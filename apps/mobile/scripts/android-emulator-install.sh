@@ -59,7 +59,7 @@ build_type="${CENTRAID_MOBILE_BUILD:-release}"
 # reports green. So the apk banks the hash it was BUILT from, and the warm path
 # refuses a mismatch here — where the cause is one line of output — instead of
 # letting it surface as a journey asserting on copy this commit changed.
-js_bundle_hash="$(node apps/mobile/scripts/js-bundle-fingerprint.mjs)"
+js_bundle_hash="$(node apps/mobile/scripts/js-bundle-fingerprint.ts)"
 test -n "$js_bundle_hash" || {
   echo "::error::empty JS bundle fingerprint; refusing to install an unverifiable apk"
   exit 1
@@ -98,7 +98,7 @@ if [ "${ANDROID_CACHE_HIT:-}" = "true" ] && [ -f "$cached_apk" ]; then
   banked="$(cat "$js_stamp" 2>/dev/null || true)"
   if [ "$banked" != "$js_bundle_hash" ]; then
     echo "::error::the restored apk was built from JS bundle '${banked:-<unstamped>}' but this commit is '$js_bundle_hash'."
-    echo "::error::the apk cache key has drifted from apps/mobile/scripts/js-bundle-fingerprint.mjs — fix the key rather than the stamp; installing this apk would test another commit's JS."
+    echo "::error::the apk cache key has drifted from apps/mobile/scripts/js-bundle-fingerprint.ts — fix the key rather than the stamp; installing this apk would test another commit's JS."
     exit 1
   fi
   echo "Android cache hit - installing $cached_apk (js $js_bundle_hash, skipping gradle)"
@@ -367,7 +367,7 @@ node scripts/test-report/prepare.mjs
 # Seeding here, before the emulator script hands off to Maestro, is what makes
 # the corpus precede the clone. It is idempotent, so the per-flow calls that
 # document each journey's fixture stay and cost nothing.
-node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+node tests/agent-e2e-mobile/seed-demo-corpus.ts
 
 export MAESTRO_PLATFORM=android
 # Read by lib/harness.mjs: it selects the installed applicationId for this build

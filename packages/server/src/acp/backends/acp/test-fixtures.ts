@@ -1,5 +1,5 @@
 // Shared fixtures for the ACP backend suite: one helper that drives a real
-// `runAcpTurn` against the scripted `fake-acp-harness.mjs`, plus the event
+// `runAcpTurn` against the scripted `fake-acp-harness.ts`, plus the event
 // selectors every feature file asserts through. Split across
 // backend.test.ts (core turn), backend.attachments.test.ts,
 // backend.model-usage.test.ts, and backend.vault-tools.test.ts.
@@ -17,7 +17,7 @@ import { runAcpTurn } from "./backend.js";
 import type { AcpTurnConfig } from "./backend.js";
 
 export const FAKE_HARNESS = fileURLToPath(
-  new URL("fake-acp-harness.mjs", import.meta.url)
+  new URL("fake-acp-harness.ts", import.meta.url)
 );
 
 export interface RunOptions {

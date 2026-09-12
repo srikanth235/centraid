@@ -20,14 +20,15 @@ install_assets_seeded:
 collisions: []
 managed_digests:
   .github/workflows/governance.yml: 220d047df6246b3b4985ad11955e2098718484be48b71a21a2ec9bea1ce269cb
-  .governance/law/arrival.mjs: e376376549bda3bf0672cafcb4a6a607bdcf5f01299d4a63ae507a480c6253ad
-  .governance/law/lib/digest.mjs: a1c5858e43b05e59bab1e00bf8cea72dfb8df585cc352c3b72541e53336c031b
-  .governance/law/lib/estates.mjs: 3b73a52a710392595368fe65c35d79878b4ff80a7ba3b3352d13dc6980ca03d6
-  .governance/law/lib/gates.mjs: 1a63e573cd3980b730d73f27dfa8182f6bf10fc15c705ba36be4f5016a3cb6f0
-  .governance/law/lib/git.mjs: e644f94d75b0cce7a55b1f7870177450bf7ed55f4bf1798d47aabb7e7e2f8be2
-  .governance/law/lib/managed.mjs: 83ca10ceeb7ac669bc7443ea34182fc3e45b8aa2b0582b8722efe5470f9e1a05
-  .governance/law/lib/registries.mjs: 9267dcda4077eec7cc0ebbd9983e99176ebac84eb9f57b3e513b04c1603582b9
-  .governance/law/lib/rule.mjs: cc5e1c19573d7029c59ed9e59e29b34d5e4c5ce2765735a7ba88d3579bd6fb8b
-  .governance/law/lib/waivers.mjs: 7b4fb12e0707e420599ee856c31a456895d97b269a6e15d27882a7f8e4964aa3
+  .governance/law/arrival.ts: dd2aa975a7be62db715df4ec5d6775b171bfd1723110f6cc66e9a74a196b7202
+  .governance/law/lib/digest.ts: e93357442a2e156da68fdcebf294eb9e287f119b077b67606e24dfeed95ccdd8
+  .governance/law/lib/estates.ts: 36643fd97e262087bd42260a481bcd5d1d03bb106ff24a849431b518b2a4d6e5
+  .governance/law/lib/gates.ts: 2fd1673836b5fb4c651c9c54176b9f9c212f59b5553ba958357afad712718a85
+  .governance/law/lib/git.ts: bd2b0075a494d7f185906fd786259008b90d633c82fef9ed30b5abcc6e2ea143
+  .governance/law/lib/managed.ts: ac4d56463d6894880fb9b71a919415e2ff5cd5f4d6472ac489e0d6c97adf2aaf
+  .governance/law/lib/registries.ts: 4ab2ee4b3120e6b74ceaa08cdbd18cc245d0c4df45edb1e2bef91852f9f07269
+  .governance/law/lib/rule.ts: 8776c3c4316392c96d945ca36d502146111c7aa660cb921850cee09e089c5b47
+  .governance/law/lib/types.ts: 21ec13043e93d9b9e0acdc9c8fe9f9a9259f475199e76bcf4cd2380e04acff2f
+  .governance/law/lib/waivers.ts: 42c7523a6948565ce57dcd68acf453ba6361151f4b1c3eed6040fea571a9ce56
   .governance/lib.sh: 19b311168426062d65495a65e21295c99f2e053d0c8bdc6a8bb9613a83010a37
   .governance/run.sh: f8a38f2ab3353aa2c9c7709f24de5bfd39041abdda3d8dda859cf915c79acbb4

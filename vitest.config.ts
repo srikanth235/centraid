@@ -71,7 +71,8 @@ export const coverageExclude = [
   // wasm-bindgen glue for the web iroh transport — generated, not hand-owned.
   "apps/web/src/generated/**",
   // In-tree ACP fake harness used by agent-runtime tests, not product code.
-  "packages/server/src/acp/backends/acp/fake-acp-harness.mjs",
+  "packages/server/src/acp/backends/acp/fake-acp-harness.ts",
+  "packages/server/src/acp/backends/acp/fake-acp-harness-vault.ts",
   // Generated recognition bundles: source-floored upstream (see the
   // packages/blueprints/automations include note above). The id list matches
   // packages/model-runtime/build-automation-handlers.ts.

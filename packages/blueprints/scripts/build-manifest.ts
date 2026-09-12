@@ -1,0 +1,141 @@
+#!/usr/bin/env node
+/**
+ * Generates `manifest.json` from `index.json` plus a directory walk of each
+ * template's files.
+ *
+ * The runtime reads this manifest (both the bundled copy at the package root
+ * and any cached copy in user-data). The bundled file is checked into git so
+ * the same path on GitHub raw can serve as the remote manifest — no separate
+ * publish step.
+ *
+ * Run via `bun run build:manifest` (or as part of `bun run build`).
+ */
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+const here = import.meta.dirname;
+const PACKAGE_ROOT = path.resolve(here, "..");
+const SOURCE_INDEX = path.join(PACKAGE_ROOT, "index.json");
+const OUTPUT = path.join(PACKAGE_ROOT, "manifest.json");
+
+async function walk(dir: string, base = dir): Promise<string[]> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const names = new Set(entries.map((e) => e.name));
+  return (
+    await Promise.all(
+      entries.map(async (e) => {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          return walk(full, base);
+        }
+        // A `.js` with a `.ts` sibling is build-handlers.ts output (#922 B2),
+        // not a template file: the catalog lists handler SOURCES, and a clone
+        // recompiles from them rather than inheriting someone else's bundle.
+        if (e.name.endsWith(".js") && names.has(`${e.name.slice(0, -3)}.ts`)) {
+          return [];
+        }
+        return e.isFile()
+          ? [path.relative(base, full).split(path.sep).join("/")]
+          : [];
+      })
+    )
+  )
+    .flat()
+    .toSorted();
+}
+
+const raw = await fs.readFile(SOURCE_INDEX, "utf8");
+const parsedIndex: unknown = JSON.parse(raw);
+if (
+  typeof parsedIndex !== "object" ||
+  parsedIndex === null ||
+  !("templates" in parsedIndex) ||
+  !Array.isArray(parsedIndex.templates)
+) {
+  throw new Error(
+    "[build-manifest] index.json must be an object with templates"
+  );
+}
+const src = parsedIndex as {
+  manifestVersion?: unknown;
+  templates: Record<string, unknown>[];
+};
+
+const enriched: {
+  manifestVersion: unknown;
+  templates: Record<string, unknown>[];
+} = {
+  manifestVersion: src.manifestVersion,
+  templates: [],
+};
+
+const templates = await Promise.all(
+  src.templates.map(async (tmpl) => {
+    // Kind-segment directory: automation apps live under `automations/`, every
+    // other app under `apps/`. Derived from `kind` so the manifest, the disk
+    // resolver, and the remote fetcher all agree on the prefix.
+    const kindDir = tmpl["kind"] === "automation" ? "automations" : "apps";
+    const id = tmpl["id"];
+    if (typeof id !== "string") {
+      throw new Error("[build-manifest] template is missing a string id");
+    }
+    const dir = path.join(PACKAGE_ROOT, kindDir, id);
+    let files = [];
+    try {
+      files = await walk(dir);
+    } catch {
+      console.warn(
+        `[build-manifest] missing template dir for "${id}", skipping`
+      );
+      return undefined;
+    }
+    // Per-app knobs (font, width, radius…) are declared as `app.json#knobs`
+    // — folded in from the old `app-knobs.json` sidecar so there's a single
+    // app manifest. Embed the parsed list in the gallery manifest so the
+    // desktop doesn't need a second fetch — `resolveTemplates()` already
+    // reads manifest.json, so this rides along for free.
+    let appKnobs;
+    // The seats block (docs/blueprint-seats.md) rides along the same way —
+    // InlineAppRoute.tsx (packages/client) also can't import app.json
+    // directly, and this manifest is already the one thing it fetches.
+    let seats;
+    // The designed-state partition (issue #839 G7) rides along for the same
+    // reason: the shell and the test report want "which of the seven states
+    // does this app owe a member" without a second fetch per app.
+    let states;
+    try {
+      const rawLocal = await fs.readFile(path.join(dir, "app.json"), "utf8");
+      const parsed: unknown = JSON.parse(rawLocal);
+      if (typeof parsed === "object" && parsed !== null) {
+        const record = parsed as Record<string, unknown>;
+        if (Array.isArray(record["knobs"])) appKnobs = record["knobs"];
+        if (record["seats"] && typeof record["seats"] === "object")
+          seats = record["seats"];
+        if (record["states"] && typeof record["states"] === "object")
+          states = record["states"];
+      }
+    } catch {
+      /* template has no parseable app.json or no knobs/seats/states — fine,
+       the popover just shows manage actions and the app mounts unrestricted */
+    }
+    // `kind` is declared explicitly in index.json (`'automation'` for an
+    // automation app); a normal UI app omits it and defaults to `'app'`.
+    const kind = tmpl["kind"] ?? "app";
+    return {
+      ...tmpl,
+      kind,
+      files,
+      ...(appKnobs ? { appKnobs } : {}),
+      ...(seats ? { seats } : {}),
+      ...(states ? { states } : {}),
+    };
+  })
+);
+for (const tmpl of templates) {
+  if (tmpl) enriched.templates.push(tmpl);
+}
+
+await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + "\n");
+process.stdout.write(
+  `[build-manifest] wrote ${enriched.templates.length} templates → ${path.relative(process.cwd(), OUTPUT)}\n`
+);

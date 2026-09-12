@@ -110,7 +110,7 @@ A source file stops at **625 lines**. `max-lines` in [oxlint.config.ts](../oxlin
 
 The ceiling lived in governance-kit's `repo-hygiene` directive until audit 0.11.0 retired that pack upstream. It came back under oxlint rather than as a repo-local directive because oxlint already reads every source file: same raw-line count, ~0.4s against the directive's 51.2s.
 
-The 131 files that predate the rule are exempt **by name**, in `tests/inventory.json#fileSize`, not by an inline `oxlint-disable`. That is the whole point of the design: a suppression comment is free to add and invisible in review, whereas a row in that section has to survive its down-only `_budget` in [check-ledgers.mjs](../scripts/check-ledgers.mjs) — splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation` note. [lint-oversized-files.mjs](../scripts/lint-oversized-files.mjs) reads the section and refuses to build the list at all if the budget and the rows disagree.
+The 131 files that predate the rule are exempt **by name**, in `tests/inventory.json#fileSize`, not by an inline `oxlint-disable`. That is the whole point of the design: a suppression comment is free to add and invisible in review, whereas a row in that section has to survive its down-only `_budget` in [check-ledgers.ts](../scripts/check-ledgers.ts) — splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation` note. [lint-oversized-files.ts](../scripts/lint-oversized-files.ts) reads the section and refuses to build the list at all if the budget and the rows disagree.
 
 A new file gets no row and no door.
 
@@ -197,7 +197,7 @@ Code comments are the State layer (AGENTS.md: "code-level facts live in code com
 
 ### Mechanical surrogates
 
-These find _surrogates_ of rot, never verdicts — a green run proves nothing about information content, and the deletion test cannot be regexed. Warn-only: `bun scripts/lint-comment-file-refs.mjs` finds dangling file references; `bun scripts/lint-comment-narration.mjs` (fuzzy) flags past-tense narration for review; `node scripts/lint-comment-blocks.mjs` flags over-long blocks. The one blocking gate is the density ratchet below (`bun run test:comment-density`). `node scripts/comment-only-diff.mjs [<ref>]` is not a gate at all — it reprints both sides of a diff with comments removed and proves a sweep changed no code, which is the evidence a doctrine-sweep PR cites.
+These find _surrogates_ of rot, never verdicts — a green run proves nothing about information content, and the deletion test cannot be regexed. Warn-only: `bun scripts/lint-comment-file-refs.ts` finds dangling file references; `bun scripts/lint-comment-narration.ts` (fuzzy) flags past-tense narration for review; `node scripts/lint-comment-blocks.ts` flags over-long blocks. The one blocking gate is the density ratchet below (`bun run test:comment-density`). `node scripts/comment-only-diff.ts [<ref>]` is not a gate at all — it reprints both sides of a diff with comments removed and proves a sweep changed no code, which is the evidence a doctrine-sweep PR cites.
 
 **The tense test.** A sentence about the past — _was, used to, until #N, replaced, retired, previously_ — either restates a present obligation (rewrite it forward-facing) or it doesn't (delete it, keeping at most a bare `(#N)` on a surviving sentence). Tense is the surrogate: a changelog conjugated into present tense still fails the deletion test.
 
@@ -223,7 +223,7 @@ Doctrine governs what a comment may say; the budget governs how much ([#861](htt
 - **The metric is character share** — non-whitespace comment characters over non-whitespace file characters, comment ranges taken from the TypeScript parser. Line counts are gameable: fuse three comment lines into one wrapped sentence and the count falls while the prose is unchanged.
 - **Per-file cap 15%** for files of 40 non-blank lines or more; **global target ≤10%**, printed on every run.
 - **Enforcement is a per-file ratchet** — `tests/inventory.json#commentDensity`, `bun run test:comment-density`. Any rise fails CI. Downward re-pins are free (`--write` recomputes, and refuses to raise a pin). A deliberate raise is a hand edit to the baseline carrying an approved-deviation note in the receipt.
-- **Blocks over 10 lines warn** — 15 for a file-top orientation header — via `scripts/lint-comment-blocks.mjs`.
+- **Blocks over 10 lines warn** — 15 for a file-top orientation header — via `scripts/lint-comment-blocks.ts`.
 - **The allowlist is by name, with a reason**, for registries where the prose _is_ the payload. Never delete load-bearing rationale to hit a number; the allowlist is that pressure valve.
 
 Deliberate non-goal of this rule: **no JSDoc tag vocabulary** — prose JSDoc is house style (`@param`/`@returns` restating types is the canonical zero-information comment).

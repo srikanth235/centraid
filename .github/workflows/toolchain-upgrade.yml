@@ -41,7 +41,7 @@ jobs:
 
           Trigger: ${RUN_URL}
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title "$title" \
             --search "$title" \
             --body-file "$body_file" \

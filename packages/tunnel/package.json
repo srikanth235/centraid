@@ -21,15 +21,15 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/build-native.mjs --release",
+    "build": "tsc -p tsconfig.json && node scripts/build-native.ts --release",
     "build:data-plane": "cargo build --locked --manifest-path data-plane/Cargo.toml",
-    "build:native": "node scripts/build-native.mjs --release",
-    "build:native:debug": "node scripts/build-native.mjs",
+    "build:native": "node scripts/build-native.ts --release",
+    "build:native:debug": "node scripts/build-native.ts",
     "clean": "rm -rf dist native/*.node",
     "format:data-plane": "cargo fmt --manifest-path data-plane/Cargo.toml",
     "lint": "bun run lint:data-plane",
     "lint:data-plane": "cargo fmt --manifest-path data-plane/Cargo.toml --check && cargo clippy --locked --manifest-path data-plane/Cargo.toml --all-targets -- -D warnings",
-    "perf:binding-probe": "node scripts/probe-typed-array.mjs",
+    "perf:binding-probe": "node scripts/probe-typed-array.ts",
     "prepack": "bun run build",
     "test": "vitest run",
     "test:data-plane": "cargo test --locked --manifest-path data-plane/Cargo.toml && bun run test:data-plane:contract",
@@ -37,7 +37,7 @@
     "test:data-plane:contract:rust": "cargo build --locked --manifest-path data-plane/Cargo.toml && cd ../.. && CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 CENTRAID_BYTE_PLANE_IMPLEMENTATION=rust CENTRAID_BYTE_PLANE_BIN=packages/tunnel/data-plane/target/debug/centraid-data-plane ./node_modules/.bin/vitest run packages/server/src/lifecycle/byte-plane-over-http.test.ts --maxWorkers=1",
     "test:data-plane:contract:typescript": "cd ../.. && CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 CENTRAID_BYTE_PLANE_IMPLEMENTATION=typescript ./node_modules/.bin/vitest run packages/server/src/lifecycle/byte-plane-over-http.test.ts --maxWorkers=1",
     "test:native": "CENTRAID_RUN_NATIVE_TUNNEL=1 vitest run src/native-relay.test.ts",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit"
+    "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
     "@number0/iroh": "1.1.0"

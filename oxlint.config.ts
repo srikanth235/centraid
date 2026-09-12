@@ -3,8 +3,8 @@ import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
 import vitest from "ultracite/oxlint/vitest";
 
-import { oversizedFiles } from "./scripts/lint-oversized-files.mjs";
-import { typeAwareOnlyRules } from "./scripts/lint-types-rules.mjs";
+import { oversizedFiles } from "./scripts/lint-oversized-files.ts";
+import { typeAwareOnlyRules } from "./scripts/lint-types-rules.ts";
 
 // ---------------------------------------------------------------------------
 // #656 Layer 4 — test seams as merge blockers.
@@ -113,7 +113,7 @@ const VITEST_TEST_FILES = [
   // #781 — the agent-e2e harness/flow sources drive the nightly journeys and
   // had the same seam exposure (Math.random ports in the pairing harness);
   // they are test infrastructure, so the seam rules apply.
-  "tests/agent-e2e-*/**/*.mjs",
+  "tests/agent-e2e-*/**/*.{mjs,ts}",
 ];
 
 // Hermes compatibility, kept separate so the mobile/time-engine *test* files
@@ -157,6 +157,9 @@ export default defineConfig({
     "**/dist/**",
     "**/.expo/**",
     "**/node_modules/**",
+    // Law is ESLint under .governance/law; oxlint's vitest glob would treat
+    // those `node --test` files as Vitest suites (#1018).
+    ".governance/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
     // Release-generated recognition bundles carry minified/transformed module
@@ -400,7 +403,7 @@ export default defineConfig({
       // files are all Node ESM scripts, so the environment below is the whole
       // configuration the rule needs to be right here without being enabled
       // repo-wide (where TypeScript's own checker already answers it).
-      files: ["tests/agent-e2e-*/**/*.mjs"],
+      files: ["tests/agent-e2e-*/**/*.{mjs,ts}"],
       env: {
         browser: false,
         es2024: true,
@@ -419,7 +422,7 @@ export default defineConfig({
       // rule above meaningful — turning on the whole `browser` env would let a
       // genuine `document` typo in a Node-side flow pass unnoticed, which is
       // the class of defect the rule was enabled for.
-      files: ["tests/agent-e2e-pairing/flows/extension-companion.mjs"],
+      files: ["tests/agent-e2e-pairing/flows/extension-companion.ts"],
       globals: {
         chrome: "readonly",
         document: "readonly",

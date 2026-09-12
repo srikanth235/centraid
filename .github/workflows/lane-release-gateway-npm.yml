@@ -81,7 +81,7 @@ jobs:
     timeout-minutes: 45
     # #557 — `id-token: write` is what makes npm provenance possible; GitHub
     # only injects ACTIONS_ID_TOKEN_REQUEST_URL when it is declared, and
-    # scripts/gateway-npm/publish.mjs probes for exactly that before adding
+    # scripts/gateway-npm/publish.ts probes for exactly that before adding
     # `--provenance`. Job-level permissions REPLACE the workflow-level block,
     # so `contents: read` has to be restated here.
     permissions:
@@ -111,7 +111,7 @@ jobs:
         run: |
           # download-artifact may nest per artifact name; merge walks recursively
           find artifacts/tunnel-native -name 'centraid-tunnel-native.*.node' -ls || true
-          node scripts/gateway-npm/merge-native-artifacts.mjs --from artifacts/tunnel-native --require
+          node scripts/gateway-npm/merge-native-artifacts.ts --from artifacts/tunnel-native --require
           ls -la packages/tunnel/native/*.node
       - name: Unit-test pack/install/platform helpers
         run: bun run gateway:npm:helpers:test
@@ -150,12 +150,12 @@ jobs:
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           if [ "$INPUT_DRY_RUN" = "true" ]; then
-            node scripts/gateway-npm/publish.mjs --dry-run
+            node scripts/gateway-npm/publish.ts --dry-run
             exit 0
           fi
           if [ -z "${NPM_TOKEN:-}" ]; then
             echo "NPM_TOKEN absent — dry-run publish only"
-            node scripts/gateway-npm/publish.mjs --dry-run
+            node scripts/gateway-npm/publish.ts --dry-run
             exit 0
           fi
-          node scripts/gateway-npm/publish.mjs
+          node scripts/gateway-npm/publish.ts

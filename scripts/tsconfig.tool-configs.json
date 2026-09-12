@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  // Bundler/Preserve: CJS packages (design, mobile) cannot `export default`
+  // under the NodeNext scripts program. These files import no package src.
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "../astro.config.ts",
+    "../packages/*/stryker*.config.ts",
+    "../apps/*/stryker*.config.ts"
+  ]
+}

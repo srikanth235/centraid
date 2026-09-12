@@ -24,7 +24,7 @@ description: >-
 # disk already to be resolved, so `checkout` + `setup` is the irreducible
 # two-line prologue.
 #
-# Enforced repo-wide by scripts/lint-workflow-pins.mjs, which fails if any
+# Enforced repo-wide by scripts/lint-workflow-pins.ts, which fails if any
 # workflow reintroduces a literal `bun-version:`.
 
 inputs:

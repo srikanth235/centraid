@@ -14,22 +14,22 @@ any of it.
 | --- | --- |
 | `docket.json` | The register of standing exceptions: one row per waiver anyone may spend |
 | `packs/<pack>.json` | The law as *declared*: which rules a pack enables, at which severity, behind which door, which paths are law, and which paths are doctrine domains |
-| `rules/<id>.mjs` | One rule, defined through `lib/rule.mjs` |
-| `rules/<id>.test.mjs` | That rule's cases, through ESLint's own `RuleTester` |
-| `lib/rule.mjs` | `defineRule` (the metadata every rule carries) and `ruleTester` |
-| `lib/digest.mjs` | The managed-tree digest algorithm, in JS, byte-identical to the pack's `lib/digest.sh` |
-| `lib/estates.mjs` | The three estates — which body of the repository a path belongs to |
-| `lib/gates.mjs` | The gate register: which tighten-only ledgers a change moved, and which way |
-| `eslint.config.mjs` | **Derived** from the packs. Never hand-written |
-| `arrival.mjs` | The generator: turns a commit range into `out/arrival.json`. Split across `lib/git.mjs`, `lib/registries.mjs` and `lib/managed.mjs`; all of it is under the managed-tree digest |
-| `digest.mjs` | `--record` re-records the generator's own digests in `install.yaml` |
-| `codeowners.mjs` | Generates `.github/CODEOWNERS` from the law estate; `--check` exits 1 on drift |
-| `parity.mjs` | Replays the deleted shell runner against these rules over real history |
-| `replay.test.mjs` | Replays the whole catalog over #1002's merged squash; the findings are pinned in `fixtures/replay/1002.json` |
-| `commitlint.config.mjs` | The commit-subject policy, in commitlint's config shape |
-| `run.mjs` | The runner: generate, lint, report one line per rule. `--brief-digest <hex>` (or `GOVERNANCE_BRIEF_DIGEST`) reports what moved in the law since a brief was stamped |
-| `brief.mjs` | Prints the doctrine digest a worker brief carries: the law digest at HEAD, every rule with its door and statute, the doctrine domains, and the docket |
-| `front-page.mjs` | Renders a run as the PR-body front page, including the generated registry lines |
+| `rules/<id>.ts` | One rule, defined through `lib/rule.ts` |
+| `rules/<id>.test.ts` | That rule's cases, through ESLint's own `RuleTester` |
+| `lib/rule.ts` | `defineRule` (the metadata every rule carries) and `ruleTester` |
+| `lib/digest.ts` | The managed-tree digest algorithm, in JS, byte-identical to the pack's `lib/digest.sh` |
+| `lib/estates.ts` | The three estates — which body of the repository a path belongs to |
+| `lib/gates.ts` | The gate register: which tighten-only ledgers a change moved, and which way |
+| `eslint.config.ts` | **Derived** from the packs. Never hand-written |
+| `arrival.ts` | The generator: turns a commit range into `out/arrival.json`. Split across `lib/git.ts`, `lib/registries.ts` and `lib/managed.ts`; all of it is under the managed-tree digest |
+| `digest.ts` | `--record` re-records the generator's own digests in `install.yaml` |
+| `codeowners.ts` | Generates `.github/CODEOWNERS` from the law estate; `--check` exits 1 on drift |
+| `parity.ts` | Replays the deleted shell runner against these rules over real history |
+| `replay.test.ts` | Replays the whole catalog over #1002's merged squash; the findings are pinned in `fixtures/replay/1002.json` |
+| `commitlint.config.ts` | The commit-subject policy, in commitlint's config shape |
+| `run.ts` | The runner: generate, lint, report one line per rule. `--brief-digest <hex>` (or `GOVERNANCE_BRIEF_DIGEST`) reports what moved in the law since a brief was stamped |
+| `brief.ts` | Prints the doctrine digest a worker brief carries: the law digest at HEAD, every rule with its door and statute, the doctrine domains, and the docket |
+| `front-page.ts` | Renders a run as the PR-body front page, including the generated registry lines |
 | `fixtures/` | Checked-in arrival records the tests pin the generator against |
 | `out/` | Generated; git-ignored |
 
@@ -41,7 +41,7 @@ file row — per commit and in the aggregate — with it.
 | Estate | What it is | Where it is declared |
 | --- | --- | --- |
 | `law` | The rules themselves. Editing it changes what the *next* change is allowed to do | the union of every pack's `lawPaths` |
-| `registry` | The adjudication and evidence layer: receipts, `CHANGELOG.md`, all of `docs/**`, `QUALITY.md`, the docket. Editing it records what happened; it never changes what is permitted | `REGISTRY_PATHS` in `lib/estates.mjs` |
+| `registry` | The adjudication and evidence layer: receipts, `CHANGELOG.md`, all of `docs/**`, `QUALITY.md`, the docket. Editing it records what happened; it never changes what is permitted | `REGISTRY_PATHS` in `lib/estates.ts` |
 | `territory` | Everything else — the product the law is for | everything not matched above |
 
 `registry` is tested first, because `.governance/law/docket.json` also matches
@@ -64,7 +64,7 @@ rule.
 | `waiver-docket` | hook / window | Every exception spent names a row in the register of exceptions | [CONSTITUTION.md](../../CONSTITUTION.md#waiver-docket) |
 
 All four were vendored shell directives in `governance-kit/audit` until #1005.
-`parity.mjs` replays both runners over the last 50 trunk commits and fails on any
+`parity.ts` replays both runners over the last 50 trunk commits and fails on any
 disagreement that is not written down in `parity-expectations.json` with a
 reason. Run it before changing any of them.
 
@@ -113,7 +113,7 @@ same bytes on any checkout, on any branch, with any local edits in flight.
 | `registries.receipts.change.completed` | `range.hasBase`, or `range.onDefaultBranch` when a commit is in flight |
 | `pending` | the message file and the index — the one legitimate index read |
 
-Inside the commit hook — `arrival.mjs --staged`, which `run.mjs` passes at the
+Inside the commit hook — `arrival.ts --staged`, which `run.ts` passes at the
 hook door — the whole right-hand column moves from `head` to the **index**, so the commit being written is judged on what it stages: staging a
 hand edit to `install.yaml` is refused there, which is the property the door
 exists for. `range.onDefaultBranch` is computed only for a pending run — the
@@ -126,11 +126,11 @@ change — and is `null` in a `--range` run.
 compiled from:
 
 ```
-node .governance/law/codeowners.mjs --write   # regenerate
-node .governance/law/codeowners.mjs --check   # exit 1 on drift
+node .governance/law/codeowners.ts --write   # regenerate
+node .governance/law/codeowners.ts --check   # exit 1 on drift
 ```
 
-`codeowners.test.mjs` pins the generation and asserts the checked-in file
+`codeowners.test.ts` pins the generation and asserts the checked-in file
 matches, so a law path added to a pack cannot end up owned by nobody. Every run
 of the law prints the state on the front page (`law estate: N paths, CODEOWNERS
 in sync`).
@@ -164,10 +164,10 @@ settle). A rule must declare at least one.
 
 One commit, three edits:
 
-1. `rules/<id>.mjs` — `export default defineRule({ id, statute, door, … })`.
+1. `rules/<id>.ts` — `export default defineRule({ id, statute, door, … })`.
    `statute` is the `CONSTITUTION.md` anchor the rule enforces; it becomes
    `meta.docs.url`, so the citation travels with every finding.
-2. `rules/<id>.test.mjs` — `ruleTester().run(id, rule, { valid, invalid })`.
+2. `rules/<id>.test.ts` — `ruleTester().run(id, rule, { valid, invalid })`.
    A rule changed without its test changed is not a reviewable change.
 3. A row in the owning `packs/<pack>.json`: `"<id>": { "severity": …, "door": … }`.
 

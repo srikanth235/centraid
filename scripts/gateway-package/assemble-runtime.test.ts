@@ -1,0 +1,131 @@
+/* oxlint-disable vitest/no-import-node-test -- (#1018) node --test lane, not a vitest suite */
+/* oxlint-disable vitest/prefer-importing-vitest-globals -- (#1018) node --test lane, not a vitest suite */
+import assert from "node:assert/strict";
+import {
+  existsSync,
+  // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal runs in the try/finally at the use site.
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+} from "node:fs";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import path from "node:path";
+/**
+ * Tests for lean runtime assemble + symlink rewrite (issue #504).
+ * Run: node --test scripts/gateway-package/assemble-runtime.test.ts
+ *
+ * Requires a built monorepo gateway closure (each package dist present).
+ * One assemble per file — full node_modules copy is expensive.
+ */
+import { test } from "node:test";
+
+import {
+  assembleRuntime,
+  GATEWAY_WORKSPACE_PACKAGES,
+  rewriteRuntimeSymlinks,
+} from "./assemble-runtime.ts";
+
+const root = path.resolve(import.meta.dirname, "../..");
+
+function canAssemble() {
+  return GATEWAY_WORKSPACE_PACKAGES.every((p) =>
+    existsSync(path.join(root, p, "dist"))
+  );
+}
+
+function underOut(resolved: string, out: string) {
+  const outR = realpathSync(out);
+  const resR = realpathSync(resolved);
+  return resR === outR || resR.startsWith(outR + path.sep);
+}
+
+test("gateway runtime package list closes over production workspace dependencies", () => {
+  const included = new Set(GATEWAY_WORKSPACE_PACKAGES);
+  const missing = [];
+  for (const pkg of GATEWAY_WORKSPACE_PACKAGES) {
+    const manifest = JSON.parse(
+      readFileSync(path.join(root, pkg, "package.json"), "utf8")
+    );
+    for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
+      if (typeof version !== "string" || !version.startsWith("workspace:"))
+        continue;
+      const dependencyPath = `packages/${name.replace(/^@centraid\//u, "")}`;
+      if (!included.has(dependencyPath)) {
+        missing.push(`${pkg} -> ${dependencyPath}`);
+      }
+    }
+  }
+  assert.deepEqual(missing, []);
+});
+
+test("assembleRuntime rewrites @centraid links and resolves under out only", (t) => {
+  if (!canAssemble()) {
+    t.skip("gateway package dist missing — build @centraid/server first");
+    return;
+  }
+  const out = mkdtempSync(path.join(tmpdir(), "centraid-assemble-"));
+  try {
+    assembleRuntime({ root, out });
+    const scope = path.join(out, "node_modules", "@centraid");
+
+    for (const pkg of GATEWAY_WORKSPACE_PACKAGES) {
+      const name = pkg.replace(/^packages\//u, "");
+      const link = path.join(scope, name);
+      assert.ok(existsSync(link), `missing link ${name}`);
+      const target = readlinkSync(link);
+      assert.equal(
+        path.isAbsolute(target),
+        false,
+        `@centraid/${name} must be relative, got ${target}`
+      );
+      const resolved = realpathSync(link);
+      assert.ok(
+        underOut(resolved, out),
+        `@centraid/${name} resolves outside out: ${resolved}`
+      );
+      assert.ok(
+        resolved.includes(`${path.sep}packages${path.sep}${name}`),
+        `@centraid/${name} should resolve into packages/${name}, got ${resolved}`
+      );
+    }
+
+    // Non-closure workspace names must not remain under @centraid.
+    assert.equal(existsSync(path.join(scope, "tsconfig")), false);
+    assert.equal(existsSync(path.join(scope, "client")), false);
+
+    // Module resolution from assembled gateway must not hit monorepo packages/.
+    const fromFile = path.join(out, "packages/server/dist/cli/cli.js");
+    const req = createRequire(fromFile);
+    const resolved = req.resolve("@centraid/server/engine");
+    assert.ok(
+      underOut(resolved, out),
+      `resolve must stay under out, got ${resolved}`
+    );
+    const monoPkg = realpathSync(path.join(root, "packages", "server"));
+    const resR = realpathSync(resolved);
+    assert.equal(
+      resR === monoPkg || resR.startsWith(monoPkg + path.sep),
+      false,
+      `resolved into monorepo packages: ${resolved}`
+    );
+
+    // Runtime deps (e.g. esbuild) must survive bun's .bun store remap.
+    const reqFromEngine = createRequire(
+      path.join(out, "packages/server/dist/index.js")
+    );
+    assert.doesNotThrow(() => reqFromEngine.resolve("esbuild"));
+    assert.ok(underOut(reqFromEngine.resolve("esbuild"), out));
+
+    // Idempotent rewrite.
+    rewriteRuntimeSymlinks(out, root);
+    assert.equal(
+      path.isAbsolute(readlinkSync(path.join(scope, "server"))),
+      false
+    );
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});

@@ -7,7 +7,7 @@ import { describe, expect, test } from "vitest";
  * Harness-turn journey (#496): message → side effect → transcript.
  *
  * Owns `agent-runtime.journey`. Drives the real `runAcpTurn` against
- * `fake-acp-harness.mjs` (same seam as backend tests) so the primary loop is
+ * `fake-acp-harness.ts` (same seam as backend tests) so the primary loop is
  * exercised on every default CI run without Electron/Playwright. Desktop
  * copilot UI e2e remains blocked on mock blueprint serving (#470); this
  * integration journey is the product-risk owner until that unblocks.

@@ -27,7 +27,7 @@ name: candidate
 # `.app` is a separate artifact and Android's green says nothing about it.
 #
 # Deliberately NOT a `pull_request` trigger: ci.yml is the only workflow allowed
-# to listen on open-PR events (scripts/lint-workflow-pins.mjs rule 5).
+# to listen on open-PR events (scripts/lint-workflow-pins.ts rule 5).
 on:
   push:
     branches: [main]
@@ -123,10 +123,10 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -220,7 +220,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
           # The committed rung-3 script. The literal path lives inside this job
-          # block, which is where scripts/lint-e2e-wiring.mjs reads it from, and
+          # block, which is where scripts/lint-e2e-wiring.ts reads it from, and
           # it is a DIFFERENT file from the nightly's on purpose: one script per
           # lane shape is what keeps a candidate lane distinguishable from a
           # depth lane to that linter. It runs `run-roster.mjs --rung 3
@@ -295,7 +295,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mobile-canary-android --rung 3 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane mobile-canary-android --rung 3 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -405,10 +405,10 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -449,7 +449,7 @@ jobs:
       # pairs (#870) and then runs
       # `run-roster.mjs --rung 3 --platform ios --suite ios-smoke`. The literal
       # path lives inside this job block, which is where
-      # scripts/lint-e2e-wiring.mjs reads it from.
+      # scripts/lint-e2e-wiring.ts reads it from.
       - name: Run the iOS smoke suite on the release artifact
         id: ios_shell
         env:
@@ -487,7 +487,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mobile-ios-smoke --rung 3 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --candidate ${{ github.sha }} --qualities journey,correctness --surfaces mobile,replica-sync,tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane mobile-ios-smoke --rung 3 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --candidate ${{ github.sha }} --qualities journey,correctness --surfaces mobile,replica-sync,tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -532,7 +532,7 @@ jobs:
 
   # #842 W5.2 — the desktop journey on darwin, moved off the PR loop (#915).
   # The "twice-burned promotion rule" recorded in lane-client-e2e.yml is what
-  # would move it back to rung 2, and `scripts/ci/lane-health.mjs` now counts
+  # would move it back to rung 2, and `scripts/ci/lane-health.ts` now counts
   # the burns instead of leaving them to memory.
   #
   # This launches the desktop journey, NOT a signed packaged build. Booting the
@@ -569,7 +569,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane desktop-e2e-macos --rung 3 --platform macos --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000 --candidate ${{ github.sha }} --qualities journey,compat --surfaces desktop
+          node scripts/test-report/write-evidence.ts --lane desktop-e2e-macos --rung 3 --platform macos --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000 --candidate ${{ github.sha }} --qualities journey,compat --surfaces desktop
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -595,7 +595,7 @@ jobs:
   # rotting without any commit touching its watch list.
   #
   # It is also where `mutation-pr` sends the PRs whose affected-seed set ran past
-  # the rung-2 cap (scripts/ci/mutation-cap.mjs): "deferred to rung 3" names this
+  # the rung-2 cap (scripts/ci/mutation-cap.ts): "deferred to rung 3" names this
   # job, so removing it would make that deferral a lie.
   mutation-full:
     runs-on: ubuntu-latest
@@ -625,7 +625,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mutation-full --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts --surfaces vault-core,gateway,app-engine
+          node scripts/test-report/write-evidence.ts --lane mutation-full --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts --surfaces vault-core,gateway,app-engine
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -689,7 +689,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane suite --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane suite --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -756,7 +756,7 @@ jobs:
         if: steps.baseline.outcome == 'success'
         run: |
           mkdir -p artifacts/perf
-          node scripts/ci/paired-journeys.mjs \
+          node scripts/ci/paired-journeys.ts \
             --candidate ../candidate-baseline \
             --pr . \
             --rounds 14 \
@@ -781,7 +781,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane paired-journeys --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities performance --surfaces gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane paired-journeys --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities performance --surfaces gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -815,7 +815,7 @@ jobs:
           path: .gh-pages-candidates
       - name: Bisect the candidate list
         run: |
-          node scripts/ci/bisect-journeys.mjs \
+          node scripts/ci/bisect-journeys.ts \
             --journey '${{ inputs.bisect_journey }}' \
             --history .gh-pages-candidates/test-report/candidate-journeys \
             --output artifacts/perf/bisect.json
@@ -910,14 +910,14 @@ jobs:
       # developer machine, wrong here, where this job installs both and so an
       # absent binary means the install step lied rather than that the tool is
       # unavailable. Under --require, "available but did not run" is red too.
-      - run: node scripts/security/rust-supply-chain.mjs --require
-      - run: node scripts/security/unsafe-edge-audit.mjs
+      - run: node scripts/security/rust-supply-chain.ts --require
+      - run: node scripts/security/unsafe-edge-audit.ts
       - name: Write lane evidence
         if: always()
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane rust-supply-chain --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities security,compat --surfaces tunnel-pairing,gateway
+          node scripts/test-report/write-evidence.ts --lane rust-supply-chain --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities security,compat --surfaces tunnel-pairing,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -975,7 +975,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane rung1-on-main --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities contracts --surfaces vault-core,gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane rung1-on-main --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities contracts --surfaces vault-core,gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1061,7 +1061,7 @@ jobs:
             platform="${rest%%:*}"; surfaces="${rest#*:}"
             verdict=passed
             [ "$result" = "success" ] || verdict=failed
-            node scripts/test-report/write-evidence.mjs \
+            node scripts/test-report/write-evidence.ts \
               --lane "$lane" --rung 3 --platform "$platform" \
               --verdict "$verdict" --started-at "$started" \
               --budget-ms 2700000 --candidate "$GITHUB_SHA" \
@@ -1110,7 +1110,7 @@ jobs:
           set -euo pipefail
           mkdir -p site/test-report
           rm -rf site/.git
-          node scripts/ci/write-candidate.mjs \
+          node scripts/ci/write-candidate.ts \
             --sha "$GITHUB_SHA" \
             --previous "${{ steps.previous.outputs.sha }}" \
             --run-id "${{ github.run_id }}" \
@@ -1174,10 +1174,10 @@ jobs:
           jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key' /tmp/needs.json > /tmp/red-lanes.txt
           while read -r lane; do
             [ -n "$lane" ] || continue
-            node scripts/ci/rolling-issue-fallback-body.mjs \
+            node scripts/ci/rolling-issue-fallback-body.ts \
               --lane "$lane" --rung 3 --result failure \
               --run-url "$RUN_URL" --out /tmp/rolling-body.md
-            node scripts/ci/file-tracking-issue.mjs --update \
+            node scripts/ci/file-tracking-issue.ts --update \
               --title "[candidate] lane red — ${lane}" \
               --search "[candidate] lane red — ${lane}" \
               --body-file /tmp/rolling-body.md \
@@ -1218,7 +1218,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/lane-health.mjs \
+          node scripts/ci/lane-health.ts \
             --repo "${{ github.repository }}" \
             --workflow candidate.yml \
             --rung 3 \
@@ -1257,7 +1257,7 @@ jobs:
               printf 'This issue is rolling: its body is rewritten every run and never appended to. Close it when the rule stops firing.\n\n'
               printf 'Run: %s\n' "$RUN_URL"
             } > /tmp/rule-body.md
-            node scripts/ci/file-tracking-issue.mjs --update \
+            node scripts/ci/file-tracking-issue.ts --update \
               --title "$title" --search "$title" \
               --body-file /tmp/rule-body.md --label tech-debt --run-url "$RUN_URL"
           done < /tmp/findings.jsonl

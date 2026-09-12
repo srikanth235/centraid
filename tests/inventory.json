@@ -158,7 +158,7 @@
         "reason": "Reflink cloning can only be asserted unconditionally on APFS; ext4 cannot clone at all, so the law is darwin-only (rig lane split to #790 by #781; originally #656).",
         "expires": "2026-12-01"
       },
-      "scripts/gateway-package/assemble-runtime.test.mjs#1": {
+      "scripts/gateway-package/assemble-runtime.test.ts#1": {
         "kind": "runtime-skip",
         "line": 64,
         "snippet": "t.skip(\"gateway package dist missing — build @centraid/server first\");",
@@ -262,7 +262,7 @@
       "packages/tunnel/src/tunnel.integration.test.ts": 2,
       "packages/vault/src/blob/cache.test.ts": 1,
       "packages/vault/src/gateway/locker-auth.test.ts": 2,
-      "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs": 1
+      "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.ts": 1
     }
   },
   "hygiene": {
@@ -5281,8 +5281,8 @@
     }
   },
   "fileSize": {
-    "_comment": "The file-length inventory. `max-lines` in oxlint.config.ts caps a source file at 625 lines (#615's limit, previously enforced by the retired governance-kit `repo-hygiene` directive). scripts/lint-oversized-files.mjs reads `sites` and oxlint turns the rule off for exactly those paths, so every file predating the rule is exempt by name rather than by an inline suppression. `_budget` is the row count and is DOWN-ONLY: splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation`. The number on each row is the file's length when it was inventoried — informational, not a per-file ceiling. A new file gets no row and no door.",
-    "_budget": 131,
+    "_comment": "The file-length inventory. `max-lines` in oxlint.config.ts caps a source file at 625 lines (#615's limit, previously enforced by the retired governance-kit `repo-hygiene` directive). scripts/lint-oversized-files.ts reads `sites` and oxlint turns the rule off for exactly those paths, so every file predating the rule is exempt by name rather than by an inline suppression. `_budget` is the row count and is DOWN-ONLY: splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation`. The number on each row is the file's length when it was inventoried — informational, not a per-file ceiling. A new file gets no row and no door.",
+    "_budget": 126,
     "approvedDeviation": "",
     "sites": {
       "apps/desktop/src/main/detached-gateway.ts": 650,
@@ -5342,7 +5342,6 @@
       "packages/client/src/replica/offline-chain.contract.test.ts": 634,
       "packages/design/src/roles.ts": 1032,
       "packages/server/src/acp/backends/acp/backend.ts": 805,
-      "packages/server/src/acp/backends/acp/fake-acp-harness.mjs": 743,
       "packages/server/src/automation/fire/connector.test.ts": 1558,
       "packages/server/src/automation/fire/enrich-gate.test.ts": 706,
       "packages/server/src/automation/fire/fire.test.ts": 666,
@@ -5411,10 +5410,6 @@
       "packages/vault/src/replica/log.ts": 820,
       "packages/vault/src/wal-shipper-detectors.test.ts": 913,
       "packages/vault/src/wal-shipper.ts": 1674,
-      "scripts/lint-engine-conformance.mjs": 1554,
-      "scripts/test-report/ratchet-floors.mjs": 874,
-      "tests/agent-e2e-mobile/lib/harness.mjs": 1182,
-      "tests/agent-e2e-pairing/lib/docker-harness.mjs": 1181,
       "tests/quality/user-facing-qualities.test.ts": 1587
     }
   },

@@ -51,11 +51,11 @@
   },
   "scripts": {
     "build": "bun run build:handlers && bun run build:manifest && tsc -p tsconfig.build.json",
-    "build:handlers": "node scripts/build-handlers.mjs",
-    "build:manifest": "node scripts/build-manifest.mjs",
+    "build:handlers": "node scripts/build-handlers.ts",
+    "build:manifest": "node scripts/build-manifest.ts",
     "clean": "rm -rf dist",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit && bun run typecheck:apps",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit && bun run typecheck:apps && tsc -p tsconfig.scripts.json --noEmit",
     "typecheck:apps": "tsc -p tsconfig.apps.json --noEmit"
   },
   "dependencies": {

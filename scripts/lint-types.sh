@@ -17,19 +17,19 @@ cd "$ROOT"
 RULES_ALL=()
 while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES_ALL+=(-D "$rule")
-done < <(node scripts/lint-types-rules.mjs all)
+done < <(node scripts/lint-types-rules.ts all)
 
 # Applied to source only. Vitest and Playwright deliberately use unawaited
 # it()/test() calls.
 RULES_SRC_ONLY=()
 while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES_SRC_ONLY+=(-D "$rule")
-done < <(node scripts/lint-types-rules.mjs source)
+done < <(node scripts/lint-types-rules.ts source)
 
 RULES_BLUEPRINT=()
 while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES_BLUEPRINT+=(-D "$rule")
-done < <(node scripts/lint-types-rules.mjs blueprint)
+done < <(node scripts/lint-types-rules.ts blueprint)
 
 # Every workspace with src/ and a TypeScript program. Keep this explicit list
 # so adding a workspace forces a conscious coverage decision.
@@ -154,7 +154,7 @@ if [[ ! -f apps/oauth-worker/worker-configuration.d.ts ]]; then
   bun run --cwd apps/oauth-worker cf-typegen >/dev/null
 fi
 
-policy_report="$(node scripts/lint-types-policy.mjs)"
+policy_report="$(node scripts/lint-types-policy.ts)"
 echo "$policy_report"
 baseline_rule_count="$(
   sed -n 's/.*baseline \([0-9][0-9]*\)).*/\1/p' <<<"$policy_report"
@@ -211,7 +211,7 @@ for entry in "${EXTRA_TARGETS[@]}"; do
   source_ignore='**/*.{test,spec}.{ts,tsx}'
   if [[ "$label" == "repository-scripts" ]]; then
     all_ignore='scripts/fixtures/**|**/*.{js,jsx,mjs,cjs}'
-    source_ignore="$all_ignore"
+    source_ignore="${source_ignore}|${all_ignore}"
   elif [[ "$label" == "repository-tests" ]]; then
     all_ignore='**/*.{js,jsx,mjs,cjs}'
   fi

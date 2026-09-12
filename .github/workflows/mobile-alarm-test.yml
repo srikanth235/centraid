@@ -77,10 +77,10 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -207,7 +207,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane alarm --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities journey --surfaces mobile-native
+          node scripts/test-report/write-evidence.ts --lane alarm --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities journey --surfaces mobile-native
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -220,6 +220,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title "[mobile-alarm-test] the mobile suite did not notice a blanked Home" \
             --body "The weekly alarm test built the app with EXPO_PUBLIC_CENTRAID_E2E_ALARM=home — Home renders nothing — and the rung-2 `pr-gate` suite passed anyway. Every recent green on the PR gate, the canary and the nightly is suspect until this is explained: a suite that cannot be shown to go red is not evidence. Evidence: the mobile-alarm-test-runs artifact on run ${{ github.run_id }}. Do not silence this lane."

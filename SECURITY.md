@@ -247,7 +247,7 @@ Complementary controls on top of manual review and the threat model above. These
 | **GitHub secret scanning + push protection** | Repo setting (enabled) | Known provider token patterns on push/PR | Non-provider high-entropy strings |
 | **Gitleaks** | `ci.yml` job `gitleaks` → required `check` | High-entropy / generic secrets in the current tree; fixtures allowlisted in [`.gitleaks.toml`](.gitleaks.toml) | Full git-history archaeology (intentionally not a merge gate) |
 | **dependency-review** | `ci.yml` (PR only) | _New_ high-severity advisories and banned copyleft licenses introduced by the PR | Latent vulns already in `bun.lock` |
-| **OSV-Scanner** | `ci.yml` job `osv-scanner` → required `check` | Full `bun.lock` inventory; **fails on CRITICAL** only ([`scripts/ci/osv-lockfile-scan.mjs`](scripts/ci/osv-lockfile-scan.mjs)); HIGH is logged | Typosquat/malware behavioral signals (Socket) |
+| **OSV-Scanner** | `ci.yml` job `osv-scanner` → required `check` | Full `bun.lock` inventory; **fails on CRITICAL** only ([`scripts/ci/osv-lockfile-scan.ts`](scripts/ci/osv-lockfile-scan.ts)); HIGH is logged | Typosquat/malware behavioral signals (Socket) |
 | **CodeQL** `security-extended` | [`candidate.yml`](.github/workflows/candidate.yml) job `codeql`, on every push to `main` (rung 3) | SAST for TS/JS, Actions YAML, Rust | Per-PR wall-clock budget |
 | **Trivy** | [`lane-release-gateway-image.yml`](.github/workflows/lane-release-gateway-image.yml) after image push | CRITICAL/HIGH OS and package CVEs in the gateway image; exceptions in [`.trivyignore`](.trivyignore) with reason + review date | Scanning every app surface |
 | **DAST** (#842 W2.4) | [`e2e.yml`](.github/workflows/e2e.yml) job `dast-scan` → [`scripts/security/dast-scan.mjs`](scripts/security/dast-scan.mjs) | Live-surface probes against a running gateway; known findings ledgered with an owning issue | SAST's reach into code paths no request exercises |
@@ -275,10 +275,10 @@ _The handler sandbox is a JS-level boundary by construction, not by omission._ H
 ```bash
 gitleaks detect --source . --no-git --config .gitleaks.toml
 # with osv-scanner on PATH:
-node scripts/ci/osv-lockfile-scan.mjs
+node scripts/ci/osv-lockfile-scan.ts
 ```
 
-SonarCloud Autoscan remains a second-opinion maintainability/security check on PRs; it is not one of these three gates, and it is **token-gated**: analysis is SonarCloud-side Automatic Analysis on the `srikanth235_centraid` project, and the project's configuration — scope exclusions, silenced noise rules, quality profiles and gate — is applied by `scripts/ci/configure-sonarcloud.mjs`, run from [`.github/workflows/sonarcloud.yml`](.github/workflows/sonarcloud.yml) on pushes that touch the configurator, weekly, and on manual dispatch. That lane runs only when the optional `SONAR_TOKEN` secret is present (a personal token with project administer); without it every step is skipped and the run logs an explicit skip notice, so a clone or fork with no token gets no SonarCloud coverage rather than a silent half-configured one. Policy detail lives in [the toolchain contract](docs/toolchain.md#sonarcloud-autoscan).
+SonarCloud Autoscan remains a second-opinion maintainability/security check on PRs; it is not one of these three gates, and it is **token-gated**: analysis is SonarCloud-side Automatic Analysis on the `srikanth235_centraid` project, and the project's configuration — scope exclusions, silenced noise rules, quality profiles and gate — is applied by `scripts/ci/configure-sonarcloud.ts`, run from [`.github/workflows/sonarcloud.yml`](.github/workflows/sonarcloud.yml) on pushes that touch the configurator, weekly, and on manual dispatch. That lane runs only when the optional `SONAR_TOKEN` secret is present (a personal token with project administer); without it every step is skipped and the run logs an explicit skip notice, so a clone or fork with no token gets no SonarCloud coverage rather than a silent half-configured one. Policy detail lives in [the toolchain contract](docs/toolchain.md#sonarcloud-autoscan).
 
 ## Known metadata exposure to backup providers
 

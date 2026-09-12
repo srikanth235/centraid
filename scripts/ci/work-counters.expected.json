@@ -1,5 +1,5 @@
 {
-  "$comment": "Per-PR perf gate expectations (#927 P2). Integers the product counts about itself on the golden year-3 vault, measured by tests/perf/work-counters.perf.test.ts and compared by scripts/ci/work-counter-gate.mjs. TIGHTEN-ONLY: lowering a number is a normal commit; raising one is the thing a reviewer must see, and needs the receipt to say what got more expensive and why. `max` is a budget — anything above it fails. `exact` is for a value where BOTH directions are a regression: a durability barrier that disappears is a durability bug, not a speed-up.",
+  "$comment": "Per-PR perf gate expectations (#927 P2). Integers the product counts about itself on the golden year-3 vault, measured by tests/perf/work-counters.perf.test.ts and compared by scripts/ci/work-counter-gate.ts. TIGHTEN-ONLY: lowering a number is a normal commit; raising one is the thing a reviewer must see, and needs the receipt to say what got more expensive and why. `max` is a budget — anything above it fails. `exact` is for a value where BOTH directions are a regression: a durability barrier that disappears is a durability bug, not a speed-up.",
   "fixture": "@centraid/test-kit/year3-vault via goldenYear3Vault()",
   "scenarios": {
     "gateway.read core.party limit=20": {

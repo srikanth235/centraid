@@ -49,7 +49,7 @@ ENV CENTRAID_REQUIRE_NATIVE_TUNNEL=1
 RUN bunx turbo run build --filter=@centraid/server \
   && node -e "const fs=require('fs');const p=require('path');const dir='packages/tunnel/native';const need=\`centraid-tunnel-native.\${process.platform}-\${process.arch}.node\`;const full=p.join(dir,need);if(!fs.existsSync(full)){console.error('missing required native tunnel artifact',full,'have',fs.readdirSync(dir).filter(n=>n.endsWith('.node')));process.exit(1)};console.log('native tunnel artifact:',full);"
 # Packages + assets only — bun's .bun store is re-installed for production below.
-RUN node scripts/gateway-package/assemble-runtime.mjs --root=/src --out=/runtime --packages-only
+RUN node scripts/gateway-package/assemble-runtime.ts --root=/src --out=/runtime --packages-only
 
 # Fresh production install against the lean workspace (resolves esbuild, ajv, sharp, …).
 FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 AS deps

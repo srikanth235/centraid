@@ -177,8 +177,8 @@ jobs:
               - 'packages/client/src/react/ui/**'
               - 'packages/client/src/react/boot.tsx'
               - 'apps/web/**'
-              - 'scripts/design-gallery.mjs'
-              - 'scripts/design-gallery-lowering.mjs'
+              - 'scripts/design-gallery.ts'
+              - 'scripts/design-gallery-lowering.ts'
               - 'tests/design-gallery/**'
               - 'tests/design-grammar-matrix.json'
 
@@ -327,7 +327,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane static --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,correctness --surfaces gateway,web,desktop,mobile
+          node scripts/test-report/write-evidence.ts --lane static --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,correctness --surfaces gateway,web,desktop,mobile
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -407,7 +407,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane gates --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane gates --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -459,7 +459,7 @@ jobs:
       # superset of that closure, and this job is unfiltered, so the check now
       # costs nothing AND runs on PRs that never woke the `client` filter.
       - name: L2 boot-the-artifact structure smoke
-        run: node scripts/release/boot-smoke.mjs
+        run: node scripts/release/boot-smoke.ts
       # The normal @centraid/tunnel build above ships its target-specific napi
       # module. Prove both pairing ALPNs plus streamed request/response bytes.
       - run: bun run --cwd packages/tunnel test:native
@@ -538,14 +538,14 @@ jobs:
       # The hazard that introduces is #556's: a merge assembled from fewer blobs than
       # were dispatched measures a smaller world and passes more easily. Two things
       # close it — this job is an ordinary (not `always()`) dependency of `coverage`,
-      # so a dead shard fails the merge, and `assert-shard-blobs.mjs` requires the
+      # so a dead shard fails the merge, and `assert-shard-blobs.ts` requires the
       # exact set {1..N} on disk before vitest is allowed to merge anything.
       - name: Write lane evidence
         if: always()
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane verify --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane verify --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -596,7 +596,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane coverage-shard-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
+          node scripts/test-report/write-evidence.ts --lane coverage-shard-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -667,7 +667,7 @@ jobs:
         if: always()
         env:
           TEST_REPORT_PUBLIC_URL: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('https://{0}.github.io/{1}/test-report/main/', github.repository_owner, github.event.repository.name) || '' }}
-        run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL"
+        run: node scripts/test-report/write-job-summary.ts --report-url "$TEST_REPORT_PUBLIC_URL"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -683,7 +683,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane coverage --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
+          node scripts/test-report/write-evidence.ts --lane coverage --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -750,7 +750,7 @@ jobs:
       - name: Merge report into site tree
         if: steps.has_report.outputs.ok == 'true'
         run: |
-          node scripts/test-report/prepare-pages-site.mjs \
+          node scripts/test-report/prepare-pages-site.ts \
             --report dist/test-report \
             --site site \
             --slot "${{ steps.slot.outputs.slot }}"
@@ -782,7 +782,7 @@ jobs:
   # measured either 4m30s of build plus ZERO mutation (no affected seeds) or
   # 19m27s of full-seed run — and the second mode fired because `package.json`
   # and `bun.lock` were in `MUTATION_GLOBAL_WATCH`, so any dependency bump ran all
-  # sixteen seeds on the PR loop. `scripts/mutation/seeds.mjs` now watches the
+  # sixteen seeds on the PR loop. `scripts/mutation/seeds.ts` now watches the
   # mutation configuration itself and nothing else globally; the full-seed run
   # moved to `mutation-canary` below, where nobody is waiting on it.
   mutation-pr:
@@ -815,12 +815,12 @@ jobs:
       # ONE comment (rewritten in place) saying which rung now owns the answer,
       # and `candidate.yml`'s `mutation-full` re-runs every seed with floors on
       # the merge commit. Nothing is skipped; only the moment the answer arrives
-      # moves. See scripts/ci/mutation-cap.mjs.
+      # moves. See scripts/ci/mutation-cap.ts.
       - name: Per-PR mutation (affected seeds + floors, 8-minute cap)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CENTRAID_PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: node scripts/ci/mutation-cap.mjs
+        run: node scripts/ci/mutation-cap.ts
 
       # #915 Wave 1 — `mutation-canary` MOVED TO `candidate.yml` as `mutation-full`.
       # It was already outside `check`'s needs (the merge had happened, so a red
@@ -846,7 +846,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mutation-pr --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness --surfaces vault-core,gateway --cases artifacts/mutation-cap/cases.json
+          node scripts/test-report/write-evidence.ts --lane mutation-pr --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness --surfaces vault-core,gateway --cases artifacts/mutation-cap/cases.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -908,13 +908,13 @@ jobs:
       # (#556's shape, one level down). An out-of-range leg is a hard error in
       # the script rather than an empty slice, for the same reason.
       - name: Burn in shard ${{ matrix.shard }}, three times each, alone
-        run: node scripts/ci/burn-in.mjs --base origin/main --runs 3 --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: node scripts/ci/burn-in.ts --base origin/main --runs 3 --shard ${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Write lane evidence
         if: always()
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane new-test-burn-in-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness,concurrency --surfaces vault-core,gateway
+          node scripts/test-report/write-evidence.ts --lane new-test-burn-in-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness,concurrency --surfaces vault-core,gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -939,7 +939,7 @@ jobs:
   # ~25-30 minutes of a 15-minute merge budget for a secondary surface.
   #
   # The promotion rule recorded in lane-client-e2e.yml is unchanged and is now
-  # counted rather than remembered: `scripts/ci/lane-health.mjs` tallies the
+  # counted rather than remembered: `scripts/ci/lane-health.ts` tallies the
   # times a rung-3 lane caught something the merge gate had already called
   # green, and files `[lanes] promote <lane>` on the second one in 30 days.
 
@@ -1050,13 +1050,13 @@ jobs:
       # banked gradle and native directories instead of recompiling them.
       #
       # The committed leg script sits literally inside this job block, which is where
-      # scripts/lint-e2e-wiring.mjs reads it from.
+      # scripts/lint-e2e-wiring.ts reads it from.
       - name: Write lane evidence
         if: always()
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mobile-smoke --rung 2 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,compat --surfaces mobile
+          node scripts/test-report/write-evidence.ts --lane mobile-smoke --rung 2 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,compat --surfaces mobile
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1087,7 +1087,7 @@ jobs:
     # KNOWN, OWNER-ACCEPTED COST (#916). `tests/budgets.json#suiteWallClock.lanes.pr-gate`
     # is 15.0 min of ELAPSED SPAN across `check`'s needs and is tighten-only. The
     # budget is not widened to match: the overrun is reported by
-    # `scripts/ci/pr-gate-wall-clock.mjs` on the run that spends it, which is the
+    # `scripts/ci/pr-gate-wall-clock.ts` on the run that spends it, which is the
     # honest place for it to show up, and it is how the restructure gets scored.
     timeout-minutes: 30
     steps:
@@ -1152,7 +1152,7 @@ jobs:
         run: bun run native:prebuild
       - name: Install Maestro CLI
         # Pinned to the SAME version every other mobile lane installs;
-        # scripts/test-report/validate-nightly-wiring.mjs fails when the three
+        # scripts/test-report/validate-nightly-wiring.ts fails when the three
         # lanes disagree, because two device drivers on one roster is a
         # difference nobody chose.
         env:
@@ -1162,10 +1162,10 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -1370,7 +1370,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
           # The committed gate script. The literal path lives inside this job
-          # block, which is where scripts/lint-e2e-wiring.mjs reads it from.
+          # block, which is where scripts/lint-e2e-wiring.ts reads it from.
           script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
       # The gateway's side of a red run. The phone is mute about its replica —
       # nothing on that path logs and the release artifact carries no debugger —
@@ -1479,7 +1479,7 @@ jobs:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: |
           set -euo pipefail
-          node scripts/test-report/write-evidence.mjs \
+          node scripts/test-report/write-evidence.ts \
             --lane mobile-device-gate --rung 2 --platform android \
             --verdict auto --job-status "${{ job.status }}" \
             --started-at "$LANE_STARTED_AT" --budget-ms 480000 \
@@ -1520,7 +1520,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane docs --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces web
+          node scripts/test-report/write-evidence.ts --lane docs --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1554,7 +1554,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane web-build --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts --surfaces web
+          node scripts/test-report/write-evidence.ts --lane web-build --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1627,7 +1627,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane iroh-wasm --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities contracts --surfaces tunnel-pairing,web
+          node scripts/test-report/write-evidence.ts --lane iroh-wasm --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities contracts --surfaces tunnel-pairing,web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1661,7 +1661,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane companion-static --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces extension
+          node scripts/test-report/write-evidence.ts --lane companion-static --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces extension
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1692,7 +1692,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane oauth-worker --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts,security --surfaces oauth-worker
+          node scripts/test-report/write-evidence.ts --lane oauth-worker --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts,security --surfaces oauth-worker
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1731,7 +1731,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane dependency-review --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane dependency-review --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1765,13 +1765,13 @@ jobs:
       # dependency-review fails *new* high-severity deps on the PR diff; this job
       # scans the whole `bun.lock` for known advisories so latent inventory debt
       # cannot hide. Fail closed on CRITICAL only (HIGH reported, non-blocking) —
-      # see scripts/ci/osv-lockfile-scan.mjs + SECURITY.md. Cheap; no bun install.
+      # see scripts/ci/osv-lockfile-scan.ts + SECURITY.md. Cheap; no bun install.
       - name: Write lane evidence
         if: always()
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane gitleaks --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane gitleaks --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1798,7 +1798,7 @@ jobs:
           chmod +x /usr/local/bin/osv-scanner
           osv-scanner --version
       - name: Scan bun.lock (fail on CRITICAL)
-        run: node scripts/ci/osv-lockfile-scan.mjs
+        run: node scripts/ci/osv-lockfile-scan.ts
 
       # The one required status check (`check`, matching the main-protection
       # ruleset). Every gate above is in `needs:`, so a lane that goes red turns
@@ -1830,13 +1830,13 @@ jobs:
       # hinting differences between the two rasterizers remain plausible. The
       # first darwin run decides it. If a residual delta appears, record the
       # NUMBERS and land per-platform baseline directories in
-      # scripts/design-gallery.mjs — do not widen the 1% ceiling to absorb it.
+      # scripts/design-gallery.ts — do not widen the 1% ceiling to absorb it.
       - name: Write lane evidence
         if: always()
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane osv-scanner --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities security --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane osv-scanner --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities security --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1864,7 +1864,7 @@ jobs:
       # The gallery runs under bun (it imports packages/design/src TS
       # directly for the lowering lanes) and builds the web dist itself — it
       # photographs the SHELL, so it refuses to trust a dist it did not just
-      # produce. `scripts/design-gallery.mjs` builds `@centraid/web`'s package
+      # produce. `scripts/design-gallery.ts` builds `@centraid/web`'s package
       # dependencies first (`turbo --filter=@centraid/web^...`) because
       # `apps/web/vite.config.ts` imports `@centraid/design/font-faces`, which
       # resolves to `packages/design/dist/font-faces.js`.
@@ -1904,7 +1904,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane design-gallery --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts,accessibility --surfaces web
+          node scripts/test-report/write-evidence.ts --lane design-gallery --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts,accessibility --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -2003,6 +2003,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/pr-gate-wall-clock.mjs \
+          node scripts/ci/pr-gate-wall-clock.ts \
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}"

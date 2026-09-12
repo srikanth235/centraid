@@ -1,6 +1,6 @@
 name: sonarcloud
 
-# #842 W0.6 — `scripts/ci/configure-sonarcloud.mjs` was a complete, idempotent
+# #842 W0.6 — `scripts/ci/configure-sonarcloud.ts` was a complete, idempotent
 # configurator that no workflow ran, while SECURITY.md advertised SonarCloud as
 # the second-opinion check. The scope exclusions and silenced-noise rules that
 # keep the Autoscan PR gate honest therefore only existed on whatever a
@@ -30,7 +30,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "scripts/ci/configure-sonarcloud.mjs"
+      - "scripts/ci/configure-sonarcloud.ts"
       - ".github/workflows/sonarcloud.yml"
 
 concurrency:
@@ -69,4 +69,4 @@ jobs:
         if: env.HAS_SONAR_TOKEN == 'true'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: bun run scripts/ci/configure-sonarcloud.mjs
+        run: bun run scripts/ci/configure-sonarcloud.ts

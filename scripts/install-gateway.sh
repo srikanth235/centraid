@@ -10,19 +10,19 @@
 #     | bash -s -- --version latest
 #
 # Piped mode installs via npm only (no silent OS service). Checkout mode
-# delegates to install-gateway.mjs for prefix/pack-dir/dry-run helpers.
+# delegates to install-gateway.ts for prefix/pack-dir/dry-run helpers.
 set -euo pipefail
 
 SCRIPT_PATH="${BASH_SOURCE[0]:-}"
 MJS=""
 if [[ -n "$SCRIPT_PATH" && -f "$SCRIPT_PATH" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
-  if [[ -f "${SCRIPT_DIR}/install-gateway.mjs" ]]; then
-    MJS="${SCRIPT_DIR}/install-gateway.mjs"
+  if [[ -f "${SCRIPT_DIR}/install-gateway.ts" ]]; then
+    MJS="${SCRIPT_DIR}/install-gateway.ts"
   fi
 fi
-if [[ -z "$MJS" && -n "${CENTRAID_INSTALL_ROOT:-}" && -f "${CENTRAID_INSTALL_ROOT}/scripts/install-gateway.mjs" ]]; then
-  MJS="${CENTRAID_INSTALL_ROOT}/scripts/install-gateway.mjs"
+if [[ -z "$MJS" && -n "${CENTRAID_INSTALL_ROOT:-}" && -f "${CENTRAID_INSTALL_ROOT}/scripts/install-gateway.ts" ]]; then
+  MJS="${CENTRAID_INSTALL_ROOT}/scripts/install-gateway.ts"
 fi
 
 if [[ -n "$MJS" ]]; then
@@ -56,7 +56,7 @@ EOF
     --dry-run) DRY=1; shift ;;
     --with-service) WITH_SERVICE=1; shift ;;
     --from-pack-dir)
-      echo "error: --from-pack-dir requires a git checkout of scripts/install-gateway.mjs" >&2
+      echo "error: --from-pack-dir requires a git checkout of scripts/install-gateway.ts" >&2
       exit 2
       ;;
     *) echo "error: unknown option $1" >&2; exit 2 ;;

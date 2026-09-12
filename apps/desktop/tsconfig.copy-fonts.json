@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "paths": {
+      "@centraid/design/font-faces": [
+        "../../packages/design/src/font-faces.ts"
+      ],
+      "@centraid/design/fonts": ["../../packages/design/src/fonts.ts"]
+    }
+  },
+  "include": ["scripts/copy-fonts.ts"]
+}

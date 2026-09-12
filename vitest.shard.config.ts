@@ -23,7 +23,7 @@ import {
 //
 // The corollary is the failure mode this split introduces and #556 already
 // taught this repo: a merged report assembled from FEWER blobs than were
-// dispatched measures a smaller universe and passes. `scripts/ci/assert-shard-blobs.mjs`
+// dispatched measures a smaller universe and passes. `scripts/ci/assert-shard-blobs.ts`
 // is the fail-closed guard for that, and the merge lane runs it before merging.
 export default defineConfig({
   test: {

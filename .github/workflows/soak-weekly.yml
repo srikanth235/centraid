@@ -41,7 +41,7 @@ jobs:
   # #915 Wave 1 — RUNG 5 CONSUMES THE CANDIDATE, like rung 4. A weekly lane that
   # tests whatever `main` happened to point at on Saturday morning cannot tell a
   # product regression from Friday's merge, and it has a whole week to be wrong
-  # about it. `scripts/ci/resolve-candidate.mjs` prints which link of the
+  # about it. `scripts/ci/resolve-candidate.ts` prints which link of the
   # fallback chain answered (dispatch input -> refs/candidates/latest -> the last
   # green ci.yml run -> this run's own SHA).
   resolve-candidate:
@@ -57,7 +57,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/resolve-candidate.mjs \
+          node scripts/ci/resolve-candidate.ts \
             --repo "${{ github.repository }}" \
             --ref "${{ github.event.inputs.ref }}" \
             --fallback-sha "${{ github.sha }}"
@@ -126,7 +126,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane long-run-soak --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 18000000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities durability,performance --surfaces gateway,vault
+          node scripts/test-report/write-evidence.ts --lane long-run-soak --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 18000000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities durability,performance --surfaces gateway,vault
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -169,7 +169,7 @@ jobs:
 
           _Auto-filed by soak-weekly.yml. Prefer updating this issue over opening duplicates._
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[soak] weekly four-hour soak red' \
             --search '[soak] weekly four-hour soak red' \
             --body-file /tmp/body.md \

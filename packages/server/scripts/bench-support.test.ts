@@ -8,7 +8,7 @@ import {
   percentile,
   ratePerHour,
   resolvedProfileFrom,
-} from "./bench-support.mjs";
+} from "./bench-support.ts";
 
 describe("benchmark support", () => {
   test("both flag spellings resolve, and a bad count is refused", () => {

@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.node.json",
+  // Package-dist importers stay out of this NodeNext program (#1018).
+  "include": [
+    "agent-e2e-mobile/**/*.ts",
+    "agent-e2e-pairing/**/*.ts",
+    "agent-e2e-pairing/**/*.d.ts",
+    "agent-e2e-compat/**/*.ts",
+    "agent-e2e-shared/**/*.ts"
+  ],
+  "exclude": [
+    "agent-e2e-mobile/lib/ci-gateway.ts",
+    "agent-e2e-pairing/lib/harness.ts",
+    "agent-e2e-pairing/lib/device-redeem.ts",
+    "agent-e2e-pairing/lib/docker-harness.ts",
+    "agent-e2e-pairing/flows/**/*.ts",
+    "agent-e2e-compat/flows/released-binary-skew.ts",
+    "**/*.test.ts"
+  ]
+}

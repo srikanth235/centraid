@@ -4,7 +4,7 @@
 # Every packages/* or apps/* tree with non-test TS source must be:
 #   (a) covered by a tests/floors.json#coverage glob, OR
 #   (b) named as an owner path prefix in the DERIVED flow view
-#       (`node scripts/test-report/derive-flows.mjs --json`), OR
+#       (`node scripts/test-report/derive-flows.ts --json`), OR
 #   (c) listed in this directive's allowlist.txt
 #
 # #915 replaced `tests/matrix.json` with `tests/claims.json` plus the mobile
@@ -53,12 +53,12 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 FLOORS="$REPO_ROOT/tests/floors.json"
 CLAIMS="$REPO_ROOT/tests/claims.json"
-DERIVE_FLOWS="$REPO_ROOT/scripts/test-report/derive-flows.mjs"
+DERIVE_FLOWS="$REPO_ROOT/scripts/test-report/derive-flows.ts"
 ALLOWLIST="$DIR/allowlist.txt"
 VITEST_CFG="$REPO_ROOT/vitest.config.ts"
 
 if [[ ! -f "$FLOORS" || ! -f "$CLAIMS" || ! -f "$DERIVE_FLOWS" ]]; then
-    violation "tests/floors.json, tests/claims.json and scripts/test-report/derive-flows.mjs are required"
+    violation "tests/floors.json, tests/claims.json and scripts/test-report/derive-flows.ts are required"
     directive_end
     exit 0
 fi
@@ -140,7 +140,7 @@ for flow in data.get("flows", []):
 '
 )"
 if [[ -z "$OWNERS" ]]; then
-    violation "scripts/test-report/derive-flows.mjs emitted no flow owners - a silent empty view would let every unfloored package pass"
+    violation "scripts/test-report/derive-flows.ts emitted no flow owners - a silent empty view would let every unfloored package pass"
 fi
 
 # Package/app ids that have non-test source.

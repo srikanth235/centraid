@@ -1,12 +1,29 @@
 {
-  "extends": "../tsconfig.base.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "types": ["node"]
-  },
-  "include": [
+  "extends": "../tsconfig.node.json",
+  // Package-source importers stay out of this NodeNext program (#1018).
+  "include": ["**/*.ts"],
+  "exclude": [
+    "fixtures/**",
     "refresh-pricing-snapshot.ts",
-    "release/vitest.config.ts",
-    "test-report/vitest.config.ts"
+    "site-tokens.ts",
+    "design-gallery.ts",
+    "design-gallery-serve.ts",
+    "design-gallery-lowering.ts",
+    "design-gallery-fidelity.ts",
+    "design-gallery-fidelity.test.ts",
+    "perf/app-waterfall.run.ts",
+    "perf/app-waterfall.ts",
+    "perf/app-waterfall.test.ts",
+    "perf/send-to-first-token.ts",
+    "release/classify.test.ts",
+    "release/publish-guards.test.ts",
+    "release/sync-versions.test.ts",
+    "test-report/diff-coverage-run.test.ts",
+    "test-report/env-red-inventory.test.ts",
+    "test-report/evidence-contract.test.ts",
+    "test-report/hygiene-ratchet.test.ts",
+    "test-report/skip-inventory.test.ts",
+    "test-report/sleep-inventory.test.ts",
+    "test-report/validate-release-wiring.test.ts"
   ]
 }

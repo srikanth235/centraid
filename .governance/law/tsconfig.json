@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Git porcelain fields are present by construction; the base profile's
+    // noUncheckedIndexedAccess turns every `split()[n]` into a noise floor.
+    "noUncheckedIndexedAccess": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "useUnknownInCatchVariables": false
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}

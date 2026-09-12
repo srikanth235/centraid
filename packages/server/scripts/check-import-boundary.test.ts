@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   checkImportBoundary,
   isForbiddenImport,
-} from "./check-import-boundary.mjs";
+} from "./check-import-boundary.ts";
 
 describe("server import-boundary", () => {
   test("the shipped engine and automation trees have no forbidden imports", () => {

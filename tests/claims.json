@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "_comment": "The claims file (#915 Wave 3). It replaces tests/claims.json and holds ONLY what a machine cannot derive: the qualities x surfaces vocabulary, the lane registry, the 45 claim rows with their severity and the date each was last demonstrated red, the law registry, the consent ledger, the join laws, the deliberate n/a cells with their reasons, and the flow ownership + minimumTests floors. Owners, journeys, budgets, seeds, engines, fuzz targets and Vitest projects are DERIVED at read time by scripts/test-report/derive.mjs from the roster, the Stryker configs, scripts/mutation/seeds.mjs, scripts/fuzz/targets.mjs and vitest.config.ts — see TESTING.md.",
+  "_comment": "The claims file (#915 Wave 3). It replaces tests/claims.json and holds ONLY what a machine cannot derive: the qualities x surfaces vocabulary, the lane registry, the 45 claim rows with their severity and the date each was last demonstrated red, the law registry, the consent ledger, the join laws, the deliberate n/a cells with their reasons, and the flow ownership + minimumTests floors. Owners, journeys, budgets, seeds, engines, fuzz targets and Vitest projects are DERIVED at read time by scripts/test-report/derive.mjs from the roster, the Stryker configs, scripts/mutation/seeds.ts, scripts/fuzz/targets.ts and vitest.config.ts — see TESTING.md.",
   "_why": "tests/claims.json was 252 KB of hand-typed grid whose per-cell assessments duplicated what the lanes already proved. #915 keeps the declarations (a claim, a law, a reason for an absence) and derives the observations.",
   "vocabulary": {
     "qualities": [
@@ -674,7 +674,7 @@
       "name": "booted-gateway HTTP posture (DAST)",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/security/dast-scan.mjs",
+      "owner": "scripts/security/dast-scan.ts",
       "evidence": "boot the real gateway → header/CORS/method/Host judges over the ROUTES table",
       "lane": "dast",
       "wallClockCost": "low",
@@ -682,7 +682,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
-        "command": "node scripts/security/dast-scan.mjs",
+        "command": "node scripts/security/dast-scan.ts",
         "seed": "point the scanner at a gateway with no Host check, a silent 200 on every verb, and a foreign origin reflected with credentials",
         "failure": "177 host/header/cors/method findings, exit 1"
       }
@@ -746,7 +746,7 @@
       "name": "rust supply-chain gate",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/security/rust-supply-chain.test.mjs",
+      "owner": "scripts/security/rust-supply-chain.test.ts",
       "evidence": "cargo-audit and cargo-deny per crate; the guarded skip is loud and --require turns a missing binary red",
       "lane": "vitest",
       "wallClockCost": "low",
@@ -754,7 +754,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
-        "command": "node --test scripts/security/rust-supply-chain.test.mjs",
+        "command": "node --test scripts/security/rust-supply-chain.test.ts",
         "seed": "disable the available-but-did-not-run check in decideExit",
         "failure": "'AVAILABLE BUT DID NOT RUN fails' goes red — an unrun lane reads as a pass"
       }
@@ -764,7 +764,7 @@
       "name": "rust unsafe-edge ratchet",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/security/unsafe-edge-audit.test.mjs",
+      "owner": "scripts/security/unsafe-edge-audit.test.ts",
       "evidence": "an unjustified or unledgered unsafe site fails; the count is tighten-only in both directions",
       "lane": "vitest",
       "wallClockCost": "low",
@@ -772,7 +772,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
-        "command": "node scripts/security/unsafe-edge-audit.mjs",
+        "command": "node scripts/security/unsafe-edge-audit.ts",
         "seed": "plant an unjustified `unsafe` block in packages/tunnel/data-plane/src",
         "failure": "exit 1 naming the unjustified site and the ledger overrun"
       }
@@ -800,7 +800,7 @@
       "name": "dependency behaviour and CI egress ratchets",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/security/dependency-behaviour.test.mjs",
+      "owner": "scripts/security/dependency-behaviour.test.ts",
       "evidence": "install-time code digested over the command AND the script bytes, so a republished tarball at the same version fails; CI egress debt shrinks only",
       "lane": "vitest",
       "wallClockCost": "low",
@@ -808,7 +808,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-21",
-        "command": "node --test scripts/security/dependency-behaviour.test.mjs",
+        "command": "node --test scripts/security/dependency-behaviour.test.ts",
         "seed": "drop the unledgered-package push and the stale-entry push from lifecycle-audit.mjs",
         "failure": "an unledgered dependency declaring postinstall passes, and a ledger entry for a dependency that no longer runs install-time code is never noticed"
       }
@@ -818,11 +818,11 @@
       "name": "nightly red blocks release",
       "family": "trust",
       "severity": "S1",
-      "owner": "scripts/release/publish-guards.test.mjs",
+      "owner": "scripts/release/publish-guards.test.ts",
       "evidence": "blocks release preparation when a nightly red issue is open",
       "lane": "vitest",
       "wallClockCost": "low",
-      "knob": "scripts/release/nightly-quality-blockers.mjs",
+      "knob": "scripts/release/nightly-quality-blockers.ts",
       "governance": "waiver-gated",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -980,7 +980,7 @@
       "name": "durable pending-write overlay parity",
       "family": "reliability",
       "severity": "S2",
-      "owner": "scripts/lint-engine-conformance.test.mjs",
+      "owner": "scripts/lint-engine-conformance.test.ts",
       "evidence": "demonstrated-red scanner rejects named, arbitrary write-backed, and engine reach-past app overlays; [law:pending-overlay] pins every blueprint action declaration",
       "lane": "check:push",
       "wallClockCost": "low",
@@ -1106,7 +1106,7 @@
       "name": "shipped CSS token ratchet",
       "family": "responsiveness",
       "severity": "S3",
-      "owner": "scripts/lint-design-tokens.mjs",
+      "owner": "scripts/lint-design-tokens.ts",
       "evidence": "design-token CSS ratchet",
       "lane": "check:pr",
       "wallClockCost": "low",
@@ -1160,7 +1160,7 @@
       "name": "mobile first-run product journey",
       "family": "friction",
       "severity": "S3",
-      "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/pairing-canary.ts",
       "evidence": "ticket minted, redeemed, profile completed, Home band settled",
       "lane": "nightly",
       "wallClockCost": "high",
@@ -1168,7 +1168,7 @@
       "governance": "tighten-only",
       "demonstratedRed": {
         "date": "2026-08-01",
-        "command": "node tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+        "command": "node tests/agent-e2e-mobile/flows/pairing-canary.ts",
         "seed": "break ticket redemption in the onboarding screen and run the canary",
         "failure": "the canary fails at redemption in under five minutes, before any suite fans out"
       }
@@ -1196,11 +1196,11 @@
       "name": "UI receipt evidence",
       "family": "friction",
       "severity": "S3",
-      "owner": "scripts/validate-ui-receipt.test.mjs",
+      "owner": "scripts/validate-ui-receipt.test.ts",
       "evidence": "rejects screenshot paths without an e2e emitter",
       "lane": "check:pr",
       "wallClockCost": "low",
-      "knob": "scripts/validate-ui-receipt.mjs",
+      "knob": "scripts/validate-ui-receipt.ts",
       "governance": "waiver-gated",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -1747,7 +1747,7 @@
       ],
       "refusalGrammar": "the OS grant is read, never assumed; a denied grant renders the app's denied state rather than an empty library",
       "adversary": {
-        "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
+        "owner": "tests/agent-e2e-mobile/flows/photos-permissions.ts",
         "flow": "mobile-photos-permissions"
       },
       "seats": ["origin"],
@@ -1973,7 +1973,7 @@
       "id": "reachability",
       "label": "Handler reachability",
       "source": [
-        "scripts/check-share-reachability.mjs",
+        "scripts/check-share-reachability.ts",
         "packages/blueprints/src/handler-reachability.test.ts"
       ],
       "propertyFlow": null,
@@ -2400,7 +2400,7 @@
         "seats": {
           "origin": {
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/agenda-week.mjs",
+            "owner": "tests/agent-e2e-mobile/flows/agenda-week.ts",
             "tier": "e2e"
           },
           "custodian": {
@@ -2420,7 +2420,7 @@
         "seats": {
           "origin": {
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/docs-drive.mjs",
+            "owner": "tests/agent-e2e-mobile/flows/docs-drive.ts",
             "tier": "e2e"
           },
           "custodian": {
@@ -2440,7 +2440,7 @@
         "seats": {
           "origin": {
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/locker-gate.mjs",
+            "owner": "tests/agent-e2e-mobile/flows/locker-gate.ts",
             "tier": "e2e"
           },
           "custodian": {
@@ -2460,7 +2460,7 @@
         "seats": {
           "origin": {
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/notes-library.mjs",
+            "owner": "tests/agent-e2e-mobile/flows/notes-library.ts",
             "tier": "e2e"
           },
           "custodian": {
@@ -2480,7 +2480,7 @@
         "seats": {
           "origin": {
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs",
+            "owner": "tests/agent-e2e-mobile/flows/people-roster.ts",
             "tier": "e2e"
           },
           "custodian": {
@@ -2500,7 +2500,7 @@
         "seats": {
           "origin": {
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs",
+            "owner": "tests/agent-e2e-mobile/flows/photos-library.ts",
             "tier": "e2e"
           },
           "custodian": {
@@ -2520,7 +2520,7 @@
         "seats": {
           "origin": {
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs",
+            "owner": "tests/agent-e2e-mobile/flows/tally-derived.ts",
             "tier": "e2e"
           },
           "custodian": {
@@ -2540,7 +2540,7 @@
         "seats": {
           "origin": {
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/tasks-board.mjs",
+            "owner": "tests/agent-e2e-mobile/flows/tasks-board.ts",
             "tier": "e2e"
           },
           "custodian": {
@@ -2882,7 +2882,7 @@
             "label": "week origin journey",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/agenda-week.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/agenda-week.ts"
           },
           {
             "id": "designed-states",
@@ -3035,7 +3035,7 @@
             "label": "drive origin journey on the phone",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/docs-drive.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/docs-drive.ts"
           },
           {
             "id": "title-only-empty-body",
@@ -3062,7 +3062,7 @@
             "label": "gate origin journey",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/locker-gate.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/locker-gate.ts"
           },
           {
             "id": "designed-states",
@@ -3173,7 +3173,7 @@
             "label": "library origin journey",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/notes-library.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/notes-library.ts"
           },
           {
             "id": "designed-states",
@@ -3242,7 +3242,7 @@
             "label": "roster origin journey",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/people-roster.ts"
           },
           {
             "id": "designed-states",
@@ -3325,7 +3325,7 @@
             "label": "library origin journey",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/photos-library.ts"
           },
           {
             "id": "search-grouping",
@@ -3339,7 +3339,7 @@
             "label": "search device journey",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/photos-search.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/photos-search.ts"
           },
           {
             "id": "viewer-chrome",
@@ -3360,14 +3360,14 @@
             "label": "permission-refused takeover",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/photos-permissions.ts"
           },
           {
             "id": "select-write",
             "label": "selection trash + restore write",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/photos-select-write.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/photos-select-write.ts"
           },
           {
             "id": "designed-states",
@@ -3450,7 +3450,7 @@
             "label": "derived origin journey — read-time figures and no verb this seat cannot fire",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/tally-derived.ts"
           },
           {
             "id": "origin-band",
@@ -3506,7 +3506,7 @@
             "label": "origin sharing journey — compile a share, make a person reachable on the mounted plane",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/sharing-reach.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/sharing-reach.ts"
           }
         ]
       },
@@ -3519,7 +3519,7 @@
             "label": "board origin journey",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/tasks-board.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/tasks-board.ts"
           },
           {
             "id": "designed-states",
@@ -4197,7 +4197,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/pairing-canary.ts",
       "minimumTests": 1
     },
     {
@@ -4206,7 +4206,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/home-loads.ts",
       "minimumTests": 3
     },
     {
@@ -4215,7 +4215,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/photos-library.ts",
       "minimumTests": 1
     },
     {
@@ -4224,7 +4224,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/photos-viewer.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/photos-viewer.ts",
       "minimumTests": 1
     },
     {
@@ -4233,7 +4233,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/photos-search.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/photos-search.ts",
       "minimumTests": 1
     },
     {
@@ -4242,7 +4242,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/photos-select-write.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/photos-select-write.ts",
       "minimumTests": 1
     },
     {
@@ -4251,7 +4251,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.ts",
       "minimumTests": 13,
       "approvedMinimumTestsDeviation": "#799 retired the mobile WebView app cover, and with it the served-app plane on the phone: all eight bundled apps route to native covers, so template-gate's premise (a bundled UI template rendering inside the phone's WebView) names a surface that no longer exists. It short-circuited to a trivial pass because its own NATIVE_ON_MOBILE set covers all eight kind:\"app\" templates in packages/blueprints/index.json, leaving it nothing to gate, and its journey coverage was delegated to this flow. Since #905 (G-device-only-gate) the every-cover-opens half of that delegation is held off the device: apps/mobile/src/screens/Home.test.tsx generates a conformance sweep from apps/mobile/app-conformance.json over every bundled app, and each cover keeps its own device journey on the per-merge canary and nightly lanes. This flow keeps the device-only claims — Settings through the all-apps sheet, and on Android the offline write, process restart, reconnect and settle arc. The floor did not shrink: template-gate's was 7, this flow is pinned at 13 declared checks (a floor, not a ceiling)."
     },
@@ -4261,7 +4261,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/photos-permissions.ts",
       "minimumTests": 1
     },
     {
@@ -4270,7 +4270,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/sharing-reach.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/sharing-reach.ts",
       "minimumTests": 15
     },
     {
@@ -4297,7 +4297,7 @@
       "surface": "tunnel-pairing",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
+      "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.ts",
       "minimumTests": 8
     },
     {
@@ -4306,7 +4306,7 @@
       "surface": "gateway",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
+      "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.ts",
       "minimumTests": 6
     },
     {
@@ -4315,7 +4315,7 @@
       "surface": "tunnel-pairing",
       "dimension": "offline",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
+      "owner": "tests/agent-e2e-pairing/flows/cross-network-relay.ts",
       "minimumTests": 11
     },
     {
@@ -4453,7 +4453,7 @@
       "surface": "blueprints",
       "dimension": "accessibility",
       "tier": "accessibility",
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "scripts/accessibility-contract.test.ts",
       "minimumTests": 4
     },
     {
@@ -4552,7 +4552,7 @@
       "surface": "tunnel-pairing",
       "dimension": "security",
       "tier": "unit",
-      "owner": "scripts/security/rust-supply-chain.test.mjs",
+      "owner": "scripts/security/rust-supply-chain.test.ts",
       "minimumTests": 15
     },
     {
@@ -4561,7 +4561,7 @@
       "surface": "tunnel-pairing",
       "dimension": "security",
       "tier": "unit",
-      "owner": "scripts/security/unsafe-edge-audit.test.mjs",
+      "owner": "scripts/security/unsafe-edge-audit.test.ts",
       "minimumTests": 15
     },
     {
@@ -4588,7 +4588,7 @@
       "surface": "desktop",
       "dimension": "security",
       "tier": "contract",
-      "owner": "scripts/security/supply-chain-core.test.mjs",
+      "owner": "scripts/security/supply-chain-core.test.ts",
       "minimumTests": 16
     },
     {
@@ -4597,7 +4597,7 @@
       "surface": "desktop",
       "dimension": "security",
       "tier": "contract",
-      "owner": "scripts/security/dependency-behaviour.test.mjs",
+      "owner": "scripts/security/dependency-behaviour.test.ts",
       "minimumTests": 24
     },
     {
@@ -4858,7 +4858,7 @@
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/places-seat.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/places-seat.ts",
       "minimumTests": 1
     },
     {
@@ -4967,7 +4967,7 @@
       "surface": "desktop",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "scripts/perf/app-weight.mjs"
+      "owner": "scripts/perf/app-weight.ts"
     },
     {
       "id": "web-app-weight",
@@ -4975,7 +4975,7 @@
       "surface": "web",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "scripts/perf/app-weight.mjs"
+      "owner": "scripts/perf/app-weight.ts"
     },
     {
       "id": "mobile-app-weight",
@@ -4983,7 +4983,7 @@
       "surface": "mobile",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "scripts/perf/app-weight.mjs"
+      "owner": "scripts/perf/app-weight.ts"
     },
     {
       "id": "web-accessibility-axe",
@@ -5037,7 +5037,7 @@
       "surface": "mobile",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "tests/agent-e2e-mobile/flows/cold-start.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/cold-start.ts",
       "minimumTests": 1
     },
     {
@@ -5046,7 +5046,7 @@
       "surface": "mobile",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/scroll-frames.ts",
       "minimumTests": 1
     },
     {

@@ -12,7 +12,7 @@ This is the durable command and ownership contract for TypeScript quality work. 
 | Compiler diagnostics and type correctness | pinned TypeScript |
 | Task graph execution | pinned Turbo |
 | Dead code and dependency hygiene | Knip |
-| Sharing-plane export reachability | `scripts/check-share-reachability.mjs` (`check:reachability`) + `share-reachability.json` |
+| Sharing-plane export reachability | `scripts/check-share-reachability.ts` (`check:reachability`) + `share-reachability.json` |
 | Runtime behaviour | Vitest and e2e suites |
 | DESIGN.md spec conformance | `@google/design.md` (pinned exact) — see `lint:design-md` |
 | Second-opinion security / reliability (PR check) | SonarCloud Autoscan — see [SonarCloud Autoscan](#sonarcloud-autoscan) |
@@ -36,7 +36,7 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `lint` | ordinary Oxlint pass, warnings denied |
 | `lint:fix` | Oxlint safe fixes only |
 | `lint:types` | compiler-compatible type-aware allowlist plus policy fixtures |
-| `typecheck` | pinned TypeScript compiler across the monorepo |
+| `typecheck` | pinned TypeScript compiler across workspaces, `tests/`, and repository scripts |
 | `test:affected` | Vitest for workspaces changed from `origin/main` |
 | `check:fast` | format check, ordinary lint, and affected typecheck |
 | `check:pr` | frozen install, static policy, typecheck, affected tests, and Knip |
@@ -57,10 +57,10 @@ Nothing a gate or a build caches belongs in the repository. Both directories def
 
 | What | Default | Override | Owner |
 | --- | --- | --- | --- |
-| Gate stamps (`static`, `governance`, `governance-deferred`) | `${XDG_CACHE_HOME:-~/.cache}/centraid/gate-stamps` | `CENTRAID_GATE_STAMP_DIR`; `CENTRAID_GATE_STAMPS=0` disables stamping | `scripts/ci/gate-stamp.mjs` |
-| Turbo filesystem cache, shared by every worktree | `${XDG_CACHE_HOME:-~/.cache}/centraid/turbo` | `TURBO_CACHE_DIR`, then `CENTRAID_TURBO_CACHE_DIR` | `scripts/ci/turbo.mjs` |
+| Gate stamps (`static`, `governance`, `governance-deferred`) | `${XDG_CACHE_HOME:-~/.cache}/centraid/gate-stamps` | `CENTRAID_GATE_STAMP_DIR`; `CENTRAID_GATE_STAMPS=0` disables stamping | `scripts/ci/gate-stamp.ts` |
+| Turbo filesystem cache, shared by every worktree | `${XDG_CACHE_HOME:-~/.cache}/centraid/turbo` | `TURBO_CACHE_DIR`, then `CENTRAID_TURBO_CACHE_DIR` | `scripts/ci/turbo.ts` |
 
-Turbo's per-run summaries stay in each checkout's `.turbo/runs`, which is what `scripts/ci/turbo-cache-report.mjs` reads. Why the tiers and stamps are shaped this way: [dev-environment.md](dev-environment.md#tiers-stamps-and-one-cache-988).
+Turbo's per-run summaries stay in each checkout's `.turbo/runs`, which is what `scripts/ci/turbo-cache-report.ts` reads. Why the tiers and stamps are shaped this way: [dev-environment.md](dev-environment.md#tiers-stamps-and-one-cache-988).
 
 ## SonarCloud Autoscan
 
@@ -85,7 +85,7 @@ The duplication metric excludes `packages/design/src/roles.ts` because its repea
 
 ### Noise policy
 
-The `NOISE_RULES` list in [`scripts/ci/configure-sonarcloud.mjs`](../scripts/ci/configure-sonarcloud.mjs) silences rules already owned elsewhere or known to be false positives in this monorepo: style preferences, React prop/index-key pedantry, intentional path inheritance and loopback URLs, locale sorting, and workflow/CLI logging false positives. ReDoS (`S5852`), postMessage origin (`S2819`), download-then-exec (`S8482`), empty tests (`S2187`), real control-flow bugs, CSP review, and vault/gateway sinks remain active.
+The `NOISE_RULES` list in [`scripts/ci/configure-sonarcloud.ts`](../scripts/ci/configure-sonarcloud.ts) silences rules already owned elsewhere or known to be false positives in this monorepo: style preferences, React prop/index-key pedantry, intentional path inheritance and loopback URLs, locale sorting, and workflow/CLI logging false positives. ReDoS (`S5852`), postMessage origin (`S2819`), download-then-exec (`S8482`), empty tests (`S2187`), real control-flow bugs, CSP review, and vault/gateway sinks remain active.
 
 On the Free plan, the custom Centraid profile and gate can be created but cannot be assigned. Keep those copies (without a coverage condition) for a future paid assignment; until then, exclusions and multicriteria protect hygiene/tooling PRs while product PRs fail closed on new BUG/VULNERABILITY findings in `packages/` and `apps/`.
 
@@ -95,8 +95,8 @@ CI applies this on every push to `main` that touches the configurator, weekly, a
 
 ```sh
 export SONAR_TOKEN=$(security find-generic-password -s sonarqube-cli -w)
-bun run scripts/ci/configure-sonarcloud.mjs
-bun run scripts/ci/configure-sonarcloud.mjs --resolve-noise
+bun run scripts/ci/configure-sonarcloud.ts
+bun run scripts/ci/configure-sonarcloud.ts --resolve-noise
 ```
 
 The settings apply on the next Autoscan analysis. Dashboard: <https://sonarcloud.io/project/overview?id=srikanth235_centraid>.
@@ -105,7 +105,7 @@ The settings apply on the next Autoscan analysis. Dashboard: <https://sonarcloud
 
 Knip's dead-export detection stops at workspace entry files: a capability re-exported through `src/index.ts` counts as "used" because the barrel is an entry, and colocated vitest files are entries too. That combination laundered dead sharing-plane capabilities past every gate (issue #750: `declareCommonsCommands` / `commonsCommandsFor` were exported, barrel-re-exported, and called by nothing in production).
 
-`bun run check:reachability` (`scripts/check-share-reachability.mjs`, part of `check:push`) closes the class. For every value export of the modules configured in the root `share-reachability.json` it resolves the transitive importer set — following re-exports through index.ts barrels and workspace package specifiers — and fails unless a production file (non-test source under `packages/` or `apps/`, per the TESTING.md naming conventions) imports the capability in a value position. Test/benchmark/fixture files, type-only imports and usages, and pure import-then-re-export sites do not count as callers. It parses with the repo-pinned TypeScript compiler at syntax level only, so it runs standalone with no build.
+`bun run check:reachability` (`scripts/check-share-reachability.ts`, part of `check:push`) closes the class. For every value export of the modules configured in the root `share-reachability.json` it resolves the transitive importer set — following re-exports through index.ts barrels and workspace package specifiers — and fails unless a production file (non-test source under `packages/` or `apps/`, per the TESTING.md naming conventions) imports the capability in a value position. Test/benchmark/fixture files, type-only imports and usages, and pure import-then-re-export sites do not count as callers. It parses with the repo-pinned TypeScript compiler at syntax level only, so it runs standalone with no build.
 
 **Same-file rule.** A capability used in a value position inside its _own_ declaring module counts as production-reached, provided that module is production code — the same convention as knip's `ignoreExportsUsedInFile`, which this repo already runs. The two gates compose: knip fails on unused **files**, so a module that only reaches itself is either alive (something runs it) or knip deletes the whole file; this gate fails on dead **exports inside live modules**. A same-file value use inside a live production module therefore does execute in production, while the defect class this gate exists for — `declareCommonsCommands`, `pushRouteAssertion`: a capability invoked nowhere, in-file or out — still fails. A declaration's own name is not a use (the usage walk skips top-level declaration name nodes), same-file uses in test modules never rescue anything, and a same-file use in a type position is still type-only. Such a reacher is reported as `<file> (same-file)` so the output stays honest about why it passed.
 
@@ -114,6 +114,14 @@ Knip's dead-export detection stops at workspace entry files: a capability re-exp
 **Scope.** The configured modules are the sharing plane on all three seats: the server's peer/share/commons/edges routes, the vault's grant and share modules, the blueprint grant and share modules under `packages/blueprints/apps/_shared` plus `apps/people/grant-dashboard.ts`, and the phone's `apps/mobile/src/kit/share`. The `_shared` tree is listed module by module rather than globbed: most of it is not the sharing plane (consent gates, nav, search scaffolding), and `grant-sheet-harness.ts` is a test kit that no production file may reach. The three modules once held out for genuinely dead exports are resolved: `_shared/ShareSheet.tsx` is deleted (the web seat lives in `GrantSheet`), and `grant-plane.ts` and `placement-registry.ts` lost their dead exports and are in the gate ([#883](https://github.com/srikanth235/centraid/issues/883)).
 
 Documented exceptions live in the config's `allowlist`, one non-empty `reason` string per entry (the same documented-exception style as `knip.json`); a stale entry — one whose capability gained a production caller or disappeared — is itself a failure, so the list only shrinks. The allowlist is currently **empty** and should stay that way: a failing capability is fixed by wiring the production caller or deleting the export, not by adding an entry.
+
+## TypeScript programs
+
+Root `typecheck` and `typecheck:affected` run the turbo workspace programs, then `tsc -p tests`, then `tsc -p tests/tsconfig.agent-e2e.json`, then the repository scripts programs. Scripts is not a turbo workspace.
+
+Directly executed Node tooling under `scripts/`, `.governance/law/`, and the agent-e2e harnesses use `tsconfig.node.json`: `module` / `moduleResolution` NodeNext, `erasableSyntaxOnly`, `allowImportingTsExtensions`, `verbatimModuleSyntax`, and `.ts` import specifiers. Maintained source is `.ts`; do not add `.mjs` or `.mts`. Node runs those files with native type stripping (`node path/to/script.ts`). Compiled package runtime keeps NodeNext `.js` specifiers. `tsconfig.base.json` stays the application/bundler default (`module: Preserve`, `moduleResolution: bundler`). The agent-e2e program includes only the four `tests/agent-e2e-*` trees so it does not typecheck `packages/*/src`. The law program is `tsc -p .governance/law`.
+
+Scripts that import package source (`scripts/refresh-pricing-snapshot.ts`) have a separate bundler/Preserve program (`scripts/tsconfig.pricing.json`) so the Node tooling program does not typecheck `packages/*/src`. `scripts/perf/app-waterfall.run.ts` is excluded from the NodeNext program for the same reason: it imports `@centraid/test-kit` source and compiled package specifiers.
 
 Do not invoke raw `npx`, global tools, `bunx` guesses, or implicit config discovery. Editors, hooks, local commands, and CI all name the root configs. Pre-commit checks staged files and does not rewrite source files; pre-push runs `check:pr`. No hook mutates a tracked file: token cost per arrival is no longer appended to anything, it is read back out of the touched receipt's `## Accounting` section and printed on the generated front page, or printed as `token cost: not recorded` when the author recorded none ([#1005](https://github.com/srikanth235/centraid/issues/1005), [decisions.md](decisions.md#governance-as-a-constitution-1005)).
 

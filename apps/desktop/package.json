@@ -7,7 +7,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run build:ts && bun run build:preload && bun run build:assets && bun run build:react",
-    "build:assets": "mkdir -p dist/renderer && cp ../../packages/client/src/index.html ../../packages/client/src/styles.css dist/renderer/ && node scripts/copy-fonts.mjs",
+    "build:assets": "mkdir -p dist/renderer && cp ../../packages/client/src/index.html ../../packages/client/src/styles.css dist/renderer/ && node scripts/copy-fonts.ts",
     "build:preload": "bun build src/preload.ts --target=node --format=cjs --external electron --outfile dist/preload.cjs",
     "build:react": "vite build",
     "build:ts": "tsc -p tsconfig.json",
@@ -17,8 +17,8 @@
     "dist:dir": "electron-builder --config electron-builder.yml --dir --publish never",
     "start": "electron .",
     "test": "vitest run",
-    "test:e2e": "node ../../scripts/test-report/prepare.mjs --lane desktop-playwright && bun run build && playwright test -c tests/e2e/playwright.config.ts",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.react.json --noEmit"
+    "test:e2e": "node ../../scripts/test-report/prepare.ts --lane desktop-playwright && bun run build && playwright test -c tests/e2e/playwright.config.ts",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.react.json --noEmit && tsc -p tsconfig.scripts.json --noEmit && tsc -p tsconfig.copy-fonts.json --noEmit"
   },
   "dependencies": {
     "@centraid/client": "workspace:*",

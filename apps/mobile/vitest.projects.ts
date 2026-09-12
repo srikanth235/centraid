@@ -79,7 +79,7 @@ export const mobileVitestProjects = [
       include: [
         "src/**/*.test.ts",
         "src/**/*.test.tsx",
-        "scripts/**/*.test.mjs",
+        "scripts/**/*.test.ts",
       ],
     },
   }),

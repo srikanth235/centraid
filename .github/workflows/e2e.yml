@@ -66,7 +66,7 @@ jobs:
   # regression from a dependency merge four hours earlier.
   #
   # The fallback chain, and which one fired, is printed to the step summary by
-  # scripts/ci/resolve-candidate.mjs: dispatch input → `refs/candidates/latest`
+  # scripts/ci/resolve-candidate.ts: dispatch input → `refs/candidates/latest`
   # → the last green `ci.yml` run on main → this workflow's own SHA. The third
   # is an interim for the days between this landing and the first promotion, and
   # it announces itself as the weaker claim it is.
@@ -83,7 +83,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/resolve-candidate.mjs \
+          node scripts/ci/resolve-candidate.ts \
             --repo "${{ github.repository }}" \
             --ref "${{ github.event.inputs.ref }}" \
             --fallback-sha "${{ github.sha }}"
@@ -169,7 +169,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane desktop-e2e --rung 4 --platform desktop --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness --surfaces desktop
+          node scripts/test-report/write-evidence.ts --lane desktop-e2e --rung 4 --platform desktop --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness --surfaces desktop
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -229,7 +229,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane web-e2e --rung 4 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness --surfaces web
+          node scripts/test-report/write-evidence.ts --lane web-e2e --rung 4 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -277,7 +277,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane web-e2e-cross-browser --rung 4 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,journey --surfaces web
+          node scripts/test-report/write-evidence.ts --lane web-e2e-cross-browser --rung 4 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,journey --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -419,7 +419,7 @@ jobs:
         run: bun run native:prebuild
       - name: Build and start the tokenless mobile test gateway
         # Scoped to the gateway's dependency subgraph instead of a full
-        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
+        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.ts imports only
         # packages/server/dist, and turbo pulls every workspace dependency
         # (vault, app-engine, agent-runtime, automation, backup, blueprints,
         # tunnel, client, web, design) in transitively — nothing
@@ -429,11 +429,11 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -548,7 +548,7 @@ jobs:
       # (flows/ios-depth-budget.md).
       #
       # THE FLAGS ARE THE WIRING (#915 Wave 2). They sit on the invocation line
-      # because scripts/lint-e2e-wiring.mjs derives what this lane schedules by
+      # because scripts/lint-e2e-wiring.ts derives what this lane schedules by
       # reading it; a runner that picked its suite from an environment variable
       # would make every lane look identical to the gate whose whole job is
       # telling a blocking lane from a nightly one.
@@ -557,7 +557,7 @@ jobs:
           MAESTRO_PLATFORM: ios
           CENTRAID_MOBILE_BUILD: release
           CENTRAID_MOBILE_LANE: nightly-ios
-        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 4 --platform ios
+        run: node tests/agent-e2e-mobile/run-roster.ts --rung 4 --platform ios
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
@@ -602,7 +602,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mobile-e2e-ios --rung 4 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane mobile-e2e-ios --rung 4 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -700,11 +700,11 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -926,7 +926,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mobile-e2e-android --rung 4 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane mobile-e2e-android --rung 4 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -998,7 +998,7 @@ jobs:
         run: |
           set -euo pipefail
           write() {
-            node scripts/test-report/write-evidence.mjs --lane "$1" --rung 5 --platform "$2" \
+            node scripts/test-report/write-evidence.ts --lane "$1" --rung 5 --platform "$2" \
               --verdict parked --started-at "$(date -u +%FT%TZ)" --budget-ms "$3" \
               --candidate ${{ needs.resolve-candidate.outputs.sha }} \
               --qualities journey,performance --surfaces mobile-native
@@ -1008,7 +1008,7 @@ jobs:
             write device-rung-ios ios 3600000
           fi
           if [ "${{ steps.resolve.outputs.pi }}" != "true" ]; then
-            node scripts/test-report/write-evidence.mjs --lane device-rung-gateway-pi --rung 5 \
+            node scripts/test-report/write-evidence.ts --lane device-rung-gateway-pi --rung 5 \
               --platform any --verdict parked --started-at "$(date -u +%FT%TZ)" --budget-ms 3600000 \
               --candidate ${{ needs.resolve-candidate.outputs.sha }} \
               --qualities performance --surfaces gateway
@@ -1048,10 +1048,10 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -1066,7 +1066,7 @@ jobs:
       # every number this rung produces is at demo volume and its ledger row
       # says so.
       - name: Seed the lane's demo corpus
-        run: node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+        run: node tests/agent-e2e-mobile/seed-demo-corpus.ts
       - name: Lease a low-end Android from the farm
         id: lease
         env:
@@ -1078,7 +1078,7 @@ jobs:
         env:
           CENTRAID_MOBILE_BUILD: release
           MAESTRO_PLATFORM: android
-        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 5 --platform android
+        run: node tests/agent-e2e-mobile/run-roster.ts --rung 5 --platform android
       - name: Release the leased device
         if: always()
         env:
@@ -1089,7 +1089,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane device-rung-android --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,performance --surfaces mobile-native
+          node scripts/test-report/write-evidence.ts --lane device-rung-android --rung 5 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,performance --surfaces mobile-native
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1126,17 +1126,17 @@ jobs:
         run: |
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.ts "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.ts http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
           exit 1
       # Demo volume, for the reason the Android cell states above.
       - name: Seed the lane's demo corpus
-        run: node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+        run: node tests/agent-e2e-mobile/seed-demo-corpus.ts
       - name: Lease an iPhone from the farm
         id: lease
         env:
@@ -1148,7 +1148,7 @@ jobs:
         env:
           CENTRAID_MOBILE_BUILD: release
           MAESTRO_PLATFORM: ios
-        run: node tests/agent-e2e-mobile/run-roster.mjs --rung 5 --platform ios
+        run: node tests/agent-e2e-mobile/run-roster.ts --rung 5 --platform ios
       - name: Release the leased device
         if: always()
         env:
@@ -1159,7 +1159,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane device-rung-ios --rung 5 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,performance --surfaces mobile-native
+          node scripts/test-report/write-evidence.ts --lane device-rung-ios --rung 5 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,performance --surfaces mobile-native
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1201,7 +1201,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane device-rung-gateway-pi --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities performance --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane device-rung-gateway-pi --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 3600000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities performance --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1227,8 +1227,8 @@ jobs:
         with:
           turbo-cache: "true"
       - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
-      - run: node scripts/test-report/prepare.mjs
-      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+      - run: node scripts/test-report/prepare.ts
+      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1247,7 +1247,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane pairing-lifecycle --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,security --surfaces tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane pairing-lifecycle --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,security --surfaces tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1273,8 +1273,8 @@ jobs:
         with:
           turbo-cache: "true"
       - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
-      - run: node scripts/test-report/prepare.mjs
-      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
+      - run: node scripts/test-report/prepare.ts
+      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1293,7 +1293,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane pairing-ticket-hygiene --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security,contracts --surfaces tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane pairing-ticket-hygiene --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security,contracts --surfaces tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1320,10 +1320,10 @@ jobs:
           turbo-cache: "true"
       - run: docker info
       - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
-      - run: node scripts/test-report/prepare.mjs
+      - run: node scripts/test-report/prepare.ts
       # Production must never silently fall back to the JS byte pump.
       - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
-      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1346,7 +1346,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane pairing-cross-network-relay --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,offline --surfaces tunnel-pairing
+          node scripts/test-report/write-evidence.ts --lane pairing-cross-network-relay --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities journey,offline --surfaces tunnel-pairing
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1410,7 +1410,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane mutation-testing --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities correctness --surfaces vault-core,gateway,app-engine
+          node scripts/test-report/write-evidence.ts --lane mutation-testing --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities correctness --surfaces vault-core,gateway,app-engine
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1448,7 +1448,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/ci/lane-health.mjs \
+          node scripts/ci/lane-health.ts \
             --repo "${{ github.repository }}" \
             --workflow ci.yml \
             --rung 2 \
@@ -1484,7 +1484,7 @@ jobs:
           The per-lane first-attempt pass rates and red streaks are in the
           \`nightly-evidence-lane-health\` artifact on run ${{ github.run_id }}.
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[lanes] a required lane has been red on main for days' \
             --search '[lanes] a required lane has been red on main' \
             --body-file /tmp/chronic-red.md \
@@ -1493,7 +1493,7 @@ jobs:
 
       # #892 Phase 2 — DATA SAFETY OVER TIME FINALLY HAS A LANE.
       #
-      # `tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs` has existed since
+      # `tests/agent-e2e-compat/flows/install-upgrade-lifecycle.ts` has existed since
       # #842 W5.4. It asserts, in as many words, "upgrade did not preserve the old
       # vault's data" — the #1 risk for a local-first sovereign vault — and it was
       # referenced by NO WORKFLOW. Its sibling `released-binary-skew.mjs` was in the
@@ -1515,7 +1515,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane lane-health --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities contracts --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane lane-health --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities contracts --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1570,7 +1570,7 @@ jobs:
       - name: Install → upgrade → the vault is still there
         env:
           CENTRAID_UPGRADE_PREV_INSTALLER: ${{ steps.prev.outputs.installer }}
-        run: node tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs
+        run: node tests/agent-e2e-compat/flows/install-upgrade-lifecycle.ts
       # N−1 binary skew: the last published client against tonight's gateway.
       # Shares "the previous release, runnable" with the lane above, which is why
       # they are one job rather than two.
@@ -1578,7 +1578,7 @@ jobs:
         env:
           CENTRAID_SKEW_RELEASE_TAG: ${{ steps.prev.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node tests/agent-e2e-compat/flows/released-binary-skew.mjs
+        run: node tests/agent-e2e-compat/flows/released-binary-skew.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1601,7 +1601,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane compat-upgrade-and-skew --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,durability --surfaces gateway,vault-core
+          node scripts/test-report/write-evidence.ts --lane compat-upgrade-and-skew --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,durability --surfaces gateway,vault-core
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1626,7 +1626,7 @@ jobs:
         with:
           turbo-cache: "true"
       # Five of the six targets are imported from each package's built dist,
-      # the same way scripts/design-gallery.mjs reads packages/design/dist.
+      # the same way scripts/design-gallery.ts reads packages/design/dist.
       - run: bun run build
       # Fails on any finding whose class is not registered in
       # scripts/fuzz/known-findings.json — registered ones are recorded defects
@@ -1658,7 +1658,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane fuzz-parsers --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security,correctness --surfaces gateway,vault-core
+          node scripts/test-report/write-evidence.ts --lane fuzz-parsers --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security,correctness --surfaces gateway,vault-core
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1688,7 +1688,7 @@ jobs:
       # defects whose current behaviour is pinned by the unit judges — removing
       # an entry is how a fix gets locked in, never adding one to go green.
       - name: Dynamic scan of the booted gateway HTTP surface
-        run: node scripts/security/dast-scan.mjs --out artifacts/dast/summary.json
+        run: node scripts/security/dast-scan.ts --out artifacts/dast/summary.json
       # Upload `artifacts/` (not `artifacts/dast/`) so merge-multiple download
       # into the report job keeps `dast/summary.json` — same reason as fuzz.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1706,7 +1706,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane dast-scan --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security --surfaces gateway
+          node scripts/test-report/write-evidence.ts --lane dast-scan --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities security --surfaces gateway
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1816,7 +1816,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane quality-performance-scale --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities performance,scalability --surfaces gateway,vault-core
+          node scripts/test-report/write-evidence.ts --lane quality-performance-scale --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities performance,scalability --surfaces gateway,vault-core
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1877,7 +1877,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane restore-year3 --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities durability,scalability --surfaces backup-restore,vault-core
+          node scripts/test-report/write-evidence.ts --lane restore-year3 --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 5400000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities durability,scalability --surfaces backup-restore,vault-core
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -1923,7 +1923,7 @@ jobs:
         env:
           LANE_STARTED_AT: ${{ steps.start.outputs.at }}
         run: >
-          node scripts/test-report/write-evidence.mjs --lane protocol-join --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities contracts,compat --surfaces gateway,replica-sync
+          node scripts/test-report/write-evidence.ts --lane protocol-join --rung 4 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities contracts,compat --surfaces gateway,replica-sync
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -2089,7 +2089,7 @@ jobs:
         if: always()
         env:
           TEST_REPORT_PUBLIC_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/
-        run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL" --title "Nightly test health"
+        run: node scripts/test-report/write-job-summary.ts --report-url "$TEST_REPORT_PUBLIC_URL" --title "Nightly test health"
       # #864 Wave 0 — the ledgers' "still open" claim is a hand-maintained
       # snapshot, so only GitHub can say whether it went stale. Nightly-only:
       # the PR lane must not gain a dependency on api.github.com. Runs last and
@@ -2174,7 +2174,7 @@ jobs:
 
           Auto-filed by #496 E2/E3. Update this issue rather than opening duplicates.
           EOF
-          node scripts/ci/file-tracking-issue.mjs \
+          node scripts/ci/file-tracking-issue.ts \
             --title '[nightly] test-health report HTML missing' \
             --search '[nightly] test-health report HTML missing' \
             --body-file /tmp/missing-html.md \
@@ -2206,11 +2206,11 @@ jobs:
           echo "url=https://${OWNER}.github.io/${REPO}/test-report/${SLOT}/" >> "$GITHUB_OUTPUT"
           # Emits date= and slug= — the same derivation nightly-failure-issue
           # uses, so the issue's dated link and this publish cannot disagree.
-          node scripts/ci/run-slug.mjs --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
+          node scripts/ci/run-slug.ts --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
       - name: Merge report into site tree
         if: steps.has_report.outputs.ok == 'true'
         run: |
-          node scripts/test-report/prepare-pages-site.mjs \
+          node scripts/test-report/prepare-pages-site.ts \
             --report dist/test-report \
             --site site \
             --slot "${{ steps.slot.outputs.slot }}" \
@@ -2312,7 +2312,7 @@ jobs:
         id: slug
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/ci/run-slug.mjs --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
+        run: node scripts/ci/run-slug.ts --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
       - name: Open or update one rolling issue per red lane
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -2339,20 +2339,20 @@ jobs:
             result="$(jq -r --arg lane "$lane" '.[$lane].result' /tmp/needs.json)"
             # The report's own renderer first: the issue body and the page's
             # attention queue are then the same model, so they cannot disagree.
-            if [ -f scripts/test-report/rolling-issue-body.mjs ] && [ -f dist/test-report/summary.json ]; then
-              node scripts/test-report/rolling-issue-body.mjs \
+            if [ -f scripts/test-report/rolling-issue-body.ts ] && [ -f dist/test-report/summary.json ]; then
+              node scripts/test-report/rolling-issue-body.ts \
                 --lane "$lane" --summary dist/test-report/summary.json > /tmp/rolling-body.md || \
-              node scripts/ci/rolling-issue-fallback-body.mjs \
+              node scripts/ci/rolling-issue-fallback-body.ts \
                 --lane "$lane" --rung 4 --result "$result" --run-url "$RUN_URL" --out /tmp/rolling-body.md
             else
-              node scripts/ci/rolling-issue-fallback-body.mjs \
+              node scripts/ci/rolling-issue-fallback-body.ts \
                 --lane "$lane" --rung 4 --result "$result" --run-url "$RUN_URL" --out /tmp/rolling-body.md
             fi
             {
               printf '\n| Candidate under test | `%s` |\n' "$CANDIDATE_SHA"
               printf '| Report for this run (immutable) | %s |\n' "$REPORT_URL"
             } >> /tmp/rolling-body.md
-            node scripts/ci/file-tracking-issue.mjs --update \
+            node scripts/ci/file-tracking-issue.ts --update \
               --title "[nightly] lane red — ${lane}" \
               --search "[nightly] lane red — ${lane}" \
               --body-file /tmp/rolling-body.md \
