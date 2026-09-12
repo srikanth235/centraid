@@ -3779,3 +3779,404 @@ than claimed as a check.)
 Some("asset-000002")`). The app's `duplicates` comparison passed throughout,
 because the app only READS the stamped column — which is D-1020-P3 working, and
 is why the clustering needs its own tests rather than the query's.
+## Wave 3 — lane X3: the cross-lane fixes wave 3 surfaced
+
+Eight commits, one per fix, each with its red first. The lane's
+subject is the eight items the three wave 3 lanes handed up: two bugs in the
+core the port had already shipped, two ABI-facing gaps, one missing fault
+injection point, lane E's three patches, one open question's ruling, and one
+gate that was reading the wrong tree. A ninth fix was found while running this
+lane's own exit list and is commit eight.
+
+### What landed, by commit
+
+**`ea8c4ff1` — `fix(xtask)`: the repository root is resolved at run time.**
+`crates/xtask/src/main.rs`, `crates/xtask/src/gate.rs`,
+`crates/xtask/tests/repo_root.rs`, `crates/xtask/README.md`.
+`repo_root()` was `env!("CARGO_MANIFEST_DIR")`, baked in when the binary is
+compiled. Wave 3's lanes shared one `CARGO_TARGET_DIR`, so the cached `xtask`
+belonged to whichever worktree compiled it last and every path-based rule —
+`sql-confinement`, `no-listening-socket`, `abi-five-symbols`, `ts-static`,
+`commonmain-no-platform-import` — scanned **that** worktree while reporting
+clean over this one (lane E finding 8, lane F finding 1; between them, three
+different answers from one command in one tree). Now: `git rev-parse
+--show-toplevel` from the cwd, then a walk up for the `CONSTITUTION.md` +
+`Cargo.toml` pair only the root carries, then the baked path **with a warning on
+stderr**. `cargo xtask repo-root` prints the answer in one line.
+`--lane <step>` already accepted any step name of the profile and errors by
+naming the profile's real steps and the four device lanes, which is what F's
+`desktop-e2e` refusal was; `select()` refuses an empty selection rather than
+reporting PASS over zero steps.
+
+**`bcfb38a8` — `fix(vault)`: ids are minted from the clock.**
+`crates/vault/src/clock.rs`, `crates/vault/src/file.rs`,
+`crates/vault/src/lib.rs`.
+`Vault::open` and `create` defaulted to `SeededIds::new("v1")`, whose counter
+starts at zero per instance, so the first write after **any** reopen collided
+with the first write of the session before it — lane E reproduced it through the
+C ABI as `Refused(code=63, "entity id is already held by another kind")`. The
+default is now `ClockIds`: UUIDv7 off the injected `Clock`, a per-open random
+suffix, fresh randomness per call. `SeededIds` stays, injected, for the
+fixtures and for `crates/sim`, whose byte-for-byte determinism is the reason
+the seeded source could not simply be deleted.
+
+**`4cf13f82` — `fix(core)`: the wire error carries an owner-facing sentence.**
+`crates/api-proto/proto/centraid/core/v1/error.proto`,
+`crates/core/src/error.rs`, `crates/core/src/lib.rs`,
+`crates/api-proto/tests/roundtrip.rs`, `crates/centraid/src/cmd/seat/server.rs`,
+`crates/protocol/src/wire.rs`, `crates/sim/src/world.rs`.
+A member saw `entity id is already held by another kind: core_party (#916)` —
+a SQLite `RAISE(ABORT)` predicate reaching the screen through `Error.detail`,
+which `error.proto` says is for logs. `Error` gains `sentence`, built from
+`code` alone by `sentence_for_code`, so no layer's own text can reach it;
+`detail` keeps the predicate for the audit trail.
+
+**`4365f216` — `feat(core)`: the handshake carries the artifact identity.**
+`crates/api-proto/proto/centraid/core/v1/handshake.proto`,
+`crates/core/src/{identity.rs,config.rs,handle.rs,error.rs,lib.rs}`,
+`crates/core/build.rs` (both moved from `crates/centraid`),
+`crates/core-ffi/src/{lib.rs,marshal.rs}`, `crates/core-ffi/include/centraid.h`,
+`crates/protocol/src/{handshake.rs,version.rs,wire.rs}`,
+`crates/centraid/src/{main.rs,run.rs,cmd/seat/core_link.rs}`,
+`crates/sim/src/world.rs`, and the four test files that assert the new field.
+`identity.rs` moves to `crates/core` with its build stamp, as its own header
+said it would; `Hello` gains `ArtifactIdentity` (git sha, digest, schema
+version) filled by `Handle::hello`; `CoreConfig` gains `expected_digest` and
+the ABI's JSON config gains `expectedIdentity`, so a shell that linked a
+prebuilt core is refused a stale one with the typed `StaleCore` **before a
+handle exists**. This is what G's `D-1020-G2` says the shell checks at `open`
+and what E's `CentraidCore.open(dataDir, expectedIdentity)` already expected.
+
+**`cfdec35f` — `feat(core-ffi)`: a debug-fault door for clause 9.**
+`crates/core-ffi/{Cargo.toml,CONTRACT.md}`,
+`crates/core-ffi/tests/contract.rs`, `crates/core/{Cargo.toml,src/handle.rs}`,
+`crates/xtask/src/gate.rs`, `crates/xtask/README.md`.
+`tests/contract.rs` drove `Handle::poison` directly and said so. The
+`debug-fault` feature makes a `Command` named `debug.panic` panic inside
+`Handle::call` — an **existing** request, so `abi-five-symbols` still counts
+five — off in every release, and `the_fault_door_is_absent_from_a_default_build`
+asserts a default build answers it as an unregistered command. `pr` gains a
+`fault-door` step that compiles the feature once for that one test.
+
+**`4bdf3ccb` — `build(gate)`: `mobile-jvm` is real, the device lanes have bodies.**
+`crates/xtask/src/{gate.rs,main.rs,rules.rs}`, `crates/xtask/README.md`,
+`.github/workflows/{gate-nightly.yml,release.yml,lane-release-mobile.yml}`,
+`contracts/ledgers/{gate-budgets.json,compile-time.json}`,
+`docs/toolchain.md`.
+Lane E's three hand-off patches, applied: `Profile::MobileJvm` stops refusing
+and runs one step (build the cdylib, `./gradlew -p mobile mobileJvm`, then
+regenerate the committed native theme and screen fixtures and fail on drift);
+an absent `mobile/` tree or an absent Gradle **fails loudly**, it never skips;
+`commonmain-no-platform-import` widens to `mobile/core`; the four device-lane
+bodies land in `run_device_lanes`; `release.yml` and the callee declaration drop
+the two retired EAS secrets in the same commit, which is the only order that is
+green at every commit.
+
+**`8def6bc4` — `docs(decisions)`: `D-1020-X3`.** `docs/decisions.md`, one dated
+block, the OQ10 evidence row and the ruling. Summarised under Decisions below.
+
+**`8602e221` — `fix(xtask)`: what has been built is read from `CARGO_TARGET_DIR`.**
+`crates/xtask/src/{main.rs,gate.rs,measure.rs,smoke.rs}`,
+`crates/xtask/README.md`. Found by this lane's own exit list — see the
+demonstrated red. `tree_state` read `<root>/target/debug/deps` and `measure`'s
+two cold keys removed `<root>/target/{debug,release}`, both hard-coded. One
+`target_dir()` resolves the directory as cargo does (`CARGO_TARGET_DIR`, else
+`<root>/target`, relative values joined onto the root, empty treated as unset),
+`smoke.rs`'s local copy of the same logic collapses onto it, and the `tree` line
+now prints the absolute `debug/deps` it scanned.
+
+### Exit list
+
+Every command below was run from `/home/user/centraid-laneG2`. The lane ran in
+two target directories: `/home/user/cargo-target-2b`, shared with three wave 4
+lanes, until that sharing was shown to corrupt builds (finding 1), and then
+`/home/user/cargo-target-x3`, a private hardlinked copy the root provisioned
+once the finding was confirmed. Which one a row was taken in is stated, because
+it changes how much the row is worth.
+
+Every row was taken against base `d1d8787a` (wave 3 lane E's receipt commit),
+the head this lane was spawned on. The branch was then rebased onto
+`688c0d77` — wave 4 lane assist — which itself adds 61 lines to
+`crates/xtask/src/gate.rs`; the rebase was clean and the merged result is
+re-verified by `cargo check -p xtask --all-targets`, which passes. A full
+re-run on the new base is part of the `pr` hand-off below, because the disk
+would not allow one here.
+
+| Command | Outcome |
+| --- | --- |
+| `cargo fmt --all --check` | clean, in both directories |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean, in both directories |
+| `cargo test --workspace` | **832 passed, 0 failed, 1 ignored** over 65 suites, shared directory. The ignored one is `a_relay_only_pair_and_stream`, `D-1020-C9`'s nightly-only case. Integrity-checked rather than taken on trust: the log carries four test names that exist only in this lane's commits, all passing, so the binaries were this tree's |
+| `SIM_SEEDS=25 cargo test -p centraid-sim` | 6 suites, **0 failing**; `the_determinism_seed_replays_byte_for_byte` and `a_seed_run_twice_reaches_the_same_state` both green, which is the check `bcfb38a8` had to survive |
+| `cargo xtask repo-root`, one binary, four checkouts | `/home/user/centraid-laneG2` and its `crates/xtask/src` → the lane tree; `/home/user/centraid` and `/home/user/centraid-lane4-tally` → themselves. `crates/xtask/tests/repo_root.rs`, 2 tests, green in both directories |
+| `cargo xtask gate --profile local` | **every step green, and the budget met — but not in one run.** Warm, shared directory: `tree warm — all 14 workspace member(s) have a linked artifact in /home/user/cargo-target-2b/debug/deps`, `BUDGET ok — 33.4s of 120s`, `test` clobbered mid-flight by a neighbour. Warm, shared directory, all five steps green: `150.9s` against the 120 s budget — over, on a 4-vCPU box running four lanes. Warm, private directory: `BUDGET ok — 44.9s of 120s`, `test` red on a full disk. No clean warm PASS of the whole profile was obtained; see Not done |
+| `cargo xtask gate --profile mobile-jvm` | **PASS.** `tree warm`, `BUDGET ok — 32.0s of 420s` warm; the run that rebuilt the cdylib and compiled Kotlin from cold took **274.7s**, also inside 420 s. Lane E's measured `budgetSeconds` holds at both ends |
+| `cd mobile && ./gradlew mobileJvm` | `BUILD SUCCESSFUL in 1m 35s`. Forced re-runs (`:core:jvmTest --rerun :shared:jvmTest --rerun`) found **one flaky failure** in lane E's `AbiContractSpec` under load, green on the next run — finding 5 |
+| `bun run format:check` | `All matched files use the correct format` over 5,949 files. It first found `crates/xtask/README.md` unformatted; the fix is amended into `8602e221` rather than left as a trailing commit |
+| `bun run check:push:static` | **4/4** — `lint` 7.4s, `turbo:lint` 0.8s, `format:check` 10.1s, `typecheck:affected` 14.5s |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, **no findings** |
+| `bash .governance/run.sh` | **all 10 directives pass** |
+| `cargo xtask gate --profile pr` | **not run.** Its `release-build` step needs gigabytes; `/` was at 674 MB free when this receipt was written and reached **17 MB** during the lane. An owner hand-off with the command and the expected result is below |
+| pre-commit hooks, every commit | `amendment-pairing`, `commit-message-format`, `doc-integrity`, `estate-separation`, `managed-tree-integrity`, `waiver-docket`, `law (hook door)`, `lint-check`, `no-hardcoded-colors`, `no-hardcoded-model-ids` — all green. No `--no-verify` and no `SKIP_*` anywhere in this lane |
+
+### Not done, and why
+
+**The `pr` profile did not run, and the last `cargo test --workspace` could not
+be repeated in the private directory.** Both are the same cause: `/` filled.
+The lane began at about 7 GB free and hit **17 MB** twice; at 17 MB
+`prost-build` wrote a truncated generated module, cargo cached it as fresh, and
+`centraid-protocol` then failed to compile against this lane's own `.proto`
+fields — a red whose whole content is "the disk was full". Nothing in this
+worktree holds space: it is 138 MB with `node_modules` removed. What was
+reclaimed, was: `docker builder prune` over 1.46 GB of inactive build cache,
+this lane's own `target/xtask/**`, and the private directory's 354 MB
+`incremental`. Two further reclaims were attempted and correctly refused as
+shared or unverifiable — the shared directory's 5.5 GB `debug/incremental`, and
+1.38 GB of other worktrees' artifacts that the hardlinked copy brought into the
+private directory (168 units, identified by their dep-info naming a foreign
+worktree). Those are the two levers that would unblock the `pr` profile, and
+neither is a lane's to pull.
+
+So `--profile pr` — with it `abi-five-symbols` counted over a whole green
+profile, `fault-door`, `release-build`, `ts-static`, `desktop-unit`, `deny`,
+`secrets`, `osv`, `sim`, `call-budget`, `lockfile`, `advisory` — is an owner
+hand-off. `abi-five-symbols` did report `8 file(s) scanned, clean` in every
+`local` run of this lane, and its unit tests
+(`exactly_five_abi_symbols_is_clean`, `a_sixth_abi_symbol_is_caught`) are
+green, so the count **is** five and `cfdec35f` did not add a sixth symbol; what
+is missing is that answer coming from a green `pr` run.
+
+### Decisions — lane X3
+
+**D-1020-X3** — open question 10's criterion (a) has tripped at **1.72×**
+(Tally 1.47, Photos 2.00, Notes 1.68) against the 1.5× threshold, and the
+ruling is to **keep protobuf until a device answers (b) and (c)**, with the
+number recorded so it cannot be re-litigated and a second trip on (b) or (c)
+flipping it to sealed classes + SKIE without further debate. Options, evidence
+and the hard date are in `docs/decisions.md`, one dated block, citing
+[#1020](https://github.com/srikanth235/centraid/issues/1020) open question 10
+and Amendment 3.
+
+**D-1020-X3-2** — **ids are minted from the injected clock, not persisted as a
+sequence.** Options for the reopen collision
+([#1020](https://github.com/srikanth235/centraid/issues/1020), lane E finding 1):
+(i) persist the counter in `core_vault.settings_json` or a `vault_ids` row under
+the commit that consumed it; (ii) mint UUIDv7 from the injected `Clock` with a
+per-open random suffix. (i) makes every id mint a write that has to be
+transactional with the commit that used it, and a crash between the two either
+loses ids or reissues them; it also gives the sequence a schema and therefore a
+migration. (ii) needs no state at all, matches what v0's `bootstrapVault`
+already does, and stays deterministic for the fixtures and the simulation by
+injection rather than by default. **Adopted (ii)**, with `SeededIds` kept and
+injected wherever reproducibility is the point — `crates/sim` is byte-for-byte
+reproducible and its determinism test is part of the exit list above.
+
+**D-1020-X3-3** — **the owner-facing sentence is built from the error code
+alone.** Options for the raw-predicate leak
+([#1020](https://github.com/srikanth235/centraid/issues/1020), lane E finding 2):
+(i) add a `sentence` field that each raising layer fills; (ii) derive it from
+`code` in one function and let no caller pass text. (i) is one careless
+`format!` away from the bug returning, and the bug is a member reading SQL.
+**Adopted (ii)**: `sentence_for_code` is the only writer, `detail` keeps the
+predicate for the audit trail, and a sweep asserts no code's sentence is
+SQL-shaped.
+
+**D-1020-X3-4** — **the handshake's identity is checked at `open`, against a
+digest the caller states.** Options
+([#1020](https://github.com/srikanth235/centraid/issues/1020), lane E finding 3,
+G's `D-1020-G2`): (i) the shell reads `Hello.identity` after `open` and decides;
+(ii) the caller states `expectedIdentity` in the `open` config and the core
+refuses a mismatch before a handle exists. (i) leaves a window in which a shell
+has a working handle onto a core it would have rejected. **Adopted (ii)**, with
+(i) still possible because `Hello` carries the identity either way.
+
+**D-1020-X3-5** — **no second `call` ceiling was written.** Lane E's brief
+proposed a 3,600 µs ledger ceiling for the JVM binding; E's own `measured.md`
+then asserted the JVM path against the **same 50 ms** ceiling `crates/xtask`'s
+`call-budget` step holds the Rust side to
+(`AbiRoundTripSpec.CALL_CEILING_US = 50_000`), on the grounds that a binding
+needing a relaxed ceiling is a binding the product cannot ship. Writing 3,600 µs
+would have created a second, looser ceiling for the same operation, and there is
+no ledger key for it. **Nothing written**, the reason recorded here
+([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+
+**The third gitleaks finding is an owner allowlist decision, restated and not
+taken.** `contracts/golden/format-golden.json`'s `dataKeyHex` is a **test
+vector** — the key the format golden is sealed with, which has to be in the file
+for the golden to be checkable at all. `.gitleaks.toml` is **untouched** by this
+lane, as is lane G's `contracts/ledgers/library-size.json`. Under
+`R-1020-35` a gate's false positive is fixed in the gate, never in an allowlist,
+and `D-1020-B2-5` already did that for the `target/`-walking half of this step;
+this one is not a false positive in the same sense — the string genuinely is a
+key, it is genuinely committed, and whether a documented test vector belongs in
+`.gitleaks.toml`'s allowlist or the fixture should carry the key out of band is
+the owner's call, not a lane's
+([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+
+### Demonstrated reds
+
+- **`ea8c4ff1`** — `crates/xtask/tests/repo_root.rs` runs the **already
+  compiled** binary from a second checkout. Against the old code it could not
+  pass, because the answer did not depend on the current directory at all. Live:
+  one binary, four cwds, four different and correct roots, quoted in the exit
+  list.
+- **`bcfb38a8`** — `the_first_write_after_a_reopen_does_not_collide_with_the_first_session`
+  (`crates/vault/src/file.rs`) and
+  `two_id_sources_on_one_clock_do_not_share_a_sequence`
+  (`crates/vault/src/clock.rs`). Red on `SeededIds`: open, write, close, reopen,
+  write → the same id, the second write `Refused(code=63)`.
+- **`4cf13f82`** — `the_owner_facing_sentence_carries_no_database_text_and_the_detail_still_does`
+  (`crates/core/src/error.rs`). Red while `Error.sentence` did not exist and the
+  screen's only text was `detail`.
+- **`cfdec35f`** — its first run found `centraid_next_event` answering `TIMEOUT`
+  on a poisoned handle instead of `PANICKED`, which is the bug the fault door
+  exists to find and is fixed in the same commit. The door's own absence is
+  asserted too (`the_fault_door_is_absent_from_a_default_build`).
+- **`8602e221`** — the red is a line from this lane's own exit list. Straight
+  after `cargo test --workspace` linked all fourteen members,
+  `cargo xtask gate --profile local` printed
+  `tree cold — 14 of 14 workspace member(s) have no linked artifact in
+  target/debug/deps (first: centraid)`, and after the fix the same command in
+  the same tree printed
+  `tree warm — all 14 workspace member(s) have a linked artifact in
+  /home/user/cargo-target-2b/debug/deps`. The unit test covers the direction
+  that matters — a **stale** `<root>/target` must not buy the warm budget for a
+  tree whose real target directory has never been built.
+
+### Findings outside the slice
+
+1. **A shared `CARGO_TARGET_DIR` swaps compiled artifacts between worktrees of
+   this workspace, and the failure direction includes *reports green*.** Raised
+   from this lane and confirmed by the root, which then reported that a wave 4
+   lane had hit `missing 'sentence'` / `missing 'identity'` three times — this
+   lane's fields, in a lane that does not have them. The mechanism, as observed
+   here: `centraid-api-proto`'s build-script `OUT_DIR` is keyed by package
+   identity, which is the same in every worktree, so the last lane to build
+   decides what `centraid_api_proto::core_v1` contains for all of them. Final
+   binaries are worse — `<target>/debug/xtask` carries no per-unit hash at all,
+   so `cargo build -p xtask` reported `Finished` and left a **neighbour's**
+   binary at the path `cargo --message-format=json` names as the executable; a
+   `cargo xtask gate --profile mobile-jvm` run in this tree consequently printed
+   `REFUSED … is a ledger placeholder with no steps`, which stopped being true
+   two commits earlier. Compiled test binaries swap the same way: one run failed
+   `-p centraid-vault --test commands` with `no stub reached its body; the
+   schemas refused all 23`, a wave 4 Tally lane's assertion. Another printed
+   `15 of 15 workspace member(s)`, `sql-confinement — 89 file(s)` and
+   `commonmain-no-platform-import — 12 file(s)` where this tree has 14, 81 and
+   17: a neighbour's `xtask`, correctly resolving **this** tree as its root
+   (`ea8c4ff1` working as designed) while applying **its** rule definitions. The
+   fix is one target directory per lane, or serialised lanes; no
+   repository-side change makes sharing safe.
+2. **`measure`'s two cold keys were measuring a warm build.**
+   `take_release_build` and `take_cold_local_profile` removed
+   `<root>/target/{release,debug}`, hard-coded — which under a shared or
+   overridden target directory removes nothing, so the next `cargo build
+   --release` / `cargo xtask gate` ran warm and the wall clock went into a
+   **down-only** ledger as a first build. Fixed in `8602e221`. No ledger row was
+   written from such a run by this lane, and `compile-time.json`'s
+   `coldLocalProfileSeconds` was not touched.
+3. **`.governance`'s `format-check` directive silently passes without
+   `node_modules`.** `check.sh` exits 0 when `node_modules/.bin/oxfmt` is absent
+   ("an unrunnable gate must not stop a commit"), which is defensible for a
+   commit hook and misleading in a `bash .governance/run.sh` line that reads
+   `✓ format-check`. This lane's worktree had no `node_modules`, so ten green
+   directives included zero formatter coverage — and `bun run format:check`,
+   once installable, immediately found a file. Suggested: print `SKIP`, not `✓`.
+   Not this lane's file.
+4. **No gate step would have caught finding 1.** Everything `local` runs is a
+   cargo invocation that trusts the target directory. A cheap guard exists —
+   assert that the generated `core_v1` carries every field the tree's `.proto`
+   files declare — and it is recorded rather than built, because a step whose
+   real answer is "your build directory is shared" belongs with the fix in
+   finding 1.
+5. **`mobile/core`'s `AbiContractSpec` "clause 5: a stalled consumer PARKS the
+   reader" is flaky under load.** `mobile/core/src/jvmTest/kotlin/dev/centraid/
+   core/AbiContractSpec.kt:167` asserts `handedOver <= CentraidCore.EVENT_BUFFER
+   + 3L` after a fixed `Thread.sleep(1_500)`, with `EVENT_BUFFER = 1024` and
+   1,224 events offered. It failed once on a box running three other cargo
+   builds and passed on the next run with nothing else changed. The claim is
+   right and the margin is what is fragile: `+3` slots and a wall-clock sleep on
+   a machine whose scheduler is contended. `mobile/**` is not this lane's, and
+   the test must not be loosened to go green — the shape that would hold is a
+   condition waited on rather than a sleep. Lane E's successor.
+6. **A hardlinked copy of a target directory carries stale `CARGO_BIN_EXE_*`
+   paths.** Cargo bakes the absolute path of a binary into the integration tests
+   that name it, so after the copy `crates/{centraid,xtask}/tests/*.rs` ran
+   against `/home/user/cargo-target-2b/debug/{centraid,xtask}` and failed
+   `NotFound` — four test files, found by `grep -rln CARGO_BIN_EXE`, recompiled
+   by touching them. Worth knowing before anyone repeats the copy; not a code
+   defect, and not worth changing the tests for, since `CARGO_BIN_EXE_*` is the
+   documented way to do this.
+
+### Owner hand-offs
+
+1. **Run the `pr` profile on a machine with its own target directory and about
+   10 GB free**: `export CARGO_TARGET_DIR=$(mktemp -d) && cargo xtask gate
+   --profile pr`, then remove that directory's `release/`. Expected: green
+   except the two inherited reds named on `main` — gitleaks on
+   `packages/model-runtime/LICENSES.md`, osv on `astro@7.1.5` — with
+   `abi-five-symbols` = 5 and `fault-door` ok. `mobile-jvm` is **not** in `pr`,
+   by `D-1020-B2-3`.
+2. **One target directory per lane, or serialised lanes**, for finding 1. Until
+   then no gate verdict from a shared directory is worth anything, whichever
+   lane produced it.
+3. **`.gitleaks.toml` and `contracts/golden/format-golden.json`** — the
+   `dataKeyHex` test-vector decision above.
+4. **The device numbers that decide `D-1020-X3`** — criteria (b) and (c) of open
+   question 10, commands in `mobile/README.md`'s hand-off table. `D-1020-X3`
+   turns on them and on nothing else.
+5. **`kotlinNativeLinkSeconds`** stays `null` until the owner's first
+   `:shared:linkDebugFrameworkIosSimulatorArm64`; the key names the command.
+6. **Lane E's `AbiContractSpec` flake**, finding 5. Not to be loosened.
+
+### Doctrine digest
+
+Law `53be88c22ab5`, stamped: `amendment-pairing` · `commit-message-format` ·
+`constitution-coverage` · `doc-integrity` · `doctrine-citation` ·
+`estate-separation` · `managed-tree-integrity` · `receipt-per-issue` ·
+`registry-completeness` · `waiver-docket`. No waiver spent. No law or territory
+file mixed in one commit: this lane touched no `.governance/**`,
+no `CONSTITUTION.md`, no `scripts/ci/gate-classes.json`, no
+`tests/{floors,budgets,inventory,quarantine,claims}.json`, no `oxlint.config.ts`,
+no `oxfmt.config.ts`, no `.github/CODEOWNERS`. No gate, budget, ledger, test or
+allowlist was weakened: `gate-budgets.json#mobile-jvm` went from `null` to a
+measured `420` (a new entry, not a raise), `compile-time.json`'s
+`kotlinNativeLinkSeconds` stayed `null` with its reason, `.gitleaks.toml` and
+`library-size.json` were not touched, and no `SKIP_*` or `--no-verify` was used.
+
+### Falsification
+
+**Claim 1: `ClockIds` did not break the simulation's byte-for-byte
+determinism.** The risk is real — `crates/sim` replays a seed and compares
+bytes, and this commit changed where every id comes from. Throwaway check:
+`SIM_SEEDS=25 cargo test -p centraid-sim`, specifically
+`the_determinism_seed_replays_byte_for_byte` and
+`a_seed_run_twice_reaches_the_same_state`. Result: both green, 0 failing across
+6 suites. The reason it holds is that the sim injects `SeededIds` rather than
+taking the default, which is the only thing `SeededIds` is still for.
+
+**Claim 2: the warm/cold verdict is now right in both directions, not just the
+one that was in front of me.** The observed bug was a warm tree reading cold,
+which is the safe direction; a fix that only satisfied that case would leave the
+dangerous one — a stale `<root>/target` buying the 120 s budget for an unbuilt
+tree — in place. Throwaway check: a fixture with `<root>/target/debug/deps`
+fully linked for both members and an **empty** target directory in force must
+report `Cold`, and the mirror fixture (empty root, linked shared directory) must
+report `Warm` and name the directory it scanned. Both assertions are in
+`the_tree_state_follows_the_target_directory_and_not_the_repository_root` and
+both pass; the first one fails against a fix that merely read the env var for
+the warm case.
+
+**What the falsification could not cover.** Neither check runs inside a green
+`pr` profile, and neither could be repeated in the private target directory,
+for the disk reason in Not done. The claim that is therefore weakest in
+this diff is not a code claim: it is that `cargo test --workspace` reporting 832
+passing describes **this** tree. The check run against it was to grep the log
+for test names that exist only in this lane's commits —
+`the_tree_state_follows_the_target_directory_and_not_the_repository_root`,
+`the_target_directory_follows_cargo_target_dir_and_not_the_repository_root`,
+`the_binary_scans_the_checkout_it_runs_in_and_not_the_one_it_was_compiled_in`,
+`the_fault_door_is_absent_from_a_default_build` — all four present and passing in
+the same log. A neighbour's binaries could not have produced those lines. That
+is evidence, not proof, and it is the best this machine's shared build directory
+allows.
