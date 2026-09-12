@@ -20,6 +20,8 @@ interface ColumnInfo {
   name: string;
   type: string;
   pk: number;
+  /** 1 when the column is declared NOT NULL. Read by `columnIsNullable`. */
+  notnull: number;
 }
 
 // ONE `PRAGMA table_info` per table per process. The column set and the
@@ -59,6 +61,28 @@ function tableInfo(db: DatabaseSync, physical: string): readonly ColumnInfo[] {
     tableInfoCache.set(physical, info);
   }
   return info;
+}
+
+/**
+ * Can this column hold NULL? (#1020, R-1020-35)
+ *
+ * The paged door's keyset is a row value, and a row value with a NULL operand
+ * compares to NULL — so a continuation over a nullable sort column silently
+ * drops those rows from every page after the first. `planPagedDoor` refuses
+ * that case, and this is the schema reading it refuses on. A column that is
+ * not in the table at all reads as nullable: the caller has a worse problem
+ * and the grammar refuses it separately.
+ */
+export function columnIsNullable(
+  db: DatabaseSync,
+  physical: string,
+  column: string
+): boolean {
+  const info = tableInfo(db, physical).find(
+    (candidate) => candidate.name === column
+  );
+  if (!info) return true;
+  return info.notnull !== 1 && info.pk !== 1;
 }
 
 /** Actual column names of a physical table (cached per process). */

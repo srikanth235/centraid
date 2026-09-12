@@ -172,7 +172,11 @@ export default async function dayContext({
           name: "agenda.dayContext.dueTasks",
           select: "task_id, status, title, due_at, project_id",
           from: "schedule_task",
-          where: `${statusIn.sql} AND due_at >= ? AND due_at < ?`,
+          // `due_at IS NOT NULL` is implied by the range either side of it and is
+          // stated anyway: the paged door proves a nullable sort column
+          // syntactically, and without the words a continuation over this
+          // window would be refused rather than served (#1020, R-1020-35).
+          where: `${statusIn.sql} AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?`,
           bind: [...statusIn.bind, from, dueUpper],
           order: {
             sortColumn: "due_at",

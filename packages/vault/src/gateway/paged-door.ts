@@ -31,10 +31,12 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import type { PageOrder } from "@centraid/core/page";
+
 import { sealedColumnsOf } from "../schema/sealed.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import { evaluateAccess } from "./access.js";
-import { compileFilters, tableColumns } from "./filters.js";
+import { columnIsNullable, compileFilters, tableColumns } from "./filters.js";
 import type { FilterClause, Identity } from "./types.js";
 import { GatewayError } from "./types.js";
 
@@ -350,6 +352,60 @@ function checkColumn(
 }
 
 /**
+ * A CONTINUATION OVER A NULLABLE SORT COLUMN IS REFUSED (#1020, R-1020-35).
+ *
+ * The keyset is a row value: `(sort, pk) < (?, ?)`. SQLite compares a row
+ * value containing a NULL operand to NULL, which is not true, so a row whose
+ * sort key is NULL is excluded from EVERY page after the first — the walk
+ * returns a short page, the cursor says the rows ended, and nothing anywhere
+ * says rows were dropped. That is a wrong answer with no error message, and it
+ * is the one failure mode of the paged door that neither the grammar nor the
+ * access decision could see.
+ *
+ * WHY THE FIRST PAGE IS LEFT ALONE. Without a cursor there is no row-value
+ * comparison and the ordering is total — SQLite sorts NULL as the smallest
+ * value, consistently, in both directions — so page one is correct today and
+ * refusing it would remove rows a member can currently see (an undated photo
+ * in a small library sorts last under `captured_at DESC` and shows up fine).
+ * The bug is the CONTINUATION, so the continuation is what refuses.
+ *
+ * WHY NOT COALESCE IT. Coalescing in the ORDER BY makes the sort key an
+ * expression, and a SELECT alias cannot be named in a WHERE, so the keyset
+ * could not be written against it at all: the walk would have to fall back to
+ * OFFSET, which is the thing `packages/core/src/page/window.ts` exists to
+ * prevent. A named refusal is the honest answer.
+ *
+ * A handler whose sort column is declared nullable but whose own predicate
+ * proves it is not — `deleted_at IS NOT NULL` on a trash shelf — is accepted:
+ * the proof is syntactic and checked here, in the same place as the schema.
+ */
+function checkSortColumn(
+  vault: DatabaseSync,
+  name: string,
+  order: PageOrder,
+  where: string,
+  tables: PagedDoorTable[]
+): void {
+  const dot = order.sortColumn.indexOf(".");
+  const column = dot > 0 ? order.sortColumn.slice(dot + 1) : order.sortColumn;
+  const owner =
+    dot > 0
+      ? tables.find((table) => table.alias === order.sortColumn.slice(0, dot))
+      : tables.find((table) => table.columns.has(column));
+  if (!owner) return; // `checkColumn` has already refused an unresolvable ref.
+  if (!columnIsNullable(vault, owner.physical, column)) return;
+  const proven = new RegExp(
+    `\\b${column.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s+IS\\s+NOT\\s+NULL\\b`,
+    "iu"
+  ).test(where);
+  if (proven) return;
+  refuse(
+    name,
+    `continues from a cursor on ${owner.physical}.${column}, which is nullable; a row value with a NULL operand compares to NULL, so every later page would silently drop those rows`
+  );
+}
+
+/**
  * Plan one statement: resolve its tables, take an access decision on each, and
  * compile every table's row filters into the predicate the assembler splices
  * in beside the handler's own.
@@ -357,8 +413,16 @@ function checkColumn(
 export function planPagedDoor(
   vault: DatabaseSync,
   identity: Identity,
-  query: { name: string; select: string; from: string; where?: string },
-  now: string
+  query: {
+    name: string;
+    select: string;
+    from: string;
+    where?: string;
+    order: PageOrder;
+  },
+  now: string,
+  /** True when the request carries a cursor — see `checkSortColumn`. */
+  continues = false
 ): PagedDoorPlan {
   const { name } = query;
   const { parts, conditions } = parseFrom(name, query.from);
@@ -408,6 +472,12 @@ export function planPagedDoor(
     for (const ref of columnRefs(name, tokens, label))
       checkColumn(name, ref, tables, label);
   }
+
+  // The keyset's own soundness, checked against the schema rather than hoped
+  // for (#1020, R-1020-35). Only a continuation can drop rows, so only a
+  // continuation refuses.
+  if (continues)
+    checkSortColumn(vault, name, query.order, query.where ?? "", tables);
 
   // The row filters of EVERY table, ANDed. A table whose grant carries a
   // filter carries it wherever it is read from, including the far side of a
