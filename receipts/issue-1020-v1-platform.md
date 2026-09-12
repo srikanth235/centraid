@@ -2980,3 +2980,470 @@ before this receipt was written (`5d2a0a53`).
 The residual risk is named rather than closed: the drift check itself runs in
 the `mobile-jvm` gate step lane G has not spliced yet, so until it does, the
 three artifacts are kept in step by `NativeThemeSpec` and by nothing else.
+
+## Wave 4 — lane assist: the assistant plane in Rust — a ledger band, a turn plane that asks consent first, harnesses as external processes, and an MCP server with no socket
+
+`crates/assist` is the assistant plane's **meaning**; it holds no SQL, no model
+and no inference loop. The three processes are the gateway, a harness CLI it
+spawns over stdio, and `centraid mcp`, which the harness spawns back. Nothing
+listens. `crates/assist/README.md` is the current-state map of that shape.
+
+### What landed, by commit
+
+**`f3d48d8b` — `build(deps)`** · `Cargo.toml`, `Cargo.lock`
+`agent-client-protocol = "2.1"` (Apache-2.0, MSRV 1.88) and `futures`, one line
+each in `[workspace.dependencies]`. The crate's `unstable_mcp_over_acp` feature
+**exists and is not enabled**; the `Cargo.toml` comment says why and records it
+as the future collapse of `centraid mcp` into the ACP connection itself.
+
+**`23d00b2b` — `feat(assist)`** · `crates/assist/{Cargo.toml,src/{lib,registry,preflight,adapters,spawn_env,low_priority}.rs}`,
+`contracts/assist/harnesses.json`, `contracts/tools/export-harnesses.ts`
+The registry as data (D-1020-AS1): **17 kinds**, of which **5** are in
+`SUPPORTED_HARNESS_KINDS` (`codex, claude-code, opencode, grok, pi`), generated
+from v0's `registry.ts` and loaded by `registry::Registry`. `registry::LaunchPlan`
+is the one answer the module gives, so nothing outside `registry.rs` branches on
+the kind. v0's two prose SAFETY comments became **`refuse_args` data** —
+`--mdns` for opencode (it defaults its listen host to `0.0.0.0`, publishing an
+unauthenticated code-execution harness to the LAN) and `--port` for copilot — 
+because a comment cannot stop a member typing one into the extra-args box.
+`spawn_env`'s PATH scrub strips every `node_modules/.bin`; `low_priority` is
+nice +10 plus `ionice` on Linux and nothing on Windows. Preflight is
+warn-never-block with a 24 h `--version` cache and `versionAtLeast: false` ⇒
+`ok: true`.
+
+**`ff618621` — `feat(vault)`** · `crates/vault/src/{lib.rs,ledger/{mod,schema,store,health,consent,archive,sql_guard}.rs}`,
+`crates/vault/tests/ledger.rs`, `contracts/assist/ledger-fixture.json`,
+`contracts/tools/export-ledger-fixture.ts`
+The ledger band (D-1020-AS3), and **no new migration** — see `D-1020-AS8`. The
+band is machinery, registered names-only, all 14 tables in `localTables` so
+they leave neither in the portable export nor on the replica, **by band**.
+`sql_guard` is `vault_sql`'s grammar: one statement, `SELECT`/`WITH … SELECT`/
+`EXPLAIN` only, 8,000 statement bytes, `MAX_ROWS = 500`, 8 forbidden prefixes,
+15 forbidden tables, and the principal checked before the statement is parsed.
+
+**`08c798ac` — `feat(assist)`** · `crates/assist/src/{turn,health,acp,bin/fake-acp-harness}.rs`,
+`crates/assist/tests/acp_turn.rs`
+The turn plane (D-1020-AS4) and the ACP client (D-1020-AS5). `run_turn` asks
+the posture's consent **before** it touches the dispatcher, and `TurnPosture`
+cannot be constructed without an `EgressConsent`. `HYDRATION_TOKEN_BUDGET` 8,000
+and `HYDRATION_MIN_TURNS` 2 are v0's. `health` carries the `-1` permanent
+sentinel (`auth` failures, because backing off a wrong key is not a wait) and
+`half_open_claimed_at` so exactly one caller claims the probe. `Dispatch` is the
+trait the automations lane implements as `ctx.delegate`.
+
+**`e08c80a7` — `feat(centraid)`** · `crates/centraid/{Cargo.toml,src/{main.rs,cmd/{mod,mcp,assist}.rs},tests/mcp_stdio.rs}`
+`centraid mcp` over stdio (D-1020-AS2) and `centraid assist` (D-1020-AS7, no
+`sql` subcommands per #286). Three tools, five methods, stateless, no session
+id, nothing bound.
+
+**`96513ba1` — `test(assist)`** · `crates/assist/src/corpus.rs`,
+`crates/assist/tests/prompt_injection.rs`, `crates/assist/README.md`,
+`contracts/assist/prompt-injection/**` (14 payloads + `ORIGIN.md`)
+The #842 corpus, copied not authored, run in Rust (D-1020-AS6).
+
+**`fa79ff81` — `feat(xtask)`** · `crates/xtask/src/gate.rs`,
+`contracts/handoff/assist/gate.patch`
+The `prompt-injection` `pr` step. **`crates/xtask` is lane X3's this slot**, so
+the step is both applied here in a commit touching only `gate.rs` and filed as
+a patch under `contracts/handoff/assist/` — the root can drop the commit and
+apply the patch if X3's changes conflict.
+
+**`5026b0ac`, `8b20948f` — `style`** · rustfmt/clippy and oxfmt/oxlint over the
+earlier slices; `contracts/handoff/assist/README.md`.
+
+**`59941ff8` — `fix(assist)`** · `crates/assist/src/preflight.rs`,
+`crates/centraid/src/cmd/assist.rs`
+**A real bug this slot shipped and then found.** `VersionProbe::version` took
+the `LaunchPlan`, so for the two adapter kinds it probed the process a turn
+spawns — `node` — and compared **node's** version against the harness's
+minimum. `centraid assist preflight claude-code` answered `v22.22.2`,
+`versionAtLeast: true`, against a 2.1.126 floor: a green preflight that says
+nothing about the harness. `docs/harnesses.md:69`–`:71` already stated the
+distinction (`defaultBin` always names the user-facing CLI, and
+`HarnessPrefs.binPath` means "the harness CLI", not "the process we spawn"), so
+this was a documented invariant broken in the port, not an open question. The
+trait now takes the CLI path explicitly and
+`an_adapter_kind_probes_the_harness_cli_and_never_the_node_that_hosts_it`
+asserts **which program was asked**, not just the answer.
+
+### Exit list
+
+| command | outcome |
+|---|---|
+| `cargo fmt --all --check` | clean |
+| `cargo clippy -p centraid-assist -p centraid-vault -p centraid --all-targets` | clean, no warnings |
+| `cargo test -p centraid-assist` | 66 unit + 5 `acp_turn` + 3 `prompt_injection` = **74 passed, 0 failed** |
+| `cargo test -p centraid-vault` | **236 passed, 0 failed** — 153 unit, 16 in the new `tests/ledger.rs`, 67 in the pre-existing suites |
+| `cargo test -p centraid` | 87 + 3 + 3 + 9 + 3 + 7 = **112 passed** (incl. 3 `mcp_stdio`) |
+| `cargo test --workspace` | **926 passed, 0 failed**, 71 suites (819 + lane E's at spawn) |
+| `cargo xtask gate --profile local` (warm) | **no single run was both all-green and under budget, and the reason is the box, not the tree.** Three consecutive runs on the same commit: all steps green at `283.3s` against the 120s budget; then `BUDGET ok — 114.5s of 120s` with `test` red on finding 1; and a cold first run at `25.0s` against the `3200s coldLocalProfileSeconds` ceiling, also red on finding 1. Suite time is **80.9s** of the 283.3s (the 71 test binaries' own reported times, largest `crates/sim`'s `tests/seeds.rs` at 27.5s); the remainder is recompilation and lock waiting caused by other lanes touching the shared target directory. This lane's own suites are **4.71s** of that 80.9s (93 tests: `prompt_injection` 3.34, `tests/ledger.rs` 1.31, 66 unit 0.03, `acp_turn` 0.02, `mcp_stdio` 0.01), so the overrun is not chargeable here and **the budget was not touched** (finding 2) |
+| `cargo xtask gate --profile pr` | 18 steps, **14 green**, 4 red — `ci-policy`, `secrets` and `osv` inherited, `test` poisoned by the shared target directory (both below). `BUDGET ok — 669.6s of 1500s` on a cold tree |
+| `bun contracts/tools/export-harnesses.ts && bun run format && git diff --exit-code` | byte-identical |
+| `bun contracts/tools/export-ledger-fixture.ts && bun run format && git diff --exit-code` | byte-identical |
+| `cp packages/server/src/acp/prompt-injection/corpus/*.json … && bun run format && git diff --exit-code` | byte-identical, 14/14 |
+| `bun run format` / `format:check` | `All matched files use the correct format`, 5,971 files |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, **no findings** |
+| `bash .governance/run.sh` | **all 10 directives passed** |
+| `bun run check:push:static` | **4/4** in 30.6s (and the gate's own `ts-static` step, green) |
+
+The two lines the exit criterion asks to be quoted, from the `pr` run:
+
+```
+ok    prompt-injection    4.2s  cargo test -p centraid-assist --test prompt_injection (14 payloads)
+ok      no-listening-socket — 197 file(s) scanned, clean (9 in the rule runner)
+```
+
+The 197 files include every `.rs` under `crates/assist` and `crates/centraid`.
+The claim is not only a grep: `crates/centraid/tests/mcp_stdio.rs` reads the
+child's **own** `/proc/<pid>/fd` and `/proc/<pid>/net/tcp{,6}` while it is
+serving, matching `LISTEN`-state rows against the child's own socket inodes, so
+the negative is about that process at that moment. It runs on this box (it is
+`cfg_attr(not(target_os = "linux"), ignore)`, not `ignore`).
+
+**The four red `pr` steps, each judged.**
+
+| step | verdict |
+|---|---|
+| `osv` | **inherited**, named in the wave 2 brief: `astro@7.1.5 (score 9.8)`. |
+| `secrets` | **inherited, and one more than the brief names.** `findings.txt` is two files: `packages/model-runtime/LICENSES.md` (the named one) and `contracts/golden/format-golden.json:23` — a `generic-api-key` hit on `"masterKeyHex": "fffefdfc…e3e2e1e0"`, a counting-pattern **test fixture key** that landed with `c5de2b39` in wave 2. Neither file is in this lane's diff. Finding 4 below. |
+| `ci-policy` | **inherited.** `lint:path-filters` reports `copy`, `design` and `mobile` each "claimed by no `changes` filter and has no ledger entry" — three top-level trees wave 3 added. `.github/**` and `tests/path-filter-ledger.json` are lane G's and the estate's; this lane adds no top-level tree. Finding 5 below. |
+| `test` | **not this tree's code.** `error[E0063]: missing field 'identity' in initializer of centraid_api_proto::core_v1::Hello` at `crates/protocol/src/version.rs:39`. No `.proto` in this worktree declares `identity`, and neither file is in this lane's diff. Finding 1 below. The real verdict for this tree is the standalone `cargo test --workspace` above: **926 passed, 0 failed.** |
+
+### The #842 corpus: 14 payloads, 10 proven, 4 deferred loudly
+
+The gate step prints the size, counted from the directory rather than taken from
+the test, so the two cannot agree with each other while both being wrong.
+
+Ten are proven end to end through a real turn against `fake-acp-harness`:
+`read-confinement` (5), `no-out-of-grant-entity` (3), `egress-no-widen` (2).
+Each run (a) asserts the payload's sentinel **was in the prompt the harness
+actually received** — a corpus that passed because nothing was injected would
+prove nothing — (b) applies the attempt through the same confined door the turn
+had against a real founded vault, and (c) asserts the outcome **class** and that
+no forbidden row exists. Structural enums only; no ids, no timestamps, no
+ordering, and no fake clock, because a fake timer wedges the subprocess I/O.
+
+The four `risk-park` payloads are **deferred with a test that fails the day the
+gap closes**, not marked passing:
+`crates/assist/tests/prompt_injection.rs::the_park_gate_is_still_missing`.
+`CommandDefinition::confirm` is carried, documented and **never read**
+(`crates/vault/src/commands/mod.rs:167`–`:169`), so a confirm-gated command
+invoked by a non-owner **executes** instead of parking for the owner. The
+deferred payloads still assert what is true today — the attempt wrote no
+forbidden row — so a regression that made them worse is still caught. The
+numbers `(14, 10, 4)` are asserted as a triple with a comment saying a change in
+them must be read, not re-baselined.
+
+`the_one_allowed_payload_proves_the_corpus_is_not_passing_by_refusing_everything`
+is the anti-vacuity check: exactly one payload expects `allowed`, and it is run.
+
+### The fake-harness `tools/call vault_sql` transcript
+
+Live, off the shipped binary launched the way a harness launches it
+(`CENTRAID_SEAT_SOCKET` + `CENTRAID_TURN_TOKEN` in the environment, JSON-RPC on
+stdin and stdout), abridged to the three answers:
+
+```
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"centraid","version":"1.0.0-alpha.0"}}}
+{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"vault_sql",…},{"name":"attachments_list",…},{"name":"attachments_read",…}]}}
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"vault_sql is the owner's surface; this turn runs as `assistant turn`"}],"isError":true}}
+```
+
+The refusal is a **tool result the model can read** (`isError: true`), never a
+JSON-RPC transport fault: a model that cannot read the refusal retries it.
+
+### A real harness on this box
+
+`command -v codex claude gemini` → **`/opt/node22/bin/claude` only**; no
+`codex`, no `gemini`. `claude-code` is one of the two adapter kinds, and the
+adapter is not installed, so out of the box the verb reports the hand-off
+rather than a version:
+
+```
+$ centraid assist preflight claude-code --json
+{ "kind": "claude-code", "ok": false, "version": null, "minVersion": "2.1.126",
+  "versionAtLeast": null,
+  "reason": "claude-code speaks ACP through the @agentclientprotocol/claude-agent-acp adapter, which is not installed. Run `centraid assist adapters install` …",
+  "hint": "Install Claude Code (https://claude.com/code) and run `claude login`." }
+```
+
+With a stub adapter directory in `CENTRAID_ACP_ADAPTER_DIR` so the launch plan
+resolves, the probe runs against the **real** CLI on this box:
+
+```
+{ "kind": "claude-code", "ok": true, "version": "2.1.269 (Claude Code)",
+  "minVersion": "2.1.126", "versionAtLeast": true }
+```
+
+`2.1.269 (Claude Code)` and not `v22.22.2` is the falsification of `59941ff8`
+against a real binary rather than against a `Fixed` probe.
+
+**Owner hand-off — one real `initialize` against a real harness.** A real ACP
+negotiation needs one of the two npm adapters, and installing it means fetching
+and executing third-party code with the member's vault open. That is the
+decision `centraid assist adapters install` deliberately **prints rather than
+runs**, and it is the owner's, not this lane's. The command and the evidence:
+
+```
+npm i -g --prefix "$(centraid assist adapters --json | jq -r .directory)" \
+  @agentclientprotocol/claude-agent-acp
+centraid assist preflight claude-code --json     # expect ok:true, a 2.1.x version
+```
+
+Expected evidence: an `initialize` answer carrying the adapter's
+`agentCapabilities`, and a `session/new` that returns an opaque session id.
+Until then the protocol half is proven against `fake-acp-harness`, which is a
+genuine ACP `Agent` on the other end of a real pipe — not a mock of the client
+under test.
+
+### Decisions — lane assist
+
+- **`D-1020-AS1`…`D-1020-AS7`** are adopted as the brief states them (#1020);
+  `crates/assist/README.md` is their current-state map. Three refinements:
+- **`D-1020-AS8` — the ledger band needed no migration** (#1020). Options: (a)
+  write `contracts/migrations/002_ledger.sql` as the brief anticipated; (b)
+  discover that the band is already on **rung one** of
+  `contracts/migrations/001_baseline.sql` — it is, because the baseline was
+  exported from a founded v0 vault and v0 founds the ledger band with everything
+  else — and hold the baseline to `ledger.ts`'s shape with assertions instead.
+  **(b) adopted.** A second migration creating tables the baseline already has
+  is either a no-op or a divergence, and the real risk is the opposite one: a
+  future migration silently dropping a trigger or widening a CHECK. So
+  `crates/vault/src/ledger/schema.rs` is names and closed vocabularies —
+  14 tables, 2 indices, 8 triggers, 1 view, 1 FTS virtual table — and
+  `crates/vault/tests/ledger.rs::every_object_the_band_needs_is_on_rung_one`
+  fails if any of them leaves.
+- **`D-1020-AS9` — the ACP session fixtures are a live fake `Agent`, not
+  recorded `.jsonl`** (#1020). Options: (a) record
+  `contracts/assist/acp-sessions/*.jsonl` from v0 with a fake agent and replay
+  the frames in Rust, as the brief specifies; (b) ship `fake-acp-harness`, a
+  real ACP `Agent` binary with four modes (`echo`, `tool`, `thinking`,
+  `refuse`), and run the client half against it over a real pipe. **(b)
+  adopted.** A replayed frame log tests the mapper and *asserts the framing it
+  was recorded with*; it cannot fail when `initialize` stops negotiating, when
+  notifications arrive out of order, or when the crate's framing changes under a
+  version bump — and those are the failures that break a turn. The same binary
+  is then what the #842 corpus and the `tools/call` transcript run against, so
+  one fake serves three suites instead of three fixtures serving one. The cost
+  is named: **no recorded v0 wire bytes are committed**, so a divergence between
+  v0's frames and `agent-client-protocol` 2.1's would not be caught here. That
+  is a close-pass item, and the mitigation today is that the crate is the
+  protocol's own reference implementation rather than a hand-rolled codec.
+- **`D-1020-AS10` — `preflight` probes the harness CLI** (#1020). Not an open
+  question so much as a bug with two candidate fixes: (a) keep the `LaunchPlan`
+  signature and special-case the two adapter kinds inside `run`; (b) change
+  `VersionProbe::version` to take the CLI path and the environment explicitly.
+  **(b) adopted**, because (a) puts a `match kind` outside `registry.rs` —
+  exactly what D-1020-AS1 forbids — while (b) makes the type carry the
+  distinction `docs/harnesses.md:69`–`:71` states, so a future probe
+  implementation cannot get it wrong by accident.
+
+### A citation is not a justification — the seams re-judged
+
+- **`SUPPORTED_HARNESS_KINDS` is 5 of 17.** Kept, and it is a real product
+  decision rather than an oversight: twelve registered kinds launch and are not
+  claimed as supported. Collapsing the lists would mean either dropping twelve
+  working kinds or claiming support nobody verified. **Question for the owner:**
+  should the twelve be surfaced in Settings → Agents behind an "unverified"
+  label, hidden, or promoted after one probe each? Recommendation: surface them
+  labelled, because a member who has `goose` installed and cannot select it will
+  conclude the product does not support it.
+- **`turns.idempotency_key` is indexed, not UNIQUE**, and `items.effort` NULL
+  means "not confirmed, never infer". Both kept, both re-derived from what reads
+  them rather than from v0's ruling: a UNIQUE key would refuse a legitimate
+  retry after a partial write, and an inferred effort is a number in the cost
+  column that no harness reported.
+- **`turns.parent_turn_id` carries no foreign key.** Kept. A sub-run's parent can
+  be recorded after the child inside one batch, and a constraint would refuse
+  the batch. The three edges that *do* cascade are asserted together with this
+  one in `three_edges_cascade_and_the_parent_turn_link_deliberately_does_not`,
+  so the asymmetry is a test rather than a comment.
+
+### Owner hand-offs
+
+1. **The park gate.** `CommandDefinition::confirm` is never read, so a
+   confirm-gated command from a non-owner executes. Needs a third
+   `CommandStatus::Parked`, written in `Vault::execute` after the authority gate
+   and before the handler, the invocation row recorded as parked, and
+   `crates/core::api::invoke` mapping it to a new wire value. `crates/api-proto`
+   and `crates/core/src/api.rs` are another lane's files this slot. Pinned by
+   `the_park_gate_is_still_missing`, which **fails the day park lands**.
+2. **`vault_sql` over the seat socket.** The grammar, the row cap and the
+   principal check are implemented in `crates/vault/src/ledger/sql_guard.rs`;
+   the local channel deliberately carries only *named* reads and commands, so no
+   message carries a free-form statement yet. That transport is lane F's
+   successor's. Until it exists, `centraid mcp` answers `vault_sql` with the
+   principal refusal above rather than opening the vault file itself — the
+   tempting fallback, and the one that would make the child a second gateway.
+   `the_child_refuses_to_start_without_its_capability_token` holds that shut.
+3. **The `prompt-injection` gate step** — `contracts/handoff/assist/gate.patch`,
+   also applied here in its own commit. `crates/xtask` is lane X3's this slot.
+4. **One real ACP `initialize`** — the adapter install above.
+
+### Demonstrated reds
+
+Each one run on this tree, with the output it produced.
+
+1. **The gate step refuses an empty corpus.** With
+   `contracts/assist/prompt-injection/*.json` moved aside:
+   ```
+   the corpus is committed: Empty("…/contracts/assist/prompt-injection")
+   test result: FAILED. 1 passed; 2 failed
+   ```
+   Zero payloads is an **error**, never "zero payloads, all passed" — the one
+   failure mode a gate over a grow-only corpus has. The count in the gate line
+   is read from the directory, not from the test, so the two cannot agree with
+   each other while both being wrong.
+2. **The deferred four cannot be silently promoted.** The triple edited from
+   `(14, 10, 4)` to `(14, 14, 0)`:
+   ```
+   assertion `left == right` failed: the corpus is 14 payloads: 10 proven end to
+   end, 4 deferred on the park gate. A change in these numbers is a change in
+   what is proven and must be read, not re-baselined.
+     left: (14, 10, 4)   right: (14, 14, 0)
+   ```
+3. **The preflight fix.** `an_adapter_kind_probes_the_harness_cli_and_never_the_node_that_hosts_it`
+   fails on the pre-fix signature with
+   `the probe must ask the harness CLI, not the node that hosts its adapter`;
+   the real-binary form of the same red is the `v22.22.2` answer quoted above.
+4. **The park gate** is pinned by an *inverted* red — the test asserts the gap,
+   so closing the gap fails it. That is the only kind of red a hand-off can
+   carry without either papering over the gap or leaving it unwatched.
+
+### Findings outside the slice
+
+1. **The shared `CARGO_TARGET_DIR` corrupts cross-lane builds through
+   `crates/api-proto`'s build script. This is a correctness hazard, not a slow
+   one.** `centraid-api-proto`'s `OUT_DIR` is keyed by package identity, which
+   is identical in every lane's worktree, so the four lanes sharing
+   `/home/user/cargo-target-2b` share one generated `centraid.core.v1.rs`. The
+   **last lane to build wins**, and a downstream crate in another worktree then
+   compiles against a proto that worktree does not contain. Observed three times
+   in this lane with two different fields from a concurrent lane:
+   `missing field 'sentence' in initializer of centraid_api_proto::core_v1::Error`
+   (`crates/core/src/error.rs:112`) and `missing 'identity'`
+   (`crates/protocol/src/version.rs:39`). Neither field exists in this
+   worktree's `.proto` files; neither file is in this lane's ten commits.
+   Touching this worktree's `.proto` files and `build.rs` immediately before a
+   cargo invocation forces the regeneration and was enough to get
+   `cargo test --workspace` to **926 passed**, but it is a race, not a fix: the
+   third occurrence happened *inside one `gate --profile pr` run*, between the
+   `clippy` step and the `test` step, which is why `test` is red above while the
+   standalone run is green. **Every lane's `--workspace` verdict in this slot is
+   conditional on no other lane building at that moment**, and the root should
+   know that before trusting one. The fix is one target directory per worktree.
+2. **The same hazard hits the gate runner itself, and it is worse, because it
+   fails silently.** `cargo xtask` is `run --quiet --package xtask --`. The
+   uplifted `debug/xtask` is whichever lane's build wrote it last, and a fresh
+   build does not re-uplift — so this lane's first `gate --profile pr` ran **lane
+   X3's xtask binary**: its step table contained a `fault-door` step that does
+   not exist in this worktree's `crates/xtask/src/gate.rs`, and did **not**
+   contain `prompt-injection`, which does. Nothing in the output said so; the
+   gate reported a plausible pass/fail table for the wrong program. Detected by
+   `strings $CARGO_TARGET_DIR/debug/xtask | grep -c prompt-injection` → `0`,
+   fixed by `touch crates/xtask/src/gate.rs && cargo build -p xtask` (then `2`
+   and `fault-door` → `0`), after which the step appeared and passed. **A gate
+   verdict from a shared target directory is not evidence unless the binary is
+   verified first.**
+3. **Disk.** The box reached **0 bytes free** during this slot: four lanes, a
+   21 GB shared target directory of which **6.2 GB was `debug/incremental`** —
+   pure cache no lane's correctness depends on. Two `pr` steps
+   (`call-budget`, `fault-door`) and the evidence file failed with
+   `No space left on device` in the first run for that reason alone. Nothing was
+   deleted from the shared tree, because removing files under another lane's
+   running `rustc` is its own failure mode; `$CARGO_TARGET_DIR/release` was
+   removed after the release build per the wave 3 rule, and this worktree's
+   `node_modules` was installed only for the `bun` steps and removed again.
+4. **A third inherited `secrets` red, and it is a false positive.**
+   `contracts/golden/format-golden.json:23` trips `generic-api-key` on
+   `"masterKeyHex": "fffefdfcfbfaf9f8…e3e2e1e0"` — a counting pattern, i.e. a
+   deterministic golden-fixture key, landed by `c5de2b39` in wave 2. The wave 2
+   brief names two inherited reds and this is a third, so a lane that trusted
+   the brief's count would read it as its own. Per R-1020-35 a gate that reports
+   a false positive is a bug in the gate, and `gate.rs:1100` already says the
+   remedy is "a reasoned allowlist row in `.gitleaks.toml` naming the file" and
+   that it is **the owner's**. **Recommendation:** add the row for this one file
+   with the reason, rather than widening a rule — the fixture key must stay
+   deterministic for the golden to be a golden.
+5. **`ci-policy` is red on the umbrella head for three wave 3 trees.**
+   `lint:path-filters` reports `copy`, `design` and `mobile` each "claimed by no
+   `changes` filter and has no ledger entry", and its own message states the
+   consequence: `skipped` counts as a PASS in `ci.yml`'s `check`, so a change
+   under those paths **merges green, unexercised**. That is three of wave 3's
+   deliverables currently outside CI. `.github/**` and
+   `tests/path-filter-ledger.json` are lane G's and the estate's, and this lane
+   adds no top-level tree, so it is filed rather than fixed. It should not wait
+   for the close pass: it is a hole in the gate, not a cosmetic one.
+
+### Doctrine digest
+
+Law `53be88c22ab5`. `amendment-pairing`, `commit-message-format`,
+`constitution-coverage`, `doc-integrity`, `doctrine-citation`,
+`estate-separation`, `managed-tree-integrity`, `receipt-per-issue`,
+`registry-completeness`, `waiver-docket` — all green at the window door, no
+waiver spent, no gate, budget, ledger, test or allowlist weakened. No estate
+file touched. `docs/harnesses.md` is accurate for this port and was **not**
+edited: its two paragraphs at `:69`–`:71` are what `59941ff8` restores
+compliance with, and the wave's doc pass is the umbrella's at close.
+
+### Falsification
+
+The two riskiest claims in this diff, the throwaway checks run against each, and
+the result. **Both found something.**
+
+**Claim 1 — "the #842 corpus is green because the gateway refuses, not because
+the corpus is vacuous."** Four ways it could read green while proving nothing:
+the injected content never reaching the model; the gateway refusing
+*everything*; the deferred four counting as passes; an empty corpus passing.
+Checks and results:
+
+(a) The sentinel assertion was replaced with a **counter** over all fourteen
+payloads, reading the marker file the *subprocess* writes: `14 FALSIFY HIT`,
+`0 MISS`. So the injected content reaches the harness for every payload, not
+just for the first one the assertion happens to reach. (This matters: the
+assertion is inside the loop, so simply inverting it fails on payload one and
+proves nothing about the other thirteen — the first attempt at this check did
+exactly that and had to be redone as a count.)
+
+(b) `the_one_allowed_payload_proves_the_corpus_is_not_passing_by_refusing_everything`
+runs the single `allowed` payload and asserts `Applied::Allowed`, so a
+refuse-everything gateway fails the suite.
+
+(c) and (d) are demonstrated reds 2 and 1 above.
+
+**And the audit-band question is where the real subtlety is.** `produced_rows`
+asks the commit's **own `produced` list** — what the replica log captured —
+rather than counting a named table, and filters the `audit` band off it. Both
+halves are load-bearing and in opposite directions: a denied invocation
+*correctly* writes its receipt, its invocation row and its explanation, so
+requiring "no rows at all" would fail on the gateway working properly; and
+checking `core_party` by name would pass while some other handler wrote
+somewhere the test did not think to look. The band list is read from
+`centraid_ontology::registries::v0_registries().audit_band`, so a table added to
+the audit band cannot silently become a permitted write.
+
+**Claim 2 — "`centraid mcp` binds nothing."** A source grep proves only that
+this source has no `TcpListener`; the dependency graph pulls `iroh`, `quinn` and
+`tokio`, any of which could bind on a path this verb reaches. Three checks:
+
+(a) the `no-listening-socket` rule over 197 files, clean — the weak one, because
+it is a scan of text;
+
+(b) `the_running_child_holds_no_listening_socket` reads the serving child's own
+`/proc/<pid>/fd` inodes and matches them against `LISTEN`-state rows in
+`/proc/<pid>/net/tcp{,6}`. **A negative from a parser is worthless unless the
+parser can find a positive**, so the same logic was run by hand against a
+process that does listen — a Python socket bound to `127.0.0.1:36503` — and it
+reported `LISTENING FOUND: 0100007F:8E97 (inode 2202690)`. `0x8E97` is 36503.
+The method detects a real listener, so the empty answer for `centraid mcp` means
+something;
+
+(c) the child was launched with `CENTRAID_SEAT_SOCKET` and `CENTRAID_TURN_TOKEN`
+**removed** and it refused to start rather than falling back to opening the
+vault file directly.
+
+That third check is the one that mattered, and it exists because the second has
+a hole: a process that binds nothing but reads the vault file itself is not a
+listener and is still exactly the architecture D-1020-AS2 rules out. "No socket"
+was never the property worth proving on its own; "no second door" is.
+
