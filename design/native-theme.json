@@ -1,0 +1,416 @@
+{
+  "$generatedBy": "contracts/tools/export-native-theme.ts",
+  "$note": "The native lowering of packages/design, emitted for the KMP shared module and for SwiftUI. Regenerate with `bun contracts/tools/export-native-theme.ts && bun run format`; `git diff --exit-code design copy mobile` is the drift check (#1020).",
+  "schemes": {
+    "light": {
+      "borders": {
+        "hairline": 1
+      },
+      "colors": {
+        "cAmber": "#904e46",
+        "cForest": "#397247",
+        "cIndigo": "#635a93",
+        "cOchre": "#845922",
+        "cRose": "#8c4c61",
+        "cSlate": "#3e6596",
+        "cTeal": "#00707e",
+        "cViolet": "#7a5283",
+        "accent": "#141414",
+        "accentDeep": "#141414",
+        "accentFill": "#141414",
+        "accentDeepHover": "#000000",
+        "accentInkHover": "#2E2E2D",
+        "accentLight": "#3D3D3B",
+        "accentSoft": "rgba(20,20,20,.08)",
+        "accentText": "#141414",
+        "appIdentityText": "#141414",
+        "attention": "#8A6520",
+        "bg": "#FDFDFC",
+        "bgChrome": "#F5F4F2",
+        "bgElev": "#F5F4F2",
+        "bgHover": "#f1f1f0",
+        "bgPress": "#e8e8e7",
+        "bgSel": "rgba(45,75,168,.12)",
+        "bgSunken": "#F9F8F6",
+        "danger": "#9a3b2e",
+        "line": "#EFEEEB",
+        "lineStrong": "#E5E4E1",
+        "lineSel": "rgba(45,75,168,.42)",
+        "link": "#2D4BA8",
+        "net": "#9A3B2E",
+        "netHover": "#7F3026",
+        "netWash": "rgba(154,59,46,.07)",
+        "onAccent": "#FDFDFC",
+        "onStage": "#EDEDEC",
+        "onStageSoft": "#9A9A98",
+        "focusRingColor": "#4A67C8",
+        "scrim": "rgba(26,24,21,0.3)",
+        "seam": "#B4441F",
+        "shadowLg": "0 24px 48px -16px rgba(20,20,20,.16)",
+        "shadowMd": "0 8px 24px -8px rgba(20,20,20,.10)",
+        "shadowSm": "0 1px 2px rgba(20,20,20,.06)",
+        "skel": "#E4E3E0",
+        "stage": "#0B0B0B",
+        "stageLine": "#2A2A29",
+        "stageSunken": "#1A1A19",
+        "success": "#3a6540",
+        "text": "#141414",
+        "textDisabled": "#9C9C99",
+        "textFaint": "#6C6C69",
+        "textGhost": "#888885",
+        "textInv": "#FDFDFC",
+        "textSoft": "#5A5A58",
+        "warning": "#7c5619"
+      },
+      "density": {
+        "comfortable": {
+          "pad": 16,
+          "row": 44
+        },
+        "compact": {
+          "pad": 12,
+          "row": 38
+        },
+        "dense": {
+          "pad": 8,
+          "row": 34
+        }
+      },
+      "durations": {
+        "one": 140,
+        "two": 280
+      },
+      "metrics": {
+        "control": 34,
+        "controlTouch": 44,
+        "row": 44,
+        "segmented": 28,
+        "keyCol": 150,
+        "keyColTouch": 110,
+        "stem": 240,
+        "appRail": 232,
+        "appRailRow": 30,
+        "bandCapsule": 52
+      },
+      "pageMargin": 18,
+      "radii": {
+        "xs": 0,
+        "sm": 4,
+        "md": 7,
+        "lg": 12,
+        "pill": 999
+      },
+      "scheme": "light",
+      "spacing": {
+        "1": 4,
+        "2": 8,
+        "3": 12,
+        "4": 16,
+        "5": 24,
+        "6": 32
+      },
+      "targetMin": {
+        "coarse": 44,
+        "fine": 34
+      },
+      "type": {
+        "display": {
+          "family": "sans",
+          "fontSize": 27,
+          "lineHeight": 31,
+          "weight": "600",
+          "letterSpacing": "-0.02em"
+        },
+        "title": {
+          "family": "sans",
+          "fontSize": 20,
+          "lineHeight": 26,
+          "weight": "600",
+          "letterSpacing": "-0.01em"
+        },
+        "reading": {
+          "family": "sans",
+          "fontSize": 17,
+          "lineHeight": 28,
+          "weight": "400"
+        },
+        "body": {
+          "family": "sans",
+          "fontSize": 15,
+          "lineHeight": 22,
+          "weight": "400"
+        },
+        "bodyStrong": {
+          "family": "sans",
+          "fontSize": 13,
+          "lineHeight": 19,
+          "weight": "600"
+        },
+        "labelOn": {
+          "family": "sans",
+          "fontSize": 15,
+          "lineHeight": 22,
+          "weight": "600"
+        },
+        "small": {
+          "family": "sans",
+          "fontSize": 15,
+          "lineHeight": 22,
+          "weight": "400"
+        },
+        "smallStrong": {
+          "family": "sans",
+          "fontSize": 15,
+          "lineHeight": 21,
+          "weight": "600"
+        },
+        "control": {
+          "family": "sans",
+          "fontSize": 11,
+          "lineHeight": 15,
+          "weight": "600"
+        },
+        "eyebrow": {
+          "family": "sans",
+          "fontSize": 11,
+          "lineHeight": 15,
+          "weight": "600",
+          "letterSpacing": "0.06em",
+          "textTransform": "uppercase"
+        },
+        "mono": {
+          "family": "sans",
+          "fontSize": 13,
+          "lineHeight": 18,
+          "weight": "400",
+          "variantNumeric": "tabular-nums",
+          "direction": "ltr",
+          "unicodeBidi": "isolate"
+        },
+        "annotLabel": {
+          "family": "sans",
+          "fontSize": 13,
+          "lineHeight": 18,
+          "weight": "400"
+        },
+        "annotLabelOn": {
+          "family": "sans",
+          "fontSize": 13,
+          "lineHeight": 18,
+          "weight": "600"
+        },
+        "band": {
+          "family": "sans",
+          "fontSize": 11,
+          "lineHeight": 15,
+          "weight": "400"
+        }
+      }
+    },
+    "dark": {
+      "borders": {
+        "hairline": 1
+      },
+      "colors": {
+        "cAmber": "#d78f85",
+        "cForest": "#7bb587",
+        "cIndigo": "#a39bda",
+        "cOchre": "#c99b65",
+        "cRose": "#d48da2",
+        "cSlate": "#7ea7dc",
+        "cTeal": "#58b4c4",
+        "cViolet": "#be92c8",
+        "accent": "#EDEDEC",
+        "accentDeep": "#EDEDEC",
+        "accentFill": "#EDEDEC",
+        "accentDeepHover": "#FFFFFF",
+        "accentInkHover": "#D2D2D1",
+        "accentLight": "#C8C8C6",
+        "accentSoft": "rgba(237,237,236,.08)",
+        "accentText": "#EDEDEC",
+        "appIdentityText": "#EDEDEC",
+        "attention": "#D8A64E",
+        "bg": "#0E0E0E",
+        "bgChrome": "#121211",
+        "bgElev": "#171716",
+        "bgHover": "#191919",
+        "bgPress": "#222222",
+        "bgSel": "rgba(157,176,240,.12)",
+        "bgSunken": "#121211",
+        "danger": "#e08878",
+        "line": "#1B1B1A",
+        "lineStrong": "#232322",
+        "lineSel": "rgba(157,176,240,.42)",
+        "link": "#9DB0F0",
+        "net": "#E08878",
+        "netHover": "#EC9C8D",
+        "netWash": "rgba(224,136,120,.11)",
+        "onAccent": "#0E0E0E",
+        "onStage": "#EDEDEC",
+        "onStageSoft": "#9A9A98",
+        "focusRingColor": "#8098E8",
+        "scrim": "rgba(0,0,0,0.62)",
+        "seam": "#E0864F",
+        "shadowLg": "0 30px 70px -24px rgba(0,0,0,.7)",
+        "shadowMd": "0 12px 30px -14px rgba(0,0,0,.6)",
+        "shadowSm": "0 1px 0 rgba(0,0,0,.4)",
+        "skel": "#1E1E1D",
+        "stage": "#0B0B0B",
+        "stageLine": "#2A2A29",
+        "stageSunken": "#1A1A19",
+        "success": "#7fb588",
+        "text": "#EDEDEC",
+        "textDisabled": "#565654",
+        "textFaint": "#878785",
+        "textGhost": "#656563",
+        "textInv": "#0E0E0E",
+        "textSoft": "#9A9A98",
+        "warning": "#d9a75b"
+      },
+      "density": {
+        "comfortable": {
+          "pad": 16,
+          "row": 44
+        },
+        "compact": {
+          "pad": 12,
+          "row": 38
+        },
+        "dense": {
+          "pad": 8,
+          "row": 34
+        }
+      },
+      "durations": {
+        "one": 140,
+        "two": 280
+      },
+      "metrics": {
+        "control": 34,
+        "controlTouch": 44,
+        "row": 44,
+        "segmented": 28,
+        "keyCol": 150,
+        "keyColTouch": 110,
+        "stem": 240,
+        "appRail": 232,
+        "appRailRow": 30,
+        "bandCapsule": 52
+      },
+      "pageMargin": 18,
+      "radii": {
+        "xs": 0,
+        "sm": 4,
+        "md": 7,
+        "lg": 12,
+        "pill": 999
+      },
+      "scheme": "dark",
+      "spacing": {
+        "1": 4,
+        "2": 8,
+        "3": 12,
+        "4": 16,
+        "5": 24,
+        "6": 32
+      },
+      "targetMin": {
+        "coarse": 44,
+        "fine": 34
+      },
+      "type": {
+        "display": {
+          "family": "sans",
+          "fontSize": 27,
+          "lineHeight": 31,
+          "weight": "600",
+          "letterSpacing": "-0.02em"
+        },
+        "title": {
+          "family": "sans",
+          "fontSize": 20,
+          "lineHeight": 26,
+          "weight": "600",
+          "letterSpacing": "-0.01em"
+        },
+        "reading": {
+          "family": "sans",
+          "fontSize": 17,
+          "lineHeight": 28,
+          "weight": "400"
+        },
+        "body": {
+          "family": "sans",
+          "fontSize": 15,
+          "lineHeight": 22,
+          "weight": "400"
+        },
+        "bodyStrong": {
+          "family": "sans",
+          "fontSize": 13,
+          "lineHeight": 19,
+          "weight": "600"
+        },
+        "labelOn": {
+          "family": "sans",
+          "fontSize": 15,
+          "lineHeight": 22,
+          "weight": "600"
+        },
+        "small": {
+          "family": "sans",
+          "fontSize": 15,
+          "lineHeight": 22,
+          "weight": "400"
+        },
+        "smallStrong": {
+          "family": "sans",
+          "fontSize": 15,
+          "lineHeight": 21,
+          "weight": "600"
+        },
+        "control": {
+          "family": "sans",
+          "fontSize": 11,
+          "lineHeight": 15,
+          "weight": "600"
+        },
+        "eyebrow": {
+          "family": "sans",
+          "fontSize": 11,
+          "lineHeight": 15,
+          "weight": "600",
+          "letterSpacing": "0.06em",
+          "textTransform": "uppercase"
+        },
+        "mono": {
+          "family": "sans",
+          "fontSize": 13,
+          "lineHeight": 18,
+          "weight": "400",
+          "variantNumeric": "tabular-nums",
+          "direction": "ltr",
+          "unicodeBidi": "isolate"
+        },
+        "annotLabel": {
+          "family": "sans",
+          "fontSize": 13,
+          "lineHeight": 18,
+          "weight": "400"
+        },
+        "annotLabelOn": {
+          "family": "sans",
+          "fontSize": 13,
+          "lineHeight": 18,
+          "weight": "600"
+        },
+        "band": {
+          "family": "sans",
+          "fontSize": 11,
+          "lineHeight": 15,
+          "weight": "400"
+        }
+      }
+    }
+  }
+}

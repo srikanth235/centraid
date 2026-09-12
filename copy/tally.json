@@ -1,0 +1,6 @@
+{
+  "$generatedBy": "contracts/tools/export-native-theme.ts",
+  "app": "tally",
+  "strings": {},
+  "functions": ["routeStatus", "moreMeta"]
+}

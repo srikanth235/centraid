@@ -1,18 +1,40 @@
 name: lane-release-mobile
 
 # A `release.yml` lane, not an independently-triggered workflow (#557).
-
-# #501 / J1 / J7 — secret-gated store pipeline scaffold (EAS Build + Submit).
-# Human enrollment residual: Expo token, Play upload key, ASC credentials
-# (docs/enrollment.md). Never runs `eas update` (J7 store-only routine path).
 #
-# Default: workflow_dispatch only — does not auto-publish on every desktop tag.
+# EAS IS RETIRED ([#1020](https://github.com/srikanth235/centraid/issues/1020)
+# wave 3 lane E). v0 shipped through `eas build` + `eas submit` over an
+# `expo prebuild` output, and this lane replaces both halves with the native
+# projects under `mobile/`: a Gradle build for Android and an XcodeGen + Xcode
+# build for iOS. What that buys, in the order it matters:
+#
+#   * `mobile/androidApp/src/main/AndroidManifest.xml` is SOURCE. In v0 the
+#     manifest and the two Auto-Backup rule files were written by
+#     `plugins/withCentraidAndroidPrivacy.cjs` into a generated project, and CI
+#     had to regenerate that project before every release build "so the release
+#     builds what the inputs say rather than what the index happens to carry".
+#     A privacy rule that excludes a vault replica from device-to-device
+#     transfer is not a thing to keep as the output of a plugin.
+#   * The `.xcodeproj` is generated and NOT committed, so there is no second
+#     source of truth to reconcile.
+#   * The build is the build a contributor runs locally, with the same pinned
+#     Gradle wrapper.
+#
+# The `workflow_call` inputs are UNCHANGED, because `release.yml` is lane G's
+# file and this lane does not get to edit it. `profile`, `platform` and `submit`
+# mean what they meant. `EXPO_TOKEN` and `EAS_PROJECT_ID` stay DECLARED as
+# optional secrets for the same reason: `release.yml` still passes them, and a
+# `workflow_call` that receives an undeclared secret is an error. They are read
+# by nothing here. `contracts/handoff/E/release-yml.patch` removes them from the
+# caller.
+#
+# It runs only through `release.yml` — it does not auto-publish on a desktop tag.
 
 on:
   workflow_call:
     inputs:
       profile:
-        description: "EAS profile (preview = TestFlight/Play internal; production = store)"
+        description: "preview = TestFlight/Play internal; production = store"
         required: true
         type: string
       platform:
@@ -28,109 +50,180 @@ on:
         required: false
       EAS_PROJECT_ID:
         required: false
+      # THE NATIVE PATH'S OWN SECRETS. One set per lane, declared here rather
+      # than inherited, per `docs/release.md`'s rule. Absent means
+      # scaffold-only: the build runs, nothing is signed, nothing is submitted.
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      PLAY_SERVICE_ACCOUNT_JSON:
+        required: false
+      APPLE_API_KEY_ID:
+        required: false
+      APPLE_API_ISSUER_ID:
+        required: false
+      APPLE_API_PRIVATE_KEY:
+        required: false
 
 permissions:
   contents: read
 
 jobs:
+  # THE ENROLMENT PROBE PRINTS NO SECRET VALUE, only whether one is present.
+  # It keeps "scaffolded" and "enrolled" two visible states rather than one
+  # silent one.
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: mobile-release
     outputs:
-      enrolled: ${{ steps.enroll.outputs.enrolled }}
+      android_signed: ${{ steps.enroll.outputs.android_signed }}
+      ios_signed: ${{ steps.enroll.outputs.ios_signed }}
     steps:
-      - name: Enrollment probe (no secret values)
+      - name: Enrolment probe (no secret values)
         id: enroll
         env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
         run: |
-          if [ -n "${EXPO_TOKEN:-}" ]; then
-            echo "enrolled=true" >> "$GITHUB_OUTPUT"
-            echo "EXPO_TOKEN present — EAS path enabled"
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "android_signed=true" >> "$GITHUB_OUTPUT"
+            echo "Android upload key present - release signing enabled"
           else
-            echo "enrolled=false" >> "$GITHUB_OUTPUT"
-            echo "EXPO_TOKEN absent — scaffold-only (no submit)"
+            echo "android_signed=false" >> "$GITHUB_OUTPUT"
+            echo "Android upload key absent - assembleDebug only (docs/enrollment.md)"
+          fi
+          if [ -n "${APPLE_API_KEY_ID:-}" ]; then
+            echo "ios_signed=true" >> "$GITHUB_OUTPUT"
+            echo "App Store Connect key present - archive enabled"
+          else
+            echo "ios_signed=false" >> "$GITHUB_OUTPUT"
+            echo "App Store Connect key absent - simulator build only (docs/enrollment.md)"
           fi
 
-  # Scaffold path: assembleDebug only (no store submit). Proves tree builds.
-  android-assemble-scaffold:
-    if: needs.probe.outputs.enrolled != 'true' && (inputs.platform == 'all' || inputs.platform == 'android')
-    needs: [probe]
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
-        with:
-          distribution: temurin
-          java-version: "17"
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-      # REGENERATE THE ANDROID PROJECT (#996; tracked since #1011).
-      # `apps/mobile/android` is a prebuild output — committed, but regenerated
-      # here so the release builds what the inputs say rather than what the
-      # index happens to carry. The
-      # enrolled `eas-build` job needs no equivalent: EAS prebuilds on its own
-      # workers from the same inputs.
-      - name: Generate the Android project
-        working-directory: apps/mobile
-        env:
-          EXPO_NO_TELEMETRY: "1"
-        run: bun run native:prebuild
-      - name: assembleDebug (scaffold — no release signing)
-        working-directory: apps/mobile/android
-        run: ./gradlew assembleDebug --no-daemon
-      - run: echo "Scaffold only. Enroll EXPO_TOKEN + store secrets to enable EAS submit (docs/enrollment.md)."
-
-  eas-build:
-    if: needs.probe.outputs.enrolled == 'true'
+  android:
+    if: inputs.platform == 'all' || inputs.platform == 'android'
     needs: [probe]
     runs-on: ubuntu-latest
     environment: mobile-release
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ${{ inputs.platform == 'all' && fromJSON('["ios","android"]') || fromJSON(format('["{0}"]', inputs.platform)) }}
+    timeout-minutes: 60
+    env:
+      # Dispatch inputs reach the shell as env vars, never as interpolated
+      # script text (#557).
+      CENTRAID_MOBILE_PROFILE: ${{ inputs.profile }}
+      ANDROID_SIGNED: ${{ needs.probe.outputs.android_signed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-      - uses: expo/expo-github-action@04c13d00e429d099d9cffcc5370d54ab38675069 # v8
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-      - name: EAS build (${{ matrix.platform }} / ${{ inputs.profile }})
-        working-directory: apps/mobile
-        env:
-          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
-          # #557 — dispatch inputs reach the shell as env vars, not as
-          # interpolated script text. `profile` is a `type: choice` so its
-          # values are already constrained, but the pattern should be uniform
-          # across the repo rather than "safe because of a schema elsewhere".
-          EAS_PROFILE: ${{ inputs.profile }}
-          EAS_PLATFORM: ${{ matrix.platform }}
-          # Do NOT run eas update — J7 dormant OTA only
+          distribution: temurin
+          # AGP 9 requires JDK 17+; `mobile/*/build.gradle.kts` declares
+          # `jvmToolchain(21)`.
+          java-version: "21"
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      # THE PREBUILT CORE. The AAR carries `libcentraid_core_ffi.so` for the
+      # four Android ABIs and is published by `lane-prebuilt-core.yml` (lane G)
+      # with its build identity stamped in. A release build that compiled the
+      # core itself would be a second artifact with a second digest, and the
+      # shell's `ArtifactIdentity` check exists to refuse exactly that.
+      - name: Fetch the prebuilt core AAR
         run: |
-          eas build --platform "$EAS_PLATFORM" \
-            --profile "$EAS_PROFILE" \
-            --non-interactive \
-            --no-wait || eas build --platform "$EAS_PLATFORM" \
-            --profile "$EAS_PROFILE" \
-            --non-interactive
-      - name: EAS submit (optional)
-        # `workflow_call` typed this input as a real boolean; the dispatch form
-        # it replaced delivered the string 'true', so the old `== 'true'`
-        # comparison would now be permanently false — a store submit that
-        # silently never happens.
-        if: inputs.submit
-        working-directory: apps/mobile
-        env:
-          EAS_PROFILE: ${{ inputs.profile }}
-          EAS_PLATFORM: ${{ matrix.platform }}
+          echo "OWNER HAND-OFF: lane-prebuilt-core.yml publishes the AAR; this step"
+          echo "downloads it with its SHA256SUMS and refuses on a mismatch. It is a"
+          echo "placeholder until the first prebuilt-core release exists"
+          echo "(mobile/README.md -> The other hand-offs)."
+
+      - name: Build
+        working-directory: mobile
         run: |
-          eas submit --platform "$EAS_PLATFORM" \
-            --profile "$EAS_PROFILE" \
-            --latest \
-            --non-interactive
+          if [ "${ANDROID_SIGNED}" = "true" ]; then
+            ./gradlew -Pcentraid.android=true :androidApp:bundleRelease --no-daemon
+          else
+            ./gradlew -Pcentraid.android=true :androidApp:assembleDebug --no-daemon
+            echo "Scaffold only. Enrol the upload key to build a signed bundle."
+          fi
+
+      - name: Submit to Play internal
+        if: inputs.submit && needs.probe.outputs.android_signed == 'true'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          echo "OWNER HAND-OFF: the Play upload needs a service account and one"
+          echo "successful manual upload first (docs/enrollment.md)."
+
+  ios:
+    if: inputs.platform == 'all' || inputs.platform == 'ios'
+    needs: [probe]
+    runs-on: macos-15
+    environment: mobile-release
+    timeout-minutes: 90
+    env:
+      IOS_SIGNED: ${{ needs.probe.outputs.ios_signed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # ONE TOOLCHAIN FILE, READ AND NOT RETYPED. `.xcode-version` is the pin
+      # nix cannot carry, and this is the only place CI reads it.
+      - name: Select Xcode
+        run: |
+          version="$(cat .xcode-version)"
+          echo "Selecting Xcode ${version}"
+          sudo xcode-select --switch "/Applications/Xcode_${version}.app" ||
+            echo "OWNER HAND-OFF: ${version} is not on this runner image."
+
+      - name: Link the shared framework
+        working-directory: mobile
+        run: |
+          # Cinterop needs an Apple toolchain, which this runner has - so klib
+          # cross-compilation goes back on. On Linux it is off, and
+          # mobile/gradle.properties says why in full.
+          ./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true \
+            :shared:linkReleaseFrameworkIosArm64 --no-daemon
+
+      - name: Generate the Xcode project
+        working-directory: mobile/iosApp
+        run: |
+          brew install xcodegen
+          CENTRAID_IOS_DEPLOYMENT_TARGET="$(cat ../ios-deployment-target)" \
+            xcodegen generate
+
+      - name: Build
+        working-directory: mobile/iosApp
+        run: |
+          if [ "${IOS_SIGNED}" = "true" ]; then
+            xcodebuild -scheme Centraid -destination 'generic/platform=iOS' archive \
+              -archivePath build/Centraid.xcarchive
+          else
+            xcodebuild -scheme Centraid \
+              -destination 'platform=iOS Simulator,name=iPhone 16' build
+            echo "Scaffold only. Enrol the App Store Connect key to archive."
+          fi
+
+      - name: The fixture test - one fixture, two languages
+        working-directory: mobile/iosApp
+        run: |
+          # THE OTHER HALF of mobile/shared's ScreenFixtureSpec, over the same
+          # 19 files in contracts/screens. This is the first machine in the
+          # pipeline that can run it.
+          swift test || {
+            echo "OWNER HAND-OFF: swift test needs the SwiftProtobuf types"
+            echo "generated first (mobile/README.md -> The iOS hand-off)."
+            exit 1
+          }
+
+      - name: Submit to TestFlight
+        if: inputs.submit && needs.probe.outputs.ios_signed == 'true'
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          echo "OWNER HAND-OFF: the TestFlight upload needs an App Store Connect"
+          echo "key and one successful manual upload first (docs/enrollment.md)."

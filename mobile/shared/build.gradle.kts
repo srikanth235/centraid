@@ -104,6 +104,19 @@ tasks.withType<Test>().configureEach {
 // the report will be standing.
 kover {
     reports {
+        filters {
+            excludes {
+                // GENERATED CODE IS NOT THIS MODULE'S CODE. `centraid.screen.v1.*`
+                // is Wire's output over `crates/api-proto/proto` and
+                // `dev.centraid.design.*` is the token/copy emitter's; together
+                // they are four times the hand-written source, and including
+                // them would make the coverage number a measurement of a code
+                // generator. The threshold below is over `commonMain`'s state
+                // machines, the navigation model and the scheduler, which is
+                // what it is meant to be about.
+                classes("centraid.screen.v1.*", "dev.centraid.design.*")
+            }
+        }
         total {
             xml {
                 title = "centraid mobile :shared — JVM only; not a Kotlin/Native number"

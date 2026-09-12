@@ -1,0 +1,34 @@
+{
+  "$generatedBy": "contracts/tools/export-native-theme.ts",
+  "app": "photos",
+  "strings": {
+    "PHOTOS_ARCHIVE": "Archive",
+    "PHOTOS_ARCHIVE_EMPTY": "Archive is empty.",
+    "PHOTOS_EMPTY_DUPLICATES": "No near-identical clusters in your library.",
+    "PHOTOS_EMPTY_FAVORITES": "No favorites yet — tap the heart on any photograph.",
+    "PHOTOS_ERROR_EDIT_NOT_SAVED": "Photograph not saved.",
+    "PHOTOS_ERROR_EXPORT_FAILED": "Photograph not exported.",
+    "PHOTOS_ERROR_FREE_UP_PAUSED": "Free up vault paused.",
+    "PHOTOS_ERROR_IN_CLOUD": "Original is still in iCloud.",
+    "PHOTOS_ERROR_WRITE_NOT_SAVED": "Photo change not saved.",
+    "PHOTOS_SAVE_AS_NEW": "Save as a new photograph",
+    "PHOTOS_SAVE_AS_NEW_EXPLANATION": "Saving writes a new photograph dated today; the original is not touched.",
+    "PHOTOS_SAVED_AS_NEW": "Saved as a new photograph",
+    "PHOTOS_SEARCH_PLACEHOLDER": "Search photographs, people, places, albums",
+    "PHOTOS_UNARCHIVE": "Unarchive",
+    "PHOTOS_VIDEO_STATUS": "Video · playing from the display copy on this device",
+    "PLACE_NO_LOCATION": "No location yet",
+    "PLACE_UNNAMED": "A place with no name yet"
+  },
+  "functions": [
+    "duplicatesLede",
+    "photosOriginalNotFetched",
+    "photosFaceMatchedOn",
+    "photosPinLabel",
+    "photosPurgeNote",
+    "photosArchiveVerb",
+    "photosArchiveMoved",
+    "PLACE_NO_LOCATION_TERMS",
+    "PLACE_HOME_TERMS"
+  ]
+}
