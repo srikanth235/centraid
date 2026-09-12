@@ -1,0 +1,21 @@
+{
+  "_comment": "THE `call` BUDGET (#1020, D-1020-D2-6). Down-only: every number here is a ceiling on how long a bounded read may take, and it may only fall. The issue's Execution model says any request that exceeds its budget in the `pr` profile fails the gate, and `cargo xtask gate --profile pr`'s `call-budget` step is that gate. The measurement is `cargo test -p centraid-core --test call_budget`: p95 over 200 calls of one page of 100 rows, after 20 unmeasured warm-up calls. p95 and not the mean, because a mean hides the case a member notices.",
+  "_provenance": {
+    "measuredBy": "cargo test -p centraid-core --test call_budget -- --nocapture",
+    "hardware": "ci-linux-x64-4c",
+    "hardwareDetail": "4 vCPU / 15 GB, the hosted Linux runner this repository's gate budgets are stated against",
+    "shape": "one PageRequest for 100 rows of core_party, ordered (created_at, party_id), over a vault seeded with 200 rows",
+    "samples": 200,
+    "warmup": 20,
+    "statistic": "p95, nearest-rank",
+    "seededFrom": "wave 2 lane D2's first measurement; the observed p95 was far below the ceiling, and the ceiling is the issue's stated promise rather than the observation, so it is not ratcheted down to the observation. A ceiling set to the current measurement would fail on the next runner that is one percent slower, which teaches the team to raise budgets.",
+    "knownFloor": "The fixture is small. This catches a regression in the CALL PATH — a lock held too long, a statement re-prepared per call, a page probe gone quadratic — not the cost of a year-three table. When the year-3 corpus generator lands (wave 2 lane D3 / wave 4), the measurement moves to it and this number is re-stated from that fixture."
+  },
+  "profiles": {
+    "pr": {
+      "ci-linux-x64-4c": {
+        "p95Ms": 50
+      }
+    }
+  }
+}
