@@ -92,6 +92,19 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **client package** | Shared React shell + browser-safe HTTP. `packages/client` |
 | **daemon** | Standalone `centraid-gateway` process under a `dataDir`. |
 
+The v1 platform's nouns, ruled at wave 0 of [#1020](https://github.com/srikanth235/centraid/issues/1020) (see [decisions.md](decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020)). They name the v1 tree; the v0 rows above stay current for the v0 tree until wave 6 deletes it.
+
+| Term | Meaning **(v1, #1020)** |
+| --- | --- |
+| **gateway** | A _role_ of the one core, not a machine: the vault's authority — canonical SQLite file, receipts, retention, backup, iroh endpoint, QR pairing. A headless daemon the member runs on a VPS, a home server, Docker or their own laptop. It has no admin UI. |
+| **seat** | The other role of the same core: a full replica with the applier, the outbox, settlement, and every app's queries and commands. Every device, desktop included, is a seat and pairs by scanning the gateway's QR ticket. A phone is never a gateway. Not the v0 byte-custody seat below (`origin` / `custodian` / `viewer`), which is about where bytes live; in v1 the axis is whether a seat is replicated or thin. |
+| **replicated seat** | A seat holding a full local copy of the vault, so it works offline. The default. |
+| **thin seat** | A seat with no local copy: every call is forwarded to the gateway and run under the caller's principal. Same API as a replicated seat, and it shows its connectivity and durability states because a thin seat that has lost its gateway has nothing to draw. |
+| **sidecar** | The seat process Electron main spawns on desktop. The renderer is a thin client over a local socket to it; the sidecar is what pairs to the gateway over iroh. |
+| **`centraid` binary** | The one shipped program, with `gateway`, `seat`, `pair`, `doctor`, `recover`, `export` and `native-host` subcommands. The CLI is a _client_: every admin verb sends the same command message an owner seat sends. |
+| **blob door** | The optional, off-by-default HTTPS listener on the gateway, which ships only if the wave 3 iPhone measurement requires it. The only inbound port the product would ever have. |
+| **reference device** | One of the two phones the absolute targets in [`tests/journeys.json`](../tests/journeys.json) are stated on — a mid-range Android and the oldest supported iPhone. The models are the owner's to name (Q-1020-2). |
+
 ## Seats and byte custody (blueprints, [blueprint-seats.md](blueprint-seats.md))
 
 | Term | Meaning |
