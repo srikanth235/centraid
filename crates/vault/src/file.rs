@@ -80,6 +80,11 @@ impl Vault {
         // matter for no benefit.
         connection.pragma_update(None, "foreign_keys", "OFF")?;
         crate::migrations::run_from(&connection, 0)?;
+        // The registry the schema's own foreign keys point into, derived from
+        // the DDL that was just run (D-1020-D1-15). Before `foreign_keys = ON`,
+        // because `core_entity_kind` is what makes the first entity insert
+        // legal and seeding it is not itself an entity write.
+        crate::migrations::seed_entity_kinds(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
 
         let vault = Self::wrap(connection, path, head_version(), clock, ids)?;

@@ -104,6 +104,79 @@ pub fn run_from(connection: &Connection, from: i64) -> Result<i64> {
     Ok(at)
 }
 
+/// Seed `core_entity_kind`, the registry `core_entity.entity_type` keys into.
+///
+/// **DERIVED FROM THE SCHEMA, not transcribed** (D-1020-D1-15). An entity kind
+/// is exactly a logical name whose physical table declares
+/// `FOREIGN KEY (<pk>) REFERENCES core_entity(entity_id)` — that is what makes
+/// a row an entity in its own right rather than a child row of one. So the list
+/// is read off the DDL the file was just founded from, and a new entity table
+/// registers itself. A transcribed list would be a second answer to a question
+/// the schema already answers, and the one that drifted would drift silently:
+/// the symptom is an `entity_type` that fails its foreign key on the first
+/// insert, months later, in one app.
+///
+/// Verified against the baseline corpus: the derivation yields the same 52
+/// names v0's own ladder seeded, in both directions (`tests/baseline.rs`).
+pub fn seed_entity_kinds(connection: &Connection) -> Result<usize> {
+    let mut statement = connection.prepare(
+        r"SELECT name, sql FROM sqlite_master
+            WHERE type = 'table' AND sql IS NOT NULL
+              AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
+            ORDER BY name",
+    )?;
+    let tables: Vec<(String, String)> = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut seeded = 0;
+    for (name, sql) in tables {
+        if !keys_into_core_entity(&sql) {
+            continue;
+        }
+        // SQLite has no namespaces: the logical name is the physical one with
+        // its FIRST underscore restored to a dot, which is the inverse of the
+        // `${schema}_${kind}` the resolver derives.
+        let Some((schema, kind)) = name.split_once('_') else {
+            continue;
+        };
+        connection.execute(
+            "INSERT OR IGNORE INTO core_entity_kind (kind) VALUES (?1)",
+            [format!("{schema}.{kind}")],
+        )?;
+        seeded += 1;
+    }
+    Ok(seeded)
+}
+
+/// Does this table's DDL declare its primary key as a `core_entity` member?
+///
+/// Matched with SQL comments stripped, for the reason the snapshot's private-
+/// table matcher strips them: the DDL in this schema carries long explanatory
+/// comments, and one of them quoting the clause would register a child row as
+/// an entity kind.
+fn keys_into_core_entity(sql: &str) -> bool {
+    let stripped = crate::snapshot::strip_sql_comments(sql).to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(found) = stripped[from..].find("references core_entity") {
+        let at = from + found + "references core_entity".len();
+        let rest = stripped[at..].trim_start();
+        // `references core_entity(entity_id)` and not
+        // `references core_entity_revision(...)` or
+        // `references core_entity(entity_type, entity_id)`, which is the
+        // composite key a child row uses.
+        if rest.starts_with("(entity_id)") || rest.starts_with("( entity_id )") {
+            // And only when the referencing column is the table's own primary
+            // key, which the `FOREIGN KEY (…)` form before it names.
+            let head = &stripped[..from + found];
+            if head.trim_end().ends_with(')') && head.contains("foreign key") {
+                return true;
+            }
+        }
+        from = at;
+    }
+    false
+}
+
 /// Render an executable baseline from a corpus, for `bin/export-baseline`.
 ///
 /// Ordered by DEPENDENCY, not by name: tables (virtual tables included, in

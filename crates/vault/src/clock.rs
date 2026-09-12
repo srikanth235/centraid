@@ -28,6 +28,30 @@ pub trait Clock: Send + Sync {
     }
 }
 
+/// A clock or an id source behind an `Arc` is still one.
+///
+/// This is what lets a test HOLD the clock it gave the vault: `Vault::create_with`
+/// takes a `Box<dyn Clock>`, so without this the test would have no handle to
+/// advance. And "advance the clock" is not a convenience — the retention rules
+/// are about EDGES (a 30-day cutoff, a 14-day hold), and the two are different
+/// lengths, so a test that cannot move time cannot have a live cursor and an
+/// aged-out row at once.
+impl<T: Clock + ?Sized> Clock for std::sync::Arc<T> {
+    fn now_ms(&self) -> i64 {
+        (**self).now_ms()
+    }
+
+    fn now_text(&self) -> String {
+        (**self).now_text()
+    }
+}
+
+impl<T: Ids + ?Sized> Ids for std::sync::Arc<T> {
+    fn next(&self) -> String {
+        (**self).next()
+    }
+}
+
 /// The host clock.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemClock;
