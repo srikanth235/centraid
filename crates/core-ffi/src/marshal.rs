@@ -140,6 +140,13 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // landed must not quietly get an empty vault, which would be a product
         // that opens and shows nothing.
         create: false,
+        // NEITHER IS SETTABLE ACROSS THE ABI, on purpose. A clock is a `dyn`
+        // trait object and a shell has no way to hand one over the C boundary;
+        // and a shipped gateway wants the system clock, which is what `None`
+        // is. `CoreConfig::with_clock` is for a test, a simulation or a fixture
+        // freezer — callers that are Rust.
+        clock: None,
+        ids: None,
     };
     config.create = parsed
         .get("create")
