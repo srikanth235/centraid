@@ -338,6 +338,26 @@ test("a missing scripts program cannot drop out of typecheck", (t) => {
   ]);
 });
 
+test("astro.config.ts requires the bundler tool-configs program in typecheck", (t) => {
+  const root = fixture(t, {
+    "package.json": json({
+      name: "centraid",
+      scripts: {
+        typecheck: "tsc -p tests && tsc -p scripts",
+        "typecheck:affected": "tsc -p tests && tsc -p scripts",
+      },
+    }),
+    "tsconfig.node.json": nodeProfile,
+    "scripts/tsconfig.json": scriptsProgram,
+    "astro.config.ts": "export default {};\n",
+  });
+  assert.deepEqual(lintTsconfigs(root).sort(), [
+    "package.json: typecheck must target tsc -p scripts/tsconfig.tool-configs.json",
+    "package.json: typecheck:affected must target tsc -p scripts/tsconfig.tool-configs.json",
+    "scripts/tsconfig.tool-configs.json: missing Node tooling program",
+  ]);
+});
+
 test("refresh-pricing-snapshot.ts requires the bundler program in typecheck", (t) => {
   const root = fixture(t, {
     "package.json": json({

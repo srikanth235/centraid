@@ -164,15 +164,15 @@ export async function deriveFuzzTargets() {
   });
 }
 
-/** Every committed `stryker.config.mjs`, as package-relative paths. */
+/** Every committed `stryker.config.ts`, as package-relative paths. */
 export function deriveStrykerConfigs() {
   const packages = path.join(ROOT, "packages");
   const found: string[] = [];
   for (const entry of readdirSync(packages, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    const config = path.join(packages, entry.name, "stryker.config.mjs");
+    const config = path.join(packages, entry.name, "stryker.config.ts");
     if (existsSync(config))
-      found.push(`packages/${entry.name}/stryker.config.mjs`);
+      found.push(`packages/${entry.name}/stryker.config.ts`);
   }
   return found.sort();
 }

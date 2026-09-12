@@ -28,6 +28,12 @@ const ROOT_TOOLING_PROGRAMS = [
     typecheckNeedles: ["tsc -p scripts/tsconfig.pricing.json"],
   },
   {
+    rel: "scripts/tsconfig.tool-configs.json",
+    requiredWhen: "astro.config.ts",
+    extendsNeedle: "tsconfig.base.json",
+    typecheckNeedles: ["tsc -p scripts/tsconfig.tool-configs.json"],
+  },
+  {
     rel: "tests/tsconfig.agent-e2e.json",
     requiredWhen: "tests/agent-e2e-shared/harness.ts",
     extendsNeedle: NODE_TOOLING_PROFILE,

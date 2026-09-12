@@ -2,7 +2,7 @@
  * Mutation lane runner (#532).
  *
  * Runs StrykerJS from each seed package directory (package-local
- * `stryker.config.mjs` + `vitest.mutation.config.ts`) and writes a normalized
+ * `stryker.config.ts` + `vitest.mutation.config.ts`) and writes a normalized
  * scores JSON under artifacts/mutation/ for the test-health report.
  *
  * Usage:

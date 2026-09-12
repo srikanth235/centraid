@@ -54,7 +54,7 @@ function run(command: string, args: string[]) {
 }
 
 // The site is served under DOCS_SITE_BASE_PATH (e.g. "/docs" on the apex
-// domain, "/" locally) — the same value astro.config.mjs feeds Astro's `base`.
+// domain, "/" locally) — the same value astro.config.ts feeds Astro's `base`.
 // Bake it into the index hrefs so results link correctly in both trees.
 function basePrefix() {
   const raw = process.env.DOCS_SITE_BASE_PATH || "/";
@@ -128,6 +128,6 @@ async function buildSearchIndex() {
   );
 }
 
-await run("bun", ["x", "astro", "build", "--config", "astro.config.mjs"]);
+await run("bun", ["x", "astro", "build", "--config", "astro.config.ts"]);
 await normalizePagefindAnchors();
 await buildSearchIndex();
