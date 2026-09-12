@@ -143,9 +143,9 @@ debug = false
 #
 # `release` is what a PULL REQUEST builds. `cargo xtask gate --profile pr`'s
 # `release-build` step runs `cargo build --workspace --release` and scores it
-# against the 600 s `releaseBuildSeconds` ceiling in
-# `contracts/ledgers/compile-time.json` — the one compile-time number a pull
-# request can go red on. It is also what a developer builds when checking that
+# against the `releaseBuildSeconds` ceiling in
+# `contracts/ledgers/compile-time.json` (1400 s as wave 2 lane B2 re-based it)
+# — the one compile-time number a pull request can go red on. It is also what a developer builds when checking that
 # something is fast enough to be worth shipping.
 #
 # `dist` is what a TAG publishes. It is `release` plus `lto = "thin"` and
@@ -154,13 +154,26 @@ debug = false
 # and it is paid for once per triple on a CI runner rather than on every pull
 # request.
 #
-# WHY THEY ARE SEPARATE. `lto = "thin"` + `codegen-units = 1` was tried inside
-# `release` first, which is the conventional single-profile answer. Measured on
-# `ci-linux-x64-4c`: `cargo build --release --bin centraid` took **630 s** and
-# `cargo build --workspace --release` took **1039 s**, against a 600 s ceiling.
-# The ceiling is a down-only ledger entry and moving it to accommodate a
-# compiler flag is the one thing this repository's rules forbid, so the flag
-# moved instead of the number.
+# WHY THEY ARE SEPARATE, re-judged against wave 2 lane B2's re-based ledgers
+# (D-1020-B2) rather than against the number that first prompted the split.
+# `lto = "thin"` + `codegen-units = 1` was tried inside `release` first, which
+# is the conventional single-profile answer. Measured on `ci-linux-x64-4c`,
+# cold, contended with another lane's build:
+#
+#   * `cargo build --release --bin centraid`, LTO + `codegen-units = 1`: 630 s
+#   * `cargo build --workspace --release`, LTO + `codegen-units = 1`: 1039 s
+#   * `cargo build --workspace --release`, no LTO, with split debuginfo: 747 s
+#   * `cargo build --workspace --release`, this profile: **379 s**
+#
+# Against the 600 s `releaseBuildSeconds` ceiling those numbers were measured
+# under, LTO simply did not fit. B2 has since re-based that ceiling to 1400 s,
+# so 1039 s WOULD now fit — and the split stays anyway, on the argument that
+# survives the number: LTO in `release` spends 74 % of the ceiling and about
+# 70 % of the whole 1500 s `pr` budget on an optimisation only the PUBLISHED
+# artifact needs, and `pr` has to hold with the release build inside it. A
+# feedback loop is not the place to pay for inlining nobody on a pull request
+# consumes. If that argument ever stops holding, the fix is to merge `dist`
+# back into `release`, not to widen a ledger.
 #
 # WHAT THE SPLIT COSTS, stated because it is a real cost and not a free win:
 # the binary a pull request builds is no longer bit-identical to the binary a
@@ -180,14 +193,14 @@ debug = false
 # would buy is a fraction of the artifact; the cost is the shell losing the
 # ability to survive a bug in the core.
 #
-# DEBUGINFO IS `dist`-ONLY, and that is the third measured decision here. A
+# DEBUGINFO IS `dist`-ONLY, for the same reason and on the same measurement. A
 # symbol file is only needed for an artifact somebody SHIPS, and generating and
 # packing one is not free: `release` carrying
-# `debug = "line-tables-only"` + `split-debuginfo = "packed"` put
-# `cargo build --workspace --release` at **747 s** on this container, still over
-# the 600 s ceiling the `pr` gate scores. So the debuginfo settings live in
-# `dist`, where the wall clock is bounded by a CI runner rather than by a
-# feedback-time budget, and `release` is cargo's ordinary optimised build.
+# `debug = "line-tables-only"` + `split-debuginfo = "packed"` cost 747 s against
+# this profile's 379 s — nearly double, for symbols no pull request reads. So
+# the debuginfo settings live in `dist`, where the wall clock is bounded by a CI
+# runner rather than by a feedback-time budget, and `release` is cargo's
+# ordinary optimised build.
 #
 # `debug = "line-tables-only"` + `split-debuginfo = "packed"` + NO `strip`. A
 # stripped binary with no symbol file anywhere is a crash report nobody can

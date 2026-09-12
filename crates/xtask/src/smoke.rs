@@ -39,8 +39,9 @@
 //! **It smokes the `release` binary, not the `dist` one.** A tag publishes
 //! `--profile dist` (`release` plus thin LTO), and `release` is what a pull
 //! request builds — the two profiles were split because thin LTO put the
-//! workspace release build at 1039 s against a 600 s ceiling (root
-//! `Cargo.toml`). What differs between them is inlining; the panic strategy,
+//! workspace release build at 1039 s against 379 s without it, i.e. most of
+//! the `pr` budget spent on inlining only the published artifact consumes
+//! (root `Cargo.toml`). What differs between them is inlining; the panic strategy,
 //! the debuginfo shape and the dependency graph are identical. The `dist`
 //! artifact's own proof is `.github/workflows/lane-prebuilt-core.yml`, which
 //! builds it, stamps it, reads the stamp back OUT of the binary, and publishes
