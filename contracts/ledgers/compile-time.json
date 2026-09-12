@@ -24,7 +24,7 @@
       },
       "kotlinNativeLinkSeconds": {
         "budgetSeconds": null,
-        "headroom": "A PLACEHOLDER, and deliberately null (D-1020-B2-3). The issue's fourth compile-time number is the Kotlin/Native framework link time for the shared module, and nothing in this repository can link it yet — there is no Android SDK, no Xcode and no `mobile/` tree on this machine. Wave 3 lane E measures it on the hardware class it runs on and sets it, alongside the `mobile-jvm` profile in gate-budgets.json. A null cannot be ratcheted, so seeding it costs the down-only discipline nothing; what it buys is that the key is named before it is needed, so the lane that lands the module cannot land it without a number."
+        "headroom": "STILL NULL, and by wave 3 lane E's own measurement rather than by omission (#1020 wave 3 lane X3). No machine in CI links Kotlin/Native: there is no Xcode and no Kotlin/Native toolchain here, and the `mobile-jvm` profile that lane E landed runs the JVM suites only. Filling this with a JVM number would be the one thing the key exists to prevent — the issue's fourth compile-time number is the FRAMEWORK LINK time for the shared module, which the JVM path never pays. The owner's first `./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true :shared:linkDebugFrameworkIosSimulatorArm64` sets it; `mobile/README.md` carries the command. A null cannot be ratcheted, so leaving it null costs the down-only discipline nothing, and the key is named so the lane that links the framework cannot land without a number."
       }
     }
   }

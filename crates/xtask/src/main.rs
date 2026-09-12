@@ -5,8 +5,9 @@
 //! three languages. Anything that has to hold across all of them cannot live in
 //! any one of them, so it lives here: `cargo xtask gate --profile <local|pr|
 //! nightly|release>` is the single command CI runs and the single command the
-//! local loop runs. A fifth profile name, `mobile-jvm`, exists in the ledgers
-//! and refuses to run until wave 3 lane E fills it (#1020, D-1020-B2-3). See `crates/xtask/README.md` for the profiles, the budgets,
+//! local loop runs. A fifth profile, `mobile-jvm`, runs the Kotlin/Gradle JVM
+//! suites; it is not a superset of any other and is not charged to `pr`, for
+//! the reason in its ledger row (#1020, D-1020-B2-3). See `crates/xtask/README.md` for the profiles, the budgets,
 //! where failure artifacts land, and the one thing this runner deliberately
 //! does NOT do (governance — it has its own workflow).
 
@@ -126,8 +127,11 @@ pub enum Profile {
     Nightly,
     /// `nightly` plus the restore drill and the VPS smoke.
     Release,
-    /// The Kotlin/Gradle JVM suites. A LEDGER PLACEHOLDER with no steps until
-    /// wave 3 lane E lands them, and a refusal if you run it (D-1020-B2-3).
+    /// The Kotlin/Gradle JVM suites: `:shared:jvmTest`, `:core:jvmTest` — a
+    /// real ABI round trip against the real cdylib — and the generated-artifact
+    /// drift check. NOT a superset of any other profile and not charged to
+    /// `pr`: a different toolchain with a different cold cost, and one number
+    /// answering for two build systems answers for neither (D-1020-B2-3).
     MobileJvm,
 }
 

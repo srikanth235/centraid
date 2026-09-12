@@ -107,6 +107,55 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  # THE KOTLIN HALF ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3, D-1020-B2-3).
+  #
+  # `cargo xtask gate --profile mobile-jvm` — one step: build the cdylib, run
+  # `./gradlew -p mobile mobileJvm` (`:shared:jvmTest`, `:core:jvmTest` over the
+  # REAL `libcentraid_core_ffi.so`, `:shared:koverXmlReport`), then regenerate
+  # the committed native theme and screen fixtures and fail on drift.
+  #
+  # A SEPARATE JOB, not a step of the profile above, because `mobile-jvm` is not
+  # a superset of any other profile: it is a second toolchain with its own cold
+  # cost and its own ledger row (420 s), and folding it into a Rust profile's
+  # ceiling would make one number answer for two build systems.
+  #
+  # Nightly rather than `pr` for the same reason. If Gradle is missing the step
+  # FAILS — the wrapper is committed, so its absence is a broken checkout and
+  # not a reason to report a suite that did not run.
+  mobile-jvm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          cargo-cache: v1
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - id: channel
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: ${{ steps.channel.outputs.channel }}
+      - run: cargo xtask gate --profile mobile-jvm
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: gate-mobile-jvm-artifacts
+          path: |
+            target/xtask/**
+            mobile/**/build/reports/**
+          retention-days: 7
+          if-no-files-found: warn
+
   # THE DEVICE LANES ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-G4).
   #
   # Four cells, each `cargo xtask gate --profile nightly --lane <name>`, each
@@ -115,6 +164,16 @@ jobs:
   # yet — it is open question 13 and an owner hand-off — so on GitHub-hosted
   # infrastructure these jobs do not run at all and the `gate-nightly` job above
   # reports `device-lanes` as a loud SKIP naming them.
+  #
+  # THE FOUR BODIES ARE ON THE BRANCH (wave 3 lane E, applied by the close
+  # pass). They live in `crates/xtask/src/gate.rs` rather than as four `run:`
+  # blocks here, because each cell is already `cargo xtask gate --lane <name>`
+  # and a second copy in YAML would be a second thing to keep true — an owner
+  # with a phone runs the same lane the same way on a laptop. What each one
+  # does when its prerequisite is absent is a LOUD SKIP naming the command, and
+  # `battery-per-background-pass` is a permanent one: neither platform exposes
+  # per-pass energy to an app, so the owner's Settings → Battery reading IS the
+  # measurement.
   #
   # WHY A SEPARATE JOB PER LANE and not one job with four steps: the four have
   # different failure modes and different owners (Maestro flows, Macrobenchmark,
@@ -171,8 +230,8 @@ jobs:
         # The lease script's rule, unchanged: it leases a device and makes it
         # appear where the EXISTING harness already looks, because a farm SDK
         # that drove the flows itself would be a second device driver whose
-        # green says nothing about the first. iOS needs `xcrun devicectl`, which
-        # is the change wave 3 lane E owns.
+        # green says nothing about the first. iOS needs `xcrun devicectl`, not
+        # `simctl`, which is what the lane bodies use.
         run: bash scripts/ci/device-farm-lease.sh
       - run: cargo xtask gate --profile nightly --lane ${{ matrix.lane }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

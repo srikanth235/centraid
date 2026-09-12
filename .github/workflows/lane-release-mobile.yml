@@ -20,13 +20,13 @@ name: lane-release-mobile
 #   * The build is the build a contributor runs locally, with the same pinned
 #     Gradle wrapper.
 #
-# The `workflow_call` inputs are UNCHANGED, because `release.yml` is lane G's
-# file and this lane does not get to edit it. `profile`, `platform` and `submit`
-# mean what they meant. `EXPO_TOKEN` and `EAS_PROJECT_ID` stay DECLARED as
-# optional secrets for the same reason: `release.yml` still passes them, and a
-# `workflow_call` that receives an undeclared secret is an error. They are read
-# by nothing here. `contracts/handoff/E/release-yml.patch` removes them from the
-# caller.
+# The `workflow_call` inputs are UNCHANGED: `profile`, `platform` and `submit`
+# mean what they meant. `EXPO_TOKEN` and `EAS_PROJECT_ID` are GONE — EAS is
+# retired and they were read by nothing here. They were kept declared only
+# because `release.yml` still passed them and a `workflow_call` that receives an
+# undeclared secret is an error; wave 3's close pass dropped them from the
+# caller and from this declaration in the same change, which is the only order
+# that is green at every commit.
 #
 # It runs only through `release.yml` — it does not auto-publish on a desktop tag.
 
@@ -46,10 +46,6 @@ on:
         required: true
         type: boolean
     secrets:
-      EXPO_TOKEN:
-        required: false
-      EAS_PROJECT_ID:
-        required: false
       # THE NATIVE PATH'S OWN SECRETS. One set per lane, declared here rather
       # than inherited, per `docs/release.md`'s rule. Absent means
       # scaffold-only: the build runs, nothing is signed, nothing is submitted.

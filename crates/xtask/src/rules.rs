@@ -383,14 +383,25 @@ pub fn listener_hits(source: &str) -> Vec<(usize, &'static str)> {
 
 pub fn commonmain_no_platform_import(root: &Path) -> RuleReport {
     const NAME: &str = "commonmain-no-platform-import";
-    let common = root.join("mobile/shared/src/commonMain");
-    if !common.is_dir() {
+    // BOTH KMP MODULES. `mobile/core`'s `commonMain` is the ABI binding's
+    // shared half and is exactly as platform-free as `mobile/shared`'s: a JNA
+    // `Pointer` or a `kotlinx.cinterop` import leaking into it would be the
+    // same defect with a shorter blast radius (#1020 wave 3 lane E).
+    let roots = [
+        root.join("mobile/shared/src/commonMain"),
+        root.join("mobile/core/src/commonMain"),
+    ];
+    if !roots.iter().any(|dir| dir.is_dir()) {
         return RuleReport::pending(
             NAME,
-            "mobile/shared lands in wave 3 lane E; Konsist replaces this rule there, and this cheap one stays",
+            "mobile/ lands in wave 3 lane E; Konsist replaces this rule there, and this cheap one stays",
         );
     }
-    let files = source_files(&common, "kt");
+    let files: Vec<_> = roots
+        .iter()
+        .filter(|dir| dir.is_dir())
+        .flat_map(|dir| source_files(dir, "kt"))
+        .collect();
     let mut findings = Vec::new();
     for file in &files {
         let rel = relative(root, file);
