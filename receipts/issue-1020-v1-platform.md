@@ -2550,3 +2550,433 @@ used `/proc/<pid>` to detect the exit, which still exists for an unreaped
 zombie, so it reported the seat as alive when it had exited cleanly. (c) The
 socket file's disappearance is checked separately from the process, so
 "unlinked" and "exited" cannot pass for each other.
+
+## Wave 3 — lane E: the KMP mobile shell, the ABI binding, three screens, and the experiment that is a protocol
+
+The mobile tree: one Kotlin Multiplatform shared module over the five-function C
+ABI, three screens as protobuf state machines, a Compose shell and a SwiftUI
+shell that render finished states and own nothing, and the iOS background
+transfer experiment written so an owner's device run produces the number that
+decides. Doctrine digest stamp: law `53be88c22ab5`.
+
+**What this lane could prove, and where it drew the line.** There is no Android
+SDK, no Xcode, no simulator and no device on this machine. Every claim that
+needs one is an owner hand-off with an exact command in
+[`mobile/README.md`](../mobile/README.md), whose first table is the whole list.
+Nothing here is a passing stub and nothing is a silent skip: the iOS actuals
+that cannot be written honestly fail loudly with the command that unblocks them
+(`IosSecureStore` refuses rather than writing a vault credential to a plist),
+the Android target is not in the build at all unless `ANDROID_HOME` is set and
+says so on every configuration, and `:core:jvmTest` **fails** rather than skips
+when the cdylib or the fixture vault is missing.
+
+### What landed, by commit
+
+**`b9472eda` — `build(mobile): the KMP skeleton`**
+
+- `mobile/settings.gradle.kts`, `mobile/build.gradle.kts`,
+  `mobile/gradle.properties`, `mobile/gradle/libs.versions.toml`,
+  `mobile/gradle/wrapper/{gradle-wrapper.jar,gradle-wrapper.properties}`,
+  `mobile/gradlew`, `mobile/gradlew.bat`, `mobile/.gitignore`,
+  `mobile/ios-deployment-target`
+- `mobile/core/build.gradle.kts`, `mobile/shared/build.gradle.kts`
+- `mobile/core/src/nativeInterop/cinterop/centraid.def`
+- `mobile/core/src/commonMain/kotlin/dev/centraid/core/{CoreStatus,CoreFailure,ArtifactIdentity,CentraidAbi,CentraidCore}.kt`
+- `mobile/core/src/jnaMain/kotlin/dev/centraid/core/JnaCentraidAbi.kt`
+- `mobile/core/src/jvmMain/.../CentraidAbi.jvm.kt`,
+  `mobile/core/src/androidMain/.../CentraidAbi.android.kt`,
+  `mobile/core/src/iosMain/.../CentraidAbi.ios.kt`
+- `mobile/core/src/jvmTest/kotlin/dev/centraid/core/{AbiContractSpec,AbiRoundTripSpec,FakeCentraidAbi}.kt`
+
+**`f522e0d2` — `feat(mobile): three screens as protobuf state machines`**, with
+**`d9d1e785`** staging the `.proto` that commit compiles against — it was left
+out of its `git add` path list, so `f522e0d2` does not build on its own. The fix
+is a separate commit rather than a rewrite because the branch had already been
+built and measured on top of it; a reader bisecting should treat the pair as one.
+
+- `crates/api-proto/proto/centraid/screen/v1/screen.proto` — `TallyListState/Event`,
+  `PhotosGridState/Event`, `NotesEditorState/Event`, `SeatState`, `Money`,
+  `ReadFailure`, `Loading`, `PhotoStateView`, `BackupState`, `MediaPermission`
+- `contracts/screens/{tally,photos,notes,seat}/*.{textproto,bin}` (19 fixtures),
+  `contracts/screens/manifest.json`, `contracts/tools/build-screen-fixtures.ts`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/screen/{ScreenMachine,ScreenHost,TallyListMachine,PhotosGridMachine,NotesEditorMachine}.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/Navigation.kt`,
+  `.../mount/Mount.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{ScreenFixtureSpec,ScreenMachineSpec,NavigationAndMountSpec,CommonMainIsPlatformFreeSpec}.kt`
+
+**`af91a36e` — `feat(mobile): the sync/lifecycle scheduler, the write gate, the platform seams`**
+
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/{Lifecycle,WriteGate}.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/platform/PlatformServices.kt`
+- `mobile/shared/src/{jvmMain,androidMain,iosMain}/kotlin/dev/centraid/shared/platform/PlatformServices.*.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/SyncSchedulerSpec.kt`
+
+**`7bc99be3` — `feat(mobile): Compose and SwiftUI over the emitted tokens, the experiment, the promise`**
+
+- `mobile/androidApp/build.gradle.kts`, `src/main/AndroidManifest.xml`,
+  `src/main/res/xml/{data_extraction_rules,full_backup_content}.xml`,
+  `src/main/kotlin/dev/centraid/android/{CentraidApplication,MainActivity,HomeScreen}.kt`,
+  `.../theme/Theme.kt`, `.../screens/{TallyListScreen,PhotosGridScreen,NotesEditorScreen}.kt`
+- `mobile/iosApp/{Package.swift,project.yml}`, `Resources/Info.plist`,
+  `Sources/{CentraidApp,ShellModel,TallyListView,PhotosGridView,NotesEditorView,StateViews,CentraidCore}.swift`,
+  `Tests/ScreenFixtureTests.swift`, `Design/Theme.swift` (generated)
+- `contracts/tools/export-native-theme.ts`; generated:
+  `design/native-theme.json`, `copy/{notes,photos,shared,tally}.json`,
+  `mobile/shared/src/commonMain/kotlin/dev/centraid/design/{Tokens,Copy}.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{NativeThemeSpec,NativeAccessibilityLintSpec}.kt`
+- `mobile/maestro/README.md`, `ios-transfer-experiment.md`,
+  `flows/{selectors.md,tally-list.yaml,photos-grid.yaml,notes-editor.yaml,cold-start-and-relaunch.yaml}`
+- `mobile/README.md`, `.github/workflows/lane-release-mobile.yml` (EAS retired)
+- `docs/mobile-offline.md` (the per-state promise, provisional),
+  `docs/platform-gating.md` (the native parity rows),
+  `docs/client-keying.md` (rules 11 and 12)
+- `contracts/handoff/E/{README.md,mobile-jvm-step.patch,release-yml.patch,device-lane-bodies.md,measured.md,proposed-patches.md}`
+
+**`5d2a0a53` — `test(mobile): the source-scanning specs declare their sources as task inputs`** —
+the two defects the falsification below found in this lane's own work, fixed,
+plus the hand-off numbers corrected to what was actually measured.
+
+### Exit list
+
+| Command | Outcome |
+| --- | --- |
+| `cd mobile && ./gradlew mobileJvm` | **green** — 75 tests across `:shared:jvmTest` and `:core:jvmTest`, plus `koverXmlReport`. Three consecutive runs: **91 s** cold, **15 s**, **16 s** warm |
+| the ABI round trip | **green** — `AbiRoundTripSpec` "open, call, next_event, free and close, against the real library", over JNA against the `cargo`-built `libcentraid_core_ffi.so` on a `spike-fixture` vault |
+| the five calls' latencies | `open` **12.9–13.0 ms**; `call` p50 **398–494 µs** / p95 **563–1177 µs** across the three screens' reads; `next_event` timeout path **133–170 µs**; `close` **2.3–2.9 ms**; `free` has **no number of its own, by contract** — it is inside `call`'s harvest, which is what clause 1 requires, and measuring it separately would mean a binding that held a buffer across two calls |
+| the `call` budget | measured; the proposed `contracts/ledgers/gate-budgets.json#mobile-jvm` row is `budgetSeconds` **420** and the `call` ceiling **3,600 µs** (three times the worst measured p95). `kotlinNativeLinkSeconds` stays **null**. Numbers and reasoning: `contracts/handoff/E/measured.md` |
+| the threading red | **demonstrated** — `UiThreadCallError: centraid_call was invoked on the UI thread (centraid-ui @spec-scope-1871678080#10) … on a device this is the freeze` |
+| `contracts/screens` | **19 fixtures**, 4 screens, decoded by Wire in `ScreenFixtureSpec`. The Swift twin is `mobile/iosApp/Tests/ScreenFixtureTests.swift` — written in full, **never run** (owner hand-off) |
+| open question 10's line counts | **1.72×** averaged over the three screens; see below |
+| the Konsist red | **demonstrated** — `[mobile/shared/ScreenHost: java.io.File]` |
+| the accessibility reds | **demonstrated** — `[NotesEditorScreen.kt: Icon( with no contentDescription]` and `[PhotosGridView.swift: Image(systemName:) with neither accessibilityLabel nor accessibilityHidden(true)]` |
+| the `warning.mode=fail` red | **demonstrated** — `Deprecated Gradle features were used in this build, making it incompatible with Gradle 10` → `BUILD FAILED`, with no `--warning-mode` on the command line |
+| the theme drift check | **idempotent** — `bun contracts/tools/export-native-theme.ts && bun contracts/tools/build-screen-fixtures.ts && bun run format && git diff --exit-code design copy mobile contracts/screens` is clean |
+| `cargo test -p centraid-core-ffi` | **green** — 29 tests (7 + 10 + 7 + 2 + 3). Lane E changed nothing in that crate |
+| `cargo test -p centraid-api-proto` | **green**, including `every_proto_in_the_tree_is_compiled` |
+| `buf lint` / `buf breaking --against '.git#ref=529435a1'` | **both clean** |
+| `cargo xtask gate --profile local` | **PASS** — `fmt` 0.8 s, `clippy` 26.6 s, `cargo test --workspace` 189.0 s green, `rules`, `ledgers` (5 ledgers hold); 216.5 s of the 3200 s cold ceiling |
+| `cargo xtask rules` | `commonmain-no-platform-import` **flipped from PENDING to applied** — 12 files scanned, clean. See finding 8 for the shared-target-dir trap that makes this answer depend on which worktree last compiled `xtask` |
+| `nm -D --defined-only …/libcentraid_core_ffi.so \| grep ' T centraid_' \| wc -l` | **5** |
+| `actionlint .github/workflows/lane-release-mobile.yml` | clean |
+| `bun run format` + `format:check` | clean |
+| governance hooks on every commit | `format-check`, `lint-check`, `law`, `doc-integrity`, `estate-separation`, `managed-tree-integrity`, `commit-message-format`, `no-hardcoded-colors`, `no-hardcoded-model-ids` — all green, no `SKIP_*` and no `--no-verify` |
+| kover | `INSTRUCTION 84.8%`, `BRANCH 72.6%`, `LINE 86.8%` over hand-written `commonMain`, against a 70 % floor. The report is titled **"centraid mobile :shared — JVM only; not a Kotlin/Native number"**; generated code is excluded, for the reason in `mobile/README.md` |
+
+### Open question 10 — criterion (a), measured
+
+**The method, exactly.** The protobuf side is the `.proto` source a human
+maintains — every `message` and `enum` block for that screen, counted
+non-blank and non-comment. The Kotlin side is the equivalent hand-written
+sealed classes and data classes with the same fields, the same nesting and the
+same three-state content union, written as a throwaway under `/tmp` (**not in
+the tree**) and **compiled** against this module's `jvmTest` source set, so the
+comparison is real code and not a sketch. Wire's generated output is excluded
+from both sides: nobody maintains it, and counting it would measure a code
+generator.
+
+| Screen | proto lines | Kotlin lines | ratio |
+| --- | --- | --- | --- |
+| Tally list (`TallyListState`, `TallyListData`, `TallyRow`, `TallyListEvent`) | 63 | 43 | **1.47×** |
+| Photos grid (+ `PhotoCell`, `PhotoStateView`, `BackupState`, `MediaPermission`) | 140 | 70 | **2.00×** |
+| Notes editor (`NotesEditorState`, `NoteDraft`, `NotesEditorEvent`) | 69 | 41 | **1.68×** |
+| **average over the three screens** | | | **1.72×** |
+| (the shared messages: `SeatState`, `ReadFailure`, `Loading`, `Money`, the envelope) | 62 | 33 | 1.88× |
+
+**1.72× — over the 1.5× threshold** on criterion (a). Tally alone is *under* it
+at 1.47×; Photos is twice the Kotlin, and it is the screen with the most enums,
+which is where protobuf's `_UNSPECIFIED` zero value and `buf`'s
+`ENUM_VALUE_PREFIX` rule cost the most lines. The count also **understates**
+protobuf's cost: it excludes the 19 `.textproto`/`.bin` fixture pairs, the
+manifest and the `buf convert` step that keeps them current, none of which
+sealed classes would need.
+
+Criteria (b) — a SwiftUI/Compose disagreement on a shared state fixture more
+than once — and (c) — >1 ms p95 Kotlin→Swift delivery on the reference iPhone at
+50k assets — are both device measurements and **neither has been taken**.
+
+**What the number does not settle**, and what the owner should weigh against it:
+the one thing protobuf bought here is the Swift half of
+`ScreenFixtureTests.swift`. Nineteen fixtures, one byte format, two decoders,
+and a Swift test a macOS session runs without porting anything. SKIE over
+sealed classes gives Swift the types but not a byte-level fixture the two
+languages can share, so "one fixture, two languages" — v0's own pattern, from
+the tunnel module — would have to be replaced by something. That is a
+judgement, not a measurement, and it is the owner's.
+
+### Decisions — lane E
+
+- **D-1020-E0-1** — **the toolchain is current stable, not the container's.**
+  Gradle **9.7.1** via the committed wrapper (with `distributionSha256Sum`),
+  Kotlin **2.4.20**, AGP **9.4.0** (the newest with no alpha/beta/rc suffix in
+  Google's maven metadata), Wire 7.0.1, Kotest 6.2.5, Turbine 1.2.1, kover
+  0.9.9, Konsist 0.17.3, JNA 5.19.1, coroutines 1.11.0. Options: (i) the
+  container's preinstalled Gradle 8.14.3 / Kotlin 2.0.21, which the brief
+  assumed and which printed *"Deprecated Gradle features were used in this
+  build, making it incompatible with Gradle 9.0"* on the first run;
+  (ii) current stable with `org.gradle.warning.mode=fail`. **Adopted (ii)** on
+  the owner's instruction of 2026-09-12, amending D-1020-E0. Its cost is that a
+  Gradle or plugin upgrade reds here before anywhere else, which is the point.
+  Three deprecations were removed to get clean: `project(":core")` as a
+  dependency notation inside `binaries.framework { export(...) }` (now
+  `dependencies.project`), and two `val x by tasks.registering(T::class)` /
+  `val x by creating` Kotlin-DSL delegate forms (now `register<T>(name)` and
+  `create(name)`) (#1020).
+- **D-1020-E1a** — **the Android target is configured by NAME, not through
+  typed accessors.** Options: (i) declare AGP in `plugins {}` with
+  `apply false`, which resolves it from `google()` on every configuration of
+  this build including on machines with no SDK — a download to reach a failure;
+  (ii) add it to the root `buildscript` classpath conditionally and configure
+  the `androidLibrary` extension by name with `withGroovyBuilder`, which is not
+  type-checked here; (iii) a precompiled convention plugin in a
+  `mobile/build-logic` included build, the mature answer, which doubles the
+  setup. **Adopted (ii)**, with the trade written out in
+  `mobile/core/build.gradle.kts`: that block is proved by the owner hand-off and
+  nowhere else, and a silently-skipped Android target would have been worse
+  (#1020).
+- **D-1020-E1b** — **cinterop commonization ON, klib cross-compilation OFF on
+  Linux.** `iosMain` needs commonization to see `:core`'s one `centraid` klib
+  across three iOS targets — it is what makes the iOS actual a single file. But
+  processing a cinterop needs an Apple toolchain, and with cross-compilation
+  left on, a Linux `:core:compileKotlinJvm` **fails** with "Cross Compilation
+  with Cinterop Not Supported" rather than simply not building iOS. Options:
+  (i) drop the cinterop from the shared source set and write three per-target
+  actuals; (ii) turn commonization off and let `iosMain` not resolve;
+  (iii) keep commonization and set `kotlin.native.enableKlibsCrossCompilation=false`,
+  with the macOS hand-off passing `-P…=true`. **Adopted (iii)** (#1020).
+- **D-1020-E3a** — **all screen messages go in the existing `screen.proto`, one
+  file.** `crates/api-proto/build.rs` carries a NAMED list of every `.proto` and
+  `tests/tree.rs` asserts the list and the directory agree; both are lane C's.
+  Options: (i) one file per screen plus a `build.rs` edit outside this lane's
+  ownership; (ii) one file. **Adopted (ii)** — for a shell-internal package with
+  a PR-base-only compatibility promise, one file costs nothing and keeps the
+  change inside the boundary (#1020).
+- **D-1020-E5a** — **`.xcode-version` stays `16.4`, unchanged, and the
+  confirmation is the hand-off.** Options: (i) raise it to a current Xcode,
+  which on a machine that can neither run `xcodebuild` nor link Kotlin/Native is
+  a guess dressed as a decision; (ii) confirm the existing pin and name the
+  exact command that settles it. **Adopted (ii)**, which is what the census
+  expects ("E confirms or replaces it on the first real iOS compile"). If
+  Kotlin 2.4.20's Kotlin/Native refuses that Xcode, the refusal names the
+  version it wants and that number goes in the file (#1020).
+- **D-1020-E6a** — **the emitter splits `NativeColors` into colours and
+  effects.** Three of `packages/design`'s 54 `NativeColors` entries
+  (`shadowLg`, `shadowSm`, `shadowAmbient`) are CSS `box-shadow` strings and
+  five more are `rgba()` functions. Options: (i) emit them as opaque strings in
+  the colour map, making `colors` a map a `Color(Long)` cannot consume;
+  (ii) invent a native elevation grammar, a design decision this lane does not
+  get to make; (iii) parse the `rgba()` colours into channels, split the three
+  shadows into a named `effects: Map<String, String>`, and file the design
+  question. **Adopted (iii)**; `NATIVE_EFFECT_ROLES` is the honest record and
+  the proposed `packages/design` fix is in
+  `contracts/handoff/E/proposed-patches.md` §4 (#1020).
+- **D-1020-E7a** — **the accessibility lint is a source scan over both
+  surfaces, not Konsist.** Compose's `contentDescription` is a call argument and
+  Konsist reads declarations; the Swift half has no Kotlin AST at all. Options:
+  (i) two tools that disagree about which files they cover; (ii) one regex
+  scanner that strips comments, asserts its own file count, and fails with the
+  file and the call site. **Adopted (ii)**, and its advertised failure mode — a
+  false positive somebody fixes rather than a false negative nobody sees — fired
+  immediately (a six-line comment between an `Image` and its
+  `.accessibilityLabel` pushed the label out of the window) and was fixed by
+  measuring over code instead of over comments (#1020).
+- **D-1020-E7b** — **kover excludes generated code from its report.**
+  `centraid.screen.v1.*` (Wire) and `dev.centraid.design.*` (the emitter) are
+  four times the hand-written source; including them put line coverage at
+  **41.2 %** against a 70 % floor and made the number a measurement of two code
+  generators. Options: (i) lower the floor to fit the generated code, which is
+  weakening a gate; (ii) exclude the generated packages and keep the floor.
+  **Adopted (ii)** — the coverage after the exclusion is 86.8 % of lines, and
+  the exclusion is stated in the build file and in `mobile/README.md` (#1020).
+
+### Demonstrated reds
+
+1. **The Konsist rule.** `import java.io.File` added to
+   `mobile/shared/.../screen/ScreenHost.kt` →
+   `AssertionFailedError: [mobile/shared/ScreenHost: java.io.File]`. `java.*`
+   rather than `android.os.Bundle` deliberately: an Android import does not
+   compile on the JVM target, so that red would have been a compile failure
+   rather than the lint's. `java.io.File` compiles on the JVM, fails on iOS, and
+   is the mistake that actually reaches a review.
+2. **The accessibility lint, Compose half.** The `contentDescription` removed
+   from `NotesEditorScreen.kt`'s pin button →
+   `[NotesEditorScreen.kt: Icon( with no contentDescription]`.
+3. **The accessibility lint, SwiftUI half.** The `.accessibilityLabel` removed
+   from `PhotosGridView.swift`'s `more` control →
+   `[PhotosGridView.swift: Image(systemName:) with neither accessibilityLabel nor accessibilityHidden(true)]`.
+4. **`org.gradle.warning.mode=fail`.** `val abiFixture by tasks.registering(...)`
+   restored → `Deprecated Gradle features were used in this build, making it
+   incompatible with Gradle 10` → `BUILD FAILED`, with no `--warning-mode` flag
+   on the command line.
+5. **The missing-fixture refusal.** `:core:abiFixture` disabled and
+   `build/abi-fixture` deleted → `IllegalStateException: the ABI fixture vault
+   is missing. Build it with: cargo run -p centraid-core-ffi --bin
+   spike-fixture -- … a missing fixture is a red and never a skip`. This is the
+   one that matters most: it is what makes "the ABI round trip is real" a claim
+   the gate can keep.
+6. **The theme drift check.** A colour hand-edited in the emitted `Tokens.kt`
+   and **committed**, then the emitter re-run → `git diff --exit-code` fails on
+   that file.
+7. **The three-state read law**, as a permanent red rather than a demonstrated
+   one: `ScreenFixtureSpec`'s "tally/empty-ledger and tally/refused-denied are
+   DIFFERENT screens" asserts the two fixtures against each other, so a decoder
+   that collapsed them fails rather than passing two separate assertions.
+
+### Findings outside the slice
+
+Each has a patch in [`contracts/handoff/E/proposed-patches.md`](../contracts/handoff/E/proposed-patches.md).
+
+1. **`Vault::open` restarts its id sequence, so the first write after ANY reopen
+   collides.** `crates/vault/src/file.rs:59` and `:97` default to
+   `SeededIds::new("v1")`, whose counter starts at zero per instance.
+   **Reproduced from Kotlin through the real C ABI**:
+   `Refused(code=63, detail=entity id is already held by another kind: core_party (#916))`.
+   A gateway that restarts fails its next write. Lane D3's file; the patch and a
+   three-line red-first test are in the hand-off.
+2. **The same refusal ships a raw predicate as its owner-facing sentence**,
+   which `command.proto`'s own comment forbids in those words.
+3. **`Hello` carries no `ArtifactIdentity`**, so a released shell cannot check
+   the core it loaded — even though `crates/centraid/src/identity.rs`'s header
+   says the move happens "when `crates/core-ffi` is on the umbrella", and it is.
+   Lane C's proto plus lane D2's `Handle::hello`.
+4. **`crates/core-ffi` has no fault-injection point**, so no shell can test its
+   own clause-9 poison handling against the real library;
+   `tests/contract.rs:495` says so itself. Proposed: a `debug-fault` feature
+   riding the existing `Admin` request, **no sixth symbol**.
+5. **`packages/design`'s `NativeColors` holds three CSS `box-shadow` strings**,
+   which `assertNativeColorRoleContract` passes over because it checks which
+   keys exist and not what they hold. See D-1020-E6a.
+6. **`Cargo.lock` was stale for `centraid-core-ffi`** (missing `centraid-vault`,
+   in its `Cargo.toml` since wave 2), so every `cargo build` in this repository
+   dirtied the tree; lane E reverted the change on every commit rather than
+   carrying a file it does not own. **RESOLVED on the rebase onto `529435a1`** —
+   the lock now carries the entry, and `cargo check --workspace` leaves it
+   clean. Recorded because the workaround is visible in this lane's commits and
+   a reader should know why it is no longer needed.
+7. **`docs/platform-gating.md`'s parity table claimed an accessibility parity
+   that did not exist** — v0's two gates are both web-shaped and neither reaches
+   React Native. That doc is lane E's, so it was **fixed in place** rather than
+   filed: the native table now names what is real, what is net-new, and the one
+   row (type and target floors) still a gap with nothing checking it.
+8. **`cargo xtask`'s repo root is baked in at COMPILE time**
+   (`main.rs:142`, `env!("CARGO_MANIFEST_DIR")`), so with the shared
+   `CARGO_TARGET_DIR` the wave 3 briefs mandate, every path-based rule scans
+   whichever worktree last compiled `xtask`. Observed three different answers
+   from the same command in the same tree; the failure direction is **reports
+   clean**, which is the worst one. `sql-confinement`,
+   `no-listening-socket` and `abi-five-symbols` are all path-based and all three
+   would have been affected. Patch in the hand-off: resolve the root from the
+   current directory and panic rather than fall back.
+
+### Owner hand-offs
+
+Every one has its exact command in `mobile/README.md`.
+
+1. **The iOS transfer experiment** — `mobile/maestro/ios-transfer-experiment.md`.
+   5 states × 2 transports × 4 measurements, a 2,000-asset / 6 GB corpus on a
+   **named reference device** (R-1020-20), the `lldb`
+   `_simulateLaunchForTaskWithIdentifier:` command that makes state 4 measurable
+   at all, four fixed evidence file names, and a decision table whose four
+   sentences are already written. Hand back: the four JSON files, the device
+   name and iOS version, and one line saying which row they land in.
+2. **The iOS build** — `./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true
+   :shared:linkDebugFrameworkIosSimulatorArm64`, then `protoc-gen-swift`, then
+   `xcodegen generate`, then `swift test`. Four things are deliberately
+   unimplemented and fail loudly: `IosSecureStore` (needs a `Security.framework`
+   cinterop — it refuses rather than writing a credential to a plist),
+   `IosMediaLibrary.page` (needs `PHAsset` + a streamed SHA-256),
+   `IosNetworkStatus` (needs `NWPathMonitor`; until then it reports
+   `platformRefused`, which is TRUE and which `WriteGate` treats as
+   not-reachable), and `ShellModel.send`.
+3. **The Swift fixture test** — `cd mobile/iosApp && swift test`. Written in
+   full over the same 19 fixtures. **It has never run**, and reporting it as a
+   pass would be the single most misleading thing this lane could do.
+4. **The Android build** — `ANDROID_HOME=… ./gradlew -Pcentraid.android=true
+   :androidApp:assembleDebug`, plus `connectedBenchmarkAndroidTest` for the
+   Macrobenchmark numbers on a named device.
+5. **The Maestro flows** — `maestro test mobile/maestro/flows` with
+   `MAESTRO_VERSION=2.6.1` (v0's pin). **Add the 17 `testTag` /
+   `accessibilityIdentifier` values from `flows/selectors.md` first**: they are
+   paired with the run that proves each selects exactly one thing, because
+   seventeen strings nothing checks are seventeen strings that rot.
+6. **Store enrolment** — `docs/enrollment.md`; the native lane declares seven
+   secrets of its own and reports `scaffold-only` without them.
+7. **`.xcode-version`** — confirm `16.4` or replace it on the first real iOS
+   compile (D-1020-E5a).
+
+### To lane G
+
+`contracts/handoff/E/` carries the patch and the numbers.
+`mobile-jvm-step.patch` turns `Profile::MobileJvm` from a ledger placeholder
+into a real profile with one `mobile-jvm` step (the cargo prerequisite,
+`./gradlew mobileJvm`, and the generated-artifact drift check) and widens
+`commonmain-no-platform-import` to cover `mobile/core` as well —
+`git apply --check` clean against the umbrella head `529435a1`. **Lane E did not apply
+it**: `Profile::MobileJvm`'s refusal message, its two null ledger rows and its
+unit test are one design lane B2 wrote (D-1020-B2-3), and flipping it touches
+three of G's files rather than one. `measured.md` carries the proposed
+`budgetSeconds` (**420**, from 91 s cold / 15 s / 16 s warm) and the `call`
+ceiling (**3,600 µs**); `kotlinNativeLinkSeconds` stays **null**, because no
+machine in CI links Kotlin/Native and filling it with a JVM number is the one
+thing the report title exists to prevent. `device-lane-bodies.md` has the four
+`run:` bodies, each of which still reports a loud `Skipped` — including the
+emulator and simulator checks that keep a parked ceiling from being promoted by
+accident, and `battery-per-background-pass`, which is **not automatable on
+either platform** and says so rather than deriving a number from a proxy.
+`release-yml.patch` drops the two retired EAS secrets from `release.yml`'s call.
+
+### Falsification
+
+The two riskiest claims in this diff, the throwaway check run against each, and
+the result. **Both found something.**
+
+**Claim 1 — "the ABI round trip is real, not a mock."** A binding test can look
+like a round trip and be a test of a fake: the `AbiAnswer` type, the
+`FakeCentraidAbi` in the same source set, and a `Native.load` that silently
+found some other library would all produce a green. Three checks:
+(a) `nm -D --defined-only $CARGO_TARGET_DIR/debug/libcentraid_core_ffi.so | grep ' T centraid_' | wc -l` → **5**, so the library under test is the
+five-symbol cdylib; (b) the fixture vault was **deleted** and the fixture task
+disabled, and the spec re-run → it FAILED with the
+`cargo run -p centraid-core-ffi --bin spike-fixture` command in the message,
+rather than passing over an absent file; (c) the seeded read asserts **100 rows
+and a non-null keyset cursor** from a vault `spike-fixture` seeded with 200
+parties through the real command plane — a number no fake in this tree
+produces. The `core.add_party` refusal in finding 1 is a fourth check by
+accident: a mock would not have reproduced a bug in `crates/vault`'s id
+generator.
+
+**Claim 2 — "the token table is generated from `packages/design` and cannot
+drift."** A generator can be run once and then hand-edited, which is exactly
+the failure census §E seam 11 names. Two checks, and **both found a real
+weakness**:
+
+(a) A colour was edited by hand in `mobile/shared/.../design/Tokens.kt` and the
+emitter re-run. With the edit UNCOMMITTED, `git diff --exit-code` came back
+**clean** — the regeneration had silently restored the original value, so the
+check proved nothing. Redone with the edit **committed**, the same sequence
+failed, which is the shape the gate step actually runs in (CI regenerates over
+a committed tree). The check works; the first way of testing it did not, and
+the distinction is worth recording: a drift gate that only catches *committed*
+drift is exactly what is wanted, and the first run did not show that.
+
+(b) `NativeThemeSpec`'s "the emitted JSON, the Kotlin table and the Swift table
+are the same table" was run against a `Theme.swift` with `"accent":` renamed in
+the LIGHT scheme only. **It passed** — the assertion used `contains`, and the
+dark scheme's copy of the role satisfied it. A presence check over a file with
+two schemes in it cannot tell a complete table from half of one. The assertion
+now **counts** occurrences (exactly two per role, one per scheme) and the
+falsification then failed as it should:
+`mobile/iosApp/Design/Theme.swift: accent … expected:<2> but was:<1>`.
+
+That second run also exposed a third defect, in the build rather than the test:
+the first attempt produced **no output at all**, because `:shared:jvmTest` was
+`UP-TO-DATE` — `Theme.swift`, `design/`, `copy/`, `contracts/screens` and both
+view trees are read by these specs at runtime and were not declared as task
+inputs. A source-scanning test whose sources are not inputs is a test that
+passes on yesterday's tree, which is the same failure as a lint over an empty
+file set. `mobile/shared/build.gradle.kts` now declares all five as
+`inputs.dir(...)`, and the falsification was re-run against the fixed build
+before this receipt was written (`5d2a0a53`).
+
+The residual risk is named rather than closed: the drift check itself runs in
+the `mobile-jvm` gate step lane G has not spliced yet, so until it does, the
+three artifacts are kept in step by `NativeThemeSpec` and by nothing else.

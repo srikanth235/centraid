@@ -116,6 +116,69 @@ The fix belongs in `packages/design` (the pinned oracle, so a finding rather tha
 
 ---
 
-## 5. `Cargo.lock` is stale for `centraid-core-ffi`
+## 5. `Cargo.lock` was stale for `centraid-core-ffi` — RESOLVED on `529435a1`
+
+**No longer needs action.** The lock regenerated somewhere between `2fc8d284` and `529435a1` and now carries the entry; `cargo check --workspace` on the rebased tree leaves it clean. Kept here because lane E's commits visibly revert the file on every commit, and a reader should know why that stopped being necessary rather than wondering whether it was ever right.
 
 `cargo build -p centraid-core-ffi` adds `centraid-vault` to that package's dependency list in the lockfile. `centraid-vault` has been in `crates/core-ffi/Cargo.toml`'s `[dependencies]` since wave 2 lane D2; only the committed lock is behind. `Cargo.lock` is lane G's (_"never hand-edit; rebase, re-run `cargo check --workspace`"_), so lane E reverted the change on every commit rather than carrying it. **G should run `cargo check --workspace` and commit the result**; until then every `cargo build` here dirties the tree.
+
+---
+
+## 6. `cargo xtask`'s repo root is baked in at COMPILE time, so a shared `CARGO_TARGET_DIR` makes the gate scan the wrong tree
+
+**Found by accident, and it is the most surprising thing in this list.**
+
+`crates/xtask/src/main.rs:142`:
+
+```rust
+fn repo_root() -> PathBuf {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    ...
+}
+```
+
+`env!` is evaluated when the binary is compiled, not when it runs. The wave 3 briefs tell three lanes to share one `CARGO_TARGET_DIR` (disk is tight), so the `xtask` binary in that directory is whichever worktree compiled it last — and every path-based rule then scans **that** worktree.
+
+Observed, in this order, from `/home/user/centraid-laneE`:
+
+```
+$ cargo run -q -p xtask -- rules
+  ok  commonmain-no-platform-import — 12 file(s) scanned, clean
+# ... another lane builds xtask into the shared target dir ...
+$ cargo run -q -p xtask -- rules
+  PENDING commonmain-no-platform-import — mobile/shared lands in wave 3 lane E
+$ touch crates/xtask/src/main.rs && cargo run -q -p xtask -- rules
+  ok  commonmain-no-platform-import — 12 file(s) scanned, clean
+```
+
+The same command, the same tree, three different answers. **A gate that scans the wrong tree reports clean**, which is the worst direction for this to fail in: `sql-confinement`, `no-listening-socket` and `abi-five-symbols` are all path-based, and all three would have reported clean over a tree nobody asked about.
+
+Patch (`crates/xtask/src/main.rs`, lane G's file):
+
+```rust
+ fn repo_root() -> PathBuf {
+-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+-    match manifest.parent().and_then(std::path::Path::parent) {
+-        Some(root) => root.to_path_buf(),
+-        None => manifest,
+-    }
++    // FROM THE CURRENT DIRECTORY, NOT FROM THE BUILD'S. `env!` is evaluated
++    // when this binary is compiled, and the wave 3 lanes share one
++    // CARGO_TARGET_DIR — so a binary compiled from another worktree made every
++    // path-based rule scan THAT worktree and report clean (#1020 wave 3 lane E).
++    let mut dir = std::env::current_dir().expect("a current directory");
++    loop {
++        if dir.join("CONSTITUTION.md").is_file() && dir.join("Cargo.toml").is_file() {
++            return dir;
++        }
++        if !dir.pop() {
++            panic!(
++                "cargo xtask must run inside the repository: no ancestor of the \
++                 current directory carries CONSTITUTION.md and Cargo.toml"
++            );
++        }
++    }
+ }
+```
+
+A `panic!` rather than a fallback, for the reason the bug demonstrates: a wrong root is worse than no root.
