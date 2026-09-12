@@ -1,6 +1,4 @@
 import { rmSync } from "node:fs";
-// Drainer behaviour: the URL gate, dedupe, resume reconciliation, retry
-// classification, and the network-policy seam.
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,8 +33,7 @@ let store: UploadQueueStore;
 let killer: Killer;
 let provider: FakeProvider;
 let gateway: FakeGateway;
-/** A drain now defers a retryable item behind a backoff window (#1014), so
- *  every multi-pass test drives this clock forward instead of sleeping. */
+/** Multi-pass tests drive this clock past #1014's backoff instead of sleeping. */
 let clock: number;
 
 const openFile = async () => bytesFileSource(BYTES);
@@ -329,8 +326,7 @@ describe("uploader", () => {
       expect(new Set(seen)).toStrictEqual(new Set(["vault-family"]));
     });
 
-    // #1014: five attempts used to be spent inside one drain pass, seconds
-    // apart, so a gateway blip handed the member a permanent failure.
+    // #1014: one drain pass used to spend all five attempts on a gateway blip.
     it("defers a retryable failure behind a backoff window", async () => {
       enqueue();
       const flaky: DirectTransferClient = {
@@ -355,8 +351,7 @@ describe("uploader", () => {
       expect(store.bySha(SHA)?.attempts).toBe(1);
     });
 
-    // #1014: an item must not spend its attempt budget on a gateway the
-    // transport never reached. Aeroplane mode is not the photograph's fault.
+    // #1014: aeroplane mode must not spend the photograph's attempt budget.
     it("spends no attempt when the gateway was unreachable", async () => {
       enqueue();
       const offline: DirectTransferClient = {
@@ -380,9 +375,7 @@ describe("uploader", () => {
       expect(item.attempts).toBe(0);
     });
 
-    // #1014 P22: a resumed multipart upload trusted the file's SIZE, so an
-    // in-place edit that kept the byte count shipped a mixture of two files
-    // under the first one's content address.
+    // #1014 P22: resume must not trust size alone — an in-place edit can keep it.
     it("refuses to resume over a file whose bytes changed", async () => {
       const frameCount = frameCountFor(BYTES.byteLength);
       const item = store.enqueue({
@@ -473,8 +466,6 @@ describe("uploader", () => {
         complete: async () => ({}),
       };
       await drainer({ client: full }).drainOnce();
-      // Three member surfaces print this row verbatim — Backup health's
-      // failure list, the backup verdict's detail, Home's notification cause.
       expect(store.bySha(SHA)?.lastError).toBe("Your vault is out of space");
       expect(warn).toHaveBeenCalledWith(
         `[centraid] upload: item-dddd was not sent — ${raw}`
