@@ -1,0 +1,22 @@
+[package]
+name = "centraid-apps-kit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_apps_kit"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-ontology = { path = "../../ontology" }
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

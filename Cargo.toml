@@ -1,8 +1,14 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
-# The v0 byte plane stays where it is as the pinned oracle until wave 6 (#1020).
+# One crate per app, so an edit in an app rebuilds one crate (#1020, Tooling
+# coverage). `crates/apps` is a DIRECTORY of crates, so it is excluded below
+# (cargo refuses a glob match with no manifest) and each app crate is NAMED
+# here: a glob would hide the count, and an explicitly listed member overrides
+# the exclusion of its parent.
+members = ["crates/*", "crates/apps/kit"]
 exclude = [
+  "crates/apps",
+  # The v0 byte plane stays where it is as the pinned oracle until wave 6 (#1020).
   "packages/tunnel/data-plane",
   "packages/tunnel/native",
   "apps/web/iroh-wasm",
@@ -21,6 +27,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 flate2 = "1"
 hex = "0.4"
+proptest = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
