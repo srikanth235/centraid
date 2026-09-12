@@ -45,6 +45,7 @@ pub mod audit;
 pub mod bootstrap;
 pub mod clock;
 pub mod commands;
+pub mod custody;
 pub mod devices;
 pub mod error;
 pub mod file;
