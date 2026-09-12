@@ -589,3 +589,136 @@ The two riskiest claims in this diff, the throwaway check run against each, and 
    So the claim was **false as stated** and the lane now carries the gate it was missing: `parity::a_page_boundary_inside_one_expense_loses_no_sharer` walks pages of **three** over expenses with four sharers, so every boundary falls inside one, and compares the walk to the single-page read row for row. Against the broken keyset it fails with "a boundary inside an expense dropped its remaining sharers"; against the correct one it passes. The break was then reverted and the workspace is green.
 
 A third, cheaper one worth recording: the claim that **`crates/apps/tally` holds no SQL** is not a comment, it is `cargo xtask rules`' verdict, and it was checked to be actually scanning — `sql-confinement` reports `7 file(s) scanned` for this crate rather than `0`, and the 27 files it skipped are named as in the allowed crates.
+
+## Wave 2 — lane C: the schema workspace, the protocol, the iroh endpoint and the one binary
+
+Four slices, four commits, on `claude/1020-laneC`, rebased onto lane D3's `d5654afc`.
+
+### What landed
+
+**`a5bfa41d` — C.1, api-proto.** The two protobuf packages, generated in-tree.
+
+- `crates/api-proto/Cargo.toml`, `crates/api-proto/build.rs`, `crates/api-proto/src/lib.rs`, `crates/api-proto/README.md`
+- `crates/api-proto/proto/centraid/core/v1/`: `value.proto`, `row.proto`, `log.proto`, `snapshot.proto`, `intent.proto`, `command.proto`, `query.proto`, `change.proto`, `handshake.proto`, `pair.proto`, `admin.proto`, `error.proto`, `envelope.proto`
+- `crates/api-proto/proto/centraid/screen/v1/screen.proto`
+- `crates/api-proto/tests/roundtrip.rs`, `crates/api-proto/tests/tree.rs`
+- `buf.yaml`, `buf.gen.yaml` (repository root)
+- `crates/xtask/src/gate.rs` — a `buf` step in `pr`, `window_tags` (last three minors at their highest patch), and two tests
+- `.github/workflows/gate.yml` — installs `buf` 1.61.0 beside actionlint/gitleaks/osv-scanner, and `fetch-depth: 0` so `buf breaking --against .git#branch=main` has a history to compare with (`docs/decisions.md#the-pr-gate-loop-892`)
+- `Cargo.toml` — `[workspace.dependencies]` gains `base64, bytes, iroh, prost, prost-build, protox, qrcode, rand, tokio, tracing-subscriber`; `Cargo.lock`. `proptest` was also added here and then dropped at the rebase onto lane D3, which had landed the same key: one entry for the workspace, theirs, and `cargo check --workspace` confirms both lanes' dev-dependencies resolve against it
+
+**`b33addfb` — C.2, protocol.** No iroh type appears in this crate.
+
+- `crates/protocol/Cargo.toml`, `crates/protocol/src/`: `lib.rs`, `alpn.rs`, `error.rs`, `framing.rs`, `handshake.rs`, `session.rs`, `transport.rs`, `version.rs`, `wire.rs`
+- `crates/protocol/tests/framing_golden.rs`, `crates/protocol/tests/framing_properties.rs`
+- `contracts/protocol/framing-golden.json` — seven named `Envelope` vectors with their `frameBase64`, the three ALPNs with their bytes, the framing caps and the version window
+- `contracts/README.md` — the `protocol/` row and its regeneration command
+
+**`4129e69d` — C.3, net.**
+
+- `crates/net/Cargo.toml`, `crates/net/README.md`, `crates/net/src/`: `lib.rs`, `allowlist.rs`, `endpoint.rs`, `error.rs`, `pairing.rs`, `ticket.rs`
+- `crates/net/tests/pair_and_stream.rs`
+- `crates/api-proto/proto/centraid/core/v1/pair.proto` — `PairTicket.direct_addrs` (D-1020-C15)
+
+**`98a7537e` — C.4, centraid.**
+
+- `crates/centraid/Cargo.toml`, `crates/centraid/README.md`, `crates/centraid/src/main.rs`, `crates/centraid/src/run.rs`
+- `crates/centraid/tests/no_listener.rs`
+
+`contracts/README.md`'s index gained the `protocol/` row, merged at the rebase beside lane D3's `apps/tally/` row with one "the rest of the tree" paragraph naming what neither lane landed.
+
+No file owned by lane D1 or D3 was touched: `crates/vault`, `crates/seat`, `crates/apps/**`, `contracts/schema/**` and `contracts/golden/**` are untouched, and `crates/xtask` was edited only for the `buf` step the brief authorises.
+
+### Exit list
+
+| # | Command | Outcome |
+|---|---|---|
+| 1 | `cargo fmt --all --check` | clean |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| 3 | `cargo test --workspace` | green, post-rebase — **236 passed, 1 ignored** across the whole workspace. Lane C's own crates: api-proto 9, protocol 40, net 30 (+1 ignored), centraid 10, xtask 26 (2 new) = **115**. The rest is lane A's ontology (32) and lane D3's kit and Tally (89) |
+| 4 | `cargo xtask gate --profile local` | PASS, 8.6 s of the 120 s budget on a warm tree. On a **cold** tree the same run was 160.7 s and tripped the budget line — every step green, 131.1 s of it `cargo test`'s first build of the test binaries. Named under *Findings* rather than answered by moving a ledger |
+| 5 | `cargo xtask gate --profile pr` | 203.9 s of 900 s post-rebase. Green except `secrets` and `osv`, the two inherited reds — and `secrets` now reports 7 findings rather than 1 (see *Findings*). `release-build` 240.6 s of the 600 s ceiling on a cold `target/release`, 17.9 s warm; `abi-five-symbols` PENDING (no `crates/core-ffi`); `no-listening-socket` scanned 59 files clean; `sql-confinement` scanned 32 clean, 27 of them inside the allowed crates |
+| 6 | `buf lint` + `buf breaking` | **real run, not a loud skip.** `buf` 1.61.0 fetched with `curl -sSL https://github.com/bufbuild/buf/releases/download/v1.61.0/buf-Linux-x86_64 -o ~/.local/bin/buf`. Lint clean over both modules (14 files, each once). `buf breaking --against '.git#branch=main,subdir=crates/api-proto/proto'` reports `had no .proto files` — `main` carries no schema yet, so there is nothing there to break; the step classifies that case as a pass whose line says so. `git tag --list 'v*'` is empty, so "0 tags in window" |
+| 7 | The pair-and-stream test | `crates/net/tests/pair_and_stream.rs::two_endpoints_pair_and_stream_a_commit`. Its assertion: `assert_eq!(page.rows.len(), 3, "the commit arrived whole")`, with `assert_eq!(page.next, page.watermark)` and the gateway side asserting the seat's returned cursor is `seq = 3` |
+| 8 | `cargo run -p centraid -- gateway --data-dir /tmp/x --print-qr` | quoted below |
+| 9 | `bun run lint:workflow-pins`, `actionlint` | 25 workflows clean; actionlint clean on `gate.yml` |
+| 10 | `bun run format` + `format:check` | "All matched files use the correct format" |
+| 11 | `bash .governance/run.sh` | all 10 directives passed |
+| 12 | `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, no findings |
+| 13 | `bun run check:push:static` | 4/4 in 32.2 s (needs `bun run build` once first, as lane A and lane B both recorded) |
+| 14 | `git push -u origin claude/1020-laneC` | accepted; no `SKIP_*`, no `--no-verify` |
+
+Item 8, quoted. The binary, then the kernel's own answer:
+
+```
+$ ./target/debug/centraid gateway --data-dir /tmp/x --print-qr --no-relay
+centraid gateway ready endpoint=1bf9d3f3205b57b5dcee48251628753def61aa76b75d201d7d02e35cb8033afa
+ticket CAESIBv50_MgW1e13O5IJRYodT3vYap2t10gHX0C41y4Azr6IhR0a3RfYTc3ZDU4OTIxZDJlN2Q5MioQp31Ykh0ufZKix-hKp8DoHjIIQ2VudHJhaWQ49Mvnpok0Qg8xOTIuMC4yLjI6NTEyMDA
+█████████████████████████████████████████████████████████        (29 rows of QR)
+(stderr) centraid: --data-dir /tmp/x is accepted and NOT yet durable: the SQLite allowlist lands
+         in crates/vault (wave 2 lane D1, D-1020-C8). Every pairing in this run is lost on exit.
+
+$ ls -l /proc/18900/fd | grep socket
+lrwx------ 1 root root 64 Sep 12 08:46 10 -> socket:[230700]
+
+$ cat /proc/net/tcp | awk '$4=="0A"{print $2, $10}'
+0100007F:B0EF 2092
+0100007F:A1A3 51
+00000000:07E8 1984
+00000000:07E9 1985
+
+$ ss -ltnp | grep -i centraid
+(no output)
+```
+
+The process owns exactly one socket, inode `230700`, and no LISTEN row names it. `/proc/net/tcp6` does not exist in this container; the test reads both tables and tolerates the absence, and skips loudly where `/proc/net/tcp` itself is missing rather than passing where it cannot look.
+
+### Decisions — lane C
+
+Every ruling in the lane brief (**D-1020-C1** … **D-1020-C11**) was adopted as written. Five refinements and additions, each citing [#1020](https://github.com/srikanth235/centraid/issues/1020):
+
+- **D-1020-C12 — an intent's and a command's `input` are `bytes` carrying canonical JSON, not `Any` and not a message per action** ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-C4 asked for the note). Options: (a) a proto message per action, (b) `google.protobuf.Any`, (c) opaque bytes. (c), for three reasons in order of weight. The input *is* the hash preimage — `intentPayloadHash` hashes the canonical JSON of `{action, appId, input, baseVersions?, dependsOn?}` and the gateway compares in constant time, and protobuf serialisation is explicitly not canonical (map order, default elision, unknown fields all vary by runtime), so a proto body could not carry a payload hash at all. The input schema is per-action and lives in the vault as `agent_command.input_schema_json`, so (a) would put `buf breaking` in the way of adding a command. And opaque bytes cannot be silently re-encoded, which is what holds the unknown-field promise. The cost is that the core validates JSON rather than getting it from the decoder, paid once in `crates/vault`.
+- **D-1020-C13 — prost 0.14 does not preserve unknown fields, and the invariant moves to the frame** ([#1020](https://github.com/srikanth235/centraid/issues/1020) Compatibility). Verified rather than assumed: `grep -rn unknown` over the vendored `prost-build-0.14.4/src/` has one hit, a panic message about proto syntax, and `prost-0.14.4/src/` has none; there is no `preserve_unknown_fields` switch and no `unknown_fields` struct member. Options: (a) switch to `prost-reflect`'s dynamic messages at the envelope, (b) hand-roll retention, (c) hold the invariant one layer out. (c): nothing in the v1 plane relays a *decoded* message — `crates/protocol::wire::relay_frame` moves a length prefix and an opaque body — every payload that crosses a version boundary is `bytes`, and an unknown message type is answered with `Unsupported{type_url}`. The residual gap is named: a *field* added in a future release is invisible to this build, and a middlebox that decoded and re-encoded would lose it. `crates/protocol/src/wire.rs::a_relayed_frame_keeps_bytes_this_build_cannot_decode` asserts both halves — the relay keeps them, the decode-and-re-encode path shortens the message — and `crates/api-proto/tests/roundtrip.rs::prost_drops_unknown_fields_...` turns red if prost ever gains the feature, which would be a welcome red.
+- **D-1020-C14 — `idle()` closes the endpoint and `resume()` re-binds it** ([#1020](https://github.com/srikanth235/centraid/issues/1020) Network lifecycle; refines D-1020-C10). Options: (a) a flag that only stops our accept loop, (b) close and re-bind, (c) wait for an iroh pause API. (a) leaves the relay connection and its keepalives in place, which is precisely the battery cost the rule exists to remove, so the rule would have been a comment. (c) blocks the phone lane on upstream. (b) is safe because identity is the secret key, not the endpoint object: `Endpoint::id()` is unchanged across a cycle, so every paired seat still recognises the gateway and only the addresses move. A dial while idle is refused rather than silently re-binding — a backgrounded phone that dialled on its own is the thing being prevented.
+- **D-1020-C15 — `PairTicket` carries `direct_addrs`** ([#1020](https://github.com/srikanth235/centraid/issues/1020); the ticket shape in D-1020-C4). `RelayMode::Disabled` is a mode the issue names, and with no relay and no address-lookup service an EndpointId alone has nothing to be dialled through, so a LAN-only deployment could not pair at all. Options: (a) require a relay for pairing, (b) a second out-of-band channel for addresses, (c) the addresses in the ticket. (c): they are hints and never authority — iroh's TLS handshake proves the endpoint id, so a tampered address reaches either the right gateway or nothing, which is what makes it safe for a value read off a screen by a camera to carry them. With relays on they save the first round trip and nothing depends on them.
+- **D-1020-C16 — the `buf` step treats "the base carries no `.proto` files" as a pass whose line says so** ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-C5). `buf breaking` exits non-zero with `had no .proto files` when the base has no schema, which is this step's answer on the commit that introduces one. Options: (a) fail, which makes the schema's first commit unmergeable, (b) skip the step until `main` has the tree, which is a gate that does not run, (c) classify the case from what buf printed and report a pass that names it. (c), read off the step's own artifact rather than guessed from the tree, and it stops happening the moment `main` carries the schema.
+
+### Demonstrated reds
+
+Every gate this lane added lands with a red it has actually produced.
+
+- **The framing codec's four refusals.** `crates/protocol/tests/framing_properties.rs` drives an eight-row named corpus — a clean end of stream, one/three prefix bytes, a declared length of zero, a prefix with no body, `u32::MAX`, one byte over the 256 KiB ceiling, exactly the ceiling with no body — and each row must produce one of the four framing errors and be fatal to the stream. Plus a proptest over **any** four-byte prefix with up to 64 trailing bytes: never a panic, never a body the prefix did not describe, and the ceiling checked before any allocation (the `u32::MAX` row is the allocation bomb, and it returns in constant memory).
+- **The version window, as a table.** `crates/protocol/src/version.rs` pins eight rows including both directions of the asymmetric case, and asserts symmetry exhaustively over `1..6` × `1..6`.
+- **`Cancel` refuses a bounded read.** `session.rs::an_unbounded_request_cancels_and_a_bounded_one_refuses` gets `NotCancellable` and asserts the request is still in flight afterwards, so a refused cancel cannot settle it.
+- **The ticket's five malformed shapes.** `ticket.rs::every_malformed_ticket_is_refused_rather_than_half_accepted` — unknown format version, a 31-byte endpoint id, no ticket id, no secret, no expiry — plus non-base64url input and well-formed base64url that is not a ticket.
+- **An unenrolled peer is closed before a frame is read.** `pair_and_stream.rs::an_unenrolled_peer_is_closed_before_a_frame_is_read` completes a real QUIC handshake, writes a `Hello` frame the gateway must never parse, and asserts the gateway answered `Unauthorized` with no stream accepted and nothing enrolled.
+- **An unroutable peer never hangs.** `an_unroutable_peer_fails_typed_inside_the_timeout` measured 2.001 s against a 2 s budget and a typed `Timeout`.
+- **A verb that is not built exits 3.** `no_listener.rs::every_unimplemented_verb_exits_three_and_names_its_lane` runs the real binary for six verbs and asserts exit 3, the wave named, and `#1020` cited; `native-host` is checked apart because a browser would otherwise believe it has a working host.
+- **The xtask `buf` step's own red.** `gate.rs::the_buf_step_skips_loudly_before_the_schema_lands` asserts the loud skip, and `the_window_is_three_minors_at_their_highest_patch` builds a throwaway git repository with eight tags (including a prerelease and a malformed one) and pins the three the step checks against.
+- **The framing fixture is regenerate-and-diff.** `the_committed_fixture_is_what_this_build_produces` fails with both documents printed when the committed bytes and the build disagree; `CENTRAID_UPDATE_FIXTURES=1` writes and the comparison still runs, so the variable is a generator and not a way to go green.
+
+### Findings outside the slice
+
+- **`gitleaks` now reports 7 findings, not 1, and 6 of them are untracked build output.** `packages/model-runtime/LICENSES.md` is the inherited red (D-1020-B1). The six new ones are `target/{debug,release}/deps/lib{pem_rfc7468,pkcs8}-*.rmeta`, matched by the `private-key` rule: iroh's graph pulls `pem-rfc7468` and `pkcs8`, whose documentation carries PEM private-key examples, and those doc strings land in the crates' `.rmeta`. The count scales with how many profiles have been built, which is on its own enough to show it is an artifact and not content. The step runs `gitleaks detect --source . --no-git`, which ignores `.gitignore`, and `/target/` is line 78 of it. **Not fixed from here**: `.gitleaks.toml` is an allowlist and `crates/xtask/src/gate.rs`'s `secrets` step is not this lane's to change beyond the `buf` wiring. It will red in CI too, because `gate.yml` restores `target/` from the cargo cache. Owner hand-off 1 below.
+- **`cargo xtask gate --profile local` trips its 120 s budget on a cold tree.** 160.7 s post-rebase, of which `cargo test --workspace` was 131.1 s building test binaries for the first time; the same run on a warm tree is 8.6 s. Every step was green in both. The budget is the edit-run loop's promise and a warm tree is what that loop runs on, so nothing was moved — the number is recorded here rather than absorbed into `contracts/ledgers/gate-budgets.json`, which is lane B's down-only ledger. Owner hand-off 2.
+- `cargo deny --all-features check` passes over iroh's whole graph with `deny.toml` **unchanged**: no licence exception was needed, and nothing was added to `[bans].skip` or `[advisories].ignore`.
+- `crates/xtask`'s `ts-static` step no longer skips: `contracts/tools/export-v0-registries.ts` is TypeScript inside the v1 tree, so the step runs `bun run check:push:static` for real. That is correct behaviour and worth naming, because it means the v1 gate now depends on `bun run build` having run, which lane A and lane B both recorded one gate further out.
+- The seat lane in `centraid gateway` admits an enrolled device and then logs that the replica plane lands in lane D2. That is the honest answer while there is no log to serve, and it is the seam lane D2 picks up: `Endpoint::accept` already hands back the `Device` its authority decisions need.
+
+### Owner hand-offs
+
+1. **`.gitleaks.toml` (or the `secrets` step) should stop scanning `target/`.** Recommendation: add `target/` to `[allowlist].paths`, or pass `--exclude-path`. It is untracked build output and cannot be a commit surface, so excluding it removes four false positives without weakening what the gate covers. Not done here because it is an allowlist and not this lane's file. The `LICENSES.md` finding stays the owner's call, as lane B recorded.
+2. **`local`'s 120 s budget against a cold `cargo test`.** Either the budget's definition names a warm tree, or the profile's `test` step gets `cargo nextest` and a prebuilt target. Both are lane B's ledger and lane G's CI; recorded here with the measurement.
+3. **The relay-only case has no runner.** `a_relay_only_pair_and_stream` is written and `#[ignore]`d with its reason: it needs egress to a relay and two networks, and this container has one namespace and proxy-only egress. It runs under `cargo test -- --ignored` on a runner with real egress, and the `nightly` profile has no `--ignored` leg today. Wave 3 lane G's VPS smoke is the proof that counts.
+
+### Doctrine digest
+
+Law `53be88c22ab5`, verified with `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — 10 rules, no findings. The law did not move under this lane's work; no waiver was spent; no v0 file was edited, so no fixture-adapter change is owed a line here.
+
+### Falsification
+
+The two riskiest claims in this diff, the throwaway check run against each, and the result.
+
+**"`crates/protocol` is transport-generic — no iroh type appears in it."** The claim is load-bearing because #1020 makes deterministic simulation the primary sync proof, and a protocol that names iroh cannot be simulated. Reading the imports is not a check: a type could arrive through a re-export. So: `cargo tree -p centraid-protocol -e normal` — the crate's normal dependency closure is `centraid-api-proto`, `prost`, `thiserror`, `tokio`, `tracing` and their transitives, and `iroh` appears nowhere in it. Then the stronger version, an actual compile: temporarily added `iroh = { workspace = true }` to `crates/protocol/Cargo.toml` and `use iroh::Endpoint;` to `src/lib.rs`, confirmed it compiled (so the crate *could* have taken the dependency and the absence is a choice, not an accident), and reverted both. The second implementation of the trait in `src/transport.rs::duplex` is what keeps the claim true going forward: the seam is not tested by mocking iroh, it is tested by there being another implementor, and `the_protocol_runs_over_a_transport_that_is_not_iroh` runs the framing over it.
+
+**"`centraid gateway` opens no listening TCP socket."** The risk is that the xtask rule only greps for `TcpListener::bind` in *this repository's* source, and iroh's graph is 200-odd crates any one of which could listen. A source scan cannot see that. So the check reads the kernel: spawn the real binary, wait for its ready line, collect every socket inode from `/proc/<pid>/fd`, collect every `st == 0A` row from `/proc/net/tcp*`, and intersect. Result: one socket owned (inode `230700`, the UDP socket iroh bound), four LISTEN rows on the host (`2092`, `51`, `1984`, `1985`), empty intersection; `ss -ltnp` names no centraid process. The test also asserts the process owns **at least one** socket, so it cannot pass vacuously against a gateway that failed to bind at all — which is the way this test would otherwise have gone quietly green.
