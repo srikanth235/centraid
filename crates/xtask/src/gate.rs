@@ -129,6 +129,13 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("osv", run_osv),
         step("release-build", run_release_build),
         step("ts-static", run_ts_static),
+        // THE DESKTOP SEAT'S PURE CORES (#1020 wave 3 lane F, D-1020-F8). Every
+        // `electron`-importing module has a pure twin with unit tests, which is
+        // v0's own split and the reason it is testable without a display; this
+        // step runs those, plus the three tsconfigs, and costs single-digit
+        // seconds. The Playwright run that needs a window is `desktop-e2e`, in
+        // `nightly`.
+        step("desktop-unit", run_desktop_unit),
         // THE CI-SHAPE GATES, re-homed out of `scripts/ci/**` (D-1020-G3).
         // They are not v0's gates — they are gates about the shape of CI and
         // about the supply chain — so taking `ci.yml` off `pull_request` had to
@@ -151,6 +158,12 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // them: each profile is stated as a CONCATENATION of the one before.
         step("sim-nightly", run_sim_nightly),
         step("v0-oracle", run_v0_oracle),
+        // THE DESKTOP SEAT'S EXIT CRITERION (#1020 wave 3 lane F): a real
+        // Electron app, a real `centraid seat` sidecar over a real socket, and
+        // a `<video>` that seeks inside a blob whose bytes are still arriving.
+        // Nightly rather than `pr` because it builds a release binary and
+        // launches a browser — tens of seconds either side of the assertion.
+        step("desktop-e2e", run_desktop_e2e),
         step("device-lanes", run_device_lanes),
         step("lane-health", run_lane_health),
     ]);
@@ -1402,6 +1415,137 @@ fn run_lockfile(ctx: &Ctx) -> Result<Outcome> {
 /// Lane health off the Actions API (D-1020-G3). Nightly only — it reads
 /// `api.github.com`, and a pull request's verdict must not depend on a third
 /// party being up.
+/// The desktop seat's pure cores, and its three type programs.
+///
+/// **Not** part of the repository-wide vitest project list. That list drives the
+/// v0 coverage run scored against `tests/floors.json`, and adding a new tree to
+/// it would move coverage numbers for reasons that have nothing to do with the
+/// v0 oracle it measures — so `desktop/vitest.config.ts` is its own project and
+/// this step is how CI runs it (D-1020-F8).
+///
+/// `bun` absent is a SKIP locally and a FAILURE in CI, the same rule every
+/// other tool in this file follows: in CI the workflow installs it, so its
+/// absence is an infrastructure fault rather than a developer's choice.
+fn run_desktop_unit(ctx: &Ctx) -> Result<Outcome> {
+    if !ctx.root.join("desktop/vitest.config.ts").is_file() {
+        return Ok(Outcome::Skipped(
+            "no desktop/ tree yet — `bun run --cwd desktop/electron test` runs here the moment there is (#1020 wave 3 lane F)"
+                .to_owned(),
+        ));
+    }
+    if !binary_available("bun") {
+        return Ok(missing_binary(
+            ctx,
+            "bun",
+            "the desktop seat's pure cores and its three type programs",
+            "`.github/actions/setup` installs it in CI; locally, see docs/toolchain.md",
+        ));
+    }
+    match process(
+        ctx,
+        "desktop-unit",
+        "bun",
+        &["run", "--cwd", "desktop/electron", "test"],
+    )? {
+        Outcome::Ok(_) => {}
+        other => return Ok(other),
+    }
+    process(
+        ctx,
+        "desktop-unit",
+        "bun",
+        &["run", "--cwd", "desktop/electron", "typecheck"],
+    )
+}
+
+/// The desktop seat's Playwright run: the lane's exit criterion.
+///
+/// Three prerequisites, each reported as itself rather than as one "it did not
+/// run": the `centraid` binary the shell spawns, `bun` for the app build, and a
+/// display for Electron. The display is the one a hosted Linux runner does not
+/// have, so `xvfb-run` is used when it is there and the step says so when it is
+/// not — a browser test that "passed" with no window would be the loudest kind
+/// of lie.
+fn run_desktop_e2e(ctx: &Ctx) -> Result<Outcome> {
+    if !ctx.root.join("desktop/e2e/playwright.config.ts").is_file() {
+        return Ok(Outcome::Skipped(
+            "no desktop/e2e yet (#1020 wave 3 lane F)".to_owned(),
+        ));
+    }
+    for tool in ["bun", "node"] {
+        if !binary_available(tool) {
+            return Ok(missing_binary(
+                ctx,
+                tool,
+                "the desktop seat's Playwright run (bun builds the app, node runs Playwright)",
+                "`.github/actions/setup` installs both in CI",
+            ));
+        }
+    }
+    // THE BINARY THE SHELL SPAWNS. Built debug, not release: the assertion is
+    // about the media door's byte arithmetic and Chromium's reaction to it, and
+    // a release build would add minutes to a nightly for no change in what is
+    // proven.
+    match process(ctx, "desktop-e2e", "cargo", &["build", "-p", "centraid"])? {
+        Outcome::Ok(_) => {}
+        other => return Ok(other),
+    }
+    match process(
+        ctx,
+        "desktop-e2e",
+        "bun",
+        &["run", "--cwd", "desktop/electron", "build"],
+    )? {
+        Outcome::Ok(_) => {}
+        other => return Ok(other),
+    }
+    let playwright = "node_modules/.bin/playwright";
+    if !ctx.root.join(playwright).is_file() {
+        return Ok(missing_binary(
+            ctx,
+            playwright,
+            "the desktop seat's Playwright run",
+            "run `bun install` (the workflow does)",
+        ));
+    }
+    // Where Playwright's browsers live. Named rather than left to the default
+    // under `$HOME`, because CI and this container both stage them centrally
+    // and a run that silently downloaded its own copy would be a run nobody
+    // budgeted for.
+    let browsers =
+        std::env::var("PLAYWRIGHT_BROWSERS_PATH").unwrap_or_else(|_| "/opt/pw-browsers".to_owned());
+    let env = [("PLAYWRIGHT_BROWSERS_PATH", browsers.as_str())];
+    let headless = std::env::var("DISPLAY").is_err() && binary_available("xvfb-run");
+    if headless {
+        return process_with_env(
+            ctx,
+            "desktop-e2e",
+            "xvfb-run",
+            &[
+                "-a",
+                playwright,
+                "test",
+                "-c",
+                "desktop/e2e/playwright.config.ts",
+            ],
+            &env,
+        );
+    }
+    if std::env::var("DISPLAY").is_err() {
+        return Ok(Outcome::Failed(
+            "no DISPLAY and no xvfb-run: Electron has no real headless mode, so this step cannot run here. Install xvfb (`apt-get install xvfb`) or run it on a machine with a display (#1020 wave 3 lane F)"
+                .to_owned(),
+        ));
+    }
+    process_with_env(
+        ctx,
+        "desktop-e2e",
+        playwright,
+        &["test", "-c", "desktop/e2e/playwright.config.ts"],
+        &env,
+    )
+}
+
 fn run_lane_health(ctx: &Ctx) -> Result<Outcome> {
     let repo =
         std::env::var("GITHUB_REPOSITORY").unwrap_or_else(|_| "srikanth235/centraid".to_owned());

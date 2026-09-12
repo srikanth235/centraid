@@ -10,6 +10,14 @@ import { defineConfig } from "vitest/config";
  * project for the same reason: it is one more consumer of the same seat, and a
  * second runner over three files would be a second thing to keep green.
  *
+ * `desktop/electron/package.json` passes this file to vitest as an ABSOLUTE
+ * path (`--config "$PWD/../vitest.config.ts"`), and that is not decoration: a
+ * relative `../vitest.config.ts` is resolved by vitest against the project root
+ * it infers rather than against the shell's cwd, so it lands on the
+ * repository's own `vitest.config.ts` — whose `projects` list then resolves
+ * against the wrong directory and fails with "Projects definition references a
+ * non-existing file". An absolute path has one meaning.
+ *
  * Deliberately NOT a member of the repository-wide `vitest.config.ts` project
  * list: that list drives the v0 coverage run scored against
  * `tests/floors.json`, and adding a new tree to it would move coverage numbers

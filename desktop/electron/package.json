@@ -9,9 +9,9 @@
     "build": "tsc -p tsconfig.json && bun build src/preload.ts --target=node --format=cjs --external electron --outfile dist/preload.cjs && bun run build:renderer",
     "build:renderer": "mkdir -p dist/renderer && cp -R ../renderer/public/. dist/renderer/ && bun build ../renderer/src/main.tsx --outfile dist/renderer/main.js --target=browser",
     "clean": "rm -rf dist",
-    "e2e": "playwright test -c ../e2e/playwright.config.ts",
+    "e2e": "playwright test -c \"$PWD/../e2e/playwright.config.ts\"",
     "start": "electron .",
-    "test": "vitest run --config ../vitest.config.ts",
+    "test": "vitest run --config \"$PWD/../vitest.config.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p ../renderer/tsconfig.json --noEmit"
   }
 }

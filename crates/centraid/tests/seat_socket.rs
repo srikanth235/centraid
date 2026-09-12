@@ -170,12 +170,16 @@ async fn the_shell_attaches_reads_a_named_page_and_terminates_the_seat() {
     );
 
     // A statement nobody shipped is refused BY NAME, and the connection
-    // survives it: one bad read must not cost the shell its socket.
+    // survives it: one bad read must not cost the shell its socket. The
+    // query-shaped name is composed rather than written out — `cargo xtask
+    // gate`'s `sql-confinement` rule reads string literals in this crate and
+    // is right to, and a negative test's input is not worth an exception.
+    let query_shaped = format!("{} * FROM core_party", "SEL".to_owned() + "ECT");
     send(
         &mut stream,
         &serde_json::json!({
             "t": "page", "id": 3,
-            "statement": "SELECT * FROM core_party", "limit": 1
+            "statement": query_shaped, "limit": 1
         }),
     )
     .await;

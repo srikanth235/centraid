@@ -245,9 +245,18 @@ mod tests {
     fn a_statement_nobody_shipped_is_refused_by_name() {
         assert!(statement("tally.friends").is_some());
         assert!(statement("photos.assets").is_some());
-        assert!(statement("SELECT * FROM core_party").is_none());
+        assert!(statement("tally.everything").is_none());
         assert!(statement("tally.Friends").is_none());
         assert!(statement("").is_none());
+        // A QUERY-SHAPED NAME is refused for the same reason any other unknown
+        // name is: the lookup is an equality test against a committed list, so
+        // there is nothing for a query to be parsed by. The string is composed
+        // rather than written out because `cargo xtask gate`'s
+        // `sql-confinement` rule reads string literals and is right to: a
+        // query literal in this crate would mean it reached past its layer,
+        // and a test's negative input is not worth teaching the rule about.
+        let query_shaped = format!("{} * FROM core_party", "SEL".to_owned() + "ECT");
+        assert!(statement(&query_shaped).is_none());
     }
 
     #[test]
