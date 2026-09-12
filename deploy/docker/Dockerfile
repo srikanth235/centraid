@@ -33,9 +33,7 @@ WORKDIR /src
 # `rusqlite` is built with `bundled`, so the SQLite amalgamation is compiled
 # here and needs a C toolchain; `pkg-config` and `perl` are what the AEAD and
 # compression crates' build scripts look for. No rustup install: the base image
-# IS the pinned toolchain, and rust-toolchain.toml is copied in below so a
-# mismatch between the two fails loudly instead of silently building on the
-# base image's channel.
+# IS the pinned toolchain.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     build-essential \
@@ -54,10 +52,30 @@ ARG CENTRAID_BUILD_DIGEST=""
 ENV CENTRAID_BUILD_GIT_SHA=${CENTRAID_BUILD_GIT_SHA} \
   CENTRAID_BUILD_DIGEST=${CENTRAID_BUILD_DIGEST}
 
-# Manifests and the toolchain pin only, so a source-only commit keeps the
-# dependency layer warm (v0's #637 Phase 2 rule, kept). `--parents` needs the
-# labs frontend declared at the top of this file.
-COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
+# THE TOOLCHAIN PIN IS ASSERTED, NOT INSTALLED. `rust-toolchain.toml` is the
+# one version file, and copying it in here would make rustup try to SYNC the
+# channel on every build: the base image's `rustc` is already 1.94.1, but the
+# file also asks for a `minimal` profile and named components, which rustup
+# answers by reaching out to static.rust-lang.org. That is a network round-trip
+# per build, and on a host whose egress is proxied it is a build failure with a
+# TLS error that says nothing about Centraid. So the version is compared
+# instead, and a mismatch fails LOUDLY with both numbers rather than quietly
+# building on whatever the base image happens to carry.
+COPY rust-toolchain.toml /tmp/rust-toolchain.toml
+RUN set -eu; \
+  want="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' /tmp/rust-toolchain.toml | head -1)"; \
+  got="$(rustc --version | cut -d' ' -f2)"; \
+  if [ "$want" != "$got" ]; then \
+    echo "deploy/docker/Dockerfile: the base image is rustc $got and rust-toolchain.toml pins $want. Bump the FROM line (and its digest) to match; this image must not build on a channel the repository does not pin." >&2; \
+    exit 1; \
+  fi; \
+  echo "toolchain $got matches rust-toolchain.toml"; \
+  rm /tmp/rust-toolchain.toml
+
+# Manifests only, so a source-only commit keeps the dependency layer warm
+# (v0's #637 Phase 2 rule, kept). `--parents` needs the labs frontend declared
+# at the top of this file.
+COPY Cargo.toml Cargo.lock ./
 COPY --parents crates/*/Cargo.toml crates/apps/*/Cargo.toml ./
 
 # A dependency-only build. Every member gets a placeholder root so cargo can

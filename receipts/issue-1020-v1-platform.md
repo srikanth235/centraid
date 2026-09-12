@@ -1316,3 +1316,148 @@ Mirrored into [docs/decisions.md](../docs/decisions.md#decisions--lane-b2-1020) 
 ### Doctrine digest
 
 Law `53be88c22ab5`. `.governance/run.sh` all directives pass; `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` no findings. No waiver spent, no law file touched (`.governance/**`, `CONSTITUTION.md`, `scripts/ci/gate-classes.json`, `tests/*.json`, `oxlint.config.ts`, `oxfmt.config.ts`, `.github/CODEOWNERS` are all untouched); `.github/workflows/gate.yml` is territory and is cited to [#the-pr-gate-loop-892](../docs/decisions.md#the-pr-gate-loop-892) through D-1020-B2-3. No v0 file under `packages/**` or `tests/**` was edited, so this lane lists no fixture-adapter edits.
+
+## Wave 3 — lane G: the deploy tree, the CI lanes, the prebuilt core and the release smoke
+
+### What landed
+
+**`f64ede94` — one deploy tree, and service units as a CLI verb.**
+`deploy/README.md`, `deploy/docker/Dockerfile` (new, the v1 image), `deploy/docker/gateway-v0.Dockerfile` (`git mv` from the root `Dockerfile`, unchanged), `deploy/systemd/centraid-gateway.service`, `deploy/systemd/system/centraid-gateway@.service`, `deploy/launchd/dev.centraid.gateway.plist`, `deploy/vps/install.sh`, `contracts/deploy/units/{README.md,export-v0-units.ts,centraid-gateway.user.service.expected,centraid-gateway@.system.service.expected,dev.centraid.gateway.plist.expected}`, `crates/centraid/src/cmd/{units.rs,gateway_install.rs,doctor.rs,mod.rs}`, `crates/centraid/src/main.rs`, `crates/centraid/tests/gateway_install.rs`, `crates/centraid/tests/no_listener.rs`, `crates/centraid/README.md`, `.github/workflows/{ci.yml,lane-gateway-package.yml,lane-release-gateway-image.yml}` (the moved Dockerfile's path), `ARCHITECTURE.md`, `TESTING.md`, `flake.nix` (stale path references).
+
+**`11282c87` — the artifact key, the identity stamp and the prebuilt-core lane.**
+`crates/xtask/src/artifact.rs`, `crates/xtask/{Cargo.toml,src/main.rs}`, `crates/centraid/{build.rs,src/identity.rs,src/main.rs}`, `.github/workflows/lane-prebuilt-core.yml` (new), `.github/workflows/{gate.yml,release.yml}`, `Cargo.toml`, `Cargo.lock`.
+
+**`86ffd20e` — the dev loop carries line tables, and `dist` is what a tag ships.** `Cargo.toml`.
+
+**`e174ca68` — the CI re-homes, the WAL capture tick and a real `vps-smoke`.**
+`crates/xtask/src/{ci.rs,smoke.rs}` (new), `crates/xtask/src/{gate.rs,main.rs}`, `crates/centraid/src/cmd/{capture.rs,backup.rs,mod.rs}`, `crates/centraid/src/run.rs`, `crates/net/src/endpoint.rs` (one new method — see finding 1), `contracts/ledgers/advisory.json` (new).
+
+**`9fb2d81f` — device lanes with a runner contract, the flake check and the candidate.**
+`.github/workflows/gate-nightly.yml`, `.github/actionlint.yaml`, `.github/workflows/lane-prebuilt-core.yml`, `deploy/docker/Dockerfile`, `deploy/vps/install.sh`, `contracts/ledgers/library-size.json`, `tests/journeys.json`, `crates/xtask/README.md`, `docs/{release.md,toolchain.md}`.
+
+**`fa003e51` — the `dist` split re-judged against lane B2's re-based ceilings.** `Cargo.toml`, `docs/toolchain.md`, `crates/xtask/src/smoke.rs`.
+
+### Exit list
+
+| # | Command | Outcome |
+|---|---|---|
+| 1 | `cargo test --workspace` | **PASS** — 0 failures across every member; `cargo test -p xtask` is 58 tests, `-p centraid` 40 |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check` | **PASS**, clean |
+| 3 | `cargo xtask gate --profile local` | **PASS** — 127.0 s. Over the 120 s **warm** budget and the run was scored **cold** (10 of 10 members unlinked), so it was charged `coldLocalProfileSeconds` = 3200 s and held. `test` is 102.7 s of the 127.0 |
+| 4 | `cargo xtask gate --profile pr` | **258.8 s of 1500 s**, `BUDGET ok`, cold. Green except three: `secrets` (2 findings — finding 3), `osv` (`astro@7.1.5`, the named inherited red), `ts-static` (unprovisioned tree; green after `bun run build`, item 5) |
+| 5 | `cargo xtask gate --profile release --lane ts-static` | **PASS** — 25.6 s, `bun run check:push:static`, after `bun run build` — the step's own message diagnosed it correctly as an unprovisioned tree rather than a type error |
+| 6 | `cargo xtask gate --profile release --lane vps-smoke` | **PASS — 74.0 s.** The wave 3 exit criterion; transcript quoted below |
+| 7 | `cargo xtask gate --profile release --lane artifact-identity` | **PASS** — the refusal line is quoted below |
+| 8 | `cargo xtask gate --profile release --lane prebuilt-core-required` | **PASS** — three required triples, three distinct keys: `x86_64-unknown-linux-gnu 4ab33d7a2d12bd26`, `aarch64-apple-darwin d20c9afb7fb58370`, `x86_64-pc-windows-msvc 74bb9f0034869e33` |
+| 9 | `cargo xtask gate --profile release --lane restore-drill` | **PASS** — 28.0 s, lane R's step, unchanged by this lane |
+| 10 | `bun run lint:workflow-pins` | **PASS** — 26 workflows clean (SHA pins, bun pin, timeouts, single PR + release entry point) |
+| 11 | `bun run lint:ci-egress` | **PASS** — 6 workflows enforce a policy, 16 pinned as debt; `lane-prebuilt-core.yml` enforces `audit` |
+| 12 | `bun run lint:path-filters`, `bun run lint:journey-ledger`, `bun run lint:ledgers` | **PASS** each |
+| 13 | `actionlint` (pinned 1.7.12, whole `.github/`) | **PASS**, clean. `devices` is declared in `.github/actionlint.yaml` |
+| 14 | the 21 `ci.yml` job keys | **unchanged** — `21 21 / identical: True` from a key extractor run over `git show 6e2bd750:.github/workflows/ci.yml` and the working copy |
+| 15 | `cargo xtask artifact-key` on two trees differing by one byte in `contracts/` | **different, and reverting restores it** — quoted below |
+| 16 | `docker build -f deploy/docker/Dockerfile .` | **NOT PROVEN HERE** — finding 4 and an owner hand-off |
+| 17 | `bun run format` + `format:check` | **PASS** — "All matched files use the correct format" |
+| 18 | `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5`; `bash .governance/run.sh` | see the report |
+| 19 | `bun run check:push:static` | **PASS** — through the `ts-static` step, item 5 |
+
+### The `vps-smoke` transcript, summarised
+
+`cargo xtask gate --profile release --lane vps-smoke` → **ok, 74.0 s**, over three clean containers of `debian:trixie-slim@sha256:d7e1218…` (digest-pinned for the same reason `deploy/docker`'s bases are):
+
+- **pass 1, first boot.** `deploy/vps/install.sh --local … --sums …`: `checksum ok`, `identity ok (gitSha, digest, schemaVersion all match the release)`, `installed /usr/local/bin/centraid`, and then the two commands it did **not** run. `centraid gateway install --system --dry-run` printed a `DynamicUser=yes` system unit and `/etc/systemd/system` was byte-for-byte the same before and after — checked by listing it, not by trusting the message. The gateway **FOUNDED a new vault** (`centraid: vault 2c96e477-…`), minted a ticket, and a seat redeemed it over iroh with `--no-relay`. The RPO capture tick ran (`wal/tick.json`: `{"ticks":1,"segments":0,"lastSegment":null}`), `centraid backup now --force` took generation 1, and `centraid doctor --data-dir /data --json` was clean.
+- **pass 2, restart over the same data directory.** `opened the existing vault (no second vault founded)` — asserted by the ABSENCE of the founding line, so a second vault would be a red. Paired again, tick ran, doctor clean.
+- **pass 3, the negative.** The same tarball and the same `SHA256SUMS` with **one character of the digest changed** in `identity.json`: `install.sh: IDENTITY MISMATCH on digest: the release says 'zev', the binary says 'dev'. This artifact is not the one this release published — refusing to install it.` Exit 1, nothing installed.
+
+**Two things the smoke does not claim, and says so in its own line.** The WAL tail is **empty** — nothing writes to the vault after it is founded until the durable allowlist lands (D-1020-C8, wave 2 lane D2), so a tick that seals nothing is correct rather than broken, and the smoke prints the segment count instead of asserting it non-zero. And a restart **re-pairs** rather than reconnecting the previous seat, for the same reason. The capture mechanics themselves — per-tick offsets, a checkpoint bumping the group, resume across a restart, a pending line whose blob is missing being refused — are proved by six unit tests in `crates/centraid/src/cmd/capture.rs` over a WAL that does grow.
+
+### The artifact key, the identity stamp, the sizes
+
+```
+$ cargo xtask artifact-key --triple x86_64-unknown-linux-gnu --profile release
+7e8e0864c825f2fd70c315f4b6ca0d36fae888e8615490c13ce3dc2b4dbbdd3d
+$ printf '\n' >> contracts/README.md && cargo xtask artifact-key --triple … --profile release
+103bacad05a560bb6f2cf3aa6431c973be9aaf222baac2cbb9e1d3edc07db9d2
+$ git checkout contracts/README.md && cargo xtask artifact-key --triple … --profile release
+7e8e0864c825f2fd70c315f4b6ca0d36fae888e8615490c13ce3dc2b4dbbdd3d
+```
+
+One byte in `contracts/` moves the key and reverting restores it. The `Cargo.lock` half of the rule is proved by unit test both ways (`a_cargo_lock_change_moves_the_key_only_when_the_resolved_graph_changes`): a reordered `dependencies` list and an added comment do **not** move it; a version bump does; and a checksum change at the **same** version does, which is the yanked-and-republished case a version-only rule would miss. `a_ledger_write_does_not_move_the_key` holds the other half — a ledger is evidence about an artifact, not an input to it, or every measurement would re-key the thing it measured.
+
+The identity refusal, quoted from `crates/centraid/src/identity.rs`: `STALE CORE REFUSED: this shell was built against core digest {expected}, and the core it loaded reports {digest} (git {sha}, schema {version}). Refusing to answer a single call: a core from another tree starts, answers, and answers from the wrong schema.` An **empty** expectation is refused too — that is a build that forgot to record which core it was built against, and treating it as a match is what would make the whole scheme decorative. A `dev` build is allowed and returns a warning that says the check did not run.
+
+**Sizes.** `contracts/ledgers/library-size.json` takes its first measured entry: `x86_64-unknown-linux-gnu.strippedBytes = 23067264` (22.0 MiB), from `cargo build --profile dist --bin centraid` then `objcopy --only-keep-debug` + `--strip-debug --add-gnu-debuglink`; the symbol file beside it is 73,679,584 bytes. The other twelve published triples are **`null`** and are listed rather than omitted: this container is Linux x64 with no macOS runner, no Xcode, no NDK and no Windows host, and a projection from the x64 number would be indistinguishable from a measurement six months from now.
+
+### v0 CI shapes: re-homed vs. still running under `ci.yml`
+
+| Re-homed into `cargo xtask` | From | Where it runs now |
+|---|---|---|
+| `advisory` | `scripts/ci/advisory-expiry.mjs` | `pr` |
+| `lockfile` | `scripts/ci/lockfile-lint.mjs`, extended to `Cargo.lock` | `pr` |
+| `lane-health` | `scripts/ci/lane-health.mjs` | `nightly`, and `cargo xtask lane-health` |
+| the per-PR evidence row | `scripts/test-report/write-evidence.mjs` | every profile, `target/xtask/<profile>/evidence.json` |
+| the wall-clock scorer | `scripts/ci/pr-gate-wall-clock.mjs` | already the budget table (wave 1 lane B, re-based by B2) |
+| the candidate pointer | `candidate.yml`'s `promote` | `gate-nightly.yml`'s `promote-candidate`, on a green nightly |
+
+**Still running under `ci.yml` on `push: main` and its own nightly schedule, none deleted, all 21 job keys byte-identical:** `changes, static, gates, verify, web-build, docs, oauth-worker, gitleaks, osv-scanner, dependency-review, mobile-smoke, iroh-wasm, data-plane, gateway-package, extension, design, quality, perf, scale, e2e-smoke, check`. The four `scripts/ci/**` groups not re-homed are v0 governance that retires with v0: the `run-gates.mjs`/`gate-classes.json` runner, the turbo and mutation ratchets, the device/toolchain lease scripts (`device-farm-lease.sh` is now *called* by the device lanes rather than replaced), and the candidate resolve/write scripts (`write-candidate.mjs` is now *called* by `promote-candidate`).
+
+### Decisions — lane G
+
+Adopted under R-1020-34 (options, recommendation, adopt), each citing [#1020](https://github.com/srikanth235/centraid/issues/1020).
+
+- **D-1020-G1 — `deploy/` is the one home; the v0 image moves with history and keeps shipping.** Options: (a) rewrite the root `Dockerfile` into the v1 image in place, (b) add a v1 image beside an untouched root `Dockerfile`, (c) `git mv` the v0 image into `deploy/docker/gateway-v0.Dockerfile` and add `deploy/docker/Dockerfile` as the v1 one. **(c) adopted.** (a) would have broken `lane-release-gateway-image.yml` and `lane-gateway-package.yml`, which is deleting a v0 lane by another name; (b) leaves the deploy tree half-populated. Both workflows and `ci.yml`'s path filter were repointed to the new path — a re-home, not a deletion.
+- **D-1020-G2 — the key and the stamp are two mechanisms, and the exact rule is written down.** `cargo xtask artifact-key`'s five inputs, with `contracts/ledgers/` excluded and `Cargo.lock` reduced to its resolved graph, are in `crates/xtask/src/artifact.rs`'s module doc and in `docs/release.md`. The stamp lives in `crates/centraid` and **not** `crates/core`, because lane D2 had not landed when this was written; the module names the move rather than implying it, and the JSON field names are already `gitSha`/`digest`/`schemaVersion` so lane E's KMP assertion has a contract to write against today.
+- **D-1020-G3 — a CI-shape gate moves into the gate that replaced the workflow; it is never dropped.** The advisory register reads **both** `contracts/ledgers/advisory.json` and `tests/inventory.json#advisory` (law estate, not editable from a territory commit), so there is exactly one row per step between the two files and neither carries a copy of the other's. Options considered: duplicate the two v0 rows into the v1 ledger (rejected — two copies of one row drift), or leave the rule in v0 only (rejected — it would come off pull requests with `ci.yml`).
+- **D-1020-G4 — a device lane is a loud skip with a runner contract, and the contract lives in the runner.** `CENTRAID_DEVICE_RUNNER` flips `device-lanes` from skipping to REQUIRING `xcrun devicectl list devices` (a physical iPhone — not `simctl`, which lists simulators, the exact gap `tests/quarantine.json#lanes.device-rung-ios` is parked on) and `adb devices`. A runner that claims the label and has no phone goes **red**: that is an infrastructure fault, not a skip. `--lane <name>` narrows a run to one cell, and a name matching nothing is an error rather than an empty run that would report PASS over zero steps.
+- **D-1020-G5 — the release profile's four steps, and `vps-smoke`'s device-less form.** `restore-drill` + `artifact-identity` + `prebuilt-core-required` + `vps-smoke`. The old placeholder test (`the_placeholders_fail_rather_than_skip`) was replaced by `no_step_in_the_release_profile_is_a_stub`, which greps this file for the stub sentence — the rule was never about the message, it was that the profile cannot pass vacuously.
+- **D-1020-G6 — the flake stays honest without a fabricated pin.** Options: (a) install nix with a SHA-pinned third-party action, (b) install it from a pinned release URL, (c) do neither and check what is checkable. This repository has no pin for either installer shape, and **inventing one in the file whose whole subject is pinning** is the worst available outcome — so **(c)**: `gate-nightly.yml`'s `flake` job asserts that `flake.nix` reads the channel out of `rust-toolchain.toml` and carries no second literal of it, and states in the run summary that the flake has never been evaluated. The first evaluation is an owner hand-off.
+- **D-1020-G7 — the edit-run loop carries line tables, not full DWARF.** Measured on the shared target directory: **16 GB** under `debug/`, of which **7.7 GB was 144 test and bin executables** (the four `centraid` ones 363–387 MB each) and 4.3 GB rlibs. `[profile.dev]`/`[profile.test]` at `debug = "line-tables-only"` with `split-debuginfo = "unpacked"`, and `[profile.dev.package."*"] debug = false` beside the existing `opt-level = 2`, take the same set to **0.50 GB over 39 executables**, largest **43.1 MB** (−89 % on the biggest single artifact), with 0.03 GB of split DWARF beside it. A backtrace still names file and line; `CARGO_PROFILE_DEV_DEBUG=2 cargo test -p <crate>` restores the rest for one command and is written in `crates/xtask/README.md`. No test inspects a backtrace's contents, so `debug = 1` was not needed. **The directory total does not fall until a clean**: cargo does not garbage-collect artifacts from a previous profile, so `du` over the shared `target/` keeps showing the old bytes until someone clears it — the honest number is the per-artifact one above.
+- **D-1020-G8 — two optimised profiles, and the second reason is the one that survives.** `release` (what a pull request builds and `release-build` scores) and `dist` = `release` + `lto = "thin"` + `codegen-units = 1` + the debuginfo settings (what a tag publishes). Measured cold on `ci-linux-x64-4c`, contended: LTO + `codegen-units = 1` put `cargo build --workspace --release` at **1039 s** (and `--bin centraid` alone at 630 s); the debuginfo settings alone at **747 s**; the profile as it stands at **379 s**. The split was first made against the old 600 s `releaseBuildSeconds` ceiling, which 1039 s broke. Lane B2 has since re-based that ceiling to **1400 s**, so 1039 s would now fit — and the split stays on the argument that survives the number: it spends ~70 % of the 1500 s `pr` budget on inlining only the published artifact consumes. **What it costs is stated too:** the binary a pull request builds is not bit-identical to the one a tag ships, so `vps-smoke` smokes `release` and the `dist` artifact is proved by `lane-prebuilt-core.yml`, which builds it, stamps it and reads the stamp back **out of the binary** before publishing.
+- **D-1020-G9 — the WAL capture tick runs in the gateway and its pending tail is on disk.** Lane R named the missing tick as a gap. Options: (a) an in-process buffer (rejected — `centraid backup now` is a separate process and could not see it), (b) the CLI captures the tail itself (rejected — a second capturer with its own idea of where the last segment ended), (c) the gateway appends one line per tick to `<data-dir>/wal/pending.jsonl` and writes the sealed bytes to the blob store; `backup now` reads it and retires it **after** the manifest naming those segments is written. **(c) adopted.** A crash between the blob write and the index append leaves an orphan blob rather than a manifest pointing at a blob that is not there — a blob nothing points at is garbage; the other way round is a generation that cannot be replayed. The gateway holds the vault's **one writable connection open** for the process lifetime, which is also what makes the tick have bytes at all: in WAL mode SQLite checkpoints and removes the `-wal` file when the last connection closes.
+- **D-1020-G10 — a redemption waits for the peer's close.** See finding 1.
+
+### Demonstrated reds
+
+1. **`a_dry_run_prints_the_unit_and_leaves_the_home_directory_untouched`** — before the assertion existed, `--dry-run`'s guarantee was a sentence in a message. The test lists every file under a temporary `HOME` before and after and compares the sets.
+2. **`the_user_unit_is_byte_identical_to_the_v0_generator`** — the two fixtures under `contracts/deploy/units/` were written by **v0's own** `buildSystemdUnit`/`buildLaunchdPlist` (regenerable with `bun run contracts/deploy/units/export-v0-units.ts`, verified byte-identical with `cmp`). Changing one character of `systemd_quote`'s bare-character set reds it.
+3. **`a_past_revisit_date_is_a_finding`** — the same advisory row passes at `2026-09-11` and fails at `2026-09-12`, so the failure is about the date and not about the row.
+4. **`a_mismatched_digest_is_refused_and_both_digests_are_named`** — and its companion `an_empty_expectation_is_refused_rather_than_treated_as_a_match`, which is the failure mode that would have made the identity scheme decorative.
+5. **`an_unknown_lane_name_is_refused_rather_than_running_nothing`** — `--lane no-such-lane` errors instead of selecting zero steps and reporting PASS.
+6. **`a_pending_line_whose_blob_is_missing_is_refused`** — a tail line naming a blob the store cannot produce fails at `backup now` rather than at restore time.
+7. **`a_checkpoint_that_shortens_the_wal_starts_a_new_group_at_offset_zero`** — without it, two different byte ranges would seal under one address and, with a deterministic nonce, under one nonce.
+8. **The `vps-smoke` step itself reproduced finding 1** three times before it passed, and its pass-3 negative reproduces the identity refusal on every run.
+
+### Findings outside the slice
+
+1. **A pairing race: the gateway enrols the device and tells the member pairing failed.** `pairing::serve_redemption` writes and flushes its `PairResponse` and returns; the accept loop then dropped the `Connection` on its next iteration, and dropping an iroh connection sends CONNECTION_CLOSE at once, which QUIC uses to discard stream data the peer has not read. The seat printed `centraid: i/o: connection lost` while the gateway logged `a device paired` — and because the ticket is one-shot, the member's second attempt is **refused**. Reproduced by the release smoke in two of two passes. **FIXED at its source under R-1020-35** (D-1020-G10): `IrohConnection::closed()` is a new method on `crates/net/src/endpoint.rs` (no existing behaviour changed) and `crates/centraid/src/run.rs`'s accept loop awaits it with a 10 s backstop after answering. **This is a cross-lane edit** — `crates/net` is lane C/D2's file — and it is one added method plus its caller; the root should route the review.
+2. **`centraid seat|devices|export`'s README rows were stale.** `crates/centraid/README.md` still said `backup now`, `recover` and `export` exit 3, which wave 2 lane R made real. Corrected in `f64ede94` along with the `doctor` and `gateway install` rows. Stale docs are bugs.
+3. **`secrets` now reports TWO findings, and the new one is a `contracts/` fixture.** `contracts/golden/format-golden.json` — lane R's cross-language format golden, which is AEAD ciphertext and test-vector key material by construction — joins the named `packages/model-runtime/LICENSES.md` red. **Nothing was added to `.gitleaks.toml`**: a gate whose first act is to widen its own allowlist has gated nothing, and the census records the precedent that the number moving is not a licence to suppress. This is an **owner hand-off**, and the decision is a real one: either a reasoned allowlist row naming the golden (with the argument that a published test vector is not a secret) or moving the key material out of the fixture.
+4. **`docker build -f deploy/docker/Dockerfile .` cannot be proven on this machine.** The build reaches the toolchain assertion and passes it (`toolchain 1.94.1 matches rust-toolchain.toml`), then fails fetching the crates.io index: `[60] SSL peer certificate or SSH remote key was not OK (SSL certificate problem: self-signed certificate in certificate chain)`. This host's outbound HTTPS goes through an agent proxy whose CA is not in the container's trust store; it is an environment limitation and not a Dockerfile defect. **One real fix came out of the attempt**: the first version copied `rust-toolchain.toml` into the build stage, which made rustup try to sync the channel on every build — a network round-trip per build and, here, a TLS failure whose message said nothing about Centraid. The file is now compared rather than installed, and a mismatch fails loudly with both version numbers. Owner hand-off below.
+5. **`local` is over its warm budget on this tree.** 127.0 s against 120 s, of which `test` is 102.7 s. The run was correctly scored **cold** by B2's detector and charged the 3200 s cold ceiling, so the profile passed — but the warm number is what the budget is about, and it is now over. No ledger number was touched. This is lane B2's open question (b): `local` runs the changed crates' tests and `pr` keeps the workspace run.
+6. **`tests/journeys.json`'s twelve v1 mobile entries now name their lane** and **no number was promoted.** Each `_intended` cell gained a `lane` field naming the `gate-nightly.yml` cell that will measure it and restating R-1020-20 in the same sentence: a parked ceiling is promoted by the first run on a named reference device, never by a lane existing.
+
+### Owner hand-offs
+
+1. **Branch protection must be repointed** — still open since wave 1. `gate` **and** `dependency-review` are the required checks; until then pull requests block.
+2. **The real VPS run.** The exact commands and the transcript to expect are in [docs/release.md](../docs/release.md#owner-hand-off--the-real-vps-run). What the container cannot prove and that run must: that `DynamicUser` + `StateDirectory` actually start (the system unit has never been loaded by a real systemd), that `systemd-creds` hands the secret over, that the service survives a reboot, and that a seat on another machine pairs across a real network rather than over loopback.
+3. **`docker build` on a host with ordinary egress**, or with the proxy CA added to the container's trust store: `docker build -f deploy/docker/Dockerfile -t centraid-gateway:v1 .`, then record the image size. Finding 4.
+4. **A self-hosted macOS runner with one iPhone (XR/iOS 17) and one Android (Galaxy A55) attached**, and `vars.CENTRAID_DEVICE_RUNNER=true` to enable the four device cells. Open question 13.
+5. **Signing and notarisation enrolment** for the desktop and mobile surfaces — lanes F and E own their sections of [docs/enrollment.md](../docs/enrollment.md).
+6. **The first `nix flake check`**, then commit `flake.lock` and add the pinned nix installer `gate-nightly.yml`'s `flake` job deliberately does not fabricate. D-1020-G6.
+7. **The `secrets` decision on `contracts/golden/format-golden.json`** and the standing `LICENSES.md` and `astro@7.1.5` reds. Finding 3.
+8. **The first real `prebuilt-core` matrix run** fills the twelve `null` triples in `contracts/ledgers/library-size.json` and produces the first `dist` artifact measurement on a non-x64 platform.
+
+### Splices owed
+
+`contracts/handoff/{F,E}/` did not exist at the rebase onto `6e2bd750`, so **no lane F or lane E step function was spliced**. What is prepared for them: `gate-nightly.yml`'s four device cells call `cargo xtask gate --profile nightly --lane <name>` and `device-lanes` FAILS on a real device runner rather than reporting lanes it did not run; `lane-prebuilt-core.yml`'s `android` and `ios` jobs are gated on `crates/core-ffi`'s presence with a loud run-summary line, and the Android job publishes the four ABIs in the AAR's `jni/<abi>/` layout while saying the AAR is **not** assembled because the JNI initializer class is lane E's. The iOS deployment floor is declared once, in that job's `IPHONEOS_DEPLOYMENT_TARGET`, for lane E's `Package.swift` to read.
+
+### Falsification
+
+The two riskiest claims in this diff, and the throwaway check run against each.
+
+1. **"The Rust unit generators emit exactly what v0 emits."** A port proved by reading is a port nobody checked. Check: regenerated both fixtures with `bun run contracts/deploy/units/export-v0-units.ts` into copies, then `cmp` against the committed files — byte-identical — and then deliberately widened `systemd_quote`'s bare-character set by one character and confirmed `the_user_unit_is_byte_identical_to_the_v0_generator` goes red. The fixtures are v0's output, not this lane's.
+2. **"The capture tick is running."** The first version of the smoke asserted a non-empty `pending.jsonl` and failed; the temptation was to conclude the loop was broken. Check: ran the real release binary on the host for 100 s with `--data-dir /tmp/gwtest` and read `wal/tick.json` — `{"ticks":1,"segments":0,"lastSegment":null}`. The loop is alive and there is genuinely nothing to capture, because nothing writes to the vault after it is founded until D2's durable allowlist lands. That is why the smoke now asserts the **marker** and prints the segment count, and why the marker exists at all: without it, a dead loop and an idle one are the same observation.
+
+### Doctrine digest
+
+Law `53be88c22ab5`. `bash .governance/run.sh` all directives pass; `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` no findings. No waiver spent. No law file touched — `.governance/**`, `CONSTITUTION.md`, `scripts/ci/gate-classes.json`, `tests/{floors,budgets,inventory,quarantine,claims}.json`, `oxlint.config.ts`, `oxfmt.config.ts` and `.github/CODEOWNERS` are all unmodified (`tests/journeys.json` is not law estate and took a non-numeric `lane` field on twelve entries). `.github/workflows/**` and `scripts/ci/**`-adjacent territory is cited to [#the-pr-gate-loop-892](../docs/decisions.md#the-pr-gate-loop-892) in every commit that touches it. No v0 file under `packages/**` was edited and no fixture adapter was needed, so this lane lists none. No model identifier appears in any file or commit message.
