@@ -81,6 +81,10 @@ enum Command {
         /// then means no connection at all.
         #[arg(long, conflicts_with = "relay")]
         no_relay: bool,
+        /// With no subcommand, `gateway` RUNS the gateway. `gateway install`
+        /// writes an OS service unit for it and never enables it.
+        #[command(subcommand)]
+        command: Option<GatewayCommand>,
     },
     /// Run a seat: a full replica, the applier, the outbox and every app's
     /// queries and commands.
@@ -115,10 +119,14 @@ enum Command {
         #[command(subcommand)]
         command: BackupCommand,
     },
-    /// Check a vault and report.
+    /// Check a vault and report. Read-only and lock-free, so it is safe against
+    /// a serving gateway — which is why the container health check runs it.
     Doctor {
         #[arg(long)]
         data_dir: Option<PathBuf>,
+        /// Print the JSON report even when the vault is clean.
+        #[arg(long)]
+        json: bool,
     },
     /// Restore from a recovery kit. The kit carries the keys; the blob store
     /// carries the bytes.
@@ -159,6 +167,29 @@ enum Command {
     /// The browser extension's native-messaging host. Launched by the browser,
     /// never by a person.
     NativeHost,
+}
+
+#[derive(Subcommand)]
+enum GatewayCommand {
+    /// Write an OS service unit for this gateway and print the command that
+    /// enables it. It never enables it: a background service that starts
+    /// because a file was unpacked is a service nobody chose to run
+    /// (`scripts/install-gateway.mjs:5`–`:8`, D-1020-G1).
+    Install {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        /// Print the unit and the commands, write nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// A templated systemd SYSTEM unit instead of a per-user one — the VPS
+        /// shape, because a user unit does not survive without a login session
+        /// unless lingering is enabled (census §G seam G10).
+        #[arg(long)]
+        system: bool,
+        /// The `%i` in `centraid-gateway@%i`, for `--system`.
+        #[arg(long, default_value = "default")]
+        instance: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -214,16 +245,34 @@ fn main() -> ExitCode {
                 vault_name,
                 relay,
                 no_relay,
-            } => {
-                run::gateway(run::GatewayArgs {
+                command,
+            } => match command {
+                Some(GatewayCommand::Install {
                     data_dir,
-                    print_qr,
-                    vault_name,
-                    relay,
-                    no_relay,
-                })
-                .await
-            }
+                    dry_run,
+                    system,
+                    instance,
+                }) => cmd::gateway_install::run(cmd::gateway_install::InstallArgs {
+                    data_dir,
+                    dry_run,
+                    flavour: if system {
+                        cmd::gateway_install::Flavour::System
+                    } else {
+                        cmd::gateway_install::Flavour::User
+                    },
+                    instance,
+                }),
+                None => {
+                    run::gateway(run::GatewayArgs {
+                        data_dir,
+                        print_qr,
+                        vault_name,
+                        relay,
+                        no_relay,
+                    })
+                    .await
+                }
+            },
             Command::Pair {
                 mint,
                 data_dir,
@@ -252,10 +301,9 @@ fn main() -> ExitCode {
                     cmd::backup::now(cmd::backup::BackupNowArgs { data_dir, force })
                 }
             },
-            Command::Doctor { .. } => run::not_yet_available(
-                "doctor",
-                "the vault checks live in crates/vault, wave 2 lane D1",
-            ),
+            Command::Doctor { data_dir, json } => {
+                cmd::doctor::run(cmd::doctor::DoctorArgs { data_dir, json })
+            }
             Command::Recover {
                 kit,
                 password_file,

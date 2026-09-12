@@ -149,7 +149,10 @@ jobs:
               # change there still changes what the artifact runs. Listed with
               # the other engine packages for the same reason they are.
               - 'packages/model-runtime/**'
-              - 'Dockerfile'
+              # Moved to deploy/docker/ in wave 3 of #1020; the v0 image itself is
+              # unchanged and still the one this lane and lane-release-gateway-image
+              # build. The filter follows the file.
+              - 'deploy/docker/gateway-v0.Dockerfile'
               - '.dockerignore'
               - 'flake.nix'
               - 'scripts/gateway-package/**'

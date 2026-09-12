@@ -17,10 +17,11 @@ That is why `centraid.core.v1`'s `admin.proto` defines command _inputs_ rather t
 | `seat pair <ticket>` | Redeems a ticket against its gateway and enrols this device. | **runs** |
 | `seat [--data-dir] [--thin]` | Runs a seat: replica, applier, outbox, app queries and commands. | exit 3 — `crates/seat`, wave 2 lane D2 |
 | `devices list \| revoke <id>` | The device register. | exit 3 — needs `crates/vault`'s authority and receipts, wave 2 lane D1 |
-| `backup now [--force]` | Takes a snapshot. | exit 3 — wave 2 lane R |
-| `doctor` | Checks a vault and reports. | exit 3 — `crates/vault`, wave 2 lane D1 |
-| `recover --kit <file>` | Restores from a recovery kit. | exit 3 — wave 2 lane R |
-| `export` | Writes a portable copy. | exit 3 — `crates/vault`, wave 2 lane D1 |
+| `backup now [--force]` | Takes a generation: the snapshot, the sealed WAL tail, the manifest. | **runs** (wave 2 lane R) |
+| `gateway install [--dry-run] [--system] [--instance <name>] [--data-dir]` | Writes an OS service unit for this gateway and prints the command that enables it. **Never enables it**, and `--dry-run` writes nothing. | **runs** (wave 3 lane G; `deploy/README.md`) |
+| `doctor --data-dir <dir> [--json]` | Checks a vault: pages, foreign keys, receipt pointers, the seal-key fingerprint. Read-only and lock-free, so it is safe against a serving gateway — which is why the container health check runs it. | **runs** (wave 3 lane G) |
+| `recover --kit <file> --password-file <file> --data-dir <dir> [--at] [--full] [--yes]` | Restores from a recovery kit. | **runs** (wave 2 lane R) |
+| `export [--out] [--password-file]` | Writes a portable copy: a snapshot generation plus a password-wrapped recovery kit. | **runs** (wave 2 lane R; content blobs are still owed — see that lane's receipt section) |
 | `native-host` | The browser extension's native-messaging host. Launched by the browser, never by a person. | exit 3 — wave 4 |
 
 `--log` (or `CENTRAID_LOG`) takes a `RUST_LOG`-style filter. **Diagnostics go to stderr and nothing else does**, so stdout stays parseable: the ready line, the ticket and the QR are the only things on it.

@@ -1,0 +1,16 @@
+[Unit]
+Description=Centraid gateway daemon
+After=network.target
+
+[Service]
+Type=simple
+LoadCredentialEncrypted=centraid-keystore:/home/owner/.config/centraid/credentials/centraid-gateway.keystore.cred
+ExecStart=/usr/local/bin/centraid gateway --data-dir /home/owner/.local/share/centraid
+WorkingDirectory=/home/owner/.local/share/centraid
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/owner/.local/state/centraid/gateway.out.log
+StandardError=append:/home/owner/.local/state/centraid/gateway.err.log
+
+[Install]
+WantedBy=default.target

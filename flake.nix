@@ -19,7 +19,8 @@
 #     derivation — the #504 packaging stub it replaces said the same and the
 #     reason is unchanged: a FOD/bun2nix build waits on the native-module pins
 #     (sharp / wasm-vips / node:sqlite / iroh) being packaging-stable, and
-#     `scripts/gateway-package/` plus `./Dockerfile` remain the paths that do
+#     `scripts/gateway-package/` plus `deploy/docker/gateway-v0.Dockerfile`
+#     remain the paths that do
 #     build and smoke the v0 gateway. The OS unit writer stays single-writer: a
 #     host service module must call `centraid-gateway service install` rather
 #     than invent a second unit path (docs/config-ownership.md).

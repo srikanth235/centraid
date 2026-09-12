@@ -215,14 +215,16 @@ fn print_qr_emits_a_parseable_ticket_and_a_qr() {
 /// Every verb whose implementation lands in a later lane exits 3 and says so.
 /// Never 0 (#1020, D-1020-C11).
 ///
-/// The list SHRINKS as lanes land, and it shrank here: `backup now`, `recover`
-/// and `export` are real as of wave 2 lane R, so they are no longer this
-/// test's subject — they now exit 1 on a refusal and 2 on a usage error, which
-/// `tests/restore_drill.rs` asserts. The rule is untouched: a verb that is not
-/// implemented exits 3 and never 0.
+/// The list SHRINKS as lanes land, and it has shrunk twice: `backup now`,
+/// `recover` and `export` became real in wave 2 lane R, and `doctor` in wave 3
+/// lane G (`cmd/doctor.rs`; it now exits 0 on a clean vault and 1 when there is
+/// no vault to check, which `tests/gateway_install.rs` and the release smoke
+/// both rely on). The rule is untouched: a verb that is not implemented exits 3
+/// and never 0, and a verb leaving this list must have an implementation and a
+/// test of its own in the same commit.
 #[test]
 fn every_unimplemented_verb_exits_three_and_names_its_lane() {
-    let verbs: [&[&str]; 3] = [&["seat"], &["devices", "list"], &["doctor"]];
+    let verbs: [&[&str]; 2] = [&["seat"], &["devices", "list"]];
     for verb in verbs {
         let output = Command::new(binary())
             .args(verb)

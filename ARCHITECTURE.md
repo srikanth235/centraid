@@ -28,7 +28,7 @@ One **product version** stamps the monorepo; surfaces may skip _ship_ but not di
 | **Web PWA** | Continuous host scaffold `app.centraid.dev` (`apps/web` + `web.yml`). Gateway also embeds the built PWA for LAN/ticket clients. |
 | **Assist OAuth edge** | Protected continuous Worker `oauth.centraid.dev` (`apps/oauth-worker` + `oauth-worker.yml`); stateless callback/exchange/refresh only, with external Google/Cloudflare evidence gates. |
 | **Docs/home** | Cloudflare static assets (`docs:bundle` → `dist/site`); GHA is gate-only. |
-| **Gateway daemon** | Primary: monorepo / npm `@centraid/server` + optional H5 OS service. Optional: GHCR image on tags (monorepo-root `Dockerfile`; #504). npm multi-OS tunnel natives (#511). |
+| **Gateway daemon** | Primary: monorepo / npm `@centraid/server` + optional H5 OS service. Optional: GHCR image on tags (`deploy/docker/gateway-v0.Dockerfile`; #504). npm multi-OS tunnel natives (#511). |
 | **Companion extension** | Same product version; package via the `companion-v*` tag line into `release.yml`'s `companion` lane (`lane-release-companion.yml`) — not a second product-version line. |
 
 Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [docs/release.md](docs/release.md). Versioning policy: [docs/decisions.md](docs/decisions.md) R1–R5.

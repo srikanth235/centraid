@@ -1,4 +1,5 @@
-//! The verbs lane R owns: `backup`, `recover`, `export` (#1020, D-1020-R5/R6).
+//! The verbs lane R owns: `backup`, `recover`, `export` (#1020, D-1020-R5/R6),
+//! and wave 3 lane G's `gateway install` + `doctor` (D-1020-G1).
 //!
 //! Each is a **client**. The gateway holds the one writable connection and the
 //! keys, so a CLI that built a generation or fenced an epoch itself would be a
@@ -13,8 +14,11 @@
 //! line on stdout would make the report unparseable exactly when it matters.
 
 pub mod backup;
+pub mod doctor;
 pub mod export;
+pub mod gateway_install;
 pub mod recover;
+pub mod units;
 
 use std::path::{Path, PathBuf};
 
