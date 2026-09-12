@@ -640,12 +640,16 @@ dependencies = [
 name = "centraid-automations"
 version = "1.0.0-alpha.0"
 dependencies = [
+ "centraid-assist",
+ "centraid-media",
  "centraid-ontology",
  "hex",
  "jiff",
  "serde",
  "serde_json",
  "sha2",
+ "subtle",
+ "tempfile",
  "thiserror 2.0.20",
 ]
 
