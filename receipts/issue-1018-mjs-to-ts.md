@@ -665,3 +665,50 @@ tsc -p scripts --noEmit
 - `scripts/lint-types.sh`, `scripts/lint-types-policy.ts`, `scripts/lint-law-registry.ts`
 - `CHANGELOG.md`
 - `receipts/issue-1018-mjs-to-ts.md`
+
+## Law estate — `.governance/law` to TypeScript
+
+Converted all 43 maintained `.governance/law/**/*.mjs` files to `.ts` (no `.mts`). Relative imports use explicit `.ts` specifiers. `JSON.parse` is `unknown` at the call site. `amendment-pairing` pairs `rules/<id>.ts` with `rules/<id>.test.ts`. ESLint config stays derived at import time (`eslint.config.ts`); the runner is `node .governance/law/run.ts` and imports `./eslint.config.ts`. Digest-locked generator files were re-recorded with `node .governance/law/digest.ts --record`; `install.yaml` keys use the new `.ts` paths. `.governance/law/tsconfig.json` extends `tsconfig.node.json` and includes law `**/*.ts` only (`tsc --listFiles` has 0 `packages/*/src` hits).
+
+Lane branch: `issue-1018-lane-law`. Merged into `issue-1018-mjs-to-ts`.
+
+### Verification
+
+```sh
+tsc -p .governance/law --noEmit
+```
+
+Exit 0.
+
+```sh
+tsc -p .governance/law --listFiles --pretty false
+```
+
+44 non-lib members. `packages/*/src` count: 0.
+
+```sh
+node --test .governance/law/*.test.ts .governance/law/rules/*.test.ts
+```
+
+178 pass, 0 fail.
+
+```sh
+node .governance/law/digest.ts
+```
+
+Recorded digests match actual for `arrival.ts` and every `lib/*.ts` module.
+
+### Paths this slice
+
+- `.governance/law/**/*.mjs` → `.ts` (43 files)
+- `.governance/law/tsconfig.json`
+- `.governance/law/lib/types.ts`
+- `.governance/install.yaml` (re-recorded digests)
+- `.github/CODEOWNERS` (regenerated header)
+- `.governance/packs/srikanth235/centraid/directives/law/check.sh`
+- `.governance/packs/srikanth235/centraid/directives/law/hooks/commit-msg.sh`
+- `CONSTITUTION.md` (current-state paths + evolution log line)
+- `.governance/law/README.md`
+- `CHANGELOG.md`
+- `docs/dev-environment.md`, `docs/glossary.md`, `docs/multi-agent.md`
+- `receipts/issue-1018-mjs-to-ts.md`

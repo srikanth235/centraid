@@ -1,6 +1,6 @@
 # GENERATED — do not edit by hand.
 #
-# Written by `node .governance/law/codeowners.mjs --write` from the union of
+# Written by `node .governance/law/codeowners.ts --write` from the union of
 # `lawPaths` in `.governance/law/packs/*.json`: the law estate, the set of
 # paths whose edit changes what the NEXT change is allowed to do. Adding a
 # law path to a pack and regenerating is the only way to add a line here.
