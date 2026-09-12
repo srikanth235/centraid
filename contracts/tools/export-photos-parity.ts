@@ -70,224 +70,48 @@
 //    "not counted yet" is the state the port models as a type (D-1020-P1) and
 //    the one a renderer gets wrong.
 
+import { refreshCustodyRollup } from "../../packages/vault/src/blob/custody-rollup.js";
 import { bootstrapVault } from "../../packages/vault/src/bootstrap.js";
 import { registerEnrichCommands } from "../../packages/vault/src/commands/enrich.js";
 import { registerMediaGazetteerCommands } from "../../packages/vault/src/commands/media-gazetteer.js";
 import { registerMediaCommands } from "../../packages/vault/src/commands/media.js";
 import { registerPartyCommands } from "../../packages/vault/src/commands/parties.js";
 import { registerPeopleCommands } from "../../packages/vault/src/commands/people.js";
+import { registerSyncCommands } from "../../packages/vault/src/commands/sync.js";
 import { registerTagCommands } from "../../packages/vault/src/commands/tags.js";
 import { openVaultDb } from "../../packages/vault/src/db.js";
+import { recomputeDuplicateClusters } from "../../packages/vault/src/enrich/clusters.js";
 import { createGateway } from "../../packages/vault/src/gateway/gateway.js";
 import type { Credential } from "../../packages/vault/src/gateway/types.js";
 import { installFixtureClock } from "../../packages/vault/tests/fixtures/ontology-scenarios/clock.js";
+import {
+  PARITY_EPOCH,
+  PHOTOS_PARITY_TABLES,
+  canonicaliseBundle,
+} from "./photos-parity-bundle.js";
+import type {
+  CommandCase,
+  PhotosParityBundle,
+  QueryCase,
+  TableRows,
+} from "./photos-parity-bundle.js";
+import { loadHandlers, runQueries } from "./photos-parity-queries.js";
 
-/** Where the bundle is written, relative to the repository root. */
-export const PHOTOS_PARITY_DIR = "contracts/apps/photos";
-
-/**
- * The instant the whole run is stamped at. Frozen, and in the far future for
- * the reason Tally's generator records: the vault has TWO clocks, and a
- * condition comparing `purge_at` against SQLite's own `now` cannot be held
- * still by a JS proxy. `media.restore_asset`'s precondition is exactly such a
- * comparison (`packages/vault/src/commands/media.ts`'s `asset_is_trashed`), so
- * at a past epoch the restore step cannot be fixtured at all.
- *
- * The Rust port took the other road: its condition reads `:ctx_now`
- * (`crates/vault/src/commands/media.rs`), so the same fixture is reproducible
- * at any instant. The epoch stays in 2099 while v0 is the oracle.
- */
-export const PARITY_EPOCH = "2099-06-01T09:00:00.000Z";
-
-/**
- * The tables the eight Photos queries read, in the order the library reads
- * them.
- *
- * Derived from the STATEMENTS, not from the manifest's `vault.scopes`: the
- * manifest declares reach and the statements are what ran.
- */
-export const PHOTOS_PARITY_TABLES = [
-  "core_vault",
-  "core_party",
-  "core_content_item",
-  "core_content_representation",
-  "core_content_derivative",
-  "core_concept_scheme",
-  "core_concept",
-  "core_tag",
-  "core_collection",
-  "core_collection_entry",
-  "core_place",
-  "media_asset",
-  "media_asset_phash",
-  "media_face_region",
-  "media_face_cluster",
-  "media_memory",
-  "media_memory_member",
-  "enrich_policy",
-  "enrich_request",
-  "blob_custody_state",
-  "blob_custody_rollup",
-] as const;
-
-/** One table's rows, as data. */
-export interface TableRows {
-  table: string;
-  columns: string[];
-  rows: (string | number | null)[][];
-}
-
-export interface QueryCase {
-  query: string;
-  input: Record<string, unknown>;
-  output: unknown;
-}
-
-export interface CommandCase {
-  command: string;
-  input: Record<string, unknown>;
-  status: string;
-  output: unknown;
-  reason?: string;
-}
-
-export interface PhotosParityBundle {
-  rows: TableRows[];
-  queries: QueryCase[];
-  commands: CommandCase[];
-  scenarios: unknown;
-}
-
-/** The token every host-clock instant is replaced by. See Tally's generator. */
-const HOST_CLOCK = "<host-clock>";
-
-/** Canonicalise every identifier to the order it first appears. */
-function canonicalise<T>(value: T): T {
-  const seen = new Map<string, string>();
-  const ID =
-    /\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})\b/giu;
-  const HOST_INSTANT =
-    /(?<!2099)\b(?:19|20)\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/gu;
-  // A 64-hex sha is NOT canonicalised: it is a fact about the bytes, it is
-  // reproducible, and a port compares it. The id pattern above cannot match it
-  // because it is anchored to 32 hex characters exactly.
-  const text = JSON.stringify(value)
-    .replaceAll(ID, (id) => {
-      const known = seen.get(id.toLowerCase());
-      if (known) return known;
-      const token = `id-${String(seen.size + 1).padStart(4, "0")}`;
-      seen.set(id.toLowerCase(), token);
-      return token;
-    })
-    .replaceAll(HOST_INSTANT, HOST_CLOCK);
-  return JSON.parse(text) as T;
-}
-
-/** Deep-sorted JSON, so two runs that agree on values agree on bytes. */
-export function stableJson(value: unknown): string {
-  const sorted = (node: unknown): unknown => {
-    if (Array.isArray(node)) return node.map(sorted);
-    if (node && typeof node === "object") {
-      return Object.fromEntries(
-        Object.entries(node as Record<string, unknown>)
-          .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-          .map(([key, child]) => [key, sorted(child)])
-      );
-    }
-    return node;
-  };
-  return `${JSON.stringify(sorted(value), null, 2)}\n`;
-}
-
-/**
- * The eight queries, each at the inputs a parity run compares.
- *
- * THE SPECIFIERS ARE COMPUTED, NOT LITERAL, for the reason Tally's generator
- * records: a literal import pulls the whole blueprint handler graph into
- * whatever TypeScript program type-checks this file, and no program that can
- * also see `packages/vault/src` has both tsconfigs.
- */
-async function runQueries(
-  ctx: unknown,
-  ids: { assets: string[]; places: string[] }
-): Promise<QueryCase[]> {
-  const HANDLERS = [
-    "storage",
-    "library",
-    "faces",
-    "face-queue",
-    "people",
-    "search",
-    "duplicates",
-    "enrichment-status",
-  ] as const;
-  const handlers = await Promise.all(
-    HANDLERS.map(
-      (name) =>
-        import(`../../packages/blueprints/apps/photos/queries/${name}.ts`)
-    )
-  );
-  const [storage, library, faces, faceQueue, people, search, duplicates, status] =
-    handlers.map(
-      (module: { default: unknown }) =>
-        module.default as (args: unknown) => Promise<unknown>
-    );
-
-  // Inputs are FIXED and named, never derived at compare time.
-  const plan: {
-    query: string;
-    run: (args: unknown) => Promise<unknown>;
-    input: Record<string, unknown>;
-  }[] = [
-    { query: "storage", run: storage!, input: {} },
-    { query: "library", run: library!, input: {} },
-    // The declared floor and the declared ceiling, so the clamp is compared.
-    { query: "library", run: library!, input: { limit: 20 } },
-    { query: "library", run: library!, input: { limit: 2000 } },
-    // A limit UNDER the floor and one OVER the ceiling: the clamp, not an error.
-    { query: "library", run: library!, input: { limit: 1 } },
-    { query: "library", run: library!, input: { limit: 9000 } },
-    { query: "face-queue", run: faceQueue!, input: {} },
-    { query: "people", run: people!, input: {} },
-    { query: "duplicates", run: duplicates!, input: {} },
-    { query: "enrichment-status", run: status!, input: {} },
-    { query: "search", run: search!, input: { term: "tahoe" } },
-    { query: "search", run: search!, input: { term: "ana" } },
-    // A term nothing matches: the empty answer is a state, not an error.
-    { query: "search", run: search!, input: { term: "zzzz" } },
-    // An EMPTY term short-circuits before the index is touched.
-    { query: "search", run: search!, input: { term: "" } },
-    ...ids.assets.map((assetId) => ({
-      query: "faces",
-      run: faces!,
-      input: { asset_id: assetId },
-    })),
-    // An asset that does not exist: an empty face list, never a throw.
-    { query: "faces", run: faces!, input: { asset_id: "no-such-asset" } },
-  ];
-
-  const cases: QueryCase[] = [];
-  for (const entry of plan) {
-    // Sequential on purpose: the statements a handler makes are recorded in
-    // order, and two handlers in flight would interleave them.
-    // eslint-disable-next-line no-await-in-loop
-    const output = await entry.run({ ctx, input: entry.input });
-    cases.push({ query: entry.query, input: entry.input, output });
-  }
-  // A second `library` read after the keyset cursor, so the page boundary is a
-  // compared case rather than a claim.
-  const first = cases.find((entry) => entry.query === "library");
-  const tail = (first?.output as { tail?: string | null } | undefined)?.tail;
-  if (typeof tail === "string") {
-    cases.push({
-      query: "library",
-      input: { limit: 20, before: tail },
-      output: await library!({ ctx, input: { limit: 20, before: tail } }),
-    });
-  }
-  void ids.places;
-  return cases;
-}
+// The bundle's shape and its canonicalisation live next door; they are
+// re-exported here so a caller has one import (`tests/quality/`'s oracle, and
+// the Rust side's README, both name this file).
+export {
+  PARITY_EPOCH,
+  PHOTOS_PARITY_DIR,
+  PHOTOS_PARITY_TABLES,
+  stableJson,
+} from "./photos-parity-bundle.js";
+export type {
+  CommandCase,
+  PhotosParityBundle,
+  QueryCase,
+  TableRows,
+} from "./photos-parity-bundle.js";
 
 /**
  * The ontology scenarios that touch media, exported as data. All thirteen run
@@ -295,20 +119,37 @@ async function runQueries(
  * otherwise-empty vault is not telling the truth about the product.
  */
 async function mediaScenarios(): Promise<unknown> {
-  const { buildOntologyScenarios } = await import(
-    "../../packages/vault/tests/fixtures/ontology-scenarios/build.js"
-  );
+  const { buildOntologyScenarios } =
+    await import("../../packages/vault/tests/fixtures/ontology-scenarios/build.js");
   const fixture = buildOntologyScenarios();
   try {
-    // ONT-03 is the favourite mirror the star replaced; ONT-26 is the sha
-    // shape. Both are media's own drift.
-    const wanted = new Set(["ONT-03", "ONT-26"]);
-    return {
-      digest: fixture.digest,
-      scenarios: fixture.scenarios.filter((scenario: { drift: string }) =>
-        wanted.has(scenario.drift)
-      ),
-    };
+    // THE THREE DRIFTS A PHOTOGRAPH IS SUBJECT TO:
+    //
+    //   ONT-22 — two byte-identical files keep separate histories, which is
+    //            what stops a duplicate review from merging two members' rolls;
+    //   ONT-26 — the invariant boundary the sha shape sits on;
+    //   ONT-28 — one byte row read two ways, which is WHY a media type is a
+    //            property of the owner and not of the bytes, and therefore why
+    //            `crates/apps/photos/src/representations.rs` exists.
+    //
+    // A drift id that no longer exists must FAIL here rather than export one
+    // scenario fewer: the earlier draft of this generator asked for `ONT-03`,
+    // which the scenario set has not carried since the ids were renumbered, and
+    // the filter answered quietly with the other one.
+    const wanted = new Set(["ONT-22", "ONT-26", "ONT-28"]);
+    const scenarios = fixture.scenarios.filter((scenario: { drift: string }) =>
+      wanted.has(scenario.drift)
+    );
+    const found = new Set(
+      scenarios.map((scenario: { drift: string }) => scenario.drift)
+    );
+    const missing = [...wanted].filter((drift) => !found.has(drift));
+    if (missing.length > 0) {
+      throw new Error(
+        `the ontology scenario set carries no ${missing.join(", ")}: the media drifts moved`
+      );
+    }
+    return { digest: fixture.digest, scenarios };
   } finally {
     fixture.db.close();
   }
@@ -331,6 +172,13 @@ export async function buildPhotosParity(): Promise<PhotosParityBundle> {
     registerMediaCommands(gateway);
     registerMediaGazetteerCommands(gateway);
     registerEnrichCommands(gateway);
+    // The demo seed stages its face PROPOSALS through the sync door
+    // (`sync.stage_rows` with `kind: "enrich.faces"`,
+    // `packages/blueprints/apps/photos/seed.js`), not through a `media.*`
+    // command: a proposal is something that arrived, and `media_face_region`'s
+    // `review_state` is what the queue filters on. Without these registered
+    // the seed throws and the face queue has no corpus at all.
+    registerSyncCommands(gateway);
     const owner: Credential = {
       kind: "device",
       deviceId: boot.deviceId,
@@ -381,15 +229,16 @@ export async function buildPhotosParity(): Promise<PhotosParityBundle> {
     // THE DEMO SEED IS THE CORPUS. The app's own `seed.js` writes nineteen
     // assets through the real commands, which is exactly what a parity fixture
     // wants: a corpus nobody typed.
-    const seed = await import(
-      "../../packages/blueprints/apps/photos/seed.js"
-    );
+    const seed = await import("../../packages/blueprints/apps/photos/seed.js");
     await (seed.default as (args: unknown) => Promise<unknown>)({
       input: { seed: 1, now: PARITY_EPOCH },
       log: { info: () => undefined },
       ctx: {
         vault: {
-          invoke: (request: { command: string; input?: Record<string, unknown> }) =>
+          invoke: (request: {
+            command: string;
+            input?: Record<string, unknown>;
+          }) =>
             Promise.resolve(
               gateway.invoke(owner, {
                 command: request.command,
@@ -410,6 +259,22 @@ export async function buildPhotosParity(): Promise<PhotosParityBundle> {
         .prepare("SELECT place_id FROM core_place ORDER BY place_id")
         .all() as { place_id: string }[]
     ).map((row) => row.place_id);
+    // THE ASSETS THAT ACTUALLY CARRY FACES. `assetIds` above is the first four
+    // by id and none of them has a region, so a `faces` case at those inputs
+    // compares an empty answer to an empty answer. These are read AFTER the
+    // command set, below, because the set answers and forgets regions.
+    //
+    // The seed's own two people, never the owner: the owner is the party the
+    // script forgets.
+    const personPartyIds = (
+      db.vault
+        .prepare(
+          `SELECT party_id FROM core_party
+            WHERE kind = 'person' AND party_id <> ?
+            ORDER BY display_name, party_id`
+        )
+        .all(boot.ownerPartyId) as { party_id: string }[]
+    ).map((row) => row.party_id);
     const regionIds = (
       db.vault
         .prepare("SELECT region_id FROM media_face_region ORDER BY region_id")
@@ -468,6 +333,31 @@ export async function buildPhotosParity(): Promise<PhotosParityBundle> {
       { region_id: regionIds[3]!, answer: "confirm" },
       "any"
     );
+    // THE FACE-DELETE GATE, HERE AND NOT AT THE END OF THE SET, because of
+    // what it deletes. `media.forget_person` removes every region
+    // `WHERE party_id = :party_id OR confirmed_by_party_id = :party_id`
+    // (`packages/vault/src/commands/media.ts`'s `FORGET_PERSON`, #724 W5) —
+    // both party columns, deliberately — and the only credential this fixture
+    // has is the owner's, so the owner is the `confirmed_by_party_id` of EVERY
+    // confirmation in the vault. Run last, it would erase every confirmed
+    // region regardless of whose face it is, and the bundle's final state would
+    // carry no confirmed match at all: `people` — the query that lists only
+    // confirmed parties — would answer empty for a reason that is an artefact
+    // of this script rather than a fact about the port. Run here, it erases the
+    // confirm above (the owner's own face: `regions_forgotten: 1`, the cascade
+    // this command exists for) and the confirm below survives it.
+    //
+    // That the owner forgetting THEMSELF takes other people's confirmed faces
+    // with them is v0's answer, is reproduced by the port, and is a question in
+    // the receipt rather than a silent "deliberate".
+    execute("media.forget_person", { party_id: boot.ownerPartyId });
+    // A CONFIRMED REGION IN THE FINAL STATE, named to one of the seed's two
+    // people rather than to the owner.
+    execute("media.answer_face_proposal", {
+      region_id: regionIds[4]!,
+      answer: "confirm",
+      party_id: personPartyIds[0]!,
+    });
     const album = execute<{ album_id: string }>("media.create_album", {
       title: "A second album",
     });
@@ -526,12 +416,9 @@ export async function buildPhotosParity(): Promise<PhotosParityBundle> {
       { entity_type: "media.asset", reason: "manual" },
       "any"
     );
-    // `media.promote_caption` and `media.forget_person` are exercised only as
-    // REFUSALS here: promoting needs a generated caption, which is the
-    // automations lane's writer, and forgetting a person is confirm-gated and
-    // not a Photos action. Both refusals are the port's to reproduce.
+    // `media.promote_caption` is exercised only as a REFUSAL: promoting needs a
+    // generated caption, which is the automations lane's writer.
     execute("media.promote_caption", { asset_id: assetIds[0]! }, "any");
-    execute("media.forget_person", { party_id: boot.ownerPartyId }, "any");
 
     const ctx = {
       vault: {
@@ -561,13 +448,65 @@ export async function buildPhotosParity(): Promise<PhotosParityBundle> {
       },
     };
 
-    // THE PRE-SWEEP STORAGE ANSWER, exported before anything writes a rollup:
+    // Read after the command set, which answers and forgets regions: the cases
+    // must name the assets that carry a face in the FINAL state.
+    const faceAssetIds = (
+      db.vault
+        .prepare(
+          `SELECT DISTINCT asset_id FROM media_face_region ORDER BY asset_id LIMIT 4`
+        )
+        .all() as { asset_id: string }[]
+    ).map((row) => row.asset_id);
+    if (faceAssetIds.length < 3) {
+      throw new Error(
+        "fewer than three assets carry a face region: the faces cases would prove nothing"
+      );
+    }
+
+    const handlers = await loadHandlers();
+
+    // THE PRE-SWEEP STORAGE ANSWER, read before anything writes a rollup:
     // `computedAt: null` with zero buckets is the state D-1020-P1 models as a
-    // type, and it is the one a renderer gets wrong.
-    const queries = await runQueries(ctx, {
-      assets: assetIds,
-      places: placeIds,
-    });
+    // type, and it is the one a renderer gets wrong. It is the ONE case marked
+    // `phase: "unswept"`, because the rows beside it are the swept state.
+    const unswept: QueryCase = {
+      query: "storage",
+      input: {},
+      output: await handlers.storage!({ ctx, input: {} }),
+      phase: "unswept",
+    };
+
+    // THE TWO SWEEPS, run here because NO COMMAND WRITES WHAT THEY WRITE and
+    // two of the eight queries read only what they wrote:
+    //
+    // - `duplicates` reads `media_asset_phash.cluster_id IS NOT NULL`, and the
+    //   column is the standing sweep's (`recomputeDuplicateClusters`, union-find
+    //   over Hamming ≤ 6 with the group's lowest `asset_id` as the id). Without
+    //   the sweep the query answers `{clusters: []}` for every corpus, which
+    //   would have made the fixture agree with a port that does nothing —
+    //   D-1020-P3's whole point is that the app only READS this id.
+    // - `storage` reads `blob_custody_rollup`, which `refreshCustodyRollup`
+    //   writes. The corpus carries no `blob_custody_state` rows (custody is the
+    //   replica's writer, not a `media.*` command), so the swept buckets are
+    //   still zero — and that is exactly the pair worth fixturing: two storage
+    //   answers whose ONLY difference is `computedAt`, which is the difference
+    //   between "nothing to free" and "not counted yet".
+    const clustered = recomputeDuplicateClusters(db.vault);
+    if (clustered.clustered === 0) {
+      throw new Error(
+        "the duplicate sweep clustered nothing: the duplicates case would prove nothing"
+      );
+    }
+    refreshCustodyRollup(db);
+
+    const queries = [
+      unswept,
+      ...(await runQueries(handlers, ctx, {
+        assets: assetIds,
+        faceAssets: faceAssetIds,
+        places: placeIds,
+      })),
+    ];
 
     const rows: TableRows[] = PHOTOS_PARITY_TABLES.map((table) => {
       const columns = (
@@ -597,12 +536,7 @@ export async function buildPhotosParity(): Promise<PhotosParityBundle> {
       };
     });
 
-    return {
-      rows: canonicalise(rows),
-      queries: canonicalise(queries),
-      commands: canonicalise(commands),
-      scenarios: canonicalise(scenarios),
-    };
+    return canonicaliseBundle({ rows, queries, commands, scenarios });
   } finally {
     clock.restore();
     db.close();

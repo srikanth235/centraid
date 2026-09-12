@@ -200,12 +200,11 @@ pub fn duplicate_clusters(door: &dyn PageDoor) -> KitResult<Vec<DuplicateCluster
         .filter_map(|row| Some((text_of(row, "content_id")?, ContentRow::of(row)?)))
         .collect()
     };
-    Ok(fold_clusters(
-        &cluster_of,
-        &assets,
-        &contents,
-        &BTreeMap::new(),
-    ))
+    // The media type is the OWNER's representation, not the bytes' (R20(b)):
+    // a cluster card says "photo" or "video" per asset, and two assets sharing
+    // one sha can read as two different things.
+    let media_types = crate::representations::read_media_types(door, &content_ids)?;
+    Ok(fold_clusters(&cluster_of, &assets, &contents, &media_types))
 }
 
 #[cfg(test)]

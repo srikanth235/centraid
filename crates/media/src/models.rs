@@ -541,6 +541,47 @@ mod tests {
         // And `ensure` returned. There is no `?` for a caller to propagate.
     }
 
+    /// THE NO-NETWORK HOST, stated as a fetcher rather than as an empty
+    /// directory: every `get` refuses, which is what a phone in a tunnel and a
+    /// gateway behind a proxy both look like from in here.
+    ///
+    /// Two claims, and the second is the one that matters: `ensure` RETURNS —
+    /// a provisioning failure is reported in `Provision::failed`, never raised
+    /// — and `verify` on the same lock touches no network at all, because it
+    /// is a question about the disk.
+    #[test]
+    fn a_host_with_no_network_is_reported_and_never_throws() {
+        struct NoNetwork;
+        impl Fetch for NoNetwork {
+            fn get(&self, url: &str) -> Result<Vec<u8>, String> {
+                Err(format!("{url}: no network on this host"))
+            }
+        }
+
+        let world = World::new("no-network");
+        let text = lock_text(&[("y@1", "yunet/model.onnx", b"weights", &["faces"])]);
+        let lock = Lock::parse(&text).expect("parses");
+
+        // `verify` first: it never asks a fetcher anything.
+        let seen = verify(&lock, &world.runtime(), &["faces"]);
+        assert!(seen.ready.is_empty());
+        assert_eq!(seen.failed.len(), 1);
+
+        let provision = ensure(&lock, &world.runtime(), &["faces"], &NoNetwork);
+        assert!(provision.ready.is_empty());
+        assert_eq!(provision.failed.len(), 1);
+        assert!(
+            provision.failed[0].reason.contains("no network"),
+            "the failure carries the fetcher's own sentence: {}",
+            provision.failed[0].reason
+        );
+        // And nothing was written: a refused fetch leaves no temp file behind.
+        assert!(
+            !world.runtime().join("yunet/model.onnx").exists(),
+            "a refused fetch must not leave a file the next verify would trust"
+        );
+    }
+
     /// A capability outside the request is not read and not written.
     #[test]
     fn provisioning_one_capability_leaves_every_other_file_alone() {

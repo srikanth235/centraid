@@ -905,11 +905,9 @@ fn assemble_joins(
         album_ids_by_asset,
         // `core_content_representation` is the R20(b) media-type index, keyed
         // on the OWNER — `media.asset` — never on the bytes, because two
-        // assets can share a sha and read it as two different things. The
-        // representation read is the automations lane's `representation-reads`
-        // port; until it lands the field is absent rather than guessed, and
-        // the fixture manifest marks it `deferred`.
-        media_types: BTreeMap::new(),
+        // assets can share a sha and read it as two different things
+        // (`crate::representations`).
+        media_types: crate::representations::read_media_types(door, &content_ids)?,
         joins: fold_asset_joins(&schemes, &concepts, &asset_tags, &custody),
         memories,
         memory_members,

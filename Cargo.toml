@@ -5,7 +5,12 @@ resolver = "3"
 # (cargo refuses a glob match with no manifest) and each app crate is NAMED
 # here: a glob would hide the count, and an explicitly listed member overrides
 # the exclusion of its parent.
-members = ["crates/*", "crates/apps/kit", "crates/apps/photos", "crates/apps/tally"]
+members = [
+  "crates/*",
+  "crates/apps/kit",
+  "crates/apps/photos",
+  "crates/apps/tally",
+]
 exclude = [
   "crates/apps",
   # The v0 byte plane stays where it is as the pinned oracle until wave 6 (#1020).

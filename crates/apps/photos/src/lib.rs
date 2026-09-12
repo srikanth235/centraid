@@ -53,6 +53,7 @@ pub mod faces;
 pub mod manifest;
 pub mod places;
 pub mod queries;
+pub mod representations;
 pub mod storage;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
