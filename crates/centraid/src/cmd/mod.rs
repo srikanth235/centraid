@@ -14,6 +14,7 @@
 //! line on stdout would make the report unparseable exactly when it matters.
 
 pub mod backup;
+pub mod capture;
 pub mod doctor;
 pub mod export;
 pub mod gateway_install;

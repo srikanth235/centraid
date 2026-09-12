@@ -81,6 +81,35 @@ Branch protection's required check today is **`check`**, the single aggregator j
 
 The owner must switch branch protection's required checks from `check` (ci.yml) to **`gate`** and **`dependency-review`**, the two jobs in gate.yml. Until that is done, pull requests will block. Nothing in this repository can do it: branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)).
 
+## The steps re-homed from `scripts/ci/**` (#1020, D-1020-G3)
+
+v0's CI grew a layer of gates that are not about v0's product: they are about the shape of CI and about the supply chain. #1020 takes v0's gates off pull requests, and these would have gone with them — which would be weakening a gate rather than moving one.
+
+| Step | Profile | From | What it holds |
+| --- | --- | --- | --- |
+| `advisory` | `pr` | `scripts/ci/advisory-expiry.mjs` | a step whose NAME declares it advisory carries an owner, an issue and an unexpired `revisitBy`. A past date fails; a row naming a step that no longer exists fails too. Rows may live in `contracts/ledgers/advisory.json` (v1) **or** `tests/inventory.json#advisory` (v0, law estate) — one row per step between them, so neither file needs a copy of the other's |
+| `lockfile` | `pr` | `scripts/ci/lockfile-lint.mjs` | no `http:` package URL and integrity markers present in `bun.lock`; every registry `[[package]]` in `Cargo.lock` pinned by `checksum` and sourced over TLS. A workspace member with no `source` is not a finding — its bytes are in the tree |
+| `lane-health` | `nightly` | `scripts/ci/lane-health.mjs` | first-attempt pass rate against a 95 % floor and consecutive reds on `main` against a 3-run chronic-red rule, off the Actions API. **Nightly only**: a pull request's verdict must not depend on api.github.com. With no token it is a loud SKIP naming the command, never a pass |
+| the evidence row | every profile | `scripts/test-report/write-evidence.mjs` | one row per step in `target/xtask/<profile>/evidence.json`, written on success as well as failure. `gate.yml` wrote none, so the per-PR test report had no row for the gate that decides a v1 pull request — the named silence in wave 1 lane B's receipt |
+
+`cargo xtask lane-health --repo owner/name [--workflow ci.yml] [--runs 40]` runs it on its own.
+
+## `cargo xtask artifact-key` (#1020, D-1020-G2)
+
+The prebuilt core's cache key. `--triple` is required; `--features`, `--profile` and `--explain` are optional. The exact rule — what is in the key, what is deliberately not, and both halves of the `Cargo.lock` case — is the module doc of [`src/artifact.rs`](src/artifact.rs) and the operator-facing half is in [`docs/release.md`](../../docs/release.md).
+
+## Debuginfo, and the one-command escape hatch (#1020, D-1020-G7)
+
+`[profile.dev]` and `[profile.test]` carry `debug = "line-tables-only"` with `split-debuginfo = "unpacked"`, and dependencies carry `debug = false`. A backtrace still names the file and the line. The measurement that decided it is in the root `Cargo.toml`'s comment and in [`docs/toolchain.md`](../../docs/toolchain.md): 7.7 GB of test executables became 0.50 GB, and the biggest single one went from 387 MB to 43 MB.
+
+**When you need the full type and variable tables for one debugging session:**
+
+```bash
+CARGO_PROFILE_DEV_DEBUG=2 cargo test -p centraid-vault
+```
+
+One command, one crate, nothing committed. Do not put it in a script — a profile change that is always on is the profile, and this one was measured out on purpose.
+
 ## The structural rules
 
 Four of them, one per invariant in the issue's _Execution plan → Invariants_. They are **file walks and hand-rolled scanners, not parse trees**: the issue rules that tree-sitter owns structural rules, and it is not here yet because all four are answerable from string literals, attribute lines and import lines, and a parser would cost the `local` budget more than the precision is worth today. The commit that adds tree-sitter is the one where a rule needs to know what an expression _means_.

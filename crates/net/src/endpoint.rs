@@ -427,6 +427,26 @@ impl IrohConnection {
         self.inner.alpn().to_vec()
     }
 
+    /// Wait until the PEER has closed the connection.
+    ///
+    /// Added by wave 3 lane G (#1020, D-1020-G10) for a bug the release smoke
+    /// reproduced: dropping an iroh `Connection` sends CONNECTION_CLOSE at
+    /// once, and QUIC discards stream data the peer has not read yet. The
+    /// gateway's pair lane wrote and flushed its `PairResponse`, returned, and
+    /// the accept loop dropped the connection on its next iteration — so the
+    /// gateway had ENROLLED the device and the member was told
+    /// `i/o: connection lost`. A member who is told pairing failed on a device
+    /// that is now enrolled will pair again, and the second attempt is refused
+    /// because the ticket is one-shot.
+    ///
+    /// The caller awaits this with its own timeout after answering, so the
+    /// client reads the response before the close. It is a plain await on
+    /// quinn's own close future — NOT a sleep: "wait long enough" is the thing
+    /// that makes this class of bug come back on a slower network.
+    pub async fn closed(&self) {
+        self.inner.closed().await;
+    }
+
     pub fn close_unauthorized(&self) {
         self.inner.close(
             VarInt::from_u32(CLOSE_UNAUTHORIZED),

@@ -30,8 +30,21 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result};
 
 use crate::Profile;
+use crate::artifact;
+use crate::ci;
 use crate::ledger;
 use crate::rules;
+use crate::smoke;
+
+/// The four device cells (#1020 open question 13, D-1020-G4). Named here, in
+/// the runner, so `gate-nightly.yml`'s matrix and this file cannot disagree
+/// about which lanes exist.
+pub const DEVICE_LANES: [&str; 4] = [
+    "ios-transfer-experiment",
+    "android-macrobenchmark",
+    "ios-xctest-metrics",
+    "battery-per-background-pass",
+];
 
 /// The hardware class this container is, matching `tests/journeys.json`'s
 /// vocabulary. Overridable so the self-hosted device runner can score itself.
@@ -40,6 +53,10 @@ pub const DEFAULT_HARDWARE: &str = "ci-linux-x64-4c";
 /// Everything a step needs to know about the run it is part of.
 pub struct Ctx {
     pub root: PathBuf,
+    /// `--lane <name>`: run only this step. The device cells of
+    /// `gate-nightly.yml` are four jobs over one profile, so each needs to name
+    /// the one lane it is (D-1020-G4).
+    pub lane: Option<String>,
     pub hardware: String,
     /// True under `CI`. A tool that is merely absent is a skip locally and an
     /// infrastructure failure in CI, because the workflow installs it.
@@ -58,6 +75,7 @@ pub enum Outcome {
 
 type Runner = fn(&Ctx) -> Result<Outcome>;
 
+#[derive(Debug)]
 pub struct Step {
     pub name: &'static str,
     pub run: Runner,
@@ -111,27 +129,31 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("osv", run_osv),
         step("release-build", run_release_build),
         step("ts-static", run_ts_static),
+        // THE CI-SHAPE GATES, re-homed out of `scripts/ci/**` (D-1020-G3).
+        // They are not v0's gates — they are gates about the shape of CI and
+        // about the supply chain — so taking `ci.yml` off `pull_request` had to
+        // move them rather than drop them.
+        step("advisory", run_advisory),
+        step("lockfile", run_lockfile),
     ]);
     if profile == Profile::Pr {
         return pr;
     }
     let mut nightly = pr;
-    nightly.extend([step("v0-oracle", run_v0_oracle), step("device-lanes", |_| {
-        Ok(Outcome::Skipped(
-            "not runnable on a hosted Linux runner: ios-transfer-experiment, android-macrobenchmark, ios-xctest-metrics, battery-per-background-pass. They need the self-hosted macOS runner with one iPhone and one Android attached (#1020 wave 3 lane G / open question 13)".to_owned(),
-        ))
-    })]);
+    nightly.extend([
+        step("v0-oracle", run_v0_oracle),
+        step("device-lanes", run_device_lanes),
+        step("lane-health", run_lane_health),
+    ]);
     if profile == Profile::Nightly {
         return nightly;
     }
     let mut release = nightly;
     release.extend([
         step("restore-drill", run_restore_drill),
-        step("vps-smoke", |_| {
-            Ok(Outcome::Failed(
-                "not implemented: lands in wave 3 lane G (release smoke on a clean VPS from the Docker image)".to_owned(),
-            ))
-        }),
+        step("artifact-identity", run_artifact_identity),
+        step("prebuilt-core-required", run_prebuilt_core_required),
+        step("vps-smoke", run_vps_smoke),
     ]);
     release
 }
@@ -257,7 +279,7 @@ fn has_linked_artifact(names: &[String], member: &str) -> bool {
 }
 
 /// Run a profile. Returns `true` when every step passed inside its budget.
-pub fn run(profile: Profile, root: &Path, forced_cold: bool) -> Result<bool> {
+pub fn run(profile: Profile, root: &Path, forced_cold: bool, lane: Option<String>) -> Result<bool> {
     let hardware =
         std::env::var("CENTRAID_GATE_HARDWARE").unwrap_or_else(|_| DEFAULT_HARDWARE.to_owned());
     if profile == Profile::MobileJvm {
@@ -270,6 +292,7 @@ pub fn run(profile: Profile, root: &Path, forced_cold: bool) -> Result<bool> {
     }
     let ctx = Ctx {
         root: root.to_path_buf(),
+        lane: lane.clone(),
         hardware: hardware.clone(),
         ci: std::env::var_os("CI").is_some(),
         artifacts: root.join("target/xtask").join(profile.name()),
@@ -286,8 +309,16 @@ pub fn run(profile: Profile, root: &Path, forced_cold: bool) -> Result<bool> {
         ),
     );
 
+    // `--lane <name>` narrows the run to ONE step. A device cell is one job per
+    // lane over one profile, and a job that ran the whole nightly profile to
+    // reach its own four lines would pay for the other fifteen steps four
+    // times. A name that matches no step is an error rather than an empty run:
+    // a lane filter that silently selected nothing would report PASS over zero
+    // steps.
+    let selected = select(profile, ctx.lane.as_deref())?;
+
     let mut results: Vec<(&'static str, Duration, Outcome)> = Vec::new();
-    for entry in steps(profile) {
+    for entry in selected {
         let started = Instant::now();
         let outcome =
             (entry.run)(&ctx).unwrap_or_else(|error| Outcome::Failed(format!("{error:#}")));
@@ -314,11 +345,35 @@ pub fn run(profile: Profile, root: &Path, forced_cold: bool) -> Result<bool> {
         ok = false;
     }
 
+    // THE PER-PR EVIDENCE ROW (D-1020-G3). Written on success as well as
+    // failure: a report that only has rows when something broke cannot show a
+    // lane going quiet, which is the failure mode `gate.yml` had — it wrote no
+    // evidence at all, so the per-PR test report had no row for the gate that
+    // decides a v1 pull request. Written BEFORE the verdict line so the file
+    // exists even when the verdict path below panics.
+    let rows: Vec<(&'static str, f64, &'static str, String)> = results
+        .iter()
+        .map(|(name, elapsed, outcome)| {
+            let (verdict, detail) = match outcome {
+                Outcome::Ok(detail) => ("ok", detail.clone()),
+                Outcome::Skipped(detail) => ("SKIP", detail.clone()),
+                Outcome::Failed(detail) => ("FAIL", detail.clone()),
+            };
+            (*name, elapsed.as_secs_f64(), verdict, detail)
+        })
+        .collect();
+    match ci::write_evidence(&ctx.artifacts, profile.name(), &hardware, &rows) {
+        Ok(path) => println!("  evidence {}", display_relative(root, Path::new(&path))),
+        // A gate that went red because its own report would not write is a gate
+        // reporting the wrong problem. Said out loud, not swallowed.
+        Err(error) => println!("  EVIDENCE could not be written: {error:#}"),
+    }
+
     // The last line is the verdict, and the verdict includes the budget. Before
     // this it read `PASS` off the step list alone, so a run whose steps were all
     // green and whose total blew the budget printed the budget failure and then
     // `gate local: PASS` — with the process still exiting non-zero. Two
-    // contradicting answers in one output is worse than either.
+    // contradicting answers in one output is worse than either (D-1020-B2).
     if ok {
         println!("\ngate {}: PASS", profile.name());
     } else if failed.is_empty() {
@@ -401,6 +456,38 @@ fn score(profile: Profile, tree: Tree, total: f64, budget: Option<f64>, ctx: &Ct
     }
     println!("  BUDGET ok — {total:.1}s of {seconds:.0}s{state}");
     true
+}
+
+/// The steps a run executes: the whole profile, or the one `--lane` names.
+///
+/// A name that matches no step is an ERROR rather than an empty selection: a
+/// lane filter that silently selected nothing would report PASS over zero
+/// steps, which is the one verdict this file exists to make impossible.
+fn select(profile: Profile, lane: Option<&str>) -> Result<Vec<Step>> {
+    let mut selected = steps(profile);
+    let Some(wanted) = lane else {
+        return Ok(selected);
+    };
+    let keep = if DEVICE_LANES.contains(&wanted) {
+        "device-lanes"
+    } else {
+        wanted
+    };
+    if !selected.iter().any(|entry| entry.name == keep) {
+        anyhow::bail!(
+            "--lane {wanted} names no step of the `{}` profile, and no device lane. Steps: {}. Device lanes: {}",
+            profile.name(),
+            selected
+                .iter()
+                .map(|entry| entry.name)
+                .collect::<Vec<_>>()
+                .join(", "),
+            DEVICE_LANES.join(", ")
+        );
+    }
+    selected.retain(|entry| entry.name == keep);
+    println!("  --lane {wanted}: running only `{keep}`");
+    Ok(selected)
 }
 
 fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
@@ -1162,6 +1249,197 @@ fn run_v0_oracle(ctx: &Ctx) -> Result<Outcome> {
     process(ctx, "v0-oracle", "bunx", &["vitest", "run", SUITE])
 }
 
+/// The advisory register (D-1020-G3). See `crate::ci::advisory`.
+fn run_advisory(ctx: &Ctx) -> Result<Outcome> {
+    verdict(ctx, "advisory", ci::advisory(&ctx.root, &ci::today_utc())?)
+}
+
+/// Both lockfiles (D-1020-G3). See `crate::ci::lockfile`.
+fn run_lockfile(ctx: &Ctx) -> Result<Outcome> {
+    verdict(ctx, "lockfile", ci::lockfile(&ctx.root)?)
+}
+
+/// Lane health off the Actions API (D-1020-G3). Nightly only — it reads
+/// `api.github.com`, and a pull request's verdict must not depend on a third
+/// party being up.
+fn run_lane_health(ctx: &Ctx) -> Result<Outcome> {
+    let repo =
+        std::env::var("GITHUB_REPOSITORY").unwrap_or_else(|_| "srikanth235/centraid".to_owned());
+    let result = ci::lane_health(&ctx.root, &repo, "ci.yml", 40)?;
+    if result.ok && result.line.starts_with("SKIPPED:") {
+        return Ok(Outcome::Skipped(result.line));
+    }
+    verdict(ctx, "lane-health", result)
+}
+
+/// THE DEVICE LANES, with a RUNNER CONTRACT rather than a bare skip
+/// (D-1020-G4).
+///
+/// Four lanes, each a cell of `gate-nightly.yml` that runs **only** on a runner
+/// carrying the `[self-hosted, macos, devices]` labels with one iPhone and one
+/// Android attached. On a hosted runner they are a loud `Skipped` naming open
+/// question 13 — never a pass, and never a test that reads green.
+///
+/// The contract is stated here, in the runner, and not only in the workflow: a
+/// lane whose preconditions live only in YAML is a lane nobody can run locally
+/// and nobody can check. `CENTRAID_DEVICE_RUNNER=1` is what a real device
+/// runner sets, and when it is set with no devices attached this step FAILS —
+/// because a runner that claims the label and has no phone is an
+/// infrastructure fault, not a skip.
+fn run_device_lanes(ctx: &Ctx) -> Result<Outcome> {
+    let lanes: Vec<&str> = match &ctx.lane {
+        Some(one) if DEVICE_LANES.contains(&one.as_str()) => vec![one.as_str()],
+        _ => DEVICE_LANES.to_vec(),
+    };
+    let named = lanes.join(", ");
+    if std::env::var_os("CENTRAID_DEVICE_RUNNER").is_none() {
+        return Ok(Outcome::Skipped(format!(
+            "not runnable here: {named}. They need a runner labelled [self-hosted, macos, devices] with one iPhone and one Android attached, which is #1020 open question 13 and an owner hand-off. The lane bodies are `cargo xtask gate --profile nightly --lane <name>` and wave 3 lane E supplies them (Maestro flows, Macrobenchmark, XCTest metrics on release builds); NO NUMBER in tests/journeys.json is promoted by anything short of a run on a named reference device (R-1020-20)"
+        )));
+    }
+    // On a real device runner the two enumerators are the contract: `xcrun
+    // devicectl list devices` for a physical iPhone (NOT `simctl`, which
+    // enumerates simulators — census §G6, the exact gap the iOS cell is parked
+    // on) and `adb devices` for Android.
+    let mut missing = Vec::new();
+    for (tool, args, what) in [
+        (
+            "xcrun",
+            vec!["devicectl", "list", "devices"],
+            "a physical iPhone",
+        ),
+        ("adb", vec!["devices"], "an Android device"),
+    ] {
+        let listed = Command::new(tool)
+            .args(&args)
+            .current_dir(&ctx.root)
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+            .unwrap_or_default();
+        if listed.trim().is_empty() {
+            missing.push(format!("{what} (`{tool} {}`)", args.join(" ")));
+        }
+    }
+    if !missing.is_empty() {
+        return Ok(Outcome::Failed(format!(
+            "CENTRAID_DEVICE_RUNNER is set, so this runner claims the devices label, and it has no {}. A runner that claims the label and has no phone is an infrastructure failure, not a skip",
+            missing.join(" and no ")
+        )));
+    }
+    Ok(Outcome::Failed(format!(
+        "the device runner is real and the lane bodies are not on this branch yet: {named}. Wave 3 lane E delivers them; until then a runner with phones attached must go RED rather than report a lane it did not run"
+    )))
+}
+
+/// THE STALE-ARTIFACT REFUSAL, as a gate step (D-1020-G2).
+///
+/// Runs the identity test in `crates/centraid` and quotes the refusal line, so
+/// the release profile's transcript carries the sentence a shell would print
+/// rather than only the fact that a test passed.
+fn run_artifact_identity(ctx: &Ctx) -> Result<Outcome> {
+    let outcome = process(
+        ctx,
+        "artifact-identity",
+        "cargo",
+        &[
+            "test",
+            "-p",
+            "centraid",
+            "--bin",
+            "centraid",
+            "identity::",
+            "--",
+            "--nocapture",
+        ],
+    )?;
+    if !matches!(outcome, Outcome::Ok(_)) {
+        return Ok(outcome);
+    }
+    Ok(Outcome::Ok(
+        "a core whose digest is not the one the shell was built against is REFUSED: \"STALE CORE REFUSED: this shell was built against core digest …, and the core it loaded reports …\". An empty expectation is refused too, and a `dev` build is allowed with the warning that the check did not run (crates/centraid/src/identity.rs)".to_owned(),
+    ))
+}
+
+/// EVERY REQUIRED TRIPLE, with a matching key (D-1020-G2, D-1020-G5).
+///
+/// The workflow's `prebuilt-core-required` job is what enforces this over real
+/// artifacts; this step is the local half — it proves the key is computable for
+/// every required triple and that the six triples are stated in exactly one
+/// place. It cannot prove an artifact EXISTS, and says so rather than implying
+/// the artifacts were checked.
+fn run_prebuilt_core_required(ctx: &Ctx) -> Result<Outcome> {
+    const REQUIRED: [&str; 3] = [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+    ];
+    let mut keys = Vec::new();
+    for triple in REQUIRED {
+        let (key, _) = artifact::key(
+            &ctx.root,
+            &artifact::KeyInputs {
+                triple: triple.to_owned(),
+                features: Vec::new(),
+                profile: "release".to_owned(),
+            },
+        )?;
+        keys.push(format!("{triple} {}", &key[..16]));
+    }
+    // The keys must DIFFER per triple, or the cache would serve a macOS
+    // artifact to a Linux build.
+    let mut distinct: Vec<&String> = keys.iter().collect();
+    distinct.sort();
+    distinct.dedup();
+    if distinct.len() != REQUIRED.len() {
+        return Ok(Outcome::Failed(
+            "two required triples compute the same artifact key, so the cache could serve one platform's core to another".to_owned(),
+        ));
+    }
+    Ok(Outcome::Ok(format!(
+        "{} — the artifacts themselves are published by .github/workflows/lane-prebuilt-core.yml, whose `prebuilt-core-required` job is what asserts they EXIST; this step proves the keys are computable and distinct",
+        keys.join(", ")
+    )))
+}
+
+/// THE RELEASE SMOKE (D-1020-G5). See `crate::smoke`.
+fn run_vps_smoke(ctx: &Ctx) -> Result<Outcome> {
+    let outcome = smoke::run(&ctx.root, &ctx.artifacts)?;
+    if outcome.line.starts_with("SKIPPED:") {
+        return Ok(if outcome.ok {
+            Outcome::Skipped(outcome.line)
+        } else {
+            Outcome::Failed(outcome.line)
+        });
+    }
+    Ok(if outcome.ok {
+        Outcome::Ok(outcome.line)
+    } else {
+        Outcome::Failed(outcome.line)
+    })
+}
+
+/// A `ci::Verdict` as a step outcome, with the findings written to the step's
+/// artifact directory and printed — the same shape `run_rules` uses, so a
+/// finding is never only in an exit code.
+fn verdict(ctx: &Ctx, step: &str, result: ci::Verdict) -> Result<Outcome> {
+    if result.ok {
+        return Ok(Outcome::Ok(result.line));
+    }
+    let dir = ctx.artifacts.join(step);
+    fs::create_dir_all(&dir)?;
+    fs::write(dir.join("findings.txt"), result.findings.join("\n"))?;
+    for finding in &result.findings {
+        println!("        {finding}");
+    }
+    Ok(Outcome::Failed(format!(
+        "{} · artifact: {}",
+        result.line,
+        display_relative(&ctx.root, &dir)
+    )))
+}
+
 // ---------------------------------------------------------------------------
 // Small shared helpers
 // ---------------------------------------------------------------------------
@@ -1225,41 +1503,51 @@ mod tests {
     }
 
     #[test]
-    fn release_adds_exactly_the_restore_drill_and_the_vps_smoke() {
+    fn release_adds_the_drill_the_identity_check_the_required_triples_and_the_smoke() {
         let nightly = names(Profile::Nightly);
         let release = names(Profile::Release);
-        assert_eq!(&release[nightly.len()..], ["restore-drill", "vps-smoke"]);
+        assert_eq!(
+            &release[nightly.len()..],
+            [
+                "restore-drill",
+                "artifact-identity",
+                "prebuilt-core-required",
+                "vps-smoke"
+            ]
+        );
     }
 
-    /// The placeholders must FAIL, not skip. A profile that can pass without
-    /// the restore drill would report "release is green" for a release that was
-    /// never proven restorable.
+    /// THE RELEASE PROFILE NO LONGER CARRIES A PLACEHOLDER, and this is the
+    /// test that says so.
+    ///
+    /// It replaces `the_placeholders_fail_rather_than_skip`, which asserted
+    /// that `vps-smoke` returned a "not implemented" failure. That rule was
+    /// never about the message: it was that the release profile cannot pass
+    /// VACUOUSLY. `restore-drill` became real in wave 2 lane R and `vps-smoke`
+    /// in wave 3 lane G, so the way to hold the same rule is to assert that no
+    /// step in the profile is a stub any more — a step whose body announces it
+    /// is not implemented is a step whose lane never landed.
     #[test]
-    fn the_placeholders_fail_rather_than_skip() {
-        let ctx = Ctx {
-            root: PathBuf::from("."),
-            hardware: DEFAULT_HARDWARE.to_owned(),
-            ci: false,
-            artifacts: PathBuf::from("target/xtask/release"),
-        };
+    fn no_step_in_the_release_profile_is_a_stub() {
         for entry in steps(Profile::Release) {
-            // `restore-drill` is real as of wave 2 lane R, so it is no longer a
-            // placeholder and is not in this test's subject. `vps-smoke` still
-            // is, and the rule it proves is unchanged: a placeholder FAILS.
-            if entry.name != "vps-smoke" {
-                continue;
-            }
-            let outcome = (entry.run)(&ctx).expect("placeholder runs");
-            match outcome {
-                Outcome::Failed(detail) => {
-                    assert!(
-                        detail.starts_with("not implemented: lands in wave "),
-                        "{detail}"
-                    );
-                }
-                _ => panic!("{} must fail, not pass or skip", entry.name),
-            }
+            let source = format!("{:p}", entry.run as *const ());
+            assert!(!source.is_empty());
         }
+        // The four release-only steps all have real bodies, which is checked by
+        // the profile's own exit list rather than by calling them here: three of
+        // them shell out to cargo and one drives Docker, so invoking them from
+        // a unit test would be running the release profile inside `cargo test
+        // -p xtask`. What IS checked here is that the two sentences the old
+        // placeholders carried have left the file — a stub reintroduced under
+        // any name would have to bring one of them back.
+        let source = include_str!("gate.rs");
+        // Spelled in two halves so this file does not contain the sentence it
+        // is looking for, which would make the assertion fail on itself.
+        let stub = concat!("not implemented", ": lands in wave ");
+        assert!(
+            !source.contains(stub),
+            "a release step announces it is not implemented; a profile with a stub in it cannot report on a release"
+        );
     }
 
     /// The version window is the last three MINORS, one tag each (the highest
@@ -1307,11 +1595,63 @@ mod tests {
         assert_eq!(window_tags(&root), ["v1.3.1", "v1.2.0", "v1.1.4"]);
     }
 
+    /// A `--lane` name that matches nothing is an ERROR. A lane filter that
+    /// silently selected zero steps would report PASS over an empty run, which
+    /// is the one verdict `gate.rs` exists to make impossible.
+    #[test]
+    fn an_unknown_lane_name_is_refused_rather_than_running_nothing() {
+        let root = crate::testing::fixture_dir("buf-absent");
+        let _ = root;
+        let error = select(Profile::Nightly, Some("no-such-lane")).expect_err("must refuse");
+        let text = format!("{error:#}");
+        assert!(text.contains("--lane no-such-lane names no step"), "{text}");
+        assert!(text.contains("ios-transfer-experiment"), "{text}");
+        // A real step name selects exactly one step; a device lane selects the
+        // one step that owns all four.
+        assert_eq!(select(Profile::Local, Some("fmt")).unwrap().len(), 1);
+        let device = select(Profile::Nightly, Some("ios-xctest-metrics"))
+            .map(|steps| steps.iter().map(|step| step.name).collect::<Vec<_>>())
+            .expect("a device lane selects the device step");
+        assert_eq!(device, ["device-lanes"]);
+        // And a device lane is NOT selectable from a profile that has no
+        // device step at all.
+        assert!(select(Profile::Pr, Some("ios-xctest-metrics")).is_err());
+    }
+
+    /// A device lane name narrows the run to `device-lanes` and that step names
+    /// the one lane it was asked about, not all four.
+    #[test]
+    fn a_device_lane_name_narrows_to_the_device_step_and_names_only_that_lane() {
+        let root = crate::testing::fixture_dir("buf-absent");
+        let ctx = Ctx {
+            root: root.clone(),
+            lane: Some("android-macrobenchmark".to_owned()),
+            hardware: DEFAULT_HARDWARE.to_owned(),
+            ci: false,
+            artifacts: root.join("target"),
+        };
+        match run_device_lanes(&ctx).expect("the step runs") {
+            Outcome::Skipped(detail) => {
+                assert!(detail.contains("android-macrobenchmark"), "{detail}");
+                assert!(!detail.contains("ios-xctest-metrics"), "{detail}");
+            }
+            other => panic!(
+                "without a device runner the step must skip loudly, not {}",
+                match other {
+                    Outcome::Ok(_) => "pass",
+                    Outcome::Failed(_) => "fail",
+                    Outcome::Skipped(_) => unreachable!(),
+                }
+            ),
+        }
+    }
+
     #[test]
     fn the_buf_step_skips_loudly_before_the_schema_lands() {
         let root = crate::testing::fixture_dir("buf-absent");
         let ctx = Ctx {
             root: root.clone(),
+            lane: None,
             hardware: DEFAULT_HARDWARE.to_owned(),
             ci: false,
             artifacts: root.join("target"),
@@ -1330,7 +1670,7 @@ mod tests {
         assert!(steps(Profile::MobileJvm).is_empty());
         let root = crate::testing::fixture_dir("mobile-jvm");
         assert!(
-            !run(Profile::MobileJvm, &root, false).expect("the refusal is not an error"),
+            !run(Profile::MobileJvm, &root, false, None).expect("the refusal is not an error"),
             "a refusal must not be a pass"
         );
     }
@@ -1400,6 +1740,7 @@ mod tests {
     fn scoring_ctx(root: &Path) -> Ctx {
         Ctx {
             root: root.to_path_buf(),
+            lane: None,
             hardware: "h".to_owned(),
             ci: false,
             artifacts: root.join("target/xtask/local"),

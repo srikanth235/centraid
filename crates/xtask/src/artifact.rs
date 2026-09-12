@@ -140,7 +140,7 @@ fn collect(dir: &Path, root: &Path, excluded: &[&Path], out: &mut Vec<PathBuf>) 
         return Ok(());
     }
     let relative = dir.strip_prefix(root).unwrap_or(dir);
-    if excluded.iter().any(|skip| relative == *skip) {
+    if excluded.contains(&relative) {
         return Ok(());
     }
     for entry in fs::read_dir(dir)

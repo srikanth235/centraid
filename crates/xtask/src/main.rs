@@ -16,10 +16,12 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 
 mod artifact;
+mod ci;
 mod gate;
 mod ledger;
 mod measure;
 mod rules;
+mod smoke;
 #[cfg(test)]
 mod testing;
 
@@ -47,6 +49,12 @@ enum Command {
         /// the cold branch without deleting `target/` (#1020, D-1020-B2-1).
         #[arg(long)]
         cold: bool,
+        /// Run only one step of the profile, by name — or one of the four
+        /// device lanes, which narrows the run to `device-lanes`. A name that
+        /// matches nothing is an error, never an empty run that reports PASS
+        /// over zero steps (#1020, D-1020-G4).
+        #[arg(long)]
+        lane: Option<String>,
     },
     /// Run only the structural rules (the cheap half of every profile).
     Rules,
@@ -67,6 +75,20 @@ enum Command {
         /// attributed to one of the five inputs instead of guessed at.
         #[arg(long)]
         explain: bool,
+    },
+    /// Per-lane first-attempt pass rate and chronic red, off the GitHub Actions
+    /// API (#1020, D-1020-G3; re-homed from `scripts/ci/lane-health.mjs`).
+    /// Nightly only — a pull request's verdict must not depend on api.github.com.
+    LaneHealth {
+        /// `owner/name`.
+        #[arg(long, default_value = "srikanth235/centraid")]
+        repo: String,
+        /// Which workflow's runs to read.
+        #[arg(long, default_value = "ci.yml")]
+        workflow: String,
+        /// How many runs on `main` to look back over.
+        #[arg(long, default_value_t = 40)]
+        runs: usize,
     },
     /// Measure the edit-run loop and print (or write) the compile-time ledger.
     Measure {
@@ -129,7 +151,11 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let root = repo_root();
     let ok = match cli.command {
-        Command::Gate { profile, cold } => match gate::run(profile, &root, cold) {
+        Command::Gate {
+            profile,
+            cold,
+            lane,
+        } => match gate::run(profile, &root, cold, lane) {
             Ok(ok) => ok,
             Err(error) => {
                 eprintln!("xtask: {error:#}");
@@ -161,6 +187,23 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Command::LaneHealth {
+            repo,
+            workflow,
+            runs,
+        } => match ci::lane_health(&root, &repo, &workflow, runs) {
+            Ok(result) => {
+                println!("{}", result.line);
+                for finding in &result.findings {
+                    println!("  {finding}");
+                }
+                result.ok
+            }
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
         Command::Measure { write, only } => match measure::run(&root, write, &only) {
             Ok(()) => true,
             Err(error) => {

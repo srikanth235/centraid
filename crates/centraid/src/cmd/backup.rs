@@ -86,21 +86,41 @@ fn take(data_dir: &Path, force: bool) -> Result<serde_json::Value, String> {
         if force { "forced" } else { "due" }
     );
 
-    // No WAL tail yet: the capture tick is the gateway's loop, and this lane
-    // lands the seal and the manifest. A generation with an empty tail is a
-    // complete generation — it is the snapshot, and the tail is what a later
-    // tick adds.
+    // THE WAL TAIL. The gateway's capture tick sealed it and wrote it to
+    // `<data-dir>/wal/pending.jsonl` (wave 3 lane G, `cmd/capture.rs`); this
+    // reads it back. It is on disk rather than handed over in process because
+    // `backup now` is a separate process from the gateway, and the alternative
+    // was for this CLI to capture the tail itself — a second capturer with its
+    // own idea of where the last segment ended.
+    //
+    // An empty tail is still a complete generation: it means nothing was
+    // written since the last one, or no gateway has run a tick over this data
+    // directory. The count is in the report either way, so "the tail was empty"
+    // is a fact a script can read rather than an absence it has to infer.
+    let wal_tail = crate::cmd::capture::pending_tail(data_dir)?;
+    if wal_tail.is_empty() {
+        eprintln!(
+            "centraid: the pending WAL tail is EMPTY — this generation is the snapshot and \
+             nothing since it. That is correct when no write has happened; if a gateway is \
+             serving this data directory, its capture tick is not running."
+        );
+    }
     let outcome = backup::take_generation(
         &vault,
         &blobs,
         &keyring,
         generation,
         previous_manifest_hash(&blobs, &master, &vault).as_deref(),
-        &[],
+        &wal_tail,
         &scratch,
     )
     .map_err(|error| error.to_string())?;
     vault.close().map_err(|error| error.to_string())?;
+
+    // Retired only now, after the manifest naming these segments is written. A
+    // tail cleared first would be a generation whose WAL rows are in no
+    // manifest at all.
+    crate::cmd::capture::retire_pending(data_dir)?;
 
     eprintln!(
         "centraid: generation {generation} is {} ({} bytes, {} WAL segment(s))",
