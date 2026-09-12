@@ -5,13 +5,7 @@
     "issue": "https://github.com/srikanth235/centraid/issues/1020",
     "note": "GENERATED — do not edit. Regenerate from the v0 registry; see the generator's header."
   },
-  "supportedKinds": [
-    "codex",
-    "claude-code",
-    "opencode",
-    "grok",
-    "pi"
-  ],
+  "supportedKinds": ["codex", "claude-code", "opencode", "grok", "pi"],
   "harnesses": [
     {
       "kind": "codex",
@@ -55,9 +49,7 @@
       "kind": "gemini",
       "label": "Gemini CLI",
       "defaultBin": "gemini",
-      "acpArgs": [
-        "--acp"
-      ],
+      "acpArgs": ["--acp"],
       "minVersion": "0.50.0",
       "installHint": "Install Gemini CLI (`npm i -g @google/gemini-cli`) and run `gemini` once to authenticate.",
       "env": {},
@@ -70,9 +62,7 @@
       "kind": "qwen",
       "label": "Qwen Code",
       "defaultBin": "qwen",
-      "acpArgs": [
-        "--acp"
-      ],
+      "acpArgs": ["--acp"],
       "minVersion": "0.20.0",
       "installHint": "Install Qwen Code (`npm i -g @qwen-code/qwen-code`) and run `qwen` once to authenticate.",
       "env": {},
@@ -85,9 +75,7 @@
       "kind": "opencode",
       "label": "opencode",
       "defaultBin": "opencode",
-      "acpArgs": [
-        "acp"
-      ],
+      "acpArgs": ["acp"],
       "minVersion": "1.18.4",
       "installHint": "Install opencode (`npm i -g opencode-ai`) and run `opencode auth login`.",
       "env": {},
@@ -105,10 +93,7 @@
       "kind": "grok",
       "label": "Grok",
       "defaultBin": "grok",
-      "acpArgs": [
-        "agent",
-        "stdio"
-      ],
+      "acpArgs": ["agent", "stdio"],
       "minVersion": "0.2.106",
       "installHint": "Install Grok CLI (`npm i -g @xai-official/grok`) and sign in. Requires a paid SuperGrok or X Premium+ subscription.",
       "env": {},
@@ -121,9 +106,7 @@
       "kind": "kimi",
       "label": "Kimi",
       "defaultBin": "kimi",
-      "acpArgs": [
-        "acp"
-      ],
+      "acpArgs": ["acp"],
       "minVersion": "1.17.0",
       "installHint": "Install Kimi CLI (`uv tool install kimi-cli`, or `curl -LsSf https://code.kimi.com/install.sh | bash`) and run `kimi login`.",
       "env": {},
@@ -136,9 +119,7 @@
       "kind": "copilot",
       "label": "GitHub Copilot CLI",
       "defaultBin": "copilot",
-      "acpArgs": [
-        "--acp"
-      ],
+      "acpArgs": ["--acp"],
       "minVersion": "1.0.71",
       "installHint": "Install GitHub Copilot CLI (`curl -fsSL https://gh.io/copilot-install | bash`, or `brew install copilot-cli`) and sign in with `/login`. Requires a paid Copilot subscription.",
       "env": {},
@@ -156,9 +137,7 @@
       "kind": "cursor",
       "label": "Cursor",
       "defaultBin": "cursor-agent",
-      "acpArgs": [
-        "acp"
-      ],
+      "acpArgs": ["acp"],
       "minVersion": "2026.7.16",
       "installHint": "Install Cursor CLI (`curl https://cursor.com/install -fsS | bash`) and sign in with `cursor-agent login`. Requires a paid Cursor plan.",
       "env": {},
@@ -171,9 +150,7 @@
       "kind": "kilo",
       "label": "Kilo",
       "defaultBin": "kilo",
-      "acpArgs": [
-        "acp"
-      ],
+      "acpArgs": ["acp"],
       "minVersion": "7.4.11",
       "installHint": "Install Kilo (`npm i -g @kilocode/cli`) and run `kilo auth`.",
       "env": {},
@@ -186,9 +163,7 @@
       "kind": "cline",
       "label": "Cline",
       "defaultBin": "cline",
-      "acpArgs": [
-        "--acp"
-      ],
+      "acpArgs": ["--acp"],
       "minVersion": "3.0.46",
       "installHint": "Install Cline (`npm i -g cline`) and run `cline auth`.",
       "env": {},
@@ -201,9 +176,7 @@
       "kind": "goose",
       "label": "goose",
       "defaultBin": "goose",
-      "acpArgs": [
-        "acp"
-      ],
+      "acpArgs": ["acp"],
       "minVersion": "1.43.0",
       "installHint": "Install goose (`brew install block-goose-cli`; the binary is `goose`) and run `goose configure` to set a provider before use.",
       "env": {},
@@ -216,9 +189,7 @@
       "kind": "auggie",
       "label": "Auggie CLI",
       "defaultBin": "auggie",
-      "acpArgs": [
-        "--acp"
-      ],
+      "acpArgs": ["--acp"],
       "minVersion": "0.33.0",
       "installHint": "Install Auggie CLI (`npm i -g @augmentcode/auggie`) and sign in from a terminal. Requires a paid Augment plan.",
       "env": {
@@ -246,11 +217,7 @@
       "kind": "droid",
       "label": "Factory Droid",
       "defaultBin": "droid",
-      "acpArgs": [
-        "exec",
-        "--output-format",
-        "acp-daemon"
-      ],
+      "acpArgs": ["exec", "--output-format", "acp-daemon"],
       "minVersion": "0.175.1",
       "installHint": "Install Factory Droid (`curl -fsSL https://app.factory.ai/cli | sh`, or `brew install --cask droid`) and sign in in a browser, or set `FACTORY_API_KEY`.",
       "env": {

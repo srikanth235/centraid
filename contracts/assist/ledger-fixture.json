@@ -35,11 +35,7 @@
   "vocabularies": [
     {
       "column": "kind",
-      "values": [
-        "chat",
-        "automation",
-        "build"
-      ],
+      "values": ["chat", "automation", "build"],
       "nullable": false
     },
     {
@@ -56,47 +52,27 @@
     },
     {
       "column": "feedback",
-      "values": [
-        "up",
-        "down"
-      ],
+      "values": ["up", "down"],
       "nullable": true
     },
     {
       "column": "kind",
-      "values": [
-        "message_in",
-        "step",
-        "tool",
-        "delegate"
-      ],
+      "values": ["message_in", "step", "tool", "delegate"],
       "nullable": false
     },
     {
       "column": "cost_source",
-      "values": [
-        "harness",
-        "estimated"
-      ],
+      "values": ["harness", "estimated"],
       "nullable": true
     },
     {
       "column": "status",
-      "values": [
-        "active",
-        "warm",
-        "cold",
-        "stale"
-      ],
+      "values": ["active", "warm", "cold", "stale"],
       "nullable": false
     },
     {
       "column": "primary_kind",
-      "values": [
-        "vault-data",
-        "app",
-        "draft"
-      ],
+      "values": ["vault-data", "app", "draft"],
       "nullable": false
     },
     {
@@ -115,10 +91,7 @@
     },
     {
       "column": "source",
-      "values": [
-        "webhook",
-        "poll"
-      ],
+      "values": ["webhook", "poll"],
       "nullable": false
     }
   ],
@@ -160,10 +133,7 @@
       "onDelete": "cascade"
     }
   ],
-  "plainColumns": [
-    "turns.parent_turn_id",
-    "items.child_turn_id"
-  ],
+  "plainColumns": ["turns.parent_turn_id", "items.child_turn_id"],
   "indexes": [
     "idx_attachments_hash",
     "idx_attachments_item",
@@ -199,13 +169,7 @@
     "fts_conversation_item_ai",
     "fts_conversation_turn_ad"
   ],
-  "views": [
-    "run_summary"
-  ],
-  "indexedNotUnique": [
-    "turns.idempotency_key"
-  ],
-  "neverInferred": [
-    "items.effort"
-  ]
+  "views": ["run_summary"],
+  "indexedNotUnique": ["turns.idempotency_key"],
+  "neverInferred": ["items.effort"]
 }

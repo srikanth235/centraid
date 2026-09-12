@@ -114,7 +114,8 @@ function specSources(): string[] {
         }
       }
     }
-    if (end === -1) throw new Error(`unbalanced ${marker} at ${at} in ${SOURCE}`);
+    if (end === -1)
+      throw new Error(`unbalanced ${marker} at ${at} in ${SOURCE}`);
     found.push(source.slice(open, end));
     at = source.indexOf(marker, end);
   }
@@ -122,20 +123,101 @@ function specSources(): string[] {
 }
 
 /**
- * Evaluate one object literal. `resolveModel` is the single field whose value
- * is a function; it is replaced by its own identifier so the fixture names the
- * resolver instead of pretending it is absent.
+ * Turn one object literal into JSON, then parse it.
+ *
+ * NOT `eval`, and not `new Function`. This script reads v0's source, and
+ * evaluating source to extract constants from it is a class of tool that
+ * executes whatever the file happens to contain — including, one refactor from
+ * now, an import.
+ *
+ * The transformer is a one-pass scanner rather than a chain of `replace`
+ * calls, because the literals here contain the two sequences a regex gets
+ * wrong: `https://` inside a string looks like a comment, and a `//` comment
+ * can sit between a key and its value. So string state is tracked explicitly
+ * and only text OUTSIDE a string is rewritten:
+ *
+ * - `//` to end of line is dropped (the two SAFETY notes among them);
+ * - a bare key becomes a quoted key;
+ * - the one bare identifier in the shape, `resolveClaudeModel`, becomes the
+ *   string `"resolveClaudeModel"`, so the fixture NAMES the model resolver
+ *   instead of pretending it is absent;
+ * - a trailing comma before a close is dropped.
+ *
+ * Anything else unquoted is a shape this script does not understand, and
+ * `JSON.parse` refuses it loudly rather than guessing.
  */
+function toJson(text: string): string {
+  let out = "";
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index] ?? "";
+    if (char === '"') {
+      // A string, copied verbatim including escapes.
+      out += char;
+      index += 1;
+      while (index < text.length) {
+        const inner = text[index] ?? "";
+        out += inner;
+        index += 1;
+        if (inner === "\\") {
+          out += text[index] ?? "";
+          index += 1;
+          continue;
+        }
+        if (inner === '"') break;
+      }
+      continue;
+    }
+    if (char === "/" && text[index + 1] === "/") {
+      while (index < text.length && text[index] !== "\n") index += 1;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(char)) {
+      let word = "";
+      while (index < text.length && /[\w$]/u.test(text[index] ?? "")) {
+        word += text[index];
+        index += 1;
+      }
+      // A key is an identifier followed by a colon; a value is not.
+      const isKey = /^\s*:/u.test(text.slice(index));
+      if (isKey || word === "resolveClaudeModel") {
+        out += `"${word}"`;
+      } else if (word === "true" || word === "false" || word === "null") {
+        // JSON's own literals. Quoting them would turn `probeModels: true`
+        // into the STRING "true", which is truthy in both languages and so
+        // would never fail a test — the worst kind of wrong.
+        out += word;
+      } else {
+        throw new Error(
+          `${SOURCE} has a bare identifier \`${word}\` in a harness entry; this exporter only understands data literals and the \`resolveClaudeModel\` resolver`
+        );
+      }
+      continue;
+    }
+    if (char === ",") {
+      // Drop it when the next non-space character closes a collection.
+      const rest = text.slice(index + 1);
+      if (/^\s*[}\]]/u.test(rest)) {
+        index += 1;
+        continue;
+      }
+    }
+    out += char;
+    index += 1;
+  }
+  return out;
+}
+
 function evaluateSpec(text: string): RawSpec {
-  const resolvers = new Proxy(
-    {},
-    { get: (_target, name: string): string => name }
-  );
-  const build = new Function(
-    "resolveClaudeModel",
-    `"use strict"; return (${text});`
-  ) as (resolveClaudeModel: unknown) => RawSpec;
-  return build((resolvers as Record<string, string>).resolveClaudeModel);
+  const json = toJson(text);
+  try {
+    return JSON.parse(json) as RawSpec;
+  } catch (error) {
+    throw new Error(
+      `a harness entry in ${SOURCE} is not a plain data literal any more, so it cannot be exported without evaluating code:\n${json}`,
+      { cause: error }
+    );
+  }
 }
 
 /** The `SUPPORTED_HARNESS_KINDS` array literal, read from the same source. */
@@ -144,15 +226,17 @@ function supportedKinds(): string[] {
   if (at === -1) throw new Error(`no SUPPORTED_HARNESS_KINDS in ${SOURCE}`);
   const open = source.indexOf("[", at);
   const close = source.indexOf("]", open);
-  return (JSON.parse(
-    `[${source
-      .slice(open + 1, close)
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0)
-      .map((entry) => entry.replace(/^"|"$/gu, '"'))
-      .join(",")}]`
-  ) as string[]).map((kind) => kind);
+  return (
+    JSON.parse(
+      `[${source
+        .slice(open + 1, close)
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+        .map((entry) => entry.replace(/^"|"$/gu, '"'))
+        .join(",")}]`
+    ) as string[]
+  ).map((kind) => kind);
 }
 
 const specs = specSources().map(evaluateSpec);
@@ -160,7 +244,9 @@ const supported = supportedKinds();
 
 for (const kind of supported) {
   if (!specs.some((spec) => spec.kind === kind)) {
-    throw new Error(`SUPPORTED_HARNESS_KINDS names ${kind}, which is not registered`);
+    throw new Error(
+      `SUPPORTED_HARNESS_KINDS names ${kind}, which is not registered`
+    );
   }
 }
 

@@ -45,7 +45,8 @@ function tableNames(): string[] {
     .split(",")
     .map((entry) => entry.trim().replace(/^["']|["']$/gu, ""))
     .filter((entry) => entry.length > 0 && !entry.startsWith("//"));
-  if (names.length === 0) throw new Error(`LEDGER_BAND_TABLES parsed empty in ${SOURCE}`);
+  if (names.length === 0)
+    throw new Error(`LEDGER_BAND_TABLES parsed empty in ${SOURCE}`);
   return names;
 }
 
@@ -58,15 +59,19 @@ function tableNames(): string[] {
 function vocabularies(): { column: string; values: string[] }[] {
   const found: { column: string; values: string[] }[] = [];
   const pattern =
-    /CHECK\s*\(\s*(?:(\w+)\s+IS\s+NULL\s+OR\s+)?(\w+)\s+IN\s*\(([^)]*)\)/gu;
+    /CHECK\s*\(\s*(?:(?<nullable>\w+)\s+IS\s+NULL\s+OR\s+)?(?<column>\w+)\s+IN\s*\((?<values>[^)]*)\)/gu;
   for (const match of source.matchAll(pattern)) {
-    const column = match[2];
-    const values = (match[3] ?? "")
+    const column = match.groups?.column;
+    const values = (match.groups?.values ?? "")
       .split(",")
       .map((entry) => entry.trim().replace(/^'|'$/gu, ""))
       .filter((entry) => entry.length > 0);
     if (column && values.length > 0) {
-      found.push({ column, values, nullable: Boolean(match[1]) } as never);
+      found.push({
+        column,
+        values,
+        nullable: Boolean(match.groups?.nullable),
+      } as never);
     }
   }
   return found;
@@ -75,11 +80,12 @@ function vocabularies(): { column: string; values: string[] }[] {
 /** Every `REFERENCES <table>(<column>)` and whether it cascades. */
 function deleteRules(): { references: string; onDelete: string }[] {
   const found: { references: string; onDelete: string }[] = [];
-  const pattern = /REFERENCES\s+(\w+)\(([^)]+)\)(\s+ON DELETE CASCADE)?/gu;
+  const pattern =
+    /REFERENCES\s+(?<table>\w+)\((?<column>[^)]+)\)(?<cascade>\s+ON DELETE CASCADE)?/gu;
   for (const match of source.matchAll(pattern)) {
     found.push({
-      references: `${match[1]}(${match[2]?.trim()})`,
-      onDelete: match[3] ? "cascade" : "none",
+      references: `${match.groups?.table}(${match.groups?.column?.trim()})`,
+      onDelete: match.groups?.cascade ? "cascade" : "none",
     });
   }
   return found;
@@ -88,9 +94,13 @@ function deleteRules(): { references: string; onDelete: string }[] {
 /** Every `CREATE TRIGGER <name>` and `CREATE INDEX`/`CREATE UNIQUE INDEX`. */
 function objects(keyword: string): string[] {
   const found: string[] = [];
-  const pattern = new RegExp(`CREATE\\s+(?:UNIQUE\\s+)?${keyword}\\s+(\\w+)`, "gu");
+  const pattern = new RegExp(
+    `CREATE\\s+(?:UNIQUE\\s+)?${keyword}\\s+(?<name>\\w+)`,
+    "gu"
+  );
   for (const match of source.matchAll(pattern)) {
-    if (match[1]) found.push(match[1]);
+    const name = match.groups?.name;
+    if (name) found.push(name);
   }
   return found.sort();
 }
