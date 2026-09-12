@@ -22,6 +22,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 mod cmd;
+mod identity;
 mod run;
 
 /// The exit codes, stated once. A script that wraps this binary branches on
@@ -222,7 +223,33 @@ enum BackupCommand {
     },
 }
 
+/// `centraid --version --json` prints the ARTIFACT IDENTITY (#1020 Artifacts,
+/// D-1020-G2): the version, the git sha, the artifact digest, the vault schema
+/// version, and whether this is a development build.
+///
+/// Intercepted before clap rather than modelled as a subcommand, because clap
+/// owns `--version` and the shape `--version --json` is what `deploy/vps/
+/// install.sh` and the release smoke read. A `centraid version --json`
+/// subcommand would have been tidier inside this file and a second spelling for
+/// everyone outside it.
+fn version_json_requested() -> bool {
+    let mut version = false;
+    let mut json = false;
+    for argument in std::env::args().skip(1) {
+        match argument.as_str() {
+            "--version" | "-V" => version = true,
+            "--json" => json = true,
+            _ => {}
+        }
+    }
+    version && json
+}
+
 fn main() -> ExitCode {
+    if version_json_requested() {
+        println!("{}", identity::ArtifactIdentity::current().to_json());
+        return ExitCode::from(exit::OK);
+    }
     let cli = Cli::parse();
     run::install_tracing(cli.log.as_deref());
 

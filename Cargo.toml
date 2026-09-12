@@ -90,3 +90,39 @@ zstd = "0.13"
 # The edit-run loop is the new Hermes (#1020): dependencies optimised once, our crates rebuilt fast.
 [profile.dev.package."*"]
 opt-level = 2
+
+# THE RELEASE PROFILE (#1020, D-1020-G8). What ships, and what a crash report
+# can be read with.
+#
+# `lto = "thin"` + `codegen-units = 1`: the prebuilt core is one artifact linked
+# by three shells, so it is compiled once per triple in CI and never on a
+# developer's machine — the cost lands on `releaseBuildSeconds` (the one
+# compile-time number a pull request can go red on, so it is measured and not
+# assumed) and the benefit lands on every call every shell makes. "thin" rather
+# than "fat" because fat LTO's extra few per cent is not worth doubling the one
+# number this workspace has a ceiling for.
+#
+# `panic = "unwind"`, NOT abort, and this is not a size oversight:
+# `crates/core-ffi` exports a C ABI, and a panic crossing a C frame with
+# `panic = "abort"` takes the host process down — the phone's app, the
+# desktop's Electron main, the browser's native host. Unwinding lets the FFI
+# boundary catch it and return an error the shell can report. The saving abort
+# would buy is a fraction of the artifact; the cost is the shell losing the
+# ability to survive a bug in the core.
+#
+# `debug = "line-tables-only"` + NO `strip` here: a stripped binary with no
+# symbol file anywhere is a crash report nobody can read, and #1020 rules a
+# symbol file published beside every artifact. Line tables are enough for a
+# backtrace with file and line, and they are a fraction of full debuginfo.
+# Stripping happens at PACKAGING (`objcopy --only-keep-debug` + `--strip-debug
+# --add-gnu-debuglink` in `deploy/docker/Dockerfile` and the `prebuilt-core`
+# workflow), so the shipped binary is stripped AND the symbols exist. Setting
+# `strip = "debuginfo"` here would throw them away before anything could keep
+# them, and `contracts/ledgers/library-size.json` measures the stripped artifact
+# either way.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+debug = "line-tables-only"
+strip = false

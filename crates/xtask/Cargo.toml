@@ -21,3 +21,11 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
+# `artifact-key` hashes the tree. sha2 is already in this workspace's graph
+# (crates/vault), so it costs a link here and no extra compile.
+sha2 = { workspace = true }
+
+[dev-dependencies]
+# The artifact-key rules are asserted over throwaway trees, so the tests are
+# about the rule and not about whatever this repository happens to contain.
+tempfile = { workspace = true }

@@ -193,3 +193,30 @@ jobs:
           # Denies the licence on NEW dependencies only — existing ones are
           # untouched, so it cannot retroactively red an unrelated PR.
           deny-licenses: AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later
+
+  # THE PREBUILT CORE, and deliberately NOT on a pull request.
+  #
+  # #1020 ships a prebuilt core: six binary triples, four Android ABIs and an
+  # iOS XCFramework. Building all eleven on every pull request would buy nothing
+  # a PR needs — the `gate` job above already compiles the workspace in release
+  # configuration for the host triple, which is what catches a code change that
+  # does not build. What the OTHER triples catch is a cross-compilation or a
+  # platform-conditional break, and that answer is worth having once per merge,
+  # not once per push to a branch.
+  #
+  # So this job runs on `push: main` and on `workflow_dispatch`, never on
+  # `pull_request` — which is also why it is a job here rather than a second
+  # workflow: `gate.yml` is the one workflow allowed to listen on open-PR events
+  # (lint:workflow-pins rule 5), and `release.yml` is the one allowed to listen
+  # on tags (rule 6), so a lane that wants both callers has to be
+  # `workflow_call` and be invoked from each. `release.yml` invokes the same
+  # lane on a tag, with `binary-only: false`.
+  #
+  # `binary-only: true` here: on `main` the point is to keep the cache warm and
+  # to catch a cross-compilation break, and the mobile artifacts need an Android
+  # NDK and a macOS runner per push to do it.
+  prebuilt-core:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/lane-prebuilt-core.yml
+    with:
+      binary-only: true

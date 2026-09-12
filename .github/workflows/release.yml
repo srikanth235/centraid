@@ -253,6 +253,29 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
 
+  # THE PREBUILT CORE ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-G2).
+  #
+  # Six binary triples with a symbol file each, the four Android ABIs, and the
+  # iOS XCFramework — plus one `SHA256SUMS` and one identity digest across all
+  # of them. It rides `all` rather than needing an explicit surface, because
+  # unlike `mobile` it submits nothing to anybody: it builds and publishes
+  # artifacts, and a release that shipped a desktop installer whose core was
+  # never built for one of the required triples is a partial release.
+  #
+  # `require-candidate` is upstream of `plan`, so this lane inherits the
+  # candidate precondition like every other: a release ships a build somebody
+  # promoted (docs/release.md).
+  prebuilt-core:
+    needs: plan
+    if: >
+      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'prebuilt-core')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lane-prebuilt-core.yml
+    with:
+      ref: ${{ inputs.ref || '' }}
+      binary-only: false
+
   companion:
     needs: plan
     if: >
@@ -277,6 +300,7 @@ jobs:
         gateway-npm,
         gateway-image,
         mobile,
+        prebuilt-core,
         companion,
       ]
     if: always()

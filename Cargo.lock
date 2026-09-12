@@ -5095,6 +5095,8 @@ dependencies = [
  "anyhow",
  "clap",
  "serde_json",
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]

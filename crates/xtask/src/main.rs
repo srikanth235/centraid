@@ -15,6 +15,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
+mod artifact;
 mod gate;
 mod ledger;
 mod measure;
@@ -49,6 +50,24 @@ enum Command {
     },
     /// Run only the structural rules (the cheap half of every profile).
     Rules,
+    /// Print the prebuilt core's cache key for a target triple (#1020,
+    /// D-1020-G2). The exact rule is in `src/artifact.rs`.
+    ArtifactKey {
+        /// The target triple the artifact is for.
+        #[arg(long)]
+        triple: String,
+        /// Cargo features, comma-separated. Order does not matter; the list is
+        /// sorted before it is hashed.
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
+        /// The cargo profile.
+        #[arg(long, default_value = "release")]
+        profile: String,
+        /// Print the per-input digests on stderr, so a moved key can be
+        /// attributed to one of the five inputs instead of guessed at.
+        #[arg(long)]
+        explain: bool,
+    },
     /// Measure the edit-run loop and print (or write) the compile-time ledger.
     Measure {
         /// Write the measurements into `contracts/ledgers/compile-time.json`.
@@ -118,6 +137,30 @@ fn main() -> ExitCode {
             }
         },
         Command::Rules => rules::print_report(&root),
+        Command::ArtifactKey {
+            triple,
+            mut features,
+            profile,
+            explain,
+        } => {
+            features.sort();
+            features.dedup();
+            match artifact::run(
+                &root,
+                &artifact::KeyInputs {
+                    triple,
+                    features,
+                    profile,
+                },
+                explain,
+            ) {
+                Ok(()) => true,
+                Err(error) => {
+                    eprintln!("xtask: {error:#}");
+                    false
+                }
+            }
+        }
         Command::Measure { write, only } => match measure::run(&root, write, &only) {
             Ok(()) => true,
             Err(error) => {
