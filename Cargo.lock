@@ -557,6 +557,7 @@ dependencies = [
  "centraid-api-proto",
  "centraid-apps-kit",
  "centraid-apps-tally",
+ "centraid-assist",
  "centraid-core",
  "centraid-net",
  "centraid-protocol",
@@ -609,6 +610,7 @@ name = "centraid-assist"
 version = "1.0.0-alpha.0"
 dependencies = [
  "agent-client-protocol",
+ "centraid-ontology",
  "centraid-vault",
  "futures",
  "serde",

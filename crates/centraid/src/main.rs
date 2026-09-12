@@ -183,6 +183,45 @@ enum Command {
         #[command(subcommand)]
         command: Option<NativeHostCommand>,
     },
+    /// The harness surface: what is registered, what is reachable, and where
+    /// the two ACP adapters are (#1020, D-1020-AS7). Replaces v0's
+    /// `centraid-acp` binary, and deliberately has **no `sql` subcommand**
+    /// (#286) — data questions ride the turn's own gated tools.
+    Assist {
+        #[command(subcommand)]
+        command: AssistCommand,
+    },
+    /// Serve the vault's tool surface to a harness over stdin and stdout
+    /// (#1020, D-1020-AS2). Launched by the harness as its MCP child, never by
+    /// a person; stdout IS the protocol. There is no listening socket.
+    Mcp,
+}
+
+#[derive(Subcommand)]
+enum AssistCommand {
+    /// Every registered harness, whether it is in the supported five, and what
+    /// would be spawned for it.
+    Harnesses {
+        #[arg(long)]
+        json: bool,
+    },
+    /// One kind's `--version` probe. An older-than-minimum version WARNS and
+    /// stays reachable; a version that cannot be read claims nothing.
+    Preflight {
+        kind: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Where the two npm ACP adapters are.
+    Adapters {
+        /// Print the install command instead of the current state. It is
+        /// printed rather than run: installing an adapter downloads and then
+        /// executes third-party code.
+        #[arg(long)]
+        install: bool,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -425,6 +464,20 @@ fn main() -> ExitCode {
                 // stderr for every verb in this binary.
                 None => cmd::native_host::run(),
             },
+            Command::Assist { command } => match command {
+                AssistCommand::Harnesses { json } => {
+                    cmd::assist::run(cmd::assist::Args::Harnesses { json })
+                }
+                AssistCommand::Preflight { kind, json } => {
+                    cmd::assist::run(cmd::assist::Args::Preflight { kind, json })
+                }
+                AssistCommand::Adapters { install, json } => {
+                    cmd::assist::run(cmd::assist::Args::Adapters { install, json })
+                }
+            },
+            // stdout IS the protocol here too, for the same reason as
+            // `native-host`: a stray line desynchronises the harness's parser.
+            Command::Mcp => cmd::mcp::run(),
         }
     });
     ExitCode::from(code)
