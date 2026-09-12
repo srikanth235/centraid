@@ -239,10 +239,18 @@ describe(VaultCursorEngine, () => {
       { position: "10", occurredAt: 10 },
     ];
     const attempted: string[] = [];
+    const errors: string[] = [];
+    // The retry clock is DURABLE (#1014, B1): a failed element carries its
+    // backoff in the pending batch, so the restart below has to happen after
+    // the delay elapsed or the second engine would correctly defer it.
+    let clock = Date.now();
     const first = new VaultCursorEngine({
       store: cursors,
+      now: () => new Date(clock),
       fire: vi.fn<VaultCursorEngineOptions["fire"]>(),
       readCursor: async () => ({ elements, positionJson: "10" }),
+      onError: (error) =>
+        errors.push(error instanceof Error ? error.message : String(error)),
       fireCursor: ({ element }) => {
         attempted.push(element.position);
         if (element.position === "10") throw new Error("gateway stopped");
@@ -254,16 +262,17 @@ describe(VaultCursorEngine, () => {
       secretHash: "a".repeat(64),
     };
 
-    await expect(
-      first.reconcile([row("hooks/restart", [trigger])])
-    ).rejects.toThrow("gateway stopped");
+    await first.reconcile([row("hooks/restart", [trigger])]);
+    expect(errors).toStrictEqual(["gateway stopped"]);
     expect(cursors.getCursor("hooks/restart", 0)).toMatchObject({
       pendingJson: expect.stringContaining('"9"'),
     });
     expect(cursors.getCursor("hooks/restart", 0)?.positionJson).toBeUndefined();
 
+    clock += 60_000;
     const second = new VaultCursorEngine({
       store: cursors,
+      now: () => new Date(clock),
       fire: vi.fn<VaultCursorEngineOptions["fire"]>(),
       readCursor: async ({ cursor }) => ({
         elements:

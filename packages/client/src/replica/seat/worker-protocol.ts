@@ -128,6 +128,13 @@ export interface SerializedSeatError {
   readonly code?: string;
   readonly reason?: string;
   readonly recovery?: string;
+  /**
+   * The two ETags of a moved artifact (#1014, V4). Carried because the loop's
+   * bounded retry keys off the ERROR, not off its message, and a browser seat
+   * meets that error only after it has crossed this boundary.
+   */
+  readonly expected?: string;
+  readonly actual?: string;
 }
 
 export type SeatWorkerResponse =
@@ -143,6 +150,8 @@ export function serializeSeatError(error: unknown): SerializedSeatError {
     code?: string;
     reason?: string;
     recovery?: string;
+    expected?: string;
+    actual?: string;
   };
   return {
     name: error.name,
@@ -150,5 +159,7 @@ export function serializeSeatError(error: unknown): SerializedSeatError {
     ...(shaped.code ? { code: shaped.code } : {}),
     ...(shaped.reason ? { reason: shaped.reason } : {}),
     ...(shaped.recovery ? { recovery: shaped.recovery } : {}),
+    ...(shaped.expected ? { expected: shaped.expected } : {}),
+    ...(shaped.actual ? { actual: shaped.actual } : {}),
   };
 }

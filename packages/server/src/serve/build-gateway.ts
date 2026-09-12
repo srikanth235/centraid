@@ -76,7 +76,6 @@ import {
   generateConversationTitle,
   makeConversationRouteHandler,
   makeConversationRunnerCore,
-  makeLedgerDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
   resolveSubsystemHarnessLadder,
@@ -98,6 +97,8 @@ import {
   readBlobStoreSettings,
   readEnrichPolicyResolutionInput,
   custodyStateCounts,
+  enrichTargetFailureSummary,
+  enrichWalkProgress,
   jitterDelayMs,
   DEFAULT_VAULT_FOOTPRINT,
 } from "@centraid/vault";
@@ -160,6 +161,7 @@ import type { LifecycleRouteOptions } from "../lifecycle/lifecycle-shared.js";
 import { rewriteAutomationInstructions } from "../lifecycle/rewrite-automation-instructions.js";
 import type { GatewayPaths } from "../paths.js";
 import { createImagePreviewCodec } from "../preview/codec.js";
+import { makeReplicatedLedgerDbProvider } from "../replicated-ledger-db.js";
 import { makeAppsStoreRouteHandler } from "../routes/apps-store-routes.js";
 import { makeAssistantRouteHandler } from "../routes/assistant-routes.js";
 import {
@@ -279,6 +281,10 @@ import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
 import { reconcileLinkBindings } from "./link-party-bindings.js";
+import {
+  forwardProjectedEditLocally,
+  pullShareTailLocally,
+} from "./local-share-path.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import {
   automationNoticeHeadline,
@@ -1200,6 +1206,12 @@ export async function buildGateway(
                 ok: t.ok,
                 ...(t.endedAt === undefined ? {} : { endedAt: t.endedAt }),
               })),
+          // SUCCESS IS NOT PROGRESS (#1014, B2). Every fire succeeding while
+          // the walk stands still is exactly the shape one poisoned asset
+          // produced, and recent-run health called it `ok` forever.
+          progress: (automationId) =>
+            enrichWalkProgress(p.db.vault, automationId),
+          targetFailures: () => enrichTargetFailureSummary(p.db.vault),
         })),
     })
   );
@@ -2928,7 +2940,7 @@ export async function buildGateway(
     const plane = vaultRegistry.get(vaultId);
     if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
     const store = new AutomationTriggerStore(
-      makeLedgerDbProvider(plane.workspace.ledgerDbFile)
+      makeReplicatedLedgerDbProvider(plane.workspace.ledgerDbFile)
     );
     triggerStores.set(vaultId, store);
     return store;
@@ -3169,6 +3181,13 @@ export async function buildGateway(
         event: input.element.payload,
       };
     }
+    // KEYED BY (ELEMENT, ATTEMPT) (#1014, B1). The run id is memoised: a
+    // second delivery under the same id finds the first run's ended turn and
+    // returns early. That is exactly right for a REDELIVERY of work already
+    // done and exactly wrong for a RETRY of work that failed, so the attempt
+    // number is part of the key from the second attempt on. Attempt one keeps
+    // the historical id so an in-flight batch upgrades without re-running
+    // everything it already delivered.
     const sourceTurnId = crypto
       .createHash("sha256")
       .update(
@@ -3176,8 +3195,9 @@ export async function buildGateway(
       )
       .digest("hex")
       .slice(0, 24);
-    await fireAutomation(input.automationRef, {
-      runId: `${input.automationRef}:trigger:${sourceTurnId}`,
+    const attemptSuffix = input.attempt > 1 ? `:${input.attempt}` : "";
+    const outcome = await fireAutomation(input.automationRef, {
+      runId: `${input.automationRef}:trigger:${sourceTurnId}${attemptSuffix}`,
       triggerKind: "scheduled",
       triggerOrigin: input.sourceKind,
       idempotent: true,
@@ -3185,6 +3205,19 @@ export async function buildGateway(
       ...(payload === undefined ? {} : { input: payload }),
       ...(gapNote(input) ? { note: gapNote(input) } : {}),
     });
+    // A HANDLER FAILURE IS A FAILED DELIVERY (#1014, B1). `propagateError`
+    // covers only what throws before or around the run; a run that reached the
+    // handler and came back `ok: false` returned normally, and the cursor
+    // engine acked the element on the strength of that return. Raising it here
+    // is what puts the element on the retry-then-dead-letter path instead.
+    // A SKIPPED run is not a failure: a paused or preparing system automation
+    // deliberately did nothing, and its element waits for the next tick.
+    if (outcome.outcome && !outcome.outcome.ok && !outcome.outcome.skipped) {
+      throw new Error(
+        outcome.outcome.error ??
+          `automation ${input.automationRef} did not complete`
+      );
+    }
   };
 
   const schedulerFor = (vaultId: string): automation.LocalScheduler => {
@@ -3218,6 +3251,33 @@ export async function buildGateway(
               health.reportError("automation-runs", message);
               logger.warn(message);
             },
+            // GIVEN UP ON, OUT LOUD (#1014, B1). The engine has already
+            // recorded the element on the cursor row by the time this runs;
+            // this is the half the member can see. One notice per element,
+            // keyed by position so a second dead letter for the same element
+            // (a re-read after a cursor reset) does not nag.
+            onDeadLetter: (entry) =>
+              runWithVaultContext({ vaultId }, () => {
+                const detail =
+                  `${entry.automationRef} gave up on trigger element ` +
+                  `${entry.position} after ${entry.attempts} attempts: ${entry.error}`;
+                health.reportError("automation-runs", detail);
+                logger.warn(detail);
+                const name = humanizeAutomationRef(entry.automationRef);
+                vaultRegistry.current().notices.put({
+                  kind: "automation",
+                  sourceRef: `${entry.automationRef}#dead-letter:${entry.position}`,
+                  headline: `${name} gave up on one item`,
+                  severity: "high",
+                  detail: {
+                    sourceType: "automation",
+                    outcome: "failure",
+                    automationRef: entry.automationRef,
+                    error: entry.error,
+                    deepLink: `/automations/${encodeURIComponent(entry.automationRef)}`,
+                  },
+                });
+              }),
             // The owner's background pause, honoured BEFORE the cursor is
             // read (#528). The same predicate `fireAutomation` applies to a
             // scheduled system fire, one layer up: a paused pass does no
@@ -3286,6 +3346,17 @@ export async function buildGateway(
     vaultFor: (vaultId: string) => vaultRegistry.get(vaultId)?.db,
     logger: health.loggerFor("share", logger),
   };
+  // TWO VAULTS ON ONE GATEWAY (#1014, S2; ruling R-1014-10). Which vaults this
+  // host mounts is the host's fact, exactly as which link reaches which vault
+  // is; the share modules are handed the answer and never learn the topology.
+  const localShareHost = {
+    vaultFor: (vaultId: string) => vaultRegistry.get(vaultId)?.db,
+    gatewayFor: (vaultId: string) => vaultRegistry.get(vaultId)?.gateway,
+    credentialFor: (vaultId: string) =>
+      vaultRegistry.get(vaultId)?.ownerCredential,
+    labelFor: (vaultId: string) => vaultRegistry.get(vaultId)?.name,
+    now: () => new Date().toISOString(),
+  };
   // View grants sync forward (ruling G-view). The doorbell swallows its own
   // failures: an uncarried share is durable state on the fulfillment rows,
   // never a reason for the triggering write to look failed.
@@ -3297,9 +3368,12 @@ export async function buildGateway(
     ringNotificationsDoorbell(vaultId);
     // The commit's entity types are the delivery loop's filter (ruling
     // V-delivery): a commit that cannot have moved a granted subject wakes
-    // nothing. `undefined` would mean "walk everything", so the hint is passed
-    // through even when it is empty.
-    grantRefreshDoorbell.ring(vaultId, entityTypes ?? []);
+    // nothing. A ring that NAMES NO TYPES is not an empty commit — it is a
+    // sweep, an import or a purge saying it does not know what it touched, and
+    // `undefined` is the doorbell's word for "walk everything" (#1014, V12).
+    // Collapsing it to `[]` woke nothing at all, which is the one answer that
+    // cannot be right for a write nobody described.
+    grantRefreshDoorbell.ring(vaultId, entityTypes);
     runWithVaultContext({ vaultId }, () =>
       schedulers.get(vaultId)?.nudge(entityTypes)
     );
@@ -3856,7 +3930,7 @@ export async function buildGateway(
               onRevoked: (rows) => {
                 for (const row of rows) {
                   const plane = vaultRegistry.get(row.vaultId);
-                  plane?.forgetReplicaDevice(row.endpointId);
+                  plane?.retireReplicaDevice(row.endpointId);
                   plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
                 }
               },
@@ -3874,7 +3948,7 @@ export async function buildGateway(
               onRevoked: (rows) => {
                 for (const row of rows) {
                   const plane = vaultRegistry.get(row.vaultId);
-                  plane?.forgetReplicaDevice(row.endpointId);
+                  plane?.retireReplicaDevice(row.endpointId);
                   plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
                 }
               },
@@ -4091,6 +4165,12 @@ export async function buildGateway(
         // itself never learns an address. No dial or no link is a fact about
         // REACH — the intent stays retryable rather than being written here.
         forwardProjectedEdit: async (request) => {
+          // SAME GATEWAY TAKES THE LOCAL PATH FIRST (#1014, S2; R-1014-10).
+          // A local pair has no route to dial, so asking for one answered
+          // `retryable` forever and an `edit` grant between two vaults on this
+          // host could never be used.
+          const local = forwardProjectedEditLocally(localShareHost, request);
+          if (local) return local;
           const dial = options.peerPlane?.dial;
           const link = vaultLinksStore.peerForVault(
             request.route.originVaultId,
@@ -4356,6 +4436,10 @@ export async function buildGateway(
           credentialFor: (vaultId) =>
             vaultRegistry.get(vaultId)?.ownerCredential,
           pullShape: async (input) => {
+            // The same local path the forwarder takes: a co-hosted origin is
+            // served from its own handle rather than dialled (#1014, S2).
+            const local = pullShareTailLocally(localShareHost, input);
+            if (local) return local;
             const dial = options.peerPlane?.dial;
             const link = vaultLinksStore.peerForVault(
               input.originVaultId,

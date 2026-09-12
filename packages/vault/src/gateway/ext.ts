@@ -8,7 +8,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
-import { refreshReplicaTriggers } from "../replica/change-log.js";
+import { watchReplicaTable } from "../replica/log.js";
 import {
   canonicalSpecJson,
   dropExtFtsDdl,
@@ -217,6 +217,10 @@ export function applyExtBand(
             now
           );
         outcome.created.push(spec.name);
+        // The session capture enumerated its tables before this one existed
+        // (#1014, G21): rows written into a brand-new physical before the
+        // next capture would have nothing watching them.
+        watchReplicaTable(db.vault, physical);
         clearColumnCache(physical);
         continue;
       }
@@ -236,7 +240,6 @@ export function applyExtBand(
     }
     // Live ext tables join the durable change log before COMMIT; draft
     // tables are absent from listVaultEntities and never replicated.
-    refreshReplicaTriggers(db.vault);
     db.vault.exec("COMMIT");
   } catch (error) {
     db.vault.exec("ROLLBACK");
@@ -318,16 +321,23 @@ function alterExtTable(
   );
   if (nowSealed.length > 0)
     sealExistingExtColumns(db, physical, extPk(spec), nowSealed);
-  // The retro-seal UPDATE was observed by the old trigger contract; scrub
-  // after sealing to cover earlier retained history too.
+  // RETAINED HISTORY IS SCRUBBED TOO (#1014, R-1014-1). Fresh writes are
+  // sealed by the command sweep and the retro-seal above closes the
+  // at-declaration gap in the table — but the log holds the images this
+  // column's plaintext was already captured into, and a seat tailing from
+  // below the floor would apply them. `prior_json` as well as `row_json`: the
+  // prior delta carries the old value of exactly the columns a statement
+  // changed, which is where a plaintext value is most likely to be.
   for (const column of newlySealed) {
     db.vault
       .prepare(
-        `UPDATE replica_change
-            SET old_values_json = json_remove(old_values_json, '$.' || ?)
-          WHERE entity = ? AND old_values_json IS NOT NULL`
+        `UPDATE replica_log
+            SET row_json = json_remove(row_json, '$.' || ?),
+                prior_json = CASE WHEN prior_json IS NULL THEN NULL
+                                  ELSE json_remove(prior_json, '$.' || ?) END
+          WHERE "table" = ? AND row_json IS NOT NULL`
       )
-      .run(column, extLogical(appId, prior.table_name, band));
+      .run(column, column, physical);
   }
 }
 
@@ -740,10 +750,11 @@ export function recreateExtTables(db: VaultDb): string[] {
           extFtsDdl(row.physical, extPk(spec), spec.searchable ?? [])
         );
       }
+      // As in `applyExtSpecs` (#1014, G21).
+      watchReplicaTable(db.vault, row.physical);
       created.push(row.physical);
     }
   }
-  refreshReplicaTriggers(db.vault);
   return created;
 }
 

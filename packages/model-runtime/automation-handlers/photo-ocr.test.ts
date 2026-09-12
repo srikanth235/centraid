@@ -322,16 +322,44 @@ describe("photo-ocr handler", () => {
       ).rejects.toThrow("delegate OCR requires an explicit pinned model");
     });
 
-    it("refuses a delegate answer that carries no ACP-confirmed model identity", async () => {
+    it("counts a delegate answer with no ACP-confirmed model identity against the target", async () => {
+      // #1014, B20. Throwing here re-sent — and re-billed — the SAME
+      // photograph on every tick, because the walk is ordered and the
+      // watermark never moved. It is a per-target failure now.
       const harness = createHarness({
         input: delegateInput,
         entities: { "media.asset": [asset("a1")], "enrich.derivation": [] },
         delegate: () => ({ regions: [{ text: "Total" }] }),
+        invoke: () => ({
+          status: "executed",
+          output: { failures: 1, declined: false },
+        }),
       });
 
-      await expect(
-        handler({ ctx: harness.ctx, log: harness.log })
-      ).rejects.toThrow("no ACP-confirmed model identity");
+      const result = await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(outputOf(result)).toMatchObject({ derived: 0, notReady: 1 });
+      expect(harness.invokes[0]).toMatchObject({
+        command: "enrich.record_target_failure",
+        input: {
+          capability: "ocr",
+          target_type: "core.content_item",
+          target_id: "c-a1",
+          reason: "delegate-failed",
+        },
+      });
+      // NOT re-billed once declined: the cursor advances past it.
+      const declined = createHarness({
+        input: delegateInput,
+        entities: { "media.asset": [asset("a1")], "enrich.derivation": [] },
+        delegate: () => ({ regions: [{ text: "Total" }] }),
+        invoke: () => ({
+          status: "executed",
+          output: { failures: 3, declined: true },
+        }),
+      });
+      await handler({ ctx: declined.ctx, log: declined.log });
+      expect(declined.state.get("cursor")).toBe("a1");
     });
 
     it("forgets the confirmed model when the selection changes", async () => {

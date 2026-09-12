@@ -65,6 +65,8 @@ export interface BackupVaultStatus {
   policy: BackupPolicy;
   destination: BackupDestinationStatus;
   pendingOffsite: { count: number; bytes: number };
+  /** Rows that spent their custody attempts (#1014, B12) — a member must act. */
+  quarantined: { count: number; bytes: number };
   providerPolicy?: ProviderPolicySyncState;
   reconciliation?: BackupReconciliationState;
 }
@@ -202,6 +204,12 @@ function vaultStatus(
     policy: readBackupPolicy(plane.db.vault),
     destination,
     pendingOffsite: { count: outbox.pendingCount, bytes: outbox.pendingBytes },
+    // Backlog that has stopped moving is reported apart from backlog that is
+    // still draining (#1014, B12): a member can only act on the first.
+    quarantined: {
+      count: outbox.quarantinedCount,
+      bytes: outbox.quarantinedBytes,
+    },
     ...(target?.lastBackupAt ? { lastBackupAt: target.lastBackupAt } : {}),
     ...(target?.lastVerifiedAt ? { lastVerifyAt: target.lastVerifiedAt } : {}),
     ...(target?.lastWalDrainAt

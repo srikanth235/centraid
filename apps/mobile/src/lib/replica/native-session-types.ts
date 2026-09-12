@@ -101,12 +101,32 @@ export interface CreateNativeReplicaSessionOptions {
   isNetworkWorkAllowed?: () => Promise<boolean>;
   isRowSyncAllowed?: () => Promise<boolean>;
   retryDelayMs?: number;
+  /** The foreground catch-up clock (#1014, R15); defaults to a minute. */
+  pullIntervalMs?: number;
   /** Hermes has no WebCrypto; these default to expo-crypto's, imported lazily. */
   digest?: ReplicaDigest;
   idFactory?: ReplicaIdFactory;
   /** Fires once per storage-full pause, so the mount need not poll. */
   onStorageFull?: (error: unknown) => void;
+  /**
+   * THE GATEWAY REFUSED THIS DEVICE (#1014, X7/X8; R-1014-12).
+   *
+   * Raised from the seat's own log door (a read-only seat never touches the
+   * drain) and from the drain, and answered by the mount the same way the
+   * browser answers it: quiesce, export what is unsent, purge. Absent leaves a
+   * session that reports the refusal and does nothing with it, which is what
+   * every phone did — it re-bootstrapped against a gateway that had revoked
+   * it, forever.
+   */
+  onAuthorizationRevoked?: () => void;
   onGatewayOutcome?: (reachable: boolean) => void;
+  /**
+   * A batch of rows became durable in this phone's file, at this position
+   * (#1014, C3). The honest freshness signal: the frame that predicted the
+   * rows is a wake, and a stamp bumped from it says "current" over rows that
+   * have not been applied yet.
+   */
+  onApplied?: (applied: number) => void;
   /**
    * Who a queued write into THIS vault may wait for. Set only where
    * `ReplicaVaultScope.personal === false`; absent means the member's own

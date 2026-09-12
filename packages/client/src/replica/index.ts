@@ -23,6 +23,7 @@ export * from "./shell-admission.js";
 export * from "./shell-invalidation-bus.js";
 export * from "./shell-intent-drain.js";
 export * from "./terminal-purge.js";
+export * from "./revoked-outbox.js";
 export * from "./shell-session-purge.js";
 export * from "./shell-session.js";
 export * from "./shell-session-scopes.js";

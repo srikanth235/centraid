@@ -11,6 +11,12 @@ export interface AutomationTriggerCursor {
   windowTo?: number;
   skipped: number;
   gapReason?: string;
+  /**
+   * The bounded tail of elements this cursor GAVE UP on (#1014, B1), as JSON.
+   * It outlives the pending batch deliberately: an element that was never run
+   * has to stay visible after the batch it belonged to settles.
+   */
+  deadLetterJson?: string;
   updatedAt: number;
 }
 
@@ -24,6 +30,8 @@ export interface PutAutomationTriggerCursor {
   windowTo?: number;
   skipped?: number;
   gapReason?: string;
+  /** Omit to LEAVE the stored record alone; the engine writes it only on change. */
+  deadLetterJson?: string;
   updatedAt: number;
 }
 
@@ -82,6 +90,7 @@ interface CursorRow {
   window_to: number | null;
   skipped: number;
   gap_reason: string | null;
+  dead_letter_json: string | null;
   updated_at: number;
 }
 
@@ -107,6 +116,9 @@ function mapCursor(row: CursorRow): AutomationTriggerCursor {
     ...(row.window_to === null ? {} : { windowTo: row.window_to }),
     skipped: row.skipped,
     ...(row.gap_reason === null ? {} : { gapReason: row.gap_reason }),
+    ...(row.dead_letter_json === null
+      ? {}
+      : { deadLetterJson: row.dead_letter_json }),
     updatedAt: row.updated_at,
   };
 }
@@ -135,7 +147,7 @@ export class AutomationTriggerStore {
     const row = this.dbProvider()
       .prepare(
         `SELECT automation_id, trigger_index, source_kind, position_json, pending_json,
-                window_from, window_to, skipped, gap_reason, updated_at
+                window_from, window_to, skipped, gap_reason, dead_letter_json, updated_at
            FROM automation_trigger_cursor
           WHERE automation_id = ? AND trigger_index = ?`
       )
@@ -146,10 +158,14 @@ export class AutomationTriggerStore {
   putCursor(input: PutAutomationTriggerCursor): void {
     this.dbProvider()
       .prepare(
+        // `dead_letter_json` is the one column an omitted value PRESERVES:
+        // every other field is the engine's whole current answer, but the
+        // dead-letter tail is written only by the batch that adds to it and
+        // must survive every settle in between (#1014, B1).
         `INSERT INTO automation_trigger_cursor
            (automation_id, trigger_index, source_kind, position_json, pending_json,
-            window_from, window_to, skipped, gap_reason, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            window_from, window_to, skipped, gap_reason, dead_letter_json, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(automation_id, trigger_index) DO UPDATE SET
            source_kind = excluded.source_kind,
            position_json = excluded.position_json,
@@ -158,6 +174,8 @@ export class AutomationTriggerStore {
            window_to = excluded.window_to,
            skipped = excluded.skipped,
            gap_reason = excluded.gap_reason,
+           dead_letter_json =
+             COALESCE(excluded.dead_letter_json, automation_trigger_cursor.dead_letter_json),
            updated_at = excluded.updated_at`
       )
       .run(
@@ -170,6 +188,7 @@ export class AutomationTriggerStore {
         input.windowTo ?? null,
         input.skipped ?? 0,
         input.gapReason ?? null,
+        input.deadLetterJson ?? null,
         input.updatedAt
       );
   }

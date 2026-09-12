@@ -9,6 +9,7 @@ import {
   replicaCoverageRow,
   replicaStatusRow,
   revokedNoticeRow,
+  isGatewayRefusal,
   settledReachability,
 } from "./replica-status";
 import type { ReplicaReachability } from "./replica-status";
@@ -176,6 +177,39 @@ describe("the trace a revoked scope leaves", () => {
     });
   });
 
+  it("says what the purge took with it, and whether it was saved", () => {
+    // NEVER SILENT (#1014, P24; R-1014-12). Revocation is about access, not
+    // about the member's past writes; "removed" alone was the whole sentence
+    // even when unsent edits went with the file.
+    expect(revokedNoticeRow({ ...notice, unsent: 0 }).label).toBe(
+      "No longer shared with you — Family was removed from this phone"
+    );
+    expect(
+      revokedNoticeRow({ ...notice, unsent: 3, unsentSaved: true }).label
+    ).toBe(
+      "No longer shared with you — Family was removed from this phone. 3 unsent changes were saved to this phone."
+    );
+    expect(
+      revokedNoticeRow({ ...notice, unsent: 1, unsentSaved: false }).label
+    ).toBe(
+      "No longer shared with you — Family was removed from this phone. 1 unsent change could not be saved."
+    );
+  });
+
+  it("fills the count in after the purge, keeping the first instant", async () => {
+    const storage = memoryStorage();
+    // The label is written BEFORE the purge (it is about to be erased) and the
+    // count only exists AFTER it, so the second record must reach the first.
+    await recordRevokedNotice(storage, "gateway-1", notice);
+    const filled = await recordRevokedNotice(storage, "gateway-1", {
+      ...notice,
+      at: "2026-08-27T09:00:05.000Z",
+      unsent: 2,
+      unsentSaved: true,
+    });
+    expect(filled).toStrictEqual([{ ...notice, unsent: 2, unsentSaved: true }]);
+  });
+
   it("survives the relaunch after the purge, and clears on dismiss", async () => {
     // THE POINT (#880 W4.4). The purge takes the rows, the cursor and the
     // mount, so nothing else on the phone can afterwards say where a vault
@@ -237,5 +271,43 @@ describe("what a pass may claim before it has asked the gateway anything", () =>
 
   it("has no gateway to be syncing with when no base resolved", () => {
     expect(attemptedReachability(true, false, true)).toBe("gateway-asleep");
+  });
+});
+
+describe("a refusal is not an absence (#1014, P11)", () => {
+  it("reads an auth_required failure as refusing, never as asleep", () => {
+    // Every non-landed pull read as `gateway-asleep`, so a gateway that
+    // answered — and said no — put "Gateway asleep · Wake help" on screen:
+    // an action that cannot possibly be the remedy, retried forever.
+    expect(isGatewayRefusal({ code: "auth_required" })).toBe(true);
+    expect(isGatewayRefusal({ status: 403 })).toBe(true);
+    expect(isGatewayRefusal({ status: 401 })).toBe(true);
+    expect(
+      settledReachability(false, false, {
+        lastSyncError: { code: "auth_required" },
+      })
+    ).toBe("gateway-refusing");
+    expect(replicaStatusRow("gateway-refusing")).toStrictEqual({
+      action: "Check access",
+      actionable: true,
+      label: "Gateway refused this device",
+    });
+  });
+
+  it("leaves an unreachable gateway alone — that one really is asleep", () => {
+    expect(isGatewayRefusal(new Error("connection refused"))).toBe(false);
+    expect(isGatewayRefusal(undefined)).toBe(false);
+    expect(
+      settledReachability(false, false, {
+        lastSyncError: new Error("connection refused"),
+      })
+    ).toBe("gateway-asleep");
+    expect(settledReachability(false, false, undefined)).toBe("gateway-asleep");
+  });
+
+  it("the member's own transfer rules still outrank both", () => {
+    expect(
+      settledReachability(false, true, { lastSyncError: { status: 403 } })
+    ).toBe("sync-paused");
   });
 });

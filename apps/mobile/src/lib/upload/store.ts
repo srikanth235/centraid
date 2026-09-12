@@ -12,6 +12,7 @@
 
 import type { UploadSqliteDriver } from "../replica/expo-sqlite-driver";
 import type { PendingUploadGroup } from "../replica/storage-accounting";
+import { amendUploadFollowupInput } from "./followup-amend";
 import { stableFollowupIntentId, toUploadFollowup } from "./followup-record";
 import type {
   NewUploadFollowup,
@@ -19,7 +20,18 @@ import type {
   UploadFollowup,
   UploadFollowupFactory,
 } from "./followup-record";
+import { PENDING_PAGE_LIMIT } from "./store-limits";
 import { migrateUploadSchema, SCHEMA_VERSION } from "./store-migrations";
+import {
+  deferItemUntil,
+  dismissFailedItem,
+  failedItemCount,
+  failedItems,
+  recentItems,
+  retryFailedItem,
+  retryingItems,
+  sweepTerminalItems,
+} from "./store-retention";
 import { toItem, toPart } from "./store-rows";
 import type { ItemRow, PartRow } from "./store-rows";
 
@@ -50,7 +62,7 @@ const FOLLOWUP_DDL = `
 const DDL = `
   CREATE TABLE IF NOT EXISTS upload_item (
     item_id TEXT PRIMARY KEY,
-    sha256 TEXT NOT NULL UNIQUE,
+    sha256 TEXT NOT NULL,
     local_uri TEXT NOT NULL,
     target_vault_id TEXT,
     media_type TEXT,
@@ -64,9 +76,17 @@ const DDL = `
     created_order INTEGER NOT NULL UNIQUE,
     attempts INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
-    receipt_json TEXT
+    receipt_json TEXT,
+    edge_digest TEXT,
+    settled_at TEXT,
+    dismissed_at TEXT,
+    next_attempt_at TEXT
   );
   CREATE INDEX IF NOT EXISTS upload_item_state ON upload_item(state, created_order);
+  -- P3 (#1014): one row per (content, vault), not per content. An expression
+  -- index, because SQLite counts every NULL target as distinct.
+  CREATE UNIQUE INDEX IF NOT EXISTS upload_item_sha_vault
+    ON upload_item(sha256, COALESCE(target_vault_id, ''));
   CREATE TABLE IF NOT EXISTS upload_part (
     item_id TEXT NOT NULL,
     part_number INTEGER NOT NULL,
@@ -106,6 +126,15 @@ export interface UploadItem {
   sha256: string;
   localUri: string;
   targetVaultId?: string;
+  /** P22 (#1014): sha of the file's first and last MiB, taken at enqueue.
+   *  A resume re-takes it: same size, different bytes is a different file. */
+  edgeDigest?: string;
+  /** When `settle` ran; the retention sweep reads it (P25). */
+  settledAt?: string;
+  /** When the member dismissed a failed row; the sweep may then drop it. */
+  dismissedAt?: string;
+  /** Earliest wall-clock the drain may touch this row again (backoff). */
+  nextAttemptAt?: string;
   mediaType?: string;
   filename?: string;
   plaintextSize: number;
@@ -125,6 +154,7 @@ export interface NewUpload {
   sha256: string;
   localUri: string;
   targetVaultId?: string;
+  edgeDigest?: string;
   mediaType?: string;
   filename?: string;
   plaintextSize: number;
@@ -135,9 +165,11 @@ export interface NewUpload {
 
 const TERMINAL: readonly UploadItemState[] = ["settled", "failed"];
 
-/** The most queue rows one read materializes: a memory bound, not a product
- *  limit. Whole-queue answers are a SQL aggregate or a walk over pages. */
-export const PENDING_PAGE_LIMIT = 500;
+export {
+  PENDING_PAGE_LIMIT,
+  RECENT_PAGE_LIMIT,
+  TERMINAL_RETENTION_MS,
+} from "./store-limits";
 
 interface PendingGroupRow {
   vault_id: string | null;
@@ -203,13 +235,18 @@ export class UploadQueueStore {
    * monotonic), so paging never re-reads a row. Callers that need only totals
    * use `pendingCount` / `pendingStorageGroups`.
    */
-  pending(limit: number = PENDING_PAGE_LIMIT, afterOrder = 0): UploadItem[] {
+  pending(
+    limit: number = PENDING_PAGE_LIMIT,
+    afterOrder = 0,
+    now: string = new Date().toISOString()
+  ): UploadItem[] {
     return this.driver
       .all<ItemRow>(
         `SELECT * FROM upload_item
            WHERE state NOT IN ('settled', 'failed') AND created_order > ?
+             AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
            ORDER BY created_order LIMIT ?`,
-        [afterOrder, limit]
+        [afterOrder, now, limit]
       )
       .map(toItem);
   }
@@ -258,6 +295,48 @@ export class UploadQueueStore {
       .map(toItem);
   }
 
+  /** The newest slice of the ledger; the retention sweep keeps it short. */
+  recent(limit?: number): UploadItem[] {
+    return recentItems(this.driver, limit);
+  }
+
+  /** Drop terminal rows nothing is waiting on (#1014, P25). */
+  sweepTerminal(options: {
+    olderThanMs: number;
+    keep?: number;
+    now?: number;
+  }): number {
+    return sweepTerminalItems(this.driver, options);
+  }
+
+  /** Terminally failed rows the member has not dismissed (#1014, P7). */
+  failed(limit?: number): UploadItem[] {
+    return failedItems(this.driver, limit);
+  }
+
+  failedCount(): number {
+    return failedItemCount(this.driver);
+  }
+
+  /** Rows that failed and will try again, backoff window included (#1014). */
+  retrying(limit?: number): UploadItem[] {
+    return retryingItems(this.driver, limit);
+  }
+
+  /** Member-driven retry: back to `pending` with a fresh attempt budget. */
+  retry(itemId: string): void {
+    retryFailedItem(this.driver, itemId);
+  }
+
+  dismissFailed(itemId: string): void {
+    dismissFailedItem(this.driver, itemId);
+  }
+
+  /** Do not touch this row before `at`; the drain skips it (backoff). */
+  deferUntil(itemId: string, at: string): void {
+    deferItemUntil(this.driver, itemId, at);
+  }
+
   /** Unique key makes producer retries idempotent; one blob may feed many apps. */
   enqueueFollowup(followup: NewUploadFollowup): UploadFollowup {
     const inputJson = JSON.stringify(followup.input);
@@ -288,6 +367,15 @@ export class UploadQueueStore {
     if (!row)
       throw new Error(`upload follow-up for ${followup.itemId} vanished`);
     return toUploadFollowup(row);
+  }
+
+  /** A caption typed before the row exists (#1014, R17) — see
+   *  `followup-amend.ts` for why only an untried follow-up may move. */
+  amendFollowupInput(
+    itemId: string,
+    patch: Record<string, unknown>
+  ): UploadFollowup[] {
+    return amendUploadFollowupInput(this.driver, itemId, patch);
   }
 
   /** Settled bytes, oldest first. Poisoned follow-ups excluded (F4). */
@@ -354,10 +442,16 @@ export class UploadQueueStore {
     return row ? toItem(row) : undefined;
   }
 
-  bySha(sha256: string): UploadItem | undefined {
+  /**
+   * The row for these bytes IN THIS VAULT (#1014, P3). Passing no vault asks
+   * the unassigned-target question, not "any vault" — an unscoped answer is
+   * what let one queued photograph stand in for the same photograph queued
+   * for a second vault.
+   */
+  bySha(sha256: string, targetVaultId?: string): UploadItem | undefined {
     const row = this.driver.all<ItemRow>(
-      "SELECT * FROM upload_item WHERE sha256 = ?",
-      [sha256]
+      "SELECT * FROM upload_item WHERE sha256 = ? AND COALESCE(target_vault_id, '') = ?",
+      [sha256, targetVaultId ?? ""]
     )[0];
     return row ? toItem(row) : undefined;
   }
@@ -383,6 +477,15 @@ export class UploadQueueStore {
       state,
       itemId,
     ]);
+  }
+
+  /** Give an attempt back: the gateway was never reached, so nothing about
+   *  this item was tried (#1014). */
+  uncountAttempt(itemId: string): void {
+    this.driver.run(
+      "UPDATE upload_item SET attempts = MAX(attempts - 1, 0) WHERE item_id = ?",
+      [itemId]
+    );
   }
 
   countAttempt(itemId: string): void {
@@ -414,9 +517,11 @@ export class UploadQueueStore {
 
   settle(itemId: string, receipt: Record<string, unknown>): void {
     this.driver.run(
-      `UPDATE upload_item SET state = 'settled', last_error = NULL, receipt_json = ?
-         WHERE item_id = ?`,
-      [JSON.stringify(receipt), itemId]
+      `UPDATE upload_item
+          SET state = 'settled', last_error = NULL, receipt_json = ?,
+              settled_at = ?, next_attempt_at = NULL
+        WHERE item_id = ?`,
+      [JSON.stringify(receipt), new Date().toISOString(), itemId]
     );
   }
 
@@ -443,19 +548,19 @@ export class UploadQueueStore {
   }
 
   private enqueueItem(upload: NewUpload): UploadItem {
-    const existing = this.bySha(upload.sha256);
+    // P3 (#1014): the lookup is keyed by (sha, vault). The old retarget branch
+    // — adopting an unassigned row for the first vault that asked — is gone
+    // with it: an unassigned row is its own key now, and adopting it would put
+    // the same bytes in exactly one of the two vaults that wanted them.
+    const existing = this.bySha(upload.sha256, upload.targetVaultId);
     if (existing) {
-      if (!existing.targetVaultId && upload.targetVaultId) {
-        this.driver.run(
-          "UPDATE upload_item SET target_vault_id = ? WHERE item_id = ?",
-          [upload.targetVaultId, existing.itemId]
-        );
-      }
       // F6: re-enqueue of a failed item revives it; do not report success over a stuck row.
       if (existing.state === "failed") {
         this.driver.run(
-          `UPDATE upload_item SET state = 'pending', attempts = 0, last_error = NULL
-             WHERE item_id = ?`,
+          `UPDATE upload_item
+              SET state = 'pending', attempts = 0, last_error = NULL,
+                  next_attempt_at = NULL, dismissed_at = NULL
+            WHERE item_id = ?`,
           [existing.itemId]
         );
         return this.require(existing.itemId);
@@ -466,8 +571,8 @@ export class UploadQueueStore {
     this.driver.run(
       `INSERT INTO upload_item(
          item_id, sha256, local_uri, target_vault_id, media_type, filename, plaintext_size,
-         sealed_size, frame_count, part_count, state, created_order, attempts)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)`,
+         sealed_size, frame_count, part_count, state, created_order, attempts, edge_digest)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, ?)`,
       [
         upload.itemId,
         upload.sha256,
@@ -480,6 +585,7 @@ export class UploadQueueStore {
         upload.frameCount,
         upload.partCount,
         createdOrder,
+        upload.edgeDigest ?? null,
       ]
     );
     for (let partNumber = 1; partNumber <= upload.partCount; partNumber += 1) {

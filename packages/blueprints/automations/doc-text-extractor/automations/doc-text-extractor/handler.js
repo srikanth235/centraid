@@ -31,6 +31,18 @@
  */
 
 const BATCH = 6;
+/**
+ * The byte budget for one page image handed to the transcription turn
+ * (#1014, R10). `ctx.vault.content`'s DEFAULT is 1 MiB and this handler passed
+ * nothing, so a perfectly ordinary 1.5 MB device preview came back
+ * `too-large`, the turn threw, and — because the cursor is written after the
+ * loop — the SAME document was first in every later batch. One poisoned item
+ * blocked every later one, forever. Four MiB is the hard ceiling the agent
+ * content surface allows (`AGENT_CONTENT_HARD_MAX_BYTES`).
+ */
+const VISUAL_MAX_BYTES = 4 * 1024 * 1024;
+/** Failures one document is given before this recipe declines it. */
+const MAX_TARGET_FAILURES = 3;
 /** The prompt revision this handler's transcription prompt is at. */
 const PROMPT_REV = "doc-text-v1";
 /** `BUILT_IN_PROFILE` in packages/vault/src/enrich/derivation.ts, restated. */
@@ -133,6 +145,50 @@ export default async function handler({ ctx, log }) {
     return { summary: "no new documents — all readable and summarized" };
   }
 
+  /**
+   * The first rung of the visual ladder whose bytes fit the budget, or null.
+   * The check is a real read: a `too-large` verdict is a fact about the rung's
+   * size, and guessing it from the derivative row would be a second notion of
+   * the same ceiling.
+   */
+  const firstReadableVariant = async (contentId, preferred) => {
+    const ladder = preferred === "preview" ? ["preview", "thumb"] : ["thumb"];
+    for (const variant of ladder) {
+      const probe = await ctx.vault.content({
+        contentId,
+        variant,
+        maxBytes: VISUAL_MAX_BYTES,
+      });
+      if (probe?.status === "ok") return variant;
+    }
+    return null;
+  };
+  /** Count one failure against a document; true once the walk should move on. */
+  const declineTarget = async (contentId, input) => {
+    try {
+      const outcome = await ctx.vault.invoke({
+        command: "enrich.record_target_failure",
+        input: {
+          capability: "doc-text",
+          target_type: "core.content_item",
+          target_id: contentId,
+          max_failures: MAX_TARGET_FAILURES,
+          ...(input.error === undefined
+            ? {}
+            : { error: String(input.error).slice(0, 2000) }),
+          ...(input.reason === undefined ? {} : { reason: input.reason }),
+          ...(input.permanent === undefined
+            ? {}
+            : { permanent: input.permanent }),
+        },
+      });
+      const output = outcome?.output ?? outcome;
+      return output?.declined === true;
+    } catch {
+      return false;
+    }
+  };
+
   const summaryRows = [];
   let ocred = 0;
   let summarized = 0;
@@ -158,6 +214,22 @@ export default async function handler({ ctx, log }) {
         : null;
 
     if (!hasText && visual) {
+      // FALL BACK DOWN THE LADDER, THEN GIVE UP DURABLY (#1014, R10). A
+      // preview past the ceiling is not a reason to lose the document: the
+      // `thumb` rung is smaller by construction and legible enough for a
+      // transcription turn. Only when NEITHER fits is the target declined —
+      // and `too-large` is permanent for that target, because trying the same
+      // bytes against the same ceiling twice more cannot end differently.
+      const readable = await firstReadableVariant(item.content_id, visual);
+      if (readable === null) {
+        await declineTarget(item.content_id, {
+          reason: "too-large",
+          error: `no ${visual}/thumb rung fits within ${VISUAL_MAX_BYTES} bytes`,
+          permanent: true,
+        });
+        skipped += 1;
+        return;
+      }
       // OCR: transcribe what the preview shows, then write the text
       // derivative — the parent document becomes searchable in the same
       // transaction (issue #296 FTS rule).
@@ -166,7 +238,13 @@ export default async function handler({ ctx, log }) {
           "The attached image is a page of a document. Transcribe ALL legible text faithfully, " +
           "preserving reading order. Return an empty string if nothing is legible.",
         json: OCR_SCHEMA,
-        content: [{ contentId: item.content_id, variant: visual }],
+        content: [
+          {
+            contentId: item.content_id,
+            variant: readable,
+            maxBytes: VISUAL_MAX_BYTES,
+          },
+        ],
       });
       const text = out && typeof out.text === "string" ? out.text.trim() : "";
       // Provenance is the delegate variant's whole added value: a pinned
@@ -255,26 +333,61 @@ export default async function handler({ ctx, log }) {
     );
   };
 
+  /**
+   * ONE POISONED DOCUMENT DOES NOT BLOCK EVERY LATER ONE (#1014, R10). A throw
+   * inside `processItem` skipped the cursor write below, so the same document
+   * led every later batch. Under the cap the walk parks on it (nothing is
+   * lost); at the cap it is declined durably and the cursor moves past it.
+   * Returns true when the caller may advance its watermark.
+   */
+  const runItem = async (item) => {
+    try {
+      await processItem(item);
+      return true;
+    } catch (error) {
+      const declined = await declineTarget(item.content_id, {
+        reason: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      if (declined) {
+        skipped += 1;
+        log.info(
+          `content ${item.content_id}: giving up after repeated failures`
+        );
+        return true;
+      }
+      log.info(
+        `content ${item.content_id}: document text failed, retrying next tick`
+      );
+      return false;
+    }
+  };
+
   // Derivative rows are processed in their own order and their cursor moves
   // only after the owning content was handled. A live device lease pins this
   // stream exactly like it pins the new-content stream.
   for (const row of late) {
     if (deviceOwned.has(row.content_id)) break;
     if (!processed.has(row.content_id)) {
-      await processItem({
+      const advanced = await runItem({
         content_id: row.content_id,
         media_type: "application/octet-stream",
       });
       processed.add(row.content_id);
+      if (!advanced) break;
     }
     lastDerivative = row.derivative_id;
   }
   for (const item of items) {
     if (deviceOwned.has(item.content_id)) break;
-    lastSeen = item.content_id;
-    if (processed.has(item.content_id)) continue;
-    await processItem(item);
+    if (processed.has(item.content_id)) {
+      lastSeen = item.content_id;
+      continue;
+    }
+    const advanced = await runItem(item);
     processed.add(item.content_id);
+    if (!advanced) break;
+    lastSeen = item.content_id;
   }
 
   if (summaryRows.length > 0) {

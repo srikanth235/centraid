@@ -94,8 +94,11 @@ async function measure(): Promise<Record<ResourceMetric, number>> {
         .page_count *
       (db.vault.prepare("PRAGMA page_size").get() as { page_size: number })
         .page_size;
+    // THE ONE LOG (#1014, R-1014-1). The probe measured the trigger log's
+    // rows; the payload a first sync pass moves is the seat log's, which is
+    // what the seeding actually produced.
     const changes = db.vault
-      .prepare("SELECT * FROM replica_change")
+      .prepare("SELECT * FROM replica_log")
       .all() as unknown[];
     const anomalies = new AnomalyLedger({ now: () => CLOCK });
     anomalies.record({

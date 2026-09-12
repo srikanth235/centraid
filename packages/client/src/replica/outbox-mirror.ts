@@ -17,6 +17,15 @@
  * Reads are mirrored; EVERYTHING ELSE INVALIDATES. A method added to the store
  * later invalidates by default, because forgetting to invalidate serves a
  * stale overlay and forgetting to mirror only costs a query.
+ *
+ * AND ONE WRITER IS NOT THE SAME AS ONE PATH THROUGH THE PROXY (#1014, C11).
+ * Where the outbox shares the seat's file, R24's `clearSeatOverlaysAtCommit`
+ * runs `DELETE FROM seat_outbox` inside the APPLIER's transaction — the same
+ * process, the same connection, and not through this proxy. Nothing here saw
+ * it, so the mirror went on serving settled intents as pending forever: a
+ * badge on a row that had already landed, until something else happened to
+ * write. `invalidateOutboxMirror` is what the shell calls when it is told the
+ * overlays cleared, keyed by the store the mirror was built over.
  */
 
 import type { IntentRecordStore } from "./intent-record-store.js";
@@ -34,10 +43,36 @@ export interface OutboxMirror {
   readonly store: IntentRecordStore;
   /** The overlay states' intents, from memory when the mirror is warm. */
   pending: (states: readonly IntentState[]) => Promise<ReplicaIntent[]>;
+  /** Forget everything held. What a write outside the proxy has to call. */
+  readonly invalidate: () => void;
+}
+
+/**
+ * Every live mirror, by the store it was built over.
+ *
+ * A WeakMap rather than a field on the proxy: the caller that learns the
+ * overlays cleared (the shell session) holds the RAW store it handed to the
+ * queue, not the queue's wrapped one, and the mirror belongs to neither of
+ * them to own.
+ */
+const MIRRORS = new WeakMap<IntentRecordStore, () => void>();
+
+/** Drop whatever a mirror over this store is holding. Safe on an unmirrored one. */
+export function invalidateOutboxMirror(
+  store: IntentRecordStore | undefined
+): void {
+  if (store) MIRRORS.get(store)?.();
 }
 
 export function mirrorOutbox(store: IntentRecordStore): OutboxMirror {
-  let mirrored: ReplicaIntent[] | undefined;
+  // KEYED BY THE STATES ASKED FOR (#1014, C11). One cache for every argument
+  // served the first caller's answer to the second: `pending(["queued"])`
+  // after `pending(OVERLAY_STATES)` got the wider list, and the narrower one
+  // poisoned the wider. The states are a handful of short strings, so the key
+  // is just them.
+  const mirrored = new Map<string, ReplicaIntent[]>();
+  const invalidate = (): void => mirrored.clear();
+  MIRRORS.set(store, invalidate);
   const wrapped = new Proxy(store, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver) as unknown;
@@ -46,16 +81,21 @@ export function mirrorOutbox(store: IntentRecordStore): OutboxMirror {
         return (value as (...args: unknown[]) => unknown).bind(target);
       }
       return (...args: unknown[]): unknown => {
-        mirrored = undefined;
+        invalidate();
         return (value as (...args: unknown[]) => unknown).apply(target, args);
       };
     },
   });
   return {
     store: wrapped,
+    invalidate,
     pending: async (states) => {
-      mirrored ??= await store.list(states);
-      return mirrored;
+      const key = [...states].join("\u0000");
+      const held = mirrored.get(key);
+      if (held) return held;
+      const fresh = await store.list(states);
+      mirrored.set(key, fresh);
+      return fresh;
     },
   };
 }

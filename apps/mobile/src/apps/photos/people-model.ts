@@ -73,6 +73,15 @@ export interface PeopleShelf {
   pendingByParty: PendingEntry[];
   unnamed: UnnamedGroupEntry[];
   pendingTotal: number;
+  /**
+   * IS THERE ANYTHING TO REVIEW (#1014, R6). Both doors into Face review were
+   * CLUSTER cards, and the clusterer deletes a cluster once its regions are
+   * attributed — so a library with unmatched faces and no clusters left had no
+   * way in at all, while the People page's own sentence said the review
+   * exists. This is the predicate the door uses, and it does not mention
+   * clusters.
+   */
+  reviewable: boolean;
   empty: string;
   detectFaces: DetectFacesAvailability;
 }
@@ -213,6 +222,7 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
     pendingByParty,
     unnamed,
     pendingTotal: grouped.pendingTotal,
+    reviewable: grouped.pendingTotal > 0 || unnamed.length > 0,
     // Already-asked members get "not finished", not a second invite.
     empty: facts.faces.length > 0 ? PEOPLE_PENDING_EMPTY : PEOPLE_EMPTY,
     detectFaces: detectFacesFor(tier),

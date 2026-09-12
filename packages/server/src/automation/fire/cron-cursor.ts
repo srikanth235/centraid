@@ -1,12 +1,16 @@
 import type { AutomationTriggerCursor } from "@centraid/server/engine";
 
 import { wallClockFields, wallClockMinuteKey } from "../cron-timezone.js";
+import { MAX_BACKFILL_OCCURRENCES } from "../manifest/manifest.js";
+import type { CronBackfillClass } from "../manifest/manifest.js";
 import { cronMatches } from "./cron-match.js";
 import type { CursorReadResult } from "./cursor-engine.js";
 
 export type CronSchedule = {
   readonly expr: string;
   readonly timeZone?: string;
+  /** @see CronTrigger.backfill (#1014, B9). Absent means the default class. */
+  readonly backfill?: CronBackfillClass;
 };
 
 export function floorMinute(time: number): number {
@@ -25,7 +29,11 @@ function asSchedules(
   return exprsOrSchedules.map((entry) =>
     typeof entry === "string"
       ? { expr: entry }
-      : { expr: entry.expr, timeZone: entry.timeZone }
+      : {
+          expr: entry.expr,
+          timeZone: entry.timeZone,
+          backfill: entry.backfill,
+        }
   );
 }
 
@@ -135,7 +143,13 @@ export function readCronCursor(
     }
   }
   const from = Number.isFinite(parsed) ? parsed : to - 60_000;
-  const due = deliverableInstants(asSchedules(exprsOrSchedules), from, to);
+  const schedules = asSchedules(exprsOrSchedules);
+  const due = deliverableInstants(schedules, from, to);
+  // THE BACKFILL CLASS (#1014, B9, ruling R-1014-9). A poll's missed
+  // occurrences are one fetch — collapsing them is right. A per-occurrence
+  // recipe's missed occurrences are two reminders nobody got, so `each`
+  // delivers every one of them, bounded, with the remainder still a gap.
+  const eachClass = schedules.some((schedule) => schedule.backfill === "each");
   const latest = due.at(-1);
   if (!latest) {
     const bootstrap = cursor?.positionJson === undefined;
@@ -147,14 +161,19 @@ export function readCronCursor(
         : {}),
     };
   }
+  // Newest occurrences win the budget: a catch-up that can only deliver
+  // twenty-four is more useful ending at NOW than ending three days ago.
+  const delivered = eachClass ? due.slice(-MAX_BACKFILL_OCCURRENCES) : [latest];
+  const skipped = Math.max(0, due.length - delivered.length);
   return {
-    elements: [
-      { position: String(latest.getTime()), occurredAt: latest.getTime() },
-    ],
+    elements: delivered.map((instant) => ({
+      position: String(instant.getTime()),
+      occurredAt: instant.getTime(),
+    })),
     positionJson: JSON.stringify(to),
     windowFrom: from,
     windowTo: to,
-    skipped: Math.max(0, due.length - 1),
-    ...(due.length > 1 ? { gapReason: "scheduler_gap" } : {}),
+    skipped,
+    ...(skipped > 0 ? { gapReason: "scheduler_gap" } : {}),
   };
 }

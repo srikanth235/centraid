@@ -189,14 +189,17 @@ describe("integrity check library", () => {
       expect(finding.detail).toContain("change-log consistent");
     });
 
-    test("detects a replica_change row from a foreign epoch", () => {
+    test("detects a replica_log row from a foreign epoch", () => {
       const { db, vaultId } = seededVault();
       // The retention prune deletes every row whose epoch != current, so a
       // surviving foreign-epoch row is unrepresentable in a healthy log.
       db.vault
         .prepare(
-          `INSERT INTO replica_change (epoch, commit_id, entity, row_id, op, old_values_json, changed_at)
-           VALUES ('foreign-epoch-xyz', 'commit-1', 'core.party', '999', 'insert', NULL, '2020-01-01T00:00:00Z')`
+          `INSERT INTO replica_log
+             (commit_seq, epoch, schema_epoch, "table", op, pk_json, row_json,
+              producer, committed_at)
+           VALUES (1, 'foreign-epoch-xyz', 1, 'core_party', 'insert', '["999"]',
+                   NULL, 'test', '2020-01-01T00:00:00Z')`
         )
         .run();
       const finding = checkReplicaJournalConsistency({
@@ -209,12 +212,22 @@ describe("integrity check library", () => {
 
     test("detects an autoincrement watermark rewound below the max change seq", () => {
       const { db, vaultId } = seededVault();
-      // Bootstrap + blob ingests fire replica triggers, so there are rows and a
-      // sqlite_sequence entry. Rewinding it below the max seq is a rowid-reuse
-      // hazard the log's monotonic autoincrement is meant to prevent.
+      // A row at the current epoch, so the watermark has something to be
+      // rewound BELOW: rewinding `sqlite_sequence` under the log's high-water
+      // mark is the rowid-reuse hazard its monotonic autoincrement prevents.
       db.vault
         .prepare(
-          "UPDATE sqlite_sequence SET seq = 0 WHERE name = 'replica_change'"
+          `INSERT INTO replica_log
+             (commit_seq, epoch, schema_epoch, "table", op, pk_json, row_json,
+              producer, committed_at)
+           SELECT 1, epoch, 1, 'core_party', 'insert', '["999"]', NULL, 'test',
+                  '2026-01-01T00:00:00Z'
+             FROM replica_meta WHERE singleton = 1`
+        )
+        .run();
+      db.vault
+        .prepare(
+          "UPDATE sqlite_sequence SET seq = 0 WHERE name = 'replica_log'"
         )
         .run();
       const finding = checkReplicaJournalConsistency({

@@ -46,7 +46,11 @@ export function backupVerdict(
   custody?: CustodyStatus | null
 ): BackupVerdict {
   if (!queue.readable) return "unreadable";
-  if (queue.failures.length > 0) return "failing";
+  // A quarantined follow-up is a failure the queue's own counts cannot see:
+  // its bytes settled, so nothing is pending and nothing failed, and the
+  // vault holds content it has no row for (#1014, P7).
+  if (queue.failures.length > 0 || queue.poisonedFollowups > 0)
+    return "failing";
   if (queue.pending > 0) return "pending";
   // The queue is empty. The other half of the claim is the gateway's.
   if (!custody || custody.computedAt === null) return "unverified";
@@ -79,6 +83,21 @@ export function backupVerdictCopy(
         "Your vault has not confirmed it holds these yet — reconnect to check.",
       net: false,
       icon: "cloud",
+    };
+  }
+  if (
+    verdict === "failing" &&
+    queue.failures.length === 0 &&
+    queue.poisonedFollowups > 0
+  ) {
+    const stuck = queue.poisonedFollowups;
+    return {
+      verdict,
+      title: `${stuck} upload${stuck === 1 ? "" : "s"} could not be filed`,
+      detail:
+        "The bytes reached your vault; the record of them did not. Reconnect and reopen this screen.",
+      net: true,
+      icon: "cloud-off",
     };
   }
   if (verdict === "failing" && queue.failures.length === 0) {

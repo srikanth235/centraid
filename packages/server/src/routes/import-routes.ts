@@ -17,6 +17,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { assertPassphraseFloor } from "@centraid/backup";
 import {
   importPortableVault,
   isMediaPath,
@@ -190,6 +191,20 @@ export function makeImportRouteHandler(
           method === "POST"
             ? String((await readJson(req)).passphrase ?? "")
             : "";
+        // THE FLOOR IS THE DOOR'S TOO (#1014, X13). `wrapPasswordDocument`
+        // enforces it, but a rejection from inside the export would surface
+        // as a 500 for what is an ordinary bad request — the owner gets a
+        // failed export instead of a sentence telling them what to type.
+        if (passphrase.length > 0) {
+          try {
+            assertPassphraseFloor("custody kit", passphrase);
+          } catch (error) {
+            return sendJson(res, 400, {
+              error: "weak_passphrase",
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
         const exported = await plane.gateway.exportPortableVault(
           owner,
           passphrase.length > 0 ? { passphrase } : {}

@@ -98,10 +98,11 @@ describe("openLedgerDb (the conversation-ledger band of vault.db)", () => {
     // and opening does not move it.
     const pathLocal = freshDbPath();
     const before = userVersion(pathLocal);
-    // Seven rungs: #929's three, the #928 ask tables (#972), #996's Locker key
-    // plane and its unlock-credential drop; the number is the VAULT's, which
-    // is the point.
-    expect(before).toBe(7);
+    // Eleven rungs: #929's three, the #928 ask tables (#972), #996's Locker
+    // key plane and its unlock-credential drop, and #1014's replica floor
+    // split, poison registers, one-log retirement and transient blob holds;
+    // the number is the VAULT's, which is the point.
+    expect(before).toBe(11);
     openLedgerDb(pathLocal).close();
     expect(userVersion(pathLocal)).toBe(before);
     // A BARE path is not a ledger: without the vault's DDL there is no band,

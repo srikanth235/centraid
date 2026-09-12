@@ -140,6 +140,40 @@ describe("link ceremony party↔vault bindings", () => {
     expect(party.display_name).toBe("Priya");
   });
 
+  test("the mirror party is named after the PERSON when we can ask (#1014 S4)", async () => {
+    const { store, home, peer } = await open();
+    // The peer vault is mounted here, and it knows what its owner is called.
+    // The vault's DIRECTORY label is a different fact — "Family", not "Bob" —
+    // and a shared-with list that reads it names households, not people.
+    const now = new Date().toISOString();
+    peer.vault
+      .prepare(
+        `INSERT INTO core_party
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
+         VALUES (?, 'person', 'Bob', 'Bob', ?, ?)`
+      )
+      .run(PEER_PARTY, now, now);
+    const link = store.propose({
+      fromVaultId: HOME,
+      fromPublicKey: keyHome,
+      toVaultId: PEER,
+      toPublicKey: keyPeer,
+      fromPartyId: HOME_PARTY,
+      toPartyId: PEER_PARTY,
+      fromLabel: "Personal",
+      toLabel: "Family",
+    });
+    store.approve(link.linkId, PEER);
+
+    expect(
+      (
+        home.vault
+          .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
+          .get(PEER_PARTY) as { display_name: string }
+      ).display_name
+    ).toBe("Bob");
+  });
+
   test("re-approving is idempotent — no second row, no UNIQUE failure", async () => {
     const { store, home } = await open();
     const link = proposeLink(store);

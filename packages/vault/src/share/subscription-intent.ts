@@ -38,6 +38,44 @@ export interface MemberIntentEnvelope {
     rowId: string;
     version: number;
   }[];
+  /**
+   * WHEN THIS ENVELOPE STOPS BEING AN OFFER (#1014, V7). A signed member
+   * intent used to be good forever: anything that captured one — a relay, a
+   * backup of the member's outbox, a log — could present it again months
+   * later and the origin would run it. An expiry inside the SIGNED bytes is
+   * what makes the replay window finite, and it has to be signed or the
+   * replayer simply edits it.
+   */
+  expiresAt?: string;
+  /**
+   * A per-send random string, also signed. It costs nothing and it means two
+   * envelopes that are otherwise identical — the same member re-composing the
+   * same edit against the same base — are distinguishable byte for byte, so a
+   * captured signature can never stand in for a later one.
+   */
+  nonce?: string;
+}
+
+/** How long a member's signed envelope stays presentable (#1014, V7). */
+export const MEMBER_INTENT_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+/**
+ * Has this envelope aged out of its own window?
+ *
+ * An envelope that states no expiry is NOT expired: `expiresAt` is a trailing
+ * field the bytes only carry when it is present (see `memberIntentBytes`), so
+ * a peer built before #1014 keeps working exactly as it did. A peer that
+ * states one is held to it.
+ */
+export function memberIntentExpired(
+  envelope: MemberIntentEnvelope,
+  now: Date = new Date()
+): boolean {
+  if (envelope.expiresAt === undefined) return false;
+  const at = new Date(envelope.expiresAt).getTime();
+  // An unparseable instant is not a licence to run forever.
+  if (Number.isNaN(at)) return true;
+  return at <= now.getTime();
 }
 
 /**
@@ -62,6 +100,14 @@ export function memberIntentBytes(envelope: MemberIntentEnvelope): Buffer {
       version.rowId,
       version.version,
     ]),
+    // THE WINDOW RIDES ONLY WHEN IT IS STATED (#1014, V7). Appended as a
+    // trailing pair rather than always present, so an envelope from a peer
+    // that predates the replay window signs and verifies exactly the bytes it
+    // always did — and a replayer who STRIPS the pair off a newer envelope
+    // gets the older form, whose bytes the signature does not cover.
+    ...(envelope.expiresAt === undefined && envelope.nonce === undefined
+      ? []
+      : [[envelope.expiresAt ?? "", envelope.nonce ?? ""]]),
   ]);
   return Buffer.from(canonical, "utf8");
 }

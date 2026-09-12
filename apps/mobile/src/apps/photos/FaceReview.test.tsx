@@ -171,6 +171,17 @@ vi.mock(import("react-native"), async () => {
   } as unknown as Partial<ReactNative>;
 });
 
+// #1014, R12: the screen mints a party id for "New person…" and expo-crypto
+// is a native module.
+vi.mock(
+  import("expo-crypto"),
+  () =>
+    ({
+      randomUUID: vi.fn<() => string>(
+        () => "00000000-0000-4000-8000-000000000000"
+      ),
+    }) as never
+);
 vi.mock(
   import("expo-image"),
   () =>
@@ -215,6 +226,11 @@ vi.mock(
     ({
       Text: ({ children }: { children?: React.ReactNode }) =>
         React.createElement("span", {}, children),
+      TextInput: (props: Record<string, unknown>) =>
+        React.createElement("input", {
+          "aria-label": props["accessibilityLabel"],
+          placeholder: props["placeholder"],
+        }),
     }) as never
 );
 vi.mock(

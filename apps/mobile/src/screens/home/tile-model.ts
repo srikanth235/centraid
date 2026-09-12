@@ -36,7 +36,7 @@ export interface TileDocRow {
 }
 
 export type TileBody =
-  | { kind: "photos"; photos: TilePhoto[] }
+  | { kind: "photos"; photos: TilePhoto[]; offlinePack: boolean }
   | { kind: "docs"; rows: TileDocRow[] }
   | { kind: "agenda"; title: string; at: string; after: string }
   | { kind: "people"; faces: TileFace[]; more: number }
@@ -131,6 +131,17 @@ export function selectPhotoMosaic(
 
 export function mosaicAwaitingBytes(photos: readonly TilePhoto[]): boolean {
   return photos.length > 0 && photos.every((photo) => !photo.uri);
+}
+
+/** WHY THESE CELLS ARE BLANK (#1014, R16). The tile used to say the same thing
+ *  either way — "they live on the gateway" — while this phone was holding a
+ *  pinned thumbnail pack for the very same vault, which reads as the offline
+ *  copy not working. With a pack in place the honest answer is that these
+ *  particular photographs are not in it. */
+export function mosaicWaitingCopy(offlinePack: boolean): string {
+  return offlinePack
+    ? "These are not in this phone's offline copy — they fill in when the gateway is back."
+    : "Photographs live on the gateway — these fill in when it is back.";
 }
 
 /** One row, fixed count — no-reflow: only cell contents change. Mobile never draws desktop's second row. */

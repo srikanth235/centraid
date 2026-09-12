@@ -12,7 +12,9 @@
 // Every control but Skip is a real `answer-face` write (#712). Dismiss means
 // "reviewed, deliberately unnamed" — without it declined strangers return on
 // the next pull. "Someone else" picks people already confirmed here; no
-// command mints a new one. Progress arithmetic is `triage-session`.
+// command mints a new one beyond the member's own "New person…" (#1014, R12).
+// Progress arithmetic is `triage-session`.
+import * as Crypto from "expo-crypto";
 import { Image } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, View } from "react-native";
@@ -44,11 +46,15 @@ import type { PhotosScreenProps } from "../../navigation";
 import {
   ANSWER_FAILURE,
   CROP_PX,
+  faceRunnerLabel,
   formatFirstSeen,
+  nameableParties,
   safeParseBBox,
 } from "./face-review-model";
+import type { FaceProvenanceRow, NameablePartyRow } from "./face-review-model";
 import { buildQueue } from "./face-review-queue";
 import type { AssetRow, FaceRegionRow } from "./face-review-queue";
+import FaceNamePicker from "./FaceNamePicker";
 import { styles } from "./FaceReview.styles";
 import { usePhotoEntity } from "./photo-entity-reads";
 import PhotosScreen from "./PhotosScreen";
@@ -96,14 +102,22 @@ export default function FaceReview({
       ),
     [partiesQuery.rows]
   );
+  // A FACE IS A PERSON (#1014, R12): the enrichment recipes each enrol as a
+  // `core_party`, and the picker listed all of them.
   const people = useMemo(
-    () =>
-      partiesQuery.rows.map((row) => ({
-        partyId: String(row.party_id),
-        name: String(row.display_name ?? "Unnamed"),
-      })),
+    () => nameableParties(partiesQuery.rows as unknown as NameablePartyRow[]),
     [partiesQuery.rows]
   );
+  const provenanceQuery = usePhotoEntity("faceProvenance");
+  const agentNameOf = useMemo(() => {
+    const byId = new Map(
+      partiesQuery.rows.map((row) => [
+        String(row.party_id),
+        row.display_name == null ? undefined : String(row.display_name),
+      ])
+    );
+    return (agentId: string): string | undefined => byId.get(agentId);
+  }, [partiesQuery.rows]);
   const queue = useMemo(
     () =>
       buildQueue(
@@ -122,6 +136,7 @@ export default function FaceReview({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [newName, setNewName] = useState("");
   // Frozen at first non-empty load: the numerator counts up as the member
   // works, rather than the denominator sliding as new proposals land.
   const [sessionStartTotal, setSessionStartTotal] = useState<number | null>(
@@ -192,6 +207,42 @@ export default function FaceReview({
       return false;
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * NAME A FACE AS SOMEBODY THE VAULT DOES NOT KNOW YET (#1014, R12). Before
+   * this the picker could only offer parties that already existed, so on a
+   * fresh library the only nameable person was Owner and every other face had
+   * to stay unnamed.
+   *
+   * TWO WRITES, THE ID MINTED HERE. `people.add-person` reuses a `party_id` it
+   * is given (the pending projection mints one only when the write carries
+   * none), so minting it here is what lets the `answer-face` that follows name
+   * the row the first write is creating — including offline, where both sit in
+   * the outbox in order.
+   */
+  async function nameNewPerson(): Promise<void> {
+    const name = newName.trim();
+    if (!replicaSession || busy || name.length === 0) return;
+    setNote(null);
+    setBusy(true);
+    let added = false;
+    try {
+      const partyId = Crypto.randomUUID();
+      const result = await replicaSession.write("people", {
+        action: "add-person",
+        input: { party_id: partyId, display_name: name },
+      });
+      if (!surfaceWriteOutcome(result)) return;
+      added = true;
+      setBusy(false);
+      await confirm(partyId, name);
+      setNewName("");
+    } catch (error) {
+      surfaceWriteFailure(error, "Person not added");
+    } finally {
+      if (!added) setBusy(false);
     }
   }
 
@@ -387,7 +438,11 @@ export default function FaceReview({
                       where it ran
                     </Text>
                     <Text style={[styles.factValue, { color: colors.text }]}>
-                      on this device
+                      {faceRunnerLabel(
+                        current.regionId,
+                        provenanceQuery.rows as unknown as FaceProvenanceRow[],
+                        agentNameOf
+                      )}
                     </Text>
                   </View>
                 </View>
@@ -464,14 +519,10 @@ export default function FaceReview({
                   <Tappable
                     accessibilityLabel="Name this face"
                     accessibilityHint={
-                      busy
-                        ? "Face review is updating."
-                        : people.length === 0
-                          ? "No named people are available."
-                          : undefined
+                      busy ? "Face review is updating." : undefined
                     }
                     accessibilityRole="button"
-                    disabled={busy || people.length === 0}
+                    disabled={busy}
                     onPress={() => setPickerOpen((v) => !v)}
                   >
                     <Text
@@ -482,25 +533,16 @@ export default function FaceReview({
                   </Tappable>
                 </View>
                 {pickerOpen ? (
-                  <View style={styles.picker}>
-                    {people
-                      .filter((p) => p.partyId !== current.partyId)
-                      .map((p) => (
-                        <Pressable
-                          key={p.partyId}
-                          accessibilityRole="button"
-                          disabled={busy}
-                          onPress={() => void confirm(p.partyId, p.name)}
-                          style={[styles.action, { borderColor: colors.line }]}
-                        >
-                          <Text
-                            style={[styles.actionText, { color: colors.text }]}
-                          >
-                            {p.name}
-                          </Text>
-                        </Pressable>
-                      ))}
-                  </View>
+                  <FaceNamePicker
+                    busy={busy}
+                    colors={colors}
+                    newName={newName}
+                    onAddNewPerson={() => void nameNewPerson()}
+                    onNewNameChange={setNewName}
+                    onPick={(partyId, name) => void confirm(partyId, name)}
+                    people={people}
+                    proposedPartyId={current.partyId ?? undefined}
+                  />
                 ) : null}
                 <View
                   style={[

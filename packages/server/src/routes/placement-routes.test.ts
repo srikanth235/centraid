@@ -22,7 +22,12 @@ import { describe, expect, test } from "vitest";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { blobUriFor, bootstrapVault, openVaultDb } from "@centraid/vault";
+import {
+  blobUriFor,
+  bootstrapVault,
+  openVaultDb,
+  placeItemsInVault,
+} from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
@@ -400,5 +405,203 @@ describe("[law:share-receipt-authority] POST/GET /centraid/_gateway/edges", () =
     expect(answer.status).toBe(400);
     expect(answer.body.error).toBe("invalid_edge");
     expect(receiptCount(house.gatewayDb)).toBe(0);
+  });
+});
+
+/*
+ * A CRASH AT EVERY STEP, THEN THE RETRY (#1014, V3).
+ *
+ * A placement is three transactions over three databases — the origin's
+ * authority, the audience's projection, and for a move the origin's release —
+ * and the receipt is written after all three. So the interesting question is
+ * not "does the happy path work" but "what does the phone's outbox find when
+ * it retries the same token after a kill at each step".
+ */
+describe("a placement killed part-way (#1014, V3)", () => {
+  /** Where the process dies. `place` is the whole vault half of the act. */
+  type Kill = "before-place" | "after-place";
+
+  function dying(house: Household, kill: Kill): Household["handler"] {
+    const real = placeItemsInVault;
+    return makePlacementRouteHandler({
+      gatewayDatabase: house.gatewayDb,
+      enrollments: EnrollmentStore.open(house.gatewayDb),
+      links: house.links,
+      vaultFor: (vaultId) =>
+        vaultId === WORK
+          ? house.work
+          : vaultId === PERSONAL
+            ? house.personal
+            : undefined,
+      partyIdFor: () => "edge-party",
+      place: (input) => {
+        if (kill === "before-place")
+          throw new Error("killed before the vaults");
+        // The vault work really happened; the receipt never got written.
+        real(input);
+        throw new Error("killed after the vaults, before the receipt");
+      },
+    });
+  }
+
+  function attemptCount(db: GatewayDatabase): number {
+    return (
+      db.db
+        .prepare("SELECT count(*) AS n FROM share_placement_attempts")
+        .get() as { n: number }
+    ).n;
+  }
+
+  test("resumes to exactly one audience row and one receipt", async () => {
+    const house = household();
+    const noteId = seedNote(house.work, "resumed");
+
+    // Killed AFTER the vaults: the item is in the audience and the gateway has
+    // no receipt. Before #1014 nothing on the gateway recorded that this
+    // placement had begun at all.
+    const first = await call(
+      { ...house, handler: dying(house, "after-place") },
+      {
+        method: "POST",
+        deviceId: house.laptop,
+        body: {
+          edgeId: "edge-crash",
+          originVaultId: WORK,
+          audienceVaultId: PERSONAL,
+          mode: "snapshot",
+          kind: "add",
+          itemType: "core.content_item",
+          itemIds: [noteId],
+          verbs: "read",
+        },
+      }
+    );
+    expect(first.status).toBe(502);
+    expect(noteCount(house.personal)).toBe(1);
+    expect(receiptCount(house.gatewayDb)).toBe(0);
+    // The unfinished act is visible instead of silent.
+    expect(attemptCount(house.gatewayDb)).toBe(1);
+
+    // The outbox retries the same token. Each vault step is idempotent by id,
+    // so the resume converges rather than placing a second copy.
+    const retried = await give(house, house.laptop, "edge-crash", [noteId]);
+    expect(retried.status).toBe(200);
+    expect(noteCount(house.personal)).toBe(1);
+    expect(receiptCount(house.gatewayDb)).toBe(1);
+    // And the attempt is superseded by the receipt.
+    expect(attemptCount(house.gatewayDb)).toBe(0);
+  });
+
+  test("a move killed after the vaults leaves the item in one vault, not both", async () => {
+    const house = household();
+    const noteId = seedNote(house.work, "moved-crash");
+    const body = {
+      edgeId: "edge-move-crash",
+      originVaultId: WORK,
+      audienceVaultId: PERSONAL,
+      mode: "snapshot",
+      kind: "move",
+      itemType: "core.content_item",
+      itemIds: [noteId],
+      verbs: "read",
+    };
+    const killed = await call(
+      { ...house, handler: dying(house, "after-place") },
+      { method: "POST", deviceId: house.laptop, body }
+    );
+    expect(killed.status).toBe(502);
+
+    const retried = await call(house, {
+      method: "POST",
+      deviceId: house.laptop,
+      body,
+    });
+    expect(retried.status).toBe(200);
+    expect(noteCount(house.personal)).toBe(1);
+    expect(noteCount(house.work)).toBe(0);
+    expect(receiptCount(house.gatewayDb)).toBe(1);
+  });
+
+  test("a move killed after the receipt still releases the origin on retry", async () => {
+    const house = household();
+    const noteId = seedNote(house.work, "release-crash");
+    const body = {
+      edgeId: "edge-release-crash",
+      originVaultId: WORK,
+      audienceVaultId: PERSONAL,
+      mode: "snapshot",
+      kind: "move",
+      itemType: "core.content_item",
+      itemIds: [noteId],
+      verbs: "read",
+    };
+    const noRelease = makePlacementRouteHandler({
+      gatewayDatabase: house.gatewayDb,
+      enrollments: EnrollmentStore.open(house.gatewayDb),
+      links: house.links,
+      vaultFor: (vaultId) =>
+        vaultId === WORK
+          ? house.work
+          : vaultId === PERSONAL
+            ? house.personal
+            : undefined,
+      partyIdFor: () => "edge-party",
+      release: () => {
+        throw new Error("killed after the receipt, before the release");
+      },
+    });
+    const killed = await call(
+      { ...house, handler: noRelease },
+      { method: "POST", deviceId: house.laptop, body }
+    );
+    expect(killed.status).toBe(502);
+    // The window this ORDER chooses: in both vaults, receipted, recoverable.
+    expect(noteCount(house.personal)).toBe(1);
+    expect(noteCount(house.work)).toBe(1);
+    expect(receiptCount(house.gatewayDb)).toBe(1);
+    expect(attemptCount(house.gatewayDb)).toBe(1);
+
+    // The retry must NOT short-circuit on the receipt: nothing else ever
+    // revisits a receipted placement, so the item would sit in both forever.
+    const retried = await call(house, {
+      method: "POST",
+      deviceId: house.laptop,
+      body,
+    });
+    expect(retried.status).toBe(200);
+    expect(noteCount(house.personal)).toBe(1);
+    expect(noteCount(house.work)).toBe(0);
+    expect(receiptCount(house.gatewayDb)).toBe(1);
+    expect(attemptCount(house.gatewayDb)).toBe(0);
+  });
+
+  test("refuses a token re-addressed to a different placement", async () => {
+    const house = household();
+    const first = seedNote(house.work, "first");
+    const second = seedNote(house.work, "second");
+    await call(
+      { ...house, handler: dying(house, "before-place") },
+      {
+        method: "POST",
+        deviceId: house.laptop,
+        body: {
+          edgeId: "edge-reused",
+          originVaultId: WORK,
+          audienceVaultId: PERSONAL,
+          mode: "snapshot",
+          kind: "add",
+          itemType: "core.content_item",
+          itemIds: [first],
+          verbs: "read",
+        },
+      }
+    );
+    // ONE TOKEN IS ONE ACT: a retry that re-addresses a placement in flight
+    // would place items nobody asked for under a token the caller believes
+    // settled.
+    const reused = await give(house, house.laptop, "edge-reused", [second]);
+    expect(reused.status).toBe(409);
+    expect(reused.body.error).toBe("placement_id_reused");
+    expect(noteCount(house.personal)).toBe(0);
   });
 });

@@ -13,7 +13,6 @@ import { fileURLToPath } from "node:url";
 
 import {
   ConversationStore,
-  makeLedgerDbProvider,
   ProviderEgressConsentStore,
 } from "@centraid/server/engine";
 import type { RunTurnFn } from "@centraid/server/engine";
@@ -29,9 +28,11 @@ import {
   registerLockerCommands,
   registerPeopleCommands,
   registerScheduleCommands,
+  withReplicaCommit,
 } from "@centraid/vault";
 import type { Credential, Gateway, VaultDb } from "@centraid/vault";
 
+import { makeReplicatedLedgerDbProvider } from "../../replicated-ledger-db.js";
 import { startLiveDispatch } from "../automation/run-automation-live-dispatch.js";
 import { runFake, vaultToolContext } from "../backends/acp/test-fixtures.js";
 import type { HarnessKind } from "../types.js";
@@ -89,12 +90,17 @@ export function buildScenario(): Scenario {
   registerLockerCommands(gw);
   registerPeopleCommands(gw);
 
-  db.vault
-    .prepare(
-      `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, default_tz, visibility)
-       VALUES (?, ?, 'Personal', 'Asia/Kolkata', 'private')`
-    )
-    .run("cal-inject-1", boot.ownerPartyId);
+  // Bracketed like any other raw write to a replicated table (#1014): the
+  // scenario vault is a real vault, and a seeded row that never reaches the log
+  // is a scenario that does not match what the product would have produced.
+  withReplicaCommit(db.vault, () =>
+    db.vault
+      .prepare(
+        `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, default_tz, visibility)
+         VALUES (?, ?, 'Personal', 'Asia/Kolkata', 'private')`
+      )
+      .run("cal-inject-1", boot.ownerPartyId)
+  );
 
   const agent = enrollAgent(db, { name: "assistant", modelRef: "model-x" });
   const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
@@ -233,12 +239,14 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   openVaultDb({ dir: workdir }).close({ skipOptimize: true });
   const ledgerDbFile = path.join(workdir, "vault.db");
   const automationRef = "demo/nightly";
-  const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
+  const store = new ConversationStore(
+    makeReplicatedLedgerDbProvider(ledgerDbFile)
+  );
   store.ensureAutomationConversation(automationRef, "demo", "Nightly", "codex");
   store.close();
   // Ladder holds codex only; the injected provider is not a member.
   const consent = new ProviderEgressConsentStore(
-    makeLedgerDbProvider(ledgerDbFile),
+    makeReplicatedLedgerDbProvider(ledgerDbFile),
     (member) => member === "codex"
   );
   const before = consent.has(automationRef, kind, "automations");

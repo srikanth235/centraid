@@ -43,7 +43,10 @@ import {
   writeTransferPolicy,
 } from "../kit/transfer/transfer-policy";
 import type { TransferPolicy } from "../kit/transfer/transfer-policy";
-import { readTransferQueue } from "../kit/transfer/transfer-queue";
+import {
+  readTransferQueue,
+  retryTransfer,
+} from "../kit/transfer/transfer-queue";
 import type { TransferQueueCounts } from "../kit/transfer/transfer-queue";
 import { drainUploadQueueNow } from "../lib/upload/boot";
 import { LAST_SUCCESSFUL_SYNC_KEY } from "../lib/upload/native-policy";
@@ -64,6 +67,7 @@ const EMPTY_QUEUE: TransferQueueCounts = {
   pendingVideos: 0,
   bytes: 0,
   failures: [],
+  poisonedFollowups: 0,
   readable: true,
 };
 
@@ -478,11 +482,42 @@ export default function BackupHealth({
       </Text>
       <FreeUpBlock offer={offer} />
 
-      {queue.failures.map((failure, index) => (
-        <Text key={index} style={[styles.error, { color: colors.net }]}>
-          {failure.filename ?? "Asset"}: {failure.lastError}
-        </Text>
+      {queue.failures.map((failure) => (
+        <View key={failure.itemId} style={styles.failureRow}>
+          <Text style={[styles.error, { color: colors.net }]}>
+            {failure.filename ?? "Asset"}: {failure.lastError}
+            {failure.terminal ? "" : " — trying again"}
+          </Text>
+          {/* A transfer that gave up needs a verb, not only a sentence
+              (#1014, P7): before this it was in no list at all. */}
+          {failure.terminal && gatewayBase ? (
+            <Pressable
+              accessibilityLabel={`Retry ${failure.filename ?? "this transfer"}`}
+              accessibilityRole="button"
+              onPress={() => {
+                retryTransfer(gatewayBase, failure.itemId);
+                readQueueInto(gatewayBase, setQueue);
+              }}
+              style={[styles.settings, { borderColor: colors.line }]}
+            >
+              <Text style={[styles.settingsText, { color: colors.text }]}>
+                Retry
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       ))}
+      {/* Bytes durable in the CAS whose canonical write never landed: the
+          vault holds the content and has no row for it (F4). The count had
+          no reader at all before #1014. */}
+      {queue.poisonedFollowups > 0 ? (
+        <Text style={[styles.error, { color: colors.net }]}>
+          {queue.poisonedFollowups} upload
+          {queue.poisonedFollowups === 1 ? "" : "s"} reached your vault but
+          could not be filed. Reconnect and reopen this screen; if they stay,
+          report it — the bytes are safe.
+        </Text>
+      ) : null}
       {Platform.OS === "android" ? (
         <Pressable
           accessibilityLabel="Open battery optimization settings"

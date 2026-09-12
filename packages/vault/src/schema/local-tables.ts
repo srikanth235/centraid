@@ -7,7 +7,17 @@
 // `ledger`, the two append-heavy bands that joined the one file under #916.
 // Both are named from their band modules (`AUDIT_BAND_TABLES`,
 // `LEDGER_BAND_TABLES`) so adding a table to either cannot silently add it to
-// the portable export or to the replica — the exclusion follows the band.
+// the portable export — the exclusion follows the band.
+//
+// UNREGISTERED IS NOT UNREPLICATED (#1014, X3). This list governs the
+// CANONICAL WALK — export, consent scope, Atlas census, and the trigger log
+// #1014 retires. It does not govern the seat: a seat holds `vault.db` whole
+// (#996, R1) and takes its shape from the allow-list in `private-tables.ts`,
+// which names every band table on purpose (the phone's conversation history
+// and Locker access log ARE these bands). The reason lines below said "never
+// exported or replicated" and the second half was false for every seat
+// shipped. What the seat does not get is stated where it is enforced:
+// `PRIVATE_TABLES` by table, `REPLICATED_COLUMN_EXCLUSIONS` by JSON key.
 
 import { AUDIT_BAND_TABLES } from "./audit.js";
 import { LEDGER_BAND_TABLES } from "./ledger.js";
@@ -32,17 +42,17 @@ import { LEDGER_BAND_TABLES } from "./ledger.js";
 const BAND_EXCLUSIONS: [string, string][] = [
   ...AUDIT_BAND_TABLES.map(
     (t) =>
-      [
-        t,
-        "the `audit` band — append-only evidence, never exported or replicated",
-      ] as [string, string]
-  ),
-  ...LEDGER_BAND_TABLES.map(
-    (t) =>
-      [t, "the `ledger` band — the engine's conversation transcript"] as [
+      [t, "the `audit` band — append-only evidence, never exported"] as [
         string,
         string,
       ]
+  ),
+  ...LEDGER_BAND_TABLES.map(
+    (t) =>
+      [
+        t,
+        "the `ledger` band — the engine's conversation transcript, never exported",
+      ] as [string, string]
   ),
 ];
 
@@ -72,11 +82,16 @@ export const LOCAL_TABLES: ReadonlyMap<string, string> = new Map([
   ["blob_outbox", "this device's queue of objects still to be replicated"],
   ["blob_replica", "which objects this device has proven are also remote"],
   ["blob_staging", "bytes staged for a command that has not committed yet"],
+  // The enrichment pipeline's poison register (#1014, B2). Derived twice
+  // over: it records what THIS host failed to derive, and a restore re-derives
+  // it by simply attempting the work again. `enrich_request` next door is
+  // registered because a seat's request is data the member made; a failure
+  // count is a fact about one gateway's attempts.
+  ["enrich_target_failure", "one host's per-target enrichment failure counter"],
   // The replica protocol's own plane. Its whole job is to describe changes to
   // registered rows; a change log inside the export it feeds would be a loop.
-  ["replica_change", "the change log itself — the mechanism, not the data"],
   ["replica_log", "the gateway log itself — the mechanism, not the data"],
-  ["replica_meta", "this vault's replica epoch, floor and trigger marker"],
+  ["replica_meta", "this vault's replica epoch, floor and commit position"],
   ["replica_intent_outcome", "device-scoped outcome of one submitted intent"],
   ["replica_invocation_commit", "the commit group one invocation wrote"],
   ["replica_parked_payload", "a sealed request awaiting the member's answer"],

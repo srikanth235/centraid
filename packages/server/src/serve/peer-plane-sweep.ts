@@ -95,6 +95,13 @@ export function createPeerPlaneSweep(
                 ?.route,
             now: () => new Date().toISOString(),
             limit: rowLimit,
+            // The owner reads a PERSON in a stalled-delivery notice, not a
+            // vault id (#1014, T15).
+            peerLabelFor: (peerVaultId) =>
+              options.links.peerForVault(peerVaultId, origin.vaultId)
+                ?.peerLabel ??
+              options.links.directoryEntry(peerVaultId)?.label ??
+              undefined,
           });
           delivered += steps.filter(
             (step) => step.result.outcome !== "unreachable"

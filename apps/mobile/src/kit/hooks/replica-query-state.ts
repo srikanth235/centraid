@@ -51,6 +51,7 @@ export function replicaQueryConnection(input: {
   reachability?:
     | "device-offline"
     | "gateway-asleep"
+    | "gateway-refusing"
     | "sync-paused"
     | "syncing"
     | "current";
@@ -61,6 +62,11 @@ export function replicaQueryConnection(input: {
   if (
     input.reachability === "device-offline" ||
     input.reachability === "gateway-asleep" ||
+    // A refusal reads as `offline` for the same reason a pause does (#1014,
+    // P11): what this enum tells an APP is whether the rows may be stale, and
+    // under a refusal they certainly may. Why it happened, and the fact that
+    // waking is not the remedy, is the status bar's sentence.
+    input.reachability === "gateway-refusing" ||
     // A paused sync reads as `offline` here rather than gaining a sixth value
     // every consumer would have to learn: what this enum tells an app is
     // whether the rows may be stale, and under the member's own transfer rules

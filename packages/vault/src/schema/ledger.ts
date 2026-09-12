@@ -538,3 +538,16 @@ END;
 
 
 `;
+
+/**
+ * A TRIGGER ELEMENT THAT COULD NOT BE RUN (#1014, B1).
+ *
+ * The cursor engine's write-ahead batch is transient by design: it exists
+ * until the batch settles and then goes. A dead-lettered element must OUTLIVE
+ * it — that is the whole point of not acking silently — so the settled cursor
+ * row carries the bounded tail of what it gave up on, and health and the
+ * automations surface read it from there.
+ */
+export const AUTOMATION_TRIGGER_DEAD_LETTER_DDL = `
+ALTER TABLE automation_trigger_cursor ADD COLUMN dead_letter_json TEXT;
+`;

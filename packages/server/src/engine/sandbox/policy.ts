@@ -31,6 +31,14 @@ export interface SandboxPolicy {
   readonly subprocess: "denied" | "allowed";
   readonly nativeAddons: boolean;
   readonly environment: "denied" | "inherited";
+  /**
+   * `node:worker_threads` (#1014, R9). `"denied"` is the floor and the reason
+   * is SPAWNING: a `new Worker(...)` runs on a thread the module hooks never
+   * reached. `"identity-only"` substitutes `confined-worker-threads.ts` — the
+   * two facts about the current thread that a native runtime reads at load,
+   * and no constructor.
+   */
+  readonly workerThreads: "denied" | "identity-only";
 }
 
 /** The shared floor: no ambient authority. Deliberately absent — `module`
@@ -62,6 +70,7 @@ export const COMPUTATIONAL_BUILTINS: readonly string[] = Object.freeze([
 
 export const FS_BUILTIN = "fs";
 export const FS_PROMISES_BUILTIN = "fs/promises";
+export const WORKER_THREADS_BUILTIN = "worker_threads";
 
 export function appHandlerPolicy(): SandboxPolicy {
   return {
@@ -72,6 +81,7 @@ export function appHandlerPolicy(): SandboxPolicy {
     subprocess: "denied",
     nativeAddons: false,
     environment: "denied",
+    workerThreads: "denied",
   };
 }
 
@@ -88,6 +98,7 @@ export function appSeedPolicy(appDir: string): SandboxPolicy {
     subprocess: "denied",
     nativeAddons: false,
     environment: "denied",
+    workerThreads: "denied",
   };
 }
 
@@ -100,6 +111,7 @@ export function automationHandlerPolicy(): SandboxPolicy {
     subprocess: "denied",
     nativeAddons: false,
     environment: "denied",
+    workerThreads: "denied",
   };
 }
 
@@ -119,6 +131,10 @@ export function modelRuntimePolicy(
     subprocess: "denied",
     nativeAddons: true,
     environment: "denied",
+    // The native runtime this lane exists for reads `isMainThread` at load
+    // and cannot be loaded without it (#1014, R9). The mirror gives it that
+    // and no `Worker` — see `confined-worker-threads.ts`.
+    workerThreads: "identity-only",
   };
 }
 
@@ -143,6 +159,7 @@ export function systemAutomationPolicy(): SandboxPolicy {
   return {
     lane: "system",
     allowedBuiltins: ALL_BUILTINS,
+    workerThreads: "identity-only",
     filesystem: "unrestricted",
     network: "allowed",
     subprocess: "allowed",
@@ -213,6 +230,7 @@ const KNOWN_BUILTINS: ReadonlySet<string> = new Set(
 export type BuiltinDecision =
   | { readonly kind: "allow" }
   | { readonly kind: "confined-fs"; readonly promises: boolean }
+  | { readonly kind: "confined-worker-threads" }
   | { readonly kind: "deny"; readonly reason: string };
 
 export function builtinDecision(
@@ -230,6 +248,17 @@ export function builtinDecision(
       };
     }
     return { kind: "confined-fs", promises: id === FS_PROMISES_BUILTIN };
+  }
+  if (id === WORKER_THREADS_BUILTIN) {
+    // The system lane holds the gateway's own authority and reads the real
+    // module; every other lane gets the identity mirror or nothing (#1014, R9).
+    if (policy.filesystem === "unrestricted") return { kind: "allow" };
+    if (policy.workerThreads === "identity-only")
+      return { kind: "confined-worker-threads" };
+    return {
+      kind: "deny",
+      reason: `builtin "node:${id}" is not in lane "${policy.lane}"'s allowlist`,
+    };
   }
   if (policy.allowedBuiltins.includes(id)) return { kind: "allow" };
   return {

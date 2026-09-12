@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import { currentReplicaLogState, readReplicaChanges } from "./change-log.js";
+import { currentReplicaLogState, readReplicaLogPage } from "./change-log.js";
 import {
   expiredOutcomeRecovery,
   pruneReplicaIntentOutcomes,
@@ -82,18 +82,17 @@ describe("intents", () => {
       readReplicaIntentOutcome(db.vault, identity.intentId, "another-device")
     ).toBeUndefined();
     expect(
-      readReplicaChanges(db.vault).changes.map(({ entity, rowId, op }) => ({
+      readReplicaLogPage(db.vault).changes.map(({ entity, rowId, op }) => ({
         entity,
         rowId,
         op,
       }))
     ).toStrictEqual([
       { entity: "replica.intent", rowId: "intent-1", op: "insert" },
-      // TWO entries for the one status change: the write itself, then the
-      // touch trigger's own UPDATE bumping `row_version` (#996, R6). A reader
-      // takes the LAST entry's row state, which is why the projector coalesces
-      // by (entity, row) rather than counting entries.
-      { entity: "replica.intent", rowId: "intent-1", op: "update" },
+      // ONE entry per (row, commit) (#1014, R-1014-1). The status write and
+      // the touch trigger's own UPDATE bumping `row_version` (#996, R6) are
+      // one transaction, so the log states the transition once instead of
+      // twice — the trigger log fired per statement and reported both.
       { entity: "replica.intent", rowId: "intent-1", op: "update" },
     ]);
   });
@@ -109,7 +108,7 @@ describe("intents", () => {
     expect(
       readReplicaIntentOutcome(db.vault, identity.intentId, identity.deviceId)
     ).toBeUndefined();
-    expect(readReplicaChanges(db.vault).changes).toStrictEqual([]);
+    expect(readReplicaLogPage(db.vault).changes).toStrictEqual([]);
   });
 
   test("intent replay binds immutable identity without persisting arbitrary output", () => {
@@ -138,6 +137,76 @@ describe("intents", () => {
         )
         .get(),
     }).toStrictEqual({ n: 0 });
+  });
+
+  /*
+   * WHAT A TRANSITION MAY NOT ERASE (#1014, G18/B16), and what a recovery
+   * read must return (#1014, G19).
+   *
+   * Red-first on the tree before this: the transition below drops
+   * `waitingOn`/`answeredVersions` because the UPDATE binds them
+   * unconditionally and only four fields were forwarded, and the list query
+   * selected nine of the sixteen columns — so an outcome recovered after a
+   * reconnect arrived with no commit position and wedged the seat exactly the
+   * way R1 did on the client.
+   */
+  test("a re-park keeps who it waits on, so a chain park stays re-enterable", () => {
+    db = openVaultDb();
+    recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "parked",
+      reason: "waiting for intent-0",
+      waitingOn: { seat: "intent", label: "intent-0" },
+      answeredVersions: [{ entity: "task", rowId: "task-1", version: 3 }],
+    });
+    const reparked = transitionReplicaIntentOutcome(
+      db.vault,
+      identity.intentId,
+      { status: "parked", reason: "still waiting for intent-0" }
+    );
+    expect(reparked?.waitingOn).toStrictEqual({
+      seat: "intent",
+      label: "intent-0",
+    });
+    expect(reparked?.answeredVersions).toStrictEqual([
+      { entity: "task", rowId: "task-1", version: 3 },
+    ]);
+  });
+
+  test("a park that settles is waiting on nobody", () => {
+    db = openVaultDb();
+    recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "parked",
+      waitingOn: { seat: "owner", label: "Ada" },
+    });
+    const failed = transitionReplicaIntentOutcome(db.vault, identity.intentId, {
+      status: "failed",
+      reason: "consent grant revoked while awaiting confirmation",
+    });
+    expect(failed?.waitingOn).toBeUndefined();
+  });
+
+  test("the recovery list returns the whole outcome, commit position included", () => {
+    db = openVaultDb();
+    recordReplicaIntentOutcome(db.vault, {
+      ...identity,
+      status: "executed",
+      commitSeq: 41,
+      answeredVersions: [{ entity: "task", rowId: "task-1", version: 9 }],
+      dependsOn: ["intent-0"],
+      expiresAt: "2026-10-01T00:00:00.000Z",
+    });
+    const [recovered] = listReplicaIntentOutcomes(db.vault, identity.deviceId);
+    expect(recovered?.commitSeq).toBe(41);
+    expect(recovered?.answeredVersions).toStrictEqual([
+      { entity: "task", rowId: "task-1", version: 9 },
+    ]);
+    expect(recovered?.dependsOn).toStrictEqual(["intent-0"]);
+    expect(recovered?.expiresAt).toBe("2026-10-01T00:00:00.000Z");
+    expect(recovered).toStrictEqual(
+      readReplicaIntentOutcome(db.vault, identity.intentId, identity.deviceId)
+    );
   });
 
   test("device recovery cleanup emits deletes but preserves an unfinalized repair marker", () => {
@@ -172,19 +241,16 @@ describe("intents", () => {
     expect(
       listReplicaIntentOutcomes(db.vault, identity.deviceId)
     ).toStrictEqual([]);
+    // Sorted: both deletes are one commit, and inside a commit the log's order
+    // is the session's (by key), not the statement order — which is exactly
+    // why a subscriber applies a commit whole rather than row by row.
     expect(
-      readReplicaChanges(db.vault, { since: beforeDelete }).changes
+      readReplicaLogPage(db.vault, { since: beforeDelete })
+        .changes.map(({ entity, rowId, op }) => ({ entity, rowId, op }))
+        .sort((a, b) => (a.rowId < b.rowId ? -1 : 1))
     ).toStrictEqual([
-      expect.objectContaining({
-        entity: "replica.intent",
-        rowId: "intent-1",
-        op: "delete",
-      }),
-      expect.objectContaining({
-        entity: "replica.intent",
-        rowId: "intent-2",
-        op: "delete",
-      }),
+      { entity: "replica.intent", rowId: "intent-1", op: "delete" },
+      { entity: "replica.intent", rowId: "intent-2", op: "delete" },
     ]);
   });
 

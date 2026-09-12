@@ -3,8 +3,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
   expiredOutcomeRecovery,
-  readReplicaIntentOutcome,
+  readReplicaIntentOutcomeForSeat,
   recordReplicaIntentOutcome,
+  ReplicaIntentIdentityError,
   replicaDependencyVerdict,
   resolvePredecessorReferences,
 } from "@centraid/vault";
@@ -21,6 +22,7 @@ import {
   hasCanonicalCommit,
   parseBaseVersions,
   parseDependsOn,
+  rebaseChainedBaseVersions,
 } from "./replica-intent-shape.js";
 import type { ReplicaIntentBaseVersion } from "./replica-intent-shape.js";
 import { replicaOutcomeWire } from "./replica-projection.js";
@@ -68,6 +70,14 @@ export interface ReplicaIntentRouteContext {
 
 const NO_TRANSIENT_OUTPUT = Symbol("no transient replica output");
 
+/**
+ * THE PAYLOAD IS THE IDENTITY, NOT THE ENROLMENT (#1014, G23/V9). This also
+ * compared `deviceId`, so a phone restored from a device backup — a new
+ * `endpointId`, the same durable seat file and the same outbox — was told
+ * every already-executed intent in it was a payload mismatch it could not
+ * retry past. The hash covers the app, the action, the input and the base
+ * versions; the device is attribution.
+ */
 function sameIdentity(
   outcome: ReplicaIntentOutcome,
   input: {
@@ -78,7 +88,6 @@ function sameIdentity(
   }
 ): boolean {
   return (
-    outcome.deviceId === input.deviceId &&
     outcome.appId === input.appId &&
     outcome.action === input.action &&
     outcome.payloadHash === input.payloadHash
@@ -107,12 +116,57 @@ function sendOutcome(
   });
 }
 
-function concealIdentityConflict(res: ServerResponse, intentId: string): true {
-  // UUID collisions aren't actionable: ordinary in-flight ack, no existence oracle.
-  return sendJson(res, 202, {
-    protocolVersion: REPLICA_PROTOCOL_VERSION,
-    accepted: true,
-    outcome: { intentId, status: "in-flight" },
+/**
+ * AN ADMISSION THAT DID NOT HAPPEN IS NEVER ACKNOWLEDGED (#1014, X20).
+ *
+ * Every throw out of `recordReplicaIntentOutcome` used to become `202
+ * in-flight`, which tells the seat "accepted, ask again later" about a write
+ * that will never run: the phone re-sends it forever and the member's change
+ * is silently gone. There are exactly three answers here and they lead to
+ * three different behaviours on the seat:
+ *
+ *   - the device's OWN retained outcome, when a concurrent send of the same
+ *     intent won the race — a dedupe hit, which is what a retry wants;
+ *   - `409 intent_id_reused` for an id already held by a different admission,
+ *     which the drain treats as permanent so the member is told to act rather
+ *     than left waiting. The id is the caller's own and random, so there is no
+ *     existence to leak that the caller did not already hold;
+ *   - `500` for anything else, because the vault failed and a retry is right.
+ */
+function answerAdmissionFailure(
+  res: ServerResponse,
+  context: ReplicaIntentRouteContext,
+  intentId: string,
+  identity: {
+    deviceId: string;
+    appId: string;
+    action: string;
+    payloadHash: string;
+  },
+  error: unknown
+): true {
+  if (!(error instanceof ReplicaIntentIdentityError)) {
+    return sendJson(res, 500, {
+      error: "replica_intent_outcome_failed",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  const retained = readReplicaIntentOutcomeForSeat(
+    context.plane.db.vault,
+    intentId,
+    identity
+  );
+  if (
+    retained &&
+    sameIdentity(retained, identity) &&
+    replicaOutcomeWire(retained)
+  )
+    return sendOutcome(res, retained);
+  return sendJson(res, 409, {
+    error: "intent_id_reused",
+    message:
+      "this intent id is already held by another admission; mint a new id for this change",
+    intentId,
   });
 }
 
@@ -211,10 +265,10 @@ export async function handleReplicaIntent(
     action,
     payloadHash,
   };
-  const existing = readReplicaIntentOutcome(
+  const existing = readReplicaIntentOutcomeForSeat(
     context.plane.db.vault,
     intentId,
-    identity.deviceId
+    identity
   );
   if (existing) {
     if (!sameIdentity(existing, identity)) {
@@ -273,8 +327,8 @@ export async function handleReplicaIntent(
         reason: deniedReason,
       });
       return sendOutcome(res, denied);
-    } catch {
-      return concealIdentityConflict(res, intentId);
+    } catch (error) {
+      return answerAdmissionFailure(res, context, intentId, identity, error);
     }
   }
 
@@ -291,8 +345,8 @@ export async function handleReplicaIntent(
         ...identity,
         status: "sending",
       });
-    } catch {
-      return concealIdentityConflict(res, intentId);
+    } catch (error) {
+      return answerAdmissionFailure(res, context, intentId, identity, error);
     }
     const answer = await (context.forwardProjectedEdit?.({
       route: projected,
@@ -309,10 +363,10 @@ export async function handleReplicaIntent(
       }));
     if (answer.status === "retryable") {
       // The row stays `sending`, which is exactly what a retry consumes.
-      const pending = readReplicaIntentOutcome(
+      const pending = readReplicaIntentOutcomeForSeat(
         context.plane.db.vault,
         intentId,
-        identity.deviceId
+        identity
       );
       if (!pending)
         return sendJson(res, 500, { error: "replica_intent_admission_lost" });
@@ -332,6 +386,14 @@ export async function handleReplicaIntent(
           ...(answer.commitSeq === undefined
             ? {}
             : { commitSeq: answer.commitSeq }),
+          // THE ORIGIN'S CONFLICT, NAMED (#1014, V7). The forwarded edit is
+          // checked against the origin's own row versions now, so a refusal
+          // can be a conflict — and the outbox row has to carry the two
+          // numbers or the member is told a change failed with nothing to act
+          // on. Identical to what the device door records for a local one.
+          ...(answer.conflict === undefined
+            ? {}
+            : { conflict: answer.conflict }),
           ...(answer.status === "parked"
             ? { waitingOn: { seat: "origin" as const } }
             : {}),
@@ -370,8 +432,8 @@ export async function handleReplicaIntent(
           dependsOn,
         });
         return sendOutcome(res, parked);
-      } catch {
-        return concealIdentityConflict(res, intentId);
+      } catch (error) {
+        return answerAdmissionFailure(res, context, intentId, identity, error);
       }
     }
   }
@@ -382,7 +444,13 @@ export async function handleReplicaIntent(
     const conflict = currentConflict(
       context.plane.db.vault,
       context.access,
-      baseVersions
+      baseVersions,
+      // A CHAINED WRITE IS CHECKED AGAINST ITS PARENT (#1014, R18). The seat
+      // now sends the version it observed for every row it edits, chained or
+      // not; the predecessors ran first and moved those rows, so the number
+      // to compare is the one they produced. A row nobody in the chain
+      // produced keeps the seat's own.
+      rebaseChainedBaseVersions(context.plane.db.vault, dependsOn)
     );
     if (conflict) {
       try {
@@ -394,8 +462,8 @@ export async function handleReplicaIntent(
           conflict,
         });
         return sendOutcome(res, denied);
-      } catch {
-        return concealIdentityConflict(res, intentId);
+      } catch (error) {
+        return answerAdmissionFailure(res, context, intentId, identity, error);
       }
     }
   }
@@ -407,9 +475,8 @@ export async function handleReplicaIntent(
       status: "sending",
       ...(dependsOn.length > 0 ? { dependsOn } : {}),
     });
-  } catch {
-    // Intentionally indistinguishable from any other immutable-id conflict.
-    return concealIdentityConflict(res, intentId);
+  } catch (error) {
+    return answerAdmissionFailure(res, context, intentId, identity, error);
   }
 
   const resolvedInput =
@@ -455,10 +522,10 @@ export async function handleReplicaIntent(
   } catch {
     // Dispatch failure is ambiguous (the command may have committed): keep
     // `sending` so retry consumes the marker.
-    const pending = readReplicaIntentOutcome(
+    const pending = readReplicaIntentOutcomeForSeat(
       context.plane.db.vault,
       intentId,
-      identity.deviceId
+      identity
     );
     if (!pending) {
       return sendJson(res, 500, { error: "replica_intent_admission_lost" });
@@ -475,10 +542,10 @@ export async function handleReplicaIntent(
     "pending"
   );
   if (dispatched.status === "retryable" || canonicalFinalizationPending) {
-    const pending = readReplicaIntentOutcome(
+    const pending = readReplicaIntentOutcomeForSeat(
       context.plane.db.vault,
       intentId,
-      identity.deviceId
+      identity
     );
     if (!pending) {
       return sendJson(res, 500, { error: "replica_intent_admission_lost" });

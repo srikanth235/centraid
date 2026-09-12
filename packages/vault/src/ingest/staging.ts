@@ -138,6 +138,69 @@ export function ensureConnection(
   return ensureConnectionTx(db.vault, options);
 }
 
+/**
+ * HOW OFTEN ONE ROW IS RE-STAGED AFTER PUBLISH REFUSED IT (#1014, B8).
+ *
+ * A row that threw inside `applyBatchTx` left no map entry, so the next pull
+ * staged the same external id again, it failed again, and the member got a
+ * fresh review draft every poll forever while `sync_import_row` grew without
+ * bound. The count is durable — it rides the batch receipt's own summary, the
+ * one place a failure was already recorded — and past the cap the candidate is
+ * staged as a `skip` that says so instead of a `create` that cannot land.
+ */
+export const MAX_PUBLISH_ATTEMPTS = 3;
+
+/** How many recent receipts the attempt count is summed over. */
+const PUBLISH_FAILURE_LOOKBACK_BATCHES = 50;
+
+interface BatchFailureSummary {
+  readonly failures?: { externalId: string; attempts: number }[];
+}
+
+/**
+ * Publish failures per external id for one connection, read back from the
+ * batch receipts. Bounded by `PUBLISH_FAILURE_LOOKBACK_BATCHES`: an id whose
+ * failures have scrolled out of the window is genuinely retried, which is the
+ * right answer for a provider outage measured in weeks.
+ */
+export function publishFailureAttempts(
+  vault: DatabaseSync,
+  connectionId: string
+): Map<string, number> {
+  const rows = vault
+    .prepare(
+      `SELECT summary_json FROM sync_import_batch
+        WHERE connection_id = ? AND status = 'published'
+        ORDER BY created_at DESC, batch_id DESC
+        LIMIT ?`
+    )
+    .all(connectionId, PUBLISH_FAILURE_LOOKBACK_BATCHES) as {
+    summary_json: string;
+  }[];
+  const attempts = new Map<string, number>();
+  for (const row of rows) {
+    let summary: BatchFailureSummary;
+    try {
+      summary = JSON.parse(row.summary_json) as BatchFailureSummary;
+    } catch {
+      continue;
+    }
+    for (const failure of summary.failures ?? []) {
+      if (typeof failure?.externalId !== "string") continue;
+      // The newest receipt already carries the running total; older ones are
+      // its history, so the MAXIMUM is the count, not the sum.
+      attempts.set(
+        failure.externalId,
+        Math.max(
+          attempts.get(failure.externalId) ?? 0,
+          typeof failure.attempts === "number" ? failure.attempts : 1
+        )
+      );
+    }
+  }
+  return attempts;
+}
+
 /** Transaction-less staging core: callers own the transaction boundary.
  *  Nothing here touches a domain table — staging is reviewable state (#290). */
 export function stageBatchTx(
@@ -166,6 +229,29 @@ export function stageBatchTx(
     `SELECT target_type AS entity_type, target_id AS entity_id, content_hash FROM sync_external_entity
       WHERE connection_id = ? AND external_id = ?`
   );
+  // THE REVIEW QUEUE HOLDS ONE CREATABLE ENTRY PER EXTERNAL ID (#1014, B7).
+  // The external-id map is written at PUBLISH, so on a review-gated connection
+  // two pulls before the member answers staged the same id as `create` twice —
+  // approving both created two rows, and the map's
+  // `ON CONFLICT … DO UPDATE SET target_id` then orphaned the first. A draft
+  // still awaiting review is as good as a map entry for this purpose.
+  //
+  // THE NEWEST DRAFT WINS, and every older one is retired to a `skip` saying
+  // so. The other direction — keeping the old row and skipping the new one —
+  // holds the same invariant but leaves a caller that has just staged a batch
+  // holding a batch id that publishes nothing, and pull-then-publish is
+  // exactly the shape callers have.
+  const openCreateDrafts = vault.prepare(
+    `SELECT r.row_id FROM sync_import_row r
+       JOIN sync_import_batch b ON b.batch_id = r.batch_id
+      WHERE b.connection_id = ? AND b.status = 'draft'
+        AND r.external_id = ? AND r.published_entity_id IS NULL
+        AND r.disposition = 'create'`
+  );
+  const retireDraft = vault.prepare(
+    `UPDATE sync_import_row SET disposition = 'skip', note = ? WHERE row_id = ?`
+  );
+  const failedAttempts = publishFailureAttempts(vault, connectionId);
   let seq = 0;
   for (const candidate of candidates) {
     // Hash the PLAINTEXT: sealing is nonce-randomized, dedup is about content.
@@ -211,6 +297,23 @@ export function stageBatchTx(
         disposition = probe.disposition;
         note = probe.note ?? "matches an existing row";
       }
+    }
+    const attempts = failedAttempts.get(candidate.externalId) ?? 0;
+    if (attempts >= MAX_PUBLISH_ATTEMPTS) {
+      // Publish has refused this row three times: staging a fourth `create`
+      // buys the member another draft that cannot land (#1014, B8).
+      disposition = "skip";
+      note = `publishing failed ${attempts} times; not retried until the upstream row changes`;
+    } else if (disposition === "create") {
+      const superseded = openCreateDrafts.all(
+        connectionId,
+        candidate.externalId
+      ) as { row_id: string }[];
+      for (const draft of superseded)
+        retireDraft.run(
+          "superseded by a later pull of the same upstream row",
+          draft.row_id
+        );
     }
     counts[disposition] += 1;
     const rowId = uuidv7();
@@ -392,6 +495,9 @@ export function applyBatchTx(
   }[];
 
   const provenanced: PublishedWrite[] = [];
+  // Read BEFORE this batch's own receipt is written, so the count is the
+  // history behind it (#1014, B8).
+  const priorAttempts = publishFailureAttempts(vault, batch.connection_id);
   const failed: { externalId: string; error: string }[] = [];
   let created = 0;
   let updated = 0;
@@ -551,6 +657,18 @@ export function applyBatchTx(
         skipped,
         failed: failed.length,
         total: rows.length,
+        // The durable attempt counter (#1014, B8). It rides the receipt, the
+        // one place a publish failure was already recorded, so a row that
+        // cannot land stops being re-staged without a second table.
+        ...(failed.length === 0
+          ? {}
+          : {
+              failures: failed.map((entry) => ({
+                externalId: entry.externalId,
+                attempts: (priorAttempts.get(entry.externalId) ?? 0) + 1,
+                error: entry.error,
+              })),
+            }),
       }),
       batchId
     );

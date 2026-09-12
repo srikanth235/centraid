@@ -62,7 +62,20 @@ The Gap row is unaffected: a minute that exists in no window cannot be delivered
 
 Both rows are held under a continuous minute-by-minute tick, across a whole-hour shift, a negative-DST zone and a thirty-minute shift, in `packages/server/src/automation/fire/time-zoo-cron.test.ts`.
 
-Missed fires during gateway downtime are still not backfilled (#149). DST policy only governs whether a wall-clock minute is due while the scheduler is running.
+DST policy only governs whether a wall-clock minute is due while the scheduler is running.
+
+## Backfill classes
+
+A cron trigger declares what a MISSED occurrence is worth, in `{ kind: 'cron', expr, tz?, backfill? }` ([#1014](https://github.com/srikanth235/centraid/issues/1014), ruling R-1014-9):
+
+| Class | After an outage | Right for |
+| --- | --- | --- |
+| `latest` (default) | one fire, at the newest missed instant; the rest are recorded as a `scheduler_gap` | a POLL — a connector reads "everything since my cursor", so the missed 08:00 and the missed 09:00 would fetch the same mailbox twice |
+| `each` | every missed occurrence, newest-first up to `MAX_BACKFILL_OCCURRENCES` (24), the remainder still a `scheduler_gap` | a recipe whose fire IS the occurrence, where two missed mornings are two reminders nobody got |
+
+`latest` is the default and the pre-#1014 behaviour, so no existing manifest changes what it does by adopting the field. Every bundled cron recipe is a connector poll and therefore declares `latest` explicitly — pinned by `bundled-templates.test.ts`, which refuses a bundled cron trigger with no class at all, so the decision is made rather than inherited.
+
+The class rides `CronSchedule` from `registrationsFor` into `readCronCursor`, resolved once at registration; the reader never re-derives the default. Where an automation carries several cron triggers they collapse into one registration, and `each` on any of them makes the whole registration `each`.
 
 ## Multiple devices, one schedule
 

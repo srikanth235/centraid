@@ -47,6 +47,30 @@ describe("bundled automation templates", () => {
     expect(handlerFnIds.length).toBeGreaterThan(0);
   });
 
+  it("every bundled cron recipe declares its backfill class", () => {
+    // #1014, B9. `latest` is the default and every bundled cron recipe is a
+    // POLL, so the classes below restate the behaviour they already had — but
+    // as a DECLARATION. A recipe whose fire IS the occurrence has to say
+    // `each`, and the only way that decision gets made is if the field is
+    // never allowed to be absent.
+    const classes = ids.flatMap((id) => {
+      const manifest = parseManifest(
+        readFileSync(
+          path.join(AUTOMATIONS_DIR, id, "automations", id, "automation.json"),
+          "utf8"
+        )
+      );
+      return manifest.triggers
+        .filter((trigger) => trigger.kind === "cron")
+        .map((trigger) => [id, trigger.backfill] as const);
+    });
+    // Not a vacuous pass: the bundled set really does carry cron recipes.
+    expect(classes.length).toBeGreaterThan(10);
+    expect(classes.filter(([, value]) => value === undefined)).toStrictEqual(
+      []
+    );
+  });
+
   it.each(ids.map((id) => [id] as const))(
     "%s: automation.json parses",
     (id) => {

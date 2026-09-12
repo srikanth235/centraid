@@ -158,6 +158,9 @@ export interface PreviewCodec {
   ) => string | null | Promise<string | null>;
 }
 
+/** How many named failures one backfill result carries. */
+export const PREVIEW_BACKFILL_FAILURES_KEPT = 10;
+
 export interface PreviewBackfillResult {
   scanned: number;
   generated: number;
@@ -167,6 +170,15 @@ export interface PreviewBackfillResult {
   skippedUnsupported: number;
   /** Absent from BOTH tiers — an integrity gap. */
   missingBytes: number;
+  /**
+   * Items whose backfill THREW, with the reason (#1014, B3). One unreadable
+   * image must never sink the batch, but swallowing it whole meant an asset
+   * that could never get a preview rung — and the recognition walk parked
+   * behind it — was invisible from every surface. Bounded; the count is
+   * `failed`.
+   */
+  failed: number;
+  failures: { contentId: string; error: string }[];
 }
 
 interface PreviewBackfillItem {
@@ -354,6 +366,8 @@ export async function backfillPreviews(
     thumbhashesGenerated: 0,
     skippedUnsupported: 0,
     missingBytes: 0,
+    failed: 0,
+    failures: [],
   };
   if (limit <= 0) return result;
   const now = options.now ?? nowIso();
@@ -488,8 +502,20 @@ export async function backfillPreviews(
       // marker an older codec generation left, so the content reads as
       // previewable again.
       settlePreviewVerdict(db, item.content_id, unsupported, now);
-    } catch {
-      // One unreadable image never sinks the batch or the custody sweep.
+    } catch (error) {
+      // One unreadable image never sinks the batch or the custody sweep — but
+      // it is NAMED now (#1014, B3): a swallowed failure here is exactly the
+      // asset a recognition walk parks behind forever.
+      result.failed += 1;
+      if (result.failures.length < PREVIEW_BACKFILL_FAILURES_KEPT) {
+        result.failures.push({
+          contentId: item.content_id,
+          error: (error instanceof Error ? error.message : String(error)).slice(
+            0,
+            300
+          ),
+        });
+      }
     }
     await yieldTick();
     return processNextItem(index + 1);

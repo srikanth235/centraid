@@ -12,8 +12,19 @@
 // row is still the overlay's. Reporting it as executed would clear the badge
 // before the rows it is drawn over arrive.
 
+import { GatewayClientError } from "../gateway-auth.js";
 import { ReplicaTransportError } from "./shell-transport.js";
 import type { IntentOutcome, ReplicaIntent } from "./types.js";
+
+/**
+ * The refusal every drain treats as terminal-for-now: the credential is gone,
+ * so no retry of this intent can work until the session is re-authorized.
+ * ONE definition, because both seats build a drain host out of it and a
+ * duplicate is how the phone and the browser drift (#1014).
+ */
+export function isAuthorizationError(error: unknown): boolean {
+  return error instanceof GatewayClientError && error.code === "auth_required";
+}
 
 export type ReplicaWriteResult =
   | IntentOutcome

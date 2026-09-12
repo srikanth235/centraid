@@ -12,7 +12,7 @@ import { withDrainLock } from "./drain-lock";
 import { replaySettledUploadFollowups } from "./followup";
 import { UploadForegroundService } from "./foreground-service";
 import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from "./native-policy";
-import { UploadQueue } from "./native-queue";
+import { UploadQueue, withUploadQueue } from "./native-queue";
 import { reconcileGate } from "./reconcile-gate";
 
 export interface ReconcileSummary {
@@ -35,13 +35,15 @@ async function reconcileOnce(
   let queue: UploadQueue | undefined;
   try {
     // Probe the queue before resolving the gateway: nothing pending ⇒ no tunnel.
-    const probe = UploadQueue.open({
-      gatewayBaseUrl: "http://127.0.0.1",
-      headers: authHeader,
-    });
-    const hasTransfers = probe.pending().length > 0;
-    const hasFollowups = probe.pendingFollowups().length > 0;
-    probe.close();
+    // Through `withUploadQueue` (#1014, P21): the probe's `close()` used to be
+    // a real `closeSync()` on a handle four other holders shared.
+    const { hasTransfers, hasFollowups } = await withUploadQueue(
+      { gatewayBaseUrl: "http://127.0.0.1", headers: authHeader },
+      (probe) => ({
+        hasTransfers: probe.pending().length > 0,
+        hasFollowups: probe.pendingFollowups().length > 0,
+      })
+    );
     if (
       !reconcileGate({
         hasTransfers,
@@ -70,14 +72,38 @@ async function reconcileOnce(
       : { replayed: 0, poisoned: 0 };
     if (drain.settled + drain.deduped + replay.replayed > 0)
       Store.set(LAST_SUCCESSFUL_SYNC_KEY, new Date().toISOString());
+    // THE LEDGER'S PRODUCTION CALLER (#1014, P25). Terminal rows were never
+    // deleted, so a phone's whole roll accumulated as upload history and
+    // Photos' timeline engine read all of it on every refresh. Here, after the
+    // replay, because a settled row is only history once its canonical write
+    // has landed — and best-effort: pruning is not what this pass is for.
+    try {
+      queue.sweepTerminal();
+    } catch (error) {
+      console.warn(
+        `[centraid] upload: retention sweep skipped — ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
     return {
       settled: drain.settled,
       deduped: drain.deduped,
       replayed: replay.replayed,
       poisoned: replay.poisoned,
     };
-  } catch {
-    // Drain never surfaces to the UI; unsettled items stay queued.
+  } catch (error) {
+    // SAID ONCE, THEN SWALLOWED (#1014, P21). The drain still never surfaces
+    // to the UI — unsettled items stay queued and the next pass retries — but
+    // a reconcile that fails every time on the same closed handle used to be
+    // completely silent, on the device and on the gateway both.
+    console.error(
+      `[centraid] upload: reconcile failed — ${
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error)
+      }`
+    );
     return EMPTY_RECONCILE;
   } finally {
     queue?.close();

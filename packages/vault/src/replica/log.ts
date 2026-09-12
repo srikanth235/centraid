@@ -1,8 +1,9 @@
 //
-// WHAT THIS REPLACES, AND WHY. Until now every replicated table carried three
-// AFTER triggers that wrote a row into `replica_change` — 288 of them on a
-// fresh vault, generated from the entity registry, each one re-derived on
-// every schema change. They were correct, and they were the wrong mechanism:
+// WHAT THIS REPLACED, AND WHY (#1014, R-1014-1: the replacement is now the
+// only log there is). Until #996 every replicated table carried three AFTER
+// triggers that wrote a row into `replica_change` — 288 of them on a fresh
+// vault, generated from the entity registry, each one re-derived on every
+// schema change. They were correct, and they were the wrong mechanism:
 // a trigger can only write what JSON1 can express, so BLOBs became NULL; it
 // fires per STATEMENT, so one logical change wrote several rows; and its cost
 // is paid on the write path of every table forever. SQLite already knows what
@@ -18,6 +19,17 @@
 // COMMIT, a row updated by session 1 and deleted by session 7 reads NO ROW,
 // and the decoder would emit an update for a row that no longer exists. A
 // post-commit read is unsafe for exactly the same reason.
+//
+// TWO THINGS THE TRIGGER LOG HAD THAT A CHANGESET DOES NOT, ADDED HERE.
+//   - `prior_json`: the OLD values of the columns an update changed. A trigger
+//     saw `old.*` whole; a changeset carries only the touched columns — which
+//     is enough, because the untouched ones are identical in both images, so
+//     the prior image is `row_json` overlaid with this delta. The feed decides
+//     filtered-shape membership from it.
+//   - the `local` lane: a key-only row for a GATEWAY-PRIVATE table, written so
+//     an intent outcome has a position in the same sequence space as the rows
+//     it is interleaved with. It carries no image and the seat door filters it
+//     out; it exists so there is one log rather than two.
 
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { gzipSync } from "node:zlib";
@@ -25,7 +37,13 @@ import { gzipSync } from "node:zlib";
 import { encodeWireValue } from "@centraid/core/protocol";
 import type { SeatLogRowWire, WireValue } from "@centraid/core/protocol";
 
-import { replicatedTablesOf } from "../schema/private-tables.js";
+import { prepared } from "../grant/prepared.js";
+import {
+  isPrivateTable,
+  isReplicatedTable,
+  redactReplicatedRowImage,
+  replicatedTablesOf,
+} from "../schema/private-tables.js";
 import {
   REPLICA_DDL_VERSION,
   REPLICA_SCHEMA_EPOCH,
@@ -34,6 +52,20 @@ import { changesetValueToBindable, parseChangeset } from "./changeset.js";
 import type { ChangesetChange, ChangesetValue } from "./changeset.js";
 
 export type ReplicaLogOp = "insert" | "update" | "delete" | "ddl";
+
+/**
+ * GATEWAY-PRIVATE TABLES THE CAPTURE STILL POSITIONS (#1014, R-1014-1).
+ *
+ * A seat never receives these rows — the door filters `local = 1` — but the
+ * feed has to be able to say "something about intent X happened HERE", and
+ * "here" is only meaningful in the log's own sequence space. So the capture
+ * opens a session on them too and writes the KEY alone: no image, nothing
+ * device-scoped, just a position. Adding a name here makes a private table
+ * observable as a doorbell and nothing more.
+ */
+export const REPLICA_LOCAL_TABLES: readonly string[] = [
+  "replica_intent_outcome",
+];
 
 /**
  * THE PRODUCER BOUND (#996, R5; open question 3), in DECODED LOG ROWS.
@@ -166,9 +198,10 @@ function quoted(name: string): string {
  * key and a table that quietly stops replicating.
  */
 export function primaryKeyOf(vault: DatabaseSync, table: string): string[] {
-  const columns = vault
-    .prepare(`PRAGMA table_info(${quoted(table)})`)
-    .all() as { name: string; pk: number }[];
+  const columns = prepared(
+    vault,
+    `PRAGMA table_info(${quoted(table)})`
+  ).all() as { name: string; pk: number }[];
   const key = columns
     .filter((column) => column.pk > 0)
     .sort((left, right) => left.pk - right.pk)
@@ -192,7 +225,11 @@ export function primaryKeyOf(vault: DatabaseSync, table: string): string[] {
  */
 export function openReplicaCapture(
   vault: DatabaseSync,
-  producer = "gateway"
+  producer = "gateway",
+  // The row-read statements survive the close/reopen at the tail of a capture
+  // (#1014, R-1014-1): a fresh statement per table per COMMIT is most of the
+  // decode's cost, and the log is now the only change path there is.
+  reads = new Map<string, StatementSync>()
 ): void {
   const existing = CAPTURES.get(vault);
   if (existing) {
@@ -200,13 +237,37 @@ export function openReplicaCapture(
     return;
   }
   const sessions: OpenSession[] = [];
-  for (const table of replicatedTablesOf(vault)) {
+  for (const table of [...replicatedTablesOf(vault), ...REPLICA_LOCAL_TABLES]) {
     sessions.push({
       table,
       session: vault.createSession({ table }) as OpenSession["session"],
     });
   }
-  CAPTURES.set(vault, { sessions, producer, reads: new Map() });
+  CAPTURES.set(vault, { sessions, producer, reads });
+}
+
+/**
+ * WATCH A TABLE THAT DID NOT EXIST WHEN THE CAPTURE OPENED (#1014, G21).
+ *
+ * `openReplicaCapture` enumerates the replicated tables ONCE and re-runs only
+ * at the tail of the next successful capture, so DDL that plants a new
+ * physical mid-session — an app's ext band being installed, `recreateExtTables`
+ * on the import path — left every row written into it before the next commit
+ * with no session watching, and those rows never reached a seat.
+ *
+ * ADDITIVE, NEVER A REOPEN: closing and reopening the whole set would discard
+ * the changesets the open sessions are already holding for this transaction.
+ * A table already watched is a no-op, so this is safe to call after any DDL.
+ */
+export function watchReplicaTable(vault: DatabaseSync, table: string): void {
+  const state = CAPTURES.get(vault);
+  if (!state) return;
+  if (!isReplicatedTable(table) || isPrivateTable(table)) return;
+  if (state.sessions.some((open) => open.table === table)) return;
+  state.sessions.push({
+    table,
+    session: vault.createSession({ table }) as OpenSession["session"],
+  });
 }
 
 /** Drop the sessions without decoding — the rollback path. */
@@ -243,7 +304,11 @@ interface DecodedRow {
   op: ReplicaLogOp;
   key: WireValue[];
   row: Record<string, WireValue> | null;
+  /** Old values of the columns an UPDATE changed; null for every other op. */
+  prior: Record<string, WireValue> | null;
   indirect: boolean;
+  /** A gateway-private table's doorbell position: key only, never an image. */
+  local: boolean;
 }
 
 /**
@@ -275,6 +340,7 @@ export function decodeChangeset(
     );
     reads.set(table, read);
   }
+  const local = isPrivateTable(table);
   const decoded: DecodedRow[] = [];
   const seen = new Set<string>();
   for (const change of changes) {
@@ -295,6 +361,21 @@ export function decodeChangeset(
     const identity = JSON.stringify(encodedKey);
     if (seen.has(identity)) continue;
     seen.add(identity);
+    if (local) {
+      // POSITION ONLY. No read-back, no image: what the row says is that
+      // something about this key happened at this position, and everything
+      // else about it is device-scoped and resolved at the door.
+      decoded.push({
+        table,
+        op: change.op,
+        key: encodedKey,
+        row: null,
+        prior: null,
+        indirect: change.indirect,
+        local: true,
+      });
+      continue;
+    }
     if (change.op === "delete") {
       // A DELETE record carries EVERY column of the old row, so this is the
       // one op whose image needs no read — and the one whose row is gone.
@@ -307,12 +388,21 @@ export function decodeChangeset(
         if (value.kind === "absent") continue;
         image[column] = encodeWireValue(changesetValueToBindable(value));
       }
+      // WHAT REPLICATES BUT NOT WHOLE (#1014, G14). Both images go through it:
+      // a DELETE carries the old row verbatim, so skipping this branch would
+      // have leaked on the way out what the INSERT branch withheld on the way
+      // in.
+      redactReplicatedRowImage(table, image);
       decoded.push({
         table,
         op: "delete",
         key: encodedKey,
         row: image,
+        // A delete's `row_json` IS the state before it, so there is nothing a
+        // prior delta could add.
+        prior: null,
         indirect: change.indirect,
+        local: false,
       });
       continue;
     }
@@ -327,37 +417,90 @@ export function decodeChangeset(
     const image: Record<string, WireValue> = {};
     for (const [column, value] of Object.entries(current))
       image[column] = encodeWireValue(value);
+    redactReplicatedRowImage(table, image);
     decoded.push({
       table,
       op: change.op,
       key: encodedKey,
       row: image,
+      prior:
+        change.op === "update" ? priorDelta(vault, table, change, reads) : null,
       indirect: change.indirect,
+      local: false,
     });
   }
   return decoded;
 }
 
-const COLUMN_NAMES = new WeakMap<DatabaseSync, Map<string, string[]>>();
+/**
+ * The OLD values of the columns this UPDATE changed (#1014, R-1014-13).
+ *
+ * `absent` is the changeset saying "this statement did not touch the column",
+ * and an untouched column has the same value in both images — so the columns
+ * left out here are exactly the ones `row_json` already answers for. An empty
+ * object is a real answer (an update that changed nothing but its key columns)
+ * and is stored as such; `null` would mean "no prior is known", which is a
+ * different claim and the one that forces a re-bootstrap.
+ */
+function priorDelta(
+  vault: DatabaseSync,
+  table: string,
+  change: ChangesetChange,
+  reads: Map<string, StatementSync>
+): Record<string, WireValue> {
+  const columns = tableColumnNames(vault, table, reads);
+  const prior: Record<string, WireValue> = {};
+  for (let index = 0; index < change.columnCount; index += 1) {
+    const column = columns[index];
+    if (column === undefined) continue;
+    const value = change.oldValues![index]!;
+    if (value.kind === "absent") continue;
+    prior[column] = encodeWireValue(changesetValueToBindable(value));
+  }
+  return prior;
+}
+
+// KEYED ON `PRAGMA schema_version`, LIKE `REPLICATED` (#1014, G15). These
+// names are the SOLE source of column order for a DELETE image, which is
+// positional: the changeset gives values by index and nothing else says what
+// they are. A cache that never invalidated meant that after `alterExtTable`
+// dropped a column every delete row for that table carried its values under
+// the wrong keys — and a seat applied it. SQLite's own counter is bumped by
+// every table, index and trigger change, including one an ext band installs
+// mid-session, so it is the only notion of "the schema moved" that cannot
+// disagree with the schema.
+const COLUMN_NAMES = new WeakMap<
+  DatabaseSync,
+  { schemaVersion: number; names: Map<string, string[]> }
+>();
+
+function schemaVersionOf(vault: DatabaseSync): number {
+  return (
+    prepared(vault, "PRAGMA schema_version").get() as {
+      schema_version: number;
+    }
+  ).schema_version;
+}
 
 function tableColumnNames(
   vault: DatabaseSync,
   table: string,
   _reads: Map<string, StatementSync>
 ): string[] {
-  let perDb = COLUMN_NAMES.get(vault);
-  if (!perDb) {
-    perDb = new Map();
-    COLUMN_NAMES.set(vault, perDb);
+  const schemaVersion = schemaVersionOf(vault);
+  let cached = COLUMN_NAMES.get(vault);
+  if (!cached || cached.schemaVersion !== schemaVersion) {
+    cached = { schemaVersion, names: new Map() };
+    COLUMN_NAMES.set(vault, cached);
   }
-  let names = perDb.get(table);
+  let names = cached.names.get(table);
   if (!names) {
     names = (
-      vault.prepare(`PRAGMA table_info(${quoted(table)})`).all() as {
+      prepared(vault, `PRAGMA table_info(${quoted(table)})`).all() as {
         name: string;
       }[]
     ).map((column) => column.name);
-    perDb.set(table, names);
+    cached.names.set(table, names);
   }
   return names;
 }
@@ -372,12 +515,11 @@ interface MetaRow {
 }
 
 function meta(vault: DatabaseSync): MetaRow {
-  const row = vault
-    .prepare(
-      `SELECT epoch, floor_seq, schema_epoch, commit_seq, epoch_reason, epoch_started_at
+  const row = prepared(
+    vault,
+    `SELECT epoch, floor_seq, schema_epoch, commit_seq, epoch_reason, epoch_started_at
          FROM replica_meta WHERE singleton = 1`
-    )
-    .get() as MetaRow | undefined;
+  ).get() as MetaRow | undefined;
   if (!row) throw new Error("replica metadata is missing");
   return row;
 }
@@ -406,40 +548,55 @@ export function captureReplicaCommit(
     // statement in this transaction can move the row it is about to read.
     const rows = decodeChangeset(vault, open.table, changeset, state.reads);
     if (rows.length === 0) continue;
-    tables.push(open.table);
+    // A doorbell lane is not a table this commit "touched" as far as any
+    // consumer of the result is concerned: nothing replicates from it.
+    if (!rows[0]!.local) tables.push(open.table);
     decoded.push(...rows);
   }
   // Sessions are one-shot per commit: closing and reopening is how the next
   // transaction starts from empty rather than replaying this one.
   closeReplicaCapture(vault);
-  openReplicaCapture(vault, producer);
+  openReplicaCapture(vault, producer, state.reads);
   if (decoded.length === 0) return undefined;
   const current = meta(vault);
   const commitSeq = current.commit_seq + 1;
-  vault
-    .prepare(
-      `UPDATE replica_meta SET commit_seq = ?, updated_at = ? WHERE singleton = 1`
-    )
-    .run(commitSeq, new Date().toISOString());
+  prepared(
+    vault,
+    `UPDATE replica_meta SET commit_seq = ?, updated_at = ? WHERE singleton = 1`
+  ).run(commitSeq, new Date().toISOString());
   const committedAt = options.committedAt ?? new Date().toISOString();
   const images = decoded.map((row) =>
     row.row === null ? null : JSON.stringify(row.row)
   );
-  // A CONFORMING PRODUCER IS NEVER MEASURED. Within the bound a commit is
-  // ~38 KB gzipped against a 1 MB threshold, so compressing every commit to
-  // discover that would be paying the cost on the write path to learn a
-  // number the bound already guarantees. Over the bound, the producer failed
-  // to chunk and the seat needs the real answer.
+  const priors = decoded.map((row) =>
+    row.prior === null ? null : JSON.stringify(row.prior)
+  );
+  // A CONFORMING PRODUCER IS NEVER MEASURED — BUT "CONFORMING" IS ABOUT BYTES
+  // (#1014, G20). The bound below is stated in rows, and the guarantee behind
+  // it ("~38 KB gzipped") holds only for rows of ordinary size. A 2,000-row
+  // commit of `enrich_embedding` BLOB images is tens of megabytes and used to
+  // report `deferred: false`, so the one commit a metered seat most needed to
+  // skip was the one the threshold could not see. The uncompressed image size
+  // is already in hand — it costs a sum, not a compression — so a commit is
+  // measured when EITHER its row count or its raw image bytes could plausibly
+  // reach the threshold.
+  const rawBytes = images.reduce(
+    (total, image) => total + (image === null ? 0 : image.length),
+    0
+  );
   const compressedBytes =
-    decoded.length > REPLICA_PRODUCER_MAX_ROWS
+    decoded.length > REPLICA_PRODUCER_MAX_ROWS ||
+    rawBytes > REPLICA_DEFER_THRESHOLD_BYTES
       ? gzipSync(Buffer.from(images.join("\n"), "utf8"), { level: 6 }).length
       : 0;
   const deferred = compressedBytes > REPLICA_DEFER_THRESHOLD_BYTES;
-  const insert = vault.prepare(
+  const insert = prepared(
+    vault,
     `INSERT INTO replica_log
        (commit_seq, epoch, schema_epoch, ddl_version, "table", op,
-        pk_json, row_json, indirect, producer, deferred, committed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        pk_json, row_json, prior_json, indirect, producer, deferred, local,
+        committed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (const [index, row] of decoded.entries()) {
     insert.run(
@@ -451,9 +608,11 @@ export function captureReplicaCommit(
       row.op,
       JSON.stringify(row.key),
       images[index] ?? null,
+      priors[index] ?? null,
       row.indirect ? 1 : 0,
       producer,
       deferred ? 1 : 0,
+      row.local ? 1 : 0,
       committedAt
     );
   }
@@ -463,14 +622,16 @@ export function captureReplicaCommit(
     tables,
     compressedBytes,
     deferred,
-    produced: decoded.map((row) => {
-      const version = row.row?.["row_version"];
-      return {
-        table: row.table,
-        primaryKey: row.key,
-        ...(typeof version === "number" ? { rowVersion: version } : {}),
-      };
-    }),
+    produced: decoded
+      .filter((row) => !row.local)
+      .map((row) => {
+        const version = row.row?.["row_version"];
+        return {
+          table: row.table,
+          primaryKey: row.key,
+          ...(typeof version === "number" ? { rowVersion: version } : {}),
+        };
+      }),
   };
 }
 
@@ -568,7 +729,12 @@ export class ReplicaRebootstrapRequiredError extends Error {
 }
 
 /**
- * A page of the log, NEVER half a commit.
+ * A page of the log, NEVER half a commit — and never a `local` row (#1014,
+ * R-1014-1). The doorbell lane shares the sequence space so a feed position
+ * means one thing, but a seat holds tables, and a gateway-private table is not
+ * one of them. Filtering rather than gapping the space is deliberate: the
+ * cursor a seat sends back is the last row it was SERVED, and the rows between
+ * it and the watermark are simply not its business.
  *
  * The page limit is a hint: once the last row inside it is chosen, the rest of
  * that row's commit is appended whatever the limit says. A seat applies one
@@ -576,7 +742,45 @@ export class ReplicaRebootstrapRequiredError extends Error {
  * that ends mid-commit would force it to either hold an open transaction
  * across a round trip or write a state no single transaction produced.
  */
+/**
+ * Run a read as ONE STABLE VIEW of the file (#1014, G6).
+ *
+ * Re-entrant on purpose: the projection plane already brackets its reads with
+ * `withReplicaSnapshot`, and a nested `BEGIN` is an error rather than a
+ * nesting. `ROLLBACK` rather than `COMMIT` because nothing here writes.
+ */
+export function inReadTransaction<T>(vault: DatabaseSync, read: () => T): T {
+  if (vault.isTransaction) return read();
+  vault.exec("BEGIN");
+  try {
+    const value = read();
+    vault.exec("ROLLBACK");
+    return value;
+  } catch (error) {
+    try {
+      vault.exec("ROLLBACK");
+    } catch {
+      // The read already failed; a failed rollback must not mask why.
+    }
+    throw error;
+  }
+}
+
 export function readReplicaLog(
+  vault: DatabaseSync,
+  options: { since?: ReplicaLogCursor; limit?: number } = {}
+): ReplicaLogPage {
+  return inReadTransaction(vault, () => readReplicaLogRows(vault, options));
+}
+
+/**
+ * THE FOUR STATEMENTS THAT HAVE TO AGREE (#1014, G6): state, rows, the tail
+ * of the last commit, and `hasMore`. Run apart, a prune of `(since,
+ * watermark]` landing between them yielded no rows, `hasMore: false` and
+ * `next: watermark` — and the seat skipped a span it never received, silently.
+ * Its caller brackets it; it is separate only so the bracket is re-entrant.
+ */
+function readReplicaLogRows(
   vault: DatabaseSync,
   options: { since?: ReplicaLogCursor; limit?: number } = {}
 ): ReplicaLogPage {
@@ -599,7 +803,7 @@ export function readReplicaLog(
       `SELECT seq, commit_seq, epoch, schema_epoch, ddl_version, "table",
               op, pk_json, row_json, indirect, producer, deferred, committed_at
          FROM replica_log
-        WHERE epoch = ? AND seq > ? AND seq <= ?
+        WHERE epoch = ? AND seq > ? AND seq <= ? AND local = 0
         ORDER BY seq LIMIT ?`
     )
     .all(
@@ -617,6 +821,7 @@ export function readReplicaLog(
                 op, pk_json, row_json, indirect, producer, deferred, committed_at
            FROM replica_log
           WHERE epoch = ? AND commit_seq = ? AND seq > ? AND seq <= ?
+            AND local = 0
           ORDER BY seq`
       )
       .all(
@@ -633,7 +838,7 @@ export function readReplicaLog(
     vault
       .prepare(
         `SELECT 1 AS present FROM replica_log
-            WHERE epoch = ? AND seq > ? AND seq <= ? LIMIT 1`
+            WHERE epoch = ? AND seq > ? AND seq <= ? AND local = 0 LIMIT 1`
       )
       .get(state.epoch, end.seq, state.watermark.seq)
   );
@@ -674,6 +879,23 @@ export function readReplicaLog(
 export const REPLICA_LOG_RETENTION_DAYS = 30;
 export const REPLICA_LOG_RETENTION_MAX_ROWS = 200_000;
 
+/**
+ * HOW LONG A SEAT'S CURSOR PINS THE LOG (#1014, T9).
+ *
+ * The hold exists so a prune cannot convert a cheap tail into a forced
+ * re-bootstrap on the gateway's schedule. It needs a bound for the opposite
+ * failure: a phone that is lost, wiped or simply never opened again holds a
+ * cursor forever, and with it every log row above that cursor — which is the
+ * unbounded growth the retention window was written to stop.
+ *
+ * 30 days is the retention window itself; the hold is shorter on purpose, so
+ * a device that has not asked for a page in this long stops pinning BEFORE
+ * the window it is pinning would have expired anyway. A device that comes
+ * back after the bound re-bootstraps from a snapshot — visibly, once — which
+ * is the outcome a member can understand.
+ */
+export const REPLICA_SEAT_HOLD_DAYS = 14;
+
 export interface PruneReplicaLogOptions {
   now?: Date;
   maxAgeMs?: number;
@@ -694,15 +916,106 @@ export interface ReplicaLogPruneResult {
   readonly heldBySeat: number | undefined;
 }
 
-/** The lowest position any enrolled seat still needs served. */
-export function lowestSeatCursor(vault: DatabaseSync): number | undefined {
+/**
+ * RECORD WHERE A SEAT HAS ACTUALLY GOT TO (#1014, V1/T9).
+ *
+ * The hold below reads `access_device_secret.sync_cursor`, which until now was
+ * only ever written NULL at enrollment — so the guard on the prune was inert
+ * and the day the prune was wired it would have pruned past every live seat.
+ * The seat-log door calls this with the cursor the device SENT, not the one it
+ * was served: the sent cursor is the position the device has, and the hold has
+ * to stand on what a seat has rather than on what is in flight to it.
+ *
+ * BEST-EFFORT, LIKE A DOORBELL: this is bookkeeping about a page that has
+ * already been served, so a failure here may never fail the page. It returns
+ * whether it wrote, for the door's own logging.
+ */
+export function recordSeatCursor(
+  vault: DatabaseSync,
+  deviceId: string,
+  seq: number,
+  now: Date = new Date()
+): boolean {
+  if (!Number.isSafeInteger(seq) || seq < 0) return false;
+  try {
+    return (
+      Number(
+        vault
+          .prepare(
+            `UPDATE access_device_secret
+                SET sync_cursor = ?, sync_cursor_at = ?
+              WHERE device_id = ?
+                AND (sync_cursor IS NULL OR CAST(sync_cursor AS INTEGER) <= ?)`
+          )
+          .run(String(seq), now.toISOString(), deviceId, seq).changes
+      ) > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+export interface LowestSeatCursorOptions {
+  now?: Date;
+  /** Defaults to {@link REPLICA_SEAT_HOLD_DAYS}. */
+  abandonAfterMs?: number;
+}
+
+/**
+ * The lowest position any LIVE enrolled seat still needs served.
+ *
+ * A cursor with no `sync_cursor_at`, or one older than the abandonment bound,
+ * does not pin: it is a device that has not come to the door inside the window
+ * (#1014, T9). A device that never asked at all never had a cursor to begin
+ * with, so it cannot hold a floor it has no position in.
+ */
+export function lowestSeatCursor(
+  vault: DatabaseSync,
+  options: LowestSeatCursorOptions = {}
+): number | undefined {
+  const abandonAfterMs =
+    options.abandonAfterMs ?? REPLICA_SEAT_HOLD_DAYS * 24 * 60 * 60 * 1_000;
+  const now = options.now ?? new Date();
+  const since = new Date(
+    Math.max(0, now.getTime() - abandonAfterMs)
+  ).toISOString();
   const row = vault
     .prepare(
       `SELECT MIN(CAST(sync_cursor AS INTEGER)) AS seq
-         FROM access_device_secret WHERE sync_cursor IS NOT NULL`
+         FROM access_device_secret
+        WHERE sync_cursor IS NOT NULL
+          AND sync_cursor_at IS NOT NULL
+          AND sync_cursor_at >= ?`
     )
-    .get() as { seq: number | null } | undefined;
+    .get(since) as { seq: number | null } | undefined;
   return row?.seq ?? undefined;
+}
+
+/**
+ * The lowest COMMIT position any live seat still needs — the same hold as
+ * {@link lowestSeatCursor}, in the units an intent outcome speaks (#1014, G17).
+ *
+ * A seat cursor is a `replica_log.seq`; an outcome's `commit_seq` is the
+ * transaction that seq belongs to. Comparing one against the other is the R6
+ * mistake in miniature — 432 against 2 — so the translation happens here,
+ * once, rather than at the caller. `undefined` when no live seat holds a
+ * position, which is what "nothing is pinning" means.
+ */
+export function lowestSeatCommitSeq(
+  vault: DatabaseSync,
+  options: LowestSeatCursorOptions = {}
+): number | undefined {
+  const seq = lowestSeatCursor(vault, options);
+  if (seq === undefined) return undefined;
+  const epoch = meta(vault).epoch;
+  const row = vault
+    .prepare(
+      `SELECT commit_seq FROM replica_log
+        WHERE epoch = ? AND seq <= ? ORDER BY seq DESC LIMIT 1`
+    )
+    .get(epoch, seq) as { commit_seq: number } | undefined;
+  // A cursor below every row this epoch holds pins from the very beginning.
+  return row?.commit_seq ?? 0;
 }
 
 /** The highest seq that ends a whole commit at or below `through`. */
@@ -746,7 +1059,7 @@ export function pruneReplicaLog(
   // window gets that answer rather than an Invalid Date.
   const cutoff = new Date(Math.max(0, now.getTime() - maxAgeMs)).toISOString();
   const epoch = meta(vault).epoch;
-  const heldBySeat = options.holdAtOrAbove ?? lowestSeatCursor(vault);
+  const heldBySeat = options.holdAtOrAbove ?? lowestSeatCursor(vault, { now });
 
   let pruned = 0;
   vault.exec("BEGIN IMMEDIATE");

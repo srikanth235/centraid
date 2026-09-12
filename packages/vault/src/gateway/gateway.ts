@@ -24,6 +24,7 @@ import type {
 } from "../enrich/content.js";
 import { rebuildFaceClusters } from "../enrich/face-clusters.js";
 import {
+  declineExhaustedEnrichmentLeases,
   drainSatisfiedEnrichmentRequests,
   queueMissingDeviceEnrichmentBacklog,
   releaseExpiredEnrichmentLeases,
@@ -49,7 +50,11 @@ import type {
 import { discardBatch, publishBatch } from "../ingest/staging.js";
 import type { PublishResult } from "../ingest/staging.js";
 import { archivedSegmentShas } from "../journal-archive.js";
-import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
+import {
+  abandonReplicaCommit,
+  beginReplicaCommit,
+  endReplicaCommit,
+} from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
 import { stampReplicaOutcomeCommitsInTransaction } from "../replica/intent-chain.js";
 import { transitionReplicaIntentOutcomeInTransaction } from "../replica/intents.js";
@@ -130,6 +135,7 @@ import type {
   PortableExport,
   PortableExportOptions,
 } from "./portable-export.js";
+import { withReplicaCommit } from "./replica-commit.js";
 import { searchEntity } from "./search.js";
 import { runReadOnlySql, VAULT_SQL_DEFAULT_ROWS } from "./sql.js";
 import type { VaultSqlRequest, VaultSqlResult } from "./sql.js";
@@ -209,6 +215,19 @@ export class Gateway {
   private readonly commands = new Map<string, RegisteredCommand>();
   private activeBatchInvocationIds: string[] | undefined;
   private activeBatchDecisionChanges: boolean[] | undefined;
+  /**
+   * PROVENANCE RINGS AFTER COMMIT (#1014, S1). The batch is ONE transaction,
+   * so a provenance doorbell rung from inside a run reaches the host while the
+   * vault transaction is still open — a listener that reads (the share tail,
+   * grant refresh) then sees the pre-commit vault, and whatever it throws is
+   * swallowed by design. Rings therefore accumulate here, exactly as decision
+   * changes do, and flush ONCE after `COMMIT` with the union of entity types.
+   * `unknown` is a ring that named no entity types (a sweep, an import): it
+   * means "wake everything" and must never be narrowed to that union.
+   */
+  private activeBatchProvenance:
+    | { types: Set<string>; unknown: boolean }
+    | undefined;
 
   constructor(
     private readonly db: VaultDb,
@@ -243,8 +262,10 @@ export class Gateway {
     }
     const invocationIds: string[] = [];
     const decisionChanges: boolean[] = [];
+    const provenance = { types: new Set<string>(), unknown: false };
     this.activeBatchInvocationIds = invocationIds;
     this.activeBatchDecisionChanges = decisionChanges;
+    this.activeBatchProvenance = provenance;
     try {
       // ONE FILE (#916): the vault and the audit band are the same handle, so
       // the batch is ONE transaction. Beginning twice is now an error, and the
@@ -309,13 +330,20 @@ export class Gateway {
       if (decisionChanges.length > 0) {
         this.emitDecisionChanged(decisionChanges.some(Boolean));
       }
+      if (provenance.unknown) this.emitProvenance(undefined);
+      else if (provenance.types.size > 0)
+        this.emitProvenance([...provenance.types]);
       return results;
     } catch (error) {
+      // The sessions go with the transaction (#1014, G3): a capture left open
+      // over a ROLLBACK decodes undone changes on the next commit.
+      abandonReplicaCommit(this.db.vault);
       if (this.db.vault.isTransaction) this.db.vault.exec("ROLLBACK");
       throw error;
     } finally {
       this.activeBatchInvocationIds = undefined;
       this.activeBatchDecisionChanges = undefined;
+      this.activeBatchProvenance = undefined;
     }
   }
 
@@ -1269,7 +1297,7 @@ export class Gateway {
         access,
         invocationId,
         undefined,
-        this.deps.onProvenanceCommitted,
+        this.provenanceSink,
         {
           deferCommitSettlement: this.activeBatchInvocationIds !== undefined,
           deferReplicaNotify: this.activeBatchInvocationIds !== undefined,
@@ -1401,7 +1429,7 @@ export class Gateway {
       access,
       invocationId,
       { confirmedBy: owner.partyId, confirmedAt: nowIso() },
-      this.deps.onProvenanceCommitted
+      this.provenanceSink
     );
     settleDurableParkedPayload(
       this.db,
@@ -1458,12 +1486,19 @@ export class Gateway {
           endReplicaCommit(this.db.vault, replicaCommit);
           this.db.vault.exec("COMMIT");
         } catch (error) {
+          // As above (#1014, G3).
+          abandonReplicaCommit(this.db.vault);
           this.db.vault.exec("ROLLBACK");
           throw error;
         }
-        for (const invocationId of invocationIds) {
-          setInvocationStatus(this.db, invocationId, "failed");
-        }
+        // AFTER the cascade's COMMIT and therefore outside its pair (#1014,
+        // G24): `agent_command_invocation` replicates, so the status change
+        // gets a pair of its own rather than riding the next member command's.
+        withReplicaCommit(this.db.vault, () => {
+          for (const invocationId of invocationIds) {
+            setInvocationStatus(this.db, invocationId, "failed");
+          }
+        });
         return invocationIds.length;
       }
     );
@@ -1476,25 +1511,51 @@ export class Gateway {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
       throw new GatewayError("access", "only the owner runs sweeps");
+    // THE PROJECTION PASSES, BRACKETED (#1014, G5). Untransacted, as these
+    // were, their rows were lost outright on the first sweep after process
+    // start and otherwise absorbed into the next member command's commit —
+    // mis-attributed to that member, and able to push it past
+    // `REPLICA_PRODUCER_MAX_ROWS` so the member's own edit shipped `deferred`.
+    //
+    // Grouped rather than one pair per mutator: they are the cheap, fully
+    // rebuildable projections of a vault that already fits on a phone, and the
+    // standing clock runs this every tick — six empty write transactions per
+    // idle tick would dirty WAL pages to discover there was nothing to do. The
+    // groups are exactly the ordering constraint above (#724).
+    // The purge passes inside `sweepLifecycle` keep a pair per row, where the
+    // 5,000-row `PURGE_BATCH` makes commit size the thing worth bounding.
     const result = sweepLifecycle(this.db, owner);
     // Cheap, fully rebuildable; rides the standing clock.
-    recomputeDuplicateClusters(this.db.vault);
+    withReplicaCommit(
+      this.db.vault,
+      () => recomputeDuplicateClusters(this.db.vault),
+      { producer: "sweep" }
+    );
     // AFTER the recompute above (#724): a regrouped sweep feeds this pass's
-    // 'similar' memories. Face clusters read what the faces sweep wrote (#724).
+    // 'similar' memories. It owns its own pair — its memo may only be
+    // remembered after the COMMIT, so it cannot join the group below.
     rebuildMemories(this.db.vault);
-    rebuildFaceClusters(this.db.vault);
-    // Seed jobs for old video/audio/PDF content and clear vanished ownership,
-    // so a backstop looking for NULL leases can resume immediately.
-    releaseExpiredEnrichmentLeases(this.db.vault);
-    drainSatisfiedEnrichmentRequests(this.db.vault);
-    queueMissingDeviceEnrichmentBacklog(this.db.vault, {
-      newId: () => uuidv7(),
-      requestedAt: nowIso(),
-      limit: 100,
-    });
+    withReplicaCommit(
+      this.db.vault,
+      () => {
+        // Face clusters read what the faces sweep wrote (#724).
+        rebuildFaceClusters(this.db.vault);
+        // Seed jobs for old video/audio/PDF content and clear vanished
+        // ownership, so a backstop looking for NULL leases resumes immediately.
+        releaseExpiredEnrichmentLeases(this.db.vault);
+        drainSatisfiedEnrichmentRequests(this.db.vault);
+        queueMissingDeviceEnrichmentBacklog(this.db.vault, {
+          newId: () => uuidv7(),
+          requestedAt: nowIso(),
+          limit: 100,
+        });
+      },
+      { producer: "sweep" }
+    );
     this.ringProvenance();
-    // Sweeps commit outside the command path; wake replica SSE streams at the
-    // same post-commit boundary.
+    // Each pair already rang on its own COMMIT; this is the sweep's own
+    // post-commit boundary, and a doorbell is idempotent for a listener that
+    // re-reads from its cursor.
     notifyReplicaCommit(this.db.vault);
     return result;
   }
@@ -1696,7 +1757,7 @@ export class Gateway {
       owner,
       batchId,
       PUBLISHERS,
-      this.deps.onProvenanceCommitted
+      this.provenanceSink
     );
   }
 
@@ -1894,19 +1955,35 @@ export class Gateway {
     let previewsGenerated = 0;
     let phashesGenerated = 0;
     let thumbhashesGenerated = 0;
+    let previewFailures: { contentId: string; error: string }[] = [];
     if (this.db.previewCodec) {
       try {
         const backfill = await backfillPreviews(this.db, this.db.previewCodec);
         previewsGenerated = backfill.generated;
         phashesGenerated = backfill.phashesGenerated;
         thumbhashesGenerated = backfill.thumbhashesGenerated;
-      } catch {
-        // swallowed on purpose — see the comment above.
+        // NAMED, NOT SWALLOWED (#1014, B3). Best-effort still means the sweep
+        // never fails here — but an item whose preview backfill threw is
+        // exactly the one a recognition walk parks behind forever, so it
+        // reaches the sweep receipt with its content id instead of
+        // disappearing into a bare `catch {}`.
+        previewFailures = backfill.failures;
+      } catch (error) {
+        // The whole batch, not one item: still best-effort, still named.
+        previewFailures = [
+          {
+            contentId: "*",
+            error: error instanceof Error ? error.message : String(error),
+          },
+        ];
       }
     }
     // Leases and backstops share the derivative row as completion truth:
     // close an expired job once its rung exists.
     drainSatisfiedEnrichmentRequests(this.db.vault);
+    // …and close the ones no device is ever going to finish (#1014, R10),
+    // recording each on the poison register so the gap is readable.
+    declineExhaustedEnrichmentLeases(this.db.vault);
     // Bounded-cache eviction (#405) runs LAST, against fresh evidence — never
     // sheds a tiny just made. Pinned tinies, staged bytes and un-replicated
     // last copies are untouchable.
@@ -1923,6 +2000,12 @@ export class Gateway {
         orphansSkipped: result.orphansSkipped.length,
         // Held by the recovery-window grace (#439) — deferred, not skipped.
         orphansGraceHeld: result.orphansGraceHeld.length,
+        // A listing the sweep refused to delete against (#1014, B23). Empty
+        // is the ordinary case; non-empty means nothing was deleted for that
+        // store class and says why.
+        ...(result.listingsRefused.length === 0
+          ? {}
+          : { listingsRefused: result.listingsRefused }),
         replicated: result.replicated.length,
         missing: result.missing,
         // 0 when no codec is wired or no image was missing a rung.
@@ -1931,6 +2014,8 @@ export class Gateway {
         phashesGenerated,
         // Inline ThumbHash placeholders published beside preview rungs.
         thumbhashesGenerated,
+        // Items whose backfill threw, by content id (#1014, B3).
+        previewFailures,
         // 0 when the spool is under budget or the vault is local-only.
         evictedBlobs: evicted.evictedBlobs,
         evictedBytes: evicted.evictedBytes,
@@ -2036,6 +2121,25 @@ export class Gateway {
   }
 
   private ringProvenance(entityTypes?: readonly string[]): void {
+    const batch = this.activeBatchProvenance;
+    if (batch) {
+      if (entityTypes === undefined) batch.unknown = true;
+      else for (const entityType of entityTypes) batch.types.add(entityType);
+      return;
+    }
+    this.emitProvenance(entityTypes);
+  }
+
+  /**
+   * The one sink handed to `runContractAndExecute` and friends, so a ring
+   * raised from inside a batch buffers instead of escaping the open
+   * transaction (#1014, S1). Bound once: it is passed as a value.
+   */
+  private readonly provenanceSink = (entityTypes: readonly string[]): void => {
+    this.ringProvenance(entityTypes);
+  };
+
+  private emitProvenance(entityTypes?: readonly string[]): void {
     try {
       this.deps.onProvenanceCommitted?.(entityTypes);
     } catch {

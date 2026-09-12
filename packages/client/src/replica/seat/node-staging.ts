@@ -29,6 +29,10 @@ import path from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import type { SeatBootstrapStaging } from "./bootstrap.js";
+import type { SeatCarryOverSidecar } from "./carry-over.js";
+import type { SeatSqliteDriver } from "./driver.js";
+import { NodeSeatDriver } from "./node-seat-driver.js";
+import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 
 async function sizeOf(file: string): Promise<number> {
   try {
@@ -72,11 +76,48 @@ export function nodeSeatStaging(
       await writeFile(marker, etag, "utf8");
       await appendFile(part, chunk);
     },
-    install: async (): Promise<void> => {
-      const staged = await readFile(part);
+    install: async (
+      etag: string,
+      prepare?: (driver: SeatSqliteDriver) => void
+    ): Promise<void> => {
+      // A STAGING FILE THAT IS NOT THERE IS A DOWNLOAD TO REDO, NOT AN ENOENT
+      // TO SURFACE (#1014, lane H). The part file can be gone by the time the
+      // install runs — a `discard` from a bootstrap that raced this one, a
+      // purge, a phone reclaiming scratch space — and the raw `ENOENT` escaped
+      // the loop as an unrecognised failure, which is a seat with no copy and
+      // an empty library. Named as what it is, the loop's bounded re-HEAD
+      // starts the download over.
+      const staged = await readFile(part).catch(() => undefined);
+      if (staged === undefined) {
+        await discard();
+        throw new SeatSnapshotMovedError(etag, undefined);
+      }
       const incoming = `${options.databasePath}.incoming`;
       await mkdir(path.dirname(options.databasePath), { recursive: true });
       await writeFile(incoming, gunzipSync(staged));
+      // BEFORE THE RENAME, NOT AFTER (#1014, C17). The seat's own tables are
+      // written onto the incoming file while it is still nameless, so the
+      // rename below publishes a file that is already this seat's — and a
+      // `prepare` that REFUSES (a mis-addressed artifact, C16) leaves the
+      // destination exactly as it was, with only the scratch file to remove.
+      if (prepare) {
+        const driver = new NodeSeatDriver(incoming);
+        try {
+          prepare(driver);
+        } catch (error) {
+          driver.close();
+          await rm(incoming, { force: true });
+          await rm(`${incoming}-wal`, { force: true });
+          await rm(`${incoming}-shm`, { force: true });
+          throw error;
+        }
+        driver.close();
+        // WAL and shm of the INCOMING file: `prepare` opened it in WAL mode,
+        // and a rename that left them behind would carry one file's journal
+        // over another's pages.
+        await rm(`${incoming}-wal`, { force: true });
+        await rm(`${incoming}-shm`, { force: true });
+      }
       await rename(incoming, options.databasePath);
       // The WAL and shm of the file being REPLACED describe pages that no
       // longer exist; leaving them would have SQLite recover a dead journal
@@ -95,5 +136,33 @@ export function nodeSeatStaging(
       }
     },
     currentBytes: (): Promise<number> => sizeOf(options.databasePath),
+  };
+}
+
+/**
+ * The carry-over sidecar on a real filesystem (#1014, C5/T6).
+ *
+ * Beside the seat file rather than in the staging directory, because the two
+ * have different lifetimes: staging is discarded the moment an install lands,
+ * and the stash must outlive exactly that. Written through a scratch file and
+ * renamed, so a kill mid-write leaves the previous stash or none — never half
+ * a queue that parses into a shorter one.
+ */
+export function nodeSeatCarryOverSidecar(
+  databasePath: string
+): SeatCarryOverSidecar {
+  const file = `${databasePath}.carry-over.json`;
+  return {
+    read: () => readFile(file, "utf8").catch(() => undefined),
+    write: async (payload: string): Promise<void> => {
+      const scratch = `${file}.writing`;
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(scratch, payload, "utf8");
+      await rename(scratch, file);
+    },
+    clear: async (): Promise<void> => {
+      await rm(file, { force: true });
+      await rm(`${file}.writing`, { force: true });
+    },
   };
 }

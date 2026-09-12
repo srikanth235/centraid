@@ -192,7 +192,40 @@ export type CronTrigger = {
   readonly expr: string;
   /** Optional IANA timezone (e.g. `America/New_York`). Validated at write. */
   readonly tz?: string;
+  /**
+   * WHAT A MISSED OCCURRENCE IS WORTH (#1014, B9, ruling R-1014-9).
+   *
+   * Cron used to collapse an outage to ONE fire: after a three-day gap the
+   * cursor returned only `due.at(-1)` and recorded the rest as `skipped`. That
+   * is exactly right for a POLL — a connector reads "everything since my
+   * cursor", so the missed 8 a.m. and the missed 9 a.m. would fetch the same
+   * mailbox twice — and exactly wrong for a recipe whose fire IS the
+   * occurrence, where two missed mornings are two reminders nobody got.
+   *
+   * `"latest"` keeps the collapse; `"each"` returns every missed occurrence,
+   * bounded by `MAX_BACKFILL_OCCURRENCES` with the remainder still recorded as
+   * a gap. The DEFAULT is `"latest"`, which is the behaviour every existing
+   * manifest already has — a class is a declaration, never a silent change.
+   */
+  readonly backfill?: CronBackfillClass;
 };
+
+/** @see CronTrigger.backfill */
+export type CronBackfillClass = "each" | "latest";
+
+export const CRON_BACKFILL_CLASSES: readonly CronBackfillClass[] = [
+  "each",
+  "latest",
+];
+
+export const DEFAULT_CRON_BACKFILL: CronBackfillClass = "latest";
+
+/**
+ * Occurrences one `each` catch-up may deliver. A month-long outage of a
+ * five-minute recipe is 8,640 fires; past this the remainder is recorded as a
+ * gap, the way a capped catch-up always was.
+ */
+export const MAX_BACKFILL_OCCURRENCES = 24;
 export type WebhookTrigger = {
   readonly kind: "webhook";
   /** Generated route slug — the path segment under `/_centraid-hook/`. */
@@ -635,7 +668,26 @@ function parseCronTrigger(
       );
     }
   }
-  return { kind: "cron", expr, ...(tz === undefined ? {} : { tz }) };
+  let backfill: CronBackfillClass | undefined;
+  if (t.backfill !== undefined) {
+    if (
+      typeof t.backfill !== "string" ||
+      !(CRON_BACKFILL_CLASSES as readonly string[]).includes(t.backfill)
+    ) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field}.backfill must be one of ${CRON_BACKFILL_CLASSES.join(", ")}`,
+        `${field}.backfill`
+      );
+    }
+    backfill = t.backfill as CronBackfillClass;
+  }
+  return {
+    kind: "cron",
+    expr,
+    ...(tz === undefined ? {} : { tz }),
+    ...(backfill === undefined ? {} : { backfill }),
+  };
 }
 
 function parseWebhookTrigger(

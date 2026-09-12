@@ -17,6 +17,10 @@
 //      names a private table, then the private tables themselves. A seat runs
 //      no DDL generator and no triggers but FTS sync; a trigger that survives
 //      would fire against a table the seat's writer does not have.
+//   3d. Redact what replicates but not whole: the JSON keys declared in
+//      `REPLICATED_COLUMN_EXCLUSIONS` (#1014, G14). Between 3a and 5 on
+//      purpose — after the append-only triggers went, before the VACUUM that
+//      frees the old text under `secure_delete`.
 //   4. Truncate the log, LEAVING ITS CURSOR. The seat needs to know where the
 //      copy sits in the gateway's sequence — that is the whole point of
 //      bootstrapping from a file rather than from seq 0 — and it needs none of
@@ -35,7 +39,10 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-import { PRIVATE_TABLE_NAMES } from "../schema/private-tables.js";
+import {
+  PRIVATE_TABLE_NAMES,
+  REPLICATED_COLUMN_EXCLUSIONS,
+} from "../schema/private-tables.js";
 
 export interface SeatSnapshotResult {
   /** Where the snapshot was written. */
@@ -98,15 +105,6 @@ export function buildSeatSnapshot(
   destination: string
 ): SeatSnapshotResult {
   const started = Date.now();
-  const state = vault
-    .prepare(`SELECT epoch, schema_epoch FROM replica_meta WHERE singleton = 1`)
-    .get() as { epoch: string; schema_epoch: number } | undefined;
-  if (!state) throw new Error("seat snapshot: replica metadata is missing");
-  const seq = (
-    vault
-      .prepare(`SELECT MAX(seq) AS seq FROM replica_log WHERE epoch = ?`)
-      .get(state.epoch) as { seq: number | null }
-  ).seq;
 
   // 1. The copy. `VACUUM INTO` refuses an existing file, which is the
   //    behaviour we want: a snapshot never overwrites one already served.
@@ -115,10 +113,36 @@ export function buildSeatSnapshot(
   const copy = new DatabaseSync(destination);
   const droppedTables: string[] = [];
   let droppedObjects = 0;
+  let epoch = "";
+  let schemaEpoch = 0;
+  let seq = 0;
   try {
     // 2. Before any drop, not after: it governs how the pages are freed.
     copy.exec("PRAGMA secure_delete = ON");
     copy.exec("PRAGMA foreign_keys = OFF");
+
+    // THE ARTIFACT DESCRIBES ITSELF (#1014, T7). Epoch, schema epoch and
+    // watermark used to be read from the LIVE vault around the `VACUUM INTO`
+    // — outside any transaction, and `VACUUM INTO` cannot be inside one. A
+    // `bumpReplicaEpoch` in that window produced a file whose `replica_meta`
+    // carried epoch B under an ETag and cursor stamped A, the seat took a
+    // `cursor-epoch` mismatch, re-bootstrapped, and hit the same window: a
+    // restore under live seats could loop. The copy IS a consistent snapshot,
+    // so the numbers are read from IT and cannot disagree with its contents.
+    const state = copy
+      .prepare(
+        `SELECT epoch, schema_epoch FROM replica_meta WHERE singleton = 1`
+      )
+      .get() as { epoch: string; schema_epoch: number } | undefined;
+    if (!state) throw new Error("seat snapshot: replica metadata is missing");
+    epoch = state.epoch;
+    schemaEpoch = state.schema_epoch;
+    seq =
+      (
+        copy
+          .prepare(`SELECT MAX(seq) AS seq FROM replica_log WHERE epoch = ?`)
+          .get(state.epoch) as { seq: number | null }
+      ).seq ?? 0;
 
     const objects = copy
       .prepare(
@@ -175,28 +199,44 @@ export function buildSeatSnapshot(
       droppedTables.push(table);
     }
 
-    // 4. The log goes; the cursor stays. `floor_seq` is where this file sits,
-    //    so the seat's first tail request asks for exactly what it is missing.
-    //    Both logs: `replica_change` is on its way out but a file frozen
-    //    before it went still carries it, and on the year-3 corpus that is
-    //    78,376 rows of a mechanism the seat has no reader for.
-    copy.exec(`DELETE FROM replica_log`);
-    if (
+    // 3d. WHAT REPLICATES BUT NOT WHOLE (#1014, G14). The table drops above
+    //     are the only row-level filter this pipeline had, and one cell of a
+    //     replicated table carries more than a seat needs: every command's
+    //     verbatim return value, under `access_receipt.detail_json.output`,
+    //     kept for gateway-side replay and read by nothing on a seat. It is
+    //     removed HERE — after the triggers went at 3a, so the append-only
+    //     trigger does not refuse the UPDATE, and before the VACUUM at 5, so
+    //     `secure_delete` frees the old text rather than leaving it legible.
+    for (const exclusion of REPLICATED_COLUMN_EXCLUSIONS) {
+      if (!present.has(exclusion.table)) continue;
+      const column = quoted(exclusion.column);
+      // `json_remove` with no matching path returns the document unchanged,
+      // so the WHERE keeps the no-op rows byte-identical instead of rewriting
+      // every receipt the vault has ever written.
+      const paths = exclusion.jsonKeys.map((key) => `$.${key}`);
       copy
         .prepare(
-          `SELECT 1 AS present FROM sqlite_schema
-            WHERE type = 'table' AND name = 'replica_change'`
+          `UPDATE ${quoted(exclusion.table)}
+              SET ${column} = json_remove(${column}, ${paths.map(() => "?").join(", ")})
+            WHERE ${column} IS NOT NULL
+              AND json_valid(${column})
+              AND (${paths.map(() => `json_type(${column}, ?) IS NOT NULL`).join(" OR ")})`
         )
-        .get() !== undefined
-    ) {
-      copy.exec(`DELETE FROM replica_change`);
+        .run(...paths, ...paths);
     }
+
+    // 4. The log goes; the cursor stays. `floor_seq` is where this file sits,
+    //    so the seat's first tail request asks for exactly what it is missing.
+    //    ONE log to truncate since #1014 (R-1014-1) — on the year-3 corpus the
+    //    trigger log this replaces was 78,376 rows of a mechanism the seat had
+    //    no reader for.
+    copy.exec(`DELETE FROM replica_log`);
     copy
       .prepare(
         `UPDATE replica_meta SET floor_seq = ?, active_commit_id = NULL
           WHERE singleton = 1`
       )
-      .run(seq ?? 0);
+      .run(seq);
 
     // 5. The step that actually reclaims the pages the drops freed.
     copy.exec("VACUUM");
@@ -206,9 +246,9 @@ export function buildSeatSnapshot(
 
   return {
     path: destination,
-    seq: seq ?? 0,
-    epoch: state.epoch,
-    schemaEpoch: state.schema_epoch,
+    seq,
+    epoch,
+    schemaEpoch,
     bytes: statSync(destination).size,
     droppedTables,
     droppedObjects,

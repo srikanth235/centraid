@@ -22,6 +22,7 @@ export const styles = StyleSheet.create({
   },
   body: { ...t("reading"), marginBottom: spacing[4] },
   error: { ...t("control"), marginVertical: spacing[1] + 1 },
+  failureRow: { gap: spacing[2], marginVertical: spacing[1] },
   eyebrow: t("eyebrow"),
   fact: {
     borderBottomWidth: borders.hairline,

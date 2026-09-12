@@ -125,7 +125,11 @@ vi.mock(import("./native-digest"), () => ({
   createNativeDigest: vi.fn<typeof TypeImport_181nh9s.createNativeDigest>(),
 }));
 vi.mock(import("./followup"), () => ({
-  replaySettledUploadFollowups: async () => ({ replayed: 0, poisoned: 0 }),
+  replaySettledUploadFollowups: async () => ({
+    replayed: 0,
+    poisoned: 0,
+    waitingForVault: {},
+  }),
 }));
 vi.mock(import("./native-policy"), () => ({
   // The real export is a `'photos.lastSuccessfulSync'` string-literal const;

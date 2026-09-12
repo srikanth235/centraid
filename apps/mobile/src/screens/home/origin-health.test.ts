@@ -20,6 +20,7 @@ function queue(
     failures: [],
     pending: 0,
     pendingVideos: 0,
+    poisonedFollowups: 0,
     readable: true,
     ...overrides,
   };
@@ -69,7 +70,13 @@ describe(originHealthSignal, () => {
         online: true,
         paired: true,
         queue: queue({
-          failures: [{ lastError: "Your vault is out of space" }],
+          failures: [
+            {
+              itemId: "item-1",
+              lastError: "Your vault is out of space",
+              terminal: true,
+            },
+          ],
           pending: 1,
         }),
       })

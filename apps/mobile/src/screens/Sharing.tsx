@@ -20,6 +20,7 @@ import { approveLink, listLinks } from "../lib/replica/links-transport";
 import type { GatewayLink } from "../lib/replica/links-transport";
 import type { SettingsScreenProps } from "../navigation";
 import {
+  linkCounterpartyLabel,
   readShareSection,
   SHARE_READ_LOADING,
   shareAbsentLine,
@@ -27,14 +28,6 @@ import {
 import type { ShareRead } from "./sharing-reads";
 import SharingLinkRow, { LinkTicketPanel } from "./SharingLinkRow";
 import { useShellParent } from "./shell-places";
-
-function vaultLabel(vaultId: string, links: readonly GatewayLink[]): string {
-  for (const link of links) {
-    if (link.vaultA === vaultId) return link.labelA ?? vaultId;
-    if (link.vaultB === vaultId) return link.labelB ?? vaultId;
-  }
-  return vaultId;
-}
 
 export default function SharingScreen({
   navigation,
@@ -116,7 +109,7 @@ export default function SharingScreen({
                 link={link}
                 busy={busyId === link.linkId}
                 colors={colors}
-                label={vaultLabel(link.remoteVaultId ?? link.vaultB, linkRows)}
+                label={linkCounterpartyLabel(link, replica.vaultId)}
                 onApprove={() =>
                   replica.gatewayBase &&
                   void act(link.linkId, () =>

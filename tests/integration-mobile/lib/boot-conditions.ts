@@ -247,27 +247,40 @@ export async function arrangeStale(
   // behind the gateway's, which is the whole of what stale means here.
   await serverCreate(gateway, seat, recipe, "stale-behind");
   const stale = await readEntity(seat, recipe.entity);
-  const staleChangesAhead = await changesAhead(gateway, seat);
-  // The negative: one pull on the same session, and the same two questions.
+  const behind = await changesAhead(gateway, seat);
+  // The negative: one pull on the same session, and the same two questions —
+  // asked THROUGH the position the gateway held when the first was asked.
   await seat.session.pullNow();
   const fresh = await readEntity(seat, recipe.entity);
   return {
     staleRows: stale.rows.length - baseline,
-    staleChangesAhead,
+    staleChangesAhead: behind.count,
     freshRows: fresh.rows.length - baseline,
-    freshChangesAhead: await changesAhead(gateway, seat),
+    freshChangesAhead: (await changesAhead(gateway, seat, behind.watermark))
+      .count,
   };
 }
 
 /**
- * How many changes the gateway holds beyond this session's cursor, asked over
- * the real changes route with this session's own shape ids. This is the phone's
- * freshness question, not a peek into the vault's tables.
+ * How many changes the gateway holds beyond this session's cursor, and where
+ * the log stood when it was asked.
+ *
+ * ASKED THROUGH A PINNED POSITION, NOT "IS ANYTHING AHEAD" (#1014, lane A).
+ * A real gateway is never quiescent: the recognition automations that are
+ * armed on every boot write their own conversation, turns and items, and
+ * since those writes were bracketed (#1014, G4/G22) they land in `replica_log`
+ * like any other replicated row. A caller asking "is the seat level NOW"
+ * is racing work that is allowed to arrive at any moment, which is a property
+ * of the harness rather than of the phone. So `through` names the position the
+ * caller pinned earlier, and the count answers the only question a pull can be
+ * held to: did it consume everything the gateway held when the question was
+ * FIRST asked.
  */
 export async function changesAhead(
   gateway: MobileGateway,
-  seat: MobileSeat
-): Promise<number> {
+  seat: MobileSeat,
+  through?: number
+): Promise<{ count: number; watermark: number }> {
   const status = seatStatus(seat);
   if (status.cursor === null)
     throw new Error("the session has no cursor to compare");
@@ -284,7 +297,11 @@ export async function changesAhead(
     },
   });
   const page = (await response.json()) as SeatLogPageWire;
-  return page.rows.length;
+  const rows =
+    through === undefined
+      ? page.rows
+      : page.rows.filter((row) => row.seq <= through);
+  return { count: rows.length, watermark: page.watermark };
 }
 
 export function intentIdOf(result: unknown): string {

@@ -28,6 +28,10 @@ import type { VaultPlane } from "../serve/vault-plane.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import type { ReplicaIntentDispatcher } from "./replica-intent-route.js";
 import { makeReplicaRouteHandler } from "./replica-routes.js";
+import {
+  capturedWrite,
+  settleReplicaLog,
+} from "./replica-write.test-fixtures.js";
 
 const CHANGES_PATH = "/centraid/_vault/changes";
 
@@ -87,17 +91,22 @@ describe("replica-routes", () => {
     plane.recordAppInstall("agenda", {
       scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
+    // Bootstrap and the install are the vault's whole history; settle them
+    // into the log so a cursor taken here is genuinely "caught up".
+    settleReplicaLog(plane.db.vault);
     return { plane, handler, unscopedHandler };
   }
 
   function task(plane: VaultPlane, id: string, title: string): void {
-    plane.db.vault
-      .prepare(
-        `INSERT INTO schedule_task
+    capturedWrite(plane.db.vault, () =>
+      plane.db.vault
+        .prepare(
+          `INSERT INTO schedule_task
          (task_id, owner_party_id, title, status, priority)
        VALUES (?, ?, ?, 'needs-action', 0)`
-      )
-      .run(id, plane.boot.ownerPartyId, title);
+        )
+        .run(id, plane.boot.ownerPartyId, title)
+    );
   }
 
   function watermark(plane: VaultPlane): string {

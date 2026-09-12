@@ -9,6 +9,11 @@ import {
 } from "../src/capabilities/ocr.js";
 import { resolveRuntimeModule } from "../src/onnx.js";
 import { previewUnsupported } from "./preview-status.js";
+import {
+  NOT_READY_MAX_TICKS,
+  failureMessage,
+  recordTargetFailure,
+} from "./target-failures.js";
 
 const BATCH = 16;
 const PROMPT_REV = "ocr-v1";
@@ -356,34 +361,73 @@ export default async function handler({ ctx, log }) {
       continue;
     }
     let assetNotReady = false;
+    let assetDeclined = false;
     let regions;
-    if (delegateStep) {
-      const answer = await ctx.delegate({
-        prompt:
-          "Transcribe all visible text in reading order. Return regions with text and optional [x,y,w,h] boxes; never invent confidence.",
-        json: {
-          type: "object",
-          required: ["regions"],
-          properties: { regions: { type: "array" } },
-        },
-        content: [
-          {
-            contentId: asset.content_id,
-            variant: "preview",
-            maxBytes: 4 * 1024 * 1024,
-          },
-        ],
+    const declineTarget = async (input) => {
+      const verdict = await recordTargetFailure(ctx, {
+        capability: "ocr",
+        targetType: "core.content_item",
+        targetId: asset.content_id,
+        ...input,
       });
-      if (typeof answer?.__centraidModel !== "string")
-        throw new Error(
-          "delegate OCR returned no ACP-confirmed model identity"
-        );
-      confirmedModel = answer.__centraidModel;
-      await ctx.state.set("confirmedModel", confirmedModel);
-      regions = canonicalRegions(answer, asset.width, asset.height);
+      if (verdict.declined) {
+        assetDeclined = true;
+        skipped += 1;
+      } else {
+        assetNotReady = true;
+        notReady += 1;
+      }
+    };
+    if (delegateStep) {
+      // A STALLED DELEGATE IS COUNTED, NOT RE-BILLED (#1014, B20). A profile
+      // pointing at an engine that never confirms its identity threw here on
+      // every tick, and the ordered walk meant the SAME photograph was sent —
+      // and billed — forever. Now it is a per-target failure like any other.
+      let answer;
+      try {
+        answer = await ctx.delegate({
+          prompt:
+            "Transcribe all visible text in reading order. Return regions with text and optional [x,y,w,h] boxes; never invent confidence.",
+          json: {
+            type: "object",
+            required: ["regions"],
+            properties: { regions: { type: "array" } },
+          },
+          content: [
+            {
+              contentId: asset.content_id,
+              variant: "preview",
+              maxBytes: 4 * 1024 * 1024,
+            },
+          ],
+        });
+        if (typeof answer?.__centraidModel !== "string")
+          throw new Error(
+            "delegate OCR returned no ACP-confirmed model identity"
+          );
+      } catch (error) {
+        await declineTarget({
+          error: failureMessage(error),
+          reason: "delegate-failed",
+        });
+      }
+      if (!assetNotReady && !assetDeclined) {
+        confirmedModel = answer.__centraidModel;
+        await ctx.state.set("confirmedModel", confirmedModel);
+        regions = canonicalRegions(answer, asset.width, asset.height);
+      }
     } else {
-      regions = await deterministicRegions(ctx, asset);
-      if (regions === null) {
+      try {
+        regions = await deterministicRegions(ctx, asset);
+      } catch (error) {
+        // ONE POISONED PHOTOGRAPH DOES NOT STOP THE LIBRARY (#1014, B2).
+        await declineTarget({
+          error: failureMessage(error),
+          reason: "failed",
+        });
+        regions = null;
+      }
+      if (regions === null && !assetNotReady && !assetDeclined) {
         // Pending parks; DECLINED does not. An original the codec refused
         // carries the vault's durable marker and will never have a rung, so
         // parking behind it would freeze the watermark for good (#1011).
@@ -394,11 +438,17 @@ export default async function handler({ ctx, log }) {
           );
           continue;
         }
-        notReady += 1;
-        assetNotReady = true;
+        // A PARK IS NOW BOUNDED (#1014, B3): an asset that is neither ready
+        // nor durably declined held every later photograph indefinitely.
+        await declineTarget({
+          reason: "no-preview",
+          error: "no preview landed for this asset",
+          maxFailures: NOT_READY_MAX_TICKS,
+        });
         log.info(`photo ${asset.asset_id}: preview has not landed yet`);
       }
     }
+    if (assetDeclined) continue;
     if (assetNotReady) {
       unreadyAssets.add(asset.asset_id);
       continue;

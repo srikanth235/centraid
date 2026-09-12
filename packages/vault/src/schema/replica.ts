@@ -1,7 +1,9 @@
 // The durable replica protocol band (#406), in the vault file so a base-table
-// mutation and its change entry share one transaction. `refreshReplicaTriggers`
-// generates the per-entity triggers from the logical registry, which keeps this
-// DDL free of primary-key names and covers live ext tables.
+// mutation and its log rows share one transaction. There is ONE log (#1014,
+// R-1014-1): `replica_log`, decoded from the session capture the commit
+// bracket opens. The per-entity AFTER triggers that fed a second table are
+// gone with it — see `replica/log.ts` for what the session extension replaces
+// and why.
 
 import {
   ROW_VERSION_COLUMN,
@@ -24,7 +26,7 @@ import {
 // (`schema/private-tables.ts`) minus the FTS shadow tables. Wave 0b's schema
 // changes deliberately carry no bump of their own — this one covers both, and
 // a mismatch is a re-bootstrap, never a partial apply.
-export const REPLICA_SCHEMA_EPOCH = 3;
+export const REPLICA_SCHEMA_EPOCH = 4;
 
 /**
  * Orders the ADDITIVE migrations a seat applies, and is deliberately a second
@@ -60,6 +62,88 @@ export const REPLICA_DDL_VERSION = 0;
  * carries JSON row images (R5) rather than the changeset the gateway captured.
  */
 export const SEAT_SQLITE_FLOOR = "3.49.1";
+
+/**
+ * RUNG EIGHT's DDL (#1014, G1/G2/V1). ONE FLOOR PER LOG.
+ *
+ * `replica_meta.floor_seq` was written by BOTH logs' pruners in two unrelated
+ * sequence spaces: the trigger log runs ~19 rows to the session log's 1, so a
+ * trigger-log prune could stamp a floor far above `MAX(replica_log.seq)` and
+ * every seat cursor then failed `since.seq < floor` into a `retention`
+ * re-bootstrap whose snapshot stamped the floor back down — a loop with
+ * nothing applied and nothing surfaced. `floor_seq` now belongs to
+ * `replica_log` alone and the trigger log carries its own `change_floor_seq`
+ * until it is retired.
+ *
+ * The repair of an existing file is the second statement: whatever `floor_seq`
+ * holds today is a TRIGGER-log position, so it moves across, and the seat
+ * log's floor is re-derived from the rows the file actually still has. Below
+ * the true floor is safe (a seat re-reads what it had); above it is the loss
+ * this rung exists to undo.
+ *
+ * `access_device_secret.sync_cursor_at` is the other half of the seat hold:
+ * a cursor with no time on it cannot say whether the device that wrote it is
+ * still there, and a hold with no abandonment bound lets one lost phone pin
+ * the log forever.
+ */
+export const REPLICA_FLOOR_SPLIT_DDL = `
+ALTER TABLE replica_meta ADD COLUMN change_floor_seq INTEGER NOT NULL DEFAULT 0;
+UPDATE replica_meta SET change_floor_seq = floor_seq WHERE singleton = 1;
+UPDATE replica_meta
+   SET floor_seq = (
+     SELECT COALESCE(MIN(seq), 1) - 1 FROM replica_log
+      WHERE epoch = replica_meta.epoch
+   )
+ WHERE singleton = 1;
+ALTER TABLE access_device_secret ADD COLUMN sync_cursor_at TEXT;
+`;
+
+/**
+ * RUNG NINE (#1014, R-1014-1). ONE LOG.
+ *
+ * `replica_change` — a table plus 288 generated AFTER triggers, re-derived on
+ * every schema change — is dropped, and the feed reads `replica_log`, which
+ * every write path was already filling. What the trigger log had that the
+ * session log did not is added here: the old values of the columns an update
+ * changed (`prior_json`), and a doorbell lane for the gateway-private intent
+ * outcome table (`local`).
+ *
+ * THE EPOCH ROTATES ONCE, AND ONLY ON A FILE THAT CARRIED THE TRIGGER LOG. A
+ * feed cursor is `{epoch, seq}` in both worlds — the same wire shape over a
+ * different sequence space, which no seat can detect for itself. So the file
+ * says so: `epoch_reason = 'one-log'`, the floor lands on the log this vault
+ * actually has, and a shipped phone re-bootstraps exactly once. A fresh file
+ * has no trigger log to leave behind, so the `EXISTS` guard skips it and its
+ * epoch still reads `created`.
+ *
+ * `trigger_schema_version` and `change_floor_seq` go with the plane they
+ * belonged to: one log has one floor again (#1014, G1), and there is no
+ * trigger catalog left to fingerprint. The triggers themselves cannot be
+ * dropped from stated DDL — their names are generated — so
+ * `dropReplicaChangeTriggers` does it in JS, before the ladder runs.
+ */
+export const REPLICA_ONE_LOG_DDL = `
+ALTER TABLE replica_log ADD COLUMN prior_json TEXT
+  CHECK (prior_json IS NULL OR json_valid(prior_json));
+ALTER TABLE replica_log ADD COLUMN local INTEGER NOT NULL DEFAULT 0
+  CHECK (local IN (0,1));
+UPDATE replica_meta
+   SET epoch = lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) ||
+               '-' || lower(hex(randomblob(2))) || '-' ||
+               lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
+       floor_seq = COALESCE((SELECT MAX(seq) FROM replica_log), 0),
+       schema_epoch = ${REPLICA_SCHEMA_EPOCH},
+       epoch_reason = 'one-log',
+       epoch_started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+ WHERE singleton = 1
+   AND EXISTS (
+     SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'replica_change'
+   );
+DROP TABLE IF EXISTS replica_change;
+ALTER TABLE replica_meta DROP COLUMN change_floor_seq;
+ALTER TABLE replica_meta DROP COLUMN trigger_schema_version;
+`;
 
 export const REPLICA_DDL = `
 CREATE TABLE IF NOT EXISTS replica_meta (
@@ -160,37 +244,12 @@ CREATE INDEX IF NOT EXISTS idx_replica_log_epoch_commit
 CREATE INDEX IF NOT EXISTS idx_replica_log_row
   ON replica_log(epoch, "table", pk_json, seq DESC);
 
-CREATE TABLE IF NOT EXISTS replica_change (
-  seq             INTEGER PRIMARY KEY AUTOINCREMENT,
-  epoch           TEXT NOT NULL,
-  commit_id       TEXT NOT NULL,
-  entity          TEXT NOT NULL,
-  row_id          TEXT NOT NULL,
-  op              TEXT NOT NULL CHECK (op IN ('insert','update','delete')),
-  old_values_json TEXT CHECK (old_values_json IS NULL OR json_valid(old_values_json)),
-  -- Set only on an entry that retention compaction folded OLDER entries of the
-  -- same row into: the op of, and the row state before, the oldest change this
-  -- entry now stands for. NULL means the entry stands for itself, so a reader
-  -- takes op/old_values_json instead. A client whose cursor predates the
-  -- folded entries needs that older state to decide filtered membership; see
-  -- compactSupersededCommits in replica/change-log.ts.
-  prior_op        TEXT CHECK (prior_op IS NULL OR prior_op IN ('insert','update','delete')),
-  prior_old_values_json TEXT CHECK (prior_old_values_json IS NULL OR json_valid(prior_old_values_json)),
-  changed_at      TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS idx_replica_change_epoch_seq
-  ON replica_change(epoch, seq);
-CREATE INDEX IF NOT EXISTS idx_replica_change_epoch_commit_seq
-  ON replica_change(epoch, commit_id, seq);
-CREATE INDEX IF NOT EXISTS idx_replica_change_latest_row
-  ON replica_change(epoch, entity, row_id, seq DESC);
-CREATE INDEX IF NOT EXISTS idx_replica_change_changed_at
-  ON replica_change(epoch, changed_at, seq);
-
--- An intent's durable canonical outcome. The generic replica trigger installer
--- publishes this as the internal entity replica.intent, letting the initiating
--- device observe parked/committed/rejected transitions through the same log as
--- ontology writes. The gateway remains responsible for device scoping.
+-- An intent's durable canonical outcome. The table is gateway-private, so the
+-- capture writes a KEY-ONLY \`local\` row into \`replica_log\` for every touch of
+-- it (#1014, R-1014-1): the initiating device observes parked/committed/
+-- rejected transitions through the same log as ontology writes, and the
+-- gateway remains responsible for resolving which device may read which
+-- outcome.
 CREATE TABLE IF NOT EXISTS replica_intent_outcome (
   intent_id     TEXT PRIMARY KEY,
   device_id     TEXT NOT NULL,

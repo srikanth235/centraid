@@ -586,7 +586,11 @@ describe("google-gmail-pull", () => {
     expect(fetches.some((call) => call.url.includes("q=newer_than:30d"))).toBe(
       true
     );
-    expect(result.summary).toBe("pulled 1 message(s) (window)");
+    // A GAP, NOT A SILENT RESTART (#1014, B15): everything between the
+    // expired cursor and the 30-day window is unreachable, so the fall-back
+    // says so rather than letting the window look like the whole truth.
+    expect(result.summary).toContain("pulled 1 message(s) (window)");
+    expect(result.summary).toContain("gap: gmail history cursor 5 expired");
     expect(result.rows[0]).toStrictEqual({
       entity_type: "social.message",
       external_id: "gmail:m9",

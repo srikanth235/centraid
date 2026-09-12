@@ -151,6 +151,18 @@ describe("shipped automation bundles against the sandbox lanes", () => {
       expect(bundle.builtins).toContain("fs");
   });
 
+  test("the model-runtime lane admits what its NATIVE dependency loads, not only what the bundle text imports", () => {
+    // #1014, R9. The scan above reads `node:`-prefixed specifiers in the
+    // BUNDLE, and `onnxruntime-node@1.27` reaches for `worker_threads`
+    // un-prefixed from its own CJS — so `embed-text` and `embed-image` passed
+    // every check here and then refused to load at all in the field. The
+    // lane's answer for that builtin is now part of the corpus.
+    const policy = modelRuntimePolicy(["/models"]);
+    expect(builtinDecision(policy, "worker_threads")).toStrictEqual({
+      kind: "confined-worker-threads",
+    });
+  });
+
   test("every bundle is admitted by the lane its own manifest declares", () => {
     const blocked = ALL.map((bundle) => ({
       id: bundle.id,

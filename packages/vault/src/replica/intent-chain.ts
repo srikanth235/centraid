@@ -12,7 +12,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { TERMINAL, intentRowById } from "./intents.js";
-import type { ReplicaProducedRowWire } from "./intents.js";
+import type { IntentRow, ReplicaProducedRowWire } from "./intents.js";
 
 /**
  * Stamp an executed outcome with the commit it produced (#996, R24).
@@ -229,6 +229,57 @@ export function resolvePredecessorReferences(
   return walk(input);
 }
 
+/**
+ * The row versions a chain's predecessors PRODUCED, keyed `table\0primaryKey`.
+ *
+ * WHY A CHAINED WRITE NEEDS THIS (#1014, R18). The seat states the version it
+ * OBSERVED on the row — the only honest number it has — but by the time a
+ * chained write runs, its own predecessor has already bumped that row. Without
+ * this the gateway would refuse every second edit of a row as a conflict with
+ * the member's own first edit, which is why the seat used to drop the base
+ * version entirely and why nothing was left guarding the write. The rebase is
+ * what makes carrying the base version correct AND useful: the child is
+ * checked against the version its parent produced, so a THIRD party's edit
+ * landing between the two is still a conflict.
+ *
+ * ORDERED BY COMMIT POSITION so the LAST predecessor to touch a row wins — a
+ * chain of three edits on one row rebases onto the third, not whichever id
+ * sorted first. A predecessor that has not executed, or that produced no
+ * version for the row, contributes nothing and the seat's own number stands.
+ */
+export function replicaPredecessorRowVersions(
+  vault: DatabaseSync,
+  dependsOn: readonly string[]
+): Map<string, number> {
+  const versions = new Map<string, number>();
+  const rows = dependsOn
+    .map((intentId) => intentRowById(vault, intentId))
+    .filter(
+      (row): row is IntentRow =>
+        row !== undefined &&
+        row.status === "executed" &&
+        row.produced_json !== null
+    )
+    .sort((left, right) => (left.commit_seq ?? 0) - (right.commit_seq ?? 0));
+  for (const row of rows) {
+    const produced = JSON.parse(
+      row.produced_json as string
+    ) as ReplicaProducedRowWire[];
+    for (const entry of produced) {
+      if (entry.rowVersion === undefined || entry.pk.length !== 1) continue;
+      const key = entry.pk[0];
+      if (typeof key !== "string") continue;
+      versions.set(producedRowKey(entry.table, key), entry.rowVersion);
+    }
+  }
+  return versions;
+}
+
+/** The key `replicaPredecessorRowVersions` answers by: physical table, NUL, id. */
+export function producedRowKey(table: string, rowId: string): string {
+  return `${table}\u0000${rowId}`;
+}
+
 export interface ExpiredOutcomeRecovery {
   readonly intentId: string;
   readonly reason: string;
@@ -262,13 +313,43 @@ export function expiredOutcomeRecovery(
 }
 
 /**
- * Drop outcomes past their window — but NEVER one a seat has not caught up to.
+ * Collapse outcomes past their window to TOMBSTONES — and never one a seat
+ * has not caught up to.
  *
- * The same rule the log's floor obeys (OQ-13), for the same reason: a seat
- * whose applied cursor is still behind an outcome's `commit_seq` is a seat
- * that has not yet cleared the pending projection that outcome answers.
- * Pruning it turns a badge that would have cleared into one that never does.
+ * A TOMBSTONE, NOT A DELETE (#1014, G16). This used to `DELETE` the row, and
+ * `expiredOutcomeRecovery` answers `undefined` when the row is gone — so the
+ * moment an outcome was pruned, the SAME intent id sailed past the dedupe
+ * check and executed a second time. That is the one thing the idempotency
+ * window exists to prevent, and pruning was quietly the way to defeat it. The
+ * row that stays behind is the id, the device, the app, the action, the
+ * payload hash and the window: no payload, no reason, no produced set, no
+ * chain — everything a re-execution would need is gone and everything an
+ * "I no longer know" answer needs is kept.
+ *
+ * THAT THE TOMBSTONE IS FOREVER IS THE RULING, not an oversight. Roughly a
+ * hundred and fifty bytes per intent ever admitted, against an id that can run
+ * twice. Nothing here promises a second horizon, because nothing would call
+ * it.
+ *
+ * ONLY A SETTLED ANSWER IS COLLAPSED (#1014, G17). The old predicate skipped
+ * the seat hold entirely for rows with no `commit_seq` — which is every
+ * `parked` outcome — so a confirmation the owner had not decided yet was
+ * deleted out from under them, contradicting the comment above it. A
+ * non-terminal intent is not past anything; it is still waiting.
+ *
+ * The hold is the same rule the log's floor obeys (OQ-13), for the same
+ * reason: a seat whose applied cursor is still behind an outcome's
+ * `commit_seq` has not yet cleared the pending projection that outcome
+ * answers, and collapsing it turns a badge that would have cleared into one
+ * that never does.
  */
+/**
+ * The `reason` a collapsed outcome carries. It is what makes the collapse
+ * idempotent — a second sweep over the same row changes nothing — and it says
+ * in the file itself why the row holds no payload.
+ */
+export const REPLICA_INTENT_TOMBSTONE_REASON = "aged-out";
+
 export function pruneReplicaIntentOutcomes(
   vault: DatabaseSync,
   options: { now?: Date; holdAtOrAbove?: number } = {}
@@ -278,11 +359,22 @@ export function pruneReplicaIntentOutcomes(
   const pruned = Number(
     vault
       .prepare(
-        `DELETE FROM replica_intent_outcome
+        `UPDATE replica_intent_outcome
+            SET invocation_id = NULL, reason = ?, conflict_json = NULL,
+                waiting_on = NULL, answered_versions = NULL,
+                produced_json = NULL, depends_on = NULL
           WHERE expires_at IS NOT NULL AND expires_at <= ?
-            AND (? IS NULL OR commit_seq IS NULL OR commit_seq <= ?)`
+            AND status IN ('executed', 'denied', 'failed', 'conflict')
+            AND (? IS NULL OR commit_seq IS NULL OR commit_seq <= ?)
+            AND (reason IS NULL OR reason <> ?)`
       )
-      .run(now, held ?? null, held ?? 0).changes
+      .run(
+        REPLICA_INTENT_TOMBSTONE_REASON,
+        now,
+        held ?? null,
+        held ?? 0,
+        REPLICA_INTENT_TOMBSTONE_REASON
+      ).changes
   );
   return { pruned, heldBySeat: held };
 }

@@ -2,10 +2,18 @@
  * Durable notices behind the Notifications surface (#647). Owner decisions
  * stay in their canonical tables, projected beside these rows by VaultPlane.
  * A `(kind, sourceRef)` pair is one card: repeats update count/read state.
+ *
+ * `notifications_notice` REPLICATES (#1014, N1). These are raw statements on
+ * the gateway's own vault handle, so every one of them runs inside
+ * `withReplicaCommit`: outside the pair the row reached the trigger log and the
+ * SSE feed but never a seat's file, and a phone learned about a notice only by
+ * re-bootstrapping.
  */
 
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+
+import { withReplicaCommit } from "@centraid/vault";
 
 export type NoticeSeverity = "info" | "warning" | "high";
 export type AutomationNotifyPolicy = "always" | "failures" | "never";
@@ -207,8 +215,11 @@ export class NoticeStore {
       notice: Notice;
     }) => void = () => undefined
   ) {
-    // Enforce retention even when no new notices arrive.
-    this.prune(new Date().toISOString());
+    // Enforce retention even when no new notices arrive — bracketed, because a
+    // prune is a DELETE on a replicated table like any other (#1014).
+    withReplicaCommit(this.db, () => this.prune(new Date().toISOString()), {
+      producer: "notices",
+    });
   }
 
   list(input: { includeArchived?: boolean; limit?: number } = {}): Notice[] {
@@ -242,6 +253,16 @@ export class NoticeStore {
 
   put(input: PutNotice): Notice {
     const at = input.at ?? new Date().toISOString();
+    const written = withReplicaCommit(this.db, () => this.putRow(input, at), {
+      producer: "notices",
+    });
+    // AFTER the commit: a listener that throws must not fail a written notice.
+    this.onChanged({ wake: written.severity === "high", notice: written });
+    return written;
+  }
+
+  /** The write half of {@link put}, always called inside the pair. */
+  private putRow(input: PutNotice, at: string): Notice {
     const noticeId = randomUUID();
     this.db
       .prepare(
@@ -271,7 +292,6 @@ export class NoticeStore {
     this.prune(at);
     const written = this.getBySource(input.kind, input.sourceRef);
     if (!written) throw new Error("Notice write did not settle");
-    this.onChanged({ wake: written.severity === "high", notice: written });
     return written;
   }
 
@@ -279,13 +299,18 @@ export class NoticeStore {
     noticeId: string,
     at = new Date().toISOString()
   ): Notice | undefined {
-    const changed = this.db
-      .prepare(
-        `UPDATE notifications_notice
-            SET read_at = COALESCE(read_at, ?)
-          WHERE notice_id = ?`
-      )
-      .run(at, noticeId).changes;
+    const changed = withReplicaCommit(
+      this.db,
+      () =>
+        this.db
+          .prepare(
+            `UPDATE notifications_notice
+                SET read_at = COALESCE(read_at, ?)
+              WHERE notice_id = ?`
+          )
+          .run(at, noticeId).changes,
+      { producer: "notices" }
+    );
     if (changed === 0) return undefined;
     const notice = this.getById(noticeId);
     if (notice) this.onChanged({ wake: false, notice });
@@ -293,13 +318,18 @@ export class NoticeStore {
   }
 
   archive(noticeId: string, at = new Date().toISOString()): Notice | undefined {
-    const changed = this.db
-      .prepare(
-        `UPDATE notifications_notice
-            SET read_at = COALESCE(read_at, ?), archived_at = COALESCE(archived_at, ?)
-          WHERE notice_id = ?`
-      )
-      .run(at, at, noticeId).changes;
+    const changed = withReplicaCommit(
+      this.db,
+      () =>
+        this.db
+          .prepare(
+            `UPDATE notifications_notice
+                SET read_at = COALESCE(read_at, ?), archived_at = COALESCE(archived_at, ?)
+              WHERE notice_id = ?`
+          )
+          .run(at, at, noticeId).changes,
+      { producer: "notices" }
+    );
     if (changed === 0) return undefined;
     const notice = this.getById(noticeId);
     if (notice) this.onChanged({ wake: false, notice });
@@ -317,6 +347,7 @@ export class NoticeStore {
     return row ? fromRow(row) : undefined;
   }
 
+  /** Retention. Callers bracket it; it never opens a pair of its own. */
   private prune(now: string): void {
     const cutoff = new Date(
       Date.parse(now) - ARCHIVED_RETENTION_MS

@@ -5,7 +5,7 @@
 // walk forward from. It is HISTORY now and does not grow: #929 needed to reach
 // files that already exist, which is the moment migrate.ts always said the
 // baseline text freezes and rung two begins. A fresh file runs every rung and
-// lands on `PRAGMA user_version = 5`; a file frozen at N runs the rungs above
+// lands on `PRAGMA user_version = 8`; a file frozen at N runs the rungs above
 // N and no others, which is why a shape change made after a release is a new
 // rung rather than an edit to one already climbed.
 //
@@ -24,7 +24,7 @@ import {
   SHARE_DELIVERY_CONFIG_RECUT_DDL,
 } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
-import { BLOB_DDL } from "./blob.js";
+import { BLOB_DDL, BLOB_TRANSIENT_HOLDS_DDL } from "./blob.js";
 import { CONTENT_TEXT_DDL, LINK_ANCHOR_DDL } from "./core-side-tables.js";
 import { CORE_DDL } from "./core.js";
 import {
@@ -45,16 +45,16 @@ import {
   MEDIA_DDL,
 } from "./domains-social-knowledge-media.js";
 import { TALLY_DDL, TALLY_LINE_ITEM_DDL } from "./domains-tally.js";
-import { ENRICH_DDL } from "./enrich.js";
+import { ENRICH_DDL, ENRICH_TARGET_FAILURE_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import {
   CORE_ENTITY_DDL,
   ENTITY_PURGE_REVOKE_DDL,
   refreshEntityTriggers,
 } from "./entity.js";
-import { APP_EXT_DDL } from "./ext.js";
+import { APP_EXT_DDL, refreshExtRowVersions } from "./ext.js";
 import { FTS_DDL, assertFtsSpecsRegistered } from "./fts.js";
-import { LEDGER_DDL } from "./ledger.js";
+import { AUTOMATION_TRIGGER_DEAD_LETTER_DDL, LEDGER_DDL } from "./ledger.js";
 import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { SHARE_PARTY_BINDING_DDL } from "./party-vault-binding.js";
@@ -62,7 +62,11 @@ import {
   READ_PATH_INDEX_DDL,
   SUBSCRIPTION_READ_PATH_INDEX_DDL,
 } from "./read-path-indexes.js";
-import { REPLICA_DDL } from "./replica.js";
+import {
+  REPLICA_DDL,
+  REPLICA_FLOOR_SPLIT_DDL,
+  REPLICA_ONE_LOG_DDL,
+} from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_SUBSCRIPTION_DDL } from "./subscription.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
@@ -226,7 +230,66 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // a passphrase here. See the DDL's own note for why a dormant verifier is
   // worse than none.
   LOCKER_AUTH_DROP_DDL,
+  // RUNG EIGHT (#1014, G1/G2/V1) — one floor per log, and a time on the seat
+  // cursor. Its own rung and not an edit to the baseline for the reason rung
+  // five gives: a file that has climbed a rung never climbs it again, so a
+  // shape change made after the freeze is a new rung or it reaches nothing.
+  // A fresh file climbs it too, which is why the columns are added HERE and
+  // not in `REPLICA_DDL` / `ACCESS_DDL` — `ADD COLUMN` has no `IF NOT
+  // EXISTS`, so a column stated in both places would fail the rung.
+  REPLICA_FLOOR_SPLIT_DDL,
+  // RUNG NINE (#1014, B1/B2) — the two registers that make a poisoned unit of
+  // work visible instead of silent: the tail of trigger elements a cursor gave
+  // up on, and the per-target enrichment failure counter. Its own rung for the
+  // reason rung five gives: a file that has climbed a rung never climbs it
+  // again, so a shape change made after the freeze is a new rung or it reaches
+  // nothing. The `ADD COLUMN` half is stated only here — `ADD COLUMN` has no
+  // `IF NOT EXISTS`, so a column also stated in `LEDGER_DDL` would fail the
+  // rung on a fresh file.
+  [AUTOMATION_TRIGGER_DEAD_LETTER_DDL, ENRICH_TARGET_FAILURE_DDL].join("\n"),
+  // RUNG TEN (#1014, R-1014-1) — one log. `replica_change` goes, `replica_log`
+  // gains the two things the trigger log had that a session changeset does not
+  // (`prior_json`, the `local` doorbell lane), and a file that carried the
+  // trigger log rotates its epoch once with reason `one-log` so a shipped
+  // phone re-bootstraps into the new sequence space exactly once. The
+  // generated triggers cannot be named from stated DDL, so
+  // `dropReplicaChangeTriggers` removes them in JS just before the ladder runs.
+  REPLICA_ONE_LOG_DDL,
+  // RUNG ELEVEN (#1014, B5/B12) — the staging band's intent hold and the custody
+  // outbox's quarantine mark. See `BLOB_TRANSIENT_HOLDS_DDL` for what each
+  // column ends; its own rung for the reason rung five gives.
+  BLOB_TRANSIENT_HOLDS_DDL,
 ];
+
+/**
+ * Remove the generated `replica_change` triggers from a file that still has
+ * them (#1014, R-1014-1).
+ *
+ * NOT A RUNG, because a rung is a fixed string and these names are derived
+ * from the entity registry — up to 288 of them, plus whatever an ext band
+ * installed. It runs BEFORE the ladder because rung ten drops the table they
+ * write into, and a trigger left pointing at a missing table fails the next
+ * write to its base table rather than at open.
+ *
+ * Idempotent and cheap: one catalog query that comes back empty on every file
+ * that has already been here.
+ */
+export function dropReplicaChangeTriggers(db: DatabaseSync): void {
+  const triggers = (
+    db
+      .prepare(
+        `SELECT name FROM sqlite_master
+          WHERE type = 'trigger' AND name LIKE 'trg\\_replica\\_%' ESCAPE '\\'`
+      )
+      .all() as { name: string }[]
+  ).map((row) => row.name);
+  if (triggers.length === 0) return;
+  db.exec(
+    triggers
+      .map((name) => `DROP TRIGGER IF EXISTS "${name.replaceAll('"', '""')}"`)
+      .join(";\n")
+  );
+}
 
 /**
  * Apply the current pre-release vault schema.
@@ -239,6 +302,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
 export function migrateVault(db: DatabaseSync): void {
   assertVaultRegistryLabels();
   assertFtsSpecsRegistered();
+  dropReplicaChangeTriggers(db);
   migrate(db, VAULT_MIGRATIONS);
   // Registry-generated, like the replica's triggers and for the same reason:
   // an entity added to the catalog must reach the file without a rung, and no
@@ -246,6 +310,9 @@ export function migrateVault(db: DatabaseSync): void {
   // — it returns after two counts when the file already agrees with the
   // registry.
   refreshEntityTriggers(db);
+  // The ext band's physicals are not stated DDL, so the replication guard
+  // reaches them here rather than on a rung (#1014, G8).
+  refreshExtRowVersions(db);
 }
 
 function currentVersion(db: DatabaseSync): number {

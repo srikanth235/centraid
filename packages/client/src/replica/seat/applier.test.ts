@@ -6,8 +6,16 @@ import type { SeatLogPageWire, SeatLogRowWire } from "@centraid/core/protocol";
 import { applySeatLogPage } from "./applier.js";
 import { openSeatFile } from "./driver.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
+import { addSeatOutboxIntent, readSeatOutbox } from "./outbox.js";
 import { SeatDriftError } from "./seat-drift-error.js";
+import {
+  clearSeatOverlaysAtCommit,
+  SeatIntentStore,
+  seatOverlayClearingHook,
+  SETTLED_JOURNAL_LIMIT,
+} from "./seat-intent-store.js";
 import { initSeatState, readSeatState } from "./state.js";
+import { seatWatermark, seatWatermarkLine } from "./watermark.js";
 
 const VAULT = "vault-1";
 const EPOCH = "e1";
@@ -272,7 +280,7 @@ describe("the seat applier", () => {
     driver.close();
   });
 
-  it("defers an over-threshold commit for a metered seat and records where it starts", () => {
+  it("stops at an over-threshold commit rather than stepping over it", () => {
     nextSeq = 10;
     const driver = seat();
     const big = [
@@ -284,14 +292,74 @@ describe("the seat applier", () => {
       deferOverThreshold: true,
     });
     expect(result.deferred).toBe(2);
-    expect(result.applied).toBe(1);
+    expect(result.applied).toBe(0);
     expect(result.deferredFrom).toBe(big[0]!.seq);
-    // The tail still drains behind the span the seat declined to take.
-    expect(driver.all(`SELECT note_id FROM note`)).toStrictEqual([
-      { note_id: "n3" },
-    ]);
-    expect(readSeatState(driver).appliedSeq).toBe(after.seq);
+    // NOTHING BEHIND THE SPAN EITHER (#1014, C1). The cursor used to jump to
+    // the deferred commit's last seq, and rule 3 then dropped those rows on
+    // every later delivery — the span was permanently absent from a seat that
+    // reported itself up to date. The cursor stays before it instead.
+    expect(driver.all(`SELECT note_id FROM note`)).toStrictEqual([]);
+    expect(readSeatState(driver).appliedSeq).toBe(10);
     expect(readSeatState(driver).deferredFrom).toBe(big[0]!.seq);
+    driver.close();
+  });
+
+  it("applies the owed span on the next pull once the seat is not metered", () => {
+    nextSeq = 10;
+    const driver = seat();
+    const big = [
+      { ...insertNote("n1", "big"), deferred: true as const },
+      { ...insertNote("n2", "big"), deferred: true as const },
+    ];
+    const after = insertNote("n3", "small", 101);
+    const spans = page([...big, after]);
+    applySeatLogPage(driver, spans, { deferOverThreshold: true });
+    expect(seatWatermark(readSeatState(driver)).behind).toBeGreaterThan(0);
+
+    // Wifi. The seat asks from the same position and takes the whole thing.
+    const result = applySeatLogPage(driver, spans);
+    expect(result.applied).toBe(3);
+    expect(result.deferred).toBe(0);
+    expect(
+      driver.all(`SELECT note_id FROM note ORDER BY note_id`)
+    ).toStrictEqual([{ note_id: "n1" }, { note_id: "n2" }, { note_id: "n3" }]);
+    const state = readSeatState(driver);
+    expect(state.appliedSeq).toBe(after.seq);
+    // And the flag the member was shown goes with the rows.
+    expect(state.deferredFrom).toBeUndefined();
+    expect(seatWatermarkLine(seatWatermark(state))).toBe("up to date");
+    driver.close();
+  });
+
+  it("never defers a commit that carries schema", () => {
+    nextSeq = 10;
+    const driver = seat();
+    // A ddl row is not bytes the member can wait for: every later row binds
+    // against the column it adds (#1014, C2). Deferring this wedged the seat
+    // with a bare SQLite error the loop could not recognise as drift.
+    const result = applySeatLogPage(
+      driver,
+      page([
+        {
+          ...row({
+            table: "note",
+            op: "ddl",
+            ddlVersion: 1,
+            pk: ["note"],
+            row: { sql: "ALTER TABLE note ADD COLUMN pinned INTEGER" },
+          }),
+          deferred: true as const,
+        },
+      ]),
+      { deferOverThreshold: true }
+    );
+    expect(result.deferred).toBe(0);
+    expect(result.ddl).toBe(1);
+    expect(readSeatState(driver).ddlVersion).toBe(1);
+    // The column is really there, so the rows that follow it bind.
+    driver.run(
+      `INSERT INTO note (note_id, title, pinned) VALUES ('n1', 't', 1)`
+    );
     driver.close();
   });
 
@@ -381,6 +449,83 @@ describe("the seat applier", () => {
       { onChange: (notice) => notices.push([...notice.tables]) }
     );
     expect(notices).toStrictEqual([["note", "tag"]]);
+    driver.close();
+  });
+});
+
+describe("what is written inside the transaction and what is told after it", () => {
+  it("clears the overlay in the commit and announces it only once durable", () => {
+    nextSeq = 10;
+    const driver = seat();
+    SeatIntentStore.create(driver);
+    addSeatOutboxIntent(driver, {
+      intentId: "i-1",
+      appId: "notes",
+      action: "notes.create_note",
+      input: {},
+      payloadHash: "h",
+      state: "awaiting-change",
+      commitSeq: 100,
+    });
+
+    const order: string[] = [];
+    const clearing = seatOverlayClearingHook(driver, (ids) => {
+      // WHAT THE SHELL SEES. Before #1014's C10 this ran before COMMIT, so a
+      // listener that threw rolled back an applied log page and a
+      // not-yet-durable "your write landed" was published.
+      // The rows really are visible from a fresh read at this point.
+      order.push(
+        `told:${ids.join(",")}`,
+        `note:${driver.all<{ n: number }>(`SELECT count(*) AS n FROM note`)[0]!.n}`
+      );
+    });
+    applySeatLogPage(driver, page([insertNote("n1", "landed")]), {
+      onCommitInTransaction: (commitSeq) => {
+        clearing.inTransaction(commitSeq);
+        // Inside: the outbox row is already gone, and it is not yet announced.
+        order.push(`cleared-in-transaction:${readSeatOutbox(driver).length}`);
+      },
+      afterCommit: clearing.afterCommit,
+    });
+    expect(order).toStrictEqual([
+      "cleared-in-transaction:0",
+      "told:i-1",
+      "note:1",
+    ]);
+    driver.close();
+  });
+
+  it("bounds the settled journal on the path that settles almost everything", () => {
+    nextSeq = 10;
+    const driver = seat();
+    SeatIntentStore.create(driver);
+    // The journal already at its bound, from earlier commits.
+    driver.exec(
+      `WITH RECURSIVE past(n) AS (
+         SELECT 1 UNION ALL SELECT n + 1 FROM past WHERE n < ${SETTLED_JOURNAL_LIMIT})
+       INSERT INTO seat_outbox_settled (intent_id, settled_at, outcome_json)
+       SELECT 'past-' || n, '2026-01-01T00:00:0' || (n % 10) || '.000Z', '{}'
+         FROM past`
+    );
+    addSeatOutboxIntent(driver, {
+      intentId: "i-new",
+      appId: "notes",
+      action: "notes.create_note",
+      input: {},
+      payloadHash: "h",
+      state: "awaiting-change",
+      commitSeq: 100,
+    });
+    driver.exec("BEGIN IMMEDIATE");
+    // This path — R24's in-transaction clear — settles almost everything on a
+    // seat whose outbox shares the file, and it never pruned (#1014, C9).
+    expect(clearSeatOverlaysAtCommit(driver, 100)).toStrictEqual(["i-new"]);
+    driver.exec("COMMIT");
+    expect(
+      driver.all<{ n: number }>(
+        `SELECT count(*) AS n FROM seat_outbox_settled`
+      )[0]!.n
+    ).toBe(SETTLED_JOURNAL_LIMIT);
     driver.close();
   });
 });

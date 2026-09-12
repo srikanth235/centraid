@@ -8,8 +8,8 @@ import {
   InvalidReplicaCursorError,
   parseReplicaCursor,
   ReplicaRebootstrapRequiredError,
-  REPLICA_RETENTION_DAYS,
-  REPLICA_RETENTION_MAX_ENTRIES,
+  REPLICA_LOG_RETENTION_DAYS,
+  REPLICA_LOG_RETENTION_MAX_ROWS,
 } from "@centraid/vault";
 import type { ReplicaCursor, ReplicaLogState } from "@centraid/vault";
 
@@ -85,6 +85,12 @@ export const REPLICA_REBOOTSTRAP_VERDICTS = [
   "snapshot-retention",
   "shape-changed",
   "checkpoint-incompatible",
+  // A PERSON CHANGED THE ACCESS (#1014, V16). The stream has always sent this
+  // one on a mid-stream authorization change; it was not on the list, so the
+  // normaliser below rewrote it to `invalid-cursor` and the member was told
+  // their device's position could not be read. It is a verdict, and
+  // `rebootstrap-copy.ts` has the sentence for it.
+  "device-access-changed",
   "invalid-cursor",
 ] as const;
 
@@ -116,10 +122,13 @@ function rebootstrapBody(
       epochReason: state.epochReason,
     },
     // The facts behind the reason, so the client describes THIS gateway's
-    // retention rather than a number it made up.
+    // retention rather than a number it made up. `maxEntries` is the wire's
+    // name for it and stays; the number behind it is the ONE log's row cap
+    // now (#1014, R-1014-1), because that is the window a cursor actually
+    // outlives.
     retention: {
-      days: REPLICA_RETENTION_DAYS,
-      maxEntries: REPLICA_RETENTION_MAX_ENTRIES,
+      days: REPLICA_LOG_RETENTION_DAYS,
+      maxEntries: REPLICA_LOG_RETENTION_MAX_ROWS,
     },
   };
 }
@@ -193,12 +202,14 @@ async function streamChanges(
   vaultId: string,
   options: ReplicaRouteOptions,
   limit: number,
-  subscriberCap: SseSubscriberCap
+  subscriberCap: SseSubscriberCap,
+  /** Bounds this ONE device's share of the cap (#1014, V17). */
+  deviceId: string
 ): Promise<true> {
   const rawSince = url.searchParams.get("since");
   // Bounded BEFORE any header is written (#351 Tier 4): a saturated gateway
   // answers 503 + Retry-After, and the device resumes from its own checkpoint.
-  const releaseSlot = subscriberCap.admit(res);
+  const releaseSlot = subscriberCap.admit(res, deviceId);
   if (!releaseSlot) return true;
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -256,7 +267,14 @@ async function streamChanges(
    */
   for (;;) {
     // Re-read every pass, including after a multi-page `continue` and the wake.
-    if (closed) break;
+    //
+    // `stream.closed` IS THE ONE THAT WORKS MID-DRAIN (#1014, V15). `closed` is
+    // set from socket-close listeners, and the multi-page `continue` below
+    // never yields — so on a backlog this loop ran to the end without the event
+    // loop ever getting a turn to deliver the close, and the gateway drained
+    // the whole thing into a dead socket. The multiplex route has checked both
+    // since #883; this one checked neither.
+    if (closed || stream.closed) break;
     const access = resolveReplicaAccess(url, vaultId, options.enrollments);
     if (!access.ok) {
       sendSseRebootstrap(
@@ -303,13 +321,26 @@ async function streamChanges(
         sendSseRebootstrap(stream, error.reason, error.state);
         break;
       }
-      writeSse(stream, "retry", {
-        error: "replica_stream_retry",
-        message: error instanceof Error ? error.message : String(error),
-      });
+      // NO RAW `Error.message` ON THE WIRE (#1014, V16), which the module
+      // header two hundred lines up already says: it is neither branchable by
+      // a client nor readable by a member, and it leaks whatever the exception
+      // happened to be carrying. The retry frame is a typed code; the
+      // exception itself belongs in the gateway's log, not the socket.
+      writeSse(stream, "retry", { error: "replica_stream_retry" });
     }
-    // More pages waiting: project the next one right away.
-    if (!drained) continue;
+    if (closed || stream.closed) break;
+    // More pages waiting: project the next one right away — but YIELD FIRST
+    // (#1014, V15). A synchronous `continue` starves the socket-close
+    // listeners this loop's only in-band exit depends on, and starves every
+    // other request on this single-threaded gateway besides.
+    if (!drained) {
+      // oxlint-disable-next-line no-await-in-loop -- one turn of the loop per page, by construction
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 0);
+        unrefTimer(timer);
+      });
+      continue;
+    }
     if (Date.now() - heartbeatAt >= heartbeatMs) {
       stream.comment("heartbeat");
       heartbeatAt = Date.now();
@@ -392,7 +423,8 @@ export function makeReplicaRouteHandler(
           vaultId,
           options,
           limit ?? 1_000,
-          options.subscriberCap ?? defaultReplicaSubscriberCap
+          options.subscriberCap ?? defaultReplicaSubscriberCap,
+          access.deviceId
         );
       // THE FEED IS A WAKE, AND ONLY A WAKE (#996, W5). The JSON page that
       // used to be served here was the SHAPED projection: a device asked for

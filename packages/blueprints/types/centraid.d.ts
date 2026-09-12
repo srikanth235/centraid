@@ -82,6 +82,17 @@ interface VaultInvokeRequest {
    * branch too. The gateway ignores the field and executes as always.
    */
   optional?: boolean;
+  /**
+   * WHICH OF THIS HANDLER'S CALLS THIS IS (#1014, B4), when the handler can
+   * say. A replayed intent must not re-execute a command that already
+   * committed, and the gateway identifies each call by hashing this name with
+   * the intent id. Without one it falls back to the call's ORDINAL, which is
+   * only stable for a handler that makes the same sequence of calls every
+   * time — a handler that branches on vault state, or whose second call is
+   * best-effort, does not. Any short constant name; it never reaches the
+   * command.
+   */
+  invokeKey?: string;
 }
 
 /** The card resolver (#272): (type, id) refs → renderable cards. */

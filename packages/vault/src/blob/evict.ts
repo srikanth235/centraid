@@ -40,9 +40,15 @@ export function stagingShas(vault: DatabaseSync): Set<string> {
   return new Set(rows.map((r) => r.sha256));
 }
 
-/** Eviction guard until the transfer runner clears it post-verify. */
+/** Eviction guard until the transfer runner clears it post-verify. A
+ *  QUARANTINED row is not guarded (#1014, B12): the pin is the price of a
+ *  replication still to come, and a row that has spent its attempts is not
+ *  owed it — a stuck upload would otherwise hold local bytes for ever while
+ *  the cache evicted things it could still fetch back. */
 export function pendingOutboxShas(vault: DatabaseSync): Set<string> {
-  const rows = vault.prepare("SELECT sha256 FROM blob_outbox").all() as {
+  const rows = vault
+    .prepare("SELECT sha256 FROM blob_outbox WHERE quarantined_at IS NULL")
+    .all() as {
     sha256: string;
   }[];
   return new Set(rows.map((row) => row.sha256));

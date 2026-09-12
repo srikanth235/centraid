@@ -117,6 +117,7 @@ vi.mock(
   () =>
     ({
       pinnedThumbnailUri: () => undefined,
+      hasPinnedThumbnailPack: () => false,
     }) as unknown as Partial<ThumbnailPackModule>
 );
 

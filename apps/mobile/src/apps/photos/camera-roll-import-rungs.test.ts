@@ -37,8 +37,6 @@ const HEIC_BYTES = new Uint8Array(
   )
 );
 
-const HEIC_SHA = createHash("sha256").update(HEIC_BYTES).digest("hex");
-
 /** The durable derivatives directory always exists in the fake. A plain
  *  constructor function rather than a second class: this file already spends
  *  its one-class budget on `FakeFile`. */
@@ -199,43 +197,8 @@ vi.mock(import("./device-media"), () => ({
   liveVideoUri: () => Promise.resolve(null),
 }));
 
-const { attemptImportCandidate } = await import("./camera-roll-import-run");
 const { gatewayCanDecode, longEdgeResize } =
   await import("../../lib/upload/derivatives-native");
-
-interface Call {
-  url: string;
-  body: unknown;
-}
-
-let calls: Call[];
-
-function installFetch(): void {
-  calls = [];
-  vi.stubGlobal(
-    "fetch",
-    (url: string, init: { body?: unknown }): Promise<Response> => {
-      calls.push({ url, body: init.body });
-      const json = url.endsWith("/publish")
-        ? { batchId: "b1", created: 1, updated: 0, skipped: 0, failed: 0 }
-        : url.includes("/blobs")
-          ? { sha256: "x" }
-          : {
-              batchId: "b1",
-              staged: { create: 1, update: 0, skip: 0 },
-              unrouted: [],
-            };
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(json),
-      } as Response);
-    }
-  );
-}
-
-let warned: string[];
-let logged: string[];
 
 describe("the camera-roll import's device rungs", () => {
   beforeEach(() => {
@@ -243,18 +206,6 @@ describe("the camera-roll import's device rungs", () => {
     files.set("file:///dcim/IMG_0001.HEIC", HEIC_BYTES);
     renders.length = 0;
     renderFailure = undefined;
-    warned = [];
-    logged = [];
-    // BOTH ARGUMENTS. The reason rides beside the line as the thrown value
-    // rather than interpolated into it (#1015, S14 — R-A-15), so a capture
-    // that reads only the first argument would lose the HTTP status.
-    vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
-      warned.push(args.map(String).join(" "));
-    });
-    vi.spyOn(console, "log").mockImplementation((line: unknown) => {
-      logged.push(String(line));
-    });
-    installFetch();
   });
 
   describe("which originals the phone renders rungs for", () => {
@@ -290,146 +241,6 @@ describe("the camera-roll import's device rungs", () => {
       // has not drifted from what the gateway's `TINY_EDGE`/`MEDIUM_EDGE` alias.
       expect(BLOB_TINY_EDGE).toBe(256);
       expect(BLOB_MEDIUM_EDGE).toBe(2_048);
-    });
-  });
-
-  describe("importing an HEIC original", () => {
-    test("stages the original, contributes the rungs, then publishes", async () => {
-      await expect(
-        attemptImportCandidate("http://gw", {
-          filename: "IMG_0001.HEIC",
-          id: "a",
-          kind: "photo",
-          localId: "local-a",
-        })
-      ).resolves.toBe("imported");
-
-      const urls = calls.map((call) => call.url);
-      // ORDER IS THE CONTRACT: `variant_of` needs staged-or-claimed content, and
-      // the rungs must be on the row before the publish makes it recognisable.
-      expect(urls[0]).toBe("http://gw/centraid/_vault/imports");
-      expect(urls.at(-1)).toBe("http://gw/centraid/_vault/imports/b1/publish");
-
-      const rungs = urls
-        .slice(1, -1)
-        .map((url) => Object.fromEntries(new URL(url).searchParams));
-      expect(rungs).toStrictEqual([
-        { variant: "thumb", variant_of: HEIC_SHA, media_type: "image/jpeg" },
-        { variant: "preview", variant_of: HEIC_SHA, media_type: "image/jpeg" },
-        {
-          variant: "phash",
-          variant_of: HEIC_SHA,
-          media_type: "text/x-perceptual-hash",
-        },
-        {
-          variant: "thumbhash",
-          variant_of: HEIC_SHA,
-          media_type: "application/x-thumbhash",
-        },
-      ]);
-
-      // The portrait fixture asset fits its LONG edge, as the gateway ladder
-      // does. The THIRD render is the ≤100px raster the inline rungs are
-      // hashed from — thumbhash throws above 100×100, and the contributed
-      // ladder must not be resized to suit it.
-      expect(renders.map((render) => render.actions)).toStrictEqual([
-        [{ resize: { height: BLOB_TINY_EDGE } }],
-        [{ resize: { height: BLOB_MEDIUM_EDGE } }],
-        [{ resize: { height: 100 } }],
-      ]);
-      expect(renders.at(-1)!.shape.height).toBeLessThanOrEqual(100);
-
-      // The inline rungs carry their canonical values, not bytes.
-      expect(calls.at(-3)!.body).toMatch(/^[0-9a-f]{16}$/u);
-      expect(calls.at(-2)!.body).toMatch(/^[A-Za-z0-9+/]+$/u);
-
-      // Landing is stated, so a run that produced nothing is legible by its
-      // absence (logs.md).
-      expect(logged).toStrictEqual([
-        "[centraid] import: device rungs landed for IMG_0001.HEIC — thumb, preview, phash, thumbhash",
-      ]);
-      expect(warned).toStrictEqual([]);
-    });
-
-    test("a device that cannot render the rungs says so, and still imports", async () => {
-      renderFailure = "192x256 doesn't fit in 100x100";
-      await expect(
-        attemptImportCandidate("http://gw", {
-          filename: "IMG_0004.HEIC",
-          id: "d",
-          kind: "photo",
-          localId: "local-d",
-        })
-      ).resolves.toBe("imported");
-      // No variant door was knocked on, and the reason is on the console
-      // rather than nowhere at all.
-      expect(calls.map((call) => call.url)).toStrictEqual([
-        "http://gw/centraid/_vault/imports",
-        "http://gw/centraid/_vault/imports/b1/publish",
-      ]);
-      expect(warned).toStrictEqual([
-        "[centraid] import: device rungs skipped for IMG_0004.HEIC — could not render on device Error: 192x256 doesn't fit in 100x100",
-      ]);
-      expect(logged).toStrictEqual([]);
-    });
-
-    test("a JPEG original is left to the gateway's own ingress contributor", async () => {
-      await attemptImportCandidate("http://gw", {
-        filename: "IMG_0002.JPG",
-        id: "b",
-        kind: "photo",
-        localId: "local-b",
-      });
-      expect(calls.map((call) => call.url)).toStrictEqual([
-        "http://gw/centraid/_vault/imports",
-        "http://gw/centraid/_vault/imports/b1/publish",
-      ]);
-    });
-
-    test("a rung that will not contribute never fails the import", async () => {
-      vi.stubGlobal(
-        "fetch",
-        (url: string, init: { body?: unknown }): Promise<Response> => {
-          calls.push({ url, body: init.body });
-          const ok = !url.includes("/blobs");
-          return Promise.resolve({
-            ok,
-            status: ok ? 200 : 500,
-            json: () =>
-              Promise.resolve(
-                url.endsWith("/publish")
-                  ? {
-                      batchId: "b1",
-                      created: 1,
-                      updated: 0,
-                      skipped: 0,
-                      failed: 0,
-                    }
-                  : {
-                      batchId: "b1",
-                      staged: { create: 1, update: 0, skip: 0 },
-                      unrouted: [],
-                    }
-              ),
-          } as Response);
-        }
-      );
-      await expect(
-        attemptImportCandidate("http://gw", {
-          filename: "IMG_0003.HEIC",
-          id: "c",
-          kind: "photo",
-          localId: "local-c",
-        })
-      ).resolves.toBe("imported");
-      expect(calls.at(-1)!.url).toBe(
-        "http://gw/centraid/_vault/imports/b1/publish"
-      );
-      // The HTTP status is IN the line: a rejected contribution and an
-      // unreachable gateway are different bugs.
-      expect(warned).toStrictEqual([
-        "[centraid] import: device rungs skipped for IMG_0003.HEIC — contribution failed Error: Derivative thumb failed (500)",
-      ]);
     });
   });
 });

@@ -31,18 +31,42 @@ import type { SeatLogPageWire } from "@centraid/core/protocol";
 
 import { OnlineOnlyError } from "../errors.js";
 import type { IntentRecordStore } from "../intent-record-store.js";
+import { ReplicaProtocolError } from "../replica-protocol-error.js";
+import type { SeatBootstrapResult } from "./bootstrap.js";
+import { SeatAuthorizationRevokedError } from "./seat-authorization-revoked-error.js";
 import type { SeatChannel } from "./seat-channel.js";
 import { SeatDriftError } from "./seat-drift-error.js";
+import {
+  MAX_CONSECUTIVE_DRIFT_REBOOTSTRAPS,
+  SeatDriftParkedError,
+} from "./seat-drift-parked-error.js";
 import { SeatRebootstrapRequiredError } from "./seat-rebootstrap-required-error.js";
+import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 import type { SeatState } from "./state.js";
 import { seatWatermark } from "./watermark.js";
 import type { SeatWatermark } from "./watermark.js";
-import type { SeatWorkerQuery } from "./worker-protocol.js";
+import type { SeatApplySummary, SeatWorkerQuery } from "./worker-protocol.js";
 
 /** How many log rows to ask for at a time. The door's ceiling is 10,000. */
 const PAGE = 1_000;
 /** A catch-up is bounded; a seat that is further behind asks again. */
 const MAX_PAGES_PER_SYNC = 200;
+/**
+ * How many times a bootstrap re-HEADs after the artifact moved (#1014, V4).
+ *
+ * A MOVED ARTIFACT IS NOT A FAILURE, IT IS A BUSY GATEWAY. The door builds for
+ * the current watermark and this gateway commits while the phone downloads —
+ * the system recognition automations write their conversation ledger on every
+ * boot and those rows replicate — so `If-Range` refusing the resume is the
+ * NORMAL outcome of a slow connection, not an error to surface. Left
+ * unretried it made the seat's whole catch-up fail and drew an empty library.
+ *
+ * The pin (`?seq=`) is what usually prevents the move at all; this is what
+ * covers the first HEAD racing a commit, and a gateway too old to know the
+ * parameter. Bounded, because a gateway committing faster than the phone can
+ * download will never converge and three passes is enough to say so.
+ */
+export const SEAT_SNAPSHOT_MOVE_RETRIES = 3;
 
 export interface SeatLoopOptions {
   readonly vaultId: string;
@@ -55,10 +79,29 @@ export interface SeatLoopOptions {
   readonly fetch?: typeof globalThis.fetch;
   /** Metered: skip a commit that crossed the byte threshold (R7). */
   readonly deferOverThreshold?: boolean;
+  /**
+   * Every bootstrap this loop completes, handed to whoever can say it out
+   * loud (#1014, C16).
+   *
+   * `vaultChecked` on the result is the reason this exists: a bootstrap that
+   * verified neither the door's vault header nor the file's own identity row
+   * is a bootstrap nothing checked, and the only honest place for that
+   * sentence is the host's log — `packages/client` writes to no console.
+   */
+  readonly onBootstrapped?: (result: SeatBootstrapResult) => void;
 }
 
 export class SeatLoop {
   #state: SeatState | undefined;
+  /**
+   * Drift re-bootstraps since the last page that applied (#1014, C14).
+   *
+   * The loop bounds re-bootstraps to one per sync; nothing bounded the syncs,
+   * and the host's retry timer re-enters `sync()` forever. Counted across
+   * syncs and reset by the first page that lands, so a drift the gateway
+   * resolves costs one download and a drift it cannot costs three.
+   */
+  #driftRebootstraps = 0;
   /*
    * THE BASE IS NOT A CONSTANT ON EVERY HOST (#996 follow-up).
    *
@@ -126,22 +169,42 @@ export class SeatLoop {
         }
         throw error;
       }
+      let summary: SeatApplySummary;
       try {
-        await this.channel.apply({
+        summary = await this.channel.apply({
           page: answer,
           ...(this.options.deferOverThreshold === undefined
             ? {}
             : { deferOverThreshold: this.options.deferOverThreshold }),
         });
       } catch (error) {
-        if (error instanceof SeatDriftError && !rebootstrapped) {
-          rebootstrapped = true;
-          await this.bootstrap();
-          continue;
+        if (error instanceof SeatDriftError) {
+          this.#driftRebootstraps += 1;
+          // THE THIRD ONE PARKS (#1014, C14). Two re-bootstraps that did not
+          // resolve the drift are a gateway and a seat that disagree about
+          // something a third download will not change — and the host's retry
+          // timer, which is what actually re-enters this loop, has no bound of
+          // its own. Counted across syncs, because that is where the loop was.
+          if (this.#driftRebootstraps >= MAX_CONSECUTIVE_DRIFT_REBOOTSTRAPS) {
+            throw new SeatDriftParkedError(error, this.#driftRebootstraps);
+          }
+          if (!rebootstrapped) {
+            rebootstrapped = true;
+            await this.bootstrap();
+            continue;
+          }
         }
         throw error;
       }
+      // A page that applied is the drift resolved: the count starts over.
+      this.#driftRebootstraps = 0;
       this.#state = await this.channel.state();
+      // A DEFERRED SPAN ENDS THE PASS (#1014, C1). The applier stops at the
+      // owed commit and leaves the cursor before it, so the next page this
+      // loop asked for would be the SAME page — and `hasMore` would keep it
+      // asking. The span is owed until the seat is somewhere it will spend the
+      // bytes; nothing this pass does changes that.
+      if (summary.deferred > 0) break;
       if (!answer.hasMore) break;
     }
     return this.watermark();
@@ -189,12 +252,48 @@ export class SeatLoop {
     return this.channel.close();
   }
 
+  /**
+   * Download the file, re-HEADing when the artifact moved under the download.
+   *
+   * Each attempt starts from a fresh HEAD, so the retry is against the ETag
+   * the door has NOW: the staging discards a prefix whose marker no longer
+   * matches, and a resume that is still valid keeps its bytes. See
+   * {@link SEAT_SNAPSHOT_MOVE_RETRIES}.
+   */
+  /* oxlint-disable no-await-in-loop -- each attempt is a re-HEAD of the artifact the previous one lost */
   private async bootstrap(): Promise<void> {
-    await this.channel.bootstrap({
-      vaultId: this.options.vaultId,
-      snapshotUrl: this.url(ROUTES.vaultSeatSnapshot),
-      ...(this.options.headers ? { headers: this.options.headers } : {}),
-    });
+    for (let attempt = 1; attempt < SEAT_SNAPSHOT_MOVE_RETRIES; attempt += 1) {
+      const outcome = await this.bootstrapOnce().catch((error: unknown) => {
+        if (!(error instanceof SeatSnapshotMovedError)) throw error;
+        return "moved" as const;
+      });
+      if (outcome !== "moved") return;
+    }
+    // THE LAST ATTEMPT IS THE CALLER'S, moved or not. Written as a call rather
+    // than as a caught final iteration so there is no branch here that can
+    // swallow the outcome of the bootstrap that actually decided the answer.
+    await this.bootstrapOnce();
+  }
+  /* oxlint-enable no-await-in-loop */
+
+  private async bootstrapOnce(): Promise<void> {
+    const result = await this.channel
+      .bootstrap({
+        vaultId: this.options.vaultId,
+        snapshotUrl: this.url(ROUTES.vaultSeatSnapshot),
+        ...(this.options.headers ? { headers: this.options.headers } : {}),
+      })
+      .catch((error: unknown) => {
+        // A MIS-ADDRESSED DOOR PARKS AT ONCE (#1014, C16 + C14). Drift in a
+        // PAGE is worth a re-bootstrap; an ARTIFACT for another vault is the
+        // door itself answering wrongly, and it will answer the same way in
+        // six seconds. That loop is R25: 135 KB a pass, 560 lines of gateway
+        // log, and a battery drain with no user-visible cause.
+        if (error instanceof SeatDriftError && error.reason === "wrong-vault")
+          throw new SeatDriftParkedError(error, 1);
+        throw error;
+      });
+    this.options.onBootstrapped?.(result);
     this.#state = await this.channel.state();
   }
 
@@ -222,11 +321,94 @@ export class SeatLoop {
       throw new SeatRebootstrapRequiredError(
         String(body["reason"] ?? "unknown")
       );
+    // REVOCATION IS NOT A TRANSPORT FAILURE (#1014, X8). Same two answers the
+    // intent transport already recognises (`shell-transport.ts`): a 401, or a
+    // 403 naming `replica_device_not_enrolled`. A read-only seat never touches
+    // the drain, so this was the only place it could ever learn.
+    if (
+      response.status === 401 ||
+      (response.status === 403 &&
+        body["error"] === "replica_device_not_enrolled")
+    )
+      throw new SeatAuthorizationRevokedError(this.options.vaultId);
     if (!response.ok) {
       throw new Error(
         `seat log door answered ${response.status}: ${String(body["error"] ?? "")}`
       );
     }
-    return body as unknown as SeatLogPageWire;
+    return parseSeatLogPage(body);
   }
 }
+
+function integerAtLeast(value: unknown, floor: number): boolean {
+  return (
+    typeof value === "number" && Number.isSafeInteger(value) && value >= floor
+  );
+}
+
+function nonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value !== "";
+}
+
+/**
+ * THE PAGE IS CHECKED BEFORE IT IS APPLIED (#1014, C15).
+ *
+ * This was `body as unknown as SeatLogPageWire` — a cast, on JSON off the
+ * wire, straight into `applySeatLogPage`, which writes it into the member's
+ * file inside a transaction that also moves the cursor. The shaped route has
+ * done better since it shipped (`parseOutcome`, `shell-transport.ts`), and
+ * this door carries strictly more: a missing `rows`, a `watermark` that is a
+ * string, a negative `seq` all reached the applier, where the best outcome is
+ * a throw halfway through a page and the worst is a cursor moved over rows
+ * that were not there.
+ *
+ * DELIBERATELY NOT A DEEP DECODER. It checks the fields the applier and the
+ * cursor arithmetic depend on being what they claim; the row images
+ * themselves are values the vault's own schema constrains on the way in.
+ */
+export function parseSeatLogPage(body: unknown): SeatLogPageWire {
+  const refuse = (why: string): never => {
+    throw new ReplicaProtocolError(`seat log page: ${why}`);
+  };
+  if (!body || typeof body !== "object") return refuse("is not an object");
+  const page = body as Record<string, unknown>;
+  if (!nonEmptyString(page["vaultId"])) return refuse("names no vault");
+  if (!nonEmptyString(page["epoch"])) return refuse("names no epoch");
+  for (const field of ["schemaEpoch", "ddlVersion"] as const) {
+    if (!integerAtLeast(page[field], 0))
+      return refuse(`${field} is not an integer`);
+  }
+  for (const field of ["floor", "watermark", "next"] as const) {
+    if (!integerAtLeast(page[field], 0)) {
+      return refuse(`${field} is not a position (got ${String(page[field])})`);
+    }
+  }
+  if (typeof page["hasMore"] !== "boolean")
+    return refuse("hasMore is not a boolean");
+  const rows = page["rows"];
+  if (!Array.isArray(rows)) return refuse("carries no rows array");
+  for (const value of rows) {
+    if (!value || typeof value !== "object")
+      return refuse("has a row that is not an object");
+    const row = value as Record<string, unknown>;
+    if (
+      !integerAtLeast(row["seq"], 0) ||
+      !integerAtLeast(row["commitSeq"], 0)
+    ) {
+      return refuse(
+        `has a row with a bad position (seq ${String(row["seq"])})`
+      );
+    }
+    if (!nonEmptyString(row["table"]))
+      return refuse("has a row naming no table");
+    if (!SEAT_LOG_OPS.has(row["op"] as string)) {
+      return refuse(`has a row with op ${String(row["op"])}`);
+    }
+    if (!Array.isArray(row["pk"]))
+      return refuse("has a row with no primary key");
+  }
+  return page as unknown as SeatLogPageWire;
+}
+
+/** The four the wire admits; anything else is a door this seat cannot read. */
+const SEAT_LOG_OPS = new Set(["insert", "update", "delete", "ddl"]);

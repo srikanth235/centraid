@@ -82,6 +82,39 @@ export const SEAT_SNAPSHOT_SEQ_HEADER = "x-centraid-seat-seq";
 export const SEAT_SNAPSHOT_EPOCH_HEADER = "x-centraid-seat-epoch";
 export const SEAT_SNAPSHOT_SCHEMA_EPOCH_HEADER = "x-centraid-schema-epoch";
 
+/**
+ * WHICH VAULT THE ARTIFACT IS OF (#1014, C16 / R-1014-11).
+ *
+ * The three numbers above say where the file sits and what contract it is
+ * under; none of them says WHOSE it is. A seat asked for a snapshot by URL,
+ * installed whatever came back, and then wrote its OWN vault id onto the
+ * result — so a door that answered for the wrong vault produced a file that
+ * every later check agreed with, because every later check compared pages
+ * against that self-asserted value. On a phone whose gateway base is a
+ * loopback port re-picked each launch, "the wrong door" is not hypothetical.
+ *
+ * So the door names the vault, and the seat refuses a mismatch BEFORE it
+ * touches its own file.
+ */
+export const SEAT_SNAPSHOT_VAULT_HEADER = "x-centraid-seat-vault";
+
+/**
+ * THE SEAT PINS THE ARTIFACT IT MEASURED (#1014, V4).
+ *
+ * The snapshot door builds for the CURRENT watermark, and a gateway is never
+ * quiescent — the system recognition automations write their conversation
+ * ledger on every boot, and those rows replicate. So a phone that HEADed seq 4
+ * and then asked for bytes was answered with seq 5, which `If-Range` correctly
+ * refuses as "a different file". On a slow enough connection against a busy
+ * enough gateway that repeats forever and no bootstrap ever lands.
+ *
+ * `?seq=` is the seat saying WHICH artifact it is downloading. The door serves
+ * that one while it still holds it and falls back to the current watermark when
+ * it does not — and a gateway older than #1014 ignores the parameter entirely,
+ * which is why the client keeps the moved-artifact retry as well.
+ */
+export const SEAT_SNAPSHOT_SEQ_PARAM = "seq";
+
 /** What a seat reads off the snapshot door before it downloads a byte. */
 export interface SeatSnapshotHead {
   /** Strong, and immutable for its name: the artifact is a pure function of `seq`. */
@@ -90,6 +123,18 @@ export interface SeatSnapshotHead {
   readonly seq: number;
   readonly epoch: string;
   readonly schemaEpoch: number;
+  /**
+   * The vault this artifact is a copy of.
+   *
+   * OPTIONAL ON THE WIRE, AND IT STAYS OPTIONAL. A gateway built before
+   * #1014 sends no such header, and a phone that refused to bootstrap against
+   * one would turn a compatible pair into a bricked mount — the replica
+   * protocol does not get a lockstep upgrade. `undefined` therefore means
+   * "this door did not say", which the seat treats as unverified-at-the-door
+   * and logs; the check on the FILE's own `core_vault` row still runs, and
+   * that one needs no cooperation from the gateway at all.
+   */
+  readonly vaultId?: string;
 }
 
 /** The log door's ceiling on `limit`; a seat asks for more by asking again. */

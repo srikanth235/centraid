@@ -160,4 +160,97 @@ describe("Vaults registry", () => {
     expect(notified).toBeGreaterThan(0);
     expect(booted.getActiveVaultLink()?.id).toBe(added.id);
   });
+  // #1014, P14. `(gatewayId, vaultId)` NAMES THE SEAT FILE. Rewriting the
+  // gateway id moved the path, and every write queued in the old file's
+  // `seat_outbox` stayed in a file nothing would open again.
+  it("refuses to move a resolved link to a different gateway", async () => {
+    const vaults = await loadVaultLinks();
+    await vaults.addVaultLink({
+      gatewayId: "gw-1",
+      desktopName: "Mac mini",
+      deviceId: "dev-1",
+      vaultId: "vault-a",
+      endpointHint: "hint",
+    });
+
+    await vaults.noteActiveIdentity({
+      gatewayId: "gw-2",
+      vaultId: "vault-a",
+    });
+
+    expect(vaults.getActiveVaultLink()?.gatewayId).toBe("gw-1");
+  });
+
+  it("fills an empty gateway id, which is the case it exists for", async () => {
+    const vaults = await loadVaultLinks();
+    await vaults.addVaultLink({
+      gatewayId: "",
+      desktopName: "Mac mini",
+      deviceId: "dev-1",
+      vaultId: "",
+      endpointHint: "hint",
+    });
+
+    await vaults.noteActiveIdentity({
+      gatewayId: "gw-1",
+      vaultId: "vault-a",
+    });
+
+    expect(vaults.getActiveVaultLink()).toMatchObject({
+      gatewayId: "gw-1",
+      vaultId: "vault-a",
+    });
+  });
+
+  // #1014, P14 / ruling R-1014-11: there is no `"manual"` gateway to add to.
+  it("refuses to add a vault when no gateway is named", async () => {
+    const vaults = await loadVaultLinks();
+    await expect(
+      vaults.addActiveGatewayVault({ vaultId: "vault-a" })
+    ).rejects.toThrow(/no active gateway/u);
+    expect(vaults.listVaultLinks()).toHaveLength(0);
+  });
+
+  // #1014, P20. `Store.set` swallows its failure and the registry was two
+  // keys; a kill between them left an active id naming a link the registry
+  // did not have, or links nothing pointed at. Both halves are repaired.
+  it("hydrates a torn pair of legacy keys in either direction", async () => {
+    const vaults = await loadVaultLinks();
+    const added = await vaults.addVaultLink({
+      gatewayId: "gw-1",
+      desktopName: "Mac mini",
+      deviceId: "dev-1",
+      vaultId: "vault-a",
+      endpointHint: "hint",
+    });
+
+    // The tear: the combined value never landed and the active id is gone.
+    storeMem.delete("vaults.state");
+    storeMem.set("vaults.activeId", "");
+    vi.resetModules();
+    const booted = await import("./vault-links");
+    await booted.hydrateVaultLinks();
+
+    expect(booted.getActiveVaultLink()?.id).toBe(added.id);
+  });
+
+  // #1014, P13. One global "last base" across every gateway meant vault B's
+  // mount opened at gateway A's port.
+  it("keeps one base per gateway, seeded once from the retired global key", async () => {
+    const vaults = await loadVaultLinks();
+    storeMem.set(vaults.LAST_BASE_LEGACY, "http://127.0.0.1:1111");
+
+    await expect(vaults.LastBase.hydrate("gw-1")).resolves.toBe(
+      "http://127.0.0.1:1111"
+    );
+    vaults.LastBase.set("gw-1", "http://127.0.0.1:2222");
+    vaults.LastBase.set("gw-2", "http://127.0.0.1:3333");
+
+    await expect(vaults.LastBase.hydrate("gw-1")).resolves.toBe(
+      "http://127.0.0.1:2222"
+    );
+    await expect(vaults.LastBase.hydrate("gw-2")).resolves.toBe(
+      "http://127.0.0.1:3333"
+    );
+  });
 });

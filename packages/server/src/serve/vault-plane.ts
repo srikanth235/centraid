@@ -51,7 +51,6 @@ import {
   markAppRevoked,
   openVaultDb,
   checkpointVault,
-  deleteReplicaIntentOutcomesForDevice,
   closeObsoleteScopeRequest,
   getOpenScopeRequest,
   listOpenScopeRequests,
@@ -82,7 +81,10 @@ import {
   registerTallyCommands,
   registerTaskCommands,
   registerAtlasCommands,
-  pruneReplicaChanges,
+  lowestSeatCommitSeq,
+  pruneReplicaIntentOutcomes,
+  pruneReplicaLog,
+  withReplicaCommit,
   runJournalArchival,
   blobCustodyProven,
   WalShipper,
@@ -759,7 +761,15 @@ export class VaultPlane {
         this.logger.info(
           `vault plane: retained ext tables for "${appId}" (${retained.join(", ")})`
         );
-      markAppRevoked(this.db, app.appId);
+      // BRACKETED, SO THE FEED HEARS IT WHEN IT HAPPENS (#1014, R-1014-1).
+      // `access_app` is a SHAPE-CONTROL row: a subscribed device is told to
+      // re-bootstrap because the install register moved. Written outside a
+      // commit pair, the change sat in the open session until some unrelated
+      // write closed one — so the phone kept streaming under an authorization
+      // that had been withdrawn, for as long as the gateway stayed quiet.
+      withReplicaCommit(this.db.vault, () =>
+        markAppRevoked(this.db, app.appId)
+      );
     }
     const agent = lookupAgentByName(this.db, appId);
     if (agent) {
@@ -770,7 +780,9 @@ export class VaultPlane {
       // Uninstall WIPES the memory (#306): the rows stay as evidence, stamped
       // `principal-removed`, and a reinstall answers itself afresh.
       revokeAutomationAnswers(this.db.vault, appId, nowIso());
-      markAgentRevoked(this.db, agent.agentId);
+      withReplicaCommit(this.db.vault, () =>
+        markAgentRevoked(this.db, agent.agentId)
+      );
       this.logger.info(
         `vault plane: withdrew ${revoked} standing answer(s) for "${appId}"`
       );
@@ -849,19 +861,24 @@ export class VaultPlane {
    * of the owner's vault runs no authority statement at all.
    */
   recordAppInstall(appId: string, block: InstallScopeBlock): void {
-    ensureAppEnrolled(this.db, appId);
-    recordDeclaredManifest(this.db.vault, appId, {
-      scopes: block.scopes.map((scope) => ({
-        schema: scope.schema,
-        ...(scope.table === undefined ? {} : { table: scope.table }),
-        verbs: scope.verbs,
-        // The declared row filter and field mask STAY (#928, deviating from
-        // A1's "minus filters and masks"): they are build-time properties of
-        // the app's own code, not grants, and they are what keeps a replica
-        // holding one entity type's revisions instead of every app's.
-        ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
-        ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
-      })),
+    // One bracketed commit for the pair (#1014, R-1014-1): the enrollment row
+    // and the declared manifest are one shape-control transition, and a
+    // subscriber must not be able to see half of it.
+    withReplicaCommit(this.db.vault, () => {
+      ensureAppEnrolled(this.db, appId);
+      recordDeclaredManifest(this.db.vault, appId, {
+        scopes: block.scopes.map((scope) => ({
+          schema: scope.schema,
+          ...(scope.table === undefined ? {} : { table: scope.table }),
+          verbs: scope.verbs,
+          // The declared row filter and field mask STAY (#928, deviating from
+          // A1's "minus filters and masks"): they are build-time properties of
+          // the app's own code, not grants, and they are what keeps a replica
+          // holding one entity type's revisions instead of every app's.
+          ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
+          ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+        })),
+      });
     });
   }
 
@@ -1049,8 +1066,63 @@ export class VaultPlane {
     return this.gateway.confirm(this.ownerCredential, invocationId, approve);
   }
 
-  forgetReplicaDevice(deviceId: string): number {
-    return deleteReplicaIntentOutcomesForDevice(this.db.vault, deviceId);
+  /**
+   * RETIRE A DEVICE, AND KEEP WHAT THE GATEWAY ALREADY DID (#1014, X1;
+   * R-1014-12).
+   *
+   * It used to be `forgetReplicaDevice`, and it deleted the whole idempotency
+   * ledger for the endpoint. The phone kept its outbox — R1 guarantees a full
+   * one — and `enrollWithinTransaction` re-enrols the same `endpoint_id` with
+   * `revoked = 0` and bumps nothing, so a lost-then-found phone re-paired and
+   * replayed intents this gateway had ALREADY EXECUTED. Duplicate expenses,
+   * duplicate placements, and nothing left on the gateway to notice.
+   *
+   * Revocation is about the device's future access, not about what it did.
+   * So `replica_intent_outcome` and `replica_invocation_commit` survive —
+   * they are the record that says "this intent id already ran, here is its
+   * answer" — bounded by their own `expires_at` window, which `runSweep` now
+   * prunes on.
+   *
+   * WHAT DOES NOT SURVIVE IS EXECUTABLE AUTHORITY. A parked payload is a
+   * sealed request waiting for the owner to say yes; once the device is
+   * revoked, the owner must not be able to approve its old act. That is a
+   * different fact from "this already ran", and it is the only one deleted
+   * here. `replica_parked_payload` is a local table (`local-tables.ts`), so
+   * this is not a replicated write.
+   */
+  retireReplicaDevice(deviceId: string): {
+    parkedRevoked: number;
+    outcomesKept: number;
+  } {
+    this.db.vault.exec("BEGIN IMMEDIATE");
+    try {
+      const parkedRevoked = Number(
+        this.db.vault
+          .prepare(
+            `DELETE FROM replica_parked_payload
+              WHERE intent_id IN (
+                SELECT intent_id FROM replica_intent_outcome
+                 WHERE device_id = ?
+              )`
+          )
+          .run(deviceId).changes
+      );
+      const outcomesKept = Number(
+        (
+          this.db.vault
+            .prepare(
+              `SELECT count(*) AS n FROM replica_intent_outcome
+                WHERE device_id = ?`
+            )
+            .get(deviceId) as { n: number }
+        ).n
+      );
+      this.db.vault.exec("COMMIT");
+      return { parkedRevoked, outcomesKept };
+    } catch (error) {
+      this.db.vault.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   /** `request_json` stays SERVER-SIDE: it may carry placeholder plumbing the
@@ -2092,18 +2164,38 @@ export class VaultPlane {
             `contentBlockedByLineage=${JSON.stringify(result.contentBlockedByLineage)}`
         );
       }
-      const replicaPrune = pruneReplicaChanges(this.db.vault);
-      if (
-        replicaPrune.expired +
-          replicaPrune.compacted +
-          replicaPrune.overflow +
-          replicaPrune.discardedPriorEpochs >
-        0
-      ) {
+      // THE ONLY PRUNE THERE IS (#1014, G7/T1/V1, R-1014-1). `replica_log`
+      // carries a full JSON row image per (table, pk) per commit in the file
+      // the gateway SERVES, and until now nothing in production ever pruned
+      // it: the 30-day/200,000-row window, the `retention` verdict and the
+      // seat's re-bootstrap path were all unreachable. It is held above the
+      // lowest LIVE seat cursor (`access_device_secret.sync_cursor`, written
+      // by the seat-log door), so wiring it cannot prune past a device that
+      // is still tailing.
+      const intentHold = lowestSeatCommitSeq(this.db.vault);
+      const seatLogPrune = pruneReplicaLog(this.db.vault);
+      if (seatLogPrune.pruned > 0) {
         this.logger.info(
-          `vault plane: replica prune expired=${replicaPrune.expired} ` +
-            `compacted=${replicaPrune.compacted} overflow=${replicaPrune.overflow} ` +
-            `priorEpochs=${replicaPrune.discardedPriorEpochs} retained=${replicaPrune.retained}`
+          `vault plane: seat log prune pruned=${seatLogPrune.pruned} ` +
+            `retained=${seatLogPrune.retained} floor=${seatLogPrune.floor.seq} ` +
+            `heldBySeat=${String(seatLogPrune.heldBySeat ?? "none")}`
+        );
+      }
+      // THE INTENT WINDOW'S OWN PRUNE, WIRED (#1014, G17). `expires_at` has
+      // been written on every outcome since #996 and nothing in production
+      // ever read it: the idempotency window closed on paper and the rows
+      // grew forever. Beside the seat log's prune because it is the same
+      // question about the same seats — held above the lowest LIVE seat's
+      // COMMIT position, so an answer a phone has not caught up to keeps its
+      // payload and the pending badge still clears.
+      const intentPrune = pruneReplicaIntentOutcomes(
+        this.db.vault,
+        intentHold === undefined ? {} : { holdAtOrAbove: intentHold }
+      );
+      if (intentPrune.pruned > 0) {
+        this.logger.info(
+          `vault plane: intent window prune tombstoned=${intentPrune.pruned} ` +
+            `heldBySeat=${String(intentPrune.heldBySeat ?? "none")}`
         );
       }
       // DETACHED, so remote latency never blocks the sweep (#296). Backoff
@@ -2284,6 +2376,15 @@ export class VaultPlane {
             `vault plane: blob sweep replicated=${blobs.replicated.length} ` +
               `orphansDeleted=${blobs.orphansDeleted.length} orphansSkipped=${blobs.orphansSkipped.length} ` +
               `orphansGraceHeld=${blobs.orphansGraceHeld.length} missing=${blobs.missing.length}`
+          );
+        }
+        // A REFUSED LISTING IS LOUD (#1014, B23). Skipping the destructive
+        // half is the safe answer, and one nobody would ever notice from the
+        // counts above — a sweep that deleted nothing looks like a sweep with
+        // nothing to delete.
+        for (const refusal of blobs.listingsRefused) {
+          this.logger.warn(
+            `vault plane: blob sweep did not delete against the ${refusal.store} listing — ${refusal.reason}`
           );
         }
         if (this.onReplicationPass) {

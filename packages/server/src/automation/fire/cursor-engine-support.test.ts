@@ -126,7 +126,12 @@ describe(registrationsFor, () => {
         ref: "a/multi",
         triggerIndex: 1,
         trigger: { kind: "cron", expr: "0 8 * * *" },
-        cronSchedules: [{ expr: "0 8 * * *" }, { expr: "*/30 * * * *" }],
+        // The backfill class is RESOLVED at registration, never left absent
+        // (#1014, B9): the reader must not have to re-derive the default.
+        cronSchedules: [
+          { expr: "0 8 * * *", backfill: "latest" },
+          { expr: "*/30 * * * *", backfill: "latest" },
+        ],
       },
     ]);
   });

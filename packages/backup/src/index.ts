@@ -191,6 +191,7 @@ export type {
 // custody kit is the SAME wrap, not a second copy of the crypto.
 export {
   PASSWORD_WRAP_SCRYPT,
+  assertPassphraseFloor,
   unwrapPasswordDocument,
   wrapPasswordDocument,
 } from "./password-wrap.js";

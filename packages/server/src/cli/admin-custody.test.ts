@@ -161,10 +161,12 @@ describe("admin-custody suite", () => {
       )
     );
 
-    // Give the phone something vault-local to lose. `forgetReplicaDevice` — the
-    // durable offline-intent outcomes a revoked device must not keep — is
+    // Give the phone something vault-local to lose. `retireReplicaDevice` —
+    // the sealed parked request a revoked device must not keep executable — is
     // exactly what `devices revoke` reaches, and exactly what it silently
-    // skipped when the registry mounted nothing.
+    // skipped when the registry mounted nothing. The outcome LEDGER beside it
+    // is the other half of the contract (#1014, X1; R-1014-12): it survives,
+    // so a re-paired phone's replays are deduped rather than executed twice.
     const seed = openVaultRegistry({
       rootDir: layout.vaultDir,
       cacheRootDir: layout.cacheDir,
@@ -188,6 +190,22 @@ describe("admin-custody suite", () => {
     expect(
       listReplicaIntentOutcomes(seedPlane.db.vault, "ep-phone")
     ).toHaveLength(1);
+    seedPlane.db.vault
+      .prepare(
+        `INSERT INTO replica_parked_payload (invocation_id, intent_id,
+           identity_json, request_sealed, command_id, command_name, reason,
+           parked_at)
+         VALUES ('inv-1', 'intent-1', '{}', 'sealed', 'notes.create',
+                 'notes.create', 'confirm', '2026-01-01T00:00:00.000Z')`
+      )
+      .run();
+    expect(
+      (
+        seedPlane.db.vault
+          .prepare(`SELECT count(*) AS n FROM replica_parked_payload`)
+          .get() as { n: number }
+      ).n
+    ).toBe(1);
     seed.stop();
 
     const output = await capture(() =>
@@ -205,10 +223,18 @@ describe("admin-custody suite", () => {
       enableWalShipper: false,
     });
     try {
-      // Positively asserted, not inferred from the absence of an error.
+      const vault = after.get(vaultId)!.db.vault;
+      // Positively asserted, not inferred from the absence of an error: the
+      // owner can no longer approve the revoked device's parked act…
       expect(
-        listReplicaIntentOutcomes(after.get(vaultId)!.db.vault, "ep-phone")
-      ).toStrictEqual([]);
+        (
+          vault
+            .prepare(`SELECT count(*) AS n FROM replica_parked_payload`)
+            .get() as { n: number }
+        ).n
+      ).toBe(0);
+      // …and what the gateway already did for it is still on record.
+      expect(listReplicaIntentOutcomes(vault, "ep-phone")).toHaveLength(1);
     } finally {
       after.stop();
     }

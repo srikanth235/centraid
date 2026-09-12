@@ -7,7 +7,8 @@
   "triggers": [
     {
       "kind": "cron",
-      "expr": "*/30 * * * *"
+      "expr": "*/30 * * * *",
+      "backfill": "latest"
     }
   ],
   "requires": {},
@@ -17,7 +18,12 @@
   },
   "vault": {
     "why": "Stages Gmail messages into the vault's review band and tracks the incremental history cursor on the pull.gmail connection.",
-    "scopes": [{ "schema": "sync", "verbs": "read+act" }]
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
   },
   "history": {
     "keep": {

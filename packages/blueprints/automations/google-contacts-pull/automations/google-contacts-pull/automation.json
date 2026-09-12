@@ -7,7 +7,8 @@
   "triggers": [
     {
       "kind": "cron",
-      "expr": "20 */6 * * *"
+      "expr": "20 */6 * * *",
+      "backfill": "latest"
     }
   ],
   "requires": {},
@@ -17,7 +18,12 @@
   },
   "vault": {
     "why": "Stages Google Contacts into the vault's review band as people and tracks the incremental syncToken cursor on the pull.gcontacts connection.",
-    "scopes": [{ "schema": "sync", "verbs": "read+act" }]
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
   },
   "history": {
     "keep": {

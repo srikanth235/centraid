@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import { readReplicaChanges } from "./change-log.js";
+import {
+  beginReplicaCommit,
+  endReplicaCommit,
+  readReplicaLogPage,
+} from "./change-log.js";
 import {
   readReplicaRow,
   readReplicaRows,
@@ -10,6 +14,23 @@ import {
 } from "./snapshot.js";
 
 let db: VaultDb | undefined;
+
+/**
+ * Raw seed statements, INSIDE A COMMIT BRACKET (#1014, R-1014-1).
+ *
+ * The log is decoded from the session the bracket opens, so a write outside
+ * one lands in the next commit's window — where an insert and a later delete
+ * of the same row net away to nothing. The trigger log this replaced fired per
+ * statement, which is why fixtures could skip the bracket and still be logged.
+ */
+function committed(vault: VaultDb["vault"], write: () => void): void {
+  vault.exec("BEGIN IMMEDIATE");
+  const commit = beginReplicaCommit(vault, { producer: "test-seed" });
+  write();
+  endReplicaCommit(vault, commit);
+  vault.exec("COMMIT");
+}
+
 describe("snapshot", () => {
   afterEach(() => {
     db?.close();
@@ -76,13 +97,16 @@ describe("snapshot", () => {
 
   test("changed rows can be fetched by log row id and deletes resolve absent", () => {
     db = openVaultDb();
-    db.vault
-      .prepare(
-        `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+    const vault = db.vault;
+    committed(vault, () => {
+      vault
+        .prepare(
+          `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
        VALUES ('scheme-1', 'urn:scheme-1', 'Kinds', '1')`
-      )
-      .run();
-    const change = readReplicaChanges(db.vault).changes[0];
+        )
+        .run();
+    });
+    const change = readReplicaLogPage(db.vault).changes[0];
     expect(change?.rowId).toBe("scheme-1");
     expect(
       readReplicaRow(db.vault, change?.entity ?? "", change?.rowId ?? "")
@@ -101,32 +125,89 @@ describe("snapshot", () => {
 
   test("attaches the current canonical row version to snapshot rows", () => {
     db = openVaultDb();
-    db.vault
-      .prepare(
-        `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
-       VALUES ('scheme-versioned', 'urn:scheme-versioned', 'Before', '1')`
-      )
-      .run();
-    db.vault
-      .prepare(
-        `UPDATE core_concept_scheme SET title = 'After'
-          WHERE scheme_id = 'scheme-versioned'`
-      )
-      .run();
+    const vault = db.vault;
+    const owner = "party-owner";
+    committed(vault, () => {
+      vault
+        .prepare(
+          "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'core.party', 't')"
+        )
+        .run(owner);
+      vault
+        .prepare(
+          `INSERT INTO core_party (party_id, kind, display_name, created_at)
+           VALUES (?, 'person', 'Owner', 't')`
+        )
+        .run(owner);
+      vault
+        .prepare(
+          "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('task-versioned', 'schedule.task', 't')"
+        )
+        .run();
+      vault
+        .prepare(
+          `INSERT INTO schedule_task (task_id, owner_party_id, title, status, priority)
+           VALUES ('task-versioned', ?, 'Before', 'needs-action', 5)`
+        )
+        .run(owner);
+    });
+    committed(vault, () => {
+      vault
+        .prepare(
+          `UPDATE schedule_task SET title = 'After' WHERE task_id = 'task-versioned'`
+        )
+        .run();
+    });
 
-    const row = readReplicaRows(db.vault, "core.concept_scheme").rows[0];
-    expect(row).toMatchObject({ rowId: "scheme-versioned", rowVersion: 2 });
+    const row = readReplicaRows(vault, "schedule.task").rows[0];
+    expect(row).toMatchObject({ rowId: "task-versioned", rowVersion: 2 });
     expect(
-      readReplicaRow(db.vault, "core.concept_scheme", "scheme-versioned")
-    ).toMatchObject({ rowId: "scheme-versioned", rowVersion: 2 });
+      readReplicaRow(vault, "schedule.task", "task-versioned")
+    ).toMatchObject({ rowId: "task-versioned", rowVersion: 2 });
+  });
+
+  /*
+   * AN ENTITY WITH NO `row_version` HAS NO VERSION (#1014, R-1014-1).
+   *
+   * `core_concept_scheme` is one of them, and this assertion used to read
+   * `rowVersion: 2` off it — a number that came from `MAX(seq)` over the
+   * trigger log, which is a TRANSPORT position wearing a row version's name.
+   * With one log there is no second number to fall back to, and the honest
+   * answer is the absent one: a seat that receives no version sends no base
+   * version, and the gateway's conflict check is never handed units it cannot
+   * compare (#996, R6).
+   */
+  test("an entity with no row_version column reports no version at all", () => {
+    db = openVaultDb();
+    const vault = db.vault;
+    committed(vault, () => {
+      vault
+        .prepare(
+          `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+       VALUES ('scheme-versionless', 'urn:s', 'Kinds', '1')`
+        )
+        .run();
+    });
+    expect(
+      vault
+        .prepare("PRAGMA table_info(core_concept_scheme)")
+        .all()
+        .map((column) => (column as { name: string }).name)
+    ).not.toContain("row_version");
+    expect(
+      readReplicaRows(vault, "core.concept_scheme").rows[0]
+    ).not.toHaveProperty("rowVersion");
+    expect(
+      readReplicaRow(vault, "core.concept_scheme", "scheme-versionless")
+    ).not.toHaveProperty("rowVersion");
   });
 
   /*
    * THE VERSION IS THE ROW'S COLUMN, NOT THE LOG'S POSITION (#996, R6).
    *
-   * Red-first: with unrelated commits ahead of it, `MAX(seq)` over
-   * `replica_change` and `row_version` are different numbers, and the old
-   * answer was the log's. A seat stored that as its row's version and sent it
+   * Red-first: with unrelated commits ahead of it, `MAX(seq)` over the log
+   * and `row_version` are different numbers, and the old answer was the
+   * log's. A seat stored that as its row's version and sent it
    * back as an intent's base version, while the gateway's conflict check read
    * `row_version` — so every offline edit of a row the projector had touched
    * came back conflicted, comparing a log seq against a row version.
@@ -134,29 +215,33 @@ describe("snapshot", () => {
   test("a row's version is its own column, not its position in the log", () => {
     db = openVaultDb();
     const owner = "party-owner";
-    db.vault
-      .prepare(
-        "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'core.party', 't')"
-      )
-      .run(owner);
-    db.vault
-      .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at)
-         VALUES (?, 'person', 'Owner', 't')`
-      )
-      .run(owner);
+    committed(db.vault, () => {
+      db!.vault
+        .prepare(
+          "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'core.party', 't')"
+        )
+        .run(owner);
+      db!.vault
+        .prepare(
+          `INSERT INTO core_party (party_id, kind, display_name, created_at)
+           VALUES (?, 'person', 'Owner', 't')`
+        )
+        .run(owner);
+    });
     const task = (id: string): void => {
-      db!.vault
-        .prepare(
-          "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'schedule.task', 't')"
-        )
-        .run(id);
-      db!.vault
-        .prepare(
-          `INSERT INTO schedule_task (task_id, owner_party_id, title, status, priority)
-           VALUES (?, ?, 'Once', 'needs-action', 5)`
-        )
-        .run(id, owner);
+      committed(db!.vault, () => {
+        db!.vault
+          .prepare(
+            "INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES (?, 'schedule.task', 't')"
+          )
+          .run(id);
+        db!.vault
+          .prepare(
+            `INSERT INTO schedule_task (task_id, owner_party_id, title, status, priority)
+             VALUES (?, ?, 'Once', 'needs-action', 5)`
+          )
+          .run(id, owner);
+      });
     };
     // Traffic FIRST, so the log is well past 1 before this row exists.
     for (let n = 0; n < 5; n++) task(`task-noise-${n}`);
@@ -165,8 +250,8 @@ describe("snapshot", () => {
     const logSeq = (
       db.vault
         .prepare(
-          `SELECT MAX(seq) AS seq FROM replica_change
-            WHERE entity = 'schedule.task' AND row_id = 'task-late'`
+          `SELECT MAX(seq) AS seq FROM replica_log
+            WHERE "table" = 'schedule_task' AND pk_json = '["task-late"]'`
         )
         .get() as { seq: number }
     ).seq;
@@ -185,16 +270,28 @@ describe("snapshot", () => {
 
   test("snapshot reader returns rows pinned to the same reported watermark", () => {
     db = openVaultDb();
-    db.vault
-      .prepare(
-        `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+    const vault = db.vault;
+    committed(vault, () => {
+      vault
+        .prepare(
+          `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
        VALUES ('scheme-1', 'urn:scheme-1', 'Kinds', '1')`
-      )
-      .run();
+        )
+        .run();
+    });
     const snapshot = withReplicaSnapshot(db.vault, (reader) =>
       reader.readRows("core.concept_scheme")
     );
-    expect(snapshot.state.watermark.seq).toBe(1);
+    // The watermark IS the log's high-water mark, not a count of statements:
+    // one commit of this insert lands the row and the entity-membership row
+    // its trigger derives.
+    expect(snapshot.state.watermark.seq).toBe(
+      (
+        vault.prepare("SELECT MAX(seq) AS seq FROM replica_log").get() as {
+          seq: number;
+        }
+      ).seq
+    );
     expect(snapshot.value.rows.map((row) => row.rowId)).toStrictEqual([
       "scheme-1",
     ]);

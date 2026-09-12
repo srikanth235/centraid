@@ -6,11 +6,7 @@ import { describe, afterEach, expect, test } from "vitest";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { plainSqliteRows } from "@centraid/test-kit/sqlite";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import {
-  appendReplicaChange,
-  currentReplicaLogState,
-  readReplicaRow,
-} from "@centraid/vault";
+import { currentReplicaLogState, readReplicaRow } from "@centraid/vault";
 import type { Credential } from "@centraid/vault";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
@@ -22,6 +18,7 @@ import {
   replicaShapesWire,
   shapeReplicaRow,
 } from "./replica-shape.js";
+import { capturedWrite } from "./replica-write.test-fixtures.js";
 
 const logger = {
   info: () => undefined,
@@ -588,20 +585,24 @@ describe("replica-shape suite", () => {
          (task_id, owner_party_id, title, status, priority, due_at)
        VALUES (?, ?, 'Scheduled', 'needs-action', 0, '2026-07-20T00:00:00.000Z')`
     );
-    for (let index = 0; index < 200; index += 1) {
-      insert.run(`bulk-${index}`, vault.boot.ownerPartyId);
-    }
+    // The bulk seed is its own captured commit, so the first fingerprint's
+    // recorded position is already PAST it — otherwise the late row's commit
+    // sweeps all 201 into one window and there is no incremental case left.
+    capturedWrite(vault.db.vault, () => {
+      for (let index = 0; index < 200; index += 1) {
+        insert.run(`bulk-${index}`, vault.boot.ownerPartyId);
+      }
+    });
     const access = { canWrite: true, rememberDevice: true, appId: "planner" };
     const now = "2026-07-10T00:00:00.000Z";
     // First build pays for the whole entity and retains its membership.
     const first = buildReplicaShapes(vault.db.vault, access, now)[0]!;
 
-    insert.run("bulk-late", vault.boot.ownerPartyId);
-    appendReplicaChange(vault.db.vault, {
-      entity: "schedule.task",
-      rowId: "bulk-late",
-      op: "insert",
-    });
+    // The late row lands in a captured commit of its own, so the log has one
+    // changed row for the incremental path to read.
+    capturedWrite(vault.db.vault, () =>
+      insert.run("bulk-late", vault.boot.ownerPartyId)
+    );
 
     // Count the MEMBERSHIP PROBES `alternativeMatches` runs per candidate row
     // — the per-row cost the incremental path exists to avoid. Executed, not
@@ -695,13 +696,15 @@ describe("replica-shape suite", () => {
         },
       ],
     });
-    vault.db.vault
-      .prepare(
-        `INSERT INTO schedule_task
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `INSERT INTO schedule_task
          (task_id, owner_party_id, title, description, status, priority)
        VALUES ('canonical-secret-id', ?, 'Visible', ?, 'needs-action', 0)`
-      )
-      .run(vault.boot.ownerPartyId, "x".repeat(70_000));
+        )
+        .run(vault.boot.ownerPartyId, "x".repeat(70_000))
+    );
     const access = {
       canWrite: true,
       rememberDevice: true,
@@ -719,16 +722,20 @@ describe("replica-shape suite", () => {
     expect(JSON.stringify(snapshot)).not.toContain("canonical-secret-id");
 
     const since = currentReplicaLogState(vault.db.vault).watermark;
-    vault.db.vault
-      .prepare(
-        `UPDATE schedule_task SET title = 'Updated' WHERE task_id = 'canonical-secret-id'`
-      )
-      .run();
-    vault.db.vault
-      .prepare(
-        `UPDATE schedule_task SET title = 'Updated again' WHERE task_id = 'canonical-secret-id'`
-      )
-      .run();
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `UPDATE schedule_task SET title = 'Updated' WHERE task_id = 'canonical-secret-id'`
+        )
+        .run()
+    );
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `UPDATE schedule_task SET title = 'Updated again' WHERE task_id = 'canonical-secret-id'`
+        )
+        .run()
+    );
     const updated = projectReplicaPage(vault.db.vault, access, since);
     expect(updated.rebootstrapReason).toBeUndefined();
     expect(updated.batch.changes).toStrictEqual([
@@ -737,11 +744,13 @@ describe("replica-shape suite", () => {
     expect(updated.doorbell).toHaveLength(1);
     expect(JSON.stringify(updated)).not.toContain("canonical-secret-id");
 
-    vault.db.vault
-      .prepare(
-        `UPDATE schedule_task SET status = 'completed' WHERE task_id = 'canonical-secret-id'`
-      )
-      .run();
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `UPDATE schedule_task SET status = 'completed' WHERE task_id = 'canonical-secret-id'`
+        )
+        .run()
+    );
     const left = projectReplicaPage(vault.db.vault, access, updated.batch.to);
     expect(left.rebootstrapReason).toBeUndefined();
     expect(left.batch.changes).toStrictEqual([
@@ -750,11 +759,13 @@ describe("replica-shape suite", () => {
     expect(JSON.stringify(left)).not.toContain("canonical-secret-id");
 
     const afterExit = left.batch.to;
-    vault.db.vault
-      .prepare(
-        `DELETE FROM schedule_task WHERE task_id = 'canonical-secret-id'`
-      )
-      .run();
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `DELETE FROM schedule_task WHERE task_id = 'canonical-secret-id'`
+        )
+        .run()
+    );
     const hiddenDelete = projectReplicaPage(vault.db.vault, access, afterExit);
     expect(hiddenDelete.rebootstrapReason).toBeUndefined();
     expect(hiddenDelete.batch.changes).toStrictEqual([]);
@@ -869,13 +880,15 @@ describe("replica-shape suite", () => {
       ],
     });
     const since = currentReplicaLogState(vault.db.vault).watermark;
-    vault.db.vault
-      .prepare(
-        `INSERT INTO schedule_task
+    capturedWrite(vault.db.vault, () =>
+      vault.db.vault
+        .prepare(
+          `INSERT INTO schedule_task
          (task_id, owner_party_id, title, status, priority)
        VALUES ('new-task', ?, 'Visible', 'needs-action', 0)`
-      )
-      .run(vault.boot.ownerPartyId);
+        )
+        .run(vault.boot.ownerPartyId)
+    );
 
     const projected = projectReplicaPage(
       vault.db.vault,
@@ -898,12 +911,31 @@ describe("replica-shape suite", () => {
 
   test("the vault standing sweep enforces replica retention at startup", async () => {
     const vault = await plane();
-    const old = appendReplicaChange(vault.db.vault, {
-      entity: "schedule.task",
-      rowId: "expired-row",
-      op: "update",
-      changedAt: "2000-01-01T00:00:00.000Z",
-    });
+    const task = (id: string): void => {
+      capturedWrite(vault.db.vault, () =>
+        vault.db.vault
+          .prepare(
+            `INSERT INTO schedule_task
+               (task_id, owner_party_id, title, status, priority)
+             VALUES (?, ?, 'Seed', 'needs-action', 0)`
+          )
+          .run(id, vault.boot.ownerPartyId)
+      );
+    };
+    // THREE commits, because the floor lands on a commit EDGE and keeps the
+    // commit the age boundary falls inside WHOLE: two expired commits give the
+    // sweep an edge to land on, and the third is what stays.
+    task("expired-row");
+    const old = { seq: currentReplicaLogState(vault.db.vault).watermark.seq };
+    task("also-expired");
+    // Old enough for the age window: the sweep is what this asserts, and the
+    // log's own timestamp is the only thing it reads.
+    vault.db.vault
+      .prepare(
+        `UPDATE replica_log SET committed_at = '2000-01-01T00:00:00.000Z'`
+      )
+      .run();
+    task("still-here");
 
     vault.start();
     // The first sweep is deferred one immediate off the mount critical path

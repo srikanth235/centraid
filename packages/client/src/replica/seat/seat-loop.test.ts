@@ -8,7 +8,13 @@ import { inProcessSeatChannel } from "./in-process-channel.js";
 import { NodeSeatDriver } from "./node-seat-driver.js";
 import { nodeSeatStaging } from "./node-staging.js";
 import { seatArtifact } from "./seat-artifact.test-fixtures.js";
-import { SeatLoop } from "./seat-loop.js";
+import { SeatDriftParkedError } from "./seat-drift-parked-error.js";
+import {
+  parseSeatLogPage,
+  SEAT_SNAPSHOT_MOVE_RETRIES,
+  SeatLoop,
+} from "./seat-loop.js";
+import { SeatSnapshotMovedError } from "./seat-snapshot-moved-error.js";
 import { SeatWorkerCore } from "./worker-core.js";
 
 /**
@@ -201,5 +207,251 @@ describe("the seat loop with no worker in it", () => {
     await expect(
       inProcessSeatChannel(core).query({ sql: "SELECT 1" })
     ).rejects.toThrow(/has not been opened/u);
+  });
+  // #1014, C15. `return body as unknown as SeatLogPageWire` — a cast, on JSON
+  // off the wire, straight into a transaction that writes the member's file
+  // and moves the cursor with it.
+  describe("a page the door should not have served", () => {
+    it.each([
+      ["carries no rows array", { rows: undefined }],
+      ["a watermark that is a string", { watermark: "11" }],
+      ["a negative seq on a row", { negativeSeq: true }],
+      ["an op this seat cannot read", { op: "upsert" }],
+      ["no vault id", { vaultId: undefined }],
+    ])("is refused rather than applied: %s", (_name, mutation) => {
+      const shape = mutation as Record<string, unknown>;
+      const page: Record<string, unknown> = {
+        vaultId: "vault-1",
+        epoch: "e1",
+        schemaEpoch: 2,
+        ddlVersion: 0,
+        floor: 0,
+        watermark: 11,
+        next: 11,
+        hasMore: false,
+        rows: [
+          {
+            seq: shape["negativeSeq"] === true ? -1 : 11,
+            commitSeq: 4,
+            schemaEpoch: 2,
+            ddlVersion: 0,
+            table: "note",
+            op: shape["op"] ?? "insert",
+            pk: ["n1"],
+            producer: "gateway",
+            committedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      };
+      if ("rows" in shape) page["rows"] = shape["rows"];
+      if ("watermark" in shape) page["watermark"] = shape["watermark"];
+      if ("vaultId" in shape) page["vaultId"] = shape["vaultId"];
+      expect(() => parseSeatLogPage(page)).toThrow(/seat log page/u);
+    });
+
+    it("takes the page the gateway actually serves", () => {
+      expect(
+        parseSeatLogPage({
+          vaultId: "vault-1",
+          epoch: "e1",
+          schemaEpoch: 2,
+          ddlVersion: 0,
+          floor: 0,
+          watermark: 11,
+          next: 11,
+          hasMore: false,
+          rows: [],
+        })
+      ).toMatchObject({ watermark: 11 });
+    });
+  });
+
+  // #1014, C14. A drift the gateway cannot resolve was one full artifact
+  // download every retry interval, forever, with no user-visible cause: R25
+  // measured ~6 s and 560 lines of gateway log.
+  it("parks after three drift re-bootstraps in a row instead of a fourth", async () => {
+    const root = tempDirSync("seat-loop-drift-");
+    const artifact = seatArtifact(root);
+    let asked = 0;
+    // Every page names another vault, so every apply refuses as drift and the
+    // re-bootstrap that follows cannot help.
+    const call = (input: RequestInfo | URL): Promise<Response> => {
+      asked += 1;
+      const since = Number(new URL(String(input)).searchParams.get("since"));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            vaultId: "someone-elses-vault",
+            epoch: "e1",
+            schemaEpoch: 2,
+            ddlVersion: 0,
+            floor: 0,
+            watermark: since + 1,
+            next: since + 1,
+            hasMore: false,
+            rows: [
+              {
+                seq: since + 1,
+                commitSeq: since + 1,
+                schemaEpoch: 2,
+                ddlVersion: 0,
+                table: "note",
+                op: "insert",
+                pk: ["n1"],
+                row: { note_id: "n1", title: "not this vault" },
+                producer: "gateway",
+                committedAt: "2026-01-01T00:00:00.000Z",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    };
+    const loop = loopOver(
+      root,
+      call as unknown as typeof globalThis.fetch,
+      () => artifact
+    );
+    await loop.open();
+
+    let parked: unknown;
+    for (
+      let attempt = 0;
+      attempt < 6 && !(parked instanceof SeatDriftParkedError);
+      attempt += 1
+    ) {
+      // The host's retry timer without the timer: each pass is one `sync()`.
+      // oxlint-disable-next-line no-await-in-loop
+      parked = await loop.sync().then(
+        () => undefined,
+        (error: unknown) => error
+      );
+    }
+    expect(parked).toBeInstanceOf(SeatDriftParkedError);
+    expect((parked as SeatDriftParkedError).drift.reason).toBe("vault");
+    // Bounded: three drift re-bootstraps, not one per retry until the phone
+    // is out of battery.
+    expect(asked).toBeLessThanOrEqual(4);
+    // And it stays parked: another pass does not start the count over.
+    await expect(loop.sync()).rejects.toBeInstanceOf(SeatDriftParkedError);
+  });
+});
+
+/**
+ * A BUSY GATEWAY IS NOT A FAILED BOOTSTRAP (#1014, V4).
+ *
+ * The door builds for the current watermark, and the gateway commits while the
+ * phone downloads — the system recognition automations write their conversation
+ * ledger on every boot and those rows replicate. So the artifact really does
+ * move under a slow download, `If-Range` really does refuse the resume, and the
+ * only question is whether the seat starts over or gives up. It used to give
+ * up: `SeatSnapshotMovedError` left `sync()` with no copy and the library drew
+ * empty over a vault holding rows.
+ */
+function loopOverMovingDoor(
+  root: string,
+  fetch: typeof globalThis.fetch,
+  bytes: Uint8Array,
+  movesFor: number
+): { loop: SeatLoop; heads: () => number } {
+  let heads = 0;
+  let moved = 0;
+  const core = new SeatWorkerCore({
+    openDatabase: () => new NodeSeatDriver(path.join(root, "seat.db")),
+    staging: () =>
+      nodeSeatStaging({
+        directory: path.join(root, "staging"),
+        databasePath: path.join(root, "seat.db"),
+      }),
+    transport: () => ({
+      head: () => {
+        heads += 1;
+        return Promise.resolve({
+          // A NEW ETAG EACH TIME, because the gateway really has moved on.
+          etag: `"e1-${6 + heads}"`,
+          bytes: bytes.byteLength,
+          seq: 7,
+          epoch: "e1",
+          schemaEpoch: 2,
+        });
+      },
+      range: (start: number, etag: string) => ({
+        async *[Symbol.asyncIterator]() {
+          if (moved < movesFor) {
+            moved += 1;
+            throw new SeatSnapshotMovedError(etag, `"e1-${7 + moved}"`);
+          }
+          yield bytes.subarray(start);
+        },
+      }),
+    }),
+  });
+  return {
+    loop: new SeatLoop(inProcessSeatChannel(core), {
+      vaultId: "vault-1",
+      dbName: path.join(root, "seat.db"),
+      remember: true,
+      baseUrl: "https://gateway.test",
+      fetch,
+    }),
+    heads: () => heads,
+  };
+}
+
+describe("a snapshot that moves under the download", () => {
+  it("re-HEADs and finishes the bootstrap the busy gateway interrupted", async () => {
+    const root = tempDirSync("seat-loop-moved-");
+    const door = doorAnswering([{ rows: 1, hasMore: false, watermark: 8 }]);
+    const { loop, heads } = loopOverMovingDoor(
+      root,
+      door.fetch,
+      seatArtifact(root),
+      SEAT_SNAPSHOT_MOVE_RETRIES - 1
+    );
+    await loop.open();
+    await expect(loop.sync()).resolves.toMatchObject({ head: 8 });
+    expect(
+      heads(),
+      "the retry reused the head it already had rather than asking the door where the artifact is now"
+    ).toBe(SEAT_SNAPSHOT_MOVE_RETRIES);
+    await loop.close();
+  });
+
+  it("gives up after the bound rather than downloading forever", async () => {
+    // A gateway committing faster than this phone can download will never
+    // converge; three passes is enough to say so, and the caller's retry timer
+    // is what tries again later.
+    const root = tempDirSync("seat-loop-moving-");
+    const door = doorAnswering([{ rows: 1, hasMore: false, watermark: 8 }]);
+    const { loop, heads } = loopOverMovingDoor(
+      root,
+      door.fetch,
+      seatArtifact(root),
+      Number.POSITIVE_INFINITY
+    );
+    await loop.open();
+    await expect(loop.sync()).rejects.toThrow(SeatSnapshotMovedError);
+    expect(heads()).toBe(SEAT_SNAPSHOT_MOVE_RETRIES);
+    await loop.close();
+  });
+});
+
+describe("staging that lost its part file (#1014, lane H)", () => {
+  it("names it a moved artifact so the loop redoes the download", async () => {
+    // The part file can be gone by the time `install` runs — a `discard` from
+    // a bootstrap that raced this one, a purge, a phone reclaiming scratch
+    // space. The raw `ENOENT` escaped the loop as an unrecognised failure,
+    // which is a seat with no copy and an empty library over a full vault.
+    const root = tempDirSync("seat-staging-lost-");
+    const staging = nodeSeatStaging({
+      directory: path.join(root, "staging"),
+      databasePath: path.join(root, "seat.db"),
+    });
+    await staging.append('"e1-7"', new Uint8Array([1, 2, 3]));
+    await staging.discard();
+    await expect(staging.install('"e1-7"')).rejects.toThrow(
+      SeatSnapshotMovedError
+    );
   });
 });

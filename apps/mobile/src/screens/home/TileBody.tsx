@@ -19,6 +19,7 @@ import { TILE_EMPTY_COPY } from "./springboard-policy";
 import {
   MOSAIC_CELL_HEIGHT,
   mosaicAwaitingBytes,
+  mosaicWaitingCopy,
   mosaicCells,
   TILE_PAD,
 } from "./tile-model";
@@ -77,7 +78,13 @@ function FilledBody({
 }): React.JSX.Element {
   switch (body.kind) {
     case "photos":
-      return <PhotoMosaic photos={body.photos} colors={colors} />;
+      return (
+        <PhotoMosaic
+          photos={body.photos}
+          offlinePack={body.offlinePack}
+          colors={colors}
+        />
+      );
     case "docs":
       return <RuledRows rows={body.rows} colors={colors} />;
     case "notes":
@@ -324,9 +331,11 @@ function MosaicCell({
 
 function PhotoMosaic({
   photos,
+  offlinePack,
   colors,
 }: {
   photos: readonly TilePhoto[];
+  offlinePack: boolean;
   colors: ThemeColors;
 }): React.JSX.Element {
   const waiting = mosaicAwaitingBytes(photos);
@@ -342,7 +351,7 @@ function PhotoMosaic({
       {/* Grey squares with no explanation read as a failed render (rows without bytes). */}
       {waiting ? (
         <Text style={[styles.awaiting, { color: colors.textFaint }]}>
-          Photographs live on the gateway — these fill in when it is back.
+          {mosaicWaitingCopy(offlinePack)}
         </Text>
       ) : null}
     </View>

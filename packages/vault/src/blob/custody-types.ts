@@ -64,9 +64,25 @@ export interface ReconcileResult {
   orphansSkipped: string[];
   /** Held by the grace window (#439); these WILL delete on a later sweep. */
   orphansGraceHeld: string[];
+  /**
+   * A store class whose listing did not pass the sanity gate, with the reason
+   * (#1014, B23). Non-empty means the DESTRUCTIVE half of the sweep was
+   * skipped for that class — nothing was deleted, and the reason is what the
+   * receipt and the member's notice carry.
+   */
+  listingsRefused: { store: ReplicaStore; reason: string }[];
 }
 
 export interface ReconcileOptions {
+  /**
+   * TRUST THE LISTING LESS THAN THE BYTES (#1014, B23). Below this fraction of
+   * what THIS host has evidence the store holds, a listing is treated as
+   * suspect — a truncated page, a misconfigured bucket, a provider mid-outage
+   * — and the orphan-delete phase is skipped rather than run against it.
+   * Default `DEFAULT_MIN_LISTING_COVERAGE`; `0` disables the gate, which is
+   * only right where there is no local evidence to compare against.
+   */
+  minListingCoverage?: number;
   /** Skip the orphan-DELETE phase (#367): under a conflicted instance lease an
    *  unrecognized object may be the other live process's write. */
   skipOrphanDelete?: boolean;

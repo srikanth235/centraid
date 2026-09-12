@@ -973,10 +973,12 @@ describe("build-gateway scenarios", () => {
       // enricher ids are installed on a fresh vault, and the three SYSTEM ones
       // — `faces`, `photo-ocr`, `doc-text-extractor` — are armed from the
       // catalogue; the bundled-OPTIONAL three ship off until the member turns
-      // them on, which is not a degraded state.
+      // them on, which is not a degraded state. "Armed" is the probe's word
+      // now (#1014, B21): it is what the scheduler DOES, and a system recipe's
+      // `enabled` column is not consulted for it.
       expect(byName.get("enrichment")).toMatchObject({
         status: "ok",
-        detail: "3 of 6 enrichers enabled",
+        detail: "3 of 6 enrichers armed",
       });
       expect(byName.get("blob-sweep")?.status).toBe("ok");
       // Host-pushed failure carries its structured event.

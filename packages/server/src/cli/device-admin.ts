@@ -482,7 +482,14 @@ export async function commandDevices(
       }
       const removed = devices.revoke(target);
       for (const row of removed) {
-        cleanupRegistry.get(row.vaultId)?.forgetReplicaDevice(row.endpointId);
+        const plane = cleanupRegistry.get(row.vaultId);
+        plane?.retireReplicaDevice(row.endpointId);
+        // ONE REVOCATION POLICY, BOTH LANES (#1014, X14). The HTTP lane in
+        // `build-gateway.ts` takes the seat AND the device's blob keys; a
+        // stopped-daemon revoke that took only the seat left
+        // `blob_device_content_key`/`blob_device_wrap_key` behind, so the
+        // revoked device kept every object key it had already been granted.
+        plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
       }
       for (const row of removed)
         process.stdout.write(`${JSON.stringify({ revoked: row })}\n`);

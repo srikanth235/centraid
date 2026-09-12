@@ -422,3 +422,30 @@ export function rebuildDocumentFtsIndex(vault: DatabaseSync): void {
      WHERE d."deleted_at" IS NULL;
   `);
 }
+
+/**
+ * RUNG NINE (#1014, B5/B12) — two holds the transient bands were missing.
+ *
+ * `blob_staging.held_by_intent` is `held_by_batch`'s sibling for the offline
+ * write path: a device stages bytes, then its intent waits — for the owner's
+ * decision, or simply for the radio — and the 24-hour TTL used to reclaim the
+ * bytes out from under a write that was still coming. The hold is bounded
+ * (`STAGING_INTENT_HOLD_HOURS`) and released early once the named intent has
+ * a settled outcome, so an intent that never returns cannot pin bytes for
+ * ever.
+ *
+ * `blob_outbox.quarantined_at` ends the custody outbox's infinite retry: a row
+ * that has spent `OUTBOX_MAX_ATTEMPTS` stops being due, releases its cache
+ * pin, and is reported as quarantined rather than as perpetually pending —
+ * backlog that is never going to drain must not read as backlog that is.
+ *
+ * A rung rather than an edit to the DDL above, for the reason rung five gives:
+ * a file that has climbed a rung never climbs it again, and `ADD COLUMN` has
+ * no `IF NOT EXISTS`, so a column stated in both places would fail the rung.
+ */
+export const BLOB_TRANSIENT_HOLDS_DDL = `
+ALTER TABLE blob_staging ADD COLUMN held_by_intent TEXT;
+ALTER TABLE blob_outbox ADD COLUMN quarantined_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_blob_staging_held_by_intent
+  ON blob_staging(held_by_intent) WHERE held_by_intent IS NOT NULL;
+`;

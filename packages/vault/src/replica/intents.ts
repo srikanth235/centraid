@@ -214,22 +214,64 @@ export function intentRowById(
     .get(intentId) as IntentRow | undefined;
 }
 
+/**
+ * WHY AN ADMISSION WAS REFUSED, SAID IN A TYPE (#1014, X20).
+ *
+ * The identity refusals below are the caller's fault and are fixed by minting
+ * a new id; every other throw out of this module is the vault's — a write that
+ * did not run. A door that cannot tell them apart answers both the same, and
+ * the device door answered both `202 in-flight`: an acknowledgement of a write
+ * that will never happen, which is the shape of silent loss. `code` is what a
+ * route puts on the wire.
+ */
+export class ReplicaIntentIdentityError extends Error {
+  constructor(
+    readonly code: "intent_id_reused" | "intent_already_terminal",
+    message: string
+  ) {
+    super(message);
+    this.name = "ReplicaIntentIdentityError";
+  }
+}
+
+/**
+ * THE INTENT'S IDENTITY IS ITS PAYLOAD, NOT THE DEVICE THAT CARRIED IT
+ * (#1014, G23/V9).
+ *
+ * The durable outbox lives in the SEAT FILE, and the seat file outlives the
+ * enrolment: a phone restored from a device backup, or an OS app clone,
+ * enrols under a new `endpointId` and then replays an outbox full of intents
+ * this vault has already executed. Keyed on the device, every one of them was
+ * a `409 intent_id_reused` the seat could not retry past — the second device's
+ * write refused with a conflict it could do nothing about — or, worse on the
+ * read side, a dedupe MISS that ran the write again.
+ *
+ * The id is client-minted and random and the payload hash covers the app, the
+ * action, the input and the base versions, so `(vaultId, intentId,
+ * payloadHash)` is the identity that actually means "this same change". The
+ * device is ATTRIBUTION, and the row keeps the one that first admitted it.
+ *
+ * A DIFFERENT PAYLOAD UNDER A KNOWN ID IS STILL A REUSE, from any device: the
+ * retained outcome answers the payload it was recorded for, and answering
+ * another with it would settle a change that never ran.
+ */
 function assertIdentity(
   prior: IntentRow,
   input: RecordReplicaIntentOutcomeInput
 ): void {
   if (
-    prior.device_id !== input.deviceId ||
     prior.app_id !== input.appId ||
     prior.action !== input.action ||
     prior.payload_hash !== input.payloadHash
   ) {
-    throw new Error(
+    throw new ReplicaIntentIdentityError(
+      "intent_id_reused",
       `replica intent ${input.intentId} was replayed with different immutable fields`
     );
   }
   if (TERMINAL.has(prior.status) && prior.status !== input.status) {
-    throw new Error(
+    throw new ReplicaIntentIdentityError(
+      "intent_already_terminal",
       `replica intent ${input.intentId} is already terminal (${prior.status}); refusing ${input.status}`
     );
   }
@@ -368,6 +410,29 @@ export function transitionReplicaIntentOutcomeInTransaction(
 ): ReplicaIntentOutcome | undefined {
   const prior = intentRowById(vault, intentId);
   if (!prior) return undefined;
+  // A TRANSITION FORWARDS WHAT IT DOES NOT REPLACE (#1014, G18/B16). The
+  // UPDATE below binds `waiting_on` and `answered_versions` unconditionally,
+  // so a transition that named neither used to ERASE both — and `waiting_on`
+  // is the field `replica-intent-route.ts` reads to decide whether a chain
+  // park is re-enterable, so a re-park lost the fact that it was waiting on an
+  // INTENT rather than on a person and became an immutable dedupe hit: the
+  // queue behind a slow predecessor never drained again.
+  //
+  // `waiting_on` carries over only while the outcome is STILL A WAIT. A park
+  // that has become `failed` or `executed` is waiting on nobody, and saying
+  // otherwise would put a name under a settled row.
+  const carriedWait =
+    update.status === "parked" && typeof prior.waiting_on === "string"
+      ? (JSON.parse(prior.waiting_on) as ReplicaWaitingOn)
+      : undefined;
+  // The version set a seat clears its badge against belongs to the ANSWER, not
+  // to the status; a transition that does not restate it keeps it.
+  const carriedVersions =
+    typeof prior.answered_versions === "string"
+      ? (JSON.parse(prior.answered_versions) as ReplicaAnsweredVersion[])
+      : undefined;
+  const waitingOn = update.waitingOn ?? carriedWait;
+  const answeredVersions = update.answeredVersions ?? carriedVersions;
   return recordReplicaIntentOutcomeInTransaction(vault, {
     intentId,
     deviceId: prior.device_id,
@@ -378,6 +443,8 @@ export function transitionReplicaIntentOutcomeInTransaction(
     ...(update.invocationId ? { invocationId: update.invocationId } : {}),
     ...(update.reason ? { reason: update.reason } : {}),
     ...(update.conflict ? { conflict: update.conflict } : {}),
+    ...(waitingOn ? { waitingOn } : {}),
+    ...(answeredVersions ? { answeredVersions } : {}),
     ...(update.now ? { now: update.now } : {}),
   });
 }
@@ -416,6 +483,33 @@ export function readReplicaIntentOutcome(
   return row?.device_id === deviceId ? outcomeOf(row) : undefined;
 }
 
+/**
+ * The retained outcome for a caller presenting THIS id with THIS payload
+ * (#1014, G23/V9).
+ *
+ * The device-scoped read above is the right question when the device is the
+ * durable identity — the peer door's `peer:<vaultId>` is exactly that. It is
+ * the wrong one for a seat, whose outbox lives in a file that outlives the
+ * enrolment: a restored phone asking about its own already-executed intent got
+ * `undefined` and re-ran it, or was told the id was reused by someone else.
+ *
+ * The payload hash is what makes this a non-oracle: the id is random and
+ * client-minted, and the hash covers the app, the action, the input and the
+ * base versions, so a caller who can state both is holding the same intent.
+ * Both are already this vault's own devices — the door authenticated them —
+ * so there is no existence here they could not already read.
+ */
+export function readReplicaIntentOutcomeForSeat(
+  vault: DatabaseSync,
+  intentId: string,
+  seat: { deviceId: string; payloadHash: string }
+): ReplicaIntentOutcome | undefined {
+  const row = intentRowById(vault, intentId);
+  if (!row) return undefined;
+  if (row.device_id === seat.deviceId) return outcomeOf(row);
+  return row.payload_hash === seat.payloadHash ? outcomeOf(row) : undefined;
+}
+
 export interface ListReplicaIntentOutcomesOptions {
   status?: ReplicaIntentStatus;
   limit?: number;
@@ -433,19 +527,27 @@ export function listReplicaIntentOutcomes(
       "replica intent list limit must be an integer between 1 and 5000"
     );
   }
+  // EVERY COLUMN, BECAUSE THIS IS THE RECOVERY READ (#1014, G19). It used to
+  // select nine of the sixteen, so an outcome recovered here arrived without
+  // its commit position, its produced set, who it waits on, the versions it
+  // answers for or the end of its idempotency window — the server-side twin
+  // of R1, and one that survives any client fix: a seat cannot park on a
+  // number the answer did not carry. `intentRowById` names the same list.
+  const columns = `intent_id, device_id, app_id, action, payload_hash, status,
+                   invocation_id, reason, conflict_json, waiting_on,
+                   answered_versions, commit_seq, produced_json, depends_on,
+                   expires_at, created_at, updated_at`;
   const rows = options.status
     ? (vault
         .prepare(
-          `SELECT intent_id, device_id, app_id, action, payload_hash, status,
-                  invocation_id, reason, conflict_json, created_at, updated_at
+          `SELECT ${columns}
              FROM replica_intent_outcome
             WHERE device_id = ? AND status = ? ORDER BY updated_at, intent_id LIMIT ?`
         )
         .all(deviceId, options.status, limit) as unknown as IntentRow[])
     : (vault
         .prepare(
-          `SELECT intent_id, device_id, app_id, action, payload_hash, status,
-             invocation_id, reason, conflict_json, created_at, updated_at
+          `SELECT ${columns}
              FROM replica_intent_outcome
             WHERE device_id = ? ORDER BY updated_at, intent_id LIMIT ?`
         )

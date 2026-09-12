@@ -131,8 +131,34 @@ export class OwnerStore {
    * Author ownership. INSERT OR REPLACE is deliberate: a vault has exactly
    * one owner, so re-pointing replaces rather than accumulates. Callers own
    * the "may this ownership change" decision.
+   *
+   * AND THE EX-OWNER'S DEVICES LOSE THE SCOPE WITH IT (#1014, V18). The
+   * replace deleted nothing else, so `device_checkpoints` — which since #1014
+   * is written, and is the DURABLE PROOF a device mounted a vault — survived a
+   * vault changing hands. `hadReplicaScope` reads exactly that table, so the
+   * previous owner's phone went on passing the multiplex gate and subscribing
+   * to the new owner's commit hub, and was only stopped by the per-mount check
+   * one pass later.
+   *
+   * The drop goes FIRST and opens no transaction of its own: `enroll()` calls
+   * this from inside one, and this database's `transaction` does not nest. The
+   * order is the guarantee — a failure between the two statements leaves the
+   * ex-owner's device without the scope rather than with it.
    */
   setOwner(vaultId: string, ownerId: string): void {
+    const previous = this.ownerOf(vaultId);
+    if (previous === ownerId) return;
+    if (previous !== undefined) {
+      this.gatewayDatabase.db
+        .prepare(
+          `DELETE FROM device_checkpoints
+            WHERE vault_id = ?
+              AND endpoint_id IN (
+                SELECT endpoint_id FROM devices WHERE owner_id = ?
+              )`
+        )
+        .run(vaultId, previous);
+    }
     this.gatewayDatabase.db
       .prepare(
         "INSERT OR REPLACE INTO vault_owners (vault_id, owner_id) VALUES (?, ?)"

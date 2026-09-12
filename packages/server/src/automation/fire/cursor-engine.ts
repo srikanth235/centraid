@@ -13,6 +13,7 @@ import { cronMatches } from "./cron-match.js";
 import { applyInOrder, eventSourceKey } from "./cursor-engine-order.js";
 import {
   DEFAULT_TRIGGER_CATCH_UP_CAP,
+  TRIGGER_MAX_ATTEMPTS,
   cursorIdentity,
   cursorSourceKind,
   readPendingBatch,
@@ -27,15 +28,20 @@ import type {
   LocalCursorScheduler,
   PendingFireBatch,
   TriggerCursorFireInput,
+  TriggerDeadLetterEntry,
   VaultCursorEngineOptions,
 } from "./cursor-engine-support.js";
+import { CursorRetryState } from "./cursor-retry.js";
 import type { ReconcileResult } from "./host.js";
 import { MemoryCursorStore } from "./memory-cursor-store.js";
 
 export {
   DEFAULT_TRIGGER_CATCH_UP_CAP,
+  TRIGGER_DEAD_LETTER_KEEP,
+  TRIGGER_MAX_ATTEMPTS,
   assertTriggerCursorAllowed,
   isDeniedCursorEntity,
+  readDeadLetters,
 } from "./cursor-engine-support.js";
 export type {
   CursorElement,
@@ -44,6 +50,8 @@ export type {
   LocalCursorScheduler,
   TriggerCursorFireInput,
   TriggerCursorReadInput,
+  TriggerDeadLetter,
+  TriggerDeadLetterEntry,
   VaultCursorEngineOptions,
 } from "./cursor-engine-support.js";
 
@@ -56,6 +64,8 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   private readonly store: CursorStore;
   private readonly now: () => Date;
   private readonly onError?: VaultCursorEngineOptions["onError"];
+  private readonly onDeadLetter?: VaultCursorEngineOptions["onDeadLetter"];
+  private readonly maxAttempts: number;
   private readonly onTick?: VaultCursorEngineOptions["onTick"];
   private readonly shouldPauseBackground?: VaultCursorEngineOptions["shouldPauseBackground"];
   private readonly onDormancyChange?: VaultCursorEngineOptions["onDormancyChange"];
@@ -81,6 +91,8 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     this.store = options.store ?? new MemoryCursorStore();
     this.now = options.now ?? (() => new Date());
     this.onError = options.onError;
+    this.onDeadLetter = options.onDeadLetter;
+    this.maxAttempts = Math.max(1, options.maxAttempts ?? TRIGGER_MAX_ATTEMPTS);
     this.onTick = options.onTick;
     this.shouldPauseBackground = options.shouldPauseBackground;
     this.defaultCronTimeZone = options.defaultCronTimeZone;
@@ -375,6 +387,11 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       ? (elements.at(-1)?.positionJson ?? cursor?.positionJson)
       : (result.positionJson ?? cursor?.positionJson);
     const acknowledged = new Set(priorPending?.acknowledged);
+    // FAILURE IS COUNTED, NOT SWALLOWED (#1014, B1).
+    const retries = new CursorRetryState(
+      priorPending,
+      storedCursor?.deadLetterJson
+    );
     const put = (pending?: PendingFireBatch): void => {
       this.store.putCursor({
         automationId: registration.ref,
@@ -396,6 +413,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         ...(result.gapReason === undefined
           ? {}
           : { gapReason: result.gapReason }),
+        ...(retries.deadLetterJson() === undefined
+          ? {}
+          : { deadLetterJson: retries.deadLetterJson() }),
         updatedAt: at.getTime(),
       });
     };
@@ -419,6 +439,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       ...(targetPositionJson === undefined ? {} : { targetPositionJson }),
       elements,
       acknowledged: [...acknowledged],
+      ...retries.snapshot(),
       skipped,
       ...(result.windowFrom === undefined
         ? {}
@@ -431,16 +452,21 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     // Durable intent precedes any side effect; the committed position stays
     // unchanged until all terminal turns are receipted.
     put(pending());
+    // ONE FAILURE DOES NOT STOP THE BATCH (#1014, B1) — see `cursor-retry.ts`.
     const deliverNext = async (index: number): Promise<void> => {
       const element = elements[index];
       if (element === undefined) return;
       if (acknowledged.has(element.position)) return deliverNext(index + 1);
+      if (retries.deferred(element.position, at.getTime()))
+        return deliverNext(index + 1);
+      const attempt = retries.attemptNumber(element.position);
       const fireInput: TriggerCursorFireInput = {
         automationRef: registration.ref,
         trigger: registration.trigger,
         triggerIndex: registration.triggerIndex,
         sourceKind: cursorSourceKind(registration.trigger),
         element,
+        attempt,
         skipped,
         ...(result.windowFrom === undefined
           ? {}
@@ -450,15 +476,57 @@ export class VaultCursorEngine implements LocalCursorScheduler {
           ? {}
           : { gapReason: result.gapReason }),
       };
-      if (this.fireCursor) await this.fireCursor(fireInput);
-      else if (registration.trigger.kind === "cron")
-        await this.fire(registration.ref);
+      try {
+        if (this.fireCursor) await this.fireCursor(fireInput);
+        else if (registration.trigger.kind === "cron")
+          await this.fire(registration.ref);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.onError?.(error, registration.ref);
+        if (attempt >= this.maxAttempts) {
+          const entry = retries.giveUp(element, attempt, message, at.getTime());
+          // Acknowledged ONLY here — after the element is durably recorded as
+          // given up on. That ordering is the whole difference from the
+          // silent ack this replaces.
+          acknowledged.add(element.position);
+          put(pending());
+          this.report(registration, entry);
+        } else {
+          retries.fail(element.position, attempt, at.getTime());
+          put(pending());
+        }
+        return deliverNext(index + 1);
+      }
+      retries.clear(element.position);
       acknowledged.add(element.position);
       put(pending());
       return deliverNext(index + 1);
     };
     await deliverNext(0);
-    put();
+    // A batch with an element still owed stays PENDING: the next tick re-reads
+    // it from the cursor row and retries once its backoff has elapsed.
+    if (elements.some((element) => !acknowledged.has(element.position)))
+      put(pending());
+    else put();
+  }
+
+  /** Best-effort dead-letter report; never allowed to fail a settled batch. */
+  private report(
+    registration: CursorRegistration,
+    entry: TriggerDeadLetterEntry
+  ): void {
+    try {
+      void Promise.resolve(
+        this.onDeadLetter?.({
+          ...entry,
+          automationRef: registration.ref,
+          triggerIndex: registration.triggerIndex,
+          sourceKind: cursorSourceKind(registration.trigger),
+        })
+      ).catch((error) => this.onError?.(error, registration.ref));
+    } catch (error) {
+      this.onError?.(error, registration.ref);
+    }
   }
 
   private async bootstrapTriggers(

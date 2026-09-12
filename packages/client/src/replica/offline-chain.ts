@@ -201,19 +201,39 @@ export function substitutePredecessorReferences(
 }
 
 /**
- * The base set, minus the rows a predecessor has not produced yet (R23).
+ * The base set, minus the rows a predecessor has not CREATED yet (R23, R18).
  *
  * A row the create has not made has no version to observe, and inventing one
  * — 0, or the projection's optimistic guess — is how a chain conflicts with
  * itself on its own first run. The reference to it is the dependency edge and
  * the `$intent` placeholder; the gateway resolves both from the durable
  * outcome and then compares by plain equality.
+ *
+ * ONLY THE SYNTHETIC ROWS (#1014, R18). This dropped the base version for
+ * EVERY row a queued predecessor had upserted, synthetic or not — so the
+ * second edit of an existing photograph, and the trash that followed it, went
+ * out with `base_versions_json = []` and the gateway had nothing to refuse
+ * them against. Compounded with an outbox that never settles, that means:
+ * after the first write to a row on a phone, that row never carries a
+ * precondition again. It is how a foregrounded, connected phone overwrote two
+ * newer edits with no conflict and no alert (R24), and how the loser of two
+ * offline seats was never told (R23).
+ *
+ * THE CHAIN'S DEPENDENCY AND THE WRITE'S BASE ARE DIFFERENT FACTS, and this
+ * conflated them. The dependency is `dependsOn` — this write may not run
+ * before that one. The base is the version this seat OBSERVED on the row it
+ * is editing, which is a real number for any row that already exists, and the
+ * gateway rebases it onto the version the predecessor produced before checking
+ * it (`rebaseChainedBaseVersions` in
+ * `packages/server/src/routes/replica-intent-shape.ts`). A row only a queued
+ * predecessor will ever mint is the one case with nothing to observe, and
+ * `MintedRow.synthetic` is exactly that case.
  */
 export function chainBaseVersions(
   observed: readonly ReplicaBaseVersion[],
   minted: Map<string, MintedRow>
 ): ReplicaBaseVersion[] {
-  return observed.filter((base) => !minted.has(base.rowId));
+  return observed.filter((base) => minted.get(base.rowId)?.synthetic !== true);
 }
 
 /** A dependent that is not going anywhere yet, and why. */

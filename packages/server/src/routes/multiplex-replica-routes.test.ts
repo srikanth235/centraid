@@ -8,11 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import {
-  appendReplicaChange,
-  currentReplicaLogState,
-  pruneReplicaChanges,
-} from "@centraid/vault";
+import { currentReplicaLogState, pruneReplicaLog } from "@centraid/vault";
 import type { ReplicaCursor } from "@centraid/vault";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
@@ -24,6 +20,7 @@ import {
   makeMultiplexReplicaRouteHandler,
 } from "./multiplex-replica-routes.js";
 import type { MultiplexReplicaRouteOptions } from "./multiplex-replica-routes.js";
+import { capturedWrite } from "./replica-write.test-fixtures.js";
 import { SseSubscriberCap } from "./sse-cap.js";
 
 const logger = {
@@ -183,17 +180,28 @@ function cursorsFor(body: string, vaultId: string): ReplicaCursor[] {
     .map((frame) => frame.data as ReplicaCursor);
 }
 
-/** Log entries a mounted phone has yet to see; rows stay absent. */
+/**
+ * Commits a mounted phone has yet to see, one per call.
+ *
+ * ONE COMMIT PER ENTRY, and the position returned is where that commit ENDS
+ * (#1014, R-1014-1): a page never splits a transaction, so a commit is the
+ * unit a cursor frame stands for. The trigger log this replaced could fabricate
+ * a bare entry with no row behind it; the one log is decoded from what the
+ * commit actually wrote, so the backlog is real rows.
+ */
 function backlog(plane: VaultPlane, count: number, prefix: string): number[] {
-  return Array.from(
-    { length: count },
-    (_unused, index) =>
-      appendReplicaChange(plane.db.vault, {
-        entity: "schedule.task",
-        rowId: `${prefix}-${index}`,
-        op: "insert",
-      }).seq
-  );
+  return Array.from({ length: count }, (_unused, index) => {
+    capturedWrite(plane.db.vault, () =>
+      plane.db.vault
+        .prepare(
+          `INSERT INTO schedule_task
+             (task_id, owner_party_id, title, status, priority)
+           VALUES (?, ?, 'Backlog', 'needs-action', 0)`
+        )
+        .run(`${prefix}-${index}`, plane.boot.ownerPartyId)
+    );
+    return currentReplicaLogState(plane.db.vault).watermark.seq;
+  });
 }
 
 describe("multiplex replica route", () => {
@@ -302,7 +310,7 @@ describe("multiplex replica route", () => {
     // prunes past it while the phone is offline.
     const stale = currentReplicaLogState(f.family!.db.vault).watermark;
     backlog(f.family!, 2, "pruned");
-    pruneReplicaChanges(f.family!.db.vault, {
+    pruneReplicaLog(f.family!.db.vault, {
       maxAgeMs: 0,
       now: new Date(Date.now() + 60_000),
     });
@@ -469,5 +477,80 @@ describe("multiplex replica route", () => {
     expect(res.writableEnded).toBe(true);
     expect(req.listenerCount("close")).toBe(0);
     expect(res.listenerCount("close")).toBe(0);
+  });
+  test("one unknown mount is refused by name while the others stream", async () => {
+    // THE REGRESSION THIS PINS (#1014, V18). The gate was `mounts.some(...) →
+    // 403` for the WHOLE radio: a phone mounting A,B,C,D where D had changed
+    // hands got a blanket refusal and A–C went dark. The refusal is per mount,
+    // in band, and carries the vault it is about.
+    const f = await fixture();
+    const mounts = [
+      {
+        vaultId: f.personal.boot.vaultId,
+        cursor: currentReplicaLogState(f.personal.db.vault).watermark,
+      },
+      {
+        vaultId: "vault-never-known",
+        cursor: currentReplicaLogState(f.personal.db.vault).watermark,
+      },
+    ];
+    const req = request(
+      `/centraid/_gateway/replica/changes?${new URLSearchParams({
+        mounts: JSON.stringify(mounts),
+      })}`,
+      f.deviceId
+    );
+    const res = new MockResponse();
+    res.onWrite = () => {
+      if (scopeFrames(res.body).length > 0) res.destroy();
+    };
+
+    await f.handler(req, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(200);
+    const refusals = scopeFrames(res.body).filter(
+      (frame) => frame.event === "error"
+    );
+    expect(refusals.map((frame) => frame.vaultId)).toStrictEqual([
+      "vault-never-known",
+    ]);
+    expect(refusals[0]!.data).toStrictEqual({ reason: "scope-not-enrolled" });
+  });
+
+  test("a served page writes this device's scope checkpoint", async () => {
+    // THE REGRESSION THIS PINS (#1014, V2/X9). `device_checkpoints` had no
+    // production writer at all, so `hadReplicaScope` was permanently false,
+    // the gate above could only ever refuse, and `revoke()`'s checkpoint drop
+    // was a no-op over an empty table.
+    const f = await fixture({ includeFamily: false });
+    expect(
+      f.enrollments.hadReplicaScope(f.deviceId, f.personal.boot.vaultId)
+    ).toBe(false);
+    const before = currentReplicaLogState(f.personal.db.vault).watermark;
+    backlog(f.personal, 3, "checkpoint");
+    const req = request(
+      `/centraid/_gateway/replica/changes?${new URLSearchParams({
+        mounts: JSON.stringify([
+          { vaultId: f.personal.boot.vaultId, cursor: before },
+        ]),
+      })}`,
+      f.deviceId
+    );
+    const res = new MockResponse();
+    res.onWrite = () => {
+      if (cursorsFor(res.body, f.personal.boot.vaultId).length > 0)
+        res.destroy();
+    };
+
+    await f.handler(req, res as unknown as ServerResponse);
+
+    expect(
+      f.enrollments.hadReplicaScope(f.deviceId, f.personal.boot.vaultId)
+    ).toBe(true);
+    const checkpoint = f.enrollments.get(
+      f.deviceId,
+      f.personal.boot.vaultId
+    )?.checkpoint;
+    expect(checkpoint?.seq).toBeGreaterThan(before.seq);
   });
 });

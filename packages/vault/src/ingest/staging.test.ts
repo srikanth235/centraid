@@ -399,3 +399,76 @@ describe("staging", () => {
     ).toThrow(/unknown caller/u);
   });
 });
+
+/*
+ * TWO PULLS BEFORE ONE ANSWER (#1014, B7/B8). The external-id map is written
+ * at PUBLISH, so on a review-gated connection the second pull had nothing to
+ * dedup against and staged the same id as a second `create`.
+ */
+describe("staging the same external id twice before review", () => {
+  let db2: VaultDb;
+  let gw2: Gateway;
+  let owner2: Credential;
+
+  const ICS = (summary: string): string =>
+    [
+      "BEGIN:VCALENDAR",
+      "BEGIN:VEVENT",
+      "UID:evt-dup@example.com",
+      `SUMMARY:${summary}`,
+      "DTSTART:20260709T103000Z",
+      "STATUS:CONFIRMED",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+  beforeEach(() => {
+    db2 = openVaultDb();
+    const boot2 = bootstrapVault(db2, { ownerName: "Priya" });
+    gw2 = createGateway(db2);
+    owner2 = {
+      kind: "device",
+      deviceId: boot2.deviceId,
+      deviceKey: boot2.deviceKey,
+    };
+  });
+
+  test("retires the older draft so only the newest pull can create the row", () => {
+    const first = gw2.stageImportFile(owner2, {
+      filename: "calendar.ics",
+      data: ICS("Dentist"),
+    });
+    expect(first.staged).toMatchObject({ create: 1 });
+
+    const second = gw2.stageImportFile(owner2, {
+      filename: "calendar.ics",
+      data: ICS("Dentist, moved"),
+    });
+    // The NEWEST draft owns the create — a caller that has just staged holds a
+    // batch id that actually publishes.
+    expect(second.staged).toMatchObject({ create: 1 });
+
+    // The member's queue holds exactly one creatable entry for the id, and it
+    // carries the fresher payload.
+    const creates = db2.vault
+      .prepare(
+        `SELECT payload_json FROM sync_import_row
+          WHERE external_id = ? AND disposition = 'create'`
+      )
+      .all("evt-dup@example.com") as { payload_json: string }[];
+    expect(creates).toHaveLength(1);
+    expect(creates[0]?.payload_json).toContain("Dentist, moved");
+
+    // Approving BOTH batches creates one row, not two.
+    gw2.publishImport(owner2, first.batchId);
+    gw2.publishImport(owner2, second.batchId);
+    const count = db2.vault
+      .prepare("SELECT count(*) AS n FROM core_event WHERE ical_uid = ?")
+      .get("evt-dup@example.com") as { n: number };
+    expect(count.n).toBe(1);
+    const summary = db2.vault
+      .prepare("SELECT summary FROM core_event WHERE ical_uid = ?")
+      .get("evt-dup@example.com") as { summary: string };
+    expect(summary.summary).toBe("Dentist, moved");
+  });
+});

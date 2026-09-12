@@ -22,7 +22,12 @@
 
 import { Directory, File, FileMode, Paths } from "expo-file-system";
 
-import type { SeatBootstrapStaging } from "@centraid/client/replica/native";
+import type {
+  SeatBootstrapStaging,
+  SeatCarryOverSidecar,
+  SeatSqliteDriver,
+} from "@centraid/client/replica/native";
+import { SeatSnapshotMovedError } from "@centraid/client/replica/native";
 import { gunzip } from "@centraid/client/replica/seat/gunzip";
 
 import { pathToFileUri } from "../../../modules/centraid-storage";
@@ -32,6 +37,15 @@ export interface ExpoSeatStagingOptions {
   readonly directory: string;
   /** The seat's database file — what `install` moves into place. */
   readonly databasePath: string;
+  /**
+   * Open the expanded artifact BEFORE it is moved into place (#1014, C17).
+   *
+   * Handed in rather than built here because the key and the connection
+   * options belong to whoever opens this seat's file for real; staging only
+   * knows where the bytes are. Absent in a host that has no driver to give,
+   * in which case the bootstrap names the file after the move as it used to.
+   */
+  readonly openIncoming?: (path: string) => SeatSqliteDriver;
 }
 
 function fileAt(...parts: string[]): File {
@@ -94,12 +108,51 @@ export function expoSeatStaging(
       }
       return Promise.resolve();
     },
-    install: (): Promise<void> => {
-      const staged = part().bytesSync();
-      const incoming = fileAt(`${options.databasePath}.incoming`);
+    install: (
+      etag: string,
+      prepare?: (driver: SeatSqliteDriver) => void
+    ): Promise<void> => {
+      // A STAGING FILE THAT IS NOT THERE IS A DOWNLOAD TO REDO, NOT AN ENOENT
+      // TO SURFACE (#1014, lane H). The part file can be gone by the time the
+      // install runs — a `discard` from a bootstrap that raced this one, a
+      // purge, iOS reclaiming scratch space — and the raw error escaped the
+      // loop as an unrecognised failure, which is a seat with no copy and an
+      // empty library. Named as what it is, the loop's bounded re-HEAD starts
+      // the download over.
+      let staged: Uint8Array;
+      try {
+        staged = part().bytesSync();
+      } catch {
+        return discard().then(() => {
+          throw new SeatSnapshotMovedError(etag, undefined);
+        });
+      }
+      const incomingPath = `${options.databasePath}.incoming`;
+      const incoming = fileAt(incomingPath);
       removeQuietly(incoming);
       incoming.create({ intermediates: true });
       incoming.write(gunzip(staged));
+      // NAMED BEFORE IT IS MOVED (#1014, C17). R25's forensics were a seat
+      // file holding another vault's rows with `seat_state` absent — the shape
+      // a kill between `moveSync` and the old post-install write leaves. The
+      // seat's own tables now go onto `.incoming`, so the move publishes a
+      // complete file or nothing, and a `prepare` that refuses a mis-addressed
+      // artifact (C16) never touches the destination at all.
+      if (options.openIncoming && prepare) {
+        const driver = options.openIncoming(incomingPath);
+        try {
+          prepare(driver);
+        } catch (error) {
+          driver.close();
+          removeQuietly(fileAt(`${incomingPath}-wal`));
+          removeQuietly(fileAt(`${incomingPath}-shm`));
+          removeQuietly(incoming);
+          throw error;
+        }
+        driver.close();
+        removeQuietly(fileAt(`${incomingPath}-wal`));
+        removeQuietly(fileAt(`${incomingPath}-shm`));
+      }
       const destination = fileAt(options.databasePath);
       removeQuietly(destination);
       incoming.moveSync(destination);
@@ -118,5 +171,50 @@ export function expoSeatStaging(
     },
     currentBytes: (): Promise<number> =>
       Promise.resolve(sizeOf(fileAt(options.databasePath))),
+  };
+}
+
+/**
+ * The carry-over sidecar on the phone (#1014, C5/T6).
+ *
+ * Beside the seat file in the module's durable directory, NOT in the staging
+ * directory: `install()` discards staging the moment the move lands, and the
+ * stash has to outlive exactly that. Written through a scratch file and moved
+ * in, so a process killed mid-write leaves the previous stash or none rather
+ * than a truncated queue.
+ *
+ * This is the file that makes `rebootstrap-copy.ts`'s "your unsent changes
+ * stay queued" true across a kill: on this host `install()` is
+ * `removeQuietly(destination); incoming.moveSync(destination)`, so the old
+ * file — and every intent in it — is gone before the new one is named.
+ */
+export function expoSeatCarryOverSidecar(
+  databasePath: string
+): SeatCarryOverSidecar {
+  const stash = (): File => fileAt(`${databasePath}.carry-over.json`);
+  const scratch = (): File => fileAt(`${databasePath}.carry-over.writing`);
+  return {
+    read: (): Promise<string | undefined> => {
+      try {
+        const held = stash();
+        return Promise.resolve(held.exists ? held.textSync() : undefined);
+      } catch {
+        return Promise.resolve(undefined);
+      }
+    },
+    write: (payload: string): Promise<void> => {
+      const pending = scratch();
+      removeQuietly(pending);
+      pending.create({ intermediates: true });
+      pending.write(payload);
+      removeQuietly(stash());
+      pending.moveSync(stash());
+      return Promise.resolve();
+    },
+    clear: (): Promise<void> => {
+      removeQuietly(stash());
+      removeQuietly(scratch());
+      return Promise.resolve();
+    },
   };
 }

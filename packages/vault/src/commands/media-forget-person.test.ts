@@ -22,8 +22,10 @@ import { importVaultExport } from "../gateway/portability.js";
 import type { Credential } from "../gateway/types.js";
 import { uuidv7 } from "../ids.js";
 import {
+  beginReplicaCommit,
   currentReplicaLogState,
-  readReplicaChanges,
+  endReplicaCommit,
+  readReplicaLogPage,
 } from "../replica/change-log.js";
 import { registerEnrichCommands } from "./enrich.js";
 import { registerMediaCommands } from "./media.js";
@@ -87,13 +89,24 @@ describe("media.forget_person", () => {
     ).asset_id;
   }
 
-  /** One face region plus the whole derived tail a real sweep leaves behind. */
+  /**
+   * One face region plus the whole derived tail a real sweep leaves behind.
+   *
+   * BRACKETED LIKE EVERY OTHER WRITE (#1014, R-1014-1). These are raw
+   * statements rather than commands, and the log is decoded from the session
+   * the bracket opens — so seeding outside one leaves the rows in the NEXT
+   * commit's window, where a later delete of the same row nets them both away
+   * and the forget this test is about never reaches a replica. The trigger log
+   * this replaced fired per statement and hid the missing bracket.
+   */
   function addFace(
     regionId: string,
     assetId: string,
     state: "proposed" | "confirmed",
     partyId: string | null
   ): string {
+    db.vault.exec("BEGIN IMMEDIATE");
+    const commit = beginReplicaCommit(db.vault, { producer: "test-seed" });
     db.vault
       .prepare(
         `INSERT INTO media_face_region
@@ -135,6 +148,8 @@ describe("media.forget_person", () => {
          VALUES (?, ?, '2026-08-01T00:00:00.000Z')`
       )
       .run(regionId, regionId);
+    endReplicaCommit(db.vault, commit);
+    db.vault.exec("COMMIT");
     return regionId;
   }
 
@@ -305,10 +320,9 @@ describe("media.forget_person", () => {
   test("every forgotten row is announced to replicas as a delete, so an offline phone loses them on reconnect", () => {
     const seeded = seed();
     const since = currentReplicaLogState(db.vault).watermark;
-
     invoke("media.forget_person", { party_id: seeded.ana });
 
-    const page = readReplicaChanges(db.vault, { since });
+    const page = readReplicaLogPage(db.vault, { since });
     const deletes = page.changes.filter((change) => change.op === "delete");
     const deletedOf = (entity: string): string[] =>
       deletes

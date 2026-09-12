@@ -181,7 +181,9 @@ export {
 } from "./share/subscription-store.js";
 export {
   judgeMemberIntent,
+  MEMBER_INTENT_WINDOW_MS,
   memberIntentBytes,
+  memberIntentExpired,
   verifyMemberIntent,
   type MemberIntentEnvelope,
   type MemberIntentVerdict,
@@ -369,7 +371,11 @@ export {
   type LocalOrphanSweepResult,
   type LocalOrphanSweepTarget,
 } from "./blob/local-orphan-sweep.js";
-export { type BlobPlacement, type BlobPlacementMode } from "./share/blobs.js";
+export {
+  placeBlob,
+  type BlobPlacement,
+  type BlobPlacementMode,
+} from "./share/blobs.js";
 export {
   S3BlobStore,
   MULTIPART_THRESHOLD_BYTES,
@@ -437,8 +443,11 @@ export {
   stageBlobBytes,
   sweepBlobStaging,
   releaseBatchHold,
+  holdStagingForIntent,
+  releaseIntentHold,
   mediaLocationPolicy,
   STAGING_TTL_HOURS,
+  STAGING_INTENT_HOLD_HOURS,
   type StageBlobOptions,
   type StagedBlob,
 } from "./blob/staging.js";
@@ -601,30 +610,22 @@ export {
   type ReplicaCursorInput,
 } from "./replica/cursor.js";
 export {
-  REPLICA_COMPACTION_HELD_ENTITIES,
-  REPLICA_RETENTION_DAYS,
-  REPLICA_RETENTION_MAX_ENTRIES,
   ReplicaRebootstrapRequiredError,
   abandonReplicaCommit,
-  appendReplicaChange,
   beginReplicaCommit,
   bumpReplicaEpoch,
   currentReplicaLogState,
   endReplicaCommit,
   initializeReplicaProtocol,
-  pruneReplicaChanges,
-  readReplicaChanges,
-  refreshReplicaTriggers,
-  type AppendReplicaChangeInput,
+  readReplicaLogPage,
+  replicaRowIdFromKeyJson,
   type BumpReplicaEpochOptions,
-  type PruneReplicaChangesOptions,
-  type ReadReplicaChangesOptions,
+  type ReadReplicaLogPageOptions,
   type ReplicaChangeEntry,
   type ReplicaChangeOp,
   type ReplicaChangePage,
   type ReplicaCommitHandle,
   type ReplicaLogState,
-  type ReplicaPruneResult,
   type ReplicaRebootstrapReason,
 } from "./replica/change-log.js";
 
@@ -634,23 +635,29 @@ export {
   openReplicaCapture,
   primaryKeyOf,
   readReplicaLog,
+  REPLICA_LOCAL_TABLES,
   replicaCaptureOpen,
   lowestSeatCursor,
+  lowestSeatCommitSeq,
   pruneReplicaLog,
+  recordSeatCursor,
+  watchReplicaTable,
   replicaLogState,
   seatLogRowWire,
   REPLICA_DEFER_THRESHOLD_BYTES,
   REPLICA_LOG_RETENTION_DAYS,
   REPLICA_LOG_RETENTION_MAX_ROWS,
   REPLICA_PRODUCER_MAX_ROWS,
+  REPLICA_SEAT_HOLD_DAYS,
   ReplicaRebootstrapRequiredError as ReplicaLogRebootstrapRequiredError,
   type ReplicaCaptureResult,
   type ReplicaLogCursor,
   type ReplicaLogOp,
   type ReplicaLogPage,
   type ReplicaLogRow,
-  // `ReplicaLogState` is still taken by the mechanism this replaces; the
-  // alias goes away with `replica_change`.
+  // `ReplicaLogState` is taken by the feed's view of the same log
+  // (`replica/change-log.ts`), which reports the same epoch, floor and
+  // watermark in the vocabulary the feed's callers speak.
   type ReplicaLogPruneResult,
   type ReplicaLogState as GatewayLogState,
 } from "./replica/log.js";
@@ -669,10 +676,12 @@ export {
 } from "./replica/changeset.js";
 export {
   isPrivateTable,
+  isReplicatedTable,
   PRIVATE_TABLES,
   PRIVATE_TABLE_NAMES,
   replicatedReferencesToPrivate,
   replicatedTablesOf,
+  unclassifiedTables,
   type PrivateTableDeclaration,
   type PrivateTableKind,
 } from "./schema/private-tables.js";
@@ -694,6 +703,7 @@ export {
   DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   readReplicaRow,
   readReplicaRows,
+  replicaRowIdsOf,
   withReplicaSnapshot,
   type ReadReplicaRowsOptions,
   type ReplicaRow,
@@ -707,8 +717,10 @@ export {
   deleteReplicaIntentOutcomesForDevice,
   listReplicaIntentOutcomes,
   readReplicaIntentOutcome,
+  readReplicaIntentOutcomeForSeat,
   recordReplicaIntentOutcome,
   recordReplicaIntentOutcomeInTransaction,
+  ReplicaIntentIdentityError,
   transitionReplicaIntentOutcome,
   type ListReplicaIntentOutcomesOptions,
   type RecordReplicaIntentOutcomeInput,
@@ -719,8 +731,11 @@ export {
 } from "./replica/intents.js";
 export {
   expiredOutcomeRecovery,
+  producedRowKey,
   pruneReplicaIntentOutcomes,
+  REPLICA_INTENT_TOMBSTONE_REASON,
   replicaDependencyVerdict,
+  replicaPredecessorRowVersions,
   resolvePredecessorReferences,
   stampReplicaOutcomeCommitInTransaction,
   stampReplicaOutcomeCommitsInTransaction,
@@ -837,6 +852,15 @@ export {
 } from "./schema/key-store.js";
 export { resealVaultKey, type ResealResult } from "./gateway/reseal.js";
 export { writeReceipt } from "./gateway/evidence.js";
+// THE BRACKET EVERY REPLICATED-TABLE WRITE RUNS INSIDE (#1014).
+export {
+  bracketReplicaWrites,
+  classifyReplicaSql,
+  replicaWritesBracketed,
+  withReplicaCommit,
+  type ReplicaSqlKind,
+  type WithReplicaCommitOptions,
+} from "./gateway/replica-commit.js";
 export {
   admitImportedRow,
   resolveHandle,
@@ -967,6 +991,20 @@ export {
   type DerivationRecord,
   type DerivationStamp,
 } from "./enrich/derivation.js";
+export {
+  enrichWalkProgress,
+  type EnrichWalkProgress,
+} from "./enrich/walk-progress.js";
+export {
+  ENRICH_TARGET_MAX_FAILURES,
+  clearEnrichTargetFailure,
+  declinedEnrichTargets,
+  enrichTargetFailureSummary,
+  isEnrichTargetDeclined,
+  recordEnrichTargetFailure,
+  type EnrichTargetFailureRow,
+  type EnrichTargetFailureVerdict,
+} from "./enrich/target-failures.js";
 export {
   ENRICH_SCOPE_TYPES,
   ENRICH_TRIGGERS,

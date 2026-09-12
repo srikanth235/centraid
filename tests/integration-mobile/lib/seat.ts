@@ -12,11 +12,18 @@
  *    the staging is the node filesystem one the desktop seat uses;
  * 2. `digest`/`idFactory` are injected, exactly as the device injects
  *    expo-crypto, so no Expo native module is resolved here;
- * 3. the change feed never emits. The SSE feed is a device concern; every
- *    suite here advances the session with `pullNow()`, which is the same seat
- *    catch-up a feed frame wakes. What this tier therefore CANNOT claim is
- *    that a live SSE frame wakes the pull — that stays with the device
- *    journeys.
+ * 3. the change feed is silent BY DEFAULT — every suite here advances the
+ *    session with `pullNow()`, which is the same seat catch-up a feed frame
+ *    wakes. `liveFeed: true` swaps in the shipped
+ *    `NativeMultiplexChangeFeed` over real `fetch` against this gateway's real
+ *    SSE route, which is how #1014's T11 closed the gap that used to sit here:
+ *    the live defect (R15/R22) was in the feed, and this tier's own gate could
+ *    not see it.
+ *
+ * A fourth stand-in exists only to make the feed module importable off-device:
+ * `expo/fetch` is aliased to `lib/expo-fetch.ts` (see the vitest config), which
+ * hands back Node's own streaming `fetch`. Every suite injects its own
+ * `streamFetch` regardless.
  *
  * The transport itself is real `fetch` over loopback, and `cut()` moves it to a
  * port nothing listens on so a failure is the platform's, not a flag's.
@@ -25,7 +32,8 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import { createNativeReplicaSession } from "../../../apps/mobile/src/lib/replica/native-session.js";
+import { NativeMultiplexChangeFeed } from "../../../apps/mobile/src/lib/replica/native-multiplex-change-feed.js";
+import { createNativeReplicaSession } from "../../../apps/mobile/src/lib/replica/native-session-open.js";
 import type {
   NativeChangeFeed,
   NativeReplicaSession,
@@ -57,6 +65,14 @@ function silentFeed(): NativeChangeFeed & { active: boolean } {
 
 export interface MobileSeat {
   readonly session: NativeReplicaSession;
+  /**
+   * Cancel the open SSE body, exactly as the platform did in the live trace
+   * that produced R15 (`-999`, and the request was never re-issued). A no-op
+   * on a seat with no live feed.
+   */
+  dropFeed: () => void;
+  /** SSE requests this seat's feed has issued since it opened. */
+  feedRequests: () => number;
   /** This phone's copy of the vault — the read door every suite here uses. */
   readonly seat: IntegrationSeat;
   /** The phone loses the network: every request now refuses to connect. */
@@ -69,8 +85,26 @@ export interface MobileSeat {
 }
 
 export interface OpenSeatOptions {
+  /**
+   * Give this seat the SHIPPED multiplex feed over this gateway's real SSE
+   * route, instead of the silent stand-in (#1014, T11).
+   */
+  liveFeed?: boolean;
+  /**
+   * The foreground catch-up clock. Parked beyond any suite's lifetime by
+   * default for the same reason `retryDelayMs` is: a background pull would
+   * make "did this arrangement land" depend on a timer rather than on the
+   * arrangement. A suite asserting the clock exists has to shorten it.
+   */
+  pullIntervalMs?: number;
   /** Distinct per seat so two seats on one gateway keep separate replicas. */
   label?: string;
+  /** Which vault on this gateway. Defaults to the gateway's own default. */
+  vaultId?: string;
+  /** Where the file goes. Defaults to a directory of this seat's own. */
+  directory?: string;
+  /** The file's name in that directory — the shipped stem, for #1014's suite. */
+  fileName?: string;
   /**
    * The phone's own connectivity oracle, which is NOT the transport: the mount
    * resolves the gateway base once and carries the answer as a boolean, so a
@@ -101,15 +135,31 @@ export async function openSeat(
   const attempts: string[] = [];
   let live = true;
   let counter = 0;
+  const vaultId = options.vaultId ?? gateway.vaultId;
   const fetcher: ReplicaFetcher = (baseUrl, pathname, init) => {
     attempts.push(pathname);
-    return fetch(href(live ? baseUrl : dead, pathname), init as RequestInit);
+    // The device's `fetcher(vaultId)` stamps this on every request; a suite
+    // with two vaults on one gateway needs the same (#1014).
+    const headers = new Headers(init.headers);
+    headers.set("x-centraid-vault", vaultId);
+    return fetch(href(live ? baseUrl : dead, pathname), {
+      ...init,
+      headers,
+    } as RequestInit);
   };
   const seat = await openNodeSeat({
-    directory: path.join(gateway.dataDir, `seat-${label}`),
-    vaultId: gateway.vaultId,
+    directory: options.directory ?? path.join(gateway.dataDir, `seat-${label}`),
+    ...(options.fileName ? { fileName: options.fileName } : {}),
+    vaultId,
     baseUrl: gateway.url,
-    headers: { Authorization: `Bearer ${gateway.token}` },
+    // THE SEAT'S OWN DOORS ARE ADDRESSED TOO (#1014). Without the vault
+    // header the snapshot and log doors answer for the gateway's DEFAULT
+    // vault — which is precisely the mis-addressed bootstrap R25 recorded, so
+    // it must be arranged deliberately here and never by omission.
+    headers: {
+      Authorization: `Bearer ${gateway.token}`,
+      "x-centraid-vault": vaultId,
+    },
     fetch: (input, init) => {
       // THE SEAT'S OWN DOORS COUNT AS ATTEMPTS TOO (#996, W5). A bootstrap is a
       // snapshot download now, not a walk of the shaped bootstrap route, so a
@@ -122,15 +172,70 @@ export async function openSeat(
       );
     },
   });
+  // THE SHIPPED RADIO, OVER REAL `fetch` (#1014, T11). Not a stand-in: this is
+  // `NativeMultiplexChangeFeed` talking to the gateway's own SSE route, so a
+  // suite can finally assert that a gateway write reaches a seat with no
+  // `pullNow()` at all — and that a cancelled stream is re-issued.
+  /**
+   * ONE PER OPEN STREAM, AND ABORTING IT ENDS THAT STREAM (#1014, R15).
+   *
+   * The body a stream is reading is LOCKED by the feed's own reader, so
+   * `body.cancel()` throws rather than ending anything — the only body this
+   * suite could ever cancel was a stale one, and the case passed on the
+   * reconnect churn of a seat that had not bootstrapped yet. The bytes are
+   * pumped through a pipe instead, and dropping the feed aborts the pump: the
+   * reader sees the stream end mid-flight, which is what the platform did.
+   */
+  const drops: AbortController[] = [];
+  let feedRequests = 0;
+  const multiplex = options.liveFeed
+    ? new NativeMultiplexChangeFeed({
+        gatewayAuth: {
+          baseUrl: gateway.url,
+          token: gateway.token,
+          gatewayId: "mobile-integration",
+          vaultId,
+        },
+        minReconnectMs: 10,
+        maxReconnectMs: 50,
+        streamFetch: (async (input: unknown, init: unknown) => {
+          feedRequests += 1;
+          // Registered BEFORE the response exists: a drop asked for while this
+          // request is still in flight has to reach it, or the suite cancels a
+          // stream that has already ended and calls that the test.
+          const drop = new AbortController();
+          drops.push(drop);
+          const response = await fetch(
+            live ? String(input) : String(input).replace(gateway.url, dead),
+            init as RequestInit
+          );
+          if (!response.body) return response;
+          const pipe = new TransformStream<Uint8Array, Uint8Array>();
+          void response.body
+            .pipeTo(pipe.writable, { signal: drop.signal })
+            .catch(() => undefined);
+          return new Response(pipe.readable, {
+            status: response.status,
+            headers: response.headers,
+          });
+        }) as never,
+        resumeFrom: () => {
+          const watermark = seat.watermark();
+          return watermark
+            ? { epoch: watermark.epoch, applied: watermark.applied }
+            : undefined;
+        },
+      })
+    : undefined;
   const session = await createNativeReplicaSession({
     gatewayAuth: {
       baseUrl: gateway.url,
       token: gateway.token,
       gatewayId: "mobile-integration",
-      vaultId: gateway.vaultId,
+      vaultId,
     },
     fetcher,
-    changeFeed: silentFeed(),
+    changeFeed: multiplex ? multiplex.scope(vaultId) : silentFeed(),
     seat,
     digest: nodeDigest,
     idFactory: () => `${label}-intent-${++counter}`,
@@ -139,6 +244,7 @@ export async function openSeat(
     // flushes explicitly, so a background retry would make "did it settle"
     // depend on a timer rather than on the arrangement.
     retryDelayMs: options.retryDelayMs ?? 10 * 60_000,
+    pullIntervalMs: options.pullIntervalMs ?? 10 * 60_000,
   });
   // THE FIRST COPY, AWAITED — which the phone never does. `start()` fires the
   // first catch-up and deliberately does NOT await it (a member who tapped an
@@ -151,6 +257,10 @@ export async function openSeat(
   return {
     session,
     seat,
+    dropFeed: () => {
+      for (const drop of drops.splice(0)) drop.abort();
+    },
+    feedRequests: () => feedRequests,
     cut: () => {
       live = false;
     },
@@ -158,7 +268,10 @@ export async function openSeat(
       live = true;
     },
     attempts,
-    close: () => session.close(),
+    close: async () => {
+      multiplex?.close();
+      await session.close();
+    },
   };
 }
 

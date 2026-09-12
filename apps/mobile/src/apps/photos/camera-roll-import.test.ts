@@ -14,6 +14,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   EMPTY_IMPORT_PROGRESS,
   importSummary,
+  pruneProgress,
   recordOutcome,
   remainingCandidates,
   runCameraRollImport,
@@ -78,12 +79,50 @@ describe("progress bookkeeping", () => {
     progress = recordOutcome(progress, "a", "imported");
     progress = recordOutcome(progress, "b", "skipped");
     progress = recordOutcome(progress, "c", "failed", "network unreachable");
+    // #1014 R8: a FAILURE is not done. It used to be, so one refused
+    // photograph was written off for the life of the install.
     expect(progress).toStrictEqual({
-      done: ["a", "b", "c"],
+      done: ["a", "b"],
       imported: 1,
       skipped: 1,
       failed: { c: "network unreachable" },
     });
+  });
+
+  test("a candidate that succeeds on the retry stops being a failure", () => {
+    let progress = recordOutcome(
+      EMPTY_IMPORT_PROGRESS,
+      "c",
+      "failed",
+      "network unreachable"
+    );
+    progress = recordOutcome(progress, "c", "imported");
+    expect(progress).toStrictEqual({
+      done: ["c"],
+      imported: 1,
+      skipped: 0,
+      failed: {},
+    });
+  });
+
+  test("progress forgets ids the roll no longer holds", () => {
+    const progress: ImportProgress = {
+      done: ["a", "gone"],
+      imported: 2,
+      skipped: 0,
+      failed: { b: "stage failed: 500", "also-gone": "stage failed: 500" },
+    };
+    const pruned = pruneProgress(
+      progress,
+      [candidate("a"), candidate("b")],
+      new Set()
+    );
+    expect(pruned.done).toStrictEqual(["a"]);
+    expect(Object.keys(pruned.failed)).toStrictEqual(["b"]);
+    expect(
+      pruneProgress(pruned, [candidate("a"), candidate("b")], new Set()),
+      "an unchanged record is the same object, so nothing is rewritten"
+    ).toBe(pruned);
   });
 
   test("remaining candidates excludes everything already done", () => {
@@ -193,9 +232,12 @@ describe("resumable import run", () => {
     // S14 (#1015, R-A-15): "stage failed: 500" is a fact about the program.
     // It is logged; the row a member sees says what did not happen.
     expect(progress.failed).toStrictEqual({ b: "This one did not import." });
-    // The failed candidate is DONE — a resumed run does not retry it forever
-    // on its own; a member (or a future retry affordance) decides that.
-    expect([...progress.done].sort()).toStrictEqual(["a", "b", "c"]);
+    // #1014 R8: the failed candidate STAYS offered, with its reason, and the
+    // offer's Retry is the member's decision to try it again.
+    expect([...progress.done].sort()).toStrictEqual(["a", "c"]);
+    expect(
+      remainingCandidates(candidates, progress).map((c) => c.id)
+    ).toStrictEqual(["b"]);
   });
 
   test("progress is reported after every candidate, not only at the end", async () => {

@@ -194,7 +194,9 @@ class PhotoTimelineEngine {
       try {
         next = new Map(
           queue
-            .all()
+            // Bounded (#1014, P25): `all()` materialized up to 100,000 rows
+            // on EVERY refresh, on a phone whose roll IS the queue's history.
+            .recent()
             .map((item) => [
               item.localUri,
               { sha256: item.sha256, state: item.state, receipt: item.receipt },

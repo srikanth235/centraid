@@ -20,6 +20,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type { DerivativeVariant } from "../blob/derivatives.js";
 import { contentMediaTypeSql } from "../schema/representation.js";
+import { recordEnrichTargetFailure } from "./target-failures.js";
 
 /** What a paired DEVICE may lease (browser-lane rungs only). */
 export const ENRICHMENT_CAPABILITIES = [
@@ -28,6 +29,18 @@ export const ENRICHMENT_CAPABILITIES = [
   "pdfText",
 ] as const;
 export type EnrichmentCapability = (typeof ENRICHMENT_CAPABILITIES)[number];
+
+/**
+ * HOW OFTEN ONE DEVICE JOB IS HANDED OUT BEFORE IT IS GIVEN UP ON (#1014,
+ * R10). `lease_attempts` was counted and never read: a request whose rung no
+ * paired device can produce — a codec none of them has, an original that
+ * decodes nowhere — was re-leased on every poll forever, and because the
+ * queue is `requested_at`-ordered it was handed out FIRST every time. The
+ * count is a ceiling now: past it the request is not offered again, and
+ * `declineExhaustedEnrichmentLeases` closes it with a durable record on the
+ * poison register so the gap is visible rather than eternal.
+ */
+export const MAX_ENRICHMENT_LEASE_ATTEMPTS = 6;
 
 export const DEFAULT_ENRICHMENT_LEASE_TTL_MS = 10 * 60 * 1000;
 export const MIN_ENRICHMENT_LEASE_TTL_MS = 30 * 1000;
@@ -309,6 +322,9 @@ export function leaseNextEnrichmentRequest(
            WHERE drained_at IS NULL
              AND required_capability IN (${placeholders})
              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+             -- The ceiling (#1014, R10): a job no device can finish must stop
+             -- being the FIRST thing every poll is handed.
+             AND lease_attempts < ?
            ORDER BY requested_at, request_id
            LIMIT 1
         )
@@ -316,9 +332,14 @@ export function leaseNextEnrichmentRequest(
           required_capability, contribution_variant, lease_device_id,
           lease_token, lease_expires_at, lease_attempts`
     )
-    .get(input.deviceId, token, expiresAt, ...capabilities, now) as
-    | LeaseRow
-    | undefined;
+    .get(
+      input.deviceId,
+      token,
+      expiresAt,
+      ...capabilities,
+      now,
+      MAX_ENRICHMENT_LEASE_ATTEMPTS
+    ) as LeaseRow | undefined;
   return row ? leaseOf(row) : null;
 }
 
@@ -397,6 +418,55 @@ export function releaseExpiredEnrichmentLeases(
     )
     .run(iso(now)).changes;
   return Number(changed);
+}
+
+/**
+ * Close device jobs that have exhausted their attempts, recording each on the
+ * poison register (#1014, R10). Returns the requests it closed.
+ *
+ * A closed request is NOT a derived rung: the gateway's own backstop still
+ * owns the content, and the register is what makes "this device rung is never
+ * coming" a fact somebody can read rather than a queue that quietly never
+ * empties.
+ */
+export function declineExhaustedEnrichmentLeases(
+  vault: DatabaseSync,
+  now: string | Date = new Date()
+): { requestId: string; targetId: string | null; capability: string }[] {
+  const at = iso(now);
+  const rows = vault
+    .prepare(
+      `UPDATE enrich_request
+          SET drained_at = ?, lease_device_id = NULL, lease_token = NULL,
+              lease_expires_at = NULL
+        WHERE drained_at IS NULL
+          AND lease_attempts >= ?
+          AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+        RETURNING request_id, target_type, target_id, required_capability`
+    )
+    .all(at, MAX_ENRICHMENT_LEASE_ATTEMPTS, at) as {
+    request_id: string;
+    target_type: string;
+    target_id: string | null;
+    required_capability: string;
+  }[];
+  for (const row of rows) {
+    if (row.target_id === null) continue;
+    recordEnrichTargetFailure(vault, {
+      capability: row.required_capability,
+      targetType: row.target_type,
+      targetId: row.target_id,
+      reason: "no-device",
+      error: `no paired device produced this rung in ${MAX_ENRICHMENT_LEASE_ATTEMPTS} attempts`,
+      permanent: true,
+      now: at,
+    });
+  }
+  return rows.map((row) => ({
+    requestId: row.request_id,
+    targetId: row.target_id,
+    capability: row.required_capability,
+  }));
 }
 
 /** Close expired/unowned typed jobs whose gateway backstop filled the rung. */

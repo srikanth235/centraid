@@ -88,11 +88,39 @@ export function reconcileLinkBindings(
         vaultId: peerVaultId,
         vaultPublicKey: deps.publicKeyFor?.(peerVaultId) ?? null,
         linkedAt: stamp,
-        ...(deps.labelFor?.(peerVaultId) === undefined
+        ...(mirrorName(deps, peerVaultId, partyId) === undefined
           ? {}
-          : { displayName: deps.labelFor(peerVaultId) as string }),
+          : { displayName: mirrorName(deps, peerVaultId, partyId) as string }),
       }),
     });
   }
   return outcomes;
+}
+
+/**
+ * WHAT THE MIRROR PARTY IS CALLED (#1014, S4).
+ *
+ * A link mints a party in the LOCAL vault standing for the person on the other
+ * side, and every shared-with list reads that name. It used to take the peer
+ * VAULT's directory label — so a household read "Family" and "Personal" where
+ * it meant Bob and you.
+ *
+ * When this gateway mounts the peer vault — the same-gateway case, which is
+ * where it was reproduced — the person's own name is right there, on the party
+ * the link named. Ask it. A peer this host does not mount has told us nothing
+ * but its vault label, so that is still the honest fallback: a vault name is a
+ * worse name than a person's, and a better one than an id.
+ */
+function mirrorName(
+  deps: LinkBindingDeps,
+  peerVaultId: string,
+  partyId: string
+): string | undefined {
+  const peer = deps.vaultFor(peerVaultId);
+  const own = peer?.vault
+    .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
+    .get(partyId) as { display_name?: string } | undefined;
+  const person = own?.display_name?.trim();
+  if (person) return person;
+  return deps.labelFor?.(peerVaultId);
 }

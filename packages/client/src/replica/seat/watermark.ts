@@ -31,6 +31,17 @@ export interface SeatWatermark {
   readonly epoch: string;
   /** Where this file stands in the gateway's log. */
   readonly applied: number;
+  /**
+   * The last COMMIT position this file has applied (#1014, R1).
+   *
+   * A sibling of `applied`, not a spelling of it: `applied` is a change-log
+   * seq and this is the commit group that seq belonged to, which is the
+   * number an executed answer names. An intent parked on a commit the file
+   * has already taken has nothing left to wait for, and only this number can
+   * say so — the applier's in-transaction hook fires per commit it is
+   * APPLYING and cannot sweep a row that arrived after it.
+   */
+  readonly appliedCommitSeq: number;
   /** The gateway's head, as of the last page this seat received. */
   readonly head: number;
   /** `head - applied`, never negative. */
@@ -45,6 +56,7 @@ export function seatWatermark(state: SeatState): SeatWatermark {
   return {
     epoch: state.epoch,
     applied: state.appliedSeq,
+    appliedCommitSeq: state.appliedCommitSeq,
     head,
     behind: head - state.appliedSeq,
     deferredPending: state.deferredFrom !== undefined,
@@ -67,10 +79,16 @@ export function seatWatermarkLine(
   watermark: SeatWatermark | undefined
 ): string | undefined {
   if (!watermark) return undefined;
+  const behind = `${watermark.behind.toLocaleString()} change${watermark.behind === 1 ? "" : "s"} behind`;
   if (watermark.deferredPending) {
-    // Said first and said plainly: this one does not clear by waiting.
-    return "a large update is waiting for wifi";
+    // Said plainly: this one does not clear by waiting. AND WITH THE DISTANCE
+    // WHEN THERE IS ONE (#1014, C1) — the applier now stops at an owed span
+    // instead of stepping over it, so `behind` counts real unapplied work and
+    // hiding it would understate what the member is missing.
+    return watermark.behind === 0
+      ? "a large update is waiting for wifi"
+      : `${behind} — a large update is waiting for wifi`;
   }
   if (watermark.behind === 0) return "up to date";
-  return `${watermark.behind.toLocaleString()} change${watermark.behind === 1 ? "" : "s"} behind`;
+  return behind;
 }

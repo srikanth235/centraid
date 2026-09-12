@@ -185,10 +185,24 @@ export class IntentQueue {
     });
   }
 
-  awaitingChange(intentId: string): Promise<ReplicaIntent> {
+  /**
+   * Park a sent intent with no commit position to wait on (#1014, R1).
+   *
+   * `answeredVersions` is carried when the answer named them, because it is
+   * the only other thing that can ever settle this record: `settleAnswered`
+   * reads it off the row. Without either, the park is released by the next
+   * send — the gateway's retained outcome is a dedupe hit.
+   */
+  awaitingChange(
+    intentId: string,
+    answeredVersions?: readonly ReplicaBaseVersion[]
+  ): Promise<ReplicaIntent> {
     return this.store.transition(intentId, ["sending"], {
       state: "awaiting-change",
       reason: undefined,
+      ...(answeredVersions && answeredVersions.length > 0
+        ? { answeredVersions: [...answeredVersions] }
+        : {}),
     });
   }
 

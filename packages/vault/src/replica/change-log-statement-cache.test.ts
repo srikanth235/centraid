@@ -3,12 +3,11 @@ import { afterEach, describe, expect, test } from "vitest";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import {
-  appendReplicaChange,
   beginReplicaCommit,
   currentReplicaLogState,
   endReplicaCommit,
   initializeReplicaProtocol,
-  readReplicaChanges,
+  readReplicaLogPage,
 } from "./change-log.js";
 
 // NO UNCACHED PREPARE ON THE CHANGE PATH (#922 A3).
@@ -49,16 +48,20 @@ describe("change-log statement cache", () => {
     const vault = db.vault;
     initializeReplicaProtocol(vault);
 
+    // The fixture's OWN statement is compiled once, up front: what this test
+    // counts is the log's compilations, not the seeder's.
+    const seed = vault.prepare(
+      `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+       VALUES (?, ?, ?, '1')`
+    );
     const pass = (title: string): void => {
+      vault.exec("BEGIN");
       const handle = beginReplicaCommit(vault);
-      appendReplicaChange(vault, {
-        entity: "core.concept_scheme",
-        rowId: title,
-        op: "insert",
-      });
+      seed.run(title, `urn:${title}`, title);
       endReplicaCommit(vault, handle);
+      vault.exec("COMMIT");
       currentReplicaLogState(vault);
-      readReplicaChanges(vault, { limit: 10 });
+      readReplicaLogPage(vault, { limit: 10 });
     };
 
     // Warm-up: the first pass is allowed to compile every statement once.

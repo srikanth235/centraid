@@ -21,8 +21,8 @@ import { pendingOverlayCopy } from "@centraid/blueprints/apps/_shared/pending-ov
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { openNodeNativeSeat } from "./native-seat.test-fixtures";
-import { createNativeReplicaSession } from "./native-session";
 import type { NativeChangeFeed } from "./native-session";
+import { createNativeReplicaSession } from "./native-session-open";
 
 const gatewayAuth = {
   baseUrl: "http://127.0.0.1:18789",

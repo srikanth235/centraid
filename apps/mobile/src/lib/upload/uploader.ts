@@ -12,6 +12,8 @@
 import { base64ToBytes } from "./bytes";
 import { sealDirectory, sealPart } from "./cbsf";
 import type { UploadCrypto } from "./crypto";
+import { edgeDigestOfFile } from "./enqueue";
+import type { StreamingDigest } from "./enqueue";
 import type { FileSourceOpener } from "./file-source";
 import { DirectTransferError } from "./gateway-client";
 import type {
@@ -27,7 +29,38 @@ import {
 } from "./transfer-failure";
 import { assertGatewayMintedUploadUrl } from "./transfer-policy";
 
+/** Attempts against a REACHABLE gateway before an item is terminally failed.
+ *  A refusal the transport itself calls unreachable does not spend one — see
+ *  `isUnreachable` (#1014). */
 const MAX_ATTEMPTS = 5;
+
+/**
+ * Wait before an item's next attempt, indexed by attempts already spent
+ * (#1014). Named rather than computed so the ceiling is readable and the
+ * table is what a test asserts: a phone that hit a rejecting gateway used to
+ * burn all five attempts inside one drain pass, seconds apart, and hand the
+ * member a permanent failure for a blip.
+ */
+export const RETRY_BACKOFF_MS: readonly number[] = [
+  2_000, 15_000, 60_000, 300_000,
+];
+
+/** Up to this fraction of the delay is added at random, so a queue of 400
+ *  items that failed together does not retry in lockstep. */
+const BACKOFF_JITTER = 0.25;
+
+/** The wait before the next try, given how many attempts are already spent
+ *  (1 = the first retry). Jittered. */
+export function retryDelayMs(
+  attempts: number,
+  random: () => number = Math.random
+): number {
+  const base =
+    RETRY_BACKOFF_MS[
+      Math.min(Math.max(attempts, 1), RETRY_BACKOFF_MS.length) - 1
+    ] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1]!;
+  return Math.round(base * (1 + BACKOFF_JITTER * random()));
+}
 /** Parts in flight per item, and so the sealer's peak transient cost:
  *  `sealPart` (cbsf.ts) holds each part twice — 4 x 4 MiB of sealed frames in
  *  its `body` array plus the concatenated 16 MiB it returns — so ~32 MiB live
@@ -58,6 +91,11 @@ export interface UploadDrainerDeps {
   fetchImpl?: typeof fetch;
   partConcurrency?: number;
   policy?: UploadPolicy;
+  /** Injected in the suites so a backoff table is asserted, not waited out. */
+  now?: () => number;
+  random?: () => number;
+  /** Same native digest the enqueue used; the edge check must agree with it. */
+  createDigest?: () => StreamingDigest;
   /** Progress for the Android foreground-service notification. */
   onProgress?: (progress: DrainProgress) => void;
 }
@@ -69,9 +107,14 @@ export interface DrainProgress {
 }
 
 export interface DrainSummary {
+  /** Items that reached `settled` this pass, dedupes INCLUDED once each
+   *  (#1014): `settled` used to be incremented alongside `deduped`, so a
+   *  100%-dedupe pass reported 200 movements over 100 rows. */
   settled: number;
   failed: number;
   deduped: number;
+  /** Items left `pending` behind a backoff window this pass. */
+  deferred: number;
   halted: boolean;
 }
 
@@ -85,6 +128,7 @@ export class UploadDrainer {
       settled: 0,
       failed: 0,
       deduped: 0,
+      deferred: 0,
       halted: false,
     };
     /*
@@ -102,7 +146,11 @@ export class UploadDrainer {
     let completed = 0;
     let afterOrder = 0;
     for (;;) {
-      const page = this.deps.store.pending(PENDING_PAGE_LIMIT, afterOrder);
+      const page = this.deps.store.pending(
+        PENDING_PAGE_LIMIT,
+        afterOrder,
+        new Date(this.deps.now?.() ?? Date.now()).toISOString()
+      );
       if (page.length === 0) return summary;
       for (const item of page) {
         afterOrder = item.createdOrder;
@@ -124,23 +172,51 @@ export class UploadDrainer {
           summary.settled += 1;
         } catch (error) {
           if (isKill(error)) throw error;
-          const terminal =
-            (error instanceof DirectTransferError && error.terminal) ||
-            item.attempts + 1 >= MAX_ATTEMPTS;
-          // The row is member copy (`transfer-failure.ts`); the raw text is
-          // the log's alone (#1015 R-NY-10, docs/logs.md).
-          this.deps.store.fail(
-            item.itemId,
-            memberTransferFailure(error),
-            terminal
-          );
-          console.warn(
-            `[centraid] upload: ${item.itemId} was not sent — ${transferFailureDetail(error)}`
-          );
-          if (terminal) summary.failed += 1;
+          summary.deferred += this.recordFailure(item, error, summary);
         }
       }
     }
+  }
+
+  /**
+   * One item's failure, priced (#1014).
+   *
+   * TERMINAL only for a refusal that will not fix itself, or after
+   * `MAX_ATTEMPTS` spent against a gateway that ANSWERED. A gateway the
+   * transport could not reach at all does not spend an attempt — five seconds
+   * of aeroplane mode used to burn an item's whole budget and hand the member
+   * a permanent failure for a photograph nothing was ever wrong with — but it
+   * still takes the backoff, so the drain does not spin on it.
+   */
+  private recordFailure(
+    item: UploadItem,
+    error: unknown,
+    summary: DrainSummary
+  ): number {
+    const unreachable = isUnreachable(error);
+    if (unreachable) this.deps.store.uncountAttempt(item.itemId);
+    const spent = unreachable ? item.attempts : item.attempts + 1;
+    const terminal =
+      (error instanceof DirectTransferError && error.terminal) ||
+      spent >= MAX_ATTEMPTS;
+    // The row is member copy (`transfer-failure.ts`); the raw text is
+    // the log's alone (#1015 R-NY-10, docs/logs.md).
+    this.deps.store.fail(item.itemId, memberTransferFailure(error), terminal);
+    console.warn(
+      `[centraid] upload: ${item.itemId} was not sent — ${transferFailureDetail(error)}`
+    );
+    if (terminal) {
+      summary.failed += 1;
+      return 0;
+    }
+    const now = this.deps.now?.() ?? Date.now();
+    this.deps.store.deferUntil(
+      item.itemId,
+      new Date(
+        now + retryDelayMs(spent, this.deps.random ?? Math.random)
+      ).toISOString()
+    );
+    return 1;
   }
 
   private async allowed(): Promise<boolean> {
@@ -149,6 +225,10 @@ export class UploadDrainer {
 
   private async driveItem(item: UploadItem): Promise<"settled" | "deduped"> {
     this.deps.store.countAttempt(item.itemId);
+    // P4 (#1014): every gateway call for this item is addressed to ITS vault.
+    // One queue holds items for several vaults; a client-wide header would
+    // stage all of them into whichever vault the gateway picks by default.
+    const vaultId = item.targetVaultId;
     const plan = await this.deps.client.begin({
       sha256: item.sha256,
       plaintextSize: item.plaintextSize,
@@ -156,6 +236,7 @@ export class UploadDrainer {
       partCount: item.partCount,
       ...(item.mediaType ? { mediaType: item.mediaType } : {}),
       ...(item.filename ? { filename: item.filename } : {}),
+      ...(vaultId ? { vaultId } : {}),
     });
 
     // D10: gateway holds these bytes; it is authoritative on durability —
@@ -163,10 +244,16 @@ export class UploadDrainer {
     // casAck: absent casAck withholds device-original deletion, where a
     // fabricated `replicated` would authorize it.
     if (plan.alreadyPresent) {
-      this.deps.store.settle(
-        item.itemId,
-        plan.settlement ?? { alreadyPresent: true, custody: plan.custody }
-      );
+      // P22 (#1014): the receipt is the ONLY settled marker, and a fabricated
+      // one is a lie about durability. The shipped gateway always issues a
+      // settlement alongside `alreadyPresent`; one that did not has told us
+      // nothing we may record, so the row stays pending and asks again.
+      if (!plan.settlement) {
+        throw new Error(
+          "gateway reported the bytes present but issued no settlement receipt"
+        );
+      }
+      this.deps.store.settle(item.itemId, plan.settlement);
       return "deduped";
     }
     if (!plan.sessionId || !plan.upload) {
@@ -211,6 +298,7 @@ export class UploadDrainer {
       const outstanding = this.deps.store
         .parts(item.itemId)
         .filter((part) => part.state !== "recorded");
+      await this.assertSameFile(item, source);
       await this.drainParts(item, plan.sessionId, plan.upload.kind, {
         key,
         directory,
@@ -235,10 +323,43 @@ export class UploadDrainer {
         : [];
     const receipt: SettlementReceipt = await this.deps.client.complete(
       plan.sessionId,
-      receipts
+      receipts,
+      vaultId,
+      // The follow-up write for this item has not been sent yet (#1014, B5):
+      // name it, so the gateway holds the staged bytes until it settles rather
+      // than reclaiming them on the 24-hour TTL under a phone that is offline.
+      item.itemId
     );
     this.deps.store.settle(item.itemId, receipt);
     return "settled";
+  }
+
+  /**
+   * The bytes on disk are still the bytes this row addresses (#1014, P22).
+   *
+   * A resumed multipart upload trusted `size` alone, and a phone that edited a
+   * photograph in place — same JPEG dimensions, same byte count, different
+   * pixels — then shipped a mixture of the old and new file under the ORIGINAL
+   * sha, which is an object whose content does not hash to its own address.
+   * The edge digest (first and last MiB, taken at enqueue) catches exactly the
+   * in-place rewrite that a size check cannot. Terminal, not retryable: the
+   * file is not coming back.
+   */
+  private async assertSameFile(
+    item: UploadItem,
+    source: { read: (offset: number, length: number) => Promise<Uint8Array> }
+  ): Promise<void> {
+    if (!item.edgeDigest) return;
+    const seen = await edgeDigestOfFile(
+      { size: item.plaintextSize, read: source.read },
+      this.deps.createDigest
+    );
+    if (seen !== item.edgeDigest) {
+      throw new DirectTransferError(
+        `local file changed under upload ${item.sha256}`,
+        400
+      );
+    }
   }
 
   private async drainParts(
@@ -265,7 +386,8 @@ export class UploadDrainer {
           await this.deps.client.recordPart(
             sessionId,
             part.partNumber,
-            part.etag
+            part.etag,
+            item.targetVaultId
           );
         }
         this.deps.store.markPartRecorded(
@@ -308,7 +430,12 @@ export class UploadDrainer {
       // gateway to record it.
       this.deps.store.markPartPut(item.itemId, part.partNumber, etag ?? "");
       if (kind === "multipart") {
-        await this.deps.client.recordPart(sessionId, part.partNumber, etag!);
+        await this.deps.client.recordPart(
+          sessionId,
+          part.partNumber,
+          etag!,
+          item.targetVaultId
+        );
       }
       this.deps.store.markPartRecorded(
         item.itemId,
@@ -346,6 +473,21 @@ async function pool<T>(
   );
   await Promise.all(runners);
   if (errors.length > 0) throw errors[0];
+}
+
+/**
+ * The transport could not reach the gateway at all — no status, no answer.
+ * A `DirectTransferError` always carries the gateway's own status, so it is
+ * never this; a `TypeError` from `fetch` (and RN's "Network request failed")
+ * is.
+ */
+function isUnreachable(error: unknown): boolean {
+  if (error instanceof DirectTransferError) return false;
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "TypeError" ||
+    /network request failed|failed to fetch|network error/iu.test(error.message)
+  );
 }
 
 /** Simulated process death unwinds the whole drain — never retried as a

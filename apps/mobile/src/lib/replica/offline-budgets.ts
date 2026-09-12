@@ -30,3 +30,29 @@ export const THUMBNAIL_SOURCE_BUDGET_BYTES = 128 * 1024 * 1024;
  * Per-vault sub-budgets would refuse a download a member explicitly asked for.
  */
 export const OFFLINE_CONTENT_BUDGET_BYTES = 256 * 1024 * 1024;
+
+/**
+ * HOW OFTEN A FOREGROUNDED PHONE ASKS ANYWAY (#1014, R15/R22).
+ *
+ * The wake feed was the ONLY delivery trigger: when its request was cancelled
+ * by the platform and never re-issued, a foregrounded phone sat 43 minutes
+ * behind a gateway it could reach, and only a background→foreground transition
+ * ever pulled. A feed is an optimisation — it makes delivery fast — and an
+ * optimisation may not be the only path. This is the path that does not depend
+ * on a socket surviving: while the app is foregrounded and believes it is
+ * connected, it catches up on a clock.
+ *
+ * A minute is chosen against the cost: one catch-up over a level seat is one
+ * conditional log-page request answering zero rows.
+ */
+export const REPLICA_PULL_INTERVAL_MS = 60_000;
+
+/**
+ * The gateway's SSE keep-alive period (`replica-routes.ts`,
+ * `multiplex-replica-routes.ts` both default `heartbeatMs` to this). The feed
+ * treats twice this with no byte at all as a dead socket and reconnects — a
+ * TCP connection the platform has quietly stopped delivering on is
+ * indistinguishable from a quiet vault except by the heartbeat that is missing.
+ */
+export const REPLICA_FEED_HEARTBEAT_MS = 15_000;
+export const REPLICA_FEED_SILENCE_MS = 2 * REPLICA_FEED_HEARTBEAT_MS;

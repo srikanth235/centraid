@@ -11,6 +11,11 @@ export interface ImportCandidate {
   localId: string;
   filename: string;
   kind: "photo" | "video";
+  /** Carried into the canonical write, exactly as the backup sweep does. */
+  capturedAt?: string;
+  width?: number;
+  height?: number;
+  durationS?: number;
 }
 
 /** Do not import `automaticBackupCandidates`: it pulls React in. */
@@ -25,6 +30,12 @@ export function selectImportCandidates(
             localId: asset.localId,
             filename: asset.filename ?? asset.id,
             kind: asset.kind === "video" ? "video" : "photo",
+            ...(asset.capturedAt ? { capturedAt: asset.capturedAt } : {}),
+            ...(asset.width === undefined ? {} : { width: asset.width }),
+            ...(asset.height === undefined ? {} : { height: asset.height }),
+            ...(asset.durationS === undefined
+              ? {}
+              : { durationS: asset.durationS }),
           },
         ]
       : []
@@ -34,7 +45,11 @@ export function selectImportCandidates(
 export type ImportOutcome = "imported" | "skipped" | "failed";
 
 export interface ImportProgress {
-  /** An id here is never retried. */
+  /**
+   * Candidates that reached the vault. A FAILURE is deliberately absent
+   * (#1014, R8): an id here was never offered again, so one refused
+   * photograph was silently written off for the life of the install.
+   */
   done: readonly string[];
   imported: number;
   skipped: number;
@@ -63,15 +78,55 @@ export function recordOutcome(
   outcome: ImportOutcome,
   reason?: string
 ): ImportProgress {
+  if (outcome === "failed") {
+    return {
+      // NOT done (#1014, R8): the candidate stays offered, with its reason,
+      // and the next Import is its retry.
+      done: progress.done,
+      imported: progress.imported,
+      skipped: progress.skipped,
+      failed: { ...progress.failed, [candidateId]: reason ?? "unknown error" },
+    };
+  }
+  // A candidate that succeeded on the retry stops being a failure.
+  const failed = { ...progress.failed };
+  delete failed[candidateId];
   return {
     done: [...progress.done, candidateId],
     imported: progress.imported + (outcome === "imported" ? 1 : 0),
     skipped: progress.skipped + (outcome === "skipped" ? 1 : 0),
-    failed:
-      outcome === "failed"
-        ? { ...progress.failed, [candidateId]: reason ?? "unknown error" }
-        : progress.failed,
+    failed,
   };
+}
+
+/**
+ * Forget ids the roll no longer holds (#1014, P19).
+ *
+ * `done` was an append-only array persisted in full after EVERY candidate, so
+ * a 50,000-photograph import wrote a list that ended 50,000 entries long,
+ * 50,000 times, and then carried it forever — including entries for
+ * photographs the member had since deleted from the device.
+ */
+export function pruneProgress(
+  progress: ImportProgress,
+  candidates: readonly ImportCandidate[],
+  known: ReadonlySet<string>
+): ImportProgress {
+  const live = new Set([
+    ...candidates.map((candidate) => candidate.id),
+    ...known,
+  ]);
+  const done = progress.done.filter((id) => live.has(id));
+  const failed = Object.fromEntries(
+    Object.entries(progress.failed).filter(([id]) => live.has(id))
+  );
+  if (
+    done.length === progress.done.length &&
+    Object.keys(failed).length === Object.keys(progress.failed).length
+  ) {
+    return progress;
+  }
+  return { ...progress, done, failed };
 }
 
 /** SERIAL: rejections recorded as `failed`, never abort; resumable via `onProgress`. */
@@ -110,4 +165,31 @@ export function importSummary(progress: ImportProgress): string {
   if (progress.skipped > 0) parts.push(`${progress.skipped} already in`);
   if (failedCount > 0) parts.push(`${failedCount} failed`);
   return parts.join(" · ");
+}
+
+/**
+ * THE BATCH, WITH THE SEAT NUDGED ONCE AT THE END (#1011 M2).
+ *
+ * The canonical writes go through this phone's own session (#1014, R20), so
+ * their rows land locally the moment each write is admitted. The nudge stays
+ * for the gateway-side rows the publisher derives from them — recognition,
+ * capture groups: ONE per batch, and none at all when nothing was imported,
+ * because then there is no new row to come and fetch. Not a poll; the ordinary
+ * catch-up paths are untouched.
+ */
+export async function runImportBatch(
+  candidates: readonly ImportCandidate[],
+  progress: ImportProgress,
+  deps: {
+    attempt: (candidate: ImportCandidate) => Promise<ImportOutcome>;
+    nudgeSeat: () => void | Promise<unknown>;
+    onProgress?: (progress: ImportProgress) => void;
+  }
+): Promise<ImportProgress> {
+  const result = await runCameraRollImport(candidates, progress, {
+    attempt: deps.attempt,
+    ...(deps.onProgress ? { onProgress: deps.onProgress } : {}),
+  });
+  if (result.imported > progress.imported) await deps.nudgeSeat();
+  return result;
 }

@@ -12,7 +12,9 @@ import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { UNCLAIMED_OWNER_TYPE } from "../schema/representation.js";
 import {
+  MAX_ENRICHMENT_LEASE_ATTEMPTS,
   completeEnrichmentLease,
+  declineExhaustedEnrichmentLeases,
   enrichmentQueueDepth,
   leaseNextEnrichmentRequest,
   queueDeviceEnrichmentRequest,
@@ -21,6 +23,7 @@ import {
   releaseExpiredEnrichmentLeases,
 } from "./leases.js";
 import type { EnrichmentCapability } from "./leases.js";
+import { declinedEnrichTargets } from "./target-failures.js";
 
 let db: VaultDb;
 const T0 = "2026-07-15T00:00:00.000Z";
@@ -453,5 +456,68 @@ describe("leases", () => {
         .all()
         .map((row) => ({ ...row }))
     ).toStrictEqual([{ target_id: "b-missing" }]);
+  });
+});
+
+describe("the lease attempt ceiling (#1014, R10)", () => {
+  const seedContent = (contentId: string): void => {
+    db.vault
+      .prepare(
+        `INSERT OR IGNORE INTO core_content_item
+           (content_id, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'file:///x', ?, 1, ?)`
+      )
+      .run(contentId, fixtureSha(contentId), T0);
+  };
+
+  beforeEach(() => {
+    db = openVaultDb();
+  });
+
+  test("stops offering a job past MAX_ENRICHMENT_LEASE_ATTEMPTS and records why", () => {
+    // `lease_attempts` was counted and never read: a rung no paired device
+    // could produce was re-leased forever and, because the queue is
+    // `requested_at`-ordered, handed out FIRST every poll.
+    seedContent("c-stuck");
+    queueDeviceEnrichmentRequest(db.vault, {
+      requestId: "r-stuck",
+      entityType: "core.content_item",
+      entityId: "c-stuck",
+      capability: "previews",
+      contributionVariant: "thumb",
+    });
+    const claimOnce = (index: number): void => {
+      if (index >= MAX_ENRICHMENT_LEASE_ATTEMPTS) return;
+      const lease = leaseNextEnrichmentRequest(db.vault, {
+        deviceId: "device-1",
+        capabilities: ["previews"],
+        now: new Date(
+          Date.parse("2026-09-10T00:00:00.000Z") + index * 3_600_000
+        ),
+      });
+      expect(lease?.requestId, `attempt ${index + 1}`).toBe("r-stuck");
+      claimOnce(index + 1);
+    };
+    claimOnce(0);
+
+    // Past the ceiling the job is simply not offered again.
+    expect(
+      leaseNextEnrichmentRequest(db.vault, {
+        deviceId: "device-1",
+        capabilities: ["previews"],
+        now: "2026-09-20T00:00:00.000Z",
+      })
+    ).toBeNull();
+
+    const closed = declineExhaustedEnrichmentLeases(
+      db.vault,
+      "2026-09-20T00:00:00.000Z"
+    );
+    expect(closed.map((entry) => entry.requestId)).toStrictEqual(["r-stuck"]);
+    expect(declinedEnrichTargets(db.vault)[0]).toMatchObject({
+      capability: "previews",
+      targetId: "c-stuck",
+      reason: "no-device",
+    });
   });
 });

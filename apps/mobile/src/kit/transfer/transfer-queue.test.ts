@@ -12,13 +12,17 @@ import type { PendingUploadGroup } from "../../lib/replica/storage-accounting";
 import { NodeSqliteFileDriver } from "../../lib/upload/node-sqlite-driver";
 import { PENDING_PAGE_LIMIT, UploadQueueStore } from "../../lib/upload/store";
 import type { NewUpload, UploadItem } from "../../lib/upload/store";
-import { readTransferQueue } from "./transfer-queue";
+import { readTransferQueue, retryTransfer } from "./transfer-queue";
 
 type NativeQueueModule = typeof import("../../lib/upload/native-queue");
 
 interface FakeQueue {
   pending: () => UploadItem[];
+  retrying: () => UploadItem[];
+  failed: () => UploadItem[];
+  poisonedFollowupCount: () => number;
   pendingStorageGroups: () => PendingUploadGroup[];
+  retry: (itemId: string) => void;
   close: () => void;
 }
 
@@ -71,7 +75,11 @@ describe("transfer-queue", () => {
     // queue in a `finally`, and the assertions still need the store.
     H.queue = {
       pending: () => store.pending(),
+      retrying: () => store.retrying(),
+      failed: () => store.failed(),
+      poisonedFollowupCount: () => store.poisonedFollowupCount(),
       pendingStorageGroups: () => store.pendingStorageGroups(),
+      retry: (itemId: string) => store.retry(itemId),
       close: () => {
         H.closes += 1;
       },
@@ -126,7 +134,12 @@ describe("transfer-queue", () => {
         counts.failures,
         "the drainer walks created_order ascending and an attempt leaves a row settled, terminally failed or errored — so errored rows are a prefix of the pending order, inside the page this reads"
       ).toStrictEqual([
-        { filename: "IMG-0.heic", lastError: "connection reset" },
+        {
+          itemId: "item-0",
+          filename: "IMG-0.heic",
+          lastError: "connection reset",
+          terminal: false,
+        },
       ]);
     });
 
@@ -155,8 +168,10 @@ describe("transfer-queue", () => {
 
       expect(counts.failures).toStrictEqual([
         {
+          itemId: "item-0",
           filename: "IMG-0.heic",
           lastError: "Your vault could not be reached",
+          terminal: false,
         },
       ]);
       expect(counts.pending, "a retryable failure is still pending work").toBe(
@@ -164,17 +179,75 @@ describe("transfer-queue", () => {
       );
     });
 
-    it("drops terminally failed rows from the failure list", () => {
+    // #1014 P7. A row that gave up left the pending set, and this list read
+    // only the pending set — so the one failure a member must act on was in
+    // no list at all, and there was nothing to act on it with.
+    it("lists terminally failed rows first, and offers them a retry", () => {
       store.enqueue(upload(0, { filename: "IMG-0.heic" }));
+      store.enqueue(upload(1, { filename: "IMG-1.heic" }));
       store.fail("item-0", "not a paired device", true);
+      store.fail("item-1", "connection reset", false);
 
       const counts = readTransferQueue("http://gw");
 
-      expect(
-        counts.failures,
-        "terminal rows are no longer queued"
-      ).toStrictEqual([]);
-      expect(counts.pending).toBe(0);
+      expect(counts.failures).toStrictEqual([
+        {
+          itemId: "item-0",
+          filename: "IMG-0.heic",
+          lastError: "not a paired device",
+          terminal: true,
+        },
+        {
+          itemId: "item-1",
+          filename: "IMG-1.heic",
+          lastError: "connection reset",
+          terminal: false,
+        },
+      ]);
+      expect(counts.pending, "a terminal row is no longer pending work").toBe(
+        1
+      );
+
+      retryTransfer("http://gw", "item-0");
+
+      expect(readTransferQueue("http://gw").failures).toStrictEqual([
+        {
+          itemId: "item-1",
+          filename: "IMG-1.heic",
+          lastError: "connection reset",
+          terminal: false,
+        },
+      ]);
+      expect(store.get("item-0")?.state).toBe("pending");
+    });
+
+    // A row inside its backoff window is hidden from the DRAIN by design;
+    // hiding it here too would make a refusal vanish from Backup health.
+    it("still reports a failure that is waiting out its backoff", () => {
+      store.enqueue(upload(0, { filename: "IMG-0.heic" }));
+      store.fail("item-0", "connection reset", false);
+      store.deferUntil("item-0", "2099-01-01T00:00:00.000Z");
+
+      expect(readTransferQueue("http://gw").failures).toHaveLength(1);
+    });
+
+    // The bytes are durable and the canonical write is quarantined: the vault
+    // holds content it has no row for, and nothing read this count (P7).
+    it("reports quarantined follow-ups", () => {
+      const item = store.enqueue(upload(0));
+      store.enqueueFollowup({
+        itemId: item.itemId,
+        shape: "photos",
+        action: "upload",
+        input: { staged_sha: item.sha256 },
+      });
+      store.settle(item.itemId, { casAck: "replicated" });
+      store.poisonFollowup(
+        store.pendingFollowups()[0]!.followupId,
+        "the vault refused it five times"
+      );
+
+      expect(readTransferQueue("http://gw").poisonedFollowups).toBe(1);
     });
 
     it("fails closed to UNKNOWN when the queue cannot be opened", () => {
@@ -185,6 +258,7 @@ describe("transfer-queue", () => {
         pendingVideos: 0,
         bytes: 0,
         failures: [],
+        poisonedFollowups: 0,
         readable: false,
       });
       expect(H.closes, "nothing was opened, so nothing is closed").toBe(0);

@@ -103,6 +103,11 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
     note: "Open enrichment queued for a purged entity would send an enricher after a dead row. `target_id` is NULLABLE — a search-miss request names a KIND and no row, and a composite FK with a NULL column is satisfied by definition, which is exactly the right reading. The hand sweep scoped itself to open rows; the cascade takes drained ones too, and a drained request for a row that no longer exists is inert history nothing reads.",
   },
   {
+    table: "enrich_target_failure",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    note: "One host's count of what it could not derive for a target (#1014, B2). It follows the target: a purged row's failure count is meaningless, and an id reused by a later row would inherit a `declined` verdict that would keep the new row out of every walk.",
+  },
+  {
     table: "outbox_item",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
     note: "The row the queued artifact is ABOUT. Read as an audit value until #916 (E1) — but an item still PENDING when its subject is purged would drain afterwards and publish about a row the member deleted, so the queue is emptied of it instead. `target_id` is NULLABLE (an outbound write with no canonical subject), and a composite key with a NULL column is satisfied by definition.",
@@ -131,12 +136,11 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
  * row exists to keep. Everything else is a reference and is in
  * `ENTITY_POINTERS` above.
  *
- * `sync_import_row`, `replica_change` and `enrich_policy_rule` are listed for
- * completeness even though the DDL scan does not match them — `sync_import_row`
- * carries `entity_type` with no `entity_id` sibling, `replica_change` uses
- * `entity`/`row_id`, `enrich_policy_rule` uses `scope_type`/`scope_ref` — so a
- * future rename into the canonical shape lands in the scan and is forced to a
- * decision rather than inheriting silence.
+ * `sync_import_row` and `enrich_policy_rule` are listed for completeness even
+ * though the DDL scan does not match them — `sync_import_row` carries
+ * `entity_type` with no `entity_id` sibling, `enrich_policy_rule` uses
+ * `scope_type`/`scope_ref` — so a future rename into the canonical shape lands
+ * in the scan and is forced to a decision rather than inheriting silence.
  */
 export const ENTITY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
@@ -170,10 +174,6 @@ export const ENTITY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
     "sync_import_row",
     "Immutable import history — the row-by-row ledger of what a connector proposed. `entity_type` records the kind that was imported; the row is never mutated after its batch resolves.",
-  ],
-  [
-    "replica_change",
-    "Replication machinery with its own epoch/floor lifecycle (replica/change-log.ts). It records PAST mutations and is trimmed by epoch, not by target liveness.",
   ],
   [
     "enrich_policy_rule",

@@ -45,6 +45,18 @@ Assistant opening is a local frame-state interaction with a 100ms perceived-late
 
 System renders live host status, backup, capacity, components, logs, and alert history from existing wires. The runtime heartbeat sample ring is process-session data, not durable daily history, so it is not presented as the handoff's 30-day strip. A truthful 30-day strip requires a durable daily availability series; no historical protocol is invented in this integration. Backup signals preserve their cause in the route and order the read-only or actionable Backups facts first on arrival.
 
+### What the `enrichment` probe reports
+
+Recent-run health alone said `ok` forever on a recipe whose walk had not moved in a month: one poisoned asset stalled the ordered library walk, and every fire after it SUCCEEDED — it just did nothing ([#1014](https://github.com/srikanth235/centraid/issues/1014), B2/B21). Success is not progress, so the probe reports three facts and not one:
+
+| Fact | Where it comes from | What it makes visible |
+| --- | --- | --- |
+| Recent runs | the automation journal | a recipe that is failing outright, `error` at three in a row |
+| **Progress** | `enrichWalkProgress` — targets stamped against targets eligible, plus the last time this capability produced anything | a FROZEN watermark: `degraded`, not `ok`, when the library is unfinished and nothing has been produced in the stale window |
+| **Declined targets** | `enrich_target_failure`, per capability | the poison itself — how many targets the walk gave up on, and how many are still counting toward the cap |
+
+"Armed" is what the SCHEDULER does, not what a stored bit says: a system recipe (`faces`, `photo-ocr`, `doc-text-extractor`) is armed unconditionally on every boot ([recognition automations](recognition-automations.md)), so the probe counts it as armed whatever its `enabled` column reads. Counting it off is how health and the scheduler came to disagree about what was running.
+
 ## Destination responsibilities
 
 - **Vault** owns Contents, Copies, and Sharing, in that order. The app-bar meta is a custody sentence.

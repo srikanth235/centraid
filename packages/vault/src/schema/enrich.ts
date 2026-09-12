@@ -480,3 +480,45 @@ ${touchUpdatedAt("enrich_policy_rule", "rule_id")}
 /** Scheme URIs the enrichment publishers create concepts under. */
 export const VISION_SCHEME_URI = "urn:centraid:vision";
 export const DOCTYPE_SCHEME_URI = "urn:centraid:doctype";
+
+/**
+ * THE POISON REGISTER (#1014, B2/B3/B20/R10).
+ *
+ * A recognition recipe walks the library in `asset_id` order and stamps what
+ * it derives. Until now a target the handler could not derive — a detector
+ * that threw, a preview the codec never produced, a delegate that was never
+ * wired — was neither stamped nor recorded, so the ordered walk met it again
+ * on the next tick and every tick after that, and every later asset waited
+ * behind it forever while health reported `ok`.
+ *
+ * This is the third answer, next to "derived" and "skipped": the failure is
+ * COUNTED, per `(capability, target)`. Under the cap the walk retries it; at
+ * the cap the target is declined durably, the cursor moves past it, and the
+ * row is what `enrichment-health` lists so the freeze is visible rather than
+ * silent. It is gateway job machinery — never exported, never replicated, and
+ * a restore re-derives it by simply trying the work again.
+ */
+export const ENRICH_TARGET_FAILURE_DDL = `
+CREATE TABLE IF NOT EXISTS enrich_target_failure (
+  capability      TEXT NOT NULL,
+  target_type     TEXT NOT NULL,
+  target_id       TEXT NOT NULL,
+  failures        INTEGER NOT NULL DEFAULT 0 CHECK (failures >= 0),
+  -- 1 once the cap is reached: the walk stops offering this target work.
+  declined        INTEGER NOT NULL DEFAULT 0 CHECK (declined IN (0, 1)),
+  -- Why it is declined, in one token ('failed', 'no-preview', 'too-large').
+  reason          TEXT,
+  last_error      TEXT,
+  first_failed_at TEXT NOT NULL,
+  last_failed_at  TEXT NOT NULL,
+  PRIMARY KEY (capability, target_type, target_id),
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_enrich_target_failure_declined
+  ON enrich_target_failure(capability, declined);
+-- The cascade's own index: the primary key leads with the capability, so the
+-- purge path's (target_type, target_id) has no leftmost prefix without this.
+CREATE INDEX IF NOT EXISTS idx_enrich_target_failure_target
+  ON enrich_target_failure(target_type, target_id);
+`;

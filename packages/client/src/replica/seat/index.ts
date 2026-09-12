@@ -19,6 +19,8 @@ export * from "./seat-bootstrap-no-room-error.js";
 export * from "./seat-channel.js";
 export * from "./seat-doors.js";
 export * from "./seat-drift-error.js";
+export * from "./seat-authorization-revoked-error.js";
+export * from "./seat-drift-parked-error.js";
 export * from "./seat-loop.js";
 export * from "./seat-rebootstrap-required-error.js";
 export * from "./seat-worker-client.js";

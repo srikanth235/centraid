@@ -1,22 +1,14 @@
-import { mkdirSync } from "node:fs";
-import path from "node:path";
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import {
-  beginReplicaCommit,
-  bootstrapVault,
-  blobUriFor,
   createShareGrant,
-  endReplicaCommit,
   listFulfillment,
   nowIso,
-  openVaultDb,
   revokeShareGrant,
   uuidv7,
 } from "@centraid/vault";
-import type { BootstrapResult, VaultDb } from "@centraid/vault";
+import type { VaultDb } from "@centraid/vault";
 
 import {
   createGrantRefreshDoorbell,
@@ -24,91 +16,21 @@ import {
   propagateGrantRemoval,
   refreshGrantsAfterCommit,
 } from "./grant-fulfillment.js";
+import {
+  AUDIENCE_VAULT,
+  audienceTitles,
+  closeOpenVaults,
+  inCommit,
+  makeVault,
+  ORIGIN_VAULT,
+  seedDocument,
+  sharedWorld,
+} from "./grant-fulfillment.test-fixtures.js";
 import { NoticeStore } from "./notices.js";
 import { SHARE_RECEIVED_NOTICE_KIND } from "./share-notices.js";
 
-/**
- * An origin edit AS THE GATEWAY MAKES ONE — inside a captured replica commit.
- * The `update` half of the three outputs is the LOG's (#996, R10), so an edit
- * written behind the log is one no subscription can see; that is a property of
- * the transport, and a test that edits outside a commit is testing a write the
- * product cannot produce.
- */
-function inCommit(db: VaultDb, body: () => void): void {
-  db.vault.exec("BEGIN IMMEDIATE");
-  const handle = beginReplicaCommit(db.vault);
-  try {
-    body();
-    endReplicaCommit(db.vault, handle);
-    db.vault.exec("COMMIT");
-  } catch (error) {
-    db.vault.exec("ROLLBACK");
-    throw error;
-  }
-}
-
-const ORIGIN_VAULT = "vlt_priya";
-const AUDIENCE_VAULT = "vlt_ravi";
-
-const open: VaultDb[] = [];
-
-interface Side {
-  vault: VaultDb;
-  boot: BootstrapResult;
-}
-
-function makeVault(root: string, name: string, vaultId: string): Side {
-  const dir = path.join(root, name);
-  mkdirSync(dir, { recursive: true });
-  const vault = openVaultDb({ dir });
-  open.push(vault);
-  return { vault, boot: bootstrapVault(vault, { ownerName: name, vaultId }) };
-}
-
-function seedDocument(side: Side, title: string, body: string): string {
-  const now = nowIso();
-  const blob = side.vault.blobs.ingestSync(Buffer.from(body));
-  const contentId = uuidv7();
-  side.vault.vault
-    .prepare(
-      `INSERT INTO core_content_item
-         (content_id, content_uri, sha256, byte_size, language,
-          creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?)`
-    )
-    .run(
-      contentId,
-      blobUriFor(blob.sha256),
-      blob.sha256,
-      blob.byteSize,
-      side.boot.ownerPartyId,
-      side.boot.deviceId,
-      now
-    );
-  const documentId = uuidv7();
-  side.vault.vault
-    .prepare(
-      `INSERT INTO core_document
-         (document_id, title, current_content_id, created_at, updated_at,
-          deleted_at, purge_at)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL)`
-    )
-    .run(documentId, title, contentId, now, now);
-  return documentId;
-}
-
-function audienceTitles(side: Side): string[] {
-  return (
-    side.vault.vault
-      .prepare("SELECT title FROM core_document ORDER BY title")
-      .all() as { title: string }[]
-  ).map((row) => row.title);
-}
-
 describe("serve/grant-fulfillment", () => {
-  afterEach(() => {
-    while (open.length > 0) open.pop()?.close();
-  });
+  afterEach(closeOpenVaults);
 
   test("a subject's grants are fulfilled, then their removal propagated", () => {
     const root = tempDirSync("centraid-grant-fulfillment-");
@@ -350,59 +272,6 @@ describe("serve/grant-fulfillment", () => {
       })
     ).toMatchObject({ outcome: "failed" });
   });
-
-  /** Priya, Ravi, one shared document, this host holding both vaults. */
-  function sharedWorld(): {
-    priya: Side;
-    ravi: Side;
-    raviParty: string;
-    documentId: string;
-    grantId: string;
-    host: { vaultFor: (vaultId: string) => VaultDb | undefined };
-    now: string;
-  } {
-    const root = tempDirSync("centraid-grant-delivery-");
-    const priya = makeVault(root, "priya", ORIGIN_VAULT);
-    const ravi = makeVault(root, "ravi", AUDIENCE_VAULT);
-    const now = nowIso();
-    const raviParty = uuidv7();
-    priya.vault.vault
-      .prepare(
-        `INSERT INTO core_party
-           (party_id, kind, display_name, sort_name, created_at, updated_at)
-         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?)`
-      )
-      .run(raviParty, now, now);
-    priya.vault.vault
-      .prepare(
-        `INSERT INTO share_party_vault_binding
-           (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
-         VALUES (?, ?, ?, NULL, ?, NULL)`
-      )
-      .run(uuidv7(), raviParty, AUDIENCE_VAULT, now);
-    const documentId = seedDocument(priya, "Trip plan", "day one");
-    const mounted = new Map<string, VaultDb>([
-      [ORIGIN_VAULT, priya.vault],
-      [AUDIENCE_VAULT, ravi.vault],
-    ]);
-    const grant = createShareGrant(priya.vault.vault, {
-      audience: { kind: "party", id: raviParty },
-      subjectType: "core.document",
-      subjectId: documentId,
-      capability: "view",
-      grantedAt: now,
-      grantedBy: priya.boot.ownerPartyId,
-    });
-    return {
-      priya,
-      ravi,
-      raviParty,
-      documentId,
-      grantId: grant.grantId,
-      host: { vaultFor: (vaultId: string) => mounted.get(vaultId) },
-      now,
-    };
-  }
 
   /** Every statement the loop compiles against the ORIGIN vault. */
   function countStatements(db: VaultDb): {

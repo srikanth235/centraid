@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AutomationTriggerCursor } from "@centraid/server/engine";
 
 import { wallClockFields } from "../cron-timezone.js";
+import { MAX_BACKFILL_OCCURRENCES } from "../manifest/manifest.js";
 import { dueInstants, floorMinute, readCronCursor } from "./cron-cursor.js";
 
 function cursorAt(positionJson: string): AutomationTriggerCursor {
@@ -209,5 +210,74 @@ describe(readCronCursor, () => {
 
     expect(result.elements).toHaveLength(1);
     expect(result.windowFrom).toBe(at.getTime() - 60_000);
+  });
+});
+
+/*
+ * BACKFILL CLASSES (#1014, B9, ruling R-1014-9). Cron used to collapse an
+ * outage to ONE fire whatever the recipe was for: after a three-day gap it
+ * returned `due.at(-1)` and recorded the rest as `skipped`. Right for a poll —
+ * two missed hours fetch the same mailbox twice — and wrong for a recipe whose
+ * fire IS the occurrence, where two missed mornings are two reminders nobody
+ * got.
+ */
+describe("cron backfill class", () => {
+  const hourly = "0 * * * *";
+  // Six hours of outage, ending on the hour.
+  const from = Date.parse("2026-09-10T02:00:00.000Z");
+  const at = new Date(Date.parse("2026-09-10T08:00:00.000Z"));
+  const cursor = {
+    automationId: "a",
+    triggerIndex: 0,
+    sourceKind: "cron",
+    positionJson: JSON.stringify(from),
+    skipped: 0,
+    updatedAt: from,
+  };
+
+  it("collapses to the latest occurrence by default, as a poll wants", () => {
+    const result = readCronCursor([{ expr: hourly }], cursor, at);
+    expect(result.elements).toHaveLength(1);
+    expect(result.elements[0]?.position).toBe(
+      String(Date.parse("2026-09-10T08:00:00.000Z"))
+    );
+    expect(result.skipped).toBe(5);
+    expect(result.gapReason).toBe("scheduler_gap");
+  });
+
+  it("delivers every missed occurrence for an `each` recipe", () => {
+    const result = readCronCursor(
+      [{ expr: hourly, backfill: "each" }],
+      cursor,
+      at
+    );
+    expect(result.elements.map((e) => e.position)).toStrictEqual(
+      ["03", "04", "05", "06", "07", "08"].map((hour) =>
+        String(Date.parse(`2026-09-10T${hour}:00:00.000Z`))
+      )
+    );
+    // Nothing was skipped, so nothing is reported as a gap.
+    expect(result.skipped).toBe(0);
+    expect(result.gapReason).toBeUndefined();
+  });
+
+  it("bounds an `each` catch-up and still reports the remainder as a gap", () => {
+    // A month of outage on an hourly recipe is 720 fires; the budget keeps the
+    // NEWEST, because a catch-up is more useful ending at now.
+    const long = {
+      ...cursor,
+      positionJson: JSON.stringify(Date.parse("2026-08-10T08:00:00.000Z")),
+    };
+    const result = readCronCursor(
+      [{ expr: hourly, backfill: "each" }],
+      long,
+      at
+    );
+    expect(result.elements).toHaveLength(MAX_BACKFILL_OCCURRENCES);
+    expect(result.elements.at(-1)?.position).toBe(
+      String(Date.parse("2026-09-10T08:00:00.000Z"))
+    );
+    expect(result.skipped).toBeGreaterThan(0);
+    expect(result.gapReason).toBe("scheduler_gap");
   });
 });

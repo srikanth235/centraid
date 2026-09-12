@@ -15,7 +15,7 @@ import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
-import { readReplicaChanges } from "../replica/change-log.js";
+import { readReplicaLogPage } from "../replica/change-log.js";
 import {
   browseDependents,
   browseRefSearch,
@@ -369,7 +369,7 @@ describe("atlas", () => {
     expect(out.status).toBe("executed");
 
     // Replica visibility: a replica pulled after the edit sees it.
-    const page = readReplicaChanges(db.vault);
+    const page = readReplicaLogPage(db.vault);
     const change = page.changes.find(
       (c) =>
         c.entity === "core.concept_scheme" &&

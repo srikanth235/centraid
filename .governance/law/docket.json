@@ -110,6 +110,16 @@
       "filedBy": "agent",
       "issue": "#1005",
       "expires": "2026-12-31"
+    },
+    {
+      "id": "D-12",
+      "rule": "estate-separation",
+      "path": null,
+      "reason": "#1014 Wave 0b lands the bracketed-writes directive beside the writers it brackets, per the issue's execution plan; reviewed as one change. The rule that proves the invariant and the four writers it proves it about are one question \u2014 a directive landed alone would pass over a tree it was written from, and the writers landed alone would carry the invariant as a convention again. Expires at the umbrella's close.",
+      "authority": "issue #1014 execution plan, owner to confirm",
+      "filedBy": "agent",
+      "issue": "#1014",
+      "expires": "2026-12-31"
     }
   ]
 }

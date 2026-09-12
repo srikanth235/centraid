@@ -6,10 +6,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
-import {
-  ConversationStore,
-  makeLedgerDbProvider,
-} from "@centraid/server/engine";
+import { ConversationStore } from "@centraid/server/engine";
 import type {
   AutomationTriggerKind,
   AutomationTriggerOrigin,
@@ -20,6 +17,7 @@ import type { EnrichEgressClass } from "@centraid/vault";
 import { BUILT_IN_PROFILE } from "@centraid/vault";
 
 import { isSystemAutomationRef } from "../../enrich/system-recognition.js";
+import { makeReplicatedLedgerDbProvider } from "../../replicated-ledger-db.js";
 import { runHandler } from "../handler/runner.js";
 import type {
   DelegateDispatcher,
@@ -225,7 +223,7 @@ export async function runFire(
   }
 
   const runsStore = new ConversationStore(
-    makeLedgerDbProvider(opts.ledgerDbFile)
+    makeReplicatedLedgerDbProvider(opts.ledgerDbFile)
   );
   const runId =
     opts.runId ??

@@ -163,6 +163,28 @@ describe("model-runtime lane", () => {
     }
   });
 
+  test("gives worker_threads the identity mirror, never the real module", () => {
+    // #1014, R9. `onnxruntime-node@1.27`'s `dist/binding.js` reads
+    // `isMainThread` at load, so a flat refusal meant `embed-text` and
+    // `embed-image` could not load at all — first-party code the release
+    // ships, failing on its own lane policy. The mirror answers that one
+    // question and exposes no `Worker`, so the SPAWN the floor forbids stays
+    // forbidden.
+    expect(builtinDecision(policy, "worker_threads")).toStrictEqual({
+      kind: "confined-worker-threads",
+    });
+    expect(policy.allowedBuiltins).not.toContain("worker_threads");
+    for (const lane of [
+      appHandlerPolicy(),
+      automationHandlerPolicy(),
+      appSeedPolicy(roots[0] ?? "/tmp"),
+    ]) {
+      expect(builtinDecision(lane, "worker_threads").kind, lane.lane).toBe(
+        "deny"
+      );
+    }
+  });
+
   test("declares its native-addon hole rather than hiding it", () => {
     // Not an accident: the lane loads onnxruntime-node, and a .node binary is
     // outside every check the sandbox makes. The test exists so the hole can
@@ -223,5 +245,25 @@ describe("root containment", () => {
   test("refuses everything when no root was granted", () => {
     expect(isPathWithinRoots("/srv/models", [])).toBe(false);
     expect(isPathWithinRoots("/", [])).toBe(false);
+  });
+});
+
+describe("the worker_threads identity mirror", () => {
+  test("exports the thread facts and no constructor", async () => {
+    // Fail-closed BY OMISSION, exactly as `confined-fs` is: a graph reaching
+    // for `Worker` gets `undefined` and fails at the call site (#1014, R9).
+    const mirror = (await import("./confined-worker-threads.js")) as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(mirror).sort()).toStrictEqual([
+      "isMainThread",
+      "threadId",
+    ]);
+    expect(mirror.Worker).toBeUndefined();
+    expect(mirror.parentPort).toBeUndefined();
+    expect(mirror.workerData).toBeUndefined();
+    expect(mirror.MessageChannel).toBeUndefined();
+    expect(mirror.receiveMessageOnPort).toBeUndefined();
   });
 });

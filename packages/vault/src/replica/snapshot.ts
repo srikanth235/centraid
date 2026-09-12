@@ -189,37 +189,66 @@ function publicRow(
 }
 
 /**
+ * EVERY CANONICAL ROW ID OF AN ENTITY, FROM THE ENTITY (#1014, G9).
+ *
+ * The gateway's opaque-key conflict check has to hash candidate ids to find
+ * the one behind a wire id, and it took its candidates from the change log —
+ * so after a prune or an epoch bump the candidate set was EMPTY and every
+ * opaque-shape base version passed unchecked. A log is a record of what
+ * changed; the question here is what EXISTS, and the table is the only thing
+ * that answers it. Key columns only, in the same canonical spelling
+ * `readReplicaRows` gives a row (a JSON tuple for a composite key), so the
+ * hashes match.
+ */
+export function replicaRowIdsOf(
+  vault: DatabaseSync,
+  entity: string,
+  limit = 100_000
+): string[] {
+  const shape = shapeOf(vault, entity);
+  if (shape.primaryKey.length === 0) return [];
+  const columns = shape.primaryKey.map(quoteIdentifier).join(", ");
+  const rows = vault
+    .prepare(
+      `SELECT ${columns} FROM ${quoteIdentifier(shape.physical)} LIMIT ?`
+    )
+    .all(limit) as Record<string, unknown>[];
+  return rows.map((row) => rowIdOf(row, shape.primaryKey));
+}
+
+/**
  * THE VERSION OF A ROW IS THE ROW'S OWN COLUMN (#996, R6) — here too.
  *
  * This is the PRODUCING half of the same rule the gateway's conflict check
  * states (`routes/replica-intent-shape.ts#currentRowVersion`). It answered
- * `MAX(seq)` over `replica_change`, so a seat stored a LOG POSITION as the
+ * `MAX(seq)` over the trigger log, so a seat stored a LOG POSITION as the
  * version of its row and sent that back as an intent's base version, while the
  * gateway compared it against `row_version` — 432 against 2, and every offline
  * edit of a row the projector had ever touched came back conflicted. The two
  * halves have to read the same column or the check is comparing units.
  *
- * The projector remains the fallback for an entity with no `row_version`
- * column — the append-only bands — and for a composite key, whose `rowId` is a
- * JSON tuple that no single-column `WHERE` can match.
+ * THERE IS NO LOG FALLBACK LEFT (#1014, R-1014-1). A composite key is now read
+ * by its columns rather than given up on, and an entity with no `row_version`
+ * column — the append-only bands — answers ABSENT, which is what "this row has
+ * no version" means. It used to answer with a trigger-log seq, which is the R6
+ * mistake wearing the word "fallback": a number in the wrong units is worse
+ * than no number, because the conflict check cannot tell it is wrong.
  */
 function latestRowVersions(
   vault: DatabaseSync,
   entity: string,
-  rowIds: readonly string[],
-  epoch: string
+  rowIds: readonly string[]
 ): Map<string, number> {
   const versions = new Map<string, number>();
   const shape = shapeOf(vault, entity);
-  const key =
-    shape.primaryKey.length === 1 && hasRowVersion(vault, shape.physical)
-      ? shape.primaryKey[0]
-      : undefined;
-  for (let offset = 0; offset < rowIds.length; offset += 500) {
-    const chunk = rowIds.slice(offset, offset + 500);
-    if (chunk.length === 0) continue;
-    const placeholders = chunk.map(() => "?").join(", ");
-    if (key !== undefined) {
+  if (shape.primaryKey.length === 0 || !hasRowVersion(vault, shape.physical))
+    return versions;
+  if (shape.primaryKey.length === 1) {
+    const key = shape.primaryKey[0]!;
+    for (let offset = 0; offset < rowIds.length; offset += 500) {
+      const chunk = rowIds.slice(offset, offset + 500);
+      if (chunk.length === 0) continue;
+      const placeholders = chunk.map(() => "?").join(", ");
       const rows = vault
         .prepare(
           `SELECT ${quoteIdentifier(key)} AS row_id, row_version AS v
@@ -229,17 +258,23 @@ function latestRowVersions(
         .all(...chunk) as { row_id: string; v: number | null }[];
       for (const row of rows)
         if (row.v !== null) versions.set(String(row.row_id), row.v);
-      continue;
     }
-    const rows = vault
-      .prepare(
-        `SELECT row_id, MAX(seq) AS seq FROM replica_change
-          WHERE epoch = ? AND entity = ? AND row_id IN (${placeholders})
-          GROUP BY row_id`
-      )
-      .all(epoch, entity, ...chunk) as { row_id: string; seq: number | null }[];
-    for (const row of rows)
-      if (row.seq !== null) versions.set(row.row_id, row.seq);
+    return versions;
+  }
+  // A composite key is one statement per row: the tuple form SQLite would
+  // need is not portable to the seat builds, and a page of a composite-key
+  // entity is small by construction.
+  const where = shape.primaryKey
+    .map((column) => `${quoteIdentifier(column)} = ?`)
+    .join(" AND ");
+  const read = vault.prepare(
+    `SELECT row_version AS v FROM ${quoteIdentifier(shape.physical)} WHERE ${where}`
+  );
+  for (const rowId of rowIds) {
+    const row = read.get(
+      ...(keyValues(rowId, shape.primaryKey) as (string | number)[])
+    ) as { v: number | null } | undefined;
+    if (row?.v != null) versions.set(rowId, row.v);
   }
   return versions;
 }
@@ -347,12 +382,7 @@ export function readReplicaRows(
   const hasMore = rawRows.length > limit;
   const pageRows = hasMore ? rawRows.slice(0, limit) : rawRows;
   const rowIds = pageRows.map((row) => rowIdOf(row, shape.primaryKey));
-  const versions = latestRowVersions(
-    vault,
-    entity,
-    rowIds,
-    options.epoch ?? currentReplicaLogState(vault).epoch
-  );
+  const versions = latestRowVersions(vault, entity, rowIds);
   const { ceilingBytes, policy } = ceilingFor(entity, maxValueBytes);
   const rows = pageRows.map((row) =>
     publicRow(
@@ -403,12 +433,7 @@ export function readReplicaRow(
   // back as an intent's base version — so it has to be the same column the
   // gateway's conflict check reads.
   const version =
-    latestRowVersions(
-      vault,
-      entity,
-      [canonicalRowId],
-      options.epoch ?? currentReplicaLogState(vault).epoch
-    ).get(canonicalRowId) ?? 0;
+    latestRowVersions(vault, entity, [canonicalRowId]).get(canonicalRowId) ?? 0;
   const { ceilingBytes, policy } = ceilingFor(entity, maxValueBytes);
   return publicRow(raw, shape, ceilingBytes, policy, version);
 }

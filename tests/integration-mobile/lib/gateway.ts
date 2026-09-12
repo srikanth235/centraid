@@ -41,8 +41,19 @@ export interface MobileGateway {
   callAction: (
     appId: string,
     action: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    /** Which vault on this gateway; the default one when omitted (#1014). */
+    vaultId?: string
   ) => Promise<ActionOutcome>;
+  /**
+   * Found a SECOND vault on this gateway, through the shipped door (#1014).
+   *
+   * `vaults.create()` alone is not enough: authority lives in `vault_owners`,
+   * and it is the ROUTE that enrolls the calling device for the new vault. A
+   * suite that reached past it would get a vault whose seat doors answer 403,
+   * which is a property of the test rig and not of the product.
+   */
+  createVault: (name: string) => Promise<string>;
   /** The gateway's own cursor for a shape set, read through the changes route. */
   close: () => Promise<void>;
 }
@@ -63,7 +74,27 @@ export async function bootMobileGateway(
     vaultId,
     dataDir,
     handle,
-    callAction: async (appId, action, input) => {
+    createVault: async (name) => {
+      const response = await fetch(`${handle.url}/centraid/_vault/vaults`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ name }),
+      });
+      const body = (await response.json()) as {
+        vaultId?: string;
+        message?: string;
+      };
+      if (!response.ok || !body.vaultId) {
+        throw new Error(
+          `founding "${name}" answered ${response.status}: ${JSON.stringify(body)}`
+        );
+      }
+      return body.vaultId;
+    },
+    callAction: async (appId, action, input, forVaultId) => {
       const response = await fetch(
         `${handle.url}${appActionPath(appId, action)}`,
         {
@@ -71,6 +102,7 @@ export async function bootMobileGateway(
           headers: {
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
+            ...(forVaultId ? { "x-centraid-vault": forVaultId } : {}),
           },
           body: JSON.stringify({ input }),
         }

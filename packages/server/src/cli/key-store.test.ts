@@ -197,6 +197,34 @@ describe("key-store", () => {
     ).toThrow(/one base64-encoded 32-byte key/u);
   });
 
+  test("a keychain that will not answer is an error, not an absent entry", async () => {
+    const root = await tempDir("keychain-locked-vs-absent-");
+    const credentialRoot = await tempDir("keychain-locked-vs-absent-creds-");
+    roots.push(root, credentialRoot);
+    const env = { CENTRAID_KEYSTORE_CREDENTIAL_ROOT: credentialRoot };
+    vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+
+    // X15: no explicit service/account — the DEFAULT install shape. A locked
+    // keychain used to fall through to minting a fresh 0600 credential, which
+    // could not unwrap one existing key.
+    mocked.spawnSync.mockReturnValue(
+      spawnResult({ status: 51, stderr: "User interaction is not allowed." })
+    );
+    expect(() => daemonKeyStore(path.join(root, "locked"), { env })).toThrow(
+      /could not read KeyStore credential from macOS Keychain/u
+    );
+
+    // itemNotFound (44) is the one answer that may fall through.
+    mocked.spawnSync.mockReturnValue(
+      spawnResult({
+        status: 44,
+        stderr: "The specified item could not be found in the keychain.",
+      })
+    );
+    const absent = daemonKeyStore(path.join(root, "absent"), { env });
+    expect(absent.loadOrCreate("endpoint.key")).toHaveLength(32);
+  });
+
   test("fallback credentials enforce 0600 mode and reject malformed key material", async () => {
     const root = await tempDir("headless-fallback-validation-");
     const credentialRoot = await tempDir(

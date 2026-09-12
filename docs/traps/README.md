@@ -15,9 +15,11 @@ Read the matching trap before working near its area; each one was paid for once.
 | [emulator-snapshot-settings.md](emulator-snapshot-settings.md) | `settings put global` on a lane that restores a cached AVD RAM snapshot |
 | [list-anchoring.md](list-anchoring.md) | Virtualized lists that hide rows arriving from another device |
 | [unreachable-vault.md](unreachable-vault.md) | A gateway that stops answering while the phone stays online |
+| [seat-identity.md](seat-identity.md) | A placeholder gateway id names a different seat file; a feed cursor with a second owner |
 | [loopback-identity-fallback.md](loopback-identity-fallback.md) | `deviceKeyFor` falling back to the host for a forwarded hop; the two forwarder lanes |
 | [lane-evidence.md](lane-evidence.md) | Why a green lane can vanish from the nightly report: upload path, `if: always()`, and the lane registry |
 | [ios-shell-injection.md](ios-shell-injection.md) | Re-using a cached iOS `.app` across commits: `expo export:embed` emits SOURCE, and a Hermes app runs it |
 | [generated-manifest-untracked-output.md](generated-manifest-untracked-output.md) | The blueprint manifest generator reads the directory, so untracked build output lands in a committed manifest |
 | [server-dist-resolution.md](server-dist-resolution.md) | `@centraid/server/*` self-imports resolve to `dist`; rebuild before trusting a `serve()`-booting test |
+| [file-uri-database-locations.md](file-uri-database-locations.md) | A SQLite directory passed to expo-sqlite as a PATH opens `Application%20Support` — a second, empty database |
 | [expression-index-spelling.md](expression-index-spelling.md) | **Superseded (#996 W5)** — the order/census expression indexes went with the shaped store; kept because frozen history cites it |

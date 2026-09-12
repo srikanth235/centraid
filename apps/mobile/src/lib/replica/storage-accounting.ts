@@ -3,7 +3,14 @@
 // contract is docs/mobile-offline.md, "Thumbnail packs and budgets".
 
 const SQLITE_SIDECARS = ["-wal", "-shm", "-journal"] as const;
-const REPLICA_DATABASE_PREFIX = "centraid-replica-";
+// THE NAME THE FILES ACTUALLY HAVE (#1014, P6). This read `centraid-replica-`
+// — the browser seat's SAH-pool name (`replicaDatabaseName`) — while every
+// file this phone writes is `centraid-seat-…` (`native-seat-path.ts`). So the
+// unmounted-vault fold matched nothing, ever: an orphaned seat file, and the
+// 5 MB it holds, was invisible on the Phone storage screen and reclaimed by
+// nobody. The two names are kept in step by `nativeSeatDatabaseName`, which
+// builds from this same stem.
+const REPLICA_DATABASE_PREFIX = "centraid-seat-";
 
 export interface PendingUploadAccounting {
   plaintextSize: number;

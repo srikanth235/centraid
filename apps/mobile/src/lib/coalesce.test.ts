@@ -79,3 +79,30 @@ describe(coalesceWork, () => {
     expect(runs).toBe(0);
   });
 });
+
+describe("cancelling a run in flight (#1014, P16)", () => {
+  test("aborts the signal the run is holding, not just the timer", async () => {
+    const clock = useFakeClock(0);
+    let release: (() => void) | undefined;
+    let aborted: boolean | undefined;
+    let wrote = false;
+    const work = coalesceWork(async (signal) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // Where a real run resumes after an await — the mount may be gone.
+      aborted = signal.aborted;
+      if (!signal.aborted) wrote = true;
+    }, 100);
+
+    work.signal();
+    await clock.advance(100);
+    // Teardown, with the run mid-flight. `cancel()` used to clear the timer
+    // and leave this running: it went on writing for a closing mount.
+    work.cancel();
+    release?.();
+    await clock.advance(1);
+    expect(aborted).toBe(true);
+    expect(wrote).toBe(false);
+  });
+});

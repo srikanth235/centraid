@@ -95,7 +95,15 @@ export function makeDeviceWorkRouteHandler(
     const enrollment = vaultId
       ? deps.enrollments.get(callerKey, vaultId)
       : undefined;
-    if (!vaultId || !plane || !enrollment)
+    // REVOKED IS NOT ENROLLED (#1014, X19). `enrollments.get` returns the row
+    // whatever its state — `revoked` is a FIELD on the answer, not a filter on
+    // the query — so every other device door in this tree tests it and this
+    // one did not. A revoked phone kept leasing enrichment work, reading the
+    // request payload it was handed and reporting results back into the
+    // vault, for as long as it held its endpoint key. The sibling `/status`
+    // door was already safe by accident: it scopes through `vaultsFor`, whose
+    // SQL has `revoked = 0` in it.
+    if (!vaultId || !plane || !enrollment || enrollment.revoked)
       return sendJson(res, 404, { error: "not_found" });
 
     if (url.pathname === `${WORK_PATH}/lease`) {

@@ -17,6 +17,7 @@ export type ReplicaRebootstrapVerdict =
   | "snapshot-retention"
   | "shape-changed"
   | "checkpoint-incompatible"
+  | "device-access-changed"
   | "invalid-cursor";
 
 export interface ReplicaRetentionFacts {
@@ -40,6 +41,7 @@ const NOTICE_VERDICTS: readonly ReplicaRebootstrapVerdict[] = [
   "snapshot-retention",
   "shape-changed",
   "checkpoint-incompatible",
+  "device-access-changed",
   "invalid-cursor",
 ];
 
@@ -105,6 +107,20 @@ export function rebootstrapNoticeFor(
         headline: FULL,
         detail:
           "The saved point this device would resume from cannot be read by the gateway's version, so the library is fetched fresh.",
+        fullResync: true,
+      };
+    case "device-access-changed":
+      // NOT "we could not read your cursor" (#1014, V16). This verdict reached
+      // the member as `invalid-cursor` — it is not on the closed list, so the
+      // route's normaliser rewrote it — and the sentence it drew blamed the
+      // device's own position for what is actually an access change made by a
+      // person. The copy is a full resync because the access this device holds
+      // is what its copy was scoped by.
+      return {
+        verdict,
+        headline: FULL,
+        detail:
+          "This device's access to the vault changed, so what it keeps offline is being fetched again to match.",
         fullResync: true,
       };
     case "invalid-cursor":

@@ -16,6 +16,10 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
+import {
+  bumpReplicaEpoch,
+  currentReplicaLogState,
+} from "../replica/change-log.js";
 import { forwardProjectedEdit } from "./apply-outputs.js";
 import { placeBlob } from "./blobs.js";
 import type { ShareableItemType } from "./closure.js";
@@ -28,7 +32,10 @@ import {
   seedPhoto,
 } from "./placement-fixture.js";
 import { ingestShareTail, purgeShareShape } from "./subscription-seat.js";
-import { readSubscription } from "./subscription-store.js";
+import {
+  readSubscription,
+  readSubscriptionLineage,
+} from "./subscription-store.js";
 import { composeShareTail } from "./subscription-tail.js";
 
 const ORIGIN_VAULT = "vault-priya";
@@ -298,6 +305,71 @@ describe("the predicate transport, transition by transition", () => {
     expect(applied.left).toBe(0);
     expect(count(audience, "SELECT COUNT(*) AS n FROM media_asset")).toBe(
       before
+    );
+  });
+
+  test("an epoch roll RESENDS, and the audience scrubs what left it (#1014 V10)", () => {
+    const { origin, originBoot, audience } = household();
+    const kept = inCommit(origin, () => seedPhoto(origin, originBoot, "kept"));
+    const gone = inCommit(origin, () => seedPhoto(origin, originBoot, "gone"));
+    const album = albumOver(origin, originBoot, [kept.assetId, gone.assetId]);
+    const grant: Grant = {
+      authorityId: "authority-epoch-roll",
+      subjectType: "core.collection",
+      subjectId: album,
+    };
+    deliver(origin, audience, grant);
+    expect(count(audience, "SELECT COUNT(*) AS n FROM media_asset")).toBe(2);
+
+    // The subject changes while the subscriber is not looking, and the ORIGIN
+    // rolls its epoch: the audience's cursor is in a dead sequence space, so
+    // the only answer the origin can compose is a resend.
+    inCommit(origin, () =>
+      origin.vault
+        .prepare(
+          "DELETE FROM core_collection_entry WHERE collection_id = ? AND target_id = ?"
+        )
+        .run(album, gone.assetId)
+    );
+    bumpReplicaEpoch(origin.vault, { reason: "test-epoch-roll" });
+    // A resend is the origin saying its memory of what this audience holds is
+    // NOT to be trusted — so that memory cannot also be the only thing that
+    // scrubs. Forgetting it is what a real roll does to a restored or
+    // re-created origin, and it is the case only the audience can close.
+    origin.vault
+      .prepare("DELETE FROM share_subscription_member WHERE authority_id = ?")
+      .run(grant.authorityId);
+
+    const standing = readSubscription(
+      audience.vault,
+      grant.authorityId,
+      AUDIENCE_VAULT
+    );
+    const applied = deliver(origin, audience, grant);
+    expect(applied.scrubbed).toBeGreaterThan(0);
+    // The row that left is gone from the audience's copy AND from the grant's
+    // lineage; the one that stayed is untouched.
+    expect(count(audience, "SELECT COUNT(*) AS n FROM media_asset")).toBe(1);
+    expect(
+      readSubscriptionLineage(audience.vault, grant.authorityId).some(
+        (row) => row.originItemId === gone.assetId
+      )
+    ).toBe(false);
+    expect(
+      readSubscriptionLineage(audience.vault, grant.authorityId).some(
+        (row) => row.originItemId === kept.assetId
+      )
+    ).toBe(true);
+    // And the cursor moved into the NEW epoch rather than staying in the dead
+    // one, so the next pass is an ordinary tail.
+    const after = readSubscription(
+      audience.vault,
+      grant.authorityId,
+      AUDIENCE_VAULT
+    );
+    expect(after?.cursor.epoch).not.toBe(standing?.cursor.epoch);
+    expect(after?.cursor.epoch).toBe(
+      currentReplicaLogState(origin.vault).epoch
     );
   });
 
