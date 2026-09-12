@@ -1,0 +1,282 @@
+//! Time and identity as injected facts.
+//!
+//! `committed_at`, `occurred_at` and every id the vault mints come from here,
+//! never from `SystemTime::now()` or a random source called inline. Two
+//! reasons, and the second is the load-bearing one:
+//!
+//! - A test that cannot fix the clock cannot assert on a retention edge, and
+//!   the retention rules are *about* an edge (a cutoff, a 14-day hold).
+//! - **The vault's zone is the vault's, never the host's.** A gateway on a VPS
+//!   runs UTC; v0's `docs/cron-timezone.md` is the whole file this mistake
+//!   wrote. Instants here are always UTC and the civil-time conversion is
+//!   `crates/automations`' problem, not a stray `chrono::Local`.
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// The vault's clock: milliseconds since the Unix epoch, and the text form
+/// every timestamp column holds.
+pub trait Clock: Send + Sync {
+    /// Milliseconds since the Unix epoch, UTC.
+    fn now_ms(&self) -> i64;
+
+    /// The text form: `YYYY-MM-DDTHH:MM:SS.mmmZ`, exactly what
+    /// `strftime('%Y-%m-%dT%H:%M:%fZ','now')` writes, because the schema's own
+    /// defaults write it and a second spelling would sort differently.
+    fn now_text(&self) -> String {
+        format_iso_ms(self.now_ms())
+    }
+}
+
+/// The host clock.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now_ms(&self) -> i64 {
+        let since = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
+    }
+}
+
+/// A clock a test sets, and advances when it means to.
+#[derive(Debug)]
+pub struct FixedClock {
+    millis: AtomicU64,
+}
+
+impl FixedClock {
+    /// A clock stopped at `millis`.
+    #[must_use]
+    pub const fn at(millis: i64) -> Self {
+        Self {
+            millis: AtomicU64::new(millis as u64),
+        }
+    }
+
+    /// A clock stopped at 2026-01-01T00:00:00.000Z — the instant v0's freezer
+    /// stamps, so a fixture built on both sides carries one timestamp.
+    #[must_use]
+    pub const fn frozen() -> Self {
+        Self::at(1_767_225_600_000)
+    }
+
+    /// Move the clock forward.
+    pub fn advance_ms(&self, millis: i64) {
+        self.millis
+            .fetch_add(millis.unsigned_abs(), Ordering::Relaxed);
+    }
+
+    /// Move the clock forward by whole days.
+    pub fn advance_days(&self, days: i64) {
+        self.advance_ms(days * 86_400_000);
+    }
+}
+
+impl Clock for FixedClock {
+    fn now_ms(&self) -> i64 {
+        i64::try_from(self.millis.load(Ordering::Relaxed)).unwrap_or(i64::MAX)
+    }
+}
+
+/// `YYYY-MM-DDTHH:MM:SS.mmmZ` from epoch milliseconds.
+///
+/// Written out rather than pulled from a date library because it is the one
+/// conversion the vault needs and the schema's own DEFAULT is the spec for it:
+/// a dependency here would be a second implementation of `strftime`.
+#[must_use]
+pub fn format_iso_ms(millis: i64) -> String {
+    let (days, time_ms) = {
+        let day = millis.div_euclid(86_400_000);
+        let rest = millis.rem_euclid(86_400_000);
+        (day, rest)
+    };
+    let (year, month, day) = civil_from_days(days);
+    let hour = time_ms / 3_600_000;
+    let minute = (time_ms % 3_600_000) / 60_000;
+    let second = (time_ms % 60_000) / 1_000;
+    let milli = time_ms % 1_000;
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{milli:03}Z")
+}
+
+/// Parse `YYYY-MM-DDTHH:MM:SS(.mmm)?Z` back to epoch milliseconds.
+///
+/// Returns `None` for anything that is not that shape — a timestamp column that
+/// holds something else is a finding, not a value to guess at.
+#[must_use]
+pub fn parse_iso_ms(text: &str) -> Option<i64> {
+    let bytes = text.as_bytes();
+    if bytes.len() < 20 || bytes[4] != b'-' || bytes[7] != b'-' || bytes[10] != b'T' {
+        return None;
+    }
+    let year: i64 = text.get(0..4)?.parse().ok()?;
+    let month: i64 = text.get(5..7)?.parse().ok()?;
+    let day: i64 = text.get(8..10)?.parse().ok()?;
+    let hour: i64 = text.get(11..13)?.parse().ok()?;
+    let minute: i64 = text.get(14..16)?.parse().ok()?;
+    let second: i64 = text.get(17..19)?.parse().ok()?;
+    let milli: i64 = if bytes.get(19) == Some(&b'.') {
+        text.get(20..23)?.parse().ok()?
+    } else {
+        0
+    };
+    Some(
+        days_from_civil(year, month, day) * 86_400_000
+            + hour * 3_600_000
+            + minute * 60_000
+            + second * 1_000
+            + milli,
+    )
+}
+
+/// Howard Hinnant's `days_from_civil`, the proleptic Gregorian conversion.
+const fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// Its inverse, `civil_from_days`.
+const fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let shifted = days + 719_468;
+    let era = if shifted >= 0 {
+        shifted
+    } else {
+        shifted - 146_096
+    } / 146_097;
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = if month_prime < 10 {
+        month_prime + 3
+    } else {
+        month_prime - 9
+    };
+    (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+/// Where new ids come from.
+///
+/// A uuid v7 is time-ordered, which the audit band's `seq`-less history relied
+/// on before #928 gave it a real chain position. The trait exists so a fixture
+/// can be REPLAYED: v0's freezer derives every id from a seed for exactly this
+/// reason, and a corpus seeded with randomness re-freezes differently every run.
+pub trait Ids: Send + Sync {
+    fn next(&self) -> String;
+}
+
+/// Seeded, uuid-v7-SHAPED ids: the same seed always produces the same
+/// sequence. The same derivation v0's `scripts/golden-vault/build.mjs` uses,
+/// so a fixture generated on either side carries the same ids.
+#[derive(Debug)]
+pub struct SeededIds {
+    seed: String,
+    counter: AtomicU64,
+}
+
+impl SeededIds {
+    #[must_use]
+    pub fn new(seed: impl Into<String>) -> Self {
+        Self {
+            seed: seed.into(),
+            counter: AtomicU64::new(0),
+        }
+    }
+}
+
+impl Ids for SeededIds {
+    fn next(&self) -> String {
+        use sha2::{Digest as _, Sha256};
+        let count = self.counter.fetch_add(1, Ordering::Relaxed) + 1;
+        let digest = hex::encode(Sha256::digest(format!("{}:{count}", self.seed).as_bytes()));
+        format!(
+            "{}-{}-7{}-8{}-{}",
+            &digest[0..8],
+            &digest[8..12],
+            &digest[13..16],
+            &digest[17..20],
+            &digest[20..32]
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_text_form_is_the_schemas_own_spelling() {
+        // What `strftime('%Y-%m-%dT%H:%M:%fZ','now')` writes: milliseconds,
+        // always three digits, always `Z`.
+        assert_eq!(format_iso_ms(0), "1970-01-01T00:00:00.000Z");
+        assert_eq!(
+            FixedClock::frozen().now_text(),
+            "2026-01-01T00:00:00.000Z",
+            "the frozen instant must be v0's freezer's `FROZEN_NOW`"
+        );
+        assert_eq!(format_iso_ms(1_767_225_600_007), "2026-01-01T00:00:00.007Z");
+    }
+
+    #[test]
+    fn the_conversion_round_trips_over_a_century_of_leap_years() {
+        let mut findings: Vec<String> = Vec::new();
+        // Every 37th day from 1970 to 2070 — through 2000 (a leap year) and
+        // 2100's non-leap rule is outside the range on purpose, since a
+        // timestamp column will never hold one and the const fns are Hinnant's.
+        let mut millis = 0_i64;
+        while millis < 3_155_760_000_000 {
+            let text = format_iso_ms(millis);
+            match parse_iso_ms(&text) {
+                Some(back) if back == millis => {}
+                other => findings.push(format!("{millis} -> {text} -> {other:?}")),
+            }
+            millis += 37 * 86_400_000 + 3_601_000;
+        }
+        assert_eq!(findings.len(), 0, "{}", findings.join("\n"));
+    }
+
+    #[test]
+    fn a_timestamp_that_is_not_the_shape_does_not_parse() {
+        assert_eq!(parse_iso_ms(""), None);
+        assert_eq!(parse_iso_ms("2026-01-01"), None);
+        assert_eq!(parse_iso_ms("2026/01/01T00:00:00.000Z"), None);
+        // Seconds precision, which some v0 columns hold, IS accepted.
+        assert_eq!(
+            parse_iso_ms("2026-01-01T00:00:00Z"),
+            Some(1_767_225_600_000)
+        );
+    }
+
+    #[test]
+    fn a_fixed_clock_advances_only_when_told_to() {
+        let clock = FixedClock::frozen();
+        let first = clock.now_ms();
+        assert_eq!(clock.now_ms(), first);
+        clock.advance_days(30);
+        assert_eq!(clock.now_ms() - first, 30 * 86_400_000);
+    }
+
+    #[test]
+    fn seeded_ids_are_a_function_of_the_seed_and_the_count() {
+        let one = SeededIds::new("issue-1020");
+        let two = SeededIds::new("issue-1020");
+        let three = SeededIds::new("other");
+        let first: Vec<String> = (0..3).map(|_| one.next()).collect();
+        let second: Vec<String> = (0..3).map(|_| two.next()).collect();
+        assert_eq!(first, second);
+        assert_ne!(first[0], three.next());
+        // uuid-v7-SHAPED, so anything validating the format is satisfied.
+        assert_eq!(first[0].len(), 36);
+        assert_eq!(&first[0][14..15], "7");
+        assert_eq!(&first[0][19..20], "8");
+    }
+}
