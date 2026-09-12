@@ -65,9 +65,17 @@ export async function shareCsv(
       UTI: "public.comma-separated-values-text",
     });
   } catch (error) {
-    throw new ExportFailureError(
-      EXPORT_FAILED,
-      error instanceof Error ? error.message : String(error)
-    );
+    throw new ExportFailureError(EXPORT_FAILED, logTextOf(error));
   }
+}
+
+/**
+ * A thrown thing's own words, for the `[centraid] insights:` log line. It is
+ * a named function rather than a ternary at the throw, so the one place this
+ * app extracts an exception's text is the one place that says, in its name,
+ * that the result is the log's and never a screen's.
+ */
+function logTextOf(thrown: unknown): string {
+  if (thrown instanceof Error) return thrown.message;
+  return String(thrown);
 }
