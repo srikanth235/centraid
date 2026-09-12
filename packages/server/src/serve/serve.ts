@@ -19,7 +19,6 @@ export interface ServeOptions extends BuildGatewayOptions {
   host?: string;
   port?: number;
   allowedHosts?: readonly string[];
-  token?: string;
   web?: { rootDir: string; host?: string; port?: number };
 }
 

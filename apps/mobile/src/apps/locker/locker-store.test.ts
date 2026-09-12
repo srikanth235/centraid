@@ -97,6 +97,9 @@ vi.mock(import("./locker-device-auth"), () => ({
   lockLocker: () => door.unlocked.mockReturnValue(false),
   lockerUnlocked: () => door.unlocked(),
   removeLockerVaultKey: () => Promise.resolve(),
+  // The enrol gesture's own writer (#1015, R-NY-19). Reachable from the store
+  // through `locker-enrol`, so the double has to carry it.
+  storeLockerVaultKey: () => Promise.resolve(),
 }));
 vi.mock(import("../../lib/vault-links"), () => ({
   getActiveVaultId: () => "vault-1",

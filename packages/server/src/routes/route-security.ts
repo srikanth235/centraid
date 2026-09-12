@@ -78,6 +78,13 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
   `
   ),
   ...defineRouteGroup(
+    "admin",
+    "none",
+    `
+    /centraid/_gateway/phone-link|phone-link-routes.ts|host custody only — the desktop vouching for the phone its own QR gesture paired (#1015)
+  `
+  ),
+  ...defineRouteGroup(
     "device",
     "none",
     `

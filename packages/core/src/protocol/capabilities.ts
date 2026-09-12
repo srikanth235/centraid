@@ -33,6 +33,11 @@ export interface GatewayCapabilities {
    * a gateway can serve the whole file and still hold no locker key, and a
    * seat that conflates them shows a member "unreadable secret" where the
    * truthful answer is "this vault has no locker".
+   *
+   * SERVED since #1015 (ruling R-NY-19): the key plane is founded with every
+   * vault, `GET /_vault/seat/locker-key` hands `K` to an enrolled device row,
+   * and the phone's "Enrol this phone" is the gesture that asks. This flag is
+   * what tells a seat whether the gateway in front of it has that door at all.
    */
   seatLockerKey?: boolean;
 }
@@ -47,12 +52,11 @@ export const DEFAULT_GATEWAY_CAPABILITIES: GatewayCapabilities = Object.freeze({
   // Experimental features default OFF on a fresh gateway (v0).
   automations: false,
   connectors: false,
-  // The snapshot and log-tail doors are SERVED (#996, W1). The locker key is
-  // not: the route authenticates and answers `seat_locker_key_unavailable`
-  // until W6 lands the key plane, and a seat has to be able to tell that from
-  // a gateway too old to have the door at all.
+  // All three seat doors are SERVED: the snapshot and the log tail since
+  // #996 W1, the locker key since #1015 (R-NY-19). They stay two flags, not
+  // one, because a gateway can serve the whole file and hold no locker key.
   seatReplica: true,
-  seatLockerKey: false,
+  seatLockerKey: true,
 });
 
 /** Keys a gateway may omit. Absent reads as off — never a malformed handshake. */

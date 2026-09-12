@@ -47,6 +47,7 @@ import {
 } from "./locker-places";
 import type { LockerRouteKey } from "./locker-places";
 import {
+  DEVICE_ENROL_DONE,
   DEVICE_FORGET,
   DEVICE_FORGET_BODY,
   DEVICE_FORGET_DONE,
@@ -54,8 +55,10 @@ import {
   MASKED_LABEL,
 } from "./locker-seat-copy";
 import {
+  enrolLockerPhone,
   noteLockerActivity,
   forgetLockerVaultKey,
+  readLockerVault,
   unlockLocker,
 } from "./locker-store";
 import LockerBand from "./LockerBand";
@@ -176,6 +179,12 @@ export default function LockerScreen({
                   });
                 },
                 verb: DEVICE_FORGET,
+              })
+            }
+            onEnrol={() =>
+              void enrolLockerPhone().then(() => {
+                if (!readLockerVault().notEnrolled)
+                  postStatus(DEVICE_ENROL_DONE);
               })
             }
             onUnlock={() => void unlockLocker()}

@@ -26,6 +26,7 @@ import {
 
 import { mountBlock, nodesOf, press } from "../../test/react-native-stub";
 import {
+  DEVICE_ENROL,
   DEVICE_FORGET,
   DEVICE_NOT_ENROLLED_BODY,
   DEVICE_NOT_ENROLLED_TITLE,
@@ -63,6 +64,7 @@ function wall(
       error=""
       mode="lock"
       notEnrolled={false}
+      onEnrol={noop}
       onForgetKey={noop}
       onUnlock={noop}
       {...overrides}
@@ -146,18 +148,29 @@ describe("denial", () => {
   });
 });
 
-// #1015 B1 — `storeLockerVaultKey` has no non-test caller in the repo, so
-// nothing on this seat ever writes `K`: the wall's one primary refused every
-// time it was pressed, with a "yet" that no gesture here could resolve. The
-// key plane that would hand `K` over is #996 wave 6 and is not built, so the
-// wall states the absence instead.
+// #1015 B1, then R-NY-19. `storeLockerVaultKey` had no non-test caller, so
+// nothing on this seat ever wrote `K` and the wall's one primary refused every
+// time it was pressed. The key door is served now and the member asks for it
+// HERE, so the wall carries a verb again — a different one, which does the
+// thing the absent key needed rather than the thing that could not work.
 describe("the lock wall on a phone that holds no key", () => {
-  it("offers no unlock, because pressing it could not succeed", () => {
+  it("offers the enrol verb, not the unlock that could not succeed", () => {
     const { container, unmount } = mountBlock(wall({ notEnrolled: true }));
-    expect(
-      container.querySelector('[data-testid="locker-gate-submit"]')
-    ).toBeNull();
-    expect(textOf(container)).not.toContain(DEVICE_UNLOCK);
+    const text = textOf(container);
+    expect(text).toContain(DEVICE_ENROL);
+    expect(text).not.toContain(DEVICE_UNLOCK);
+    unmount();
+  });
+
+  it("presses the enrol verb, never the unlock one", () => {
+    const onEnrol = vi.fn<() => void>();
+    const onUnlock = vi.fn<() => void>();
+    const { container, unmount } = mountBlock(
+      wall({ notEnrolled: true, onEnrol, onUnlock })
+    );
+    press(container.querySelector('[data-testid="locker-gate-submit"]'));
+    expect(onEnrol).toHaveBeenCalledOnce();
+    expect(onUnlock).not.toHaveBeenCalled();
     unmount();
   });
 
@@ -168,12 +181,20 @@ describe("the lock wall on a phone that holds no key", () => {
   });
 
   it("says what is true, as the heading, and says it once", () => {
-    const { container, unmount } = mountBlock(
-      wall({ error: DEVICE_NOT_ENROLLED_BODY, notEnrolled: true })
-    );
+    const { container, unmount } = mountBlock(wall({ notEnrolled: true }));
     const text = textOf(container);
     expect(text).toContain(DEVICE_NOT_ENROLLED_TITLE);
     expect(text.split(DEVICE_NOT_ENROLLED_BODY)).toHaveLength(2);
+    unmount();
+  });
+
+  it("shows a failed enrolment beside the verb that caused it", () => {
+    // The four refusals each name a different repair, so a wall that folded
+    // them into the heading would drop the one thing the member needs.
+    const { container, unmount } = mountBlock(
+      wall({ error: "Enrolling needs your desktop link.", notEnrolled: true })
+    );
+    expect(textOf(container)).toContain("Enrolling needs your desktop link.");
     unmount();
   });
 
@@ -181,6 +202,7 @@ describe("the lock wall on a phone that holds no key", () => {
     const { container, unmount } = mountBlock(wall({ notEnrolled: false }));
     expect(textOf(container)).toContain(DEVICE_UNLOCK);
     expect(textOf(container)).toContain(DEVICE_FORGET);
+    expect(textOf(container)).not.toContain(DEVICE_ENROL);
     unmount();
   });
 });

@@ -1926,3 +1926,54 @@ The two riskiest claims, and the throwaway check each was put to.
 1. **"`screen-root` is genuinely unconditional now, not merely unpopulated."** A rule that reads text can go quiet instead of red. Planted `<View>` as `PhotoLightbox`'s root → `screen-root 1` and `fail lint-mobile-rooms — screen-root: 1 finding(s), and this rule is at zero`, exit 1. It also exposed a limit worth stating: `rootTagOf` reads the FIRST `return <Tag` after the default export, so planting inside the loaded tree while the loading hold still returns `<StageRoom>` is NOT seen. Both returns in `PhotoLightbox` are the room, so the claim holds for this file; the general limit is the one the script already documents about matching text rather than a render tree.
 
 2. **"L1's drift half would notice a hand-edited generated file."** A validator that compares two values it computes the same way can agree with itself forever. Appended one comment line to `apps/mobile/android/gradle.properties` and staged it; the live case went red naming the tree and both ids. Restoring the file returned it to green, which also proves the id is read from the index rather than from HEAD — an unstaged edit would have been invisible, and a staged one was not.
+## Owner items — Lane D: the phone's own identity through the desktop tunnel, then Locker enrolment
+
+Rulings R-NY-18 and R-NY-19, plus the R13 amendment. SECURITY-SENSITIVE and red-first: the tests landed before the fix, as a deliberately failing commit.
+
+### The census, on `cb997a7c9`
+
+- `packages/tunnel/src/desktop-tunnel.ts` deleted `x-centraid-device` / `x-centraid-device-proof` and stamped only `x-centraid-tunnel-forwarded`, so the hop named nobody.
+- `packages/server/src/serve/build-gateway.ts`'s embedded `deviceKeyFor` returned the HOST's `embeddedEndpointId` for any loopback request without a peer header. A paired phone therefore reached every `_vault` door — `GET /_vault/seat/locker-key`, which hands back `K` — as the owner of the box.
+- **A desktop-paired phone had no vault enrolment row at all.** QR pairing writes only the desktop's `devices.json`; `startDesktopEmbeddedGateway` does not pass `devicePairing`, so the embedded gateway does not even mount `/centraid/_gateway/devices`. `revokePhoneDevice` dropped the transport row and nothing else.
+- The production forwarder is the Rust byte pump behind `packages/tunnel/src/native-relay.ts`, whose suites are gated behind `CENTRAID_RUN_NATIVE_TUNNEL=1`. A fix to the portable relay alone would have passed every JS suite and shipped nothing.
+
+### D1 — red first (`8855b9443`)
+
+Four suites, failing on the commit that introduces them. Two by assertion — `packages/tunnel/src/tunnel-forward-identity.test.ts` (2) and `packages/server/src/serve/embedded-device-identity.test.ts` (2 of 4; its two guards passed already) — and two by failing to load, because they name the vocabulary the fix introduces: `packages/server/src/serve/tunnelled-phone-identity.test.ts` and `apps/desktop/src/main/phone-link-vouch-core.test.ts`. `packages/server` and `apps/desktop` typecheck red on that commit for the same reason. No assertion in any of the four was edited afterwards.
+
+### D2 — the fix (`8ecd1af36`)
+
+- **The stamp.** New `packages/tunnel/src/forward-identity.ts`: `forwardIdentityHeaders(hostBearer, endpointId)` and `forwardedDeviceIdentity(hostBearer, headers)`, plus `PHONE_LINK_PATH`. The proof is `HMAC(HMAC(bearer, label), endpointId)`, timing-safe compared, bound to the EndpointId it names and excluding the peer lane outright. The bearer never crosses the tunnel — the forwarder overwrites `authorization` on every hop — so a phone cannot mint one; anything that can already holds the bearer and could reach the gateway as the host directly, which is strictly more authority.
+- **Both forwarder lanes stamp**: `desktop-tunnel.ts` (deleting every client copy first, then assigning) and the `/authorize` control answer in `native-relay.ts` that the Rust pump stamps from.
+- **The resolution.** `deviceKeyFor` is two principals and no third: a proved stamp names its device; a request no forwarder touched is the host (`isDirectHostRequest`); everything else is `undefined`, which the composed handler answers 403.
+- **The principal exists.** New `packages/server/src/routes/phone-link-routes.ts` — `POST /centraid/_gateway/phone-link`, host custody only, mounted only on the embedded lane, classified `admin`/`none` in `route-security.ts`. `enrol` binds the EndpointId to the host's own owner; `revoke` tombstones it. Admission stays explicit: a verified stamp never auto-enrols. New `apps/desktop/src/main/phone-link-vouch-core.ts` is the desktop's call; `phone-link.ts` makes it at pairing and at revocation, and `revokePhoneDevice` is async so a revoke does not race its answer.
+- `token` moved from `ServeOptions` to `BuildGatewayOptions` (still forwarded to the HTTP layer unchanged) so the graph can derive the proof key.
+- Docs: `SECURITY.md`'s loopback boundary (the old "forwarded requests also carry the per-boot device proof header" was true of the daemon lane only), `docs/client-keying.md` rule 9, `docs/enrollment.md` §7, and a new trap, `docs/traps/loopback-identity-fallback.md`.
+
+### D3 — enrol this phone (`283fef602`)
+
+`seatLockerKey` is advertised `true` and the "not yet" comment in `packages/core/src/protocol/capabilities.ts` is corrected (its default and `capabilities.test.ts` flip with it). New `apps/mobile/src/apps/locker/locker-enrol.ts`: reads the flag, refuses the manual-URL lane (`K` travels the tunnel or it does not travel), checks the answer's `vaultId`, stores behind `requireAuthentication` + `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY`, zeroes the bytes, logs nothing. Its two live dependencies are imported lazily so Locker's store does not drag `expo/fetch` and the native tunnel into every route. `LockerWall.tsx` carries the verb, `locker-store.ts` the action, `LockerScreen.tsx` the wiring, and `locker-seat-copy.ts` the honest copy — the false "open Locker on the desktop" is gone and nothing claims another seat can reveal. Tests: `locker-enrol.test.ts` (the four refusals, the two landing places, and that nothing is logged), `locker-enrol-roundtrip.test.ts` (the VAULT's `encryptUnderLockerKey` opened by the seat's `revealLockerRow`, with the keychain options asserted exactly and AsyncStorage untouched), and the wall's verb.
+
+### Changed or added, by full path
+
+`packages/tunnel/src/forward-identity.ts`, `packages/tunnel/src/forward-identity.test.ts`, `packages/tunnel/src/tunnel-forward-identity.test.ts`, `packages/tunnel/src/desktop-tunnel.ts`, `packages/tunnel/src/native-relay.ts`, `packages/tunnel/src/index.ts`, `packages/server/src/routes/phone-link-routes.ts`, `packages/server/src/routes/route-security.ts`, `packages/server/src/serve/build-gateway.ts`, `packages/server/src/serve/serve.ts`, `packages/server/src/serve/embedded-device-identity.test.ts`, `packages/server/src/serve/tunnelled-phone-identity.test.ts`, `packages/core/src/protocol/capabilities.ts`, `packages/core/src/protocol/capabilities.test.ts`, `apps/desktop/src/main/phone-link-vouch-core.ts`, `apps/desktop/src/main/phone-link-vouch-core.test.ts`, `apps/desktop/src/main/phone-link.ts`, `apps/desktop/src/main/ipc.ts`, `apps/mobile/src/apps/locker/locker-enrol.ts`, `apps/mobile/src/apps/locker/locker-enrol.test.ts`, `apps/mobile/src/apps/locker/locker-enrol-roundtrip.test.ts`, `apps/mobile/src/apps/locker/locker-seat-copy.ts`, `apps/mobile/src/apps/locker/locker-store.ts`, `apps/mobile/src/apps/locker/locker-store.test.ts`, `apps/mobile/src/apps/locker/LockerWall.tsx`, `apps/mobile/src/apps/locker/LockerWall.test.tsx`, `apps/mobile/src/apps/locker/LockerScreen.tsx`, `SECURITY.md`, `docs/client-keying.md`, `docs/enrollment.md`, `docs/decisions.md`, `docs/traps/README.md`, `docs/traps/loopback-identity-fallback.md`. Nothing was deleted.
+
+### Every loopback caller class, and why each resolves to the right principal
+
+| Caller | Reaches the gateway as | Why |
+| --- | --- | --- |
+| The desktop itself (renderer IPC's main process, the vouch call, the CLI) | The host | `isDirectHostRequest`: loopback, and none of the four forwarder markers present. |
+| A phone through the portable JS tunnel | Itself | `desktop-tunnel.ts` deletes the client's copies and stamps the EndpointId the QUIC handshake proved. |
+| A phone through the Rust byte relay | Itself | The relay stamps exactly what `/authorize` returns, and that answer now carries the same headers from the same function. |
+| A phone lying about who it is | Itself | Its headers are deleted before the forwarder stamps; its stamp is overwritten, not merged. |
+| A phone trying to mint a stamp for another phone | Refused | It never sees the bearer, so it cannot compute the proof; and the proof is bound to the EndpointId, so a captured stamp is not transferable. |
+| An iroh peer / linked gateway | Refused | `forwardedDeviceIdentity` returns `undefined` for any request carrying `x-centraid-peer-endpoint`, ahead of everything else, and `isDirectHostRequest` excludes it too. |
+| A forwarder that forgot to stamp (an older relay, a future one) | Refused | No stamp and a forwarded mark is `undefined`, and `undefined` is a refusal. This is the case the old fallback answered "host". |
+| Any other local process with the bearer | The host | It could already act as the host by making a direct request, so the stamp grants it nothing new. Without the bearer it is refused at the HTTP layer before identity is resolved. |
+
+### Falsification
+
+The two riskiest claims, and the throwaway check run against each.
+
+1. **"A phone cannot forge a stamp for another device."** Check: in `tunnelled-phone-identity.test.ts`, mint an honest stamp for `ep-other-phone-1015`, replay it with `x-centraid-device: ep-phone-1015`, and separately mint an honest stamp and replace the proof with 32 random bytes. Result: both 403, while the honest stamp in the same test still gets 200 — so the refusals are about the proof, not about the route.
+2. **"Revoking a phone shuts every replica door for it."** Check: enrol `ep-phone-1015` through the vouch route, confirm 200 at the key door, revoke through the same route, then re-request the key door AND the snapshot door as that phone, and the key door as the host. Result: 403 / 403 for the phone, 200 for the host. A third check — POST the vouch route with a forwarding stamp instead of host custody — is refused, and the smuggled EndpointId is still nobody afterwards.
