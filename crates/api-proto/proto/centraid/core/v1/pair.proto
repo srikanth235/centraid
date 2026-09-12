@@ -41,6 +41,20 @@ message PairTicket {
   // Milliseconds since the epoch. `DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000`
   // (`packages/server/src/serve/pairing-store.ts:21`).
   uint64 expires_at_ms = 7;
+  // The gateway's IP addresses, `<ip>:<port>`, as dialling HINTS.
+  //
+  // **D-1020-C15.** Required by `RelayMode::Disabled`, which #1020 names as a
+  // supported mode: with no relay and no address-lookup service there is
+  // nothing an EndpointId alone can be dialled through, so a LAN-only or
+  // loopback deployment needs the addresses in the ticket. With relays on they
+  // are a shortcut that saves the first round trip and nothing depends on
+  // them.
+  //
+  // They are HINTS and never authority: iroh's TLS handshake proves the
+  // endpoint id, so a tampered address reaches either the right gateway or
+  // nothing. That is what makes it safe for a value read off a screen by a
+  // camera to carry them at all.
+  repeated string direct_addrs = 8;
 }
 
 // The seat redeeming it.
