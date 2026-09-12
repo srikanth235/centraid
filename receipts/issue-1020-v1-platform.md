@@ -628,6 +628,57 @@ Four slices, four commits, on `claude/1020-laneC`, rebased onto lane D3's `d5654
 `contracts/README.md`'s index gained the `protocol/` row, merged at the rebase beside lane D3's `apps/tally/` row with one "the rest of the tree" paragraph naming what neither lane landed.
 
 No file owned by lane D1 or D3 was touched: `crates/vault`, `crates/seat`, `crates/apps/**`, `contracts/schema/**` and `contracts/golden/**` are untouched, and `crates/xtask` was edited only for the `buf` step the brief authorises.
+## Wave 2 — lane D1: `crates/vault`, the authority's file
+
+The umbrella's centre. Everything durable a gateway knows is in one SQLite file, and everything that writes to it goes through `Vault::commit`.
+
+### What landed, by commit
+
+**`2a146c85` — `build(deps): rusqlite 0.40 with session, hooks and functions`**
+
+- `Cargo.toml`, `Cargo.lock` — the workspace bump. Own commit because the workspace shares the dependency; `cargo test --workspace` was green before and after.
+
+**`66e53887` — `feat(contracts): the v1 baseline corpus, frozen at the ladder head`**
+
+- `packages/vault/tests/golden/issue-1020/{vault.db.gz,manifest.json}` — **the one permitted v0-tree edit in this lane**, and it is the permitted kind: a corpus cut by v0's own freezer (`bun run golden-vault:freeze -- --label issue-1020`). No v0 source file was touched.
+- `contracts/golden/issue-1020/{vault.db.gz,manifest.json}` — byte-identical copies.
+- `contracts/schema/vault-ddl.sql` — regenerated from the new corpus. 1,053 objects → 761: the 292 that leave are `replica_change`, its four indexes and the 287 `trg_replica_*_a{i,u,d}` triggers that #1014 R-1014-1 retired. One baseline, not two.
+- `contracts/schema/v0-registries.json`, `contracts/tools/export-v0-registries.ts` — `replicatedTables` (109 names) and `replicaConstants` (10 numbers, the local-table list, the JSON-key exclusions).
+- `crates/ontology/src/{golden,registries,ddl}.rs`, `src/bin/export-ddl.rs`, `tests/{fixtures,golden_vault}.rs`, `README.md` — the ontology crate's small change: `GOLDEN_LABEL` is now the v1 baseline and `GOLDEN_LABEL_CHECKPOINT` the #929 one, `is_replicated_table` lands, and `version_window::both_ends_of_the_window_open` reads **two real v0 files** instead of stamping a version onto one copy — which wave 1's own doc comment said was owed to this lane.
+- `contracts/README.md` — the two corpora and their roles.
+
+**`28183688` — `feat(vault): the v1 vault crate — file, log plane, registry, tally stubs`** (the commit the root merged early for lanes D3 and R)
+
+- `crates/vault/Cargo.toml`, `src/lib.rs`, `src/bin/export-baseline.rs`
+- `src/error.rs` — `VaultError`, `RebootstrapReason` (v0's closed 5-value vocabulary at the log door), `IntentRefusal`.
+- `src/value.rs` — `Value`, `RowImage`, the log's JSON in v0's spelling.
+- `src/clock.rs` — `Clock`, `FixedClock`, `Ids`, `SeededIds`, the ISO-millisecond conversion.
+- `src/migrations.rs`, `contracts/migrations/001_baseline.sql` — the ladder, the baseline, `seed_entity_kinds`.
+- `src/file.rs` — `Vault::create`/`open`/`read`, the `query_only` read path.
+- `src/log/{mod,capture,store,guard,door,apply}.rs` — the plane.
+- `src/snapshot.rs` — the seven-step pipeline, `Fault`, `SnapshotHead`.
+- `src/access.rs` — `Principal`, `Verb`, `evaluate_access`, the clamp intersection.
+- `src/commands/{mod,core,tally}.rs` — `Registry`, the gate order, the three real commands, the 23 stubs.
+- `src/audit.rs`, `src/intents.rs`, `src/devices.rs`, `src/page.rs`, `src/bootstrap.rs`.
+
+**`a3b06d55` — `test(vault): the log plane, the doors, and the three applier gates`**
+
+- `contracts/applier/{README.md,oracle.json,convergence.json,atomicity.json}`, `contracts/tools/export-applier-oracle.ts`
+- `crates/vault/tests/{common/mod,baseline,log_plane,doors,gates}.rs`
+- `crates/vault/src/{migrations,file,clock}.rs` — `seed_entity_kinds` and its call site; `Clock`/`Ids` for `Arc`, so a test can hold the clock it gave the vault.
+
+**`e59fde31` — `test(vault): the snapshot pipeline, its fault points and disk full`**
+
+- `crates/vault/tests/{snapshot_faults,disk_full}.rs`
+- `crates/vault/src/error.rs` — `From<rusqlite::Error>` classifies `DiskFull` unconditionally.
+- `crates/vault/src/snapshot.rs` — `Fault::CopyTo`.
+
+**`23d3d7a6` — `test(vault): the command plane end to end, and three properties`**
+
+- `crates/vault/tests/{commands,properties}.rs`
+- `Cargo.toml` — `serde_json`'s `float_roundtrip`.
+
+**this commit** — `crates/vault/README.md` and this receipt section.
 
 ### Exit list
 
@@ -714,6 +765,117 @@ Every gate this lane added lands with a red it has actually produced.
 ### Doctrine digest
 
 Law `53be88c22ab5`, verified with `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — 10 rules, no findings. The law did not move under this lane's work; no waiver was spent; no v0 file was edited, so no fixture-adapter change is owed a line here.
+| --- | --- | --- |
+| 1 | `cargo fmt --all --check` | clean |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | clean; no `#[allow]` added to the library, one `#![allow(dead_code)]` on `tests/common/mod.rs` with its reason (each integration test is its own binary and compiles the whole module) |
+| 3 | `cargo test --workspace` | **269 passed, 0 failed.** `centraid-vault` **122**: lib 59, `baseline` 6, `commands` 15, `disk_full` 2, `doors` 13, `gates` 4, `log_plane` 13, `properties` 3, `snapshot_faults` 7. Also `centraid-ontology` 34 (lib 11 + 9 + 5 + 9), `centraid-apps-kit` 59, `centraid-apps-tally` 30, `xtask` 24 |
+| 4 | `cargo xtask gate --profile local` | every step **PASS**; `sql-confinement` scanned this crate and reports clean. **The 120 s budget is now exceeded** — 134.2 s on the rebase onto lane C, of which `test` is 108.4 s. On the rebase onto lane D3 alone it was 23.8 s of 120 s. `cargo test -p centraid-vault` is **17.1 s** of the 108.4 s; the rest of the workspace is the other 91 s. See the finding and the hand-off below — the budget is a down-only ledger and this lane did not touch it |
+| 5 | `cargo xtask gate --profile pr` | **FAIL on exactly the two named inherited reds** — `secrets` (gitleaks, `packages/model-runtime/LICENSES.md:generic-api-key:8`) and `osv` (`astro@7.1.5`). Every other step green: fmt, clippy, test, rules, ledgers, `deny`, `ci-policy`, `release-build` 96.8s of 600s, `ts-static`. 163.9s of 900s |
+| 6 | `bunx vitest run packages/vault/src/golden-vault.test.ts` | **9 passed** — `issue-1020` and `issue-929` both green in v0, four assertions each |
+| 7 | `sha256sum` of both `issue-1020` copies | equal. `vault.db.gz` `07559187…afca00b3`, `manifest.json` `6d49f85c…85f14644` |
+| 8 | `bun contracts/tools/export-v0-registries.ts && bun run format && git diff --exit-code contracts/schema` | clean |
+| 9 | `node --experimental-strip-types contracts/tools/export-applier-oracle.ts && bun run format && git diff --exit-code contracts/applier` | clean. **`node`, not `bun`** — see D-1020-D1-16 |
+| 10 | the gate, fault and disk-full tests | below |
+| 11 | `cargo install cargo-mutants` | installed in **93 s**. First run on `crates/vault/src/value.rs`, 61 mutants, 51 reached before the lane's budget ran out: **43 caught, 3 missed, 5 unviable**. The three survivors are below |
+| 12 | `bun run format` / `format:check`; `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5`; `bash .governance/run.sh`; `bun run check:push:static` | all clean / 4-of-4 |
+
+**Item 10 — the named tests and their assertion lines.**
+
+| Test | The assertion |
+| --- | --- |
+| `gates::oracle_the_rust_log_produces_the_rows_v0_produced` | every one of v0's 10 rows equal on commit index, table, op, pk, row, prior, `indirect`, `local`, `deferred` and producer; plus "the fixture carries an update with a prior, a delete, a local row and an indirect row" so it cannot go vacuous |
+| `gates::convergence_a_copy_fed_the_log_equals_the_gateway_at_the_watermark` | `findings.join("\n") == ""` over **109 replicated tables**, row for row, value for value; 5 applied commits; the copy is the real snapshot artifact, not a file copy |
+| `gates::atomicity_a_crash_mid_batch_is_completed_and_a_duplicate_lands_once` | three cases, each asserting the row set, `atom-a`'s value and that the cursor never went back |
+| `gates::freezing_the_baseline_corpus_from_rust_reproduces_v0s_manifest` | lane A's suggestion: 16 tables, every column set, row count and per-row digest |
+| `snapshot_faults::an_interrupted_build_leaves_no_artifact_and_the_next_one_succeeds` | for each of 8 fault points: no `.db.gz` outside `.building`, the live file unchanged in size, its private table still 1 row; then the canary still in the live vault's bytes, and the 9th attempt produces a sanitised artifact |
+| `snapshot_faults::the_private_canary_is_absent_from_the_files_bytes` | present in the live vault's raw bytes, absent from the artifact gzipped **and** inflated |
+| `snapshot_faults::no_private_table_and_no_trigger_except_fts_sync_survive` | all 28 private tables gone; every surviving trigger names an FTS table; no `_touch_updated_at`; 18 FTS shadow `_data` tables kept |
+| `snapshot_faults::the_log_is_truncated_its_cursor_is_kept_and_the_numbers_come_from_the_copy` | `replica_log` 0 rows, `floor_seq == watermark`, `active_commit_id` NULL, and the head's epoch/seq/schema-epoch/vault-id equal the live state's |
+| `snapshot_faults::the_artifact_is_content_addressed_…` | two builds at one position produce the same name **and the same bytes** |
+| `disk_full::a_full_disk_at_the_log_insert_rolls_the_whole_commit_back` | `error.is_disk_full()`; `commit_seq` equals `COUNT(DISTINCT commit_seq)` in the log; **0 orphan rows** (no `core_party` row without its log row); and the next commit after the cap lifts writes 2 rows, not 20 — the sessions were abandoned |
+| `disk_full::a_full_disk_during_a_snapshot_build_leaves_no_partial_artifact` | `is_disk_full()`, the snapshot directory **empty** (`.building` files cleared too), the live vault's private table intact, and the retry builds |
+
+**Item 11 — the first `cargo mutants` run.** `--file crates/vault/src/value.rs`, 61 mutants, 51 reached in the lane's budget: **43 caught, 3 missed, 5 unviable** (the five are `Default::default()` substitutions on functions whose return type has no `Default`). The three survivors, judged:
+
+| Survivor | Verdict |
+| --- | --- |
+| `value.rs:262 replace < with <=` in `json_string` — the control-character boundary | **REAL.** A space would be escaped as `\u0020`, which is valid JSON that parses back to a space, so no round-trip test can see it. It is caught by nothing here and by the ORACLE fixture only if a v0 row's text holds a space in a redacted image. Named as owed rather than patched: the gate that would catch it is byte-equality against v0's `row_json` for a text value, which is the next wave's ORACLE widening. |
+| `value.rs:283 replace \| with ^` in `to_base64` | **EQUIVALENT MUTANT.** `((a & 3) << 4) \| (b >> 4)` combines disjoint bit ranges, so `\|` and `^` compute the same value for every input. Not a test gap. |
+| `value.rs:286 replace \| with ^` in `to_base64` | **EQUIVALENT MUTANT**, same reason. |
+
+The umbrella's "no survivors" is judged at lane D2's close; this is the number, not a verdict.
+
+### Decisions — lane D1
+
+Every one cites [#1020](https://github.com/srikanth235/centraid/issues/1020) and follows **R-1020-34**: options, recommendation, adopted.
+
+- **D-1020-D1-1 — v1's baseline is v0's current shape.** As briefed: re-cut with v0's own freezer at the ladder head, copied byte-identically to `contracts/`, and `vault-ddl.sql` regenerated from it. The old rung-7 rendering is replaced, not kept beside — one baseline.
+- **D-1020-D1-2 — v1 files carry `application_id = 0x43454E31` and a `user_version` counting v1's OWN migrations.** As briefed. `crates/ontology`'s 7..11 window is a different question and stays: it is about reading two frozen **v0** files.
+- **D-1020-D1-3 — one session per replicated table, and `table_filter` stays unused.** `rusqlite` DOES expose it, which the brief flagged. Options: (a) one filtered session, ~1 ms cheaper per commit; (b) one per table. **Adopted (b)**, for a reason stronger than caution: `node:sqlite` accepted the same filter and silently ignored it, and the failure mode is a private table's rows reaching every seat, invisible until someone reads a log. A table that was never attached produces *no changes at all*, so the failure is "no rows", which a test sees. A filter that is honoured is indistinguishable from one that is ignored until it matters.
+- **D-1020-D1-4 — the file's own row images stay v0's JSON spelling.** The ORACLE fixture compares Rust's rows against v0's value for value; a differently-spelled image would make every row a finding for a difference that is not one. Number spelling is borrowed from `centraid_ontology::jsvalue::js_number_to_string` rather than re-derived: a REAL `1.0` is JSON `1`, and Rust's own formatting prints `1.0`.
+- **D-1020-D1-5 — the commit pair is the only writable connection, and `Vault::read` holds `PRAGMA query_only`.** As briefed, plus the `query_only` half, which turns "no caller writes through a read" into "SQLite refuses it". The grep: the only `pub fn connection()` in the crate are `CommitTx::connection` (`src/log/guard.rs:54`) and `CommandCtx::connection` (`src/commands/mod.rs:116`, which delegates to it); `Vault::connection` is `pub(crate)` (`src/file.rs:239`).
+- **D-1020-D1-6 — doors are functions.** As briefed.
+- **D-1020-D1-7 — one content-addressed snapshot, three uses.** As briefed; `Fault` is a runtime enum on the shipped builder rather than a `#[cfg(test)]` hook, because a gate that only exists in test builds proves nothing about the shipped one.
+- **D-1020-D1-8 — `DiskFull` is typed, and classified in `From<rusqlite::Error>`.** The brief put the classification in a helper. Options: (a) a helper each call site calls; (b) the `From` impl. **Adopted (b)** — the first run of the disk-full test showed why: the error arrived through a handler's own `?`, not through the log plane's helper, and came out as a generic `Sqlite`. A classification a call site can forget is a classification the product renders wrong.
+- **D-1020-D1-9 — authority and the command plane.** As briefed. `AllowlistStore` is `crates/vault::devices` with the method set `enrol` / `revoke` / `is_device_enrolled` / `live_devices`, because `crates/net` was not on the umbrella at this lane's rebase; lane C's trait is implemented over it in one block.
+- **D-1020-D1-10 — the paged door's vault-side hook.** `Vault::page_raw`, `page::and_row_filters`, `page::apply_field_mask`. The interface agreed with D3: **the kit builds the statement text and the binds and calls `and_row_filters` with the decision it got from `evaluate_access`; the vault never sees a `PageQuery` and the kit never sees a `Connection`.** D3's crate landed first and its grammar matches this shape.
+- **D-1020-D1-11 — the three gates as `contracts/` fixtures.** As briefed.
+- **D-1020-D1-12 — `replicatedTables` and `replicaConstants` in the registry fixture.** As briefed, with one wrinkle: `REPLICATED_TABLE_NAMES` is **not exported** by `private-tables.ts` and the v0 tree is pinned, so adding an `export` was not available. Options: (a) re-type the 109 names in Rust; (b) derive them from a fresh vault's tables ∩ `isReplicatedTable`, which only yields the names a vault happens to carry; (c) read the array literal out of the source text and put every parsed name back through the exported `isReplicatedTable`. **Adopted (c)**: it transcribes rather than re-types, and a mis-parse fails loudly in the generator (the predicate is the oracle, plus a "well over a hundred" floor) rather than shipping a short allow-list.
+- **D-1020-D1-13 — the baseline migration and its `contracts/` fixture are ONE file.** The brief asked for `crates/vault/src/migrations/NNN_*.sql` *and* a fixture under `contracts/migrations/`. Options: (a) two copies with a test that diffs them; (b) one file under `contracts/`, reached by `include_str!`. **Adopted (b)**: two copies of a 6,460-line DDL is two answers to one question, and a diff test is a gate against a problem that need not exist. `bin/export-baseline` generates it and `tests/baseline.rs` founds a vault from it and diffs against the corpus.
+- **D-1020-D1-14 — `core.add_party` refuses a reach scheme by name rather than dropping it.** v0's input schema admits `email` and `tel`; v0 routes those to `social.save_contact_channel` and `core_party_identifier`'s own CHECK refuses them. The contact-reach plane is the People lane's. Options: (a) accept and silently ignore them; (b) accept and bind them anyway (the CHECK refuses, so the whole command fails with a constraint error); (c) refuse with a sentence naming the command that takes them. **Adopted (c)** — a dropped identifier means the app believes it bound an email and nothing did.
+- **D-1020-D1-15 — `core_entity_kind` is DERIVED from the DDL, not transcribed.** A fresh v1 file needs the registry `core_entity.entity_type` keys into, and the baseline is schema only. Options: (a) transcribe the 52 names into Rust; (b) export them into `v0-registries.json`; (c) derive them — an entity kind is exactly a logical name whose table declares `FOREIGN KEY (<pk>) REFERENCES core_entity(entity_id)`. **Adopted (c)**: the schema already answers the question, and `tests/baseline.rs` holds the derivation to v0's own 52 names in both directions. A transcribed list's drift shows up as a foreign-key failure on one app's first insert, months later.
+- **D-1020-D1-16 — `export-applier-oracle.ts` runs under `node --experimental-strip-types`, not `bun`.** Not a preference: v0's vault package is built on `node:sqlite`, which Bun does not provide (`error: No such built-in module: node:sqlite`) — the same reason v0's own freezer is `node scripts/golden-vault/build.mjs`. Types are stripped, so there is no build step. The exit list's item 9 command is amended accordingly.
+- **D-1020-D1-17 — a snapshot build cannot exhaust SQLite pages, so the disk-full test aims at the copy's file write.** The brief proposed capping the copy's `max_page_count`. Measured, that cannot work: every step after the copy only ever *frees* pages (drops, a truncation, a VACUUM), and SQLite clamps `max_page_count` **up** to the current size, so a cap has nothing to refuse — verified against the real baseline schema. Options: (a) drop the snapshot disk-full test and rely on the fault loop; (b) a privileged tiny `tmpfs`, which no CI runner should need; (c) redirect the copy to `/dev/full`, which accepts an open and fails every write with ENOSPC, so SQLite reports a genuine `SQLITE_FULL` (code 13, `database or disk is full` — verified). **Adopted (c)**: privilege-free, deterministic, and the same error code the log-insert test reaches by a different route.
+- **D-1020-D1-18 — `serde_json`'s `float_roundtrip` feature is on.** Found by `properties::a_row_image_round_trips_through_the_logs_json`: the default parser is fast and approximate and landed one ULP away (`1.2240809751959867e163` came back as `…868e163`). A log row's images are re-parsed on every apply, so a drifting REAL is a seat whose latitude, or exchange rate, is quietly not the gateway's.
+
+### Demonstrated reds
+
+Every user-facing gate here was watched to fail before it was trusted.
+
+| Gate | Demonstrated red |
+| --- | --- |
+| ORACLE | the fixture's `prior` for `update-one-column` had `updated_at` removed → `row 2 (update-one-column) prior: v0 {…}, us {…,"updated_at":…}`; restored, green. Then the CODE was broken (`prior_delta` reading `new_value` instead of `old_value`) → three rows differ, naming each |
+| CONVERGENCE | the applier was made to skip deletes — the classic insert-only mirror → `` `core_entity`: 7 row(s) on the gateway, 8 on the seat `` and `` `core_party`: 4 … 5 ``, with `conv-b` named on the seat side |
+| The interrupted build | each of the 8 fault points is itself the red: `build_snapshot` returns `Err` and the test asserts nothing was published. Without the scratch-file clear, attempt 9 fails on `VACUUM INTO`'s refusal of an existing destination |
+| Disk full at the log insert | first run reported `Sqlite(SqliteFailure(DiskFull))` rather than `VaultError::DiskFull` — which is what moved the classification into the `From` impl (D-1020-D1-8) |
+| Disk full at the snapshot | first run with a capped copy **succeeded**, which is what established D-1020-D1-17 |
+| The FTS sync triggers | the first `export-baseline` excluded shadow objects by name and produced 211 triggers instead of 268 — all 57 FTS sync triggers, because `fts_<table>_ai` starts with the virtual table's name exactly as a shadow table does. `tests/baseline.rs::the_fifty_seven_fts_sync_triggers_survive_the_baseline` is that red as a gate |
+| `Value::Integer(i64::MIN)` | `attempt to negate with overflow` in `to_wire_json` — `abs()` on `i64::MIN`. Now `unsigned_abs` |
+| The read connection | `a_read_connection_refuses_a_write` first failed with `table core_concept has no column named label`, proving the statement never reached the `query_only` check; rewritten to a statement that prepares |
+| The float round trip | `1.2240809751959867e163` → `…868e163`, which is D-1020-D1-18 |
+
+### Findings outside the slice
+
+1. **v0 cannot capture a row holding an INTEGER above 2^53, and the `{i}` encoding exists for exactly that value.** `decodeChangeset`'s read-back statement (`packages/vault/src/replica/log.ts:409-415`) never calls `setReadBigInts(true)`, so `node:sqlite` throws `ERR_OUT_OF_RANGE` — `Value is too large to be represented as a JavaScript number` — and the **whole commit rolls back**. Minimal repro, five lines, confirmed: a plain `SELECT … WHERE id = ?` over a column holding `9007199254740993n` throws, and the same statement with `setReadBigInts(true)` returns it. So `row-json.ts`'s own contract — "`{i}` is a decimal-text 64-bit integer, and a vault that stores byte counts and epoch-nanosecond timestamps reaches that" — describes a value v0's producer can never emit. It is why the ORACLE script stops at `Number.MAX_SAFE_INTEGER`; v1 has no such limit and `log_plane::a_blob_and_a_wide_integer_survive_the_round_trip_through_the_log` proves it.
+2. **`crates/xtask`'s `fixture_dir` is not unique per process, so two concurrent `cargo test` runs of `-p xtask` race.** `crates/xtask/src/testing.rs:12-17` builds `temp_dir()/centraid-xtask-<name>` and `remove_dir_all`s it; one run deletes the tree another just wrote. Seen once: `rules::tests::a_platform_import_in_commonmain_is_caught` reported 0 findings inside `cargo xtask gate --profile local`, and passed on its own and on the next gate run. A process id or a counter in the name fixes it. Lane B's file, so reported rather than changed.
+3. **`primaryKeyValues` and `primaryKeyOf` disagree about key order when a table's declared PK order differs from its column order.** `packages/vault/src/replica/log.ts:285-294` reads the primary-key flags in COLUMN index order for `pk_json`; `:200-215` sorts by the `pk` index for the read-back's `WHERE`. No table in today's schema declares them differently, so nothing is broken now — but the two are bound positionally, and the first table that does gets its read-back bound with transposed key values. v1 uses column order for **both**, so the two cannot disagree.
+4. **`isFtsSyncTrigger` matches the whole `sqlite_master.sql`, name included, not the body its comment claims.** `packages/vault/src/replica/seat-snapshot.ts:66-73` says "matching on the NAME would be matching on a convention; matching on the body is matching on what the trigger does", and the regex runs over the whole statement — so a trigger merely *named* `fts_…` is kept whatever it does. Safe in practice (nothing but an FTS sync trigger is named that way) and a wider match than the comment states. v1 reproduces the behaviour, with the discrepancy recorded in `snapshot.rs`'s test.
+5. **`replica_intent_outcome`'s `answered_versions` and `waiting_on` have no writer in this lane's port.** The parked plane and the offline chain are `crates/seat`'s (D2); the ledger here writes status, invocation, commit position and expiry. Named so D2 does not assume they are handled.
+6. **`enrich_policy`'s two default rows (`photos`/`gateway`, `docs`/`gateway`) are in the corpus and are not seeded by `Vault::create`.** No foreign key depends on them, so a v1 file is sound without them; they are a product default and belong with the enrich lane. Named so nobody discovers it as a missing row.
+7. **`cargo mutants` cannot run against a crate that builds the bundled SQLite amalgamation without `--in-place`.** Its default strategy copies the tree to `/tmp/cargo-mutants-….tmp` and `libsqlite3-sys`' build script then fails there — `error occurred in cc-rs: command did not execute successfully … "-c" "sqlite3/sqlite3.c"` — so it reports `cargo build failed in an unmutated tree, so no mutants were tested` and tests nothing. `--in-place` works (and is what produced item 11's numbers) but is incompatible with `--jobs`, so it is single-threaded. The umbrella's "no survivors" criterion needs one of: `--in-place` in the gate, a `CARGO_TARGET_DIR` that survives the copy, or a system libsqlite3 for the mutation run. Named for lane B and for lane D2's close.
+
+8. **`cargo xtask gate --profile local` now exceeds its 120 s budget: 134.2 s, with `test` at 108.4 s.** Measured on this lane's rebase onto lane C's head; the same gate was 23.8 s of 120 s on the rebase onto lane D3's head an hour earlier, so the step grew with lane C's crates, not with this one — `cargo test -p centraid-vault` is 17.1 s of the 108.4 s and the rest of the workspace is the other 91 s. The budget is a down-only ledger entry (`contracts/ledgers/gate-budgets.json`) and this lane did not touch it. The gate's own message is the right diagnosis: either a step got slower or the profile grew a step it should not carry. See the hand-off.
+
+### Owner hand-offs
+
+1. **Finding 1 is a live data-loss path in v0, not a cosmetic gap.** Any commit that writes a byte count, an epoch-nanosecond timestamp or any INTEGER above 2^53 into a replicated table throws at capture and rolls the whole commit back — so the member's write is *refused*, silently, with a `RangeError` in the gateway's log. Options: (a) leave it, since v1 fixes it and no shipped surface is known to write such a value; (b) a one-line `setReadBigInts(true)` on the read-back statement, taken as a permitted oracle edit; (c) ship it as a known issue. **Recommendation: (b)** — one line, and the failure mode is a refused write rather than a wrong number, which is the kind of bug members report as "it just doesn't save". Outside this lane's file set, so it needs the owner's word.
+2. **The `local` profile's budget needs a ruling, not a bump.** `local` is the product's edit-run-loop promise (2 minutes, #1020 Tooling coverage) and `cargo test --workspace` has grown past it as wave 2's crates landed — it will grow again with every app. Options: (a) raise the ledger number, which is the one thing the repo's own rules forbid; (b) `local` runs `cargo test` for the **changed** crates only and `pr` keeps the workspace run, which is what "incremental `cargo nextest` for one crate" in the issue's compile-time budgets already anticipates; (c) `cargo nextest` for its parallelism, which the issue also names. **Recommendation: (b), then (c) if it is still over** — a profile that promises a fast loop has to be scoped to what changed, and the workspace run is exactly what `pr` is for. Not this lane's file (`crates/xtask/src/gate.rs` is lane B's) and not this lane's number to move.
+
+3. **The `tally.*` stubs are registered with schemas transcribed from the census table, not from v0's `inputSchema` objects.** Where the census names a key without a type (`splits`, `payers`, `line_items`, `member_ids`, `split_params`, `override`) the schema admits any JSON, because narrowing it here would be inventing the shape from the key's name. Lane D3 or wave 4 should replace each stub's schema with v0's own when it fills the body. Flagged rather than decided because it is their call which fidelity they want.
+
+### Doctrine digest
+
+Law `53be88c22ab5`, stamped. `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — no findings. `bash .governance/run.sh` — all directives pass. No waiver spent. No law path touched (`.governance/**`, `CONSTITUTION.md`, `scripts/ci/gate-classes.json`, `tests/*.json`, `oxlint.config.ts`, `oxfmt.config.ts`, `.github/CODEOWNERS` — none in the diff); no gate, budget, ledger or allowlist weakened. The only edit inside the pinned v0 tree is the new corpus under `packages/vault/tests/golden/issue-1020/`, cut by v0's own freezer — no v0 source file was changed, and `REPLICATED_TABLE_NAMES` is read out of `private-tables.ts` as text precisely so that no `export` had to be added to it.
+
+### Not done, and why
+
+- **Process death between commit and ack, and restore-with-seats, are not here.** The brief assigns them to D2 and R. The mechanisms they need — `replica_invocation_commit` with `journal_finalized_at`, and the epoch bump with `reason = "backup-restore"` — are both in place and tested from the vault side (`doors::an_epoch_bump_derives_the_floor_from_the_log_and_invalidates_every_cursor`).
+- **The feed (wake) page is not ported.** `readReplicaLogPage`'s logical-entity vocabulary, canonical row ids and *second, incompatible* filter-JSON encoding (`{i}` as bare decimal text, a BLOB as `null`) belong with the change stream, which is D3's `changes.rs` and the ABI's event plane. Porting the seat door's encoding and reusing it for the feed is census seam 2's named trap, so the feed is deliberately absent rather than half-present.
+- **`ddl` log rows are written by nothing.** `apply_log_page` applies them and `LogOp::Ddl` exists, but no producer emits one: an ext band's mid-transaction DDL is D3's `alterExtTable` twin, and `CommitTx::watch_table` is the hook it will call.
+- **The snapshot door's HTTP surface** — the strong ETag, `If-None-Match`, single-range `Range`, the `?seq=` pin, the two-artifact cache with its in-flight refcount — is lane C's and R's. The builder, the content-addressed name and the head are here; `SnapshotHead.name` carries the seq in the clear precisely so eviction can read it back out of the name.
+- **`AllowlistStore` is not an `impl Trait`.** `crates/net` was not on the umbrella at this lane's rebase (D3 landed, C had not). The method set is in `crates/vault::devices` and the trait is one block away.
+- **The 171 other commands.** Three are the proof of the gate order; a fourth of the same shape adds no evidence about it.
+- **`cargo mutants` has no verdict here.** Installed in 93 s and launched over two of the riskiest files; the umbrella judges survivors at D2's close, so the number is a finding and not a gate.
 
 ### Falsification
 
@@ -722,3 +884,8 @@ The two riskiest claims in this diff, the throwaway check run against each, and 
 **"`crates/protocol` is transport-generic — no iroh type appears in it."** The claim is load-bearing because #1020 makes deterministic simulation the primary sync proof, and a protocol that names iroh cannot be simulated. Reading the imports is not a check: a type could arrive through a re-export. So: `cargo tree -p centraid-protocol -e normal` — the crate's normal dependency closure is `centraid-api-proto`, `prost`, `thiserror`, `tokio`, `tracing` and their transitives, and `iroh` appears nowhere in it. Then the stronger version, an actual compile: temporarily added `iroh = { workspace = true }` to `crates/protocol/Cargo.toml` and `use iroh::Endpoint;` to `src/lib.rs`, confirmed it compiled (so the crate *could* have taken the dependency and the absence is a choice, not an accident), and reverted both. The second implementation of the trait in `src/transport.rs::duplex` is what keeps the claim true going forward: the seam is not tested by mocking iroh, it is tested by there being another implementor, and `the_protocol_runs_over_a_transport_that_is_not_iroh` runs the framing over it.
 
 **"`centraid gateway` opens no listening TCP socket."** The risk is that the xtask rule only greps for `TcpListener::bind` in *this repository's* source, and iroh's graph is 200-odd crates any one of which could listen. A source scan cannot see that. So the check reads the kernel: spawn the real binary, wait for its ready line, collect every socket inode from `/proc/<pid>/fd`, collect every `st == 0A` row from `/proc/net/tcp*`, and intersect. Result: one socket owned (inode `230700`, the UDP socket iroh bound), four LISTEN rows on the host (`2092`, `51`, `1984`, `1985`), empty intersection; `ss -ltnp` names no centraid process. The test also asserts the process owns **at least one** socket, so it cannot pass vacuously against a gateway that failed to bind at all — which is the way this test would otherwise have gone quietly green.
+1. **"The ORACLE gate compares the decode, so a port that disagrees with v0 about a row image is caught."** The risk is a comparison that is structurally satisfied — same row count, same tables — while the part that matters goes unchecked. Two checks. First, the fixture was edited: one `prior`'s `updated_at` key removed. **Result: caught**, with `row 2 (update-one-column) prior: v0 …, us …` naming the row, the commit label and both sides. Second, and the real test, the **code** was broken: `prior_delta` was changed to read `new_value` instead of `old_value`, which is the single most plausible port slip in the whole plane (both are `Option`, both are indexed the same way, and a delta built from the new image looks superficially reasonable). **Result: caught**, three rows differing, each naming its commit. A third attempt is worth recording because it did *not* fail: filling untouched columns from the new image was a **no-op**, because an UPDATE's new record omits untouched columns exactly as its old record does — which is itself a fact about the format the test now documents rather than a hole in the gate.
+
+2. **"CONVERGENCE compares every replicated table, so a mirror that diverges anywhere is caught."** The risk is that the comparison walks a list that is shorter than it looks — a named-tables list, or only the tables the script touched. Check: the applier was broken to skip `delete` rows while still advancing its cursor, which is the classic insert-only mirror and the exact bug `INSERT OR REPLACE` versus `ON CONFLICT` is also about. **Result: caught**, `` `core_entity`: 7 row(s) on the gateway, 8 on the seat `` and `` `core_party`: 4 … 5 ``, with the surviving `conv-b` visible in the printed seat side. And the comparison is held to its own breadth by `assert!(compared > 100)` — it reports 109 tables compared, not the 4 the fixture names — so a future narrowing of the walk is a red rather than a quieter pass. Both breaks were reverted; `cargo test --workspace` is 269 green.
+
+A third, cheaper one worth recording: the claim that **the baseline migration reproduces the corpus exactly** is not an inspection, it is `tests/baseline.rs` founding a file and diffing 761 `sqlite_master` objects by `(type, name)` **and by SQL text**, in both directions, with `assert!(expected.len() > 700)` so two empty schemas cannot compare equal. The answer to "what is excluded from the comparison" is *nothing*: the three classes the generator omits — 90 FTS shadow tables, `sqlite_sequence`, and every `sqlite_autoindex_*` — are all back in the founded file because SQLite creates each of them itself, and the test asserts their counts rather than trusting the claim.
