@@ -624,19 +624,16 @@ pub fn from_value(raw: &Value) -> Result<Manifest, ManifestError> {
     // `enabled` is TRUE unless it is exactly `false`, which is v0's
     // `r.enabled === true` inverted for the same reason: a truthy junk value
     // must not silently disable an automation.
-    let enabled = object.get("enabled").map_or(true, |value| value != &Value::Bool(false));
+    let enabled = object.get("enabled") != Some(&Value::Bool(false));
     let notify = match object.get("notify") {
         None | Some(Value::Null) => Notify::default(),
-        Some(value) => value
-            .as_str()
-            .and_then(Notify::parse)
-            .ok_or_else(|| {
-                ManifestError::new(
-                    ManifestErrorCode::InvalidShape,
-                    "manifest.notify",
-                    "notify is one of always, failures, never",
-                )
-            })?,
+        Some(value) => value.as_str().and_then(Notify::parse).ok_or_else(|| {
+            ManifestError::new(
+                ManifestErrorCode::InvalidShape,
+                "manifest.notify",
+                "notify is one of always, failures, never",
+            )
+        })?,
     };
     let prompt = required_str(object, "prompt")?;
 
@@ -656,7 +653,10 @@ pub fn from_value(raw: &Value) -> Result<Manifest, ManifestError> {
     })?;
     let mut triggers = Vec::with_capacity(list.len());
     for (index, entry) in list.iter().enumerate() {
-        triggers.push(parse_trigger(entry, &format!("manifest.triggers[{index}]"))?);
+        triggers.push(parse_trigger(
+            entry,
+            &format!("manifest.triggers[{index}]"),
+        )?);
     }
     // AT MOST ONE WEBHOOK (`manifest.ts:337`–`:342`): a second one would be a
     // second route slug for one handler, and the ingress lookup is by slug.
@@ -699,9 +699,9 @@ pub fn from_value(raw: &Value) -> Result<Manifest, ManifestError> {
         ));
     }
     if vault.is_none()
-        && triggers.iter().any(|trigger| {
-            matches!(trigger.kind(), TriggerKind::Condition | TriggerKind::Data)
-        })
+        && triggers
+            .iter()
+            .any(|trigger| matches!(trigger.kind(), TriggerKind::Condition | TriggerKind::Data))
     {
         return Err(ManifestError::new(
             ManifestErrorCode::InvalidTrigger,
@@ -923,10 +923,7 @@ fn parse_vault(
                         ManifestError::new(
                             ManifestErrorCode::InvalidShape,
                             format!("{clause_field}.op"),
-                            format!(
-                                "op is one of {}",
-                                VAULT_FILTER_OPS.join(", ")
-                            ),
+                            format!("op is one of {}", VAULT_FILTER_OPS.join(", ")),
                         )
                     })?;
                 row_filter.push(WhereClause {
@@ -991,9 +988,7 @@ fn parse_vault(
     Ok(Some(ManifestVault { why, scopes }))
 }
 
-fn parse_generated(
-    object: &serde_json::Map<String, Value>,
-) -> Result<Generated, ManifestError> {
+fn parse_generated(object: &serde_json::Map<String, Value>) -> Result<Generated, ManifestError> {
     let block = object
         .get("generated")
         .and_then(Value::as_object)
@@ -1656,7 +1651,8 @@ mod tests {
     }
 
     /// A vault block wide enough for a condition or data trigger.
-    const VAULT_BLOCK: &str = r#","vault":{"why":"to reconcile","scopes":[{"schema":"core","verbs":"read"}]}"#;
+    const VAULT_BLOCK: &str =
+        r#","vault":{"why":"to reconcile","scopes":[{"schema":"core","verbs":"read"}]}"#;
 
     #[test]
     fn the_registry_carries_every_kind_exactly_once_with_its_side_effect() {
@@ -1668,7 +1664,11 @@ mod tests {
         for entry in TRIGGER_REGISTRY {
             assert!(!entry.side_effect.is_empty());
             assert!(!entry.consent.is_empty());
-            assert!(entry.ledger, "{} must be ledger-covered", entry.kind.as_str());
+            assert!(
+                entry.ledger,
+                "{} must be ledger-covered",
+                entry.kind.as_str()
+            );
         }
     }
 
@@ -1688,7 +1688,11 @@ mod tests {
         let manifest = parse(&text).expect("the five kinds are legal");
         assert_eq!(manifest.triggers.len(), 5);
         assert!(manifest.enabled, "an absent `enabled` reads as on");
-        assert_eq!(manifest.notify, Notify::Failures, "a quiet success is not news");
+        assert_eq!(
+            manifest.notify,
+            Notify::Failures,
+            "a quiet success is not news"
+        );
         assert_eq!(manifest.version, "0.1.0", "an absent version is a real one");
         assert_eq!(manifest.prompt, "summarise yesterday");
         assert_eq!(manifest.generated.by, "builder");
@@ -1826,8 +1830,7 @@ mod tests {
 
     #[test]
     fn an_omitted_enrich_lane_reads_as_gateway() {
-        let text =
-            document(r#","triggers":[],"enrich":{"domain":"photos","capability":"faces"}"#);
+        let text = document(r#","triggers":[],"enrich":{"domain":"photos","capability":"faces"}"#);
         let manifest = parse(&text).expect("an enricher");
         let enrich = manifest.enrich.expect("the block");
         assert_eq!(
@@ -1877,7 +1880,12 @@ mod tests {
 
     #[test]
     fn a_malformed_locker_reference_refuses() {
-        for reference in ["bank:password", "locker:bank", "locker:@:password", "locker::x"] {
+        for reference in [
+            "bank:password",
+            "locker:bank",
+            "locker:@:password",
+            "locker::x",
+        ] {
             let text = document(&format!(
                 r#","triggers":[],"connector":{{"kind":"x"}},
                    "requires":{{"secrets":["{reference}"]}}{VAULT_BLOCK}"#
@@ -1889,8 +1897,10 @@ mod tests {
     /// COUPLING 4: a connector stages rows, so it needs a vault block.
     #[test]
     fn a_connector_with_no_vault_block_refuses() {
-        let error = parse(&document(r#","triggers":[],"connector":{"kind":"pull.gmail"}"#))
-            .expect_err("a connector with nowhere to stage");
+        let error = parse(&document(
+            r#","triggers":[],"connector":{"kind":"pull.gmail"}"#,
+        ))
+        .expect_err("a connector with nowhere to stage");
         assert_eq!(error.field, "manifest.connector");
     }
 
@@ -1903,7 +1913,11 @@ mod tests {
         ] {
             let error = parse(&with_triggers(triggers)).expect_err("no grant to read under");
             assert_eq!(error.field, "manifest.vault", "{triggers}");
-            assert!(error.detail.contains("consented vault read"), "{}", error.detail);
+            assert!(
+                error.detail.contains("consented vault read"),
+                "{}",
+                error.detail
+            );
         }
     }
 
@@ -1976,9 +1990,8 @@ mod tests {
         // An empty scope list is refused: the owner cannot answer it.
         assert!(parse(&document(r#","triggers":[],"vault":{"scopes":[]}"#)).is_err());
         // And an unknown verb is refused with the list.
-        let verb = document(
-            r#","triggers":[],"vault":{"scopes":[{"schema":"core","verbs":"write"}]}"#,
-        );
+        let verb =
+            document(r#","triggers":[],"vault":{"scopes":[{"schema":"core","verbs":"write"}]}"#);
         let error = parse(&verb).expect_err("write is not a vault verb");
         assert!(error.detail.contains("read+act"), "{}", error.detail);
     }
@@ -1986,22 +1999,16 @@ mod tests {
     #[test]
     fn provenance_and_the_prompt_are_required() {
         // No `generated` block: refused.
-        let error = parse(
-            r#"{"name":"X","prompt":"do it","triggers":[]}"#,
-        )
-        .expect_err("no provenance");
+        let error =
+            parse(r#"{"name":"X","prompt":"do it","triggers":[]}"#).expect_err("no provenance");
         assert_eq!(error.field, "manifest.generated");
         // No prompt: refused.
-        let error = parse(
-            r#"{"name":"X","triggers":[],"generated":{"by":"b","at":"t"}}"#,
-        )
-        .expect_err("nothing to run");
+        let error = parse(r#"{"name":"X","triggers":[],"generated":{"by":"b","at":"t"}}"#)
+            .expect_err("nothing to run");
         assert_eq!(error.field, "manifest.prompt");
         // A generated block missing half of itself.
-        let error = parse(
-            r#"{"name":"X","prompt":"p","triggers":[],"generated":{"by":"b"}}"#,
-        )
-        .expect_err("half a provenance");
+        let error = parse(r#"{"name":"X","prompt":"p","triggers":[],"generated":{"by":"b"}}"#)
+            .expect_err("half a provenance");
         assert_eq!(error.field, "manifest.generated.at");
     }
 
@@ -2018,15 +2025,21 @@ mod tests {
         assert!(parse(&document(r#","triggers":[],"notify":"sometimes"#)).is_err());
         // ONLY an explicit `false` disables: a truthy junk value must not
         // silently switch an automation off.
-        assert!(!parse(&document(r#","triggers":[],"enabled":false"#))
-            .expect("legal")
-            .enabled);
-        assert!(parse(&document(r#","triggers":[],"enabled":true"#))
-            .expect("legal")
-            .enabled);
-        assert!(parse(&document(r#","triggers":[],"enabled":"yes""#))
-            .expect("legal")
-            .enabled);
+        assert!(
+            !parse(&document(r#","triggers":[],"enabled":false"#))
+                .expect("legal")
+                .enabled
+        );
+        assert!(
+            parse(&document(r#","triggers":[],"enabled":true"#))
+                .expect("legal")
+                .enabled
+        );
+        assert!(
+            parse(&document(r#","triggers":[],"enabled":"yes""#))
+                .expect("legal")
+                .enabled
+        );
     }
 
     #[test]

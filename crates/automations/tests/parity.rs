@@ -52,7 +52,10 @@ fn fixture(name: &str) -> serde_json::Value {
 /// `toISOString()`, so the shape is fixed and this parser need accept only it.
 fn epoch_ms(iso: &str) -> i64 {
     let bytes = iso.as_bytes();
-    assert!(iso.len() >= 20 && bytes[10] == b'T' && iso.ends_with('Z'), "{iso}");
+    assert!(
+        iso.len() >= 20 && bytes[10] == b'T' && iso.ends_with('Z'),
+        "{iso}"
+    );
     let field = |from: usize, to: usize| -> i64 {
         iso[from..to].parse().unwrap_or_else(|_| panic!("{iso}"))
     };
@@ -65,8 +68,7 @@ fn epoch_ms(iso: &str) -> i64 {
     let era = year.div_euclid(400);
     let year_of_era = year - era * 400;
     let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
-    let day_of_era =
-        year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
     let days = era * 146_097 + day_of_era - 719_468;
     ((days * 24 + hour) * 60 + minute) * 60_000 + second * 1_000 + millis
 }
@@ -89,7 +91,9 @@ fn every_cron_case_agrees_with_v0() {
             .or_insert_with(|| FireZone::named(zone_name).expect("bundled"));
         let answer = cron::matches(expr, epoch_ms(instant), zone);
         if answer != expected {
-            disagreements.push(format!("{expr} @ {instant} in {zone_name}: {answer} vs {expected}"));
+            disagreements.push(format!(
+                "{expr} @ {instant} in {zone_name}: {answer} vs {expected}"
+            ));
         }
     }
     assert!(
@@ -216,8 +220,9 @@ fn every_manifest_case_agrees_with_v0() {
         match case["outcome"].as_str() {
             Some("accepted") => {
                 accepted += 1;
-                let parsed = answer
-                    .unwrap_or_else(|error| panic!("{name}: v0 accepted this, we refused: {error}"));
+                let parsed = answer.unwrap_or_else(|error| {
+                    panic!("{name}: v0 accepted this, we refused: {error}")
+                });
                 let kinds: Vec<&str> = parsed
                     .triggers
                     .iter()
@@ -438,7 +443,10 @@ fn the_fixtures_instants_parse_the_way_the_generator_wrote_them() {
     // And the round trip against the crate's own wall clock.
     let utc = FireZone::named("UTC").expect("bundled");
     let wall = utc.wall_clock(epoch_ms("2026-03-08T05:00:00.000Z"));
-    assert_eq!((wall.year, wall.month, wall.day, wall.hour), (2026, 3, 8, 5));
+    assert_eq!(
+        (wall.year, wall.month, wall.day, wall.hour),
+        (2026, 3, 8, 5)
+    );
 }
 
 /// `Notify`'s vocabulary is v0's, read from the fixture rather than retyped.
