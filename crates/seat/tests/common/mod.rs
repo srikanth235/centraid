@@ -246,3 +246,37 @@ fn inflate_gz(source: &Path, target: &Path) {
     decoder.read_to_end(&mut out).expect("it inflates");
     std::fs::write(target, out).expect("the copy writes");
 }
+
+/// One scripted commit, for a test that writes its own statements.
+pub fn commit(label: &str, statements: &[&str]) -> serde_json::Value {
+    serde_json::json!({
+        "label": label,
+        "producer": format!("test.{label}"),
+        "statements": statements,
+    })
+}
+
+/// A queued intent, for a test that needs one in the outbox.
+pub fn intent(id: &str) -> centraid_seat::IntentRecord {
+    centraid_seat::IntentRecord {
+        intent_id: id.to_owned(),
+        created_order: 0,
+        app_id: "notes".to_owned(),
+        action: "edit".to_owned(),
+        input: serde_json::json!({ "title": id }),
+        payload_hash: "a".repeat(64),
+        state: centraid_seat::IntentState::Queued,
+        attempts: 0,
+        depends_on: Vec::new(),
+        base_versions: Vec::new(),
+        optimistic: Some(serde_json::json!({ "core_party": { id: { "display_name": id } } })),
+        commit_seq: None,
+        waiting_on: Vec::new(),
+        needs_blobs: Vec::new(),
+        enqueued_at: "2026-01-01T00:00:00.000Z".to_owned(),
+        updated_at: "2026-01-01T00:00:00.000Z".to_owned(),
+        reason: None,
+        conflicts: Vec::new(),
+        online_only: false,
+    }
+}
