@@ -36,6 +36,7 @@ pub mod balance;
 pub mod commands;
 pub mod manifest;
 pub mod queries;
+pub mod views;
 
 pub use balance::{
     Attribution, BalanceData, BalanceExpense, BalanceSettlement, Simplification, Transfer,
@@ -44,4 +45,8 @@ pub use balance::{
 };
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};
-pub use queries::{TallyData, load_tally};
+pub use queries::{ExpenseRow, LineItem, Person, SettlementRow, TallyData, load_tally};
+pub use views::{
+    activity_view, dashboard, dashboard_of, export_view, friend, group, history, ledger_row,
+    matches, search,
+};

@@ -165,15 +165,6 @@ export interface TallyParityBundle {
 const HOST_CLOCK = "<host-clock>";
 
 /**
- * Canonicalise every identifier to the order it first appears, and every
- * host-clock instant to one token.
- *
- * Two id shapes reach a fixture: UUIDv7 from the bootstrap (not seed-derived)
- * and the command-minted ids, which ARE seed-derived and reproducible. Both are
- * canonicalised anyway, because a fixture that is stable only for half its ids
- * is a fixture whose diff nobody trusts.
- */
-/**
  * ONE ID SPACE PER VAULT (#1020, wave 4 lane Tally-finish).
  *
  * THE BUG THIS FIXES, and it made the fixture uncomparable. `canonicalise` held
@@ -195,6 +186,43 @@ function canonicaliser(): <T>(value: T) => T {
   return <T>(value: T): T => canonicaliseWith(value, seen);
 }
 
+/**
+ * Canonicalise every identifier, every host-clock instant and every id-derived
+ * party hue.
+ *
+ * Two id shapes reach a fixture: UUIDv7 from the bootstrap (not seed-derived)
+ * and the command-minted ids, which ARE seed-derived and reproducible. Both are
+ * canonicalised anyway, because a fixture that is stable only for half its ids
+ * is a fixture whose diff nobody trusts.
+ *
+ * ## The tokens are assigned in the ids' OWN SORT ORDER (#1020, wave 4)
+ *
+ * They used to be assigned in order of first appearance, which silently broke
+ * every claim an output makes about ORDER. `tally.dashboard.groups` reads
+ * `ORDER BY group_id`, so the dashboard's three groups came back in the real
+ * uuids' order — and the tokens those uuids were rewritten to sorted the other
+ * way, because one of the groups happened to appear earlier in the bundle. A
+ * port that rebuilds the vault from `rows.json` and sorts by `group_id` reads
+ * the canonical order, which disagreed with the committed answer for a reason
+ * that is nothing to do with either implementation. Sorting the ids before
+ * numbering them makes `ORDER BY <id>` mean the same thing on both sides, which
+ * is what "the same rows, in the same order" has to mean for a fixture.
+ *
+ * ## A party hue is MASKED, for the same reason `updated_at` is
+ *
+ * `partyHueValue(partyHueKey(id))` hashes the party id, so the answer is about
+ * the id the vault minted — and this function has just rewritten that id. The
+ * committed value would therefore be an answer no reader can reproduce and no
+ * port can be wrong about; keeping it would make every ledger row in the
+ * fixture a false claim. It is replaced by a token, exactly as a host-clock
+ * instant is, and the hue wheel is proven where its inputs ARE stable:
+ * `design/identity-corpus.json`, 192 rows of literal ids, asserted by
+ * `crates/design` (#1020, D-1020-T1). The OWNER's colour is the ink brand and
+ * is not id-derived, so it survives as itself — which is the distinction a
+ * surface actually turns on.
+ */
+const PARTY_HUE = "<party-hue>";
+
 function canonicaliseWith<T>(value: T, seen: Map<string, string>): T {
   const ID =
     /\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})\b/giu;
@@ -203,15 +231,23 @@ function canonicaliseWith<T>(value: T, seen: Map<string, string>): T {
   // range check nobody can read.
   const HOST_INSTANT =
     /(?<!2099)\b(?:19|20)\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/gu;
-  const text = JSON.stringify(value)
-    .replaceAll(ID, (id) => {
-      const known = seen.get(id.toLowerCase());
-      if (known) return known;
-      const token = `id-${String(seen.size + 1).padStart(4, "0")}`;
-      seen.set(id.toLowerCase(), token);
-      return token;
-    })
-    .replaceAll(HOST_INSTANT, HOST_CLOCK);
+  // A hue the person wheel produced, and never a stored `color` column: those
+  // are hexes (`tally_group.color`) and are facts about the row.
+  const ID_DERIVED_HUE = /var\(--c-[a-z]+\)/gu;
+  const source = JSON.stringify(value);
+  // FIRST PASS: learn every id, and number them in their own order.
+  const unseen = [
+    ...new Set([...source.matchAll(ID)].map((match) => match[0].toLowerCase())),
+  ]
+    .filter((id) => !seen.has(id))
+    .sort();
+  for (const id of unseen) {
+    seen.set(id, `id-${String(seen.size + 1).padStart(4, "0")}`);
+  }
+  const text = source
+    .replaceAll(ID, (id) => seen.get(id.toLowerCase()) ?? id)
+    .replaceAll(HOST_INSTANT, HOST_CLOCK)
+    .replaceAll(ID_DERIVED_HUE, PARTY_HUE);
   return JSON.parse(text) as T;
 }
 

@@ -50,6 +50,22 @@ pub const LEDGER_FAN_OUT: FanOutBound = FanOutBound::new(500, 16);
 /// An allocation per `(line, person)`: four times that, by the same arithmetic.
 pub const ALLOCATION_FAN_OUT: FanOutBound = FanOutBound::new(500, 64);
 
+/// A resolved person a ledger row is decorated with — v0's `ServerPerson`
+/// (`queries/dashboard.ts:73`).
+///
+/// The colour is the PARTY HUE and never `identityColor` (#883, ruling
+/// O-identity): the person wheel has eight places and the vault wheel's ninth
+/// is the ink brand, so keying a person off it draws them as a black disc. The
+/// owner is the one exception and is painted with the brand on purpose.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Person {
+    pub party_id: String,
+    pub name: String,
+    pub color: String,
+    pub initials: String,
+    pub is_me: bool,
+}
+
 /// One expense, as the ledger holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpenseRow {
@@ -64,8 +80,49 @@ pub struct ExpenseRow {
     pub spent_on: String,
     pub category: String,
     pub split_method: String,
+    /// The division's own parameters, as v0 stores them: JSON text or nothing.
+    /// PROVENANCE, never a second arithmetic path.
+    pub split_params_json: Option<String>,
+    /// **Not selected by [`expenses_statement`]** — see its note. The columns
+    /// exist and the dashboard's read does not ask for them, so every row the
+    /// dashboard folds has `None` here: the money falls back to the group's and
+    /// the rate suggestion can never be made. Kept as fields rather than
+    /// dropped, so the day v0's projection is fixed both sides start answering.
     pub settlement_currency: Option<String>,
+    pub original_currency: Option<String>,
+    pub rate_scaled: Option<i64>,
+    pub rate_scale: Option<i64>,
+    pub rate_source: Option<String>,
+    pub rate_date: Option<String>,
     pub deleted_at: Option<String>,
+}
+
+/// One typed line of an expense, receipt-backed or not.
+///
+/// Lines hang off the EXPENSE and the receipt is an optional decoration, so the
+/// "By line" division has typed lines and no photo.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineItem {
+    pub line_item_id: String,
+    pub kind: String,
+    pub description: String,
+    pub amount_minor: i64,
+    pub sort_order: i64,
+    /// Who the line is allocated to, per person.
+    pub allocations: BTreeMap<String, i64>,
+}
+
+/// One settlement — real cash — as the ledger holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettlementRow {
+    pub settlement_id: String,
+    pub group_id: Option<String>,
+    pub from_party: String,
+    pub to_party: String,
+    pub amount_minor: i64,
+    /// What was PAID, in the money it was paid in (#916, R1).
+    pub currency: Option<String>,
+    pub paid_on: Option<String>,
 }
 
 /// One group, as the ledger holds it. Its **name and membership live on the
@@ -95,16 +152,18 @@ pub struct TallyData {
     pub me: Option<String>,
     /// The vault's base currency — what a single hero figure would be in.
     pub currency: String,
-    /// Every party the ledger names, whether or not still a member.
-    pub people: BTreeMap<String, String>,
+    /// Every party the ledger names, whether or not still a member, with the
+    /// presentation `crates/design` lowers (name, hue, initials, `is_me`).
+    pub people: BTreeMap<String, Person>,
     pub friends: Vec<String>,
     pub groups: Vec<GroupRow>,
     pub members_by_group: BTreeMap<String, Vec<String>>,
     pub expenses: Vec<ExpenseRow>,
     pub splits: BTreeMap<String, BTreeMap<String, i64>>,
     pub payers: BTreeMap<String, BTreeMap<String, i64>>,
-    pub settlements: Vec<BalanceSettlement>,
-    pub settlement_currencies: BTreeMap<String, String>,
+    pub settlements: Vec<SettlementRow>,
+    /// The typed lines of each expense that has any, by expense.
+    pub lines: BTreeMap<String, Vec<LineItem>>,
     pub obligations: Vec<Row>,
     pub nudges: Vec<Row>,
     /// `true` when the ledger is longer than `LEDGER_ROWS`, so a surface can
@@ -144,8 +203,29 @@ impl TallyData {
                         .unwrap_or_default(),
                 })
                 .collect(),
-            settlements: self.settlements.clone(),
+            settlements: self
+                .settlements
+                .iter()
+                .map(|settlement| BalanceSettlement {
+                    group_id: settlement.group_id.clone(),
+                    from_party: settlement.from_party.clone(),
+                    to_party: settlement.to_party.clone(),
+                    amount_minor: settlement.amount_minor,
+                })
+                .collect(),
         }
+    }
+
+    /// A settlement's money: its own, else its group's, else the base
+    /// (`queries/dashboard.ts:750`).
+    #[must_use]
+    pub fn settlement_currency(&self, settlement: &SettlementRow) -> String {
+        settlement.currency.clone().unwrap_or_else(|| {
+            settlement.group_id.as_deref().map_or_else(
+                || self.currency.clone(),
+                |group_id| self.group_currency(group_id),
+            )
+        })
     }
 
     /// A group's own currency, else the vault's base
@@ -237,13 +317,23 @@ pub fn circle_members_statement() -> PageQuery {
 ///
 /// A single page and not a walk: the window is the promise, and a ledger
 /// longer than it is a ledger the dashboard states it did not read all of.
+///
+/// **THE PROJECTION IS v0's, EXACTLY, AND THAT IS A FINDING NOT A CHOICE**
+/// (#1020, D-1020-T2a). v0 selects these thirteen columns and no others
+/// (`queries/dashboard.ts:287-290`), which means `settlement_currency`,
+/// `original_amount_minor`, `original_currency` and the four `rate_*` columns
+/// are **undefined in every row the dashboard folds** — so `ledgerRow`'s
+/// `e.settlement_currency ?? data.currency` labels a JPY expense with the
+/// vault's base money, `rateSuggestions` can never produce a row, and the
+/// export ships the same mislabelling to a file. The port reproduces it,
+/// because the 29 committed cases are v0's answers; the receipt carries the
+/// one-line fix and the evidence. Selecting the columns here would have made
+/// the port silently right and the parity comparison impossible.
 pub fn expenses_statement() -> PageQuery {
     query(
         "tally.dashboard.expenses",
-        "expense_id, group_id, description, amount_minor, currency, paid_by, spent_on, category, \
-         split_method, split_params_json, settlement_currency, original_amount_minor, \
-         original_currency, rate_scaled, rate_scale, rate_source, rate_date, \
-         recurring_template_id, created_at, deleted_at",
+        "expense_id, group_id, description, amount_minor, currency, paid_by, split_method, \
+         split_params_json, spent_on, category, txn_id, created_at, updated_at",
         "tally_expense",
         PageOrder::desc("spent_on", "expense_id"),
     )
@@ -403,6 +493,98 @@ pub fn recurring_exceptions_statement() -> PageQuery {
     )
 }
 
+/// How far apart two postings of one movement may sit, in whole days
+/// (`queries/matches.ts:31`).
+pub const MATCH_WINDOW_DAYS: i64 = 4;
+
+/// The most recent transactions a proposal is looked for among
+/// (`queries/matches.ts:34`).
+pub const MATCH_SCAN_ROWS: usize = 500;
+
+/// The chain of revisions a `history` walk reads (`queries/history.ts:23`).
+///
+/// **The chain's own length IS the window** — v0 walks to the end of the set
+/// rather than taking a number, which is what `readPages` does here, so a
+/// heavily edited expense cannot lose its oldest revisions silently.
+pub fn history_statement(expense_id: &str) -> PageQuery {
+    query(
+        "tally.history.revisions",
+        "revision_id, entity_type, entity_id, operation, snapshot_json, recorded_at, undo_until, \
+         undone_at",
+        "core_entity_revision",
+        PageOrder::desc("recorded_at", "revision_id"),
+    )
+    .filter(
+        "entity_type = ? AND entity_id = ?",
+        vec![
+            PageBindValue::from("tally.expense"),
+            PageBindValue::from(expense_id),
+        ],
+    )
+}
+
+/// `tally.export.revisions` — THE WINDOW ASKS FOR THE ROWS IT WANTS (#928,
+/// re-cut by #996 wave 4). The entity type and the exported ids are both in the
+/// statement, so the walk cannot fill with rows the export is about to discard,
+/// and it ends where the set does rather than at a number.
+pub fn export_revisions_statement(expense_ids: &[String]) -> KitResult<PageQuery> {
+    let fragment = in_list("entity_id", expense_ids)?;
+    let mut bind = vec![PageBindValue::from("tally.expense")];
+    bind.extend(fragment.bind);
+    Ok(query(
+        "tally.export.revisions",
+        "revision_id, entity_type, entity_id, operation, recorded_at, undone_at",
+        "core_entity_revision",
+        PageOrder::desc("recorded_at", "revision_id"),
+    )
+    .filter(&format!("entity_type = ? AND {}", fragment.sql), bind))
+}
+
+/// `tally.matches.transactions` — the finance plane's postings, newest first.
+/// A `void` posting is not a movement and is never half of a proposal.
+pub fn match_transactions_statement() -> PageQuery {
+    query(
+        "tally.matches.transactions",
+        "txn_id, account_id, posted_at, amount_minor, currency, direction, description",
+        "core_transaction",
+        PageOrder::desc("posted_at", "txn_id"),
+    )
+    .filter("status <> ?", vec![PageBindValue::from("void")])
+}
+
+/// `tally.matches.decisions` — the owner's answers, either way.
+///
+/// A pair the owner has answered leaves the list FOR GOOD, and both answers
+/// are the same row shape: `core_link` between two transactions, live. Nothing
+/// is merged and nothing is hidden (#996, ruling R20(c)).
+pub fn match_decisions_statement() -> PageQuery {
+    query(
+        "tally.matches.decisions",
+        "link_id, from_id, to_id",
+        "core_link",
+        PageOrder::asc("link_id", "link_id"),
+    )
+    .filter(
+        "from_type = ? AND to_type = ? AND valid_to IS NULL",
+        vec![
+            PageBindValue::from("core.transaction"),
+            PageBindValue::from("core.transaction"),
+        ],
+    )
+}
+
+/// `tally.matches.accounts` — the names the two sides of a proposal wear.
+pub fn match_accounts_statement(account_ids: &[String]) -> KitResult<PageQuery> {
+    let fragment = in_list("account_id", account_ids)?;
+    Ok(query(
+        "tally.matches.accounts",
+        "account_id, name, external_ref",
+        "core_account",
+        PageOrder::asc("account_id", "account_id"),
+    )
+    .filter(&fragment.sql, fragment.bind))
+}
+
 /// Every statement `loadTally` makes that needs no earlier answer, in reading
 /// order. Named so a test can assert the set rather than re-list it.
 pub fn independent_statements() -> Vec<PageQuery> {
@@ -457,9 +639,36 @@ fn expense_row(row: &Row) -> Option<ExpenseRow> {
         // `exact` is the default the column carries, and the method is
         // PROVENANCE — never a second arithmetic path.
         split_method: text_of(row, "split_method").unwrap_or_else(|| "exact".to_owned()),
+        split_params_json: text_of(row, "split_params_json"),
         settlement_currency: text_of(row, "settlement_currency"),
+        original_currency: text_of(row, "original_currency"),
+        rate_scaled: optional_integer(row, "rate_scaled"),
+        rate_scale: optional_integer(row, "rate_scale"),
+        rate_source: text_of(row, "rate_source"),
+        rate_date: text_of(row, "rate_date"),
         deleted_at: text_of(row, "deleted_at"),
     })
+}
+
+/// A person from a resolved name: the hue and the initials are
+/// `crates/design`'s, the one lowering of `packages/design` (#1020, D-1020-T1).
+fn person_of_name(party_id: &str, name: &str, is_me: bool) -> Person {
+    Person {
+        party_id: party_id.to_owned(),
+        name: name.to_owned(),
+        color: centraid_design::party_color(party_id),
+        initials: centraid_design::identity_initials(name),
+        is_me,
+    }
+}
+
+/// An integer column, or `None` when the projection never asked for it.
+///
+/// NOT `integer_or_zero`: a rate of zero and a rate nobody read are different
+/// facts, and collapsing them is how a missing projection becomes a 1:1 rate.
+fn optional_integer(row: &Row, column: &str) -> Option<i64> {
+    row.get(column)
+        .and_then(centraid_apps_kit::row::Cell::integer)
 }
 
 /// Fold a `(expense_id, party_id) -> amount` table into a nested map.
@@ -555,21 +764,62 @@ pub fn load_tally(door: &dyn PageDoor) -> KitResult<TallyData> {
     let split_map = pairs(&splits, "share_minor");
     let payer_map = pairs(&payers, "paid_minor");
 
-    let settlement_rows: Vec<BalanceSettlement> = settlements
+    let settlement_rows: Vec<SettlementRow> = settlements
         .iter()
         .filter_map(|row| {
-            Some(BalanceSettlement {
+            Some(SettlementRow {
+                settlement_id: text_of(row, "settlement_id")?,
                 group_id: text_of(row, "group_id"),
                 from_party: text_of(row, "from_party")?,
                 to_party: text_of(row, "to_party")?,
                 amount_minor: integer_or_zero(row, "amount_minor"),
+                currency: text_of(row, "currency"),
+                paid_on: text_of(row, "paid_on"),
             })
         })
         .collect();
-    let settlement_currencies: BTreeMap<String, String> = settlements
-        .iter()
-        .filter_map(|row| Some((text_of(row, "settlement_id")?, text_of(row, "currency")?)))
-        .collect();
+
+    // THE TYPED LINES, and their allocations. Both walks are bounded and both
+    // ceilings are Tally's own; the allocation one is four times the line one
+    // because an allocation exists per `(line, person)`.
+    let mut allocations_by_line: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    for row in &_allocations {
+        let Some(line_item_id) = text_of(row, "line_item_id") else {
+            continue;
+        };
+        let Some(party_id) = text_of(row, "party_id") else {
+            continue;
+        };
+        allocations_by_line
+            .entry(line_item_id)
+            .or_default()
+            .insert(party_id, integer_or_zero(row, "share_minor"));
+    }
+    let mut lines: BTreeMap<String, Vec<LineItem>> = BTreeMap::new();
+    for row in &_lines {
+        let Some(line_item_id) = text_of(row, "line_item_id") else {
+            continue;
+        };
+        let Some(expense_id) = text_of(row, "expense_id") else {
+            continue;
+        };
+        lines.entry(expense_id).or_default().push(LineItem {
+            allocations: allocations_by_line
+                .get(&line_item_id)
+                .cloned()
+                .unwrap_or_default(),
+            line_item_id,
+            kind: text_of(row, "kind").unwrap_or_default(),
+            description: text_of(row, "description").unwrap_or_default(),
+            amount_minor: integer_or_zero(row, "amount_minor"),
+            sort_order: integer_or_zero(row, "sort_order"),
+        });
+    }
+    // A line's place in the receipt is its own column, not the order the rows
+    // came back in.
+    for lines in lines.values_mut() {
+        lines.sort_by_key(|line| line.sort_order);
+    }
 
     // THE PARTY SET, and the subtlety of the whole read
     // (`queries/dashboard.ts:400-424`). Circle membership is current state, the
@@ -618,35 +868,78 @@ pub fn load_tally(door: &dyn PageDoor) -> KitResult<TallyData> {
         party_ids.insert(settlement.to_party.clone());
     }
 
-    let mut people: BTreeMap<String, String> = BTreeMap::new();
-    if !party_ids.is_empty() {
-        let ids: Vec<String> = party_ids.into_iter().collect();
+    // THE PEOPLE TABLE, with the three defaults v0 spells and the reason each
+    // one differs (`queries/dashboard.ts:468-497`). The OWNER is "You" in the
+    // ink brand; a FRIEND with no display name is "Friend"; any other party the
+    // ledger names is "Someone". Three words, not one placeholder: the owner is
+    // never a stranger, and a friend with a missing name is a different repair
+    // job from a co-payer nobody ever added.
+    let mut names: BTreeMap<String, String> = BTreeMap::new();
+    let ids: Vec<String> = party_ids.into_iter().collect();
+    if !ids.is_empty() {
         let statement = parties_statement(&ids)?;
         let parties = read_pages(door, &statement, LEDGER_FAN_OUT)?;
         for row in &parties {
-            if let Some(party_id) = text_of(row, "party_id") {
-                let name = text_of(row, "display_name").unwrap_or_default();
-                people.insert(party_id, name);
+            if let Some(party_id) = text_of(row, "party_id")
+                && let Some(name) = text_of(row, "display_name")
+            {
+                names.insert(party_id, name);
             }
         }
+    }
+    let friend_ids: Vec<String> = friends
+        .rows
+        .iter()
+        .filter_map(|row| text_of(row, "party_id"))
+        .collect();
+    let mut people: BTreeMap<String, Person> = BTreeMap::new();
+    if let Some(me) = me.clone() {
+        people.insert(
+            me.clone(),
+            Person {
+                party_id: me,
+                name: "You".to_owned(),
+                color: centraid_design::BRAND.to_owned(),
+                initials: centraid_design::identity_initials("You"),
+                is_me: true,
+            },
+        );
+    }
+    for party_id in &friend_ids {
+        let name = names
+            .get(party_id)
+            .filter(|name| !name.is_empty())
+            .cloned()
+            .unwrap_or_else(|| "Friend".to_owned());
+        people.insert(party_id.clone(), person_of_name(party_id, &name, false));
+    }
+    // EVERY id the ledger named, not only the ones with a party row: a sharer
+    // whose `core_party` row is gone still has to be nameable, and "Someone" is
+    // that name.
+    for party_id in &ids {
+        if people.contains_key(party_id) {
+            continue;
+        }
+        let name = names
+            .get(party_id)
+            .filter(|name| !name.is_empty())
+            .cloned()
+            .unwrap_or_else(|| "Someone".to_owned());
+        people.insert(party_id.clone(), person_of_name(party_id, &name, false));
     }
 
     Ok(TallyData {
         me,
         currency,
         people,
-        friends: friends
-            .rows
-            .iter()
-            .filter_map(|row| text_of(row, "party_id"))
-            .collect(),
+        friends: friend_ids,
         groups: group_rows,
         members_by_group,
         expenses: expense_rows,
         splits: split_map,
         payers: payer_map,
         settlements: settlement_rows,
-        settlement_currencies,
+        lines,
         obligations,
         nudges: nudges.rows,
         ledger_window_filled: expenses.filled,

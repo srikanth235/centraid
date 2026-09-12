@@ -13,6 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 centraid-apps-kit = { path = "../kit" }
+centraid-design = { path = "../../design" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

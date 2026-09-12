@@ -611,6 +611,7 @@ name = "centraid-apps-tally"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-design",
  "rusqlite",
  "serde",
  "serde_json",
