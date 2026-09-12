@@ -1,0 +1,1533 @@
+{
+  "$generatedBy": "bun contracts/tools/export-v0-registries.ts",
+  "$note": "Transcribed from packages/vault/src/schema — the v0 tree is the source of these registries until wave 6 (#1020). `userVersion` is the file shape a FRESH v0 vault reaches (VAULT_MIGRATIONS.length); the #929 golden corpus was frozen one rung earlier and carries its own number in contracts/golden/issue-929/manifest.json.",
+  "ontologyVersion": "1.0",
+  "userVersion": 11,
+  "ontologyPacks": [
+    "core",
+    "knowledge",
+    "locker",
+    "media",
+    "people",
+    "schedule",
+    "social",
+    "tally"
+  ],
+  "machineryBands": [
+    "access",
+    "agent",
+    "audit",
+    "blob",
+    "enrich",
+    "ledger",
+    "notifications",
+    "outbox",
+    "share",
+    "sync"
+  ],
+  "auditBand": {
+    "tables": [
+      "access_provenance",
+      "access_receipt",
+      "agent_command_invocation",
+      "agent_evidence",
+      "agent_explanation",
+      "agent_invocation_check",
+      "audit_archive_manifest",
+      "audit_archive_pass"
+    ],
+    "appendOnlyTables": [
+      "access_provenance",
+      "access_receipt",
+      "agent_evidence",
+      "agent_explanation",
+      "agent_invocation_check"
+    ]
+  },
+  "privateTables": [
+    {
+      "table": "access_agent_secret",
+      "kind": "credential",
+      "reason": "an enrolled agent's host-side enrollment key"
+    },
+    {
+      "table": "access_device_secret",
+      "kind": "credential",
+      "reason": "a device's public key and its gateway-side sync cursor"
+    },
+    {
+      "table": "blob_access",
+      "kind": "gateway-job",
+      "reason": "last-touch bookkeeping for THIS host's cache eviction"
+    },
+    {
+      "table": "blob_content_key",
+      "kind": "credential",
+      "reason": "the wrapped per-object content key"
+    },
+    {
+      "table": "blob_device_content_key",
+      "kind": "credential",
+      "reason": "one device's copy of a wrapped object key"
+    },
+    {
+      "table": "blob_device_wrap_key",
+      "kind": "credential",
+      "reason": "one device's key-wrapping salt and epoch"
+    },
+    {
+      "table": "blob_ingress_probe",
+      "kind": "gateway-job",
+      "reason": "head/tail bytes of an upload still in flight"
+    },
+    {
+      "table": "blob_ingress_session",
+      "kind": "gateway-job",
+      "reason": "an upload in flight — resumable on the gateway only"
+    },
+    {
+      "table": "blob_orphan",
+      "kind": "gateway-job",
+      "reason": "when THIS host first saw bytes with no live reference"
+    },
+    {
+      "table": "blob_outbox",
+      "kind": "gateway-job",
+      "reason": "the gateway's queue of objects still to be replicated"
+    },
+    {
+      "table": "blob_replica",
+      "kind": "gateway-job",
+      "reason": "which objects THIS host has proven are also remote"
+    },
+    {
+      "table": "blob_staging",
+      "kind": "gateway-job",
+      "reason": "bytes staged for a command that has not committed yet"
+    },
+    {
+      "table": "conversation_harness_sessions",
+      "kind": "gateway-job",
+      "reason": "a harness process's session handle"
+    },
+    {
+      "table": "enrich_request",
+      "kind": "gateway-job",
+      "reason": "the enrichment queue — work, not data"
+    },
+    {
+      "table": "enrich_target_failure",
+      "kind": "gateway-job",
+      "reason": "which targets this host could not derive, and how often"
+    },
+    {
+      "table": "harness_health",
+      "kind": "gateway-job",
+      "reason": "a harness process's liveness on this host"
+    },
+    {
+      "table": "locker_key",
+      "kind": "credential",
+      "reason": "which Locker key this gateway holds, and when it retired the one before"
+    },
+    {
+      "table": "outbox_item",
+      "kind": "gateway-job",
+      "reason": "the gateway's own delivery queue"
+    },
+    {
+      "table": "replica_intent_outcome",
+      "kind": "gateway-job",
+      "reason": "device-scoped outcome of one submitted intent"
+    },
+    {
+      "table": "replica_invocation_commit",
+      "kind": "gateway-job",
+      "reason": "the commit group one invocation wrote"
+    },
+    {
+      "table": "replica_parked_payload",
+      "kind": "gateway-job",
+      "reason": "a sealed request awaiting the member's answer"
+    },
+    {
+      "table": "share_delivery_config",
+      "kind": "peer-link",
+      "reason": "how this host reaches a peer"
+    },
+    {
+      "table": "share_fulfillment",
+      "kind": "peer-link",
+      "reason": "one delivery attempt against a peer"
+    },
+    {
+      "table": "share_party_vault_binding",
+      "kind": "peer-link",
+      "reason": "which vault a party is reachable at from this host"
+    },
+    {
+      "table": "sync_connection_credential",
+      "kind": "credential",
+      "reason": "a third-party connection's stored secret"
+    },
+    {
+      "table": "sync_connection_health",
+      "kind": "gateway-job",
+      "reason": "a third-party connection's liveness on this host"
+    },
+    {
+      "table": "sync_connection_run",
+      "kind": "gateway-job",
+      "reason": "one poll of a third-party connection"
+    },
+    {
+      "table": "trigger_ingress",
+      "kind": "gateway-job",
+      "reason": "an inbound trigger the gateway has not run yet"
+    }
+  ],
+  "localTables": [
+    {
+      "table": "access_agent_secret",
+      "reason": "an enrolled agent's host-side enrollment key"
+    },
+    {
+      "table": "access_device_secret",
+      "reason": "a device's key material and gateway sync cursor"
+    },
+    {
+      "table": "access_provenance",
+      "reason": "the `audit` band — append-only evidence, never exported"
+    },
+    {
+      "table": "access_receipt",
+      "reason": "the `audit` band — append-only evidence, never exported"
+    },
+    {
+      "table": "agent_command_invocation",
+      "reason": "the `audit` band — append-only evidence, never exported"
+    },
+    {
+      "table": "agent_evidence",
+      "reason": "the `audit` band — append-only evidence, never exported"
+    },
+    {
+      "table": "agent_explanation",
+      "reason": "the `audit` band — append-only evidence, never exported"
+    },
+    {
+      "table": "agent_invocation_check",
+      "reason": "the `audit` band — append-only evidence, never exported"
+    },
+    {
+      "table": "attachments",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "audit_archive_manifest",
+      "reason": "the `audit` band — append-only evidence, never exported"
+    },
+    {
+      "table": "audit_archive_pass",
+      "reason": "the `audit` band — append-only evidence, never exported"
+    },
+    {
+      "table": "automation_state",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "automation_trigger_cursor",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "blob_access",
+      "reason": "local last-touch bookkeeping for cache eviction"
+    },
+    {
+      "table": "blob_content_key",
+      "reason": "the wrapped per-object key, which never leaves"
+    },
+    {
+      "table": "blob_device_content_key",
+      "reason": "one device's copy of a wrapped object key"
+    },
+    {
+      "table": "blob_device_wrap_key",
+      "reason": "one device's key-wrapping salt and epoch"
+    },
+    {
+      "table": "blob_ingress_probe",
+      "reason": "head/tail bytes of an upload still in flight"
+    },
+    {
+      "table": "blob_ingress_session",
+      "reason": "an upload in flight — resumable on this device only"
+    },
+    {
+      "table": "blob_orphan",
+      "reason": "when this device first saw bytes with no live reference"
+    },
+    {
+      "table": "blob_outbox",
+      "reason": "this device's queue of objects still to be replicated"
+    },
+    {
+      "table": "blob_replica",
+      "reason": "which objects this device has proven are also remote"
+    },
+    {
+      "table": "blob_staging",
+      "reason": "bytes staged for a command that has not committed yet"
+    },
+    {
+      "table": "conversation_archive",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "conversation_digest",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "conversation_harness_sessions",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "conversation_provider_consent",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "conversation_turn_locks",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "conversation_workspace_selection",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "conversations",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "core_entity",
+      "reason": "the supertype index, re-derived from the entity tables"
+    },
+    {
+      "table": "core_entity_kind",
+      "reason": "the kind vocabulary, re-seeded from the registry"
+    },
+    {
+      "table": "enrich_target_failure",
+      "reason": "one host's per-target enrichment failure counter"
+    },
+    {
+      "table": "harness_health",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "items",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "locker_key",
+      "reason": "which Locker key this gateway holds, and its predecessors"
+    },
+    {
+      "table": "replica_intent_outcome",
+      "reason": "device-scoped outcome of one submitted intent"
+    },
+    {
+      "table": "replica_invocation_commit",
+      "reason": "the commit group one invocation wrote"
+    },
+    {
+      "table": "replica_log",
+      "reason": "the gateway log itself — the mechanism, not the data"
+    },
+    {
+      "table": "replica_meta",
+      "reason": "this vault's replica epoch, floor and commit position"
+    },
+    {
+      "table": "replica_parked_payload",
+      "reason": "a sealed request awaiting the member's answer"
+    },
+    {
+      "table": "trigger_ingress",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    },
+    {
+      "table": "turns",
+      "reason": "the `ledger` band — the engine's conversation transcript, never exported"
+    }
+  ],
+  "sealedColumns": {
+    "locker.item": ["card_number", "content", "cvv", "otp_seed", "password"],
+    "locker.item_field": ["value_sealed"],
+    "locker.item_passkey": ["private_key"],
+    "sync.connection_credential": [
+      "access_token",
+      "api_key",
+      "client_secret",
+      "refresh_capability",
+      "refresh_token"
+    ]
+  },
+  "entities": [
+    {
+      "logical": "access.agent",
+      "table": "access_agent",
+      "label": "Agent registrations",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "access.app",
+      "table": "access_app",
+      "label": "Installed apps",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "access.app_ext",
+      "table": "access_app_ext",
+      "label": "App tables",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "access.device",
+      "table": "access_device",
+      "label": "Devices",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "owner_party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "access.seed_row",
+      "table": "access_seed_row",
+      "label": "Seeded rows",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "agent.capability",
+      "table": "agent_capability",
+      "label": "Agent capabilities",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "agent.command",
+      "table": "agent_command",
+      "label": "Agent commands",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "blob.custody_rollup",
+      "table": "blob_custody_rollup",
+      "label": "Custody totals",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "blob.custody_state",
+      "table": "blob_custody_state",
+      "label": "Custody",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "content_id",
+          "parent": "core_content_item",
+          "role": "derived"
+        }
+      ]
+    },
+    {
+      "logical": "core.account",
+      "table": "core_account",
+      "label": "Accounts",
+      "lifecycle": "append-only",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "institution_party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        },
+        {
+          "column": "owner_party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "core.activity",
+      "table": "core_activity",
+      "label": "Activity",
+      "lifecycle": "append-only",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "actor_party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "core.attachment",
+      "table": "core_attachment",
+      "label": "Attachments",
+      "lifecycle": "append-only",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "content_id",
+          "parent": "core_content_item",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "core.collection",
+      "table": "core_collection",
+      "label": "Collections",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "cover_content_id",
+          "parent": "core_content_item",
+          "role": "participation"
+        },
+        {
+          "column": "owner_party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "core.collection_entry",
+      "table": "core_collection_entry",
+      "label": "Collection items",
+      "lifecycle": "append-only",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "core.concept",
+      "table": "core_concept",
+      "label": "Concepts",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "core.concept_scheme",
+      "table": "core_concept_scheme",
+      "label": "Vocabularies",
+      "lifecycle": "append-only",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "core.content_derivative",
+      "table": "core_content_derivative",
+      "label": "Derivatives",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "content_id",
+          "parent": "core_content_item",
+          "role": "derived"
+        }
+      ]
+    },
+    {
+      "logical": "core.content_item",
+      "table": "core_content_item",
+      "label": "Content",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "creator_party_id",
+          "parent": "core_party",
+          "role": "attribution"
+        }
+      ]
+    },
+    {
+      "logical": "core.content_representation",
+      "table": "core_content_representation",
+      "label": "Representations",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "content_id",
+          "parent": "core_content_item",
+          "role": "owned-child"
+        }
+      ]
+    },
+    {
+      "logical": "core.content_text",
+      "table": "core_content_text",
+      "label": "Body text",
+      "lifecycle": "mutable",
+      "projectionOf": "core.content_item",
+      "deletionRoles": [
+        {
+          "column": "content_id",
+          "parent": "core_content_item",
+          "role": "derived"
+        }
+      ]
+    },
+    {
+      "logical": "core.document",
+      "table": "core_document",
+      "label": "Documents",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "current_content_id",
+          "parent": "core_content_item",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "core.entity_revision",
+      "table": "core_entity_revision",
+      "label": "Entity history",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "actor_party_id",
+          "parent": "core_party",
+          "role": "attribution"
+        },
+        {
+          "column": "content_id",
+          "parent": "core_content_item",
+          "role": "attribution"
+        }
+      ]
+    },
+    {
+      "logical": "core.event",
+      "table": "core_event",
+      "label": "Events",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "organizer_party_id",
+          "parent": "core_party",
+          "role": "attribution"
+        }
+      ]
+    },
+    {
+      "logical": "core.link",
+      "table": "core_link",
+      "label": "Links",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "core.link_anchor",
+      "table": "core_link_anchor",
+      "label": "Anchors",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "core.party",
+      "table": "core_party",
+      "label": "People",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "avatar_content_id",
+          "parent": "core_content_item",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "core.party_identifier",
+      "table": "core_party_identifier",
+      "label": "Identifiers",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "owned-child"
+        }
+      ]
+    },
+    {
+      "logical": "core.place",
+      "table": "core_place",
+      "label": "Places",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "core.tag",
+      "table": "core_tag",
+      "label": "Tags",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "tagged_by_party_id",
+          "parent": "core_party",
+          "role": "attribution"
+        }
+      ]
+    },
+    {
+      "logical": "core.transaction",
+      "table": "core_transaction",
+      "label": "Transactions",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "counterparty_party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "core.vault",
+      "table": "core_vault",
+      "label": "Vault",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "self_party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "enrich.derivation",
+      "table": "enrich_derivation",
+      "label": "Enrichment provenance",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "enrich.embedding",
+      "table": "enrich_embedding",
+      "label": "Embeddings",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "enrich.policy",
+      "table": "enrich_policy",
+      "label": "Enrichment policy",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "enrich.policy_rule",
+      "table": "enrich_policy_rule",
+      "label": "Enrichment rules",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "enrich.request",
+      "table": "enrich_request",
+      "label": "Enrichment requests",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "knowledge.annotation",
+      "table": "knowledge_annotation",
+      "label": "Annotations",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "author_party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "knowledge.note",
+      "table": "knowledge_note",
+      "label": "Notes",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "author_party_id",
+          "parent": "core_party",
+          "role": "participation"
+        },
+        {
+          "column": "body_content_id",
+          "parent": "core_content_item",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "locker.item",
+      "table": "locker_item",
+      "label": "Secrets",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "locker.item_address",
+      "table": "locker_item_address",
+      "label": "Addresses",
+      "lifecycle": "append-only",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "locker.item_alias",
+      "table": "locker_item_alias",
+      "label": "Aliases",
+      "lifecycle": "append-only",
+      "projectionOf": "locker.item",
+      "deletionRoles": []
+    },
+    {
+      "logical": "locker.item_field",
+      "table": "locker_item_field",
+      "label": "Custom fields",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "locker.item_passkey",
+      "table": "locker_item_passkey",
+      "label": "Passkeys",
+      "lifecycle": "mutable",
+      "projectionOf": "locker.item",
+      "deletionRoles": []
+    },
+    {
+      "logical": "media.asset",
+      "table": "media_asset",
+      "label": "Media",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "content_id",
+          "parent": "core_content_item",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "media.asset_phash",
+      "table": "media_asset_phash",
+      "label": "Fingerprints",
+      "lifecycle": "mutable",
+      "projectionOf": "media.asset",
+      "deletionRoles": []
+    },
+    {
+      "logical": "media.face_cluster",
+      "table": "media_face_cluster",
+      "label": "Face groups",
+      "lifecycle": "mutable",
+      "projectionOf": "media.face_region",
+      "deletionRoles": []
+    },
+    {
+      "logical": "media.face_region",
+      "table": "media_face_region",
+      "label": "Faces",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "confirmed_by_party_id",
+          "parent": "core_party",
+          "role": "participation"
+        },
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "attribution"
+        }
+      ]
+    },
+    {
+      "logical": "media.memory",
+      "table": "media_memory",
+      "label": "Memories",
+      "lifecycle": "append-only",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "media.memory_member",
+      "table": "media_memory_member",
+      "label": "Memory photos",
+      "lifecycle": "append-only",
+      "projectionOf": "media.memory",
+      "deletionRoles": []
+    },
+    {
+      "logical": "notifications.notice",
+      "table": "notifications_notice",
+      "label": "Notices",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "outbox.item",
+      "table": "outbox_item",
+      "label": "Outbox items",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "recipient_party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "people.important_date",
+      "table": "people_important_date",
+      "label": "Important dates",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "owned-child"
+        }
+      ]
+    },
+    {
+      "logical": "people.profile",
+      "table": "people_profile",
+      "label": "Profiles",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "schedule.attendee",
+      "table": "schedule_attendee",
+      "label": "Guests",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "schedule.calendar",
+      "table": "schedule_calendar",
+      "label": "Calendars",
+      "lifecycle": "append-only",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "owner_party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "schedule.event_ext",
+      "table": "schedule_event_ext",
+      "label": "Event details",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "schedule.project",
+      "table": "schedule_project",
+      "label": "Task projects",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "owner_party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "schedule.recurrence_exception",
+      "table": "schedule_recurrence_exception",
+      "label": "Recurrence changes",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "schedule.recurrence_exception_attendee",
+      "table": "schedule_recurrence_exception_attendee",
+      "label": "Recurrence guests",
+      "lifecycle": "mutable",
+      "projectionOf": "schedule.recurrence_exception",
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "schedule.section",
+      "table": "schedule_section",
+      "label": "Task sections",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "schedule.task",
+      "table": "schedule_task",
+      "label": "Tasks",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "owner_party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "share.authority",
+      "table": "share_authority",
+      "label": "Access answers",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "granted_by",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "share.authority_request",
+      "table": "share_authority_request",
+      "label": "Pending asks",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "share.authority_use",
+      "table": "share_authority_use",
+      "label": "Answer last used",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "share.delivery_config",
+      "table": "share_delivery_config",
+      "label": "Delivery limits",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "share.fulfillment",
+      "table": "share_fulfillment",
+      "label": "Delivery state",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "share.party_vault_binding",
+      "table": "share_party_vault_binding",
+      "label": "Vault bindings",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "share.subscription",
+      "table": "share_subscription",
+      "label": "Subscriptions",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "share.subscription_lineage",
+      "table": "share_subscription_lineage",
+      "label": "Subscription lineage",
+      "lifecycle": "machinery",
+      "projectionOf": "core.entity",
+      "deletionRoles": []
+    },
+    {
+      "logical": "share.subscription_member",
+      "table": "share_subscription_member",
+      "label": "Subscription membership",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "social.circle",
+      "table": "social_circle",
+      "label": "Circles",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "owner_party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "social.circle_member",
+      "table": "social_circle_member",
+      "label": "Circle members",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "social.contact_channel",
+      "table": "social_contact_channel",
+      "label": "Contact channels",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "owned-child"
+        }
+      ]
+    },
+    {
+      "logical": "social.message",
+      "table": "social_message",
+      "label": "Messages",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "body_content_id",
+          "parent": "core_content_item",
+          "role": "participation"
+        },
+        {
+          "column": "sender_party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "social.thread",
+      "table": "social_thread",
+      "label": "Threads",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "social.thread_participant",
+      "table": "social_thread_participant",
+      "label": "Participants",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "sync.connection",
+      "table": "sync_connection",
+      "label": "Connections",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "sync.connection_credential",
+      "table": "sync_connection_credential",
+      "label": "Connection credentials",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "sync.connection_cursor",
+      "table": "sync_connection_cursor",
+      "label": "Sync cursors",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "sync.connection_health",
+      "table": "sync_connection_health",
+      "label": "Connection health",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "sync.connection_run",
+      "table": "sync_connection_run",
+      "label": "Sync runs",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "sync.external_entity",
+      "table": "sync_external_entity",
+      "label": "External ids",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "sync.import_batch",
+      "table": "sync_import_batch",
+      "label": "Import batches",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "sync.import_row",
+      "table": "sync_import_row",
+      "label": "Imported rows",
+      "lifecycle": "machinery",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "tally.expense",
+      "table": "tally_expense",
+      "label": "Expenses",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "paid_by",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "tally.expense_line_allocation",
+      "table": "tally_expense_line_allocation",
+      "label": "Line shares",
+      "lifecycle": "mutable",
+      "projectionOf": "tally.expense_line_item",
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "tally.expense_line_item",
+      "table": "tally_expense_line_item",
+      "label": "Receipt lines",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "tally.expense_payer",
+      "table": "tally_expense_payer",
+      "label": "Expense payers",
+      "lifecycle": "mutable",
+      "projectionOf": "tally.expense",
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "tally.expense_split",
+      "table": "tally_expense_split",
+      "label": "Expense splits",
+      "lifecycle": "mutable",
+      "projectionOf": "tally.expense",
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "tally.friend",
+      "table": "tally_friend",
+      "label": "Friends",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "tally.group",
+      "table": "tally_group",
+      "label": "Groups",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "tally.nudge",
+      "table": "tally_nudge",
+      "label": "Prepared reminders",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "tally.obligation",
+      "table": "tally_obligation",
+      "label": "Obligations",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "from_party",
+          "parent": "core_party",
+          "role": "durable-record"
+        },
+        {
+          "column": "to_party",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "tally.recurring_expense",
+      "table": "tally_recurring_expense",
+      "label": "Recurring expenses",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "paid_by",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "tally.recurring_expense_split",
+      "table": "tally_recurring_expense_split",
+      "label": "Recurring splits",
+      "lifecycle": "mutable",
+      "projectionOf": "tally.recurring_expense",
+      "deletionRoles": [
+        {
+          "column": "party_id",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    },
+    {
+      "logical": "tally.settlement",
+      "table": "tally_settlement",
+      "label": "Settlements",
+      "lifecycle": "trash",
+      "projectionOf": null,
+      "deletionRoles": [
+        {
+          "column": "from_party",
+          "parent": "core_party",
+          "role": "durable-record"
+        },
+        {
+          "column": "to_party",
+          "parent": "core_party",
+          "role": "durable-record"
+        }
+      ]
+    }
+  ],
+  "contentReferences": [
+    {
+      "table": "core_attachment",
+      "column": "content_id",
+      "onlyLive": null,
+      "documentHead": false
+    },
+    {
+      "table": "core_collection",
+      "column": "cover_content_id",
+      "onlyLive": null,
+      "documentHead": false
+    },
+    {
+      "table": "core_document",
+      "column": "current_content_id",
+      "onlyLive": null,
+      "documentHead": true
+    },
+    {
+      "table": "core_party",
+      "column": "avatar_content_id",
+      "onlyLive": null,
+      "documentHead": false
+    },
+    {
+      "table": "knowledge_note",
+      "column": "body_content_id",
+      "onlyLive": "deleted_at IS NULL",
+      "documentHead": false
+    },
+    {
+      "table": "media_asset",
+      "column": "content_id",
+      "onlyLive": "deleted_at IS NULL",
+      "documentHead": false
+    },
+    {
+      "table": "social_message",
+      "column": "body_content_id",
+      "onlyLive": null,
+      "documentHead": false
+    }
+  ],
+  "retentionWindows": {
+    "audit": {
+      "days": 365,
+      "duty": "journal-archive"
+    },
+    "ledger": {
+      "days": 90,
+      "duty": "ledger-archive"
+    }
+  },
+  "snapshotExclusions": [
+    {
+      "table": "replica_meta",
+      "reason": "the replica protocol's singleton: `active_commit_id`, `floor_seq`, `commit_seq` and `updated_at` are rewritten by opening the vault (replica/change-log.ts), so it is state ABOUT the vault rather than content IN it."
+    }
+  ]
+}
