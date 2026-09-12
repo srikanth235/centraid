@@ -38,7 +38,7 @@ fn the_ontology_crate_opens_the_v0_golden_vault() {
     assert_eq!(vault.user_version(), manifest.user_version);
     assert_eq!(
         vault.user_version(),
-        centraid_ontology::EXPECTED_USER_VERSION
+        centraid_ontology::expected_user_version()
     );
     // The corpus is a WAL file; the pragma is read at open so a future change
     // of journal mode is visible rather than silent.
@@ -160,4 +160,97 @@ fn the_snapshot_walk_skips_the_shadow_tables_and_the_replica_singleton() {
         })
         .collect();
     assert!(findings.is_empty(), "walked: {findings:?}");
+}
+
+/// The accepted `PRAGMA user_version` window (#1020, D-1020-A1).
+///
+/// Both ends are accepted, both outsides are refused, and the two ends come
+/// from `contracts/schema/v0-registries.json` rather than from a constant here
+/// — so this test also fails if the fixture stops exporting a real window.
+///
+/// HOW THE OUT-OF-CORPUS FILES ARE MADE: the corpus is inflated and its
+/// `PRAGMA user_version` is STAMPED. That synthesises the version number only,
+/// not the shape a rung would have produced, which is the honest limit of what
+/// wave 1 can build — this crate has no ladder and cannot found a vault. That
+/// the ladder head really is `ladderUserVersion` was checked out of band
+/// against v0's own `openVaultDb` (see the receipt); wave 2 lane D re-freezes a
+/// golden AT the ladder head with v0's freezer, and this test then reads it
+/// instead of stamping.
+mod version_window {
+    use centraid_ontology::golden::{inflate, scratch_dir};
+    use centraid_ontology::{OntologyError, Vault, expected_user_version, ladder_user_version};
+
+    /// An inflated copy of the corpus stamped at `user_version = version`.
+    fn corpus_stamped_at(version: i64) -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = scratch_dir();
+        let gz = centraid_ontology::golden::contracts_golden_dir().join("vault.db.gz");
+        let db = inflate(&gz, &dir).expect("the corpus inflates");
+        let connection = rusqlite::Connection::open(&db).expect("the copy opens");
+        connection
+            .pragma_update(None, "user_version", version)
+            .expect("the stamp writes");
+        drop(connection);
+        (dir, db)
+    }
+
+    #[test]
+    fn the_window_has_two_distinct_ends() {
+        // A window that collapsed to a point would make every case below pass
+        // or fail together, which is the one way this test could go vacuous.
+        assert!(
+            expected_user_version() < ladder_user_version(),
+            "the corpus is at {} and the ladder head at {}",
+            expected_user_version(),
+            ladder_user_version()
+        );
+    }
+
+    #[test]
+    fn both_ends_of_the_window_open() {
+        for version in [expected_user_version(), ladder_user_version()] {
+            let (dir, db) = corpus_stamped_at(version);
+            let vault = Vault::open(&db).unwrap_or_else(|error| {
+                panic!("a file at user_version {version} must open, and did not: {error}")
+            });
+            assert_eq!(vault.user_version(), version);
+            drop(vault);
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[test]
+    fn a_file_above_the_ladder_head_is_refused_as_a_downgrade() {
+        let above = ladder_user_version() + 1;
+        let (dir, db) = corpus_stamped_at(above);
+        let outcome = Vault::open(&db);
+        let _ = std::fs::remove_dir_all(&dir);
+        match outcome {
+            Err(OntologyError::DowngradeRefused {
+                found, expected, ..
+            }) => {
+                assert_eq!(found, above);
+                assert_eq!(expected, ladder_user_version());
+            }
+            Err(other) => panic!("expected DowngradeRefused, got {other}"),
+            Ok(_) => panic!("a file at user_version {above} must not open"),
+        }
+    }
+
+    #[test]
+    fn a_file_below_the_corpus_needs_a_forward_migration() {
+        let below = expected_user_version() - 1;
+        let (dir, db) = corpus_stamped_at(below);
+        let outcome = Vault::open(&db);
+        let _ = std::fs::remove_dir_all(&dir);
+        match outcome {
+            Err(OntologyError::UpgradeRequired {
+                found, expected, ..
+            }) => {
+                assert_eq!(found, below);
+                assert_eq!(expected, expected_user_version());
+            }
+            Err(other) => panic!("expected UpgradeRequired, got {other}"),
+            Ok(_) => panic!("a file at user_version {below} must not open"),
+        }
+    }
 }

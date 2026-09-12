@@ -22,6 +22,8 @@
 // It is `bun <path>` rather than a `bun run` script because this is v1 tooling
 // living under `contracts/`, not part of v0's package scripts.
 
+import { readFileSync } from "node:fs";
+
 import { SNAPSHOT_EXCLUSIONS } from "../../packages/vault/src/golden-snapshot.ts";
 import {
   MACHINERY_BANDS,
@@ -94,16 +96,37 @@ function sortedRecord<T>(entries: [string, T][]): Record<string, T> {
   );
 }
 
+/**
+ * The corpus's own `PRAGMA user_version`, read from the manifest beside it.
+ *
+ * It is in THIS fixture as well as in the manifest because `crates/ontology`
+ * embeds this file and nothing else: `Vault::open` has to know the accepted
+ * version window without reading a repository path at runtime (#1020,
+ * D-1020-A1).
+ */
+function goldenUserVersion(): number {
+  const manifest = JSON.parse(
+    readFileSync(
+      new URL("../golden/issue-929/manifest.json", import.meta.url),
+      "utf8"
+    )
+  ) as { userVersion: number };
+  return manifest.userVersion;
+}
+
 const exported = {
   $generatedBy: "bun contracts/tools/export-v0-registries.ts",
   $note:
     "Transcribed from packages/vault/src/schema — the v0 tree is the source " +
-    "of these registries until wave 6 (#1020). `userVersion` is the file " +
-    "shape a FRESH v0 vault reaches (VAULT_MIGRATIONS.length); the #929 " +
-    "golden corpus was frozen one rung earlier and carries its own number in " +
-    "contracts/golden/issue-929/manifest.json.",
+    "of these registries until wave 6 (#1020). The two version keys are the " +
+    "ends of the window v1 accepts (D-1020-A1): `userVersion` is what the " +
+    "#929 golden corpus was frozen at, `ladderUserVersion` is what a FRESH " +
+    "v0 vault reaches today (VAULT_MIGRATIONS.length). A file above the " +
+    "ladder head is refused as a downgrade, one below the corpus as needing " +
+    "a forward migration.",
   ontologyVersion: ONTOLOGY_VERSION,
-  userVersion: VAULT_MIGRATIONS.length,
+  userVersion: goldenUserVersion(),
+  ladderUserVersion: VAULT_MIGRATIONS.length,
   // Life data versus plumbing, explicit so a new schema fails loud rather
   // than mis-shelving. The membership trigger into `core_entity` reads only
   // the ontology packs; a machinery-band row is not an entity in its own right.

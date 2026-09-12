@@ -16,14 +16,27 @@ use crate::error::{OntologyError, Result};
 /// contract, never a per-row stamp (v0 `schema/migrate.ts`, ruling ONT-04).
 pub const ONTOLOGY_VERSION: &str = "1.0";
 
-/// The file SHAPE this build understands, `PRAGMA user_version`.
+/// The LOW end of the `PRAGMA user_version` window this build accepts: what the
+/// #929 golden corpus was frozen at.
 ///
-/// It is 7 because 7 is what the #929 golden corpus carries, and opening that
-/// corpus is wave 1's checkpoint. v0's own ladder has since added a rung and a
-/// vault freshly founded by v0 stands at 8, so `Vault::open` refuses one today
-/// with [`OntologyError::DowngradeRefused`]. That is deliberate for wave 1 —
-/// this crate ports no rungs — and closing the gap is `crates/vault`'s job.
-pub const EXPECTED_USER_VERSION: i64 = 7;
+/// THE EXPECTED VERSION IS A CONTRACT, NOT A CONSTANT (#1020, D-1020-A1). It
+/// was briefly a hard-coded `7`, which quietly made v1 understand only the
+/// checkpoint fixture: v0's ladder has climbed to 11 since the freeze, so a
+/// vault founded by v0's own code would have been refused as a downgrade. The
+/// two ends of the window are now exported from the v0 tree into
+/// `contracts/schema/v0-registries.json` and embedded, so the window moves when
+/// v0's ladder moves and no Rust constant has to be remembered.
+#[must_use]
+pub fn expected_user_version() -> i64 {
+    crate::registries::v0_registries().user_version
+}
+
+/// The HIGH end of the window: what a freshly founded v0 vault reaches today,
+/// the length of v0's migration ladder.
+#[must_use]
+pub fn ladder_user_version() -> i64 {
+    crate::registries::v0_registries().ladder_user_version
+}
 
 /// An open vault file and the two facts read at open time.
 pub struct Vault {
@@ -50,18 +63,23 @@ impl Vault {
         let user_version: i64 =
             connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
-        if user_version > EXPECTED_USER_VERSION {
+        // The window, not a point. A file anywhere between the frozen corpus
+        // and v0's current ladder head is a shape this build reads; above the
+        // head it is a file a newer build wrote and the core never guesses,
+        // below the corpus it needs a forward migration this crate does not
+        // have yet.
+        if user_version > ladder_user_version() {
             return Err(OntologyError::DowngradeRefused {
                 path,
                 found: user_version,
-                expected: EXPECTED_USER_VERSION,
+                expected: ladder_user_version(),
             });
         }
-        if user_version < EXPECTED_USER_VERSION {
+        if user_version < expected_user_version() {
             return Err(OntologyError::UpgradeRequired {
                 path,
                 found: user_version,
-                expected: EXPECTED_USER_VERSION,
+                expected: expected_user_version(),
             });
         }
 

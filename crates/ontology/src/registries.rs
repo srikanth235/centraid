@@ -22,10 +22,14 @@ const EMBEDDED: &str = include_str!("../../../contracts/schema/v0-registries.jso
 pub struct V0Registries {
     #[serde(rename = "ontologyVersion")]
     pub ontology_version: String,
-    /// The file shape a FRESH v0 vault reaches. The frozen corpus stands one or
-    /// more rungs behind it and carries its own number in its manifest.
+    /// The LOW end of the accepted `PRAGMA user_version` window: what the #929
+    /// golden corpus was frozen at (#1020, D-1020-A1).
     #[serde(rename = "userVersion")]
     pub user_version: i64,
+    /// The HIGH end: what a freshly founded v0 vault reaches today, the length
+    /// of v0's migration ladder.
+    #[serde(rename = "ladderUserVersion")]
+    pub ladder_user_version: i64,
     /// The schemas that are life data, and the bands that are plumbing. Only
     /// an ontology pack's entity gets a `core_entity` membership row.
     #[serde(rename = "ontologyPacks")]

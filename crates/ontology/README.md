@@ -8,7 +8,7 @@ Everything above this crate needs the same three answers before it can do anythi
 
 | Module | What it holds |
 | --- | --- |
-| `vault` | `Vault::open` — foreign keys on, journal mode read, `user_version` compared. `ONTOLOGY_VERSION`, `EXPECTED_USER_VERSION`, the `sqlite_master` walk. |
+| `vault` | `Vault::open` — foreign keys on, journal mode read, `user_version` compared. `ONTOLOGY_VERSION`, the accepted `user_version` window, the `sqlite_master` walk. |
 | `snapshot` | A faithful port of v0's `golden-snapshot.ts`: the corpus digest format and `compare_snapshot`. |
 | `jsvalue` | The digest's value encoding, which is a **JavaScript** fact — `typeof` and `String(value)` over what `node:sqlite` returns, including `Number.prototype.toString`. |
 | `golden` | Inflating the frozen corpus into a scratch directory. The committed file is never opened in place (`docs/traps/wal-checkpoint.md`). |
@@ -18,8 +18,8 @@ Everything above this crate needs the same three answers before it can do anythi
 
 ## What it does not do yet
 
-- **No migrations.** There is no ladder. A file behind `EXPECTED_USER_VERSION` is refused with `UpgradeRequired`, not advanced; a file ahead of it with `DowngradeRefused`. That refusal is the compatibility policy the issue's _Compatibility between v1 releases_ section states, arriving before the mechanism it guards.
-- **`EXPECTED_USER_VERSION` is the corpus's number, not v0's.** v0's ladder has added rungs since the #929 freeze, so a vault founded by v0's current code stands ahead of this constant and `Vault::open` refuses it. That is correct for a crate that ports no rungs and wrong as a long-term answer; closing it is `crates/vault`'s job.
+- **No migrations.** There is no ladder. `Vault::open` accepts a `PRAGMA user_version` inside a window and advances nothing: above the window it refuses with `DowngradeRefused` (the core never guesses at a shape a newer build wrote), below it with `UpgradeRequired`. That refusal is the compatibility policy the issue's _Compatibility between v1 releases_ section states, arriving before the mechanism it guards.
+- **The window is a contract, not a constant** (#1020, D-1020-A1). Both ends are exported from the v0 tree into `contracts/schema/v0-registries.json` and embedded: `userVersion` is what the #929 corpus was frozen at, `ladderUserVersion` what a freshly founded v0 vault reaches today. So the window moves when v0's ladder moves, and a vault founded by v0's own code opens. Wave 2 lane D re-freezes a golden AT the ladder head with v0's own freezer, and the window tests read it instead of stamping a version onto a copy of the corpus.
 - **No DDL emission.** This crate reads a schema and renders it; it cannot create one. A vault is still founded by v0.
 - **No blob custody.** v0's `vaultDoctor` asks a third question — the content-addressed pointers no foreign key covers — and this one does not, because v1 has no CAS. A clean report here is a claim about pages and keys and nothing more.
 - **No writes, no commands, no receipts.** Every commitment whose mechanism is the command pipeline stays with v0's oracle; `tests/commitments.rs` says in its header which rows those are.

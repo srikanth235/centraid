@@ -30,4 +30,6 @@ pub use snapshot::{
     Compared, SnapshotComparison, TableSnapshot, VaultSnapshot, compare_snapshot, snapshot_table,
     snapshot_tables, snapshot_vault,
 };
-pub use vault::{EXPECTED_USER_VERSION, ONTOLOGY_VERSION, SchemaObject, Vault};
+pub use vault::{
+    ONTOLOGY_VERSION, SchemaObject, Vault, expected_user_version, ladder_user_version,
+};

@@ -137,14 +137,15 @@ fn the_registry_fixture_is_where_the_crate_embeds_it() {
         registries.ontology_version,
         centraid_ontology::ONTOLOGY_VERSION
     );
-    // The transcription is of v0's CURRENT ladder, which stands ahead of the
-    // frozen corpus. Asserting the direction keeps the two numbers from being
-    // quietly conflated later.
+    // The two version keys are the ends of the accepted window (#1020,
+    // D-1020-A1): the low end IS the corpus's own number, read from the
+    // manifest beside it, and the ladder head is at or above it.
     let manifest = read_manifest(&contracts_golden_dir()).expect("the manifest parses");
+    assert_eq!(registries.user_version, manifest.user_version);
     assert!(
-        registries.user_version >= manifest.user_version,
-        "the registry fixture reports user_version {} and the corpus carries {}",
-        registries.user_version,
-        manifest.user_version
+        registries.ladder_user_version >= registries.user_version,
+        "the ladder head is {} and the corpus is at {}",
+        registries.ladder_user_version,
+        registries.user_version
     );
 }

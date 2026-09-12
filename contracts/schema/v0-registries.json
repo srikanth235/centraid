@@ -1,8 +1,9 @@
 {
   "$generatedBy": "bun contracts/tools/export-v0-registries.ts",
-  "$note": "Transcribed from packages/vault/src/schema — the v0 tree is the source of these registries until wave 6 (#1020). `userVersion` is the file shape a FRESH v0 vault reaches (VAULT_MIGRATIONS.length); the #929 golden corpus was frozen one rung earlier and carries its own number in contracts/golden/issue-929/manifest.json.",
+  "$note": "Transcribed from packages/vault/src/schema — the v0 tree is the source of these registries until wave 6 (#1020). The two version keys are the ends of the window v1 accepts (D-1020-A1): `userVersion` is what the #929 golden corpus was frozen at, `ladderUserVersion` is what a FRESH v0 vault reaches today (VAULT_MIGRATIONS.length). A file above the ladder head is refused as a downgrade, one below the corpus as needing a forward migration.",
   "ontologyVersion": "1.0",
-  "userVersion": 11,
+  "userVersion": 7,
+  "ladderUserVersion": 11,
   "ontologyPacks": [
     "core",
     "knowledge",

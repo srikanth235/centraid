@@ -23,6 +23,13 @@ The rest of the tree named in the issue — `protocol/`, `applier/`, `apps/*/`, 
 
 When a v0 registry changes, regenerate the fixture **in the same slice** as the change. `bun contracts/tools/export-v0-registries.ts` is deliberately invoked by path rather than through a `bun run` script: it is v1 tooling that happens to be written in TypeScript, not part of v0's package scripts, and v0's own gates stop running on PRs from wave 1.
 
-## Two numbers that are not the same number
+## The version window is two numbers, and both are exported
 
-`schema/v0-registries.json` reports `userVersion` as the `PRAGMA user_version` a **freshly founded v0 vault** reaches — the length of v0's migration ladder. `golden/issue-929/manifest.json` reports the version the corpus was **frozen** at, which is lower: rungs were added after the freeze, and v0's ladder climbs them when it opens the file. `crates/ontology` understands the frozen number and no other, because it ports no rungs yet; its `EXPECTED_USER_VERSION` says so and its README explains what that costs.
+`schema/v0-registries.json` carries **both ends** of the `PRAGMA user_version` window v1 accepts (#1020, **D-1020-A1**):
+
+- `userVersion` — what the #929 corpus was **frozen** at, read from the manifest beside it.
+- `ladderUserVersion` — what a **freshly founded v0 vault** reaches today, the length of v0's migration ladder.
+
+They are both here, rather than one here and one in the manifest, because `crates/ontology` embeds this file and nothing else: `Vault::open` has to know the window without reading a repository path at runtime. A file above the ladder head is refused as a downgrade, one below the corpus as needing a forward migration this crate does not have.
+
+The expected version was briefly a hard-coded `7` in Rust, which quietly made v1 understand only the checkpoint fixture and refuse a vault v0's own code had founded. A number a lane has to remember is a number that goes stale, so it is transcribed with everything else.
