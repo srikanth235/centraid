@@ -172,3 +172,139 @@ git push -u origin claude/1020-w0b
 ```
 
 No gate, ledger direction, budget, allowlist, lint config or law path was touched. No waiver was spent and no docket row was filed.
+
+## Wave 1 — lane A: the ontology crate and the contracts tree
+
+Lane A of wave 1 (Foundation). Five commits on `claude/1020-laneA`, rebased onto the umbrella at `cddafdc2`: `e37724fa` (workspace root), `8f60a0ec` (contracts), `4596c9a4` (the crate), `c145685d` (the doc paragraph), `d5356d19` (the version window, D-1020-A1). Lane B owns `crates/xtask`, `flake.nix`, the workflows and `tests/path-filter-ledger.json`; nothing below touches them.
+
+### What landed
+
+- `Cargo.toml` — the workspace root: `resolver = "3"`, `members = ["crates/*"]`, the v0 byte plane (`packages/tunnel/data-plane`, `packages/tunnel/native`, `apps/web/iroh-wasm`) excluded so it stays the pinned oracle until wave 6, one shared `[workspace.dependencies]` block, and `[profile.dev.package."*"] opt-level = 2` so dependencies are optimised once and our crates stay fast to rebuild.
+- `Cargo.lock` — committed.
+- `.gitignore` — one appended line, `/target/`.
+- `contracts/README.md` — what lives under `contracts/`, the rule that every fixture passes in Rust and the TS oracle passes the SAME FILES while the v0 tree exists, the regeneration command per subdirectory, and the version window.
+- `contracts/golden/issue-929/vault.db.gz`, `contracts/golden/issue-929/manifest.json` — byte-identical copies of the v0 corpus. `sha256sum` of both pairs: `vault.db.gz` `dd7cef709e42f6d615fad81e682d206a8afbfe1bcf6c859d9f040fd88062d0ad`, `manifest.json` `9799c2b7160b0275965ec2b1f5b31cfecb7d8708b833669a49a9ef77ab208093`. The v0 copy was not touched, moved or re-cut.
+- `contracts/schema/vault-ddl.sql` — the corpus's `sqlite_master` (`type, name, tbl_name, sql` where `sql` is not null, ordered by `type` then `name`, `sqlite_stat*` excluded), 1,068 objects over 9,992 lines, with a header naming the command that writes it.
+- `contracts/schema/v0-registries.json` — 39,640 bytes: `ontologyVersion`, the version window (`userVersion`, `ladderUserVersion`), `ontologyPacks` (8), `machineryBands` (10), `auditBand` (8 tables, 5 write-once), `privateTables` (28, by kind with reasons), `localTables` (43 with reasons), `sealedColumns` (4 entities), `entities` (96, with physical table, label, lifecycle, `projectionOf` and deletion roles), `contentReferences` (7), `retentionWindows` (audit 365, ledger 90), `snapshotExclusions` (1).
+- `contracts/tools/export-v0-registries.ts` — the transcriber. Run by path (`bun contracts/tools/export-v0-registries.ts > contracts/schema/v0-registries.json`, then `bun run format`, because the repository formatter owns JSON too), not through a `bun run` script: it is v1 tooling that happens to be TypeScript, and v0's own gates leave PRs from wave 1.
+- `crates/ontology/Cargo.toml`, `crates/ontology/README.md`.
+- `crates/ontology/src/lib.rs` (`#![forbid(unsafe_code)]`), `error.rs`, `vault.rs`, `golden.rs`, `snapshot.rs`, `jsvalue.rs`, `doctor.rs`, `registries.rs`, `ddl.rs`, `src/bin/export-ddl.rs`.
+- `crates/ontology/tests/golden_vault.rs` (the checkpoint + the version window), `tests/commitments.rs`, `tests/fixtures.rs`.
+- `docs/vault-ontology.md` — one appended paragraph under `## Where the truth lives`. Nothing else in the file was altered.
+
+### The checkpoint
+
+`cargo test -p centraid-ontology --test golden_vault`, `the_ontology_crate_opens_the_v0_golden_vault` and `every_row_the_release_froze_is_still_there_with_its_values`:
+
+```
+compare_snapshot(manifest.tables, golden) -> findings: ""  ok: true
+compared.tables = 16    compared.rows = 139    (== the manifest's own digest count)
+PRAGMA user_version = 7 (== the manifest's), journal_mode = wal, ONTOLOGY_VERSION = "1.0"
+PRAGMA integrity_check = ok, PRAGMA foreign_key_check = empty
+```
+
+`re_snapshotting_the_corpus_reproduces_the_frozen_manifest` is the stronger form: freezing the file again FROM RUST reproduces every table, column list, primary key, row count and 16-hex digest the release froze. That is what makes this crate a candidate to replace the TypeScript oracle rather than a second opinion — the digests were written by TypeScript over `node:sqlite` values, so reproducing them proves the file is being read the same way.
+
+### Decisions — lane A
+
+Both made by the root under the owner's standing delegation (R-1020-34), recorded verbatim so the next docs commit can mirror them into `docs/decisions.md`.
+
+- **D-1020-A1 — the expected file version is a contract, not a constant** ([#1020](https://github.com/srikanth235/centraid/issues/1020)). `Vault::open` reads its expected `user_version` from `contracts/schema/v0-registries.json#userVersion` (embedded via `include_str!`, so no runtime file dependency), not from a hard-coded `7`; the golden corpus at 7 is the wave 1 checkpoint fixture, and wave 2 lane D re-freezes a golden at v0's current ladder head (11) with v0's own freezer (`bun run golden-vault:freeze`, a permitted `tests/**` fixture edit) so that v1's baseline is v0's CURRENT shape. If `userVersion` in that JSON is the frozen corpus's 7 (it is exported from the manifest), keep a second exported key `ladderUserVersion` = `VAULT_MIGRATIONS.length` (11) in the registries export and make `Vault::open` accept a file at EITHER the corpus version or the ladder head, refusing above the head with `DowngradeRefused` and below the corpus with `UpgradeRequired`.
+- **D-1020-A2 — `replica_change` is an era exclusion of the corpus, never a registry entry** ([#1020](https://github.com/srikanth235/centraid/issues/1020)). `CORPUS_ERA_EXCLUSIONS`/`RETIRED_IN_CORPUS` in the tests with the reason and the #1014 citation; the library's ported `SNAPSHOT_EXCLUSIONS` stays `replica_meta` only.
+
+D-1020-A1 as implemented in `d5356d19`: `userVersion` is exported FROM the golden manifest (7) and `ladderUserVersion` from `VAULT_MIGRATIONS.length` (11); `expected_user_version()` and `ladder_user_version()` read the embedded fixture, and `Vault::open` accepts the closed window between them. Four tests: both ends open, `ladder + 1` is `DowngradeRefused`, `corpus - 1` is `UpgradeRequired`, and a fifth asserts the two ends are DISTINCT so the window cannot collapse to a point and pass vacuously. The out-of-window files are made by inflating the corpus and STAMPING `PRAGMA user_version` — the version number is synthesised, not the shape a rung would build, which is the honest limit of a crate with no ladder; the test says so in its own header. That the ladder head really is `VAULT_MIGRATIONS.length` was checked out of band, not assumed: a throwaway vitest inside `packages/vault/src/` founded a fresh vault with v0's own `openVaultDb` and asserted `PRAGMA user_version === VAULT_MIGRATIONS.length` (passed; file deleted, `git status` clean).
+
+### Commitments held, and the ones deferred
+
+`crates/ontology/tests/commitments.rs`, one `#[test]` per row of `docs/vault-ontology.md` § *Commitments the code enforces* that a file-level check can hold, all against the frozen corpus:
+
+| Held | How |
+| --- | --- |
+| Every physical table is a registered entity, a declared local table, a private table or an audit-band table | 139 base tables, all accounted for (one declared era exclusion, below) |
+| Every entity row has an id unique across the model | 61 ontology-pack, non-projection entity tables each carry `<table>_entity_insert` and `<table>_entity_delete` |
+| Evidence cannot be rewritten | an UPDATE and a DELETE are EXECUTED against `access_provenance` and both abort with the trigger's own message; the 5 write-once tables each declare both triggers |
+| Secrets are ciphertext at rest, never indexed | no sealed column of the 4 sealed entities appears in any of the 165 FTS objects |
+| A member's edit is refused when the row moved under it | 53 replicated mutable/trash entity tables all carry `row_version` |
+| Money states its currency | `currency NOT NULL` on `tally_group`, `tally_expense`, `tally_settlement`, read from `PRAGMA table_info` rather than from DDL line breaks |
+| Delete is a reversible trash with a grace window | all 13 trash entities carry `deleted_at`/`purge_at` AND the CHECK tying one to the other |
+| Which schemas are life data and which are plumbing | every registered entity's schema is in exactly one of `ONTOLOGY_PACKS` / `MACHINERY_BANDS` |
+| No replicated table references a private one | no non-private table declares a `REFERENCES` onto any of the 28 private tables |
+| A vault that a harness touched is still sound | `integrity_check` and `foreign_key_check`, in `golden_vault.rs` |
+| A vault from the frozen corpus opens and keeps every row | the checkpoint above |
+| The DDL fixture equals the live `sqlite_master` | `fixtures.rs`, regenerated in memory and diffed |
+| The two golden copies are byte-identical while the v0 path exists | `fixtures.rs`, with the wave-6 absence handled rather than failed |
+
+**Deferred — held by v0's oracle until `crates/vault`**, because each one's mechanism is the command pipeline and this crate cannot write: a receipt committing in the same transaction as the mutation it describes; the retention windows and the archive pass proving custody before it prunes; a receipted reveal; a portable export carrying no key in the clear and an import re-sealing under the target's key; the purge behaviour per `DELETION_ROLES` role; a person's purge being refused while money and authority still name them; the derived-data travel judgement per table; the scripted reader scenarios under `tests/fixtures/ontology-scenarios/`; the bracketed-replica-writes discipline; `bun run lint:vault-sql`; the published-page-versus-DDL comparison; the `agent_command.ontology_version` equality check; and the recurrence and RRULE refusals. The lane's crate also does NOT ask v0's third doctor question — blob custody — because v1 has no CAS; `doctor.rs` says so in its own header so a clean report is not read as a claim it does not make.
+
+One declared era exclusion, per D-1020-A2: `replica_change` holds 44 rows in the PRE-migration corpus, is in no registry, is DROPped by v0's rung ten ([#1014](https://github.com/srikanth235/centraid/issues/1014) R-1014-1), and is absent from the frozen manifest because the era that froze the file excluded the replica plane's own mechanism from the corpus. Consequence worth writing down: re-freezing the pre-migration corpus with TODAY's exclusion list yields 17 tables, not 16. The allowance lives in the two test files with that reason; the library's ported `SNAPSHOT_EXCLUSIONS` still names `replica_meta` and nothing else.
+
+### Falsification
+
+The two riskiest claims, each with the throwaway check that was run against it and reverted.
+
+- **The digest port.** Claim: the Rust encoding reproduces v0's digests, so a green comparison means the file is being read identically. Check: the INTEGER branch of `jsvalue::encode_value` was changed from `number:{int}` to `number:{int}.0` — the difference between JavaScript's `String(1)` and a plausible Rust spelling. Result: 9 tables and every numeric row reported as `REWRITTEN`, 2 of 5 checkpoint tests red. The comparison is therefore load-bearing on the exact encoding and not on the row count. Reverted.
+- **The DDL fixture.** Claim: the committed fixture describes the corpus, so drift is red. Check: one space inserted into the fixture's first `CREATE INDEX`. Result: `the_ddl_fixture_still_describes_the_corpus` red with `line 13: fixture: CREATE  INDEX … / live: CREATE INDEX …`. Reverted. `the_ddl_fixture_is_not_vacuous` covers the other direction (a fixture rendered down to its header would otherwise match a schemaless vault).
+
+Two further anti-vacuity guards, because a green gate over nothing is the failure mode both of these invite: the checkpoint asserts `compared.tables == 16` and `compared.rows == 139` against the manifest's own count, and `re_snapshotting_…` asserts BOTH directions of the table set — which is what caught `replica_change` rather than a reviewer noticing it later.
+
+The corpus cannot exercise every digest branch, and that is stated where it matters rather than implied by a green run: its 640 frozen cells are 453 TEXT, 144 NULL and 43 numeric, **every numeric one integral and inside the 2^53 safe range, and not one BLOB cell**. So `js_number_to_string`'s fractional and exponential forms and `encode_value`'s `object:` byte-join are held by a hand-written table of real JavaScript output in `jsvalue.rs` (24 cases, including `1e21` → `1e+21`, `1e-7` → `1e-7`, `1e-6` → `0.000001`, `-0` → `0`, `NaN`, `Infinity`), not by the fixture.
+
+### Exit list
+
+```
+cargo fmt --all --check       # PASS — clean
+cargo clippy --workspace --all-targets -- -D warnings
+                              # PASS — clean, no allows spent beyond one #[expect] on the
+                              #        integer-to-double cast, whose precision loss IS the JS
+                              #        behaviour being reproduced
+cargo test --workspace        # PASS — 32 tests green, 0 failed: 9 unit, 9 commitments,
+                              #        5 fixtures, 9 golden_vault (5 checkpoint + 4 version
+                              #        window). Checkpoint: compared.tables = 16,
+                              #        compared.rows = 139, findings ""
+cargo run -p centraid-ontology --bin export-ddl -- contracts/golden/issue-929/vault.db.gz \
+  | diff - contracts/schema/vault-ddl.sql
+                              # PASS — empty
+bun contracts/tools/export-v0-registries.ts | diff - contracts/schema/v0-registries.json
+                              # NOT EMPTY, and the fixture is still current: oxfmt owns JSON and
+                              #        re-flows short arrays, so the committed file is the script's
+                              #        output AFTER `bun run format`. The check used instead is the
+                              #        one the brief allows: regenerate, format, diff against the
+                              #        committed bytes -> no diff (idempotent). Documented in
+                              #        contracts/README.md and in the script's header
+sha256sum packages/vault/tests/golden/issue-929/* contracts/golden/issue-929/*
+                              # PASS — pairwise equal (digests quoted above); also asserted by
+                              #        tests/fixtures.rs while the v0 path exists
+bun run format && bun run format:check
+                              # PASS — "All matched files use the correct format"
+bunx vitest run packages/vault/src/golden-vault.test.ts
+                              # PASS — 1 file, 5 tests. The oracle is untouched. Needed `bun run
+                              #        build` first in this fresh worktree (see findings)
+bash .governance/run.sh       # PASS — all 10 directive(s) passed
+node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5
+                              # PASS — 10 rule(s), no findings, on the DEFAULT baseline (the
+                              #        merge-base with origin/main, e9a7d81a), which is the
+                              #        baseline CI judges and the one doc-integrity freezes
+                              #        receipts against — so this section's append is free
+bun run build                 # PASS — 14 successful, 14 total
+bun run check:push:static     # PASS — 4/4 gates
+git push -u origin claude/1020-laneA
+                              # PASS — accepted; no SKIP_* and no --no-verify on any commit
+node scripts/lint-path-filters.mjs
+                              # 2 problems, `crates` and `contracts` unledgered — EXPECTED and
+                              #        lane B's: `tests/path-filter-ledger.json` is its file and
+                              #        was not touched here
+```
+
+No gate, ledger direction, budget, allowlist, lint config or law path was touched. No waiver was spent and no docket row was filed. No v0 file under `packages/**` or `apps/**` was edited: the corpus was COPIED, never moved.
+
+### Findings for the close pass
+
+Not fixed here; each is outside lane A's files or outside wave 1.
+
+- `docs/vault-ontology.md` is stale on numbers: § *Where the truth lives* says the file's own version is `PRAGMA user_version` (5) and § *The shape today* says "A fresh vault at `PRAGMA user_version = 5`: **137 base tables**" with a five-rung ladder. Reality is a ladder of 11 rungs and 139 base tables in the frozen corpus. A.4 is append-only inside one section, so the rewrite belongs to the umbrella's doc pass.
+- `bunx vitest run packages/vault/src/golden-vault.test.ts` fails in a FRESH worktree until `bun run build` has run: `@centraid/core`'s `./blob` subpath export resolves through `dist/`, and the vault package imports it. Pre-existing, and it will bite every lane that runs a v0 suite from a new worktree.
+- `crates/ontology`'s snapshot port is byte-compatible with the TypeScript by construction and will stay so only while someone is looking. When wave 2 lane D re-freezes a golden at the ladder head, the two implementations should freeze the SAME file and diff the manifests — that is the check that keeps the port honest after v0's freezer stops running.
+
+### Doctrine digest
+
+Law `53be88c22ab5` (`node .governance/law/brief.mjs`), verified with `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — the law did not move under this lane's work.
