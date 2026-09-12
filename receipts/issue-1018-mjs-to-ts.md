@@ -542,6 +542,13 @@ Converted the whole `scripts/test-report` tree (76 `.mjs` → `.ts`, plus `recor
 `scripts/tsconfig.json` excludes the test-report files that import `@centraid/test-kit` (same reason as `app-waterfall.run.ts`) so `tsc -p scripts --listFiles` does not pull `packages/test-kit/src`. Vitest still runs those files. Root `package.json` test-report scripts, the workflows that invoke them, `apps/web` / `apps/desktop` prepare steps, `scripts/check-ledgers.mjs`, and `scripts/lint-e2e-wiring.mjs` now name `.ts` paths. Vitest include is `**/*.test.ts`.
 
 Lane branch: `issue-1018-lane-test-report`. Merged into `issue-1018-mjs-to-ts`.
+## Lane root scripts — remaining `scripts/*.mjs` → TypeScript
+
+Converted the remaining root `scripts/*.mjs` gates (ledgers, product lints, design gallery, engine conformance, share reachability, hygiene, install-gateway) to TypeScript with Node native type stripping. `JSON.parse` is `unknown` then narrowed. Params are annotated outside destructuring. `import type` for type-only names. No `any`, `@ts-nocheck`, `.mts`, or enums.
+
+`lint-engine-conformance` (1554 lines) split under the 625-line ceiling into `kit` / `overlay` / `surface` / `writes` plus the main scanner. `check-ledgers` and `lint-container-opacity` split the same way. Design-gallery / site-tokens stay out of the NodeNext program (`scripts/tsconfig.design.json`) because they import `packages/design/src`.
+
+Not converted: `scripts/lint-oversized-files.mjs` and `scripts/lint-types-rules.mjs` (oxlint.config.ts law imports); `scripts/test-report/**` (already TypeScript on the umbrella; this branch only retargeted comments/imports at converted files). `tests/inventory.json` untouched. `.heic`/`.heif` join `BINARY_EXTS` so preview fixtures are not scanned as text.
 
 ### Verification
 
@@ -581,3 +588,55 @@ Lane branch: `issue-1018-lane-configs`. Merged into `issue-1018-mjs-to-ts`.
 
 `astro.config.ts`; every `packages/**` / `apps/**` `stryker*.config.ts`; `scripts/mutation/{seeds,run,run.test}.ts`; `scripts/docs-site/build.ts`; `scripts/test-report/{derive,derive.test,diff-coverage.test}.ts`; `apps/oauth-worker/src/mutation-range.test.ts`; `scripts/tsconfig.tool-configs.json`; `scripts/lint-tsconfigs.mjs`; `scripts/lint-tsconfigs.test.mjs`; `package.json`; `CHANGELOG.md`; this receipt.
 
+`packages/*/src` count: 0.
+
+```sh
+tsc -p scripts/tsconfig.design.json --noEmit
+```
+
+Exit 0.
+
+```sh
+node --test scripts/lint-no-nul-bytes.test.ts scripts/lint-app-conformance.test.ts scripts/lint-e2e-flows.test.ts scripts/lint-test-reachability.test.ts scripts/check-ledgers.test.ts scripts/check-comment-density-ratchet.test.ts scripts/lint-product.test.ts scripts/validate-ui-receipt.test.ts scripts/lint-path-filters.test.ts scripts/lint-tsconfigs.test.ts scripts/lint-turbo-cache.test.ts scripts/lint-workflow-pins.test.ts
+```
+
+161 pass, 0 fail.
+
+```sh
+node --test scripts/lint-e2e-wiring.test.ts scripts/lint-mobile-testids.test.ts scripts/lint-vault-sql.test.ts scripts/check-mobile-suite-budgets.test.ts scripts/lint-css-classes.test.ts scripts/lint-protocol-routes.test.ts scripts/lint-law-registry.test.ts scripts/check-mobile-native-state.test.ts scripts/check-share-reachability.test.ts scripts/lint-hermes-array-surface.test.ts scripts/lint-design-tokens.test.ts scripts/lint-mobile-design.test.ts scripts/lint-logical-insets.test.ts scripts/lint-hairline.test.ts
+```
+
+142 pass, 0 fail.
+
+```sh
+node --test scripts/lint-engine-conformance.test.ts scripts/lint-engine-conformance-registry.test.ts scripts/lint-journey-ledger.test.ts scripts/ci/gate-classes.test.ts
+```
+
+61 pass, 0 fail.
+
+```sh
+node --test scripts/design-gallery-fidelity.test.ts scripts/design-gallery-browser.test.ts
+```
+
+38 pass, 0 fail.
+
+```sh
+bun run format && bun run lint
+```
+
+0 warnings, 0 errors.
+
+Remaining root `scripts/*.mjs`: `lint-oversized-files.mjs`, `lint-types-rules.mjs`.
+
+### Paths this slice
+
+- Remaining root `scripts/*.mjs` → `.ts` (except the two oxlint law imports)
+- `scripts/lint-engine-conformance-{kit,overlay,surface,writes}.ts`
+- `scripts/check-ledgers-{serialize,sections}.ts`
+- `scripts/lint-container-opacity-mobile.ts`
+- `scripts/design-gallery-{serve,fidelity-types}.ts`, `scripts/site-tokens-rules.ts`, `scripts/tsconfig.design.json`
+- `package.json`, workflows, `scripts/lint-types.sh`, `scripts/install-gateway.sh`, `oxfmt.config.ts`
+- `tests/claims.json`, `tests/journeys.json` (owner path follow-ups)
+- `scripts/test-report/*.mjs` (import/comment retargets only)
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`

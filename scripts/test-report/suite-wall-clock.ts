@@ -22,7 +22,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
-import { writeLedgerSection } from "../check-ledgers.mjs";
+import { writeLedgerSection } from "../check-ledgers.ts";
 import { isRecord } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");

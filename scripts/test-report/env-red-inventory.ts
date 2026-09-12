@@ -35,7 +35,7 @@ import {
   INVENTORY_PATH,
   readLedgerSection,
   writeLedgerSection,
-} from "../check-ledgers.mjs";
+} from "../check-ledgers.ts";
 import { parseDay } from "./quarantine.ts";
 import { dict, finite, fromAsync } from "./record.ts";
 import { SCAN_EXCLUDE, SCAN_INCLUDE } from "./skip-inventory.ts";

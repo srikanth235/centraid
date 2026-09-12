@@ -35,7 +35,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { INVENTORY_PATH, readLedgerSection } from "../check-ledgers.mjs";
+import { INVENTORY_PATH, readLedgerSection } from "../check-ledgers.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");
 /** The advisory register: `tests/inventory.json#advisory.steps` (#915 Wave 4). */

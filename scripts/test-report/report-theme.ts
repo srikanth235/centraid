@@ -8,7 +8,7 @@
 // in it names a token the generated sheet above it declares.
 //
 // The split matters because the two run under different engines. The sheet is
-// emitted by `scripts/site-tokens.mjs` under **bun**, which can import
+// emitted by `scripts/site-tokens.ts` under **bun**, which can import
 // `packages/design`'s TypeScript; the report generator runs under **node**,
 // which cannot. So the sheet is committed and gated by bytes
 // (`bun run lint:site-tokens`), exactly as the two public sites take theirs,

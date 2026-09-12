@@ -27,7 +27,7 @@ name: candidate
 # `.app` is a separate artifact and Android's green says nothing about it.
 #
 # Deliberately NOT a `pull_request` trigger: ci.yml is the only workflow allowed
-# to listen on open-PR events (scripts/lint-workflow-pins.mjs rule 5).
+# to listen on open-PR events (scripts/lint-workflow-pins.ts rule 5).
 on:
   push:
     branches: [main]
@@ -220,7 +220,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
           # The committed rung-3 script. The literal path lives inside this job
-          # block, which is where scripts/lint-e2e-wiring.mjs reads it from, and
+          # block, which is where scripts/lint-e2e-wiring.ts reads it from, and
           # it is a DIFFERENT file from the nightly's on purpose: one script per
           # lane shape is what keeps a candidate lane distinguishable from a
           # depth lane to that linter. It runs `run-roster.mjs --rung 3
@@ -449,7 +449,7 @@ jobs:
       # pairs (#870) and then runs
       # `run-roster.mjs --rung 3 --platform ios --suite ios-smoke`. The literal
       # path lives inside this job block, which is where
-      # scripts/lint-e2e-wiring.mjs reads it from.
+      # scripts/lint-e2e-wiring.ts reads it from.
       - name: Run the iOS smoke suite on the release artifact
         id: ios_shell
         env:

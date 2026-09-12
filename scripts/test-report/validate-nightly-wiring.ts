@@ -29,7 +29,7 @@ const requiredFlowScripts = [
   // this YAML (`run-roster.ts --rung 4 --platform ios`). The Android lanes
   // invoke the same runner from the committed emulator script rather than
   // from this YAML (the action executes `script:`), so they are checked by
-  // scripts/lint-e2e-wiring.mjs against the shipped roster instead; that
+  // scripts/lint-e2e-wiring.ts against the shipped roster instead; that
   // linter reads the script the lane hands off to and is the general form of
   // the rule this list encodes for the pairing lanes.
   "tests/agent-e2e-mobile/run-roster.ts",
@@ -462,7 +462,7 @@ try {
 // exhaustive while something fails when it stops being — that is this block. A
 // new rig must declare its lane and volume; a deleted rig must not leave a
 // phantom entry behind. The register's own shape (spans, consumers, ledger
-// cross-links) is checked by scripts/lint-journey-ledger.mjs.
+// cross-links) is checked by scripts/lint-journey-ledger.ts.
 const LANES = [
   { lane: "perf", suffix: ".perf.test.ts" },
   { lane: "scale", suffix: ".scale.test.ts" },

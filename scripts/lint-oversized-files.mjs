@@ -5,7 +5,7 @@
 // tests/inventory.json#fileSize — rather than by an inline `oxlint-disable`.
 // The difference is what it costs to add one: a suppression comment is free
 // and invisible to review; a row has to survive the section's down-only
-// `_budget` in scripts/check-ledgers.mjs, which means a hand edit and an
+// `_budget` in scripts/check-ledgers.ts, which means a hand edit and an
 // `approvedDeviation` note that CHANGED against the merge base.
 //
 // Lives here rather than inline in oxlint.config.ts because that config is

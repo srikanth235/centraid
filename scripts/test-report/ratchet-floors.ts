@@ -12,7 +12,7 @@
  * SECTIONS of `tests/budgets.json` rather than seven separate files, and each
  * section keeps its OWN `approvedDeviation` — merging the files must not merge
  * the waivers, or a reviewed widen of one ceiling would silently waive a drop
- * in another. `scripts/check-ledgers.mjs` (`bun run lint:ledgers`) holds the
+ * in another. `scripts/check-ledgers.ts` (`bun run lint:ledgers`) holds the
  * rest of the merged shape (issue-and-expiry, the derived mirrors, the
  * inventory budgets); this module stays the numeric ratchet the report reads.
  *

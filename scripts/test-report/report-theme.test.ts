@@ -486,7 +486,7 @@ describe("the layers the report authors", () => {
  * tightest)" and a receipt carried the table, so the numbers were true on the
  * day they were typed and unowned every night after. Both are now computed off
  * the emitted sheet, which `bun run lint:site-tokens` gates byte-for-byte
- * against `scripts/site-tokens.mjs` — so a hue edited in the ramp table is
+ * against `scripts/site-tokens.ts` — so a hue edited in the ramp table is
  * checked here without anybody remembering to.
  */
 describe("the Night Watch palette", () => {

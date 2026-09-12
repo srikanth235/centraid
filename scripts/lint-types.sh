@@ -154,7 +154,7 @@ if [[ ! -f apps/oauth-worker/worker-configuration.d.ts ]]; then
   bun run --cwd apps/oauth-worker cf-typegen >/dev/null
 fi
 
-policy_report="$(node scripts/lint-types-policy.mjs)"
+policy_report="$(node scripts/lint-types-policy.ts)"
 echo "$policy_report"
 baseline_rule_count="$(
   sed -n 's/.*baseline \([0-9][0-9]*\)).*/\1/p' <<<"$policy_report"

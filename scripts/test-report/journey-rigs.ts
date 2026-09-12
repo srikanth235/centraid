@@ -3,7 +3,7 @@
  *
  * `rigs` is a map from RIG PATH to that rig's lane, volume and budget, and
  * every reader that walks it treats a key as a file it can stat. It is also a
- * ratcheted section, so `scripts/check-ledgers.mjs` requires the waiver for a
+ * ratcheted section, so `scripts/check-ledgers.ts` requires the waiver for a
  * budget removal to sit in the SECTION being widened — `rigs.approvedDeviation`
  * — and a neighbouring section's note never waives. Those two facts collide
  * unless the walkers agree that a waiver is not a rig: without this list,

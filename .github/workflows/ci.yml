@@ -177,8 +177,8 @@ jobs:
               - 'packages/client/src/react/ui/**'
               - 'packages/client/src/react/boot.tsx'
               - 'apps/web/**'
-              - 'scripts/design-gallery.mjs'
-              - 'scripts/design-gallery-lowering.mjs'
+              - 'scripts/design-gallery.ts'
+              - 'scripts/design-gallery-lowering.ts'
               - 'tests/design-gallery/**'
               - 'tests/design-grammar-matrix.json'
 
@@ -1050,7 +1050,7 @@ jobs:
       # banked gradle and native directories instead of recompiling them.
       #
       # The committed leg script sits literally inside this job block, which is where
-      # scripts/lint-e2e-wiring.mjs reads it from.
+      # scripts/lint-e2e-wiring.ts reads it from.
       - name: Write lane evidence
         if: always()
         env:
@@ -1370,7 +1370,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
           # The committed gate script. The literal path lives inside this job
-          # block, which is where scripts/lint-e2e-wiring.mjs reads it from.
+          # block, which is where scripts/lint-e2e-wiring.ts reads it from.
           script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
       # The gateway's side of a red run. The phone is mute about its replica —
       # nothing on that path logs and the release artifact carries no debugger —
@@ -1830,7 +1830,7 @@ jobs:
       # hinting differences between the two rasterizers remain plausible. The
       # first darwin run decides it. If a residual delta appears, record the
       # NUMBERS and land per-platform baseline directories in
-      # scripts/design-gallery.mjs — do not widen the 1% ceiling to absorb it.
+      # scripts/design-gallery.ts — do not widen the 1% ceiling to absorb it.
       - name: Write lane evidence
         if: always()
         env:
@@ -1864,7 +1864,7 @@ jobs:
       # The gallery runs under bun (it imports packages/design/src TS
       # directly for the lowering lanes) and builds the web dist itself — it
       # photographs the SHELL, so it refuses to trust a dist it did not just
-      # produce. `scripts/design-gallery.mjs` builds `@centraid/web`'s package
+      # produce. `scripts/design-gallery.ts` builds `@centraid/web`'s package
       # dependencies first (`turbo --filter=@centraid/web^...`) because
       # `apps/web/vite.config.ts` imports `@centraid/design/font-faces`, which
       # resolves to `packages/design/dist/font-faces.js`.

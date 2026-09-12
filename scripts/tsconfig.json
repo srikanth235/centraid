@@ -5,6 +5,12 @@
   "exclude": [
     "fixtures/**",
     "refresh-pricing-snapshot.ts",
+    "site-tokens.ts",
+    "design-gallery.ts",
+    "design-gallery-serve.ts",
+    "design-gallery-lowering.ts",
+    "design-gallery-fidelity.ts",
+    "design-gallery-fidelity.test.ts",
     "perf/app-waterfall.run.ts",
     "perf/app-waterfall.ts",
     "perf/app-waterfall.test.ts",

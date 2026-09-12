@@ -548,7 +548,7 @@ jobs:
       # (flows/ios-depth-budget.md).
       #
       # THE FLAGS ARE THE WIRING (#915 Wave 2). They sit on the invocation line
-      # because scripts/lint-e2e-wiring.mjs derives what this lane schedules by
+      # because scripts/lint-e2e-wiring.ts derives what this lane schedules by
       # reading it; a runner that picked its suite from an environment variable
       # would make every lane look identical to the gate whose whole job is
       # telling a blocking lane from a nightly one.
@@ -1626,7 +1626,7 @@ jobs:
         with:
           turbo-cache: "true"
       # Five of the six targets are imported from each package's built dist,
-      # the same way scripts/design-gallery.mjs reads packages/design/dist.
+      # the same way scripts/design-gallery.ts reads packages/design/dist.
       - run: bun run build
       # Fails on any finding whose class is not registered in
       # scripts/fuzz/known-findings.json — registered ones are recorded defects

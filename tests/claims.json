@@ -980,7 +980,7 @@
       "name": "durable pending-write overlay parity",
       "family": "reliability",
       "severity": "S2",
-      "owner": "scripts/lint-engine-conformance.test.mjs",
+      "owner": "scripts/lint-engine-conformance.test.ts",
       "evidence": "demonstrated-red scanner rejects named, arbitrary write-backed, and engine reach-past app overlays; [law:pending-overlay] pins every blueprint action declaration",
       "lane": "check:push",
       "wallClockCost": "low",
@@ -1106,7 +1106,7 @@
       "name": "shipped CSS token ratchet",
       "family": "responsiveness",
       "severity": "S3",
-      "owner": "scripts/lint-design-tokens.mjs",
+      "owner": "scripts/lint-design-tokens.ts",
       "evidence": "design-token CSS ratchet",
       "lane": "check:pr",
       "wallClockCost": "low",
@@ -1196,11 +1196,11 @@
       "name": "UI receipt evidence",
       "family": "friction",
       "severity": "S3",
-      "owner": "scripts/validate-ui-receipt.test.mjs",
+      "owner": "scripts/validate-ui-receipt.test.ts",
       "evidence": "rejects screenshot paths without an e2e emitter",
       "lane": "check:pr",
       "wallClockCost": "low",
-      "knob": "scripts/validate-ui-receipt.mjs",
+      "knob": "scripts/validate-ui-receipt.ts",
       "governance": "waiver-gated",
       "demonstratedRed": {
         "date": "2026-08-01",
@@ -1973,7 +1973,7 @@
       "id": "reachability",
       "label": "Handler reachability",
       "source": [
-        "scripts/check-share-reachability.mjs",
+        "scripts/check-share-reachability.ts",
         "packages/blueprints/src/handler-reachability.test.ts"
       ],
       "propertyFlow": null,
@@ -4453,7 +4453,7 @@
       "surface": "blueprints",
       "dimension": "accessibility",
       "tier": "accessibility",
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "scripts/accessibility-contract.test.ts",
       "minimumTests": 4
     },
     {

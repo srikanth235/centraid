@@ -15,8 +15,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { HYGIENE_GATES } from "../hygiene-lane.mjs";
-import { PRODUCT_GATES } from "../lint-product.mjs";
+import { HYGIENE_GATES } from "../hygiene-lane.ts";
+import { PRODUCT_GATES } from "../lint-product.ts";
 import { STATIC_TIER } from "./gate-stamp.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

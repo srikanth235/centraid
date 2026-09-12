@@ -1,0 +1,22 @@
+{
+  "extends": "../tsconfig.base.json",
+  // Package-source importers: toCss / toNativeTheme / fonts (#1018).
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
+  "include": [
+    "site-tokens.ts",
+    "site-tokens-rules.ts",
+    "design-gallery.ts",
+    "design-gallery-browser.ts",
+    "design-gallery-serve.ts",
+    "design-gallery-lowering.ts",
+    "design-gallery-fidelity.ts",
+    "design-gallery-fidelity-types.ts",
+    "design-gallery-fidelity.test.ts",
+    "jsdom.d.ts"
+  ]
+}

@@ -167,7 +167,7 @@ function naErrors(naCells: Loose, push: (message: string) => void) {
         `naCells.${id}.restated must state the reason at length, not as a fragment`
       );
     }
-    // `citation` stays optional, exactly as `scripts/audit-na-cells.mjs` has
+    // `citation` stays optional, exactly as `scripts/audit-na-cells.ts` has
     // it: the restatement is the required proof, and a citation is checked for
     // resolution only when a row carries one.
     if (row.citation !== undefined && typeof row.citation !== "string") {

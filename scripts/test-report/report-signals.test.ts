@@ -495,7 +495,7 @@ describe(applyExpectedGrey, () => {
     lane: "accessibility",
     issue: "https://github.com/srikanth235/centraid/issues/781",
     reason: "no lane exists yet",
-    owner: "scripts/accessibility-contract.test.mjs",
+    owner: "scripts/accessibility-contract.test.ts",
     cells: ["vault-core:accessibility"],
   };
 
@@ -545,7 +545,7 @@ describe("findUnmatchedOwners ignoreOwners", () => {
         {
           cellOwners: {
             "vault-core.accessibility": {
-              owner: "scripts/accessibility-contract.test.mjs",
+              owner: "scripts/accessibility-contract.test.ts",
               tier: "accessibility",
             },
             "a.correctness": { owner: "tests/a.test.ts", tier: "unit" },
@@ -553,7 +553,7 @@ describe("findUnmatchedOwners ignoreOwners", () => {
           flows: [],
         },
         {
-          ignoreOwners: new Set(["scripts/accessibility-contract.test.mjs"]),
+          ignoreOwners: new Set(["scripts/accessibility-contract.test.ts"]),
         }
       )
     ).toStrictEqual(["tests/a.test.ts"]);

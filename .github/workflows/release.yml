@@ -15,7 +15,7 @@ name: release
 # platform — stronger isolation than five peer workflows that could each read
 # every repo secret.
 #
-# Enforced by policy (6) of scripts/lint-workflow-pins.mjs: only this workflow
+# Enforced by policy (6) of scripts/lint-workflow-pins.ts: only this workflow
 # may listen on `push: tags`.
 
 on:

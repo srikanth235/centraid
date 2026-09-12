@@ -25,7 +25,7 @@ import {
   INVENTORY_PATH,
   readLedgerSection,
   writeLedgerSection,
-} from "../check-ledgers.mjs";
+} from "../check-ledgers.ts";
 import { bags, dict, fromAsync } from "./record.ts";
 
 const root = path.resolve(import.meta.dirname, "../..");

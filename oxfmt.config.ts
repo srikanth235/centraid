@@ -61,7 +61,7 @@ export default defineConfig({
     // Generator-owned outputs with regeneration checks elsewhere in the repo.
     "apps/web/public/sw.js",
     // The public site's token sheet is lowered from @centraid/design by
-    // scripts/site-tokens.mjs; `lint:site-tokens` asserts it byte-for-byte.
+    // scripts/site-tokens.ts; `lint:site-tokens` asserts it byte-for-byte.
     "scripts/*-site/public/assets/centraid-tokens.css",
     // The nightly report's sheet (#853) is the same lowering from the same
     // emitter, gated the same way — one file rather than a per-surface
