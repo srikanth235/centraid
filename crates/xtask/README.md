@@ -25,9 +25,9 @@ Each profile is a **superset** of the one before, stated in code as concatenatio
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test`, `rules`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | the pre-push loop, by hand |
-| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static` | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
-| `nightly` | `v0-oracle`, `device-lanes` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
-| `release` | `restore-drill`, `vps-smoke` | unbounded | wave 2 R and wave 3 G wire it to the release lane |
+| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `desktop-unit`, `advisory`, `lockfile`, `sim`, `call-budget`, `fault-door` | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `nightly` | `sim-nightly`, `v0-oracle`, `desktop-e2e`, `device-lanes`, `lane-health` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
+| `release` | `restore-drill`, `artifact-identity`, `prebuilt-core-required`, `vps-smoke` | unbounded | wave 2 R and wave 3 G wire it to the release lane |
 | `mobile-jvm` | none — a ledger placeholder, not a superset of anything | null | nowhere yet; it **refuses** and names wave 3 lane E |
 
 The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledgers/gate-budgets.json) and are **enforced**: a profile whose steps together overran its `budgetSeconds` fails, prints the timing table, and says `FAIL — over budget` on its last line. They are down-only, like every other gate knob in this repo; the one time they rose was the 2026-09-12 re-base for the Rust workspace, under an owner ruling recorded as [D-1020-B2](../../docs/decisions.md#decisions--lane-b2-1020).
@@ -37,6 +37,10 @@ The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledg
 `mobile-jvm` is in the ledgers and not in the step lists. Running it prints a refusal naming wave 3 lane E, which lands the Kotlin Multiplatform shared module and the Gradle suites, measures `budgetSeconds` and `kotlinNativeLinkSeconds`, and sets them both. A profile with no steps that scored itself green would report "the Kotlin suites passed" before one exists.
 
 `release` **fails today, on purpose.** `restore-drill` and `vps-smoke` are steps that exit with `not implemented: lands in wave N`, so the profile cannot report green for a release nobody has proven restorable. A placeholder that skipped would be worse than no step at all.
+
+### The `fault-door` step (#1020 wave 3)
+
+The one step that compiles the tree with a feature on: `cargo test -p centraid-core-ffi --features debug-fault --test contract a_real_panic_inside_call_poisons_the_handle_through_the_abi`. `debug-fault` makes a `Command` named `debug.panic` panic inside `Handle::call`, which is how clause 9 of the C ABI gets proved against the real library rather than against a shell's fake. It exports no symbol (`abi-five-symbols` still counts five) and is off in every other step and every release profile; a default build answers `debug.panic` as an unregistered command, and `the_fault_door_is_absent_from_a_default_build` asserts that. Its first run found `centraid_next_event` answering `TIMEOUT` on a poisoned handle instead of `PANICKED`.
 
 ## What every step prints
 

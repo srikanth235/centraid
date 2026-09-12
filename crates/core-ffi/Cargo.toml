@@ -16,6 +16,11 @@ path = "src/lib.rs"
 # through `libloading` on the built cdylib.
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+# Forwarded to `centraid-core`, where the panic is. See its `debug-fault`.
+debug-fault = ["centraid-core/debug-fault"]
+
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }

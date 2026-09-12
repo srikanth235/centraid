@@ -51,6 +51,14 @@ use crate::events::{EventQueue, Next};
 /// precisely because it must not be here.
 const CAPABILITIES: &[&str] = &[];
 
+/// The command name that triggers the `debug-fault` panic.
+///
+/// Public so a shell's own clause-9 test can name it without copying a string,
+/// and **not** a registered command: `Registry` never sees it, so a build
+/// without the feature answers it as an unknown command like any other typo
+/// (#1020 wave 3, lane E finding 4).
+pub const DEBUG_FAULT_COMMAND: &str = "debug.panic";
+
 /// The type a shell holds. Opaque across the C ABI.
 pub struct Handle {
     vault: Mutex<Vault>,
@@ -273,7 +281,17 @@ impl Handle {
     /// with a timeout so it can also check its own business — and
     /// [`CoreError::Closed`] once the handle is closed and the accepted events
     /// have been handed out.
+    ///
+    /// **A POISONED HANDLE REFUSES HERE TOO** (#1020 wave 3, lane E finding 4).
+    /// It did not: the event door read the queue, found it empty and reported a
+    /// timeout, which is a NORMAL answer — so a shell whose core had panicked
+    /// would have polled a dead core once a second forever and never learned
+    /// why. `call` has always checked; nothing made the event loop check, and
+    /// nothing caught it because the clause-9 test could only poison the handle
+    /// from Rust and only exercised the closed case. The real panic the
+    /// `debug-fault` door injects found it on its first run.
     pub fn next_event(&self, timeout: Duration) -> Result<Option<wire::Event>> {
+        self.check_open()?;
         match self.events.next(timeout) {
             Next::Event(event) => Ok(Some(event)),
             Next::Timeout => Ok(None),
@@ -398,6 +416,29 @@ impl Handle {
         }
 
         use wire::request::Kind as K;
+
+        // THE FAULT-INJECTION DOOR, behind a feature that is never on in a
+        // release (#1020 wave 3, lane E finding 4).
+        //
+        // Clause 9 of the C ABI is the half a SHELL depends on: `PANICKED`
+        // arrives as a typed failure, the handle stays poisoned, and the first
+        // diagnostic id is the one kept. `core-ffi`'s clause-9 test drove
+        // `Handle::poison` directly and said so in its own comment, because a
+        // real panic inside `call` needed an injection point that did not
+        // exist — so nothing proved that the real library produces what a fake
+        // ABI produces.
+        //
+        // It rides the EXISTING `Command` request rather than a new symbol:
+        // clause 10 says five symbols and means it, and a shell that needed a
+        // sixth to test the fifth would have a sixth in production.
+        // `abi-five-symbols` still counts five, because nothing is exported.
+        #[cfg(feature = "debug-fault")]
+        if let K::Command(command) = kind
+            && command.name == DEBUG_FAULT_COMMAND
+        {
+            panic!("debug-fault: a deliberate panic for a shell's clause-9 test");
+        }
+
         match kind {
             K::Hello(hello) => Ok(response(wire::response::Kind::Hello(self.hello(hello)))),
             K::Log(log_request) => self.log_page(log_request),
