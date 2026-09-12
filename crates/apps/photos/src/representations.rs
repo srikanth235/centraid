@@ -100,6 +100,6 @@ mod tests {
         }
         let folded = fold_media_types(&[asset, document]);
         assert_eq!(folded.get("a1").map(String::as_str), Some("image/png"));
-        assert!(folded.get("d1").is_none());
+        assert!(!folded.contains_key("d1"));
     }
 }

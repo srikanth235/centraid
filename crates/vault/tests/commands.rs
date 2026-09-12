@@ -23,10 +23,12 @@ fn installed(seed: &str) -> (common::Scratch, Registry) {
 #[test]
 fn the_registry_carries_every_command_this_build_has() {
     let registry = registry();
-    // Three real `core.*` commands, the 23 `tally.*` skeletons, the whole
-    // 20-command `media.*` schema (#1020, wave 4 lane Photos) and the whole
-    // 9-command `enrich.*` schema (lane automations).
-    assert_eq!(registry.len(), 55);
+    // Nineteen `core.*` — the parties plane and Docs' whole write surface, the
+    // nineteen of v0's twenty-seven this build carries (#1020 slot 4b,
+    // D-1020-DC3) — the 23 `tally.*`, the whole 20-command `media.*` schema
+    // (lane Photos) and the whole 9-command `enrich.*` schema (lane
+    // automations).
+    assert_eq!(registry.len(), 71);
     let count = |prefix: &str| {
         registry
             .names()
@@ -34,7 +36,7 @@ fn the_registry_carries_every_command_this_build_has() {
             .filter(|name| name.starts_with(prefix))
             .count()
     };
-    assert_eq!(count("core."), 3);
+    assert_eq!(count("core."), 19);
     assert_eq!(count("tally."), 23);
     assert_eq!(count("media."), 20);
     assert_eq!(count("enrich."), 9);
@@ -44,6 +46,12 @@ fn the_registry_carries_every_command_this_build_has() {
     assert!(registry.get("enrich.upsert_faces").is_some());
     assert!(registry.get("enrich.regenerate_all").is_some());
     assert!(registry.get("core.add_party").is_some());
+    assert!(registry.get("core.add_document").is_some());
+    assert!(registry.get("core.set_extracted_text").is_some());
+    // Named absences, not oversights: Notes' link/attachment plane and
+    // People's merge plane take these with their own fixtures.
+    assert!(registry.get("core.merge_party").is_none());
+    assert!(registry.get("core.attach").is_none());
     assert!(registry.get("tally.add_expense").is_some());
     assert!(registry.get("tally.does_not_exist").is_none());
     // A duplicate name is refused rather than overwritten: two definitions

@@ -125,7 +125,9 @@ pub fn fold_representations(rows: &[Row]) -> RepresentationIndex {
         if let (Some(owner_type), Some(owner_id)) =
             (text_of(row, "owner_type"), text_of(row, "owner_id"))
         {
-            index.by_owner.insert((owner_type, owner_id), media_type.clone());
+            index
+                .by_owner
+                .insert((owner_type, owner_id), media_type.clone());
         }
         if let Some(content_id) = text_of(row, "content_id") {
             // FIRST WINS, and the read is oldest-first: the same deterministic
