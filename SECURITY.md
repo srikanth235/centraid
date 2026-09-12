@@ -262,6 +262,7 @@ Adding a claim to this document without adding its row is the thing this table i
 | Every HTTP prefix is classified fail-closed at boot | ENFORCED-BY-TEST | T4 in the same file, over `packages/server/src/routes/route-security.ts` |
 | Bearer tokens and seal-key material are never echoed on an error path or into a log | ENFORCED-BY-TEST | `packages/server/src/serve/secret-log.smoke.test.ts` |
 | A revoked device reaches no vault door | ENFORCED-BY-TEST | `packages/server/src/serve/revocation-severs-planes.test.ts`, `packages/server/src/serve/authz-deny-matrix.test.ts`, `packages/server/src/routes/device-work-routes.test.ts` (the last added under #1014, X19) |
+| A revoked device keeps no object key, by either revoke lane | ENFORCED-BY-TEST | the HTTP lane in `packages/server/src/serve/build-gateway.ts` and the stopped-daemon CLI in `packages/server/src/cli/device-admin.ts` both call `revokePairedDevice`; `packages/server/src/cli/device-revoke-keys.test.ts` fails if the CLI lane stops (added under #1014, X14) |
 | A stored media type never becomes script execution in the shell's origin | ENFORCED-BY-TEST | `packages/server/src/routes/blob-routes-hardening.test.ts` |
 | A web-push wake endpoint is refused unless it resolves to public internet space | ENFORCED-BY-TEST | `packages/server/src/push/endpoint-guard.test.ts` |
 | A forgotten person cascades through every derived row and every replica | ENFORCED-BY-TEST | `packages/vault/src/commands/media-forget-person.test.ts` |
