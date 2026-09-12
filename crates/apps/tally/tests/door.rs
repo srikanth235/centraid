@@ -169,17 +169,27 @@ fn two_hundred_expenses_through_the_real_command_path() {
         .install(&scratch.vault)
         .expect("the record installs");
     let door = VaultDoor::new(&scratch.vault, &registry, Principal::owner("phone"));
-    let owner =
-        scratch
-            .vault
-            .read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT self_party_id FROM core_vault LIMIT 1",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )?)
-            })
-            .expect("the vault has an owner");
+    // The owner comes off the app's OWN statement — `tally.dashboard.vault` —
+    // because an app crate's tests hold no SQL either (`sql-confinement`), and
+    // reading the owner through the door the app reads it through is the more
+    // honest arrangement anyway.
+    let owner = scratch
+        .vault
+        .read(|connection| {
+            let read_door = centraid_apps_kit::testdoor::TestDoor::new(connection);
+            let window = centraid_apps_kit::reads::read_window(
+                &read_door,
+                &centraid_apps_tally::queries::vault_statement(),
+                1,
+            )
+            .expect("the vault row reads");
+            Ok(centraid_apps_kit::row::text_of(
+                window.rows.first().expect("a founded vault has a row"),
+                "self_party_id",
+            )
+            .expect("a founded vault names its owner"))
+        })
+        .expect("the vault has an owner");
     let friend = door
         .invoke(&invocation("tally.add_friend", json!({ "name": "Ana" })))
         .expect("the door is there")

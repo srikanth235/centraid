@@ -395,7 +395,7 @@ writeFileSync(
 // every artifact (#1020, D-1020-T5): `copy/*.json` has exactly one writer, and
 // the eight wave-4 app lanes each add a leaf to `export-copy.ts` alone.
 
-const copyCounts = emitCopy(repositoryRoot, header);
+const copyCounts = emitCopy(repositoryRoot);
 const corpusCounts = emitIdentityCorpus(repositoryRoot);
 
 console.error(
