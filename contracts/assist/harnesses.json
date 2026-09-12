@@ -1,0 +1,292 @@
+{
+  "origin": {
+    "source": "packages/server/src/acp/registry.ts",
+    "generator": "contracts/tools/export-harnesses.ts",
+    "issue": "https://github.com/srikanth235/centraid/issues/1020",
+    "note": "GENERATED — do not edit. Regenerate from the v0 registry; see the generator's header."
+  },
+  "supportedKinds": [
+    "codex",
+    "claude-code",
+    "opencode",
+    "grok",
+    "pi"
+  ],
+  "harnesses": [
+    {
+      "kind": "codex",
+      "label": "Codex",
+      "defaultBin": "codex",
+      "acpArgs": [],
+      "minVersion": "0.128.0",
+      "installHint": "Install Codex CLI (https://platform.openai.com/docs/codex) and run `codex login`.",
+      "env": {
+        "INITIAL_AGENT_MODE": "agent-full-access"
+      },
+      "adapter": {
+        "packageName": "@agentclientprotocol/codex-acp",
+        "binPathEnvVar": "CODEX_PATH",
+        "sessionModeId": null,
+        "bypassNeedsSandboxWhenRoot": false
+      },
+      "resolveModel": null,
+      "probeModels": true,
+      "refuseArgs": []
+    },
+    {
+      "kind": "claude-code",
+      "label": "Claude Code",
+      "defaultBin": "claude",
+      "acpArgs": [],
+      "minVersion": "2.1.126",
+      "installHint": "Install Claude Code (https://claude.com/code) and run `claude login`.",
+      "env": {},
+      "adapter": {
+        "packageName": "@agentclientprotocol/claude-agent-acp",
+        "binPathEnvVar": "CLAUDE_CODE_EXECUTABLE",
+        "sessionModeId": "bypassPermissions",
+        "bypassNeedsSandboxWhenRoot": true
+      },
+      "resolveModel": "resolveClaudeModel",
+      "probeModels": true,
+      "refuseArgs": []
+    },
+    {
+      "kind": "gemini",
+      "label": "Gemini CLI",
+      "defaultBin": "gemini",
+      "acpArgs": [
+        "--acp"
+      ],
+      "minVersion": "0.50.0",
+      "installHint": "Install Gemini CLI (`npm i -g @google/gemini-cli`) and run `gemini` once to authenticate.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "qwen",
+      "label": "Qwen Code",
+      "defaultBin": "qwen",
+      "acpArgs": [
+        "--acp"
+      ],
+      "minVersion": "0.20.0",
+      "installHint": "Install Qwen Code (`npm i -g @qwen-code/qwen-code`) and run `qwen` once to authenticate.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "opencode",
+      "label": "opencode",
+      "defaultBin": "opencode",
+      "acpArgs": [
+        "acp"
+      ],
+      "minVersion": "1.18.4",
+      "installHint": "Install opencode (`npm i -g opencode-ai`) and run `opencode auth login`.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": [
+        {
+          "arg": "--mdns",
+          "because": "it defaults opencode's listen host to 0.0.0.0, publishing an unauthenticated code-execution harness to the whole LAN (registry.ts:232-235)"
+        }
+      ]
+    },
+    {
+      "kind": "grok",
+      "label": "Grok",
+      "defaultBin": "grok",
+      "acpArgs": [
+        "agent",
+        "stdio"
+      ],
+      "minVersion": "0.2.106",
+      "installHint": "Install Grok CLI (`npm i -g @xai-official/grok`) and sign in. Requires a paid SuperGrok or X Premium+ subscription.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "kimi",
+      "label": "Kimi",
+      "defaultBin": "kimi",
+      "acpArgs": [
+        "acp"
+      ],
+      "minVersion": "1.17.0",
+      "installHint": "Install Kimi CLI (`uv tool install kimi-cli`, or `curl -LsSf https://code.kimi.com/install.sh | bash`) and run `kimi login`.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "copilot",
+      "label": "GitHub Copilot CLI",
+      "defaultBin": "copilot",
+      "acpArgs": [
+        "--acp"
+      ],
+      "minVersion": "1.0.71",
+      "installHint": "Install GitHub Copilot CLI (`curl -fsSL https://gh.io/copilot-install | bash`, or `brew install copilot-cli`) and sign in with `/login`. Requires a paid Copilot subscription.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": [
+        {
+          "arg": "--port",
+          "because": "copilot is stdio only; --port would sit the harness on an unread socket (registry.ts:270)"
+        }
+      ]
+    },
+    {
+      "kind": "cursor",
+      "label": "Cursor",
+      "defaultBin": "cursor-agent",
+      "acpArgs": [
+        "acp"
+      ],
+      "minVersion": "2026.7.16",
+      "installHint": "Install Cursor CLI (`curl https://cursor.com/install -fsS | bash`) and sign in with `cursor-agent login`. Requires a paid Cursor plan.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "kilo",
+      "label": "Kilo",
+      "defaultBin": "kilo",
+      "acpArgs": [
+        "acp"
+      ],
+      "minVersion": "7.4.11",
+      "installHint": "Install Kilo (`npm i -g @kilocode/cli`) and run `kilo auth`.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "cline",
+      "label": "Cline",
+      "defaultBin": "cline",
+      "acpArgs": [
+        "--acp"
+      ],
+      "minVersion": "3.0.46",
+      "installHint": "Install Cline (`npm i -g cline`) and run `cline auth`.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "goose",
+      "label": "goose",
+      "defaultBin": "goose",
+      "acpArgs": [
+        "acp"
+      ],
+      "minVersion": "1.43.0",
+      "installHint": "Install goose (`brew install block-goose-cli`; the binary is `goose`) and run `goose configure` to set a provider before use.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "auggie",
+      "label": "Auggie CLI",
+      "defaultBin": "auggie",
+      "acpArgs": [
+        "--acp"
+      ],
+      "minVersion": "0.33.0",
+      "installHint": "Install Auggie CLI (`npm i -g @augmentcode/auggie`) and sign in from a terminal. Requires a paid Augment plan.",
+      "env": {
+        "AUGMENT_DISABLE_AUTO_UPDATE": "1"
+      },
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "vibe",
+      "label": "Mistral Vibe",
+      "defaultBin": "vibe-acp",
+      "acpArgs": [],
+      "minVersion": "2.21.0",
+      "installHint": "Install Mistral Vibe (`uv tool install mistral-vibe`, needs Python 3.12+) and set a Mistral API key.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "droid",
+      "label": "Factory Droid",
+      "defaultBin": "droid",
+      "acpArgs": [
+        "exec",
+        "--output-format",
+        "acp-daemon"
+      ],
+      "minVersion": "0.175.1",
+      "installHint": "Install Factory Droid (`curl -fsSL https://app.factory.ai/cli | sh`, or `brew install --cask droid`) and sign in in a browser, or set `FACTORY_API_KEY`.",
+      "env": {
+        "DROID_DISABLE_AUTO_UPDATE": "true",
+        "FACTORY_DROID_AUTO_UPDATE_ENABLED": "false"
+      },
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "pi",
+      "label": "pi",
+      "defaultBin": "pi-acp",
+      "acpArgs": [],
+      "minVersion": "0.0.31",
+      "installHint": "Install the pi ACP adapter (`npm i -g pi-acp`) and sign in.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    },
+    {
+      "kind": "acp",
+      "label": "Custom ACP agent",
+      "defaultBin": null,
+      "acpArgs": [],
+      "minVersion": "0.0.0",
+      "installHint": "Set the ACP CLI’s binary path in Settings → Agents, and add its ACP flag (e.g. `--acp`) under extra args.",
+      "env": {},
+      "adapter": null,
+      "resolveModel": null,
+      "probeModels": false,
+      "refuseArgs": []
+    }
+  ]
+}
