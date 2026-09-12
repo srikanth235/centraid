@@ -712,3 +712,16 @@ Recorded digests match actual for `arrival.ts` and every `lib/*.ts` module.
 - `CHANGELOG.md`
 - `docs/dev-environment.md`, `docs/glossary.md`, `docs/multi-agent.md`
 - `receipts/issue-1018-mjs-to-ts.md`
+
+## Law estate — oxlint helpers as TypeScript
+
+`oxlint.config.ts` now imports `./scripts/lint-oversized-files.ts` and `./scripts/lint-types-rules.ts` directly. The `.mjs` re-export shims stay on disk until a territory commit deletes them.
+
+`tests/inventory.json#fileSize` dropped three stale `.mjs` rows whose sources are already TypeScript (`packages/server/src/acp/backends/acp/fake-acp-harness.mjs`, `scripts/lint-engine-conformance.mjs`, `scripts/test-report/ratchet-floors.mjs`) and lowered `_budget` 129 → 126. No new rows.
+
+### Paths this slice
+
+- `oxlint.config.ts`
+- `tests/inventory.json`
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`

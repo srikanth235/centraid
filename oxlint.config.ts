@@ -3,8 +3,8 @@ import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
 import vitest from "ultracite/oxlint/vitest";
 
-import { oversizedFiles } from "./scripts/lint-oversized-files.mjs";
-import { typeAwareOnlyRules } from "./scripts/lint-types-rules.mjs";
+import { oversizedFiles } from "./scripts/lint-oversized-files.ts";
+import { typeAwareOnlyRules } from "./scripts/lint-types-rules.ts";
 
 // ---------------------------------------------------------------------------
 // #656 Layer 4 — test seams as merge blockers.
