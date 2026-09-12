@@ -1367,11 +1367,51 @@ pub fn matches(door: &dyn PageDoor) -> KitResult<Value> {
         .filter_map(|row| Some(pair_key(&text_of(row, "from_id")?, &text_of(row, "to_id")?)))
         .collect();
 
+    let proposals = match_proposals(&recent, &decided);
+
+    let mut named: Vec<String> = Vec::new();
+    for proposal in &proposals {
+        for side in ["left_account", "right_account"] {
+            let account = proposal[side].as_str().unwrap_or_default().to_owned();
+            if !named.contains(&account) {
+                named.push(account);
+            }
+        }
+    }
+    let mut accounts = serde_json::Map::new();
+    if !named.is_empty() {
+        for row in read_pages(door, &match_accounts_statement(&named)?, LEDGER_FAN_OUT)? {
+            if let Some(account_id) = text_of(&row, "account_id") {
+                accounts.insert(
+                    account_id,
+                    Value::String(text_of(&row, "name").unwrap_or_default()),
+                );
+            }
+        }
+    }
+    Ok(json!({
+        "proposals": Value::Array(proposals),
+        "accounts": Value::Object(accounts),
+    }))
+}
+
+/// THE PAIRING FOLD, pure, over the rows the two statements returned.
+///
+/// Extracted from `matches` because a door is not needed to decide whether two
+/// movements are the same one, and because the fixture cannot reach this code:
+/// v0's own seed holds ONE transaction (`contracts/apps/tally/rows.json`,
+/// `core_transaction`: 1 row), a second account and a second transaction are
+/// the finance plane's writers rather than any of Tally's 23 commands, and a
+/// bucket of one proposes nothing. So every branch here — the same-account
+/// skip, the already-decided skip, the unparseable date, the window — is
+/// asserted below over constructed rows instead of being carried by a
+/// generated fixture that answers `[]`.
+fn match_proposals(recent: &[&Row], decided: &BTreeSet<String>) -> Vec<Value> {
     // Same money, different account, near in time. The bucket is the EXACT
     // amount and currency: an amount that does not match is not this pair's
     // near miss, it is a different movement.
     let mut buckets: BTreeMap<String, Vec<&Row>> = BTreeMap::new();
-    for row in &recent {
+    for row in recent {
         let key = format!(
             "{}:{}",
             text_of(row, "currency").unwrap_or_default(),
@@ -1429,36 +1469,163 @@ pub fn matches(door: &dyn PageDoor) -> KitResult<Value> {
     // one four days apart, and a member reviewing ten of these should meet the
     // easy answers first.
     proposals.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)));
-
-    let mut named: Vec<String> = Vec::new();
-    for (_, _, proposal) in &proposals {
-        for side in ["left_account", "right_account"] {
-            let account = proposal[side].as_str().unwrap_or_default().to_owned();
-            if !named.contains(&account) {
-                named.push(account);
-            }
-        }
-    }
-    let mut accounts = serde_json::Map::new();
-    if !named.is_empty() {
-        for row in read_pages(door, &match_accounts_statement(&named)?, LEDGER_FAN_OUT)? {
-            if let Some(account_id) = text_of(&row, "account_id") {
-                accounts.insert(
-                    account_id,
-                    Value::String(text_of(&row, "name").unwrap_or_default()),
-                );
-            }
-        }
-    }
-    Ok(json!({
-        "proposals": Value::Array(proposals.into_iter().map(|(_, _, row)| row).collect()),
-        "accounts": Value::Object(accounts),
-    }))
+    proposals.into_iter().map(|(_, _, row)| row).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use centraid_apps_kit::row::Cell;
+
+    /// One `core_transaction` row as the match statement projects it.
+    fn txn(id: &str, account: &str, amount: i64, currency: &str, posted: &str) -> Row {
+        [
+            ("txn_id", Cell::Text(id.to_owned())),
+            ("account_id", Cell::Text(account.to_owned())),
+            ("amount_minor", Cell::Integer(amount)),
+            ("currency", Cell::Text(currency.to_owned())),
+            ("posted_at", Cell::Text(posted.to_owned())),
+            ("direction", Cell::Text("out".to_owned())),
+            ("description", Cell::Text(format!("movement {id}"))),
+        ]
+        .into_iter()
+        .map(|(column, cell)| (column.to_owned(), cell))
+        .collect()
+    }
+
+    fn proposed(rows: &[Row], decided: &[(&str, &str)]) -> Vec<Value> {
+        let refs: Vec<&Row> = rows.iter().collect();
+        let decided: BTreeSet<String> = decided
+            .iter()
+            .map(|(left, right)| pair_key(left, right))
+            .collect();
+        match_proposals(&refs, &decided)
+    }
+
+    #[test]
+    fn the_same_money_on_two_accounts_a_day_apart_is_one_proposal() {
+        let rows = vec![
+            txn("t1", "acct-a", 4200, "GBP", "2099-05-04T09:00:00Z"),
+            txn("t2", "acct-b", 4200, "GBP", "2099-05-05T09:00:00Z"),
+        ];
+        let proposals = proposed(&rows, &[]);
+        assert_eq!(proposals.len(), 1, "one pair, proposed once and not twice");
+        assert_eq!(proposals[0]["left_txn_id"], json!("t1"));
+        assert_eq!(proposals[0]["right_txn_id"], json!("t2"));
+        assert_eq!(proposals[0]["days_apart"], json!(1));
+        assert_eq!(proposals[0]["left_account"], json!("acct-a"));
+        assert_eq!(proposals[0]["right_account"], json!("acct-b"));
+    }
+
+    #[test]
+    fn every_reason_a_pair_is_not_proposed_is_a_reason_on_its_own() {
+        // Same account: one import of one movement, not two of the same one.
+        assert!(
+            proposed(
+                &[
+                    txn("t1", "acct-a", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                    txn("t2", "acct-a", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                ],
+                &[]
+            )
+            .is_empty()
+        );
+        // Different amount: not this pair's near miss, a different movement.
+        assert!(
+            proposed(
+                &[
+                    txn("t1", "acct-a", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                    txn("t2", "acct-b", 4201, "GBP", "2099-05-04T09:00:00Z"),
+                ],
+                &[]
+            )
+            .is_empty()
+        );
+        // Same number, different currency: 4200 JPY is not 4200 GBP.
+        assert!(
+            proposed(
+                &[
+                    txn("t1", "acct-a", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                    txn("t2", "acct-b", 4200, "JPY", "2099-05-04T09:00:00Z"),
+                ],
+                &[]
+            )
+            .is_empty()
+        );
+        // Outside the window, by exactly one day past it.
+        assert!(
+            proposed(
+                &[
+                    txn("t1", "acct-a", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                    txn(
+                        "t2",
+                        "acct-b",
+                        4200,
+                        "GBP",
+                        "2099-05-09T09:00:00Z" // MATCH_WINDOW_DAYS + 1
+                    ),
+                ],
+                &[]
+            )
+            .is_empty()
+        );
+        // ON the window: the boundary is included, so the day before is the
+        // last proposal and not the first refusal.
+        assert_eq!(
+            proposed(
+                &[
+                    txn("t1", "acct-a", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                    txn("t2", "acct-b", 4200, "GBP", "2099-05-08T09:00:00Z"),
+                ],
+                &[]
+            )
+            .len(),
+            1,
+            "MATCH_WINDOW_DAYS is {MATCH_WINDOW_DAYS} days apart inclusive"
+        );
+        // An unparseable posting date: refused, never treated as day zero.
+        assert!(
+            proposed(
+                &[
+                    txn("t1", "acct-a", 4200, "GBP", "not a date"),
+                    txn("t2", "acct-b", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                ],
+                &[]
+            )
+            .is_empty()
+        );
+        // Already answered, either way round: off the list for good, and the
+        // decision is stored one way round only.
+        assert!(
+            proposed(
+                &[
+                    txn("t1", "acct-a", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                    txn("t2", "acct-b", 4200, "GBP", "2099-05-04T09:00:00Z"),
+                ],
+                &[("t2", "t1")]
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn the_nearest_evidence_is_offered_first() {
+        let rows = vec![
+            txn("t1", "acct-a", 4200, "GBP", "2099-05-01T09:00:00Z"),
+            txn("t2", "acct-b", 4200, "GBP", "2099-05-04T09:00:00Z"),
+            txn("t3", "acct-a", 900, "GBP", "2099-05-06T09:00:00Z"),
+            txn("t4", "acct-b", 900, "GBP", "2099-05-06T09:00:00Z"),
+        ];
+        let proposals = proposed(&rows, &[]);
+        assert_eq!(proposals.len(), 2);
+        assert_eq!(
+            proposals[0]["days_apart"],
+            json!(0),
+            "the same-day pair outranks the three-day one whatever the bucket order"
+        );
+        assert_eq!(proposals[1]["days_apart"], json!(3));
+    }
 
     #[test]
     fn a_malformed_limit_reads_as_the_default_and_never_as_an_empty_file() {
