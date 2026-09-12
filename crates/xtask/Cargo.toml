@@ -1,0 +1,23 @@
+[package]
+name = "xtask"
+description = "The v1 tree's only cross-cutting entrypoint: `cargo xtask gate` (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+# Deliberately small. The gate runner is on the edit-run loop, so every
+# dependency here is charged to `local`'s two-minute budget: clap for the CLI,
+# serde_json for the ledgers, and nothing else. The structural rules are
+# hand-rolled scanners rather than `regex` or `tree-sitter` for the same reason
+# (see src/rules.rs — tree-sitter arrives when a rule needs a parse tree).
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }

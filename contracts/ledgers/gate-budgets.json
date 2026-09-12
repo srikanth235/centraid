@@ -1,0 +1,29 @@
+{
+  "_comment": "THE FEEDBACK-TIME BUDGET PER GATE PROFILE (#1020). Down-only: `budgetSeconds` is a ceiling and may only fall. `cargo xtask gate` fails a profile whose steps together overran it and prints the per-step timing table, and the `ledgers` step in every profile refuses a commit that raises any number in this directory. `budgetSeconds` is the issue's ruling — local under 2 minutes, pr under 15, nightly and release unbounded, written as null because a null is not a number and so cannot be ratcheted. The wave-1 measurement is quoted in `headroom` rather than stored as a second number, for the same reason compile-time.json does it: a workspace of one crate today and a dozen after wave 2 would fail a ceiling pinned to today, and the author would learn to widen ledgers. Keyed by hardware class in the vocabulary of tests/journeys.json. v0's ledgers live under tests/ and retire with v0; these are v1's.",
+  "profiles": {
+    "local": {
+      "ci-linux-x64-4c": {
+        "budgetSeconds": 120,
+        "headroom": "Wave 1 measured 4.9 s (fmt, clippy, test, rules, ledgers) after `cargo clean`, on this 4-vCPU container. The gap is for the crates wave 2 adds: five more members roughly multiplies fmt, clippy and test, and this budget is the thing that forces the issue's structural answers — one crate per app, mold or lld, sccache, optimised dependencies in the dev profile — rather than letting the edit-run loop rot quietly."
+      }
+    },
+    "pr": {
+      "ci-linux-x64-4c": {
+        "budgetSeconds": 900,
+        "headroom": "Wave 1 measured 16.8 s after `cargo clean` — clippy 3.1 s, tests 1.4 s, cargo-deny 1.0 s, the workspace release build 11.1 s. Unchanged from #892's rung-2 ceiling. The gap is for cargo-deny over a real dependency graph, the release build of a dozen crates, and the deterministic simulation suite wave 2 lane D adds — the issue rules that the turmoil schedules run on every pull request, and they are charged here."
+      }
+    },
+    "nightly": {
+      "ci-linux-x64-4c": {
+        "budgetSeconds": null,
+        "headroom": "Unbounded by ruling. Wave 1 measured 8.7 s warm, of which the v0 oracle suite is 4.9 s. The device lanes it will carry run on a self-hosted macOS runner with attached phones, where the wall clock is bounded by the hardware and not by a budget."
+      }
+    },
+    "release": {
+      "ci-linux-x64-4c": {
+        "budgetSeconds": null,
+        "headroom": "Unbounded by ruling. Wave 2 lane R's restore drill and wave 3 lane G's VPS smoke are the two steps that will dominate it; both are deliberate FAILURES today, so the profile cannot pass vacuously before either exists."
+      }
+    }
+  }
+}

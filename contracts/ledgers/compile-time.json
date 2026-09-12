@@ -1,0 +1,23 @@
+{
+  "_comment": "THE EDIT-RUN LOOP (#1020, \"compile time is the new Hermes\"). Down-only: `budgetSeconds` is a ceiling and may only fall. `cargo xtask measure --write` is its only writer and only ever lowers it — a gate run measures and reports but never writes, because a ratchet that records whatever the last run cost is a log. `headroom` states what the gap between the ceiling and the wave-1 measurement is for; the measurement is quoted there and in the receipt rather than stored as a second number, because a workspace of one crate today and a dozen after wave 2 would fail a ceiling pinned to today. Keyed by hardware class, in the vocabulary of tests/journeys.json.",
+  "measurements": {
+    "ci-linux-x64-4c": {
+      "cleanCheckSeconds": {
+        "budgetSeconds": 180,
+        "headroom": "Wave 1 measured 17.4 s for a workspace of one member over clap and serde_json. The ceiling carries ten times that because the crates wave 2 lands (iroh, rusqlite bundled, tokio, prost) are the expensive half of a clean check and nobody has compiled them here yet. This is the number sccache and a warm CI cache exist to keep away from a developer at all."
+      },
+      "incrementalCheckSeconds": {
+        "budgetSeconds": 10,
+        "headroom": "Wave 1 measured 0.1 s after appending one line to crates/xtask/src/main.rs. This is the number that decides whether v1 feels like v0, and the one the issue's structural answers are for: one crate per app so an edit rebuilds one crate, mold or lld, and `[profile.dev.package.\"*\"] opt-level = 2` so dependencies are optimised once. Ten seconds is the point at which a developer stops running it and starts guessing."
+      },
+      "releaseBuildSeconds": {
+        "budgetSeconds": 600,
+        "headroom": "Wave 1 measured 28.9 s for `cargo build --workspace --release` from an empty `target/release`. The `pr` profile runs it and scores it against this ceiling, so it is the one compile-time number a pull request can go red on. Ten minutes because the release profile is where LTO and codegen-units land, and because the 15-minute `pr` budget has to hold with it inside."
+      },
+      "singleCrateTestSeconds": {
+        "budgetSeconds": 60,
+        "headroom": "Wave 1 measured 10.4 s for `cargo test -p xtask`, link included. The gap is for the crates that carry real fixtures (the applier's `contracts/` cases, the turmoil schedules in wave 2 lane D), and for cargo-nextest not being installed here — when it is, this is the per-crate leg rather than a whole binary's serial run."
+      }
+    }
+  }
+}

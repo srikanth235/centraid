@@ -1,0 +1,4 @@
+{
+  "_comment": "THE PREBUILT CORE'S SIZE PER ABI (#1020). Down-only, and SEEDED EMPTY ON PURPOSE: four ABIs of a core carrying iroh, SQLite, FTS5 and codecs need a size budget, and nobody can state one before the first artifact exists. The prebuilt-core lane (wave 3 lane G) fills `abis` with one entry per target triple, each `strippedBytes` measured from the artifact it publishes alongside its dSYM and NDK symbol files. AN EMPTY LEDGER GATES NOTHING, and this comment is the whole of what it currently asserts — `cargo xtask gate` reports it as checked because the down-only comparison holds trivially over zero numbers, not because a size claim was made and met.",
+  "abis": {}
+}
