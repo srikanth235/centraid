@@ -37,7 +37,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use centraid_assist::preflight::{self, ProbeFailure, VersionProbe};
-use centraid_assist::registry::{AdapterHost, LaunchPlan, Prefs, Registry};
+use centraid_assist::registry::{AdapterHost, Prefs, Registry};
 use centraid_assist::{adapters, low_priority, spawn_env};
 
 use crate::exit;
@@ -60,11 +60,15 @@ struct Spawning {
 }
 
 impl VersionProbe for Spawning {
-    fn version(&self, plan: &LaunchPlan) -> Result<String, ProbeFailure> {
+    fn version(
+        &self,
+        program: &std::path::Path,
+        harness_env: &BTreeMap<String, String>,
+    ) -> Result<String, ProbeFailure> {
         let env =
             spawn_env::harness_spawn_env(&self.base_env, &spawn_env::SpawnEnvOptions::default());
         let wrapped = low_priority::low_priority_command(
-            &plan.program,
+            program,
             &["--version".to_owned()],
             &low_priority::Host::current(&self.base_env),
         );
@@ -73,7 +77,7 @@ impl VersionProbe for Spawning {
             .args(&wrapped.args)
             .env_clear()
             .envs(&env)
-            .envs(&plan.env)
+            .envs(harness_env)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());

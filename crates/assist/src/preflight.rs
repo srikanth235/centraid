@@ -54,8 +54,22 @@ pub struct Status {
 /// How a probe is actually run. Injected, so the policy above is tested without
 /// installing seventeen CLIs on a runner.
 pub trait VersionProbe {
-    /// The harness's `--version` output, or the reason it could not be read.
-    fn version(&self, plan: &crate::registry::LaunchPlan) -> Result<String, ProbeFailure>;
+    /// `<program> --version`, or the reason it could not be read.
+    ///
+    /// `program` is **the harness CLI**, never the process a turn spawns. For
+    /// the two adapter kinds those are different things — the turn spawns
+    /// `node <adapter>/bin.js` and the CLI is the member's own `claude` or
+    /// `codex` — and probing the process would report **node's** version
+    /// against the harness's minimum. It did, for one commit of this slot:
+    /// `centraid assist preflight claude-code` answered `v22.22.2` with
+    /// `versionAtLeast: true` against a 2.1.126 minimum, which is a green
+    /// preflight that says nothing about the harness. `docs/harnesses.md:69`–
+    /// `:71` states the distinction and this is the signature that enforces it.
+    fn version(
+        &self,
+        program: &std::path::Path,
+        env: &BTreeMap<String, String>,
+    ) -> Result<String, ProbeFailure>;
 }
 
 /// Why a `--version` probe did not produce output.
@@ -134,22 +148,37 @@ pub fn run(
         Err(error) => return not_launchable(harness, &error),
     };
 
-    let key = Cache::key(kind, &plan.program.display().to_string());
+    // THE HARNESS CLI, not `plan.program`. See `VersionProbe::version`.
+    let Some(cli) = prefs
+        .bin_path
+        .clone()
+        .or_else(|| harness.default_bin.clone())
+    else {
+        return not_launchable(
+            harness,
+            &RegistryError::NoBinary {
+                kind: harness.kind.clone(),
+                install_hint: harness.install_hint.clone(),
+            },
+        );
+    };
+    let cli = std::path::PathBuf::from(cli);
+    let key = Cache::key(kind, &cli.display().to_string());
     if let Some((checked_at, status)) = cache.entries.get(&key)
         && now_ms.saturating_sub(*checked_at) < AVAILABILITY_TTL.as_millis() as u64
     {
         return status.clone();
     }
 
-    let status = match probe.version(&plan) {
-        Ok(raw) => classify(harness, &plan, &raw),
+    let status = match probe.version(&cli, &plan.env) {
+        Ok(raw) => classify(harness, &cli, &raw),
         Err(ProbeFailure::NotFound) => Status {
             kind: harness.kind.clone(),
             ok: false,
             version: None,
             min_version: harness.min_version,
             version_at_least: None,
-            reason: Some(format!("{} not found on PATH", plan.program.display())),
+            reason: Some(format!("{} not found on PATH", cli.display())),
             hint: Some(harness.install_hint.clone()),
         },
         Err(failure) => Status {
@@ -186,7 +215,7 @@ fn not_launchable(harness: &Harness, error: &RegistryError) -> Status {
     }
 }
 
-fn classify(harness: &Harness, plan: &crate::registry::LaunchPlan, raw: &str) -> Status {
+fn classify(harness: &Harness, cli: &std::path::Path, raw: &str) -> Status {
     let trimmed: String = raw.trim().chars().take(200).collect();
     let found = Version::find_in(&trimmed);
     let at_least = found.map(|version| version >= harness.min_version);
@@ -207,7 +236,7 @@ fn classify(harness: &Harness, plan: &crate::registry::LaunchPlan, raw: &str) ->
         ));
         status.hint = Some(format!(
             "Run {} update (or your package manager's upgrade command) to bring it up to date.",
-            plan.program.display()
+            cli.display()
         ));
     }
     status
@@ -221,6 +250,7 @@ mod tests {
     struct Fixed {
         answer: Result<String, ProbeFailure>,
         calls: Cell<usize>,
+        probed: std::cell::RefCell<Vec<String>>,
     }
 
     impl Fixed {
@@ -228,19 +258,26 @@ mod tests {
             Self {
                 answer: Ok(text.to_owned()),
                 calls: Cell::new(0),
+                probed: std::cell::RefCell::new(Vec::new()),
             }
         }
         fn err(failure: ProbeFailure) -> Self {
             Self {
                 answer: Err(failure),
                 calls: Cell::new(0),
+                probed: std::cell::RefCell::new(Vec::new()),
             }
         }
     }
 
     impl VersionProbe for Fixed {
-        fn version(&self, _plan: &crate::registry::LaunchPlan) -> Result<String, ProbeFailure> {
+        fn version(
+            &self,
+            program: &std::path::Path,
+            _env: &BTreeMap<String, String>,
+        ) -> Result<String, ProbeFailure> {
             self.calls.set(self.calls.get() + 1);
+            self.probed.borrow_mut().push(program.display().to_string());
             self.answer.clone()
         }
     }
@@ -317,6 +354,36 @@ mod tests {
         assert!(!status.ok);
         assert_eq!(probe.calls.get(), 0, "`undefined --version` must not spawn");
         assert!(status.reason.unwrap().contains("no binary configured"));
+    }
+
+    #[test]
+    fn an_adapter_kind_probes_the_harness_cli_and_never_the_node_that_hosts_it() {
+        // THE DEMONSTRATED RED of this module. Probing the spawned process
+        // reports node's version against the harness's minimum — a green
+        // preflight that says nothing about the harness.
+        let registry = Registry::load();
+        let mut host = AdapterHost::default();
+        host.scripts.insert(
+            "@agentclientprotocol/claude-agent-acp".to_owned(),
+            std::path::PathBuf::from("/opt/adapters/claude-agent-acp/bin.js"),
+        );
+        let probe = Fixed::ok("2.1.269 (Claude Code)");
+        let status = run(
+            &registry,
+            "claude-code",
+            &Prefs::default(),
+            &host,
+            &probe,
+            &mut Cache::new(),
+            0,
+        );
+        assert_eq!(
+            probe.probed.borrow().as_slice(),
+            ["claude"],
+            "the probe must ask the harness CLI, not the node that hosts its adapter"
+        );
+        assert_eq!(status.version.as_deref(), Some("2.1.269 (Claude Code)"));
+        assert_eq!(status.version_at_least, Some(true));
     }
 
     #[test]
