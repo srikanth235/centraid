@@ -266,6 +266,14 @@ export class UploadQueue {
     return this.store.enqueueFollowup(followup);
   }
 
+  /** Merge fields into the writes this item still has to make (#1014, R17). */
+  amendFollowupInput(
+    itemId: string,
+    patch: Record<string, unknown>
+  ): UploadFollowup[] {
+    return this.store.amendFollowupInput(itemId, patch);
+  }
+
   pendingFollowups(): UploadFollowup[] {
     return this.store.pendingFollowups();
   }

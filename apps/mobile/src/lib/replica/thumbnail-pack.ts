@@ -92,6 +92,17 @@ export function pinnedThumbnailUri(
   );
 }
 
+/** DOES THIS SCOPE HAVE AN OFFLINE PACK AT ALL (#1014, R16)? Home's Photos
+ *  tile tells a member why a cell is blank, and "they fill in when the gateway
+ *  is back" is only true when there is nothing pinned here — with a pack in
+ *  place, a blank cell means this photograph is not in it. Answered from the
+ *  same cached listing as `pinnedThumbnailUri`, so it costs no crossing. */
+export function hasPinnedThumbnailPack(scopeId: string): boolean {
+  const prefix = `${encodeURIComponent(scopeId)}/`;
+  for (const key of packIndex().keys()) if (key.startsWith(prefix)) return true;
+  return false;
+}
+
 /**
  * Keep favorites plus the newest 90 days independently for each source.
  * Eviction is source-local and oldest-first, so one family vault cannot crowd

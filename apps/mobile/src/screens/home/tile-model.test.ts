@@ -17,6 +17,7 @@ import {
   MOSAIC_CELL_HEIGHT,
   MOSAIC_SLOTS,
   mosaicAwaitingBytes,
+  mosaicWaitingCopy,
   mosaicCells,
   openTasks,
   formatBytes,
@@ -563,5 +564,14 @@ describe(combineTileStatus, () => {
     expect(combineTileStatus([settled({ error: "read refused" })], false)).toBe(
       "unknown"
     );
+  });
+});
+
+describe("the mosaic's waiting copy", () => {
+  it("names the offline pack when this phone holds one (#1014, R16)", () => {
+    expect(mosaicWaitingCopy(false)).toContain("live on the gateway");
+    // With a pack in place, "they live on the gateway" reads as the offline
+    // copy not working; the truth is that these are not in it.
+    expect(mosaicWaitingCopy(true)).toContain("offline copy");
   });
 });

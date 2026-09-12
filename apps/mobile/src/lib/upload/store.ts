@@ -12,6 +12,7 @@
 
 import type { UploadSqliteDriver } from "../replica/expo-sqlite-driver";
 import type { PendingUploadGroup } from "../replica/storage-accounting";
+import { amendUploadFollowupInput } from "./followup-amend";
 import { stableFollowupIntentId, toUploadFollowup } from "./followup-record";
 import type {
   NewUploadFollowup,
@@ -366,6 +367,15 @@ export class UploadQueueStore {
     if (!row)
       throw new Error(`upload follow-up for ${followup.itemId} vanished`);
     return toUploadFollowup(row);
+  }
+
+  /** A caption typed before the row exists (#1014, R17) — see
+   *  `followup-amend.ts` for why only an untried follow-up may move. */
+  amendFollowupInput(
+    itemId: string,
+    patch: Record<string, unknown>
+  ): UploadFollowup[] {
+    return amendUploadFollowupInput(this.driver, itemId, patch);
   }
 
   /** Settled bytes, oldest first. Poisoned follow-ups excluded (F4). */
