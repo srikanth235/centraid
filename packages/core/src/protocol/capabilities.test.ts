@@ -19,10 +19,10 @@ describe("the default gateway capabilities", () => {
       automationTurns: true,
       automations: false,
       connectors: false,
-      // The two seat doors are served; the locker key answers a named
-      // "not yet" until W6 (#996).
+      // All three seat doors are served: the snapshot and log tail (#996 W1)
+      // and the locker key (#1015, R-NY-19).
       seatReplica: true,
-      seatLockerKey: false,
+      seatLockerKey: true,
     });
   });
 });

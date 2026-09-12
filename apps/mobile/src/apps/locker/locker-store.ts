@@ -45,6 +45,7 @@ import {
   removeLockerVaultKey,
 } from "./locker-device-auth";
 import { revealLockerRow, unlockLockerDoor } from "./locker-door";
+import { enrolThisPhoneInLocker } from "./locker-enrol";
 import { lockerRevealReceipt } from "./locker-gateway";
 import {
   ITEMS_WINDOW,
@@ -332,6 +333,28 @@ export async function unlockLocker(): Promise<void> {
   } catch (error) {
     set({ busy: false, readError: message(error) });
   }
+}
+
+/**
+ * Enrol this phone: fetch `K` over the desktop link and put it in the
+ * keychain (#1015, R-NY-19).
+ *
+ * On success the wall does NOT unlock itself. Holding the key and proving
+ * presence are two different facts, and collapsing them would mean the OS
+ * prompt the member has not answered yet had been answered for them. The
+ * absence is gone, so `notEnrolled` clears and the unlock verb appears.
+ */
+export async function enrolLockerPhone(): Promise<void> {
+  const vaultId = getActiveVaultId();
+  set({ busy: true });
+  const answer = await enrolThisPhoneInLocker(vaultId);
+  set({
+    busy: false,
+    notEnrolled: !answer.ok,
+    session: answer.ok
+      ? state.session
+      : { ...state.session, error: answer.message },
+  });
 }
 
 /** Forget `K` on this device — the revoke screen's local half (R13). */

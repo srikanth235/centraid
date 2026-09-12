@@ -38,6 +38,7 @@ import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
+  DEVICE_ENROL,
   DEVICE_FORGET,
   DEVICE_NOT_ENROLLED_BODY,
   DEVICE_NOT_ENROLLED_TITLE,
@@ -55,10 +56,12 @@ export interface LockerWallProps {
   busy: boolean;
   /** The door's refusal, in its own words. */
   error: string;
-  /** This phone holds no `K` for this vault, and nothing on this seat can hand
-   *  it one (#1015 B1, #996 W6). The wall states that and offers no verb —
-   *  a control that cannot work is worse than a stated absence. */
+  /** This phone holds no `K` for this vault (#1015 B1). The wall says so and
+   *  offers the ONE verb that changes it, rather than an unlock that would
+   *  refuse every time it was pressed. */
   notEnrolled: boolean;
+  /** Enrol: fetch `K` over the desktop link (#1015, R-NY-19). */
+  onEnrol: () => void;
   /** Unlock: asks the OS to prove the member is present. */
   onUnlock: () => void;
   /** Forget `K` on this device — the revoke gesture's local half (R13). */
@@ -70,6 +73,7 @@ export default function LockerWall({
   busy,
   error,
   notEnrolled,
+  onEnrol,
   onUnlock,
   onForgetKey,
 }: LockerWallProps): React.JSX.Element {
@@ -106,25 +110,25 @@ export default function LockerWall({
         {notEnrolled ? DEVICE_NOT_ENROLLED_BODY : LOCK_BODY}
       </Text>
 
-      {/* The refusal is the HEADING once it is permanent; repeating it as an
-          alert would say the same sentence twice on one screen. */}
-      {error && !notEnrolled ? (
+      {/* A refusal is an alert on both walls now. It was folded into the
+          heading while the not-enrolled wall was a dead end with nothing to
+          say twice; the enrol verb can fail for four different reasons, and
+          each of them has to be readable beside the button that caused it. */}
+      {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
         </Text>
       ) : null}
 
-      {notEnrolled ? null : (
-        <View style={styles.acts}>
-          <Button
-            disabled={busy}
-            label={DEVICE_UNLOCK}
-            onPress={onUnlock}
-            testID={TEST_IDS.locker.gateSubmit}
-            variant="primary"
-          />
-        </View>
-      )}
+      <View style={styles.acts}>
+        <Button
+          disabled={busy}
+          label={notEnrolled ? DEVICE_ENROL : DEVICE_UNLOCK}
+          onPress={notEnrolled ? onEnrol : onUnlock}
+          testID={TEST_IDS.locker.gateSubmit}
+          variant="primary"
+        />
+      </View>
 
       <View style={styles.facts}>
         {LOCK_FACTS.map(([key, value]) => (

@@ -3802,6 +3802,10 @@ export async function buildGateway(
           automations: experimental.automations,
           connectors: experimental.connectors,
           seatReplica: true,
+          // The key door is served (#1015, R-NY-19). A seat reads this before
+          // it offers "Enrol this phone", so an older gateway's absent flag
+          // reads as "no such door" rather than as a broken request.
+          seatLockerKey: true,
         },
       })
     ),

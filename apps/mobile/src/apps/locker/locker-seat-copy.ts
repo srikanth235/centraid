@@ -17,22 +17,34 @@
 export const DEVICE_UNLOCK = "Unlock with this device";
 
 /**
- * WHEN THIS PHONE HOLDS NO KEY (#1015 B1, #996 W6).
+ * WHEN THIS PHONE HOLDS NO KEY (#1015, rulings B1 and R-NY-19).
  *
- * `storeLockerVaultKey` has no non-test caller anywhere in the repo: nothing
- * in pairing, onboarding or Locker itself writes `K` to this keychain, because
- * the key plane that would hand it over is #996 wave 6 and is not built. So
- * "Unlock with this device" refused every time it was pressed, and the refusal
- * — "This device does not hold this vault's key yet." — read as a retryable
- * error rather than as the truth, which is that there is no gesture on this
- * seat that could ever make it succeed.
- *
- * The wall says so instead of offering the button. A control that cannot work
- * is worse than a stated absence.
+ * The wall used to say that enrolling a phone was not available and to open
+ * Locker on the desktop. The first half was true and the second was not: no
+ * seat could reveal, because nothing anywhere wrote `K`. Now one can, and it
+ * is this one — the member asks for the key here and it arrives over the
+ * desktop link this phone already authenticated. The stated absence becomes a
+ * verb, and no sentence claims another seat can do what this one cannot.
  */
 export const DEVICE_NOT_ENROLLED_TITLE = "Not enrolled on this phone";
 export const DEVICE_NOT_ENROLLED_BODY =
-  "Locker unlocks once this phone has been enrolled for this vault · enrolling a phone is not available yet, so open Locker on the desktop.";
+  "Locker unlocks once this phone holds this vault’s key · enrol this phone to fetch it over your desktop link.";
+
+/** The verb that fetches `K` (#1015, R-NY-19). Locker's, not pairing's: the
+ *  key to every secret in the vault does not ride along with a transport
+ *  ceremony the member did in Settings before they opened this app. */
+export const DEVICE_ENROL = "Enrol this phone";
+export const DEVICE_ENROL_DONE = "This phone holds this vault’s key";
+/** The four ways enrolment is refused, each naming what to do next. */
+export const ENROL_NEEDS_TUNNEL =
+  "Enrolling needs your desktop link · pair this phone in Settings, then try again.";
+export const ENROL_NO_DOOR =
+  "This desktop does not hand out Locker keys · update it, then try again.";
+export const ENROL_NOT_ALLOWED =
+  "Your desktop has not enrolled this phone for this vault · pair it again in Settings.";
+export const ENROL_REFUSED = "This phone was not enrolled · try again.";
+export const ENROL_WRONG_VAULT =
+  "Your desktop answered for another vault · switch vaults, then try again.";
 
 /** Forgetting the vault key on this device — the revoke gesture's local half
  *  (#996, R13). It is not "revoke a credential" any more: what this phone
