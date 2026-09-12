@@ -4,6 +4,7 @@ import dev.centraid.design.CentraidCopy
 import dev.centraid.design.CentraidTokens
 import dev.centraid.design.NATIVE_COLOR_ROLES
 import dev.centraid.design.NATIVE_EFFECT_ROLES
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -96,9 +97,20 @@ class NativeThemeSpec : StringSpec({
         )
         val json = repositoryRoot.resolve("design/native-theme.json").readText()
         val swift = repositoryRoot.resolve("mobile/iosApp/Design/Theme.swift").readText()
+        // ONCE PER SCHEME, COUNTED — not "appears somewhere".
+        //
+        // The first version of this assertion used `contains`, and a
+        // falsification run renamed `"accent":` in the LIGHT scheme only: the
+        // test still passed, because the dark scheme's copy satisfied
+        // `contains`. A presence check over a file with two schemes in it
+        // cannot tell a complete table from half of one.
         NATIVE_COLOR_ROLES.forEach { role ->
-            json.contains("\"$role\":").shouldBeTrue()
-            swift.contains("\"$role\":").shouldBeTrue()
+            withClue("design/native-theme.json: $role") {
+                json.split("\"$role\":").size - 1 shouldBe 2
+            }
+            withClue("mobile/iosApp/Design/Theme.swift: $role") {
+                swift.split("\"$role\":").size - 1 shouldBe 2
+            }
         }
         // And the Swift file declares the same role list.
         val swiftRoles = Regex("^    \"([A-Za-z0-9]+)\",$", RegexOption.MULTILINE)

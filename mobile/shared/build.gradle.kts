@@ -93,6 +93,27 @@ tasks.withType<Test>().configureEach {
     systemProperty("centraid.mobileRoot", rootProject.layout.projectDirectory.asFile.path)
     systemProperty("centraid.repositoryRoot", repositoryRoot.path)
     systemProperty("centraid.contractsDir", repositoryRoot.resolve("contracts").path)
+    // THE FILES THESE SPECS READ ARE TASK INPUTS.
+    //
+    // `ScreenFixtureSpec` reads `contracts/screens`, `NativeThemeSpec` reads
+    // `design/` and the emitted Swift table, and
+    // `NativeAccessibilityLintSpec` reads both view trees. Without declaring
+    // them, Gradle calls the task UP-TO-DATE after any change outside
+    // `src/`— which a falsification run found by renaming a role in
+    // `Theme.swift` and watching the suite not run at all. A source-scanning
+    // test whose sources are not inputs is a test that passes on yesterday's
+    // tree.
+    inputs.dir(repositoryRoot.resolve("contracts/screens")).withPathSensitivity(
+        org.gradle.api.tasks.PathSensitivity.RELATIVE,
+    )
+    inputs.dir(repositoryRoot.resolve("design"))
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    inputs.dir(repositoryRoot.resolve("copy"))
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    inputs.dir(rootProject.layout.projectDirectory.dir("iosApp"))
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    inputs.dir(rootProject.layout.projectDirectory.dir("androidApp/src"))
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
     testLogging { showStandardStreams = true }
 }
 
