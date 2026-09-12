@@ -235,6 +235,42 @@ pub fn read_outcome(connection: &Connection, intent_id: &str) -> Result<Option<I
     }))
 }
 
+/// Every outcome in one status, oldest intent id first.
+///
+/// Added for `crates/core`'s `parked` door (#1020, wave 2 lane D2). The door
+/// answers "what is waiting on somebody's decision", and the alternative was a
+/// SELECT inside `crates/core`, which the `sql-confinement` rule refuses —
+/// correctly. So the reader lives here, where SQL is allowed to be.
+///
+/// A status this vault never writes returns an empty vector rather than an
+/// error: the caller named a status, and "nothing is in it" is a true answer.
+pub fn list_outcomes_with_status(
+    connection: &Connection,
+    status: &str,
+) -> Result<Vec<IntentOutcome>> {
+    let mut statement = connection.prepare_cached(
+        "SELECT intent_id, device_id, app_id, action, payload_hash, status,
+                invocation_id, commit_seq, expires_at
+           FROM replica_intent_outcome WHERE status = ?1 ORDER BY intent_id",
+    )?;
+    let rows = statement
+        .query_map([status], |row| {
+            Ok(IntentOutcome {
+                intent_id: row.get(0)?,
+                device_id: row.get(1)?,
+                app_id: row.get(2)?,
+                action: row.get(3)?,
+                payload_hash: row.get(4)?,
+                status: row.get(5)?,
+                invocation_id: row.get(6)?,
+                commit_seq: row.get(7)?,
+                expires_at: row.get(8)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
 /// Refuse an intent whose id is held by a different command, caller or payload.
 ///
 /// `intent_id_reused` when `app_id`, `action` or `payload_hash` differ;

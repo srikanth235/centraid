@@ -494,3 +494,65 @@ fn a_cursor_is_the_wire_form_both_ways() {
         vec![Value::Text("a".to_owned())]
     );
 }
+
+/// The status reader `crates/core`'s `parked` door needs (#1020, lane D2).
+///
+/// The SELECT lives here rather than in `crates/core` because the
+/// `sql-confinement` rule refuses SQL outside the five named crates — and it is
+/// right to: a door that read the ledger itself would be a second reader of a
+/// table whose shape this crate owns.
+#[test]
+fn outcomes_can_be_listed_by_status_and_a_status_with_none_is_empty() {
+    let scratch = common::Scratch::founded("by-status").expect("a vault is founded");
+    scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.outcomes");
+            for (intent, status) in [
+                ("i-parked-b", "parked"),
+                ("i-parked-a", "parked"),
+                ("i-executed", "executed"),
+            ] {
+                tx.connection().execute(
+                    "INSERT INTO replica_intent_outcome
+                       (intent_id, device_id, app_id, action, payload_hash, status,
+                        commit_seq, created_at, updated_at)
+                     VALUES (?1, 'd', 'tally', 'a', 'h', ?2, 7, ?3, ?3)",
+                    rusqlite::params![intent, status, "2026-01-01T00:00:00.000Z"],
+                )?;
+            }
+            Ok(())
+        })
+        .expect("the outcomes land");
+
+    let parked = scratch
+        .vault
+        .read(|connection| centraid_vault::intents::list_outcomes_with_status(connection, "parked"))
+        .expect("the read runs");
+    // Ordered by intent id, so a caller's list is stable across runs rather
+    // than being whatever the file's page order happens to be.
+    assert_eq!(
+        parked
+            .iter()
+            .map(|outcome| outcome.intent_id.as_str())
+            .collect::<Vec<_>>(),
+        ["i-parked-a", "i-parked-b"]
+    );
+    assert_eq!(parked[0].commit_seq, Some(7));
+    // The executed one is NOT in the answer: the door asked for one status.
+    assert!(!parked.iter().any(|outcome| outcome.status != "parked"));
+
+    // A status this vault never wrote is an empty answer, not an error: the
+    // caller named a status, and "nothing is in it" is true.
+    assert!(
+        scratch
+            .vault
+            .read(
+                |connection| centraid_vault::intents::list_outcomes_with_status(
+                    connection, "sending"
+                )
+            )
+            .expect("the read runs")
+            .is_empty()
+    );
+}
