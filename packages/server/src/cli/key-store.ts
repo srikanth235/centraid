@@ -80,29 +80,58 @@ function credentialWrappingKey(
     }
   }
   if (process.platform === "darwin") {
-    const explicit =
-      Boolean(env.CENTRAID_KEYSTORE_KEYCHAIN_SERVICE?.trim()) ||
-      Boolean(env.CENTRAID_KEYSTORE_KEYCHAIN_ACCOUNT?.trim());
     const service =
       env.CENTRAID_KEYSTORE_KEYCHAIN_SERVICE?.trim() || MACOS_KEYCHAIN_SERVICE;
     const account =
       env.CENTRAID_KEYSTORE_KEYCHAIN_ACCOUNT?.trim() ||
       keychainAccountFor(keysDir);
-    const result = spawnSync(
-      "/usr/bin/security",
-      ["find-generic-password", "-w", "-s", service, "-a", account],
-      { encoding: "utf8" }
+    return readKeychainCredential(service, account, (args) =>
+      spawnSync("/usr/bin/security", args, { encoding: "utf8" })
     );
-    if (result.status === 0) return result.stdout.trim();
-    if (explicit) {
-      throw new Error(
-        `could not read KeyStore credential from macOS Keychain (${service}/${account}): ${
-          result.stderr?.trim() || `security exited ${result.status}`
-        }`
-      );
-    }
   }
   return undefined;
+}
+
+/** `security` exits 44 for "the item is not in the keychain" and nothing else. */
+const KEYCHAIN_ITEM_NOT_FOUND = 44;
+
+export interface KeychainProbeResult {
+  status: number | null;
+  stdout?: string;
+  stderr?: string;
+}
+
+/**
+ * Read one keychain entry, telling ABSENT from UNREADABLE (#1014, X15).
+ *
+ * A locked keychain, a denied ACL prompt, or a `security` that could not be
+ * spawned all exit non-zero without `itemNotFound`. Treating those as "no
+ * credential" sent the caller down the external-0600-credential fallback,
+ * which MINTS a fresh credential when none is on disk — so a transient
+ * custody failure silently produced a wrapping key that cannot unwrap a
+ * single existing key, and the gateway came up as if custody had never been
+ * configured. Absence is the only answer that may fall through.
+ */
+export function readKeychainCredential(
+  service: string,
+  account: string,
+  run: (args: string[]) => KeychainProbeResult
+): string | undefined {
+  const result = run([
+    "find-generic-password",
+    "-w",
+    "-s",
+    service,
+    "-a",
+    account,
+  ]);
+  if (result.status === 0) return result.stdout?.trim() ?? "";
+  if (result.status === KEYCHAIN_ITEM_NOT_FOUND) return undefined;
+  throw new Error(
+    `could not read KeyStore credential from macOS Keychain (${service}/${account}): ${
+      result.stderr?.trim() || `security exited ${result.status}`
+    }`
+  );
 }
 
 export function headlessCredentialFile(
