@@ -4180,3 +4180,127 @@ for test names that exist only in this lane's commits —
 the same log. A neighbour's binaries could not have produced those lines. That
 is evidence, not proof, and it is the best this machine's shared build directory
 allows.
+
+## Wave 4 — lane Tally-finish: `crates/design`, the 29 cases compared whole, the 23 commands made real, `copy/`
+
+Tally is complete in Rust. The eight queries answer all 29 committed cases by value, the 23
+`tally.*` commands write v0's rows through the vault's gate order, and the presentation the
+comparison was blocked on comes from one lowering of `packages/design` rather than a second hue
+wheel. Eight commits, rebased onto `160eaa3d` (lanes Photos and X3 landed mid-slot).
+
+### What landed
+
+**`534bb91a` — `crates/design`, the corpus, and `copy/` (D-1020-T1, D-1020-T5)**
+
+- `crates/design/{Cargo.toml,src/lib.rs,src/copy.rs,tests/corpus.rs,tests/copy_routes.rs}` — `identity_hash`, `identity_hue_key`, `party_hue_value`, `party_hue_key`, `party_color`, `identity_initials_units`, `identity_initials`, `figure_tone`, `native_themes`, `assert_native_color_role_contract`, and `copy::{CopyLeaf, route_gaps}`.
+- `contracts/tools/export-design-corpus.ts` — runs the REAL `packages/design` functions over a 252-row hostile corpus into `design/identity-corpus.json` (192 hue rows, 30 names, 30 figures).
+- `contracts/tools/export-copy.ts` — the one writer of `copy/<app>.json`, six leaves, 189 strings, plus both sides of the route-id claim; `contracts/tools/export-native-theme.ts` calls it and now carries `colorRoleContract` as data.
+- `design/{identity-corpus.json,native-theme.json}`, `copy/{tally,notes,photos,shared}.json`, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`, `Cargo.lock`.
+
+**`fb205b70` — one id space per vault in the parity generator**
+
+- `contracts/tools/export-tally-parity.ts`, `contracts/apps/tally/queries.json`. `canonicalise` held its `seen` map per call, so one expense was `id-0035` in `rows.json` and `id-0016` in `queries.json` and `export`'s inputs named group ids no row carried. The 29 cases could not be compared at all and the disagreement was the generator's.
+
+**`94e4335d` — the 29 cases compared whole, `history` and `matches` (D-1020-T2, D-1020-T4)**
+
+- `crates/apps/tally/src/views.rs` (new, the eight answers), `crates/apps/tally/src/queries.rs` (the revision, transaction, link and account statements), `crates/apps/tally/src/lib.rs`, `crates/apps/tally/Cargo.toml`, `crates/apps/tally/tests/queries_parity.rs` (new).
+- `contracts/tools/export-tally-parity.ts`, `contracts/apps/tally/{queries.json,rows.json}`, `Cargo.lock`.
+
+**`5e197b9a` — the 23 commands made real, and the app's door (D-1020-T3)**
+
+- `crates/vault/src/commands/tally.rs` — every stub's body, its preconditions and postconditions bound to `:ctx_now`, idempotency and risk as D1 registered them, two command-level `confirm`s (`tally.rs:1501`, `tally.rs:2800`) kept distinct from the manifest's seven confirmations, and `online_only` on exactly `tally.materialize_recurring_expense` (`tally.rs:3087`, census E4 of wave 3).
+- `crates/apps/tally/src/door.rs` (new, behind `vault-door`), `crates/apps/tally/tests/door.rs` (new), `crates/apps/tally/tests/year3.rs`, `crates/apps/tally/src/views.rs`, `crates/apps/tally/Cargo.toml`.
+- `crates/vault/tests/tally_commands.rs` (new, D-1020-T3c), `crates/vault/tests/commands.rs` (the two stub-era assertions rewritten for a schema that now has bodies).
+- `contracts/apps/tally/{commands.json,rows.json}`, `contracts/tools/{export-tally-parity.ts,tally-parity-canonical.ts}`, `tests/quality/tally-parity.contract.test.ts` (the ONE permitted fixture-adapter edit: `commands.json` added to `FILES`, deliberately not deep-sorted because a script is an order), `Cargo.lock`.
+
+**`9b8f4c93` — one banner for `copy/*`, and no SQL in the app's own tests**
+
+- `contracts/tools/export-copy.ts` (`copyHeader()`, one function for both callers), `contracts/tools/export-native-theme.ts`, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`, `crates/apps/tally/tests/door.rs` (the owner now comes off `tally.dashboard.vault` instead of a `SELECT`).
+
+**`fd6284e9` — the match pairing fold is pure and every refusal is asserted**
+
+- `crates/apps/tally/src/views.rs` — `match_proposals` extracted, six new assertions.
+
+**`fccefef4` — the docs**
+
+- `crates/design/README.md` (new), `crates/apps/tally/README.md`, `contracts/apps/tally/year3-ceiling.md`.
+
+**`3e993354` — the socket catalogue reprinted**
+
+- `contracts/desktop/socket-catalogue.json` — one statement changed, by the command `no_listener.rs`'s own failure message names.
+
+### Exit list
+
+| Command | Outcome |
+| --- | --- |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy -p centraid-design -p centraid-apps-tally --all-targets` (and `--features vault-door`) | no warnings |
+| `cargo test -p centraid-design -p centraid-apps-tally -p centraid-vault` | 328 passed, 0 failed; with `--features vault-door` the Tally crate is 42 passed, 0 failed |
+| `cargo test --workspace` | **1,123 passed, 0 failed, 2 ignored** on the rebased tree (819 before wave 4; 847 with this lane alone, then Photos and X3 landed) |
+| `cargo xtask gate --profile local` | **PASS on this lane's tree** (`204.7 s`, every step green, taken before the Photos rebase); on the rebased tree fmt / clippy / test / ledgers are green and `rules` is red on two files this lane did not write — see findings 6 and 7. X3's `8602e221` makes the tree read **warm**, so the run is now scored against the 120 s warm budget rather than the cold ceiling |
+| `sql-confinement` | **clean over every file this lane owns** — 121 files scanned on the rebased tree (103 in the allowed crates, 10 in the rule runner), the only two findings being `crates/apps/photos/tests/{parity,year3}.rs`. Before the rebase the same rule read `89 scanned, clean`. `crates/apps/tally` and `crates/design` hold no SQL, tests included |
+| `abi-five-symbols` / `no-listening-socket` / `commonmain-no-platform-import` | clean (8 / 224 / 17 files) |
+| `ledgers` | 5 ledger(s) hold against `e9a7d81a` |
+| `gate --profile pr --lane buf` | PASS (`buf lint` + breaking against `main`) |
+| `gate --profile pr --lane deny` | PASS |
+| `gate --profile pr --lane ts-static` | PASS — `bun run check:push:static` |
+| `gate --profile pr --lane ci-policy` | FAIL, inherited — see findings |
+| `gate --profile pr --lane secrets` | FAIL, inherited — 2 findings, both on files unchanged by this lane |
+| `gate --profile pr --lane osv` | FAIL, inherited — `astro@7.1.5` |
+| `gate --profile pr --lane release-build` | **not run** — the container was between 0.3 and 1.4 GB free for the whole slot and a release build of the workspace does not fit. Named for the root rather than reported as green |
+| `bun contracts/tools/export-native-theme.ts` + `export-copy.ts` + `bun run format` + `git diff --exit-code design copy contracts/apps/tally mobile` | clean — and the standalone `export-copy.ts` run and the combined run now agree byte for byte |
+| `node node_modules/vitest/vitest.mjs run --config vitest.quality.config.ts tests/quality/tally-parity.contract.test.ts` | 2 passed — the v0 oracle answers the fixture and the bundle is byte-current, so `export-tally-parity` is idempotent |
+| `cargo mutants -p centraid-apps-tally --in-place` | **not run to completion** — started, then stopped deliberately: `--in-place` mutates the working tree, and with the container at under 1 GB free a run that cannot finish risks leaving a mutant in a tree about to be pushed. `git status --porcelain` was verified empty afterwards. Hand-off below |
+
+**Parity counts.** 29 query cases (dashboard 1, group 4, friend 3, activity 1, search 3, export 9, history 7, matches 1), 20 command steps, 6 balance-engine cases, 252 corpus rows (192 hues, 30 initials, 30 tones), 51 colour roles plus 3 non-colour effect entries, 189 copy strings over 6 leaves, 24 fixture tables.
+
+**Year-3, through the real command path.** `load_tally` + the three extra pages 107 / 107 / 127 ms over three runs; the balance fold over 40 groups 22–23 ms; dashboard 34–35 ms, group 9–10 ms, friend 29 ms, activity 39–42 ms, search 209–218 ms over 1,960 decorated rows, export 3 ms, `matches` and `history` 0 ms over an empty plane; `tally.add_expense` **4.45 ms per write** through the whole gate order (200 writes, 889 ms). Numbers and their caveats are in `contracts/apps/tally/year3-ceiling.md`.
+
+### Decisions — lane Tally-finish
+
+- **D-1020-T1 — `crates/design` is one lowering of `packages/design`, generated, never retyped** (#1020). Options: (a) retype the three functions in Rust and test them against hand-written cases; (b) emit a corpus from the real TypeScript and assert every row; (c) drop the presentation fields from the fixture. (c) means editing a generated fixture and (a) means two hue wheels that each look right; **(b) adopted** — `contracts/tools/export-design-corpus.ts` runs the real `partyHueKey`/`partyHueValue`/`identityInitials` and Tally's `figureTone` over 252 hostile rows, and `tests/corpus.rs` asserts all of them. Lane E's emitter was EXTENDED, not duplicated: `export-native-theme.ts` calls both new tools and remains the one command that writes every artifact.
+- **D-1020-T2 — the 29 cases are compared whole** (#1020). Options: compare a subset and note the rest; compare everything. **Everything**, with one stated exception: a `recurring` row's `preview` and `next_start` are `describeRecurrence`/`expandRecurrence` answers from v0's civil-time plane, which is the schedule lane's port. They are named in one constant (`views::RECURRENCE_DEFERRED`) and asserted PRESENT in the fixture, so the deferral cannot widen quietly and cannot hide a regression in the ported fields. Regenerating `queries.json` confirmed lane V's fixes changed no answer.
+- **D-1020-T2a — the expenses projection is v0's thirteen columns exactly, and that is a finding rather than a choice** (#1020). v0's `loadTally` selects thirteen columns (`queries/dashboard.ts:287-290`), which leaves `settlement_currency`, `original_amount_minor`, `original_currency` and the four `rate_*` columns undefined in every row the dashboard folds — so `ledgerRow` labels a JPY expense with the vault's base money and `rateSuggestions` can never produce a row. Options: select the columns in the port (silently right, uncomparable); reproduce v0 and file the finding. **Reproduced**, finding below.
+- **D-1020-T3 — the 23 commands are the stubs made real, in the vault** (#1020), with v0's preconditions and postconditions as `CommandCondition`s bound to `:ctx_now`, D1's idempotency and risk, two command-level `confirm`s kept separate from the manifest's seven confirmations, and `online_only` reproducing v0's Tally list exactly (one command).
+- **D-1020-T3b — three commands refuse rather than fake** (#1020). `tally.add_receipt_expense` needs the staged-blob, content and enrichment planes, and the occurrence halves of the two recurrence commands need the civil-time expander. Options: write the expense and drop the photo; write a minimal RRULE expander; refuse with a sentence naming the lane that owns the plane. **Refused** — a member who believes their receipt was filed is worse than a refusal, and a second recurrence engine is the drift #996 R21 (ONT-25) was filed for.
+- **D-1020-T3c — effects are proven by replay, not by typing rows** (#1020). `commands.json` records v0's own 20-step script with every minted id as a reference to the step that produced it; `crates/vault/tests/tally_commands.rs` replays it and compares table for table, modulo ids and host instants, because two runs mint different ids and nothing in the product depends on which.
+- **D-1020-T3d — the app's real `Commands` door is behind a `vault-door` feature** (#1020), off by default, so an edit in `crates/apps/tally` rebuilds one crate and the in-memory test impl still serves the unit tests.
+- **D-1020-T5 — `copy/<app>.json` has exactly one writer** (#1020). The leaves are read as TEXT, not imported, because some are import-free by design and the rest would pull a `.tsx` app frame into a build script — the same precedent as `export-v0-registries.ts`. Route ids travel with the sentences and `crates/design`'s `copy::route_gaps` names either gap, because a route id in one side and not the other renders a silent empty string.
+- **D-1020-T6 — the eight client-side models stay unported** (#1020). They are form arithmetic and surface state, not the ledger. The one that was a bug — `line-model.ts`'s module-level line-id counter — was already fixed in v0 by lane V, and the Rust port mints from `Ids`.
+- **D-1020-T7 (new) — the match pairing fold is extracted and asserted over constructed rows** (#1020). `matches` is the one answer of the eight that no generated fixture can reach: v0's seed holds one `core_transaction` row, a bucket of one proposes nothing, and a second account with a second transaction is the finance plane's writer rather than any of Tally's 23 commands. Options: leave the fold covered by a fixture that answers `[]`; extend the generator with hand-written finance rows; extract the fold and assert it directly. Hand-written rows in a generated fixture are forbidden and would not be v0's answer either, so **the fold was extracted** as `views::match_proposals` — pure over the rows the two statements returned — and every refusal is now a named assertion.
+
+### Demonstrated reds
+
+- `apart > MATCH_WINDOW_DAYS` changed to `>=` in `views::match_proposals` → `every_reason_a_pair_is_not_proposed_is_a_reason_on_its_own` fails; reverted and re-run green (31 lib tests).
+- `owner_stance`'s `you_paid - your_share` changed to `you_paid - your_share + 1` → `queries_parity.rs` fails on the ledger rows' `you_are_owed` figure; reverted.
+- The socket-catalogue pin: `no_listener.rs`'s `the_seat_prints_the_catalogue_it_serves` went red on the changed expenses projection before `3e993354` reprinted it, and it is the failure message that names the command to run.
+- The copy banner: running `export-copy.ts` and then `export-native-theme.ts` produced two different `Copy.kt` banners and `git diff` fired on whichever ran last; both commands now produce the same bytes, verified by running each and diffing.
+
+### Findings outside the slice
+
+1. **v0 labels a foreign-currency expense with the vault's base money.** `loadTally` selects thirteen columns and none of them is `settlement_currency` or the `rate_*` set, so `ledgerRow`'s `e.settlement_currency ?? data.currency` always takes the fallback, `rateSuggestions` can never produce a row, and `export` ships the mislabelling to a file. The fix is one line in v0's projection plus the fixture regeneration that follows it; it is wider than this lane because the 29 committed cases are v0's current answers and changing them changes the port's target. Filed for the close pass (R-1020-35).
+2. **The pairing half of `matches` has no v0-side coverage at any volume**, because v0's own seed cannot make a pair (finding 1's sibling: one transaction, one account). Covered here by D-1020-T7's unit assertions; the fixture still answers `[]`.
+3. **`gate --profile pr --lane ci-policy` is red on three trees this lane did not create.** `copy/`, `design/` and `mobile/` are claimed by no `changes` filter in `.github/workflows/ci.yml` and have no entry in `tests/path-filter-ledger.json`; all three are on `d1d8787a` (`git ls-tree origin/claude/friendly-cori-ezadjb copy/ design/ mobile/`), so the red arrived with wave 3. `skipped` counts as a PASS in the required `check` job, so this is the merge-green-unexercised failure the linter exists to catch. `.github/**` and the ledger are lane G's.
+4. **`gate --profile pr --lane secrets` has a second inherited finding.** Beyond the named `packages/model-runtime/LICENSES.md`, gitleaks flags `contracts/golden/format-golden.json:23` (`dataKeyHex`, rule `generic-api-key`) — a golden fixture that landed with `c5de2b39`. Per R-1020-35 a false positive is fixed in the gate, not in an allowlist: the rule needs to know that a golden vault's wrapped key material is fixture data, or the fixture needs to stop carrying the field verbatim. Not this lane's file.
+6. **`crates/apps/photos/tests/{parity,year3}.rs` hold SQL string literals**, which `sql-confinement` reports as two findings on the rebased tree. It is the same class this lane removed from its own door suite in `9b8f4c93`: an app crate's TESTS are inside the rule, and the fix is to read through the app's own statement (`centraid_apps_kit::reads::read_window` over a `PageQuery`) rather than a `SELECT`. Lane Photos' files, quoted here because the local gate is red on them and a reader of this receipt will see that red.
+7. **The warm `local` profile is over its 120 s budget on the rebased tree** — 193.9 s, of which `test` is 158.5 s. Three lanes' tests landed in one wave and X3's `8602e221` made the tree read warm for the first time, so the budget is now being scored rather than the cold ceiling. Per doctrine the budget is not the thing to change to go green; whether `local` sheds a step or `gate-budgets.json` is re-based on measurement is the root's call, and this lane's own suites are a few seconds of the 158.5.
+
+5. **The year-3 Tally axis writes no `core_transaction` and no `core_entity_revision` rows**, so two of the ten measured view numbers are round because the plane is empty. Recorded in the ceiling note with the grep that proves it, and named as a kit hand-off rather than left to be inferred.
+
+### Owner hand-offs
+
+- **`cargo mutants -p centraid-apps-tally --in-place`** — not completed here, for the disk reason in the exit list. The command to run on a machine with room is exactly that one (`--in-place` is required for bundled-SQLite crates, per D1), and `crates/apps/tally/src/{balance,views}.rs` are where survivors would matter most; the fold assertions added in `fd6284e9` were written against the branches a mutation tool would target first.
+- **`gate --profile pr --lane release-build`** — same reason. Every other `pr` step was run individually and its verdict is in the exit list.
+- **The kit's year-3 axis** — `crates/apps/kit::fixtures` needs a settlement's `core_transaction` and an edited expense's `core_entity_revision` rows for `matches` and `history` to be timed over a populated plane. Both tables belong to planes other than Tally's, so the shape of the rows is the finance and revision lanes' to state. No kit patch was needed for anything else in this lane: `contracts/handoff/` has no `Tally-finish` entry, and every statement the eight answers need passed the door's grammar as it stands (`queries::tests::every_statement_passes_the_doors_grammar`).
+- **The shared `CARGO_TARGET_DIR` is not safe across worktrees** (lane X3 filed the same finding; this is the Tally-side evidence), and it cost this slot several hours. `crates/api-proto`'s build-script `OUT_DIR` is keyed by package identity, which is identical in every worktree, so a lane editing a `.proto` silently hands its generated Rust to every other lane (`missing field 'identity' in initializer of Hello`, `missing field 'sentence'` — errors in files the lane never touched). `crates/xtask` is worse: `repo_root()` is `env!("CARGO_MANIFEST_DIR")`, resolved when the binary was compiled, so `cargo xtask gate` from one worktree can run the whole gate against another's tree — observed here as `sql-confinement` reporting 98 scanned files instead of 89. X3's `8602e221` fixes the xtask half — `repo_root()` is resolved at run time and the warm/cold reading comes off `CARGO_TARGET_DIR` — but the `OUT_DIR` half is still live: the only defence is a target directory per worktree. Every verdict in the exit list above was re-established in a private target directory after the root ruled on this, and every one of them again after the Photos and X3 rebases.
+- **X3's `ClockIds` change was re-verified against this lane's suites** — the vault now mints ids from the clock rather than from a seeded sequence, and the two places that could have depended on the old behaviour do not: `tally_commands.rs` compares rows modulo ids by construction (D-1020-T3c), and `door.rs` opens one vault per test. 328 passed across the three crates after the rebase, 42 with `--features vault-door`.
+
+### Doctrine digest
+
+Law `53be88c22ab5`. `amendment-pairing` · `commit-message-format` · `constitution-coverage` · `doc-integrity` · `doctrine-citation` · `estate-separation` · `managed-tree-integrity` · `receipt-per-issue` · `registry-completeness` · `waiver-docket` — no waiver spent, no gate, budget, test, ledger or allowlist weakened, no generated fixture hand-edited, this section appended last.
+
+### Falsification
+
+**Claim 1: "the 29 cases are compared whole, so a port that lost a field would go red."** A comparison can be vacuous in two ways — a field the comparator never reaches, and a field that happens to agree by accident. Throwaway check: `owner_stance`'s `lent` figure was changed by one minor unit, the cheapest possible wrong answer in the least-inspected corner of the fold. `queries_parity.rs` failed. Then the window boundary in the newly extracted `match_proposals` was moved by one day and the boundary assertion failed. Both reverted; the comparator reaches the leaves.
+
+**Claim 2: "`copy/*.json` and the Kotlin table have exactly one writer, so the drift gate cannot fire spuriously."** The risk is the opposite of drift: a generator that is not idempotent makes `git diff --exit-code` fire on an unchanged tree and trains everyone to ignore it. Throwaway check: `export-copy.ts` alone, then `bun run format`, then `git diff --exit-code design copy mobile` — clean; then `export-native-theme.ts`, format, diff — clean again. Before `9b8f4c93` that same sequence produced a one-line banner diff in `Copy.kt` every time the other command had run last.
