@@ -24,9 +24,9 @@ fn installed(seed: &str) -> (common::Scratch, Registry) {
 fn the_registry_carries_every_command_this_build_has() {
     let registry = registry();
     // Three real `core.*` commands, the 23 `tally.*` skeletons, the whole
-    // 20-command `media.*` schema and the one app-facing `enrich.*` command
-    // (#1020, wave 4 lane Photos).
-    assert_eq!(registry.len(), 47);
+    // 20-command `media.*` schema (#1020, wave 4 lane Photos) and the whole
+    // 9-command `enrich.*` schema (lane automations).
+    assert_eq!(registry.len(), 55);
     let count = |prefix: &str| {
         registry
             .names()
@@ -37,9 +37,12 @@ fn the_registry_carries_every_command_this_build_has() {
     assert_eq!(count("core."), 3);
     assert_eq!(count("tally."), 23);
     assert_eq!(count("media."), 20);
-    assert_eq!(count("enrich."), 1);
+    assert_eq!(count("enrich."), 9);
     assert!(registry.get("media.answer_face_proposal").is_some());
     assert!(registry.get("enrich.request_enrichment").is_some());
+    assert!(registry.get("enrich.record_consent").is_some());
+    assert!(registry.get("enrich.upsert_faces").is_some());
+    assert!(registry.get("enrich.regenerate_all").is_some());
     assert!(registry.get("core.add_party").is_some());
     assert!(registry.get("tally.add_expense").is_some());
     assert!(registry.get("tally.does_not_exist").is_none());

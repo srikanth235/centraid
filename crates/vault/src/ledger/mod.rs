@@ -50,6 +50,14 @@
 //! against the values its writers actually write, and every delete rule.
 
 pub mod archive;
+// The three tables the AUTOMATIONS lane owns the store code for (#1020,
+// D-1020-AU1). The band and its DDL are lane assist's; these are the
+// statements over `automation_state`, `automation_trigger_cursor` and
+// `trigger_ingress`, and they live in this crate because `sql-confinement`
+// keeps SQL out of `crates/automations` rather than being widened for it.
+pub mod automation_cursor;
+pub mod automation_ingress;
+pub mod automation_state;
 pub mod consent;
 pub mod health;
 pub mod schema;
