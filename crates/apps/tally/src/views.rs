@@ -292,13 +292,17 @@ pub fn ledger_row(data: &TallyData, expense: &ExpenseRow) -> Value {
 
 /// A group card for the lists, archived or not. The owner's position is in the
 /// GROUP's money (#996, R22) — a group is one ledger, in one currency.
-fn group_card(data: &TallyData, group_id: &str) -> Value {
+fn group_card(data: &TallyData, balances: &crate::balance::BalanceData, group_id: &str) -> Value {
     let group = data
         .groups
         .iter()
         .find(|group| group.group_id == group_id)
         .expect("a card is built for a group the read returned");
-    let net = group_net(&data.balance_data(), group_id);
+    // THE LEDGER IS FOLDED ONCE FOR THE WHOLE SCREEN, not once per card: the
+    // fold is over every expense, so re-deriving it per group made the
+    // dashboard O(groups × expenses) — 40 × 2,000 at the year-3 volume, which
+    // is the difference between 277 ms and 30.
+    let net = group_net(balances, group_id);
     let owner_net = data
         .me
         .as_deref()
@@ -500,18 +504,19 @@ pub fn dashboard_of(
 
     // Archived groups leave the default lists and keep everything, so they
     // travel in their own array rather than being filtered into silence.
+    let balances = data.balance_data();
     let groups = Value::Array(
         data.groups
             .iter()
             .filter(|group| group.archived_at.is_none())
-            .map(|group| group_card(data, &group.group_id))
+            .map(|group| group_card(data, &balances, &group.group_id))
             .collect(),
     );
     let archived = Value::Array(
         data.groups
             .iter()
             .filter(|group| group.archived_at.is_some())
-            .map(|group| group_card(data, &group.group_id))
+            .map(|group| group_card(data, &balances, &group.group_id))
             .collect(),
     );
     let group_names: BTreeMap<&str, &str> = data

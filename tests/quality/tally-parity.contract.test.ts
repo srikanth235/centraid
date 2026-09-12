@@ -44,6 +44,7 @@ const WRITE = process.env.CENTRAID_WRITE_CONTRACTS === "1";
 const FILES = [
   "rows.json",
   "queries.json",
+  "commands.json",
   "balances.json",
   "scenarios.json",
 ] as const;
@@ -54,6 +55,9 @@ describe("contracts/apps/tally", () => {
     const payloads: Record<(typeof FILES)[number], string> = {
       "rows.json": stableJson(bundle.rows),
       "queries.json": stableJson(bundle.queries),
+      // NOT deep-sorted: a command script is an ORDER, and sorting it would
+      // make "the same steps" pass for "the same ledger".
+      "commands.json": `${JSON.stringify(bundle.commands, undefined, 2)}\n`,
       "balances.json": stableJson(bundle.balances),
       "scenarios.json": stableJson(bundle.scenarios),
     };

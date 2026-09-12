@@ -34,6 +34,8 @@
 
 pub mod balance;
 pub mod commands;
+#[cfg(feature = "vault-door")]
+pub mod door;
 pub mod manifest;
 pub mod queries;
 pub mod views;

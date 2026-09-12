@@ -12,6 +12,9 @@
 //
 //   rows.json       every row of every table the eight queries read, by table
 //   queries.json    {query, input, output} for all eight, at fixed inputs
+//   commands.json   the ordered command script the ledger is built from, with
+//                   every minted id replaced by a reference to the step that
+//                   produced it, so a port can replay it
 //   balances.json   the balance engine's cases: inputs -> pairwise/simplified
 //   scenarios.json  the two ontology scenarios that touch tally (ONT-23, ONT-24)
 //
@@ -65,6 +68,7 @@ import { createGateway } from "../../packages/vault/src/gateway/gateway.js";
 import type { Credential } from "../../packages/vault/src/gateway/types.js";
 import { installFixtureClock } from "../../packages/vault/tests/fixtures/ontology-scenarios/clock.js";
 import { balanceCases } from "./tally-parity-balances.js";
+import { canonicaliser } from "./tally-parity-canonical.js";
 import { seedLedger } from "./tally-parity-ledger.js";
 
 /** Where the bundle is written, relative to the repository root. */
@@ -124,6 +128,10 @@ export const TALLY_PARITY_TABLES = [
   "tally_obligation",
   "tally_nudge",
   "tally_recurring_expense",
+  // The template's splits are ROWS since #916 D3, and the fixture carried the
+  // template without them — so the one table a recurring occurrence resolves
+  // its shares from was not in it (#1020, wave 4).
+  "tally_recurring_expense_split",
 ] as const;
 
 /** One table's rows, as data. */
@@ -141,114 +149,18 @@ export interface QueryCase {
 
 export type { BalanceCase, BalanceInput } from "./tally-parity-balances.js";
 
+export interface CommandStep {
+  command: string;
+  input: unknown;
+  output_keys: string[];
+}
+
 export interface TallyParityBundle {
   rows: TableRows[];
   queries: QueryCase[];
+  commands: CommandStep[];
   balances: import("./tally-parity-balances.ts").BalanceCase[];
   scenarios: unknown;
-}
-
-/**
- * The token every host-clock instant is replaced by.
- *
- * THE SECOND HALF OF THE TWO-CLOCKS FINDING (see [`PARITY_EPOCH`]). Every
- * replicated table carries `updated_at TEXT NOT NULL DEFAULT
- * (strftime('%Y-%m-%dT%H:%M:%fZ','now'))` and a trigger that re-stamps it the
- * same way (`packages/vault/src/schema/updated-at.ts:2`, `:8-16`). That is
- * SQLite's clock, which no JS proxy reaches, so `updated_at` is the wall time
- * of whoever regenerated the fixture and can never be committed as a value.
- * Replacing it with a token says exactly that, and keeps the column's PRESENCE
- * — which is what a port has to reproduce — while dropping a value that is not
- * a fact about the ledger. `crates/vault` taking its instant from one injected
- * source removes both halves of this.
- */
-const HOST_CLOCK = "<host-clock>";
-
-/**
- * ONE ID SPACE PER VAULT (#1020, wave 4 lane Tally-finish).
- *
- * THE BUG THIS FIXES, and it made the fixture uncomparable. `canonicalise` held
- * its `seen` map in its own body, so each call started numbering at `id-0001`
- * — and it was called once for `rows` and once for `queries`. The same expense
- * was therefore `id-0035` in `rows.json` and `id-0016` in `queries.json`, and
- * `export`'s own inputs named group ids that no row in `rows.json` carried. A
- * port that rebuilds the vault from the rows and runs the queries could not
- * compare a single case: every id disagreed, and the disagreement was an
- * artifact of the generator rather than a fact about either side.
- *
- * The map is now created once per VAULT and shared by every artifact read out
- * of it. The ontology scenarios get their own, because they are built from a
- * DIFFERENT vault (`buildOntologyScenarios`) and sharing a numbering across two
- * vaults would assert a relationship that does not exist.
- */
-function canonicaliser(): <T>(value: T) => T {
-  const seen = new Map<string, string>();
-  return <T>(value: T): T => canonicaliseWith(value, seen);
-}
-
-/**
- * Canonicalise every identifier, every host-clock instant and every id-derived
- * party hue.
- *
- * Two id shapes reach a fixture: UUIDv7 from the bootstrap (not seed-derived)
- * and the command-minted ids, which ARE seed-derived and reproducible. Both are
- * canonicalised anyway, because a fixture that is stable only for half its ids
- * is a fixture whose diff nobody trusts.
- *
- * ## The tokens are assigned in the ids' OWN SORT ORDER (#1020, wave 4)
- *
- * They used to be assigned in order of first appearance, which silently broke
- * every claim an output makes about ORDER. `tally.dashboard.groups` reads
- * `ORDER BY group_id`, so the dashboard's three groups came back in the real
- * uuids' order — and the tokens those uuids were rewritten to sorted the other
- * way, because one of the groups happened to appear earlier in the bundle. A
- * port that rebuilds the vault from `rows.json` and sorts by `group_id` reads
- * the canonical order, which disagreed with the committed answer for a reason
- * that is nothing to do with either implementation. Sorting the ids before
- * numbering them makes `ORDER BY <id>` mean the same thing on both sides, which
- * is what "the same rows, in the same order" has to mean for a fixture.
- *
- * ## A party hue is MASKED, for the same reason `updated_at` is
- *
- * `partyHueValue(partyHueKey(id))` hashes the party id, so the answer is about
- * the id the vault minted — and this function has just rewritten that id. The
- * committed value would therefore be an answer no reader can reproduce and no
- * port can be wrong about; keeping it would make every ledger row in the
- * fixture a false claim. It is replaced by a token, exactly as a host-clock
- * instant is, and the hue wheel is proven where its inputs ARE stable:
- * `design/identity-corpus.json`, 192 rows of literal ids, asserted by
- * `crates/design` (#1020, D-1020-T1). The OWNER's colour is the ink brand and
- * is not id-derived, so it survives as itself — which is the distinction a
- * surface actually turns on.
- */
-const PARTY_HUE = "<party-hue>";
-
-function canonicaliseWith<T>(value: T, seen: Map<string, string>): T {
-  const ID =
-    /\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})\b/giu;
-  // Any instant outside the frozen run's own year. The run is stamped in 2099
-  // precisely so that "not ours" is decidable by inspection rather than by a
-  // range check nobody can read.
-  const HOST_INSTANT =
-    /(?<!2099)\b(?:19|20)\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/gu;
-  // A hue the person wheel produced, and never a stored `color` column: those
-  // are hexes (`tally_group.color`) and are facts about the row.
-  const ID_DERIVED_HUE = /var\(--c-[a-z]+\)/gu;
-  const source = JSON.stringify(value);
-  // FIRST PASS: learn every id, and number them in their own order.
-  const unseen = [
-    ...new Set([...source.matchAll(ID)].map((match) => match[0].toLowerCase())),
-  ]
-    .filter((id) => !seen.has(id))
-    .sort();
-  for (const id of unseen) {
-    seen.set(id, `id-${String(seen.size + 1).padStart(4, "0")}`);
-  }
-  const text = source
-    .replaceAll(ID, (id) => seen.get(id.toLowerCase()) ?? id)
-    .replaceAll(HOST_INSTANT, HOST_CLOCK)
-    .replaceAll(ID_DERIVED_HUE, PARTY_HUE);
-  return JSON.parse(text) as T;
 }
 
 /** Deep-sorted JSON, so two runs that agree on values agree on bytes. */
@@ -430,6 +342,35 @@ export async function buildTallyParity(): Promise<TallyParityBundle> {
       deviceKey: boot.deviceKey,
     };
 
+    // THE SCRIPT, RECORDED AS IT RUNS (#1020, D-1020-T3c).
+    //
+    // `commands.json` is the ordered set of invocations this ledger is built
+    // from, with every id the run minted replaced by a REFERENCE to the step
+    // and key that produced it — `{ "$from": "3.expense_id" }` — and the
+    // owner's own id by `$owner`. So a port can replay the same script through
+    // its own commands, resolving each reference against its OWN outputs, and
+    // compare the rows that come out. Without the references the script would
+    // name ids that only exist in the run that wrote it, which is the same
+    // canonicalisation problem the fixture's own id tokens solve for rows.
+    const script: {
+      command: string;
+      input: unknown;
+      output_keys: string[];
+    }[] = [];
+    const idRefs = new Map<string, unknown>([[boot.ownerPartyId, "$owner"]]);
+    const withRefs = (value: unknown): unknown => {
+      if (typeof value === "string") return idRefs.get(value) ?? value;
+      if (Array.isArray(value)) return value.map(withRefs);
+      if (value && typeof value === "object") {
+        return Object.fromEntries(
+          Object.entries(value as Record<string, unknown>).map(
+            ([key, entry]) => [key, withRefs(entry)]
+          )
+        );
+      }
+      return value;
+    };
+
     let step = 0;
     const execute = <T>(command: string, input: Record<string, unknown>): T => {
       // A seed per STEP: the id sequence restarts inside each invocation, so
@@ -447,6 +388,23 @@ export async function buildTallyParity(): Promise<TallyParityBundle> {
         const detail =
           why ?? (outcome as { message?: string }).message ?? "no reason given";
         throw new Error(`${command} answered ${outcome.status}: ${detail}`);
+      }
+      const recordedStep = step - 1;
+      const output = (outcome.output ?? {}) as Record<string, unknown>;
+      script.push({
+        command,
+        input: withRefs(input),
+        output_keys: Object.keys(output).sort(),
+      });
+      // Every id this step MINTED becomes a reference for the steps after it.
+      for (const [key, value] of Object.entries(output)) {
+        if (
+          typeof value === "string" &&
+          value.length >= 32 &&
+          !idRefs.has(value)
+        ) {
+          idRefs.set(value, { $from: `${recordedStep}.${key}` });
+        }
       }
       // Time moves between commands, or two writes share an instant and every
       // ordering claim over them says nothing.
@@ -539,6 +497,9 @@ export async function buildTallyParity(): Promise<TallyParityBundle> {
       // own cases read as arithmetic rather than as a vault.
       rows: vaultIds(rows),
       queries: vaultIds(queries),
+      // NOT canonicalised: every id in the script is already a reference, and
+      // anything left is a literal the script itself chose.
+      commands: script,
       balances: balanceCases(),
       // Its own id space: a different vault (see `canonicaliser`).
       scenarios: canonicaliser()(scenarios),

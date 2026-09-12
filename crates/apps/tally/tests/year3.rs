@@ -142,3 +142,120 @@ fn load_tally_at_the_year3_tally_volume() {
         read.as_millis()
     );
 }
+
+/// THE EIGHT QUERY ANSWERS at the same volume (#1020, wave 4 lane
+/// Tally-finish).
+///
+/// `loadTally` is the read; a SCREEN is the read plus a fold over it, and the
+/// fold is where the presentation per party and the per-group nets land. The
+/// dashboard folds 40 groups' nets, `group` folds one group's whole ledger, and
+/// `export` walks the revision plane for every expense it exports — so each is
+/// timed separately rather than as one number nobody can attribute.
+#[test]
+fn the_eight_views_answer_at_the_year3_tally_volume() {
+    let (connection, counts) = seeded(YEAR3_TALLY);
+    let door = TestDoor::new(&connection);
+    let data = load_tally(&door).expect("loadTally reads the year-3 ledger");
+    let extras = load_dashboard_extras(&door).expect("the three extra pages read");
+
+    let timed = |label: &str, run: &dyn Fn() -> usize| {
+        let started = Instant::now();
+        let size = run();
+        println!(
+            "tally/{label}/year3-tally/ci-linux-x64-4c: {} ms ({size} rows)",
+            started.elapsed().as_millis()
+        );
+        started.elapsed().as_millis()
+    };
+
+    let group_id = data.groups.first().expect("a group").group_id.clone();
+    let friend_id = data
+        .friends
+        .first()
+        .expect("the roster is not empty")
+        .clone();
+
+    let dashboard_ms = timed("dashboard", &|| {
+        let answer =
+            centraid_apps_tally::views::dashboard_of(&data, &extras.0, &extras.1, &extras.2)
+                .expect("the dashboard folds");
+        answer["groups"].as_array().map_or(0, Vec::len)
+    });
+    let group_ms = timed("group", &|| {
+        let answer = centraid_apps_tally::views::group(&data, &group_id);
+        answer["ledger"].as_array().map_or(0, Vec::len)
+    });
+    let friend_ms = timed("friend", &|| {
+        let answer = centraid_apps_tally::views::friend(&data, &friend_id);
+        answer["ledger"].as_array().map_or(0, Vec::len)
+    });
+    let activity_ms = timed("activity", &|| {
+        centraid_apps_tally::views::activity_view(&data)["activity"]
+            .as_array()
+            .map_or(0, Vec::len)
+    });
+    // A TERM THAT MATCHES: a search measured over an empty answer measures
+    // the filter and not the fold, and the fold is the expensive half.
+    let term: String = data
+        .expenses
+        .first()
+        .expect("an expense")
+        .description
+        .chars()
+        .take(4)
+        .collect();
+    let search_ms = timed("search", &|| {
+        centraid_apps_tally::views::search(&data, &term)["results"]
+            .as_array()
+            .map_or(0, Vec::len)
+    });
+    let export_ms = timed("export", &|| {
+        let answer = centraid_apps_tally::views::export_view(&door, &data, &group_id, None, 2_000)
+            .expect("the export reads");
+        answer["expenses"].as_array().map_or(0, Vec::len)
+    });
+    let matches_ms = timed("matches", &|| {
+        centraid_apps_tally::views::matches(&door).expect("the match plane reads")["proposals"]
+            .as_array()
+            .map_or(0, Vec::len)
+    });
+    let history_ms = timed("history", &|| {
+        let expense_id = data
+            .expenses
+            .first()
+            .expect("an expense")
+            .expense_id
+            .clone();
+        centraid_apps_tally::views::history(&door, &expense_id).expect("the revisions read")
+            ["revisions"]
+            .as_array()
+            .map_or(0, Vec::len)
+    });
+
+    // THE FOLD REACHES THE WHOLE WINDOW: a view that answered ten rows out of
+    // two thousand would be fast and wrong, so the sizes are asserted before
+    // the timings are believed.
+    assert_eq!(
+        centraid_apps_tally::views::activity_view(&data)["activity"]
+            .as_array()
+            .map_or(0, Vec::len),
+        counts.live_expenses + counts.settlements,
+        "activity interleaves every live expense and every settlement"
+    );
+    // A soft tripwire per view, two orders over the measured numbers.
+    for (label, millis) in [
+        ("dashboard", dashboard_ms),
+        ("group", group_ms),
+        ("friend", friend_ms),
+        ("activity", activity_ms),
+        ("search", search_ms),
+        ("export", export_ms),
+        ("matches", matches_ms),
+        ("history", history_ms),
+    ] {
+        assert!(
+            millis < 20_000,
+            "{label} took {millis} ms at year-3 volume; something stopped being linear"
+        );
+    }
+}

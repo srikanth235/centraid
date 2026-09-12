@@ -11,12 +11,20 @@ repository.workspace = true
 name = "centraid_apps_tally"
 path = "src/lib.rs"
 
+[features]
+# The REAL command door links the vault; the app's own build does not, so an
+# edit here rebuilds one crate (#1020, D-1020-T3d).
+vault-door = ["dep:centraid-vault"]
+
 [dependencies]
 centraid-apps-kit = { path = "../kit" }
 centraid-design = { path = "../../design" }
+centraid-vault = { path = "../../vault", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+centraid-ontology = { path = "../../ontology" }
+centraid-vault = { path = "../../vault" }
 rusqlite.workspace = true

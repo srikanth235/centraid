@@ -311,10 +311,11 @@ fn an_apps_declared_reach_is_a_ceiling_on_its_commands() {
             }],
         }),
     };
-    // Tally's own commands are inside the reach — and a tally stub still gets
-    // through the whole gate order before its body refuses, which is what
-    // makes the registry useful before lane D3 fills it in.
-    let error = scratch
+    // Tally's own commands are inside the reach, so the whole gate order runs
+    // and the command's OWN precondition is what answers — not the authority
+    // gate. `g1` is not a group in this scratch vault, so the sentence is the
+    // group condition's and the predicate names it (#1020, D-1020-T3).
+    let outcome = scratch
         .vault
         .execute(
             &registry,
@@ -324,10 +325,12 @@ fn an_apps_declared_reach_is_a_ceiling_on_its_commands() {
                 serde_json::json!({"group_id": "g1", "name": "Trip"}),
             ),
         )
-        .expect_err("a stub has no body yet");
-    assert!(
-        matches!(&error, VaultError::NotImplemented { name } if name == "tally.rename_group"),
-        "{error}"
+        .expect("the command runs inside the app's reach");
+    assert_eq!(outcome.status, CommandStatus::Failed);
+    assert_eq!(outcome.predicate.as_deref(), Some("group_exists"));
+    assert_eq!(
+        outcome.reason.as_deref(),
+        Some("there is no group with that id")
     );
 
     // `core.*` is outside it.
@@ -695,16 +698,22 @@ fn a_reach_scheme_is_refused_by_name_rather_than_dropped_in_silence() {
 }
 
 #[test]
-fn every_tally_stub_refuses_with_notimplemented_and_validates_its_input_first() {
+fn no_tally_command_reports_success_on_an_empty_input() {
     let (scratch, registry) = installed("stubs");
     let owner = Principal::owner("phone");
-    let mut not_implemented = 0;
+    let mut schema_refusals = 0;
+    let mut precondition_refusals = 0;
+    let mut plane_refusals = 0;
+    let mut bodies = 0;
     for name in registry.names() {
         if !name.starts_with("tally.") {
             continue;
         }
-        // An EMPTY input: a stub with required keys refuses on the schema, one
-        // without reaches its body. Either way it never pretends to work.
+        // An EMPTY input against an EMPTY vault: every one of the 23 has to
+        // refuse, and the refusal has to say which of the three kinds it is —
+        // the schema, the command's own precondition, or a plane this build
+        // does not carry. A command that reported success here would be one
+        // writing a row from nothing.
         let outcome = scratch.vault.execute(
             &registry,
             &owner,
@@ -712,25 +721,88 @@ fn every_tally_stub_refuses_with_notimplemented_and_validates_its_input_first() 
         );
         match outcome {
             Err(VaultError::NotImplemented { name: refused }) => {
-                assert_eq!(refused, name);
-                not_implemented += 1;
+                assert!(
+                    refused.starts_with(name),
+                    "{refused} is not {name}'s refusal"
+                );
+                // The sentence names what is missing rather than saying "no".
+                assert!(
+                    refused.contains("plane") || refused.contains("lane"),
+                    "`{name}` refuses without naming what it needs: {refused}"
+                );
+                plane_refusals += 1;
+            }
+            Err(VaultError::InvalidInput { .. }) => {
+                bodies += 1;
+            }
+            Err(VaultError::Invariant { context }) => {
+                // A vault with no owner cannot write a Tally row at all, and
+                // that is an invariant rather than a member-facing refusal.
+                assert!(context.contains("owner"), "`{name}`: {context}");
+                bodies += 1;
             }
             Ok(done) => {
                 assert_eq!(
                     done.status,
                     CommandStatus::Failed,
-                    "`{name}` reported success"
+                    "`{name}` reported success on an empty input"
                 );
-                assert_eq!(done.predicate.as_deref(), Some("schema"), "`{name}`");
+                match done.predicate.as_deref() {
+                    Some("schema") => schema_refusals += 1,
+                    Some(_) => precondition_refusals += 1,
+                    None => panic!("`{name}` failed without naming why"),
+                }
             }
             Err(other) => panic!("`{name}`: {other}"),
         }
     }
-    // At least the ones with no required keys reached their body, so the
-    // `NotImplemented` path is exercised and not merely available.
+    // ALL 23 refuse, and every one of them refuses on its schema: after wave
+    // 4 every tally command has at least one required key, which is itself the
+    // claim — a command that took an empty input would be one whose shape says
+    // nothing.
+    assert_eq!(
+        schema_refusals + precondition_refusals + plane_refusals + bodies,
+        23
+    );
+    assert_eq!(schema_refusals, 23, "every tally command requires an input");
+
+    // And the other two refusal kinds, reached with a well-shaped input: the
+    // command's own precondition, and the plane this build does not carry.
+    let refused = scratch
+        .vault
+        .execute(
+            &registry,
+            &owner,
+            &Command::new(
+                "tally.rename_group",
+                serde_json::json!({ "group_id": "nope", "name": "Trip" }),
+            ),
+        )
+        .expect("a well-shaped rename runs");
+    assert_eq!(refused.predicate.as_deref(), Some("group_exists"));
+    let plane = scratch
+        .vault
+        .execute(
+            &registry,
+            &owner,
+            &Command::new(
+                "tally.add_receipt_expense",
+                serde_json::json!({
+                    "description": "Receipt",
+                    "amount_minor": 100,
+                    "paid_by": "p1",
+                    "category": "groceries",
+                    "splits": [{ "party_id": "p1", "share_minor": 100 }],
+                    "staged_sha": "0".repeat(64),
+                    "ocr_text": "total 1.00",
+                    "line_items": []
+                }),
+            ),
+        )
+        .expect_err("the byte plane is not in this build");
     assert!(
-        not_implemented > 0,
-        "no stub reached its body; the schemas refused all 23"
+        matches!(&plane, VaultError::NotImplemented { name } if name.contains("media lane")),
+        "{plane}"
     );
 }
 
