@@ -6,6 +6,7 @@
  * stored breach flag. Only non-trashed items are reviewed.
  */
 
+import { readWindow } from "../../_shared/paged-reads.ts";
 import {
   LOCKER_ITEM_COLUMNS,
   decorate,
@@ -20,8 +21,12 @@ const WATCH_ROWS = 2000;
 
 export default async function watchtowerHandler({ ctx }: HandlerArgs) {
   try {
-    const res = await ctx.vault.page<RawItem>({
-      query: {
+    // WALKED, NOT CLAMPED (#1020, R-1020-35). A 2,000-row window asked for as
+    // one page came back 500 rows long with a `next` cursor nobody read, so
+    // Watchtower audited a quarter of the vault and reported it as all of it.
+    const rows = await readWindow<RawItem>(
+      ctx,
+      {
         name: "locker.watchtower.items",
         select: LOCKER_ITEM_COLUMNS,
         from: "locker_item",
@@ -32,9 +37,8 @@ export default async function watchtowerHandler({ ctx }: HandlerArgs) {
           descending: true,
         },
       },
-      limit: WATCH_ROWS,
-    });
-    const rows = res.rows;
+      WATCH_ROWS
+    );
     const ids = rows.map((r) => r.item_id);
     const [tagsByItem, starredIds, watchByItem] = await Promise.all([
       readTags(ctx, ids),
