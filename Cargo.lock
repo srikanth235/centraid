@@ -584,6 +584,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-apps-docs"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-apps-kit",
+ "centraid-media",
+ "centraid-ontology",
+ "centraid-vault",
+ "proptest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "centraid-apps-kit"
 version = "1.0.0-alpha.0"
 dependencies = [

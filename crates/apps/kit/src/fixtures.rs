@@ -1725,3 +1725,215 @@ fn seed_year3_photos(
     }
     Ok(counts)
 }
+
+// ===========================================================================
+// THE DOCS AXIS (#1020 wave 4 slot 4b).
+//
+// **Why the SEEDERS are here and not in the app's own test.** `sql-confinement`
+// scans every `.rs` file under `crates/`, tests included, and SQL lives only
+// under `crates/{ontology,vault,seat,search}` and `crates/apps/kit` (#1020
+// invariant). Docs' door suite needs `share_*` rows the command surface cannot
+// write — the share plane's writers are a later lane — and a staged blob row
+// the upload route writes, so the statements live on this side of the line,
+// exactly as [`crate::contract_vault::open_contract_vault`] does.
+// ===========================================================================
+
+/// One standing answer, as `share_authority` holds it.
+///
+/// A SHARE IS A STANDING ANSWER, NOT A ROSTER (#929): this row says who MAY
+/// reach a subject, and `share_fulfillment` says whether it has.
+#[derive(Debug, Clone)]
+pub struct ShareSeed<'a> {
+    pub authority_id: &'a str,
+    /// `person` or `circle` for a Docs audience.
+    pub principal_kind: &'a str,
+    pub principal_id: &'a str,
+    /// `core.document` or `docs.folder` — two namespaces, never interchangeable.
+    pub subject_type: &'a str,
+    pub subject_id: &'a str,
+    /// `view` or `edit`.
+    pub verb: &'a str,
+    /// `None` is a standing grant; `Some` makes it `until-date`, which the
+    /// table's own CHECK pairs with `duration`.
+    pub expires_at: Option<&'a str>,
+    /// Who made the grant. `NOT NULL` for every principal but a harness, by the
+    /// table's own CHECK: a grant nobody made is not a grant.
+    pub granted_by: &'a str,
+    pub at: &'a str,
+}
+
+/// Write one standing answer.
+pub fn seed_share_authority(connection: &Connection, seed: &ShareSeed<'_>) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO share_authority
+               (authority_id, principal_kind, principal_id, subject_type, subject_id,
+                verb, duration, expires_at, decision, granted_at, granted_by, revoked_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'granted', ?9, ?10, NULL)",
+            rusqlite::params![
+                seed.authority_id,
+                seed.principal_kind,
+                seed.principal_id,
+                seed.subject_type,
+                seed.subject_id,
+                seed.verb,
+                if seed.expires_at.is_some() {
+                    "until-date"
+                } else {
+                    "standing"
+                },
+                seed.expires_at,
+                seed.at,
+                seed.granted_by,
+            ],
+        )
+        .map_err(|error| KitError::Door(error.to_string()))?;
+    Ok(())
+}
+
+/// Revoke or time-box an answer already written, so a fold's `live` rule can be
+/// exercised against the same row rather than a second one.
+pub fn amend_share_authority(
+    connection: &Connection,
+    authority_id: &str,
+    expires_at: Option<&str>,
+    revoked_at: Option<&str>,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "UPDATE share_authority
+                SET duration = ?2, expires_at = ?3, revoked_at = ?4
+              WHERE authority_id = ?1",
+            rusqlite::params![
+                authority_id,
+                if expires_at.is_some() {
+                    "until-date"
+                } else {
+                    "standing"
+                },
+                expires_at,
+                revoked_at,
+            ],
+        )
+        .map_err(|error| KitError::Door(error.to_string()))?;
+    Ok(())
+}
+
+/// Bind a party to the vault that is theirs, so a delivery can be attributed.
+///
+/// A REVOKED BINDING NO LONGER SAYS WHICH VAULT IS THEIRS, which is why the
+/// readers filter on `revoked_at IS NULL` rather than folding it out.
+pub fn seed_party_vault_binding(
+    connection: &Connection,
+    binding_id: &str,
+    party_id: &str,
+    vault_id: &str,
+    at: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO share_party_vault_binding
+               (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
+             VALUES (?1, ?2, ?3, NULL, ?4, NULL)",
+            rusqlite::params![binding_id, party_id, vault_id, at],
+        )
+        .map_err(|error| KitError::Door(error.to_string()))?;
+    Ok(())
+}
+
+/// Record that a grant reached a peer vault.
+///
+/// DELIVERED IS THE DURABLE FACT, NOT THE LIVE STATE (#846): `delivered_at` is
+/// what a fold reads, and `state` may have dropped back to `syncing` since.
+pub fn seed_share_fulfillment(
+    connection: &Connection,
+    grant_id: &str,
+    peer_vault_id: &str,
+    state: &str,
+    delivered_at: Option<&str>,
+    at: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO share_fulfillment
+               (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
+             VALUES (?1, ?2, ?3, ?4, NULL, ?5)",
+            rusqlite::params![grant_id, peer_vault_id, state, at, delivered_at],
+        )
+        .map_err(|error| KitError::Door(error.to_string()))?;
+    Ok(())
+}
+
+/// Seed `count` standing answers over one subject, for a fan-out ceiling test.
+///
+/// Returns how many landed. Deterministic ids, zero-padded to six as every
+/// generator in this module pads, so the rows a run writes never move.
+pub fn seed_standing_answers(
+    connection: &Connection,
+    subject_type: &str,
+    subject_id: &str,
+    range: std::ops::Range<usize>,
+    granted_by: &str,
+    at: &str,
+) -> KitResult<usize> {
+    let mut seeded = 0;
+    for index in range {
+        seed_share_authority(
+            connection,
+            &ShareSeed {
+                authority_id: &id("grant", index),
+                principal_kind: "person",
+                principal_id: &id("party", index),
+                subject_type,
+                subject_id,
+                verb: "view",
+                expires_at: None,
+                granted_by,
+                at,
+            },
+        )?;
+        seeded += 1;
+    }
+    Ok(seeded)
+}
+
+/// Stage bytes the way `POST /_vault/blobs` does, so a claim has a row to read.
+///
+/// The bytes themselves belong in a content-addressed store beside this; the
+/// staging ROW is what `core.add_document`'s `staged_sha` gate checks and what
+/// the claim then consumes.
+pub fn seed_blob_staging(
+    connection: &Connection,
+    staging_id: &str,
+    sha256: &str,
+    media_type: &str,
+    byte_size: i64,
+    original_name: Option<&str>,
+    at: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO blob_staging
+               (staging_id, sha256, media_type, byte_size, original_name, meta_json,
+                staged_by, held_by_batch, variant, variant_of, inline_content,
+                staged_at, held_by_intent)
+             VALUES (?1, ?2, ?3, ?4, ?5, '{}', NULL, NULL, NULL, NULL, NULL, ?6, NULL)",
+            rusqlite::params![staging_id, sha256, media_type, byte_size, original_name, at],
+        )
+        .map_err(|error| KitError::Door(error.to_string()))?;
+    Ok(())
+}
+
+/// The vault's own owner party, which every seeded grant is granted BY.
+///
+/// `None` on a vault nobody has been enrolled in — which is a state, not an
+/// error: a fixture may deliberately be founded without an owner.
+pub fn owner_party_id(connection: &Connection) -> KitResult<Option<String>> {
+    Ok(connection
+        .query_row(
+            "SELECT self_party_id FROM core_vault WHERE self_party_id IS NOT NULL LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok())
+}
