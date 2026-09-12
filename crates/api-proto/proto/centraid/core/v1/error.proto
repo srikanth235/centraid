@@ -83,9 +83,27 @@ enum ErrorCode {
 message Error {
   ErrorCode code = 1;
   // FOR LOGS ONLY. A shell may put it in a support bundle and must not render
-  // it as the reason.
+  // it as the reason. It carries whatever the failing layer said, **including a
+  // database message**: `entity id is already held by another kind: core_party
+  // (#916)` is a SQLite `RAISE(ABORT)`, and it reached a member's screen
+  // through this field ([#1020](https://github.com/srikanth235/centraid/issues/1020)
+  // wave 3, lane E finding 2).
   string detail = 2;
   // The diagnostic id a panic or an internal error is filed under, so a crash
   // report and a log line name the same event.
   string diagnostic_id = 3;
+  // THE OWNER-FACING SENTENCE, derived from `code` ALONE.
+  //
+  // The header above says no free-text reason reaches a member from this
+  // message, and a shell was still left with two choices: render nothing, or
+  // render `detail`. Both are wrong — the first loses the refusal, the second
+  // ships SQL. So the sentence is a field of its own, it is built from the code
+  // with no layer's own text interpolated into it, and a shell renders THIS.
+  //
+  // It is not a second `detail` and it is not localisation: it is one English
+  // sentence a shell may show verbatim or replace by branching on `code`. The
+  // raw predicate stays in `detail` for the audit trail and never reaches a
+  // member — the rule `command.proto` states for `CommandOutcome.reason`, which
+  // this message had no way to keep.
+  string sentence = 4;
 }
