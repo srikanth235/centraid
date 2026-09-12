@@ -93,7 +93,7 @@ pub const TAG_BOUND: FanOutBound = FanOutBound::new(500, 32);
 /// are interpolated into condition SQL, where a `urn:`-style `:flags` reads as
 /// a NAMED PARAMETER (#258, the colon-literal trap).
 pub const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
-pub const LOCKER_TAGS_SCHEME_URI: &str = "centraid:locker-tags:v1";
+pub const LOCKER_TAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/locker-tags";
 pub const STARRED_NOTATION: &str = "starred";
 
 /// Clamp a caller's `limit` the way v0 does: `min(max(limit || default, min), max)`.

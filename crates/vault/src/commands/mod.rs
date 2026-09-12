@@ -38,6 +38,7 @@
 
 pub mod core;
 pub mod enrich;
+pub mod locker;
 pub mod media;
 pub mod tally;
 
@@ -108,6 +109,7 @@ pub struct CommandCtx<'tx, 'conn> {
     pub now: String,
     pub invocation_id: String,
     ids: &'tx dyn Ids,
+    clock: &'tx dyn crate::clock::Clock,
     produced_ids: std::cell::RefCell<Vec<String>>,
 }
 
@@ -124,6 +126,44 @@ impl<'conn> CommandCtx<'_, 'conn> {
         let id = self.ids.next();
         self.produced_ids.borrow_mut().push(id.clone());
         id
+    }
+
+    /// Append a SUBJECT-BEARING receipt beside the command's own.
+    ///
+    /// Gate 8 already writes one receipt per invocation, under
+    /// `object_type: "agent.command"`. That answers *which command ran*; it
+    /// does not answer *which row was opened*, and the two are different
+    /// audit questions — Locker's access history reads `object_type IN
+    /// ('locker.item', 'locker.auth')` and would never see a command receipt
+    /// (`packages/blueprints/apps/locker/queries/access.ts`).
+    ///
+    /// So a command whose subject is a row, not itself, appends a second
+    /// receipt naming that row. It goes through the same chained writer — same
+    /// `seq`, same hash chain, same append-only triggers — because a reveal
+    /// receipt that a member could remove is not a receipt
+    /// (#1020, D-1020-L3).
+    pub fn write_subject_receipt(
+        &self,
+        action: &str,
+        object_type: &str,
+        object_id: Option<&str>,
+        decision: &str,
+        detail: serde_json::Value,
+    ) -> Result<String> {
+        audit::write_receipt(
+            self.connection(),
+            self.clock,
+            self.ids,
+            &Receipt {
+                authority_id: None,
+                invocation_id: &self.invocation_id,
+                action,
+                object_type,
+                object_id,
+                decision,
+                detail,
+            },
+        )
     }
 
     /// A required string input.
@@ -212,6 +252,9 @@ impl Registry {
             registry.register(definition)?;
         }
         for definition in enrich::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in locker::definitions() {
             registry.register(definition)?;
         }
         for definition in media::definitions() {
@@ -554,6 +597,7 @@ impl Vault {
                 now: self.clock().now_text(),
                 invocation_id: invocation_id.clone(),
                 ids: self.ids(),
+                clock: self.clock(),
                 produced_ids: std::cell::RefCell::new(Vec::new()),
             };
 

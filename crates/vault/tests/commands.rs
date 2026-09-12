@@ -23,12 +23,6 @@ fn installed(seed: &str) -> (common::Scratch, Registry) {
 #[test]
 fn the_registry_carries_every_command_this_build_has() {
     let registry = registry();
-    // Nineteen `core.*` — the parties plane and Docs' whole write surface, the
-    // nineteen of v0's twenty-seven this build carries (#1020 slot 4b,
-    // D-1020-DC3) — the 23 `tally.*`, the whole 20-command `media.*` schema
-    // (lane Photos) and the whole 9-command `enrich.*` schema (lane
-    // automations).
-    assert_eq!(registry.len(), 71);
     let count = |prefix: &str| {
         registry
             .names()
@@ -36,10 +30,34 @@ fn the_registry_carries_every_command_this_build_has() {
             .filter(|name| name.starts_with(prefix))
             .count()
     };
-    assert_eq!(count("core."), 19);
-    assert_eq!(count("tally."), 23);
-    assert_eq!(count("media."), 20);
-    assert_eq!(count("enrich."), 9);
+    // ONE ROW PER SCHEMA, AND THE TOTAL IS THEIR SUM — so "a schema nobody
+    // counted" is still the invariant this test exists for, and a lane that
+    // lands a schema adds one row rather than editing a number every other
+    // lane is also editing (#1020, wave 4 lane Locker).
+    let by_schema = [
+        // Nineteen `core.*` — the parties plane and Docs' whole write
+        // surface, nineteen of v0's twenty-seven (#1020 slot 4b, D-1020-DC3).
+        ("core.", 19_usize),
+        // The 23 `tally.*`, real since the Tally-finish lane.
+        ("tally.", 23),
+        // The whole 20-command `media.*` schema (wave 4 lane Photos).
+        ("media.", 20),
+        // The whole 9-command `enrich.*` schema: `request_enrichment` came
+        // from lane Photos and the other eight from lane automations.
+        ("enrich.", 9),
+        // v0's twenty `locker.*` plus `reveal_receipt` and `rotate_key`, the
+        // two the member-key custody change needs (wave 4 lane Locker).
+        ("locker.", 22),
+    ];
+    let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
+    assert_eq!(
+        registry.len(),
+        total,
+        "the registry carries a schema this count does not name"
+    );
+    for (prefix, expected) in by_schema {
+        assert_eq!(count(prefix), expected, "{prefix}");
+    }
     assert!(registry.get("media.answer_face_proposal").is_some());
     assert!(registry.get("enrich.request_enrichment").is_some());
     assert!(registry.get("enrich.record_consent").is_some());
@@ -53,6 +71,7 @@ fn the_registry_carries_every_command_this_build_has() {
     assert!(registry.get("core.merge_party").is_none());
     assert!(registry.get("core.attach").is_none());
     assert!(registry.get("tally.add_expense").is_some());
+    assert!(registry.get("locker.reveal_receipt").is_some());
     assert!(registry.get("tally.does_not_exist").is_none());
     // A duplicate name is refused rather than overwritten: two definitions
     // under one name means whichever registered last runs.
