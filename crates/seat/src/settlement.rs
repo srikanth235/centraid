@@ -20,7 +20,7 @@
 //! missing probe means "holds nothing", so an answer *waits* rather than
 //! clearing early.
 
-use crate::error::Result;
+use crate::error::{Result, SeatError};
 use crate::intent::{IntentRecord, IntentState, OutcomeStatus, intent_verdict};
 use crate::occ::Conflict;
 use crate::outbox::Outbox;
@@ -102,8 +102,30 @@ fn apply_one(
             return Ok(Applied::AwaitingChange);
         }
         // THE #929 PATH. No commit seq; the answer carries versions instead.
-        // With neither, the honest answer is to wait: a settle here would clear
-        // an overlay over rows that have not arrived.
+        //
+        // WITH NEITHER, PARKING IS A LIVENESS BUG AND NOT CAUTION. The
+        // deterministic simulation found this on its first run: an `executed`
+        // answer with no commit seq and no versions parked at
+        // `awaiting-change`, `settle_at_commit_seq` never matched it (its
+        // `commit_seq` is NULL) and `settle_answered_intents` skipped it (its
+        // version set is empty) — so the overlay stayed on the screen for the
+        // life of the seat. "Wait rather than clear early" is only conservative
+        // when something will eventually arrive.
+        //
+        // So it is refused, loudly, naming the gap. A gateway that answers
+        // `executed` owes the seat one of the two, and the remedy is the
+        // gateway's rather than something a seat can paper over.
+        if answer.answered_versions.is_empty() {
+            return Err(SeatError::Invariant {
+                context: format!(
+                    "`{}` was answered `executed` with neither a commit seq nor an \
+                     answered-version set; nothing could ever settle it. A gateway that \
+                     answers `executed` owes the seat one of the two (#1020, found by \
+                     crates/sim seed 0)",
+                    answer.intent_id
+                ),
+            });
+        }
         outbox.transition(
             &answer.intent_id,
             IntentState::AwaitingChange,
@@ -336,6 +358,24 @@ mod tests {
     }
 
     /// A MISSING PROBE MEANS "HOLDS NOTHING", so the answer waits.
+    /// THE LIVENESS BUG the simulation found, as a test.
+    #[test]
+    fn an_executed_answer_with_neither_a_commit_seq_nor_versions_is_refused() {
+        let connection = Connection::open_in_memory().expect("opens");
+        let outbox = Outbox::open(&connection).expect("opens");
+        outbox.enqueue(&record("i-1"), "t").expect("queues");
+        // No commit seq AND no answered versions: nothing could ever settle it.
+        let empty = answer("i-1", OutcomeStatus::Executed);
+        let error = apply_intent_outcomes(&outbox, &[empty], 0, "t2").expect_err("it refuses");
+        assert!(error.to_string().contains("nothing could ever settle it"));
+        // And the intent is left as it was, rather than parked in a state with
+        // no way out.
+        assert_eq!(
+            outbox.get("i-1").expect("reads").expect("there").state,
+            IntentState::Sending
+        );
+    }
+
     #[test]
     fn the_version_set_path_waits_when_the_probe_cannot_say() {
         let connection = Connection::open_in_memory().expect("opens");

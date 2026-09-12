@@ -57,6 +57,7 @@ pub mod outbox;
 pub mod payload;
 pub mod settlement;
 pub mod state;
+pub mod sync;
 
 pub use applier::{ApplyReport, apply_page};
 pub use error::{Result, SeatError};
@@ -68,3 +69,4 @@ pub use occ::{Conflict, occ_check};
 pub use outbox::Outbox;
 pub use payload::{PayloadHash, cmp_utf16};
 pub use state::{SeatPosition, SeatState, Watermark, init_seat_state, seat_state, watermark};
+pub use sync::{FetchOutcome, FetchedPage, IntentSink, LogSource, PassReport, SubmitOutcome};

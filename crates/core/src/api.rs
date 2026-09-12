@@ -213,6 +213,10 @@ pub fn invoke(
         invocation_id: outcome.invocation_id,
         receipt_id: outcome.receipt_id,
         revoked_at: None,
+        // THE NUMBER A SEAT SETTLES AGAINST. `None` when the handler wrote
+        // nothing a session saw, which is an honest absence: there is no commit
+        // to wait for, and the seat's version-set path takes over.
+        commit_seq: outcome.commit_seq.map(i64::unsigned_abs),
     })
 }
 

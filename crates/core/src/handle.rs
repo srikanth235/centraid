@@ -85,20 +85,48 @@ impl Core {
     /// [`Handle::start_endpoint`]. A shell whose first screen waits for a relay
     /// handshake shows a spinner in an aeroplane.
     pub fn open(config: CoreConfig) -> Result<Handle> {
-        let vault = if config.create {
-            match Vault::open(&config.path) {
-                Ok(found) => found,
-                Err(centraid_vault::VaultError::Missing { .. }) => Vault::create(&config.path)?,
-                Err(other) => return Err(other.into()),
+        let CoreConfig {
+            path,
+            role,
+            ui_thread_name,
+            create,
+            clock,
+            ids,
+        } = config;
+        // The file's EXISTENCE decides create-versus-open, before the clock is
+        // moved. Trying `open` first and falling back on `Missing` would need
+        // the clock twice, and a `Box<dyn Clock>` is not clonable — for the
+        // good reason that a clock with state (a `FixedClock` a test advances)
+        // must be one clock and not two.
+        let founded = path.exists();
+        let vault = match (clock, ids) {
+            // An injected clock stamps BOTH the create and every later write: a
+            // file founded on one clock and written on another would carry rows
+            // from two timelines.
+            (Some(clock), Some(ids)) => {
+                if founded {
+                    Vault::open_with(&path, clock, ids)?
+                } else if create {
+                    Vault::create_with(&path, clock, ids)?
+                } else {
+                    return Err(centraid_vault::VaultError::Missing { path }.into());
+                }
             }
-        } else {
-            Vault::open(&config.path)?
+            _ => {
+                if founded {
+                    Vault::open(&path)?
+                } else if create {
+                    Vault::create(&path)?
+                } else {
+                    return Err(centraid_vault::VaultError::Missing { path }.into());
+                }
+            }
         };
         Ok(Handle {
             vault: Mutex::new(vault),
             registry: Registry::with_system_commands()?,
-            role: config.role,
-            ui_thread_name: config.ui_thread_name,
+            role,
+            ui_thread_name,
             events: Arc::new(EventQueue::new()),
             closed: AtomicBool::new(false),
             poison: Mutex::new(None),

@@ -88,4 +88,21 @@ message CommandOutcome {
   // consent tables to find out for itself, so the host attaches this
   // (`packages/server/src/engine/handlers/vault-bridge.ts:36`). RFC 3339.
   optional string revoked_at = 6;
+  // THE COMMIT THE EFFECT LANDED IN. Absent when the command wrote nothing a
+  // session saw — an empty commit is not a commit.
+  //
+  // Added in wave 2 lane D2 because the deterministic simulation found its
+  // absence to be a liveness bug, not a cosmetic gap (#1020). A seat settles an
+  // `EXECUTED` answer by waiting for its own applied commit seq to reach this
+  // number (`packages/client/src/replica/intent-settlement.ts:88-101`). Without
+  // it, an answer carried neither a commit seq nor an `answered_versions` set,
+  // so the intent parked at `awaiting-change` with nothing that could ever
+  // settle it — the overlay stayed on every screen for the life of the seat.
+  // `crates/vault`'s own `CommandOutcome` has carried this field all along; it
+  // was only the wire that dropped it.
+  //
+  // Adding a field with a fresh number is not a `buf breaking` violation: an
+  // older peer ignores it and the seat then falls back to the version-set path
+  // exactly as before.
+  optional uint64 commit_seq = 7;
 }

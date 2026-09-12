@@ -48,6 +48,18 @@ pub struct CoreConfig {
     /// expects is the artifact it just downloaded and a fresh empty one would
     /// be a silently empty product.
     pub create: bool,
+    /// The clock this core's writes are stamped with. `None` is the system
+    /// clock.
+    ///
+    /// Injectable because **a core on the real wall clock is not
+    /// reproducible**, and `crates/sim` needs it to be: the deterministic
+    /// simulation found this itself — two runs of one seed produced identical
+    /// rows and different timestamps, and the receipt hashes over those
+    /// timestamps then differed too. A seed that cannot be replayed byte for
+    /// byte is a seed that cannot be recorded (#1020).
+    pub clock: Option<Box<dyn centraid_vault::Clock>>,
+    /// The id source. `None` is the build's default.
+    pub ids: Option<Box<dyn centraid_vault::Ids>>,
 }
 
 impl CoreConfig {
@@ -58,6 +70,8 @@ impl CoreConfig {
             role: Role::Gateway,
             ui_thread_name: None,
             create: true,
+            clock: None,
+            ids: None,
         }
     }
 
@@ -71,6 +85,8 @@ impl CoreConfig {
             },
             ui_thread_name: None,
             create: false,
+            clock: None,
+            ids: None,
         }
     }
 
@@ -84,6 +100,8 @@ impl CoreConfig {
             },
             ui_thread_name: None,
             create: false,
+            clock: None,
+            ids: None,
         }
     }
 
@@ -91,6 +109,22 @@ impl CoreConfig {
     #[must_use]
     pub fn with_ui_thread(mut self, name: impl Into<String>) -> Self {
         self.ui_thread_name = Some(name.into());
+        self
+    }
+
+    /// Stamp this core's writes with a given clock and id source.
+    ///
+    /// What makes a run reproducible. A test, a simulation and a fixture
+    /// freezer all want it; a shipped gateway wants the system clock and passes
+    /// neither.
+    #[must_use]
+    pub fn with_clock(
+        mut self,
+        clock: Box<dyn centraid_vault::Clock>,
+        ids: Box<dyn centraid_vault::Ids>,
+    ) -> Self {
+        self.clock = Some(clock);
+        self.ids = Some(ids);
         self
     }
 
