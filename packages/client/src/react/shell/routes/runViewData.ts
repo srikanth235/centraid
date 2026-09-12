@@ -70,7 +70,7 @@ export function buildRunSnapshot(
     row === null ? (run.automationName ?? fallbackRef) : row.name;
   const promptInstr =
     row === null
-      ? "This automation was deleted — its instructions are gone."
+      ? "This rule was deleted — its instructions are gone."
       : row.manifest.prompt || "No instructions.";
   const triggersSummaryText =
     row === null

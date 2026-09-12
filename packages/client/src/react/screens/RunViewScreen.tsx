@@ -169,7 +169,7 @@ export default function RunViewScreen({
     hydrateRefs: () => undefined,
     wireCodeCopy: () => undefined,
     loadAttachmentImage: () =>
-      Promise.reject(new Error("automation attachments unavailable")),
+      Promise.reject(new Error("rule attachments unavailable")),
     onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
     onFeedback: () => undefined,
     onRegenerate: () => undefined,
@@ -192,7 +192,7 @@ export default function RunViewScreen({
           <Button
             variant="quiet"
             size="chrome"
-            label="Automations"
+            label="Rules"
             onClick={onBack}
           />
           <span className={au.auCrumbSep} aria-hidden="true">
@@ -213,8 +213,8 @@ export default function RunViewScreen({
             <Icon name="AlertCircle" size={14} />
           </span>
           <span>
-            This automation was deleted — showing the last recorded details for
-            this run.
+            This rule was deleted — showing the last recorded details for this
+            run.
           </span>
         </output>
       ) : null}

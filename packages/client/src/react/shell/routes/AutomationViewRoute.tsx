@@ -216,7 +216,7 @@ async function askAutomationWithConsent(input: {
     const approved = await input.confirm({
       confirmLabel: "Allow provider",
       message:
-        `Allow this automation conversation to be sent to ${requiredProvider}? ` +
+        `Allow this rule's conversation to be sent to ${requiredProvider}? ` +
         "This can include the question, standing instructions, recent run context, and scoped tool results.",
       title: `Send to ${requiredProvider}?`,
     });
@@ -318,7 +318,7 @@ export default function AutomationViewRoute({
             confirmLabel: "Delete",
             danger: true,
             message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
-            title: "Delete automation?",
+            title: "Delete rule?",
           });
           if (!ok) return false;
           try {
@@ -410,7 +410,7 @@ export default function AutomationViewRoute({
         }}
         onUploadAttachment={async (file) => {
           const row = rowRef.current;
-          if (!row) throw new Error("Automation is no longer available.");
+          if (!row) throw new Error("This rule is no longer available.");
           if (file.size > MAX_ATTACHMENT_BYTES) {
             throw new Error("Attachments must be 25 MB or smaller.");
           }
@@ -426,7 +426,7 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row)
             return Promise.reject(
-              new Error("Automation is no longer available.")
+              new Error("This rule is no longer available.")
             );
           return fetchAssistantAttachmentUrl(row.ownerApp, hash, mime);
         }}

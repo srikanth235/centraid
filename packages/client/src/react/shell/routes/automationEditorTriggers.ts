@@ -64,7 +64,7 @@ export function vaultForTriggers(
   });
   return scopes.length > 0
     ? {
-        why: "Evaluate automation triggers.",
+        why: "Evaluate rule triggers.",
         scopes,
       }
     : undefined;

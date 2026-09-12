@@ -58,7 +58,9 @@ export function callerPhrase(kind: string, caller: string): string {
     case "app":
       return `the app ${caller}`;
     case "agent":
-      return `the automation ${caller}`;
+      // The item noun is "rule" on both seats (R-SH-11); mobile's
+      // `needs-you-model.ts` says the same words for the same caller kind.
+      return `the rule ${caller}`;
     case "assistant":
       return "the assistant";
     default:

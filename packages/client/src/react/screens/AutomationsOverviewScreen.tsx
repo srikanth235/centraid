@@ -360,7 +360,7 @@ export default function AutomationsOverviewScreen({
         <PanelBlock
           action={{ label: ERROR_RETRY, onClick: reload }}
           body={errorBody(lastRunClock)}
-          eyebrow="Automations"
+          eyebrow="Rules"
           {...(errMsg ? { facts: [{ key: "Reason", value: errMsg }] } : {})}
           title={ERROR_TITLE}
           tone="net"
@@ -444,7 +444,7 @@ export default function AutomationsOverviewScreen({
             />
           ) : null}
           <SectionBlock
-            label="Automations"
+            label="Rules"
             meta={
               v.visibleRows.length === v.memberRows.length
                 ? String(v.memberRows.length)
@@ -452,10 +452,10 @@ export default function AutomationsOverviewScreen({
             }
           />
           {automationRows.length > 0 ? (
-            <RowsBlock ariaLabel="Automations" rows={automationRows} />
+            <RowsBlock ariaLabel="Rules" rows={automationRows} />
           ) : (
             <NoteBlock>
-              {`No automation is ${CHIP_LABEL[chip].toLowerCase()} right now.`}
+              {`No rule is ${CHIP_LABEL[chip].toLowerCase()} right now.`}
             </NoteBlock>
           )}
 

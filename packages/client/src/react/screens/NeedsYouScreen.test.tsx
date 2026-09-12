@@ -331,7 +331,7 @@ describe("screens/NeedsYouScreen", () => {
     it("names who staged the write in words rather than a classifier chip", () => {
       const el = mount(makeProps({ outbox: [outboxRow] }));
       expect(el.textContent).toContain(
-        "Outbound email · staged by the automation gmail-send"
+        "Outbound email · staged by the rule gmail-send"
       );
       // The age is its own slot on the eyebrow row, in the numeric register.
       expect(el.textContent).toContain("5m ago");
@@ -374,7 +374,7 @@ describe("screens/NeedsYouScreen", () => {
       ) as HTMLInputElement;
       expect(el.textContent).toContain("Approve without asking again");
       expect(el.textContent).toContain(
-        "the automation gmail-send may gmail.send → ravi@example.com without asking again."
+        "the rule gmail-send may gmail.send → ravi@example.com without asking again."
       );
       act(() => checkbox.click());
       click(el, "Approve");
@@ -694,7 +694,7 @@ describe("screens/NeedsYouScreen", () => {
         })
       );
       expect(automation.textContent).toContain(
-        "asked by the automation E2e Agent Purge Demo"
+        "asked by the rule E2e Agent Purge Demo"
       );
     });
 
@@ -973,7 +973,7 @@ describe("screens/NeedsYouScreen", () => {
       expect(el.textContent).toContain("Allowed · high risk");
       expect(el.textContent).toContain("auto-allowed by a standing grant");
       expect(el.textContent).toContain("Denied");
-      expect(el.textContent).toContain("by the automation gmail-send");
+      expect(el.textContent).toContain("by the rule gmail-send");
     });
 
     it("expands an activity row to the full object id, absolute time and its grant", () => {
@@ -1127,9 +1127,7 @@ describe("screens/NeedsYouScreen", () => {
 describe("notification presentation helpers", () => {
   it("names an actor in words, and falls back to the bare name it was given", () => {
     expect(callerPhrase("app", "Briefing")).toBe("the app Briefing");
-    expect(callerPhrase("agent", "gmail-send")).toBe(
-      "the automation gmail-send"
-    );
+    expect(callerPhrase("agent", "gmail-send")).toBe("the rule gmail-send");
     expect(callerPhrase("assistant", "Assistant")).toBe("the assistant");
     expect(callerPhrase("owner", "owner")).toBe("owner");
   });
