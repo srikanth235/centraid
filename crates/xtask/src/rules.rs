@@ -76,6 +76,12 @@ pub struct RuleReport {
     pub name: &'static str,
     pub state: RuleState,
     pub findings: Vec<String>,
+    /// Anything about the scan a reader needs to make sense of the file count —
+    /// notably how many files a rule skipped BY DESIGN. Without it
+    /// `sql-confinement` reports "0 files scanned" on a tree full of SQL,
+    /// because every one of those files is in an allowed crate, and a reader
+    /// cannot tell that from a rule that is silently not running.
+    pub note: String,
 }
 
 pub enum RuleState {
@@ -91,7 +97,13 @@ impl RuleReport {
             name,
             state: RuleState::Applied(scanned),
             findings,
+            note: String::new(),
         }
+    }
+
+    fn with_note(mut self, note: String) -> Self {
+        self.note = note;
+        self
     }
 
     fn pending(name: &'static str, reason: &str) -> Self {
@@ -99,6 +111,7 @@ impl RuleReport {
             name,
             state: RuleState::Pending(reason.to_owned()),
             findings: Vec::new(),
+            note: String::new(),
         }
     }
 
@@ -109,12 +122,15 @@ impl RuleReport {
                 format!("PENDING {} — {reason}", self.name)
             }
             (RuleState::Applied(scanned), 0) => {
-                format!("ok      {} — {scanned} file(s) scanned, clean", self.name)
+                format!(
+                    "ok      {} — {scanned} file(s) scanned, clean{}",
+                    self.name, self.note
+                )
             }
             (RuleState::Applied(scanned), count) => {
                 format!(
-                    "FAIL    {} — {count} finding(s) in {scanned} file(s) scanned",
-                    self.name
+                    "FAIL    {} — {count} finding(s) in {scanned} file(s) scanned{}",
+                    self.name, self.note
                 )
             }
         }
@@ -169,16 +185,20 @@ pub fn sql_confinement(root: &Path) -> RuleReport {
     }
     let files = source_files(&crates, "rs");
     let mut scanned = 0usize;
+    let mut allowed = 0usize;
+    let mut exempt = 0usize;
     let mut findings = Vec::new();
     for file in &files {
         let rel = relative(root, file);
         if rel.starts_with(RULE_RUNNER) {
+            exempt += 1;
             continue;
         }
         if SQL_ALLOWED_ROOTS
             .iter()
-            .any(|allowed| rel.starts_with(allowed))
+            .any(|allowed_root| rel.starts_with(allowed_root))
         {
+            allowed += 1;
             continue;
         }
         scanned += 1;
@@ -202,7 +222,9 @@ pub fn sql_confinement(root: &Path) -> RuleReport {
             ));
         }
     }
-    RuleReport::applied(NAME, scanned, findings)
+    RuleReport::applied(NAME, scanned, findings).with_note(format!(
+        " ({allowed} in the allowed crates, {exempt} in the rule runner)"
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -286,10 +308,12 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
     }
     let files = source_files(&crates, "rs");
     let mut scanned = 0usize;
+    let mut exempt = 0usize;
     let mut findings = Vec::new();
     for file in &files {
         let rel = relative(root, file);
         if rel.starts_with(RULE_RUNNER) {
+            exempt += 1;
             continue;
         }
         scanned += 1;
@@ -303,6 +327,7 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
         }
     }
     RuleReport::applied(NAME, scanned, findings)
+        .with_note(format!(" ({exempt} in the rule runner)"))
 }
 
 /// Listener constructions that are NOT inside a `blob-door`-gated item.
