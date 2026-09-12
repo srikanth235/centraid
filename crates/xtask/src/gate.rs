@@ -1988,6 +1988,41 @@ mod tests {
         assert!(select(Profile::Pr, Some("ios-xctest-metrics")).is_err());
     }
 
+    /// A REAL step of ANOTHER profile selects where it exists and is refused
+    /// with THAT PROFILE'S step list where it does not.
+    ///
+    /// Lane F hit `--lane desktop-e2e` being refused and read it as a bug in
+    /// the filter; it was a stale binary scanning another worktree (fixed in
+    /// `repo_root`, `tests/repo_root.rs`). The filter was right — but nothing
+    /// asserted that its refusal is ACTIONABLE, and a refusal that does not
+    /// name the profile's own steps is part of why a stale binary looked like
+    /// a filter bug (#1020 wave 3 lane F finding 1).
+    #[test]
+    fn a_step_of_another_profile_is_refused_with_this_profiles_own_step_names() {
+        // `desktop-e2e` is a `nightly` step. It selects there…
+        assert_eq!(
+            select(Profile::Nightly, Some("desktop-e2e"))
+                .expect("a nightly step")
+                .iter()
+                .map(|step| step.name)
+                .collect::<Vec<_>>(),
+            ["desktop-e2e"]
+        );
+        // …and the refusal from `local` names `local` and lists every step
+        // `local` really has, so the next person does not read this file to
+        // find out what to type.
+        let error = select(Profile::Local, Some("desktop-e2e")).expect_err("must refuse");
+        let text = format!("{error:#}");
+        assert!(text.contains("the `local` profile"), "{text}");
+        for real in steps(Profile::Local) {
+            assert!(
+                text.contains(real.name),
+                "the refusal must name `{}`: {text}",
+                real.name
+            );
+        }
+    }
+
     /// A device lane name narrows the run to `device-lanes` and that step names
     /// the one lane it was asked about, not all four.
     #[test]

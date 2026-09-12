@@ -58,6 +58,15 @@ enum Command {
     },
     /// Run only the structural rules (the cheap half of every profile).
     Rules,
+    /// Print the repository root every path-based rule will scan.
+    ///
+    /// One line, and it exists because the root was once baked in at compile
+    /// time: with a shared `CARGO_TARGET_DIR` the cached binary scanned
+    /// whichever worktree built it last and reported clean over a tree nobody
+    /// asked about (#1020 wave 3). A root you cannot print is a root you cannot
+    /// check, so `crates/xtask/tests/repo_root.rs` runs this from a second
+    /// checkout and asserts the answer is the cwd's.
+    RepoRoot,
     /// Print the prebuilt core's cache key for a target triple (#1020,
     /// D-1020-G2). The exact rule is in `src/artifact.rs`.
     ArtifactKey {
@@ -136,14 +145,85 @@ impl Profile {
 
 /// The repository root — the directory holding the workspace `Cargo.toml`.
 ///
-/// `cargo xtask` always runs the binary from the workspace root, but a bare
-/// `cargo run -p xtask` from a subdirectory should still work, so the root is
-/// derived from the manifest path cargo bakes in rather than from the cwd.
+/// **Resolved AT RUN TIME, from the current directory.** It used to be
+/// `env!("CARGO_MANIFEST_DIR")`, which is baked in when the binary is
+/// COMPILED — and wave 3's lanes share one `CARGO_TARGET_DIR` because disk is
+/// tight, so the cached binary belonged to whichever worktree compiled it last
+/// and every path-based rule scanned THAT worktree. `sql-confinement`,
+/// `no-listening-socket`, `abi-five-symbols` and `ts-static` are all
+/// path-based, and the failure direction is **reports clean**, which is the
+/// worst one: two lanes saw three different answers from the same command in
+/// the same tree (#1020 wave 3, lane E finding 8 and lane F finding 1).
+///
+/// Three sources, in order, and the third says so out loud:
+///
+/// 1. `git rev-parse --show-toplevel` from the current directory. Right for a
+///    linked worktree, a submodule checkout and a plain clone alike.
+/// 2. Walking up from the current directory for the pair only the root carries
+///    (`CONSTITUTION.md` and `Cargo.toml`). For a tree exported without
+///    `.git`, and for a machine with no `git` on `PATH`.
+/// 3. The baked manifest path, **with a warning on stderr**. `cargo run -p
+///    xtask` from outside any checkout still works — the case the baked path
+///    existed for — and a run that scores another tree can no longer happen
+///    without printing the line that says it did.
 fn repo_root() -> PathBuf {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    if let Some(root) = git_toplevel(&cwd).filter(|root| is_repo_root(root)) {
+        return root;
+    }
+    if let Some(root) = walk_up_to_root(&cwd) {
+        return root;
+    }
+    let baked = baked_root();
+    eprintln!(
+        "xtask: WARNING no repository root at or above {} — falling back to the path baked in at \
+         compile time ({}). Every path-based rule scans THAT tree, not this directory (#1020).",
+        cwd.display(),
+        baked.display()
+    );
+    baked
+}
+
+/// The manifest path cargo baked in, two levels up: `crates/xtask` → the root.
+fn baked_root() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     match manifest.parent().and_then(std::path::Path::parent) {
         Some(root) => root.to_path_buf(),
         None => manifest,
+    }
+}
+
+/// The two files only the repository root carries together.
+fn is_repo_root(dir: &std::path::Path) -> bool {
+    dir.join("CONSTITUTION.md").is_file() && dir.join("Cargo.toml").is_file()
+}
+
+fn git_toplevel(cwd: &std::path::Path) -> Option<PathBuf> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(cwd)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(trimmed))
+}
+
+fn walk_up_to_root(cwd: &std::path::Path) -> Option<PathBuf> {
+    let mut dir = cwd.to_path_buf();
+    loop {
+        if is_repo_root(&dir) {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            return None;
+        }
     }
 }
 
@@ -163,6 +243,10 @@ fn main() -> ExitCode {
             }
         },
         Command::Rules => rules::print_report(&root),
+        Command::RepoRoot => {
+            println!("{}", root.display());
+            true
+        }
         Command::ArtifactKey {
             triple,
             mut features,
@@ -216,5 +300,41 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod root_tests {
+    use super::*;
+
+    /// A fabricated second checkout is found from inside it, and NOT confused
+    /// with the tree this test binary was compiled from.
+    #[test]
+    fn the_root_is_the_cwds_and_a_bare_directory_is_not_a_root() {
+        let scratch =
+            std::env::temp_dir().join(format!("xtask-root-{}-{}", std::process::id(), line!()));
+        let nested = scratch.join("crates/xtask/src");
+        std::fs::create_dir_all(&nested).expect("a scratch tree");
+        assert!(
+            walk_up_to_root(&nested).is_none(),
+            "a directory tree with neither marker is not a repository root"
+        );
+        std::fs::write(scratch.join("CONSTITUTION.md"), "x").expect("a constitution");
+        assert!(
+            walk_up_to_root(&nested).is_none(),
+            "CONSTITUTION.md alone is not the root: `Cargo.toml` is the other half"
+        );
+        std::fs::write(scratch.join("Cargo.toml"), "[workspace]\n").expect("a manifest");
+        assert_eq!(
+            walk_up_to_root(&nested).as_deref(),
+            Some(scratch.as_path()),
+            "the root is resolved by walking UP from the current directory"
+        );
+        assert_ne!(
+            walk_up_to_root(&nested).as_deref(),
+            Some(baked_root().as_path()),
+            "and it is not the path baked in when this test binary was compiled"
+        );
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 }

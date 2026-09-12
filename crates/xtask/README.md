@@ -8,8 +8,15 @@ cargo xtask gate --profile pr        # what every pull request satisfies
 cargo xtask gate --profile nightly   # pr + the v0 oracle + the device lanes
 cargo xtask gate --profile release   # nightly + the restore drill + the VPS smoke
 cargo xtask rules                    # the structural rules alone
+cargo xtask repo-root                # which tree the path-based rules will scan
 cargo xtask measure --write          # the edit-run loop, into the compile-time ledger
 ```
+
+## The tree a run scans is **the current directory's**
+
+Every path-based rule — `sql-confinement`, `no-listening-socket`, `abi-five-symbols`, `ts-static`, `commonmain-no-platform-import` — reads files under one root, and that root is resolved when the binary RUNS: `git rev-parse --show-toplevel` from the current directory, then a walk up for the `CONSTITUTION.md` + `Cargo.toml` pair only the root carries, then the compile-time manifest path with a warning on stderr.
+
+It used to be `env!("CARGO_MANIFEST_DIR")` alone, baked in when the binary was compiled. With a shared `CARGO_TARGET_DIR` — which wave 3's lanes used because disk was tight — the cached binary belonged to whichever worktree built it last and the gate scanned **that** worktree: the same command in the same tree gave three different answers, and the failure direction was *reports clean* ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3, lanes E and F). `cargo xtask repo-root` prints the answer in one line, and `crates/xtask/tests/repo_root.rs` runs the compiled binary from a second checkout and asserts it reports that checkout.
 
 ## The four profiles (and one placeholder)
 
