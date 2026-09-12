@@ -20,6 +20,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import {
   DERIVATIVE_VARIANTS,
+  holdStagingForIntent,
   isDerivativeVariant,
   readBackupPolicy,
 } from "@centraid/vault";
@@ -83,6 +84,19 @@ function optionalSize(value: unknown, field: string): number | undefined {
   return number;
 }
 
+/** THE INTENT THESE BYTES ARE FOR (#1014, B5). A device that stages bytes and
+ *  then queues the claiming write — the offline path every phone upload takes
+ *  — names its intent here, and the staging band holds the bytes past the
+ *  24-hour TTL until that intent settles or the hold's own bound passes.
+ *  Absent, nothing changes: the row lives its ordinary TTL. */
+const STAGING_INTENT_HEADER = "x-centraid-intent";
+
+function stagingIntentOf(req: IncomingMessage): string | undefined {
+  const raw = req.headers[STAGING_INTENT_HEADER];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
 /** Only host-stamped transport identity may receive per-blob key material. */
 function authenticatedDevice(req: IncomingMessage): string | undefined {
   const ambient = vaultContext()?.deviceKey;
@@ -109,6 +123,14 @@ export function makeBlobRouteHandler(
     const plane = vaults.current();
     const owner = plane.ownerCredential;
     const casAck = readBackupPolicy(plane.db.vault).casAck;
+    const stagingIntent = stagingIntentOf(req);
+    // Applied at every staging terminus rather than plumbed through each of
+    // the four ingress modes: the header rides on the request that finishes
+    // the upload, and the row exists by the time we answer it.
+    const holdForIntent = (sha256: string): void => {
+      if (stagingIntent)
+        holdStagingForIntent(plane.db.vault, sha256, stagingIntent);
+    };
 
     try {
       if (method === "POST" && segments.length === 0) {
@@ -153,6 +175,7 @@ export function makeBlobRouteHandler(
           const custody = (
             await plane.db.blobTransfers.preflight(staged.sha256)
           ).custody;
+          holdForIntent(staged.sha256);
           return sendCommitted(res, { ...staged, casAck, custody });
         }
 
@@ -183,6 +206,7 @@ export function makeBlobRouteHandler(
           const custody = (
             await plane.db.blobTransfers.preflight(staged.sha256)
           ).custody;
+          holdForIntent(staged.sha256);
           return sendCommitted(res, { ...staged, casAck, custody });
         }
         if (variantOf !== undefined) {
@@ -210,6 +234,7 @@ export function makeBlobRouteHandler(
           stagedBy: plane.boot.deviceId,
         });
         if (begin.mode === "existing") {
+          holdForIntent(begin.staged.sha256);
           return sendJson(res, 200, {
             ...stagedJson(begin.staged),
             casAck,
@@ -227,21 +252,21 @@ export function makeBlobRouteHandler(
             },
             req
           );
+          holdForIntent(staged.sha256);
           return sendCommitted(res, staged);
         }
         if (begin.mode === "one-shot-hash-pending") {
-          return sendCommitted(
-            res,
-            await plane.db.blobTransfers.streamThrough(
-              {
-                expectedSize: begin.expectedSize,
-                ...(mediaType ? { mediaType } : {}),
-                ...(filename ? { filename } : {}),
-                stagedBy: plane.boot.deviceId,
-              },
-              req
-            )
+          const staged = await plane.db.blobTransfers.streamThrough(
+            {
+              expectedSize: begin.expectedSize,
+              ...(mediaType ? { mediaType } : {}),
+              ...(filename ? { filename } : {}),
+              stagedBy: plane.boot.deviceId,
+            },
+            req
           );
+          holdForIntent(staged.sha256);
+          return sendCommitted(res, staged);
         }
         let offset = 0;
         try {
@@ -269,6 +294,7 @@ export function makeBlobRouteHandler(
         const committed = await plane.db.blobTransfers.commitIngress(
           begin.sessionId
         );
+        holdForIntent(committed.sha256);
         return sendCommitted(res, committed);
       }
 
@@ -406,10 +432,11 @@ export function makeBlobRouteHandler(
         segments[2] === "commit" &&
         segments.length === 3
       ) {
-        return sendCommitted(
-          res,
-          await plane.db.blobTransfers.commitIngress(segments[1]!)
+        const committed = await plane.db.blobTransfers.commitIngress(
+          segments[1]!
         );
+        holdForIntent(committed.sha256);
+        return sendCommitted(res, committed);
       }
 
       if (
@@ -485,14 +512,13 @@ export function makeBlobRouteHandler(
               etag: String((part as Record<string, unknown>).etag ?? ""),
             }))
           : [];
-        return sendCommitted(
-          res,
-          await plane.db.blobTransfers.completeDirect(
-            segments[1]!,
-            deviceIdentity,
-            parts
-          )
+        const direct = await plane.db.blobTransfers.completeDirect(
+          segments[1]!,
+          deviceIdentity,
+          parts
         );
+        holdForIntent(direct.sha256);
+        return sendCommitted(res, direct);
       }
 
       if (

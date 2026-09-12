@@ -133,9 +133,13 @@ describe("the refusal ladder — a device row is not a read-only vault (#1011 M1
     );
   });
 
-  it("keeps read-only ahead of no-vault-row when both are true", () => {
+  // ORDER FLIPPED BY #1014 (R17). `canWrite` is a property of a VAULT row, so
+  // for a photograph no vault holds yet it is false by absence, not by grant —
+  // and the member was told to "ask its owner for write access" about their own
+  // vault, which would take the write the moment the row arrived.
+  it("says not-in-a-vault-yet, not read-only, when there is no vault row", () => {
     expect(viewerWriteRefusal({ writable: false, hasVaultAsset: false })).toBe(
-      READ_ONLY_VAULT_REASON
+      NOT_IN_A_VAULT_YET_REASON
     );
   });
 

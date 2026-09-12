@@ -72,6 +72,20 @@ async function reconcileOnce(
       : { replayed: 0, poisoned: 0 };
     if (drain.settled + drain.deduped + replay.replayed > 0)
       Store.set(LAST_SUCCESSFUL_SYNC_KEY, new Date().toISOString());
+    // THE LEDGER'S PRODUCTION CALLER (#1014, P25). Terminal rows were never
+    // deleted, so a phone's whole roll accumulated as upload history and
+    // Photos' timeline engine read all of it on every refresh. Here, after the
+    // replay, because a settled row is only history once its canonical write
+    // has landed — and best-effort: pruning is not what this pass is for.
+    try {
+      queue.sweepTerminal();
+    } catch (error) {
+      console.warn(
+        `[centraid] upload: retention sweep skipped — ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
     return {
       settled: drain.settled,
       deduped: drain.deduped,

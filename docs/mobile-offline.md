@@ -134,6 +134,14 @@ Ordinary writes stay in each replica's durable intent outbox. A first-open write
 
 Replay is idempotent. A crash can leave a completed target and pending source removal, but cannot delete the source before the target exists. Queued changes may be cancelled. Permission denial, terminal failure, and parked retries remain visible until dismissed.
 
+### Photographs queued for two vaults
+
+One phone holds one upload queue and, at times, several vaults, so a queued item carries the vault it was queued FOR and the queue is keyed by `(content, vault)` — the same photograph offered to two vaults is two rows, two uploads, two writes ([#1014](https://github.com/srikanth235/centraid/issues/1014)). Every gateway call an item makes is addressed per REQUEST (`x-centraid-vault`), never once per client, and a settled follow-up is written only through a session that holds the vault the row names; one addressed elsewhere waits, and the pending surface reports it as waiting for that vault. The first-run camera-roll **Import** goes through this same durable queue rather than posting originals at the gateway itself, so an import survives a kill, obeys the transfer policy, and gives each imported photograph the `upload_item` its device row joins the vault row by.
+
+A retryable failure takes an exponential backoff with jitter between attempts, and an attempt against a gateway the transport never reached spends no attempt at all. Terminally failed rows stay listed with their reason and a Retry; settled rows are pruned once their canonical write has landed, and dismissed failures with them.
+
+A caption typed on a photograph no vault holds yet is merged into that upload's own unreplayed follow-up and travels with it ("Saved with the upload") — it is not a permissions refusal, and the member is never told to ask themselves for write access.
+
 ### How an intent settles
 
 An `executed` answer is the gateway's fact, not the phone's: it says the commit happened, not that this seat holds the rows it wrote. So the answer's **commit position** goes onto the outbox record and the intent waits at `awaiting-change`, and the applier clears the overlay in the transaction that carries that commit — the pending row and the canonical row it was drawn over become visible in the same instant. Where the answer arrives AFTER the seat already applied that commit, the drain settles it against the seat's applied commit position instead, because the applier's hook has been and gone. An answer that names no position (an older gateway) waits on `answeredVersions` instead, and one that names neither is released by the next send, from the gateway's retained outcome.
@@ -209,7 +217,7 @@ The gateway push relay is wake-only. Its payload contains no vault id, item id, 
 
 ## Thumbnail packs and budgets
 
-Each source gets a pinned thumbnail pack containing the recent 90 days plus favorites, with an independent 128 MiB budget and oldest-first eviction. Displayed rows prefer those local pixels. One source cannot evict another source's offline pack. The Phone storage screen reports, per vault:
+Each source gets a pinned thumbnail pack containing the recent 90 days plus favorites, with an independent 128 MiB budget and oldest-first eviction. Displayed rows prefer those local pixels, and a surface that has to explain an empty cell says which of the two things is true: with no pack for that vault the photographs are on the gateway, and with a pack in place these particular ones are not in it. One source cannot evict another source's offline pack. The Phone storage screen reports, per vault:
 
 - replica database bytes;
 - pinned thumbnail bytes; and

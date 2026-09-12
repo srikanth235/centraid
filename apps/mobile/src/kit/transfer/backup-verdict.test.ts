@@ -35,6 +35,7 @@ const queue = (
   pendingVideos: 0,
   bytes: 0,
   failures: [],
+  poisonedFollowups: 0,
   readable: true,
   ...fields,
 });
@@ -83,7 +84,12 @@ describe(backupVerdict, () => {
     // row the device tried to send and was told no is the thing to say first.
     expect(
       backupVerdict(
-        queue({ pending: 1000, failures: [{ lastError: "413 too large" }] })
+        queue({
+          pending: 1000,
+          failures: [
+            { itemId: "item-1", lastError: "413 too large", terminal: true },
+          ],
+        })
       )
     ).toBe("failing");
   });
@@ -102,8 +108,17 @@ describe(backupVerdictCopy, () => {
       queue({
         pending: 11,
         failures: [
-          { filename: "IMG_1.HEIC", lastError: "gateway refused: 507" },
-          { lastError: "gateway refused: 507" },
+          {
+            itemId: "item-1",
+            filename: "IMG_1.HEIC",
+            lastError: "gateway refused: 507",
+            terminal: true,
+          },
+          {
+            itemId: "item-1",
+            lastError: "gateway refused: 507",
+            terminal: true,
+          },
         ],
       })
     );
@@ -121,13 +136,20 @@ describe(backupVerdictCopy, () => {
     expect(backupVerdictCopy(queue({ pending: 2 })).net).toBe(false);
     expect(backupVerdictCopy(queue({ readable: false })).net).toBe(false);
     expect(
-      backupVerdictCopy(queue({ failures: [{ lastError: "no" }] })).net
+      backupVerdictCopy(
+        queue({
+          failures: [{ itemId: "item-1", lastError: "no", terminal: true }],
+        })
+      ).net
     ).toBe(true);
   });
 
   it("says one photograph in the singular", () => {
     const copy = backupVerdictCopy(
-      queue({ pending: 1, failures: [{ lastError: "offline" }] })
+      queue({
+        pending: 1,
+        failures: [{ itemId: "item-1", lastError: "offline", terminal: true }],
+      })
     );
     expect(copy.detail).toContain("1 photograph is on this device only");
   });
@@ -135,7 +157,9 @@ describe(backupVerdictCopy, () => {
   it("names a refusal even when the queue recorded no reason", () => {
     // A row that failed with no message is still a refusal; saying "no reason
     // was recorded" beats an empty clause that reads as a rendering bug.
-    const copy = backupVerdictCopy(queue({ failures: [{ lastError: "" }] }));
+    const copy = backupVerdictCopy(
+      queue({ failures: [{ itemId: "item-1", lastError: "", terminal: true }] })
+    );
     expect(copy.detail).toContain("no reason was recorded");
   });
 
@@ -152,7 +176,9 @@ describe(backupVerdictCopy, () => {
     for (const counts of [
       queue(),
       queue({ pending: 1 }),
-      queue({ failures: [{ lastError: "x" }] }),
+      queue({
+        failures: [{ itemId: "item-1", lastError: "x", terminal: true }],
+      }),
       queue({ readable: false }),
     ]) {
       expect(known.has(backupVerdictCopy(counts).icon)).toBe(true);

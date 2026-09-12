@@ -59,6 +59,7 @@ import {
   listCommonsResidents,
   retainCommonsItem,
 } from "../../lib/replica/commons-transport";
+import { withUploadQueue } from "../../lib/upload/native-queue";
 import type { PhotosScreenProps } from "../../navigation";
 import { buildDismissGesture } from "./lightbox-gestures";
 import { MediaPage } from "./MediaPage";
@@ -98,6 +99,7 @@ import {
   viewerChromeVisible,
   viewerStatus,
   viewerTitle,
+  QUEUED_WITH_UPLOAD_NOTE,
   viewerWriteRefusal,
 } from "./viewer-model";
 
@@ -340,6 +342,29 @@ export default function PhotoLightbox({
       writable: current.canWrite === true,
       hasVaultAsset: Boolean(current.sourceVaultId),
     });
+    // A CAPTION TYPED BEFORE THE ROW EXISTS TRAVELS WITH THE UPLOAD (#1014,
+    // R17). There is no vault row to write onto, but this phone has the
+    // photograph queued; the title joins the write already on its way rather
+    // than being refused at a member who did nothing wrong.
+    if (refusal && !current.sourceVaultId && action === "update-asset") {
+      const title = input.title;
+      if (current.sha256 && typeof title === "string" && title.length > 0) {
+        // Local ledger only — the base URL is never used on this path.
+        const queued = await withUploadQueue(
+          { gatewayBaseUrl: gatewayBase ?? "http://127.0.0.1" },
+          (queue) => {
+            const item = queue.bySha(current.sha256!);
+            return item
+              ? queue.amendFollowupInput(item.itemId, { title }).length
+              : 0;
+          }
+        );
+        if (queued > 0) {
+          postStatus(QUEUED_WITH_UPLOAD_NOTE);
+          return undefined;
+        }
+      }
+    }
     if (refusal) return refusal;
     try {
       // One open vault, so one write target (#996 wave 3). `canWrite` above

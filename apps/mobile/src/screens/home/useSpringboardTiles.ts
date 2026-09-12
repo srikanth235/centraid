@@ -24,7 +24,10 @@ import { occurrenceExceptionsOf } from "@centraid/core/time";
 import { useSeatPages, useSeatWindow } from "../../kit/hooks/useSeatPages";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { expandEvent } from "../../kit/schedule/recurrence";
-import { pinnedThumbnailUri } from "../../lib/replica/thumbnail-pack";
+import {
+  hasPinnedThumbnailPack,
+  pinnedThumbnailUri,
+} from "../../lib/replica/thumbnail-pack";
 import {
   expenseTileRead,
   HOME_BODY_LOOKUP,
@@ -183,7 +186,13 @@ export function useSpringboardTiles(): Map<string, TileData> {
       count: photos.rows.length,
       countCapped: photos.truncated === true,
       countLabel: "photos",
-      body: { kind: "photos", photos: mosaic },
+      body: {
+        kind: "photos",
+        photos: mosaic,
+        // R16 (#1014): the waiting copy is only honest about "the gateway" when
+        // this phone holds no pinned pack for the vault.
+        offlinePack: hasPinnedThumbnailPack(vaultId ?? ""),
+      },
     });
 
     const docRows = selectDocRows(documents.rows, docContents.rows);

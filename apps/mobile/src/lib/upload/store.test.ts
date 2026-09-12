@@ -317,6 +317,8 @@ describe("store", () => {
     });
 
     it("adds durable vault targeting to a v4 queue without losing bytes", () => {
+      // A v4 table had neither the column nor the (sha, vault) index over it.
+      driver.exec("DROP INDEX IF EXISTS upload_item_sha_vault");
       driver.exec("ALTER TABLE upload_item DROP COLUMN target_vault_id");
       driver.exec("PRAGMA user_version = 4");
 
@@ -506,5 +508,56 @@ describe("store", () => {
         "foreign tables survive"
       ).toStrictEqual([{ intent_id: "keep-me" }]);
     });
+  });
+});
+
+describe("amending a follow-up before it replays (#1014, R17)", () => {
+  beforeEach(() => {
+    dir = tempDirSync("centraid-queue-");
+    driver = new NodeSqliteFileDriver(path.join(dir, "uploads.db"));
+    store = UploadQueueStore.create(driver);
+  });
+
+  afterEach(() => {
+    driver.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("merges a caption into the write still on its way, and re-keys it", () => {
+    store.enqueue(upload());
+    const queued = store.enqueueFollowup({
+      itemId: "item-1",
+      shape: "photos",
+      action: "upload",
+      input: { staged_sha: "a".repeat(64), title: "IMG_0042.HEIC" },
+    });
+
+    const [amended] = store.amendFollowupInput("item-1", {
+      title: "Ruth at the lake",
+    });
+    expect(amended?.input).toStrictEqual({
+      staged_sha: "a".repeat(64),
+      title: "Ruth at the lake",
+    });
+    // The intent id is derived from the input, so it MUST move with it — a
+    // stale id would idempotently replay the old title.
+    expect(amended?.intentId).not.toBe(queued.intentId);
+  });
+
+  it("leaves a follow-up alone once a replay has been attempted", () => {
+    store.enqueue(upload());
+    const queued = store.enqueueFollowup({
+      itemId: "item-1",
+      shape: "photos",
+      action: "upload",
+      input: { staged_sha: "a".repeat(64) },
+    });
+    store.countFollowupAttempt(queued.followupId);
+
+    // The gateway's idempotency window holds this id; changing it now would
+    // let the same write execute twice.
+    expect(
+      store.amendFollowupInput("item-1", { title: "too late" })
+    ).toStrictEqual([]);
   });
 });

@@ -24,7 +24,7 @@ import {
   SHARE_DELIVERY_CONFIG_RECUT_DDL,
 } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
-import { BLOB_DDL } from "./blob.js";
+import { BLOB_DDL, BLOB_TRANSIENT_HOLDS_DDL } from "./blob.js";
 import { CONTENT_TEXT_DDL, LINK_ANCHOR_DDL } from "./core-side-tables.js";
 import { CORE_DDL } from "./core.js";
 import {
@@ -255,6 +255,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // generated triggers cannot be named from stated DDL, so
   // `dropReplicaChangeTriggers` removes them in JS just before the ladder runs.
   REPLICA_ONE_LOG_DDL,
+  // RUNG ELEVEN (#1014, B5/B12) — the staging band's intent hold and the custody
+  // outbox's quarantine mark. See `BLOB_TRANSIENT_HOLDS_DDL` for what each
+  // column ends; its own rung for the reason rung five gives.
+  BLOB_TRANSIENT_HOLDS_DDL,
 ];
 
 /**

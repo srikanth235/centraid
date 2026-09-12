@@ -443,8 +443,11 @@ export {
   stageBlobBytes,
   sweepBlobStaging,
   releaseBatchHold,
+  holdStagingForIntent,
+  releaseIntentHold,
   mediaLocationPolicy,
   STAGING_TTL_HOURS,
+  STAGING_INTENT_HOLD_HOURS,
   type StageBlobOptions,
   type StagedBlob,
 } from "./blob/staging.js";

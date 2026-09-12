@@ -4,6 +4,8 @@
 // sealer and drainer take every one of these by injection so the vitest rig
 // can exercise them.
 
+import { File } from "expo-file-system";
+
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { ExpoSqliteDriver } from "../replica/expo-sqlite-driver";
 import type { PendingUploadGroup } from "../replica/storage-accounting";
@@ -13,8 +15,9 @@ import { enqueueLocalFile } from "./enqueue";
 import type { EnqueueInput } from "./enqueue";
 import { expoFileSource, expoPartPutter } from "./expo-native";
 import { httpDirectTransferClient } from "./gateway-client";
+import { planLegacyDatabaseMove } from "./legacy-db-location";
 import { createNativeDigest } from "./native-digest";
-import { UploadQueueStore } from "./store";
+import { TERMINAL_RETENTION_MS, UploadQueueStore } from "./store";
 import type {
   NewUploadFollowup,
   UploadFollowupFactory,
@@ -52,8 +55,41 @@ let shared:
   | { store: UploadQueueStore; holders: number; location: string | undefined }
   | undefined;
 
+/**
+ * Recover a ledger the old percent-encoded path stranded (#1014, R19). Runs at
+ * most once per location per process, before the handle is opened; a failure
+ * is not fatal — the queue opens empty at the right place and the sweep can be
+ * retried on the next launch — but it is never silent (logs.md).
+ */
+const recoveredLocations = new Set<string>();
+
+function recoverLegacyLedger(location: string): void {
+  if (recoveredLocations.has(location)) return;
+  recoveredLocations.add(location);
+  try {
+    const moves = planLegacyDatabaseMove(
+      location,
+      UPLOAD_DB_NAME,
+      (path) => new File(path).exists
+    );
+    for (const move of moves) new File(move.from).move(new File(move.to));
+    if (moves.length > 0) {
+      console.log(
+        `[centraid] uploads: recovered ${moves.length} queue file(s) from the percent-encoded path`
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `[centraid] uploads: could not recover the queue stranded at the percent-encoded path: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
 function acquireUploadStore(): UploadQueueStore {
   const location = replicaStorageDirectory();
+  if (location) recoverLegacyLedger(location);
   if (shared && shared.location !== location) {
     // The durable directory moved (a restored container). The old handle names
     // a file that is not this one; nobody may keep holding it.
@@ -119,6 +155,9 @@ export class UploadQueue {
       openFile: expoFileSource,
       putPart: expoPartPutter(scope),
       gatewayBaseUrl: options.gatewayBaseUrl,
+      // The resume guard must hash with the same implementation the enqueue
+      // did, or every resumed item would look rewritten (#1014, P22).
+      createDigest: createNativeDigest,
       ...(options.policy ? { policy: options.policy } : {}),
       ...(options.onProgress
         ? {
@@ -178,17 +217,61 @@ export class UploadQueue {
     return this.store.pendingStorageGroups();
   }
 
-  /** Ledger lookup by content sha — the F11 probe and the F6 outcome check. */
-  bySha(sha256: string): UploadItem | undefined {
-    return this.store.bySha(sha256);
+  /** Ledger lookup by (content sha, vault) — the F11 probe and the F6 outcome
+   *  check. Scoped since #1014 P3: the same bytes may be queued for two vaults. */
+  bySha(sha256: string, targetVaultId?: string): UploadItem | undefined {
+    return this.store.bySha(sha256, targetVaultId);
   }
 
   all(): UploadItem[] {
     return this.store.all();
   }
 
+  /** Bounded newest-first slice; what a screen wants (#1014, P25). */
+  recent(limit?: number): UploadItem[] {
+    return this.store.recent(limit);
+  }
+
+  /** Terminally failed rows the member has not dismissed (#1014, P7). */
+  failed(): UploadItem[] {
+    return this.store.failed();
+  }
+
+  failedCount(): number {
+    return this.store.failedCount();
+  }
+
+  /** Rows that failed and will try again, backoff window included (#1014). */
+  retrying(): UploadItem[] {
+    return this.store.retrying();
+  }
+
+  /** Put a failed row back in the queue with a fresh attempt budget. */
+  retry(itemId: string): void {
+    this.store.retry(itemId);
+    notifyUploadQueueChanged();
+  }
+
+  dismissFailed(itemId: string): void {
+    this.store.dismissFailed(itemId);
+    notifyUploadQueueChanged();
+  }
+
+  /** Retention sweep over terminal rows nothing waits on (#1014, P25). */
+  sweepTerminal(olderThanMs: number = TERMINAL_RETENTION_MS): number {
+    return this.store.sweepTerminal({ olderThanMs });
+  }
+
   enqueueFollowup(followup: NewUploadFollowup): UploadFollowup {
     return this.store.enqueueFollowup(followup);
+  }
+
+  /** Merge fields into the writes this item still has to make (#1014, R17). */
+  amendFollowupInput(
+    itemId: string,
+    patch: Record<string, unknown>
+  ): UploadFollowup[] {
+    return this.store.amendFollowupInput(itemId, patch);
   }
 
   pendingFollowups(): UploadFollowup[] {

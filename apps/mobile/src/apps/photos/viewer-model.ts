@@ -17,7 +17,6 @@ import {
 } from "@centraid/blueprints/apps/photos/shared-copy";
 
 import { isMeteredConnection } from "../../kit/fetch-gate/gate";
-import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 
 /** The tone a control takes. Resolved to `colors.onStage` / `colors.net`. */
 export type ViewerTone = "ink" | "net";
@@ -108,24 +107,14 @@ export function viewerChromeHeight(insetTop: number): number {
  *  lives in `kit/replica/row-provenance.ts`, read by five apps. */
 export { READ_ONLY_SOURCE_REASON as READ_ONLY_VAULT_REASON } from "../../kit/replica/row-provenance";
 
-/** A device-only photograph nothing has backed up yet — the phone imported it
- *  but this seat has not pulled the row. NOT a read-only vault. */
-export const NOT_IN_A_VAULT_YET_REASON =
-  "This photograph is not in a vault yet.";
-
-/** The ONE refusal ladder every writing surface in the viewer climbs — the
- *  toolbar, the `···` menu and `PhotoLightbox`'s `writeReason` all read it, so
- *  a device row cannot be told the vault is read-only when the truth is that
- *  the photograph is not in it yet. Read-only beats no-vault-row; a writable
- *  vault row refuses nothing. */
-export function viewerWriteRefusal(input: {
-  writable: boolean;
-  hasVaultAsset: boolean;
-}): string | undefined {
-  if (!input.writable) return READ_ONLY_SOURCE_REASON;
-  if (!input.hasVaultAsset) return NOT_IN_A_VAULT_YET_REASON;
-  return undefined;
-}
+// THE REFUSAL LADDER lives in its own leaf (#1014, R17) — the toolbar, the
+// `···` menu, the info sheet and `PhotoLightbox`'s `writeReason` all read it.
+export {
+  isReadOnlyRefusal,
+  NOT_IN_A_VAULT_YET_REASON,
+  QUEUED_WITH_UPLOAD_NOTE,
+  viewerWriteRefusal,
+} from "./viewer-write-refusal";
 
 /** Kept on the phone: swipe and the strip are one control from two directions,
  *  and dropping it makes the phone a slideshow. */

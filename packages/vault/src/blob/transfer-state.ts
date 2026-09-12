@@ -38,6 +38,9 @@ export interface OutboxRow {
   attempt_count: number;
   next_retry_at: string | null;
   last_error: string | null;
+  /** Set once the row has spent its attempts (#1014, B12) — never due again
+   *  until a member releases it. */
+  quarantined_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -392,10 +395,61 @@ export class BlobTransferState {
     return this.db
       .prepare(
         `SELECT * FROM blob_outbox
-          WHERE next_retry_at IS NULL OR next_retry_at <= ?
+          WHERE quarantined_at IS NULL
+            AND (next_retry_at IS NULL OR next_retry_at <= ?)
           ORDER BY created_at LIMIT ?`
       )
       .all(at, limit) as unknown as OutboxRow[];
+  }
+
+  /** A ROW THAT IS NEVER GOING TO DRAIN (#1014, B12). It stops being due and
+   *  stops holding the cache pin its pending-ness bought: backlog nothing will
+   *  clear must not read as backlog, and it must not keep bytes local for ever
+   *  under a promise of replication that failed. The row itself stays, with
+   *  its last error, because a member has to be able to see it and retry it. */
+  quarantineOutbox(sha256: string, message: string): void {
+    this.db
+      .prepare(
+        `UPDATE blob_outbox SET state = 'pending', attempt_count = attempt_count + 1,
+           last_error = ?, next_retry_at = NULL, quarantined_at = ?, updated_at = ?
+          WHERE sha256 = ?`
+      )
+      .run(message, nowIso(), nowIso(), sha256);
+  }
+
+  /** Return a quarantined row to the queue with a fresh attempt budget. */
+  releaseOutboxQuarantine(sha256: string): void {
+    this.db
+      .prepare(
+        `UPDATE blob_outbox SET quarantined_at = NULL, attempt_count = 0,
+           next_retry_at = NULL, updated_at = ? WHERE sha256 = ?`
+      )
+      .run(nowIso(), sha256);
+  }
+
+  /** CUSTODY IS NOT ANSWERING (#1014, B13). Distinguishable from a full disk
+   *  and from a healthy backlog: rows are present AND every one of them has
+   *  failed at least `CUSTODY_STALL_ATTEMPTS` times, which is what an offline
+   *  provider looks like from here. One slow blob among many does not count. */
+  custodyStalled(minAttempts = 3): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN attempt_count >= ? THEN 1 ELSE 0 END), 0) AS failing
+           FROM blob_outbox WHERE quarantined_at IS NULL`
+      )
+      .get(minAttempts) as { total: number; failing: number };
+    return row.total > 0 && row.failing === row.total;
+  }
+
+  quarantinedShas(): string[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT sha256 FROM blob_outbox WHERE quarantined_at IS NOT NULL ORDER BY sha256"
+        )
+        .all() as { sha256: string }[]
+    ).map((row) => row.sha256);
   }
 
   markUploading(sha256: string, tempId: string, uploadId?: string): void {
@@ -459,18 +513,28 @@ export class BlobTransferState {
     pendingCount: number;
     pendingBytes: number;
     uploadingCount: number;
+    quarantinedCount: number;
+    quarantinedBytes: number;
     lastError: string | null;
   } {
+    // Quarantined rows are counted apart from pending ones (#1014, B12): a
+    // backlog figure that folds in work no runner will pick up again answers
+    // "how far behind is custody" with a number that never falls.
     const totals = this.db
       .prepare(
-        `SELECT COUNT(*) AS pending_count, COALESCE(SUM(byte_size), 0) AS pending_bytes,
-                COALESCE(SUM(CASE WHEN state = 'uploading' THEN 1 ELSE 0 END), 0) AS uploading_count
+        `SELECT COALESCE(SUM(CASE WHEN quarantined_at IS NULL THEN 1 ELSE 0 END), 0) AS pending_count,
+                COALESCE(SUM(CASE WHEN quarantined_at IS NULL THEN byte_size ELSE 0 END), 0) AS pending_bytes,
+                COALESCE(SUM(CASE WHEN state = 'uploading' AND quarantined_at IS NULL THEN 1 ELSE 0 END), 0) AS uploading_count,
+                COALESCE(SUM(CASE WHEN quarantined_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS quarantined_count,
+                COALESCE(SUM(CASE WHEN quarantined_at IS NOT NULL THEN byte_size ELSE 0 END), 0) AS quarantined_bytes
            FROM blob_outbox`
       )
       .get() as {
       pending_count: number;
       pending_bytes: number;
       uploading_count: number;
+      quarantined_count: number;
+      quarantined_bytes: number;
     };
     const failure = this.db
       .prepare(
@@ -482,6 +546,8 @@ export class BlobTransferState {
       pendingCount: totals.pending_count,
       pendingBytes: totals.pending_bytes,
       uploadingCount: totals.uploading_count,
+      quarantinedCount: totals.quarantined_count,
+      quarantinedBytes: totals.quarantined_bytes,
       lastError: failure?.last_error ?? null,
     };
   }

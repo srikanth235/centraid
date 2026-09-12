@@ -31,6 +31,7 @@ import { styles } from "./PhotoLightbox.styles";
 import type { PhotoAsset } from "./timeline-model";
 import {
   infoSheetHeight,
+  isReadOnlyRefusal,
   originalStatus,
   originalWhereabouts,
   resolveOriginalPlacement,
@@ -330,10 +331,15 @@ export function PhotoInfoSheet(
               <Text style={[styles.refusalText, { color: colors.net }]}>
                 {refusal.because}
               </Text>
-              <Text style={[styles.refusalText, { color: colors.textSoft }]}>
-                Read-only vault — ask its owner for write access, then try
-                again.
-              </Text>
+              {/* Only the READ-ONLY refusal has "ask the owner" as its remedy
+                  (#1014, R17). A photograph that is simply not in a vault yet
+                  is nobody's permission problem. */}
+              {isReadOnlyRefusal(refusal.because) ? (
+                <Text style={[styles.refusalText, { color: colors.textSoft }]}>
+                  Read-only vault — ask its owner for write access, then try
+                  again.
+                </Text>
+              ) : null}
             </View>
           ) : null}
 

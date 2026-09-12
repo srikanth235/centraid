@@ -5,11 +5,21 @@
 import { authHeader } from "../../lib/gateway";
 import { foldPendingUploadGroups } from "../../lib/replica/storage-accounting";
 import { UploadQueue } from "../../lib/upload/native-queue";
+import type { UploadItem } from "../../lib/upload/store";
 import { memberFacingError } from "../member-error";
 
 export interface TransferQueueFailure {
+  /** Needed to act on it: the Retry below is addressed by item. */
+  itemId: string;
   filename?: string;
   lastError: string;
+  /**
+   * TERMINAL: the item spent its attempts and will not try again on its own
+   * (#1014, P7). Until this lane, such a row was in no list at all — the
+   * failure surface read only rows still being retried, so an item that gave
+   * up disappeared from Backup health entirely.
+   */
+  terminal: boolean;
 }
 
 export interface TransferQueueCounts {
@@ -17,6 +27,13 @@ export interface TransferQueueCounts {
   pendingVideos: number;
   bytes: number;
   failures: TransferQueueFailure[];
+  /**
+   * Follow-ups quarantined after exhausting their replays (F4): bytes are
+   * durable in the CAS and the canonical write never landed, so the vault has
+   * the photograph's content and no row for it. Nothing surfaced this count
+   * (#1014, P7) — `poisonedFollowupCount()` had no production caller.
+   */
+  poisonedFollowups: number;
   readable: boolean;
 }
 
@@ -25,6 +42,7 @@ const UNREADABLE: TransferQueueCounts = {
   pendingVideos: 0,
   bytes: 0,
   failures: [],
+  poisonedFollowups: 0,
   readable: false,
 };
 
@@ -41,6 +59,7 @@ export function readTransferQueue(gatewayBase: string): TransferQueueCounts {
       pendingVideos: totals.videoCount,
       bytes: totals.total.bytes,
       failures: readFailures(queue),
+      poisonedFollowups: queue.poisonedFollowupCount(),
       readable: true,
     };
   } catch {
@@ -50,15 +69,43 @@ export function readTransferQueue(gatewayBase: string): TransferQueueCounts {
   }
 }
 
+/**
+ * Every row whose last try failed: the ones that gave up FIRST, then the ones
+ * still retrying.
+ *
+ * The retrying list is `retrying()`, not `pending()`: a row inside its backoff
+ * window is hidden from the drain by design, and hiding it here as well would
+ * make a refusal vanish from Backup health for minutes at a time.
+ */
 function readFailures(queue: UploadQueue): TransferQueueFailure[] {
-  return queue.pending().flatMap((item) =>
-    item.lastError
-      ? [
-          {
-            ...(item.filename ? { filename: item.filename } : {}),
-            lastError: memberFacingError(item.lastError),
-          },
-        ]
-      : []
-  );
+  const failed = queue.failed().map((item) => describe(item, true));
+  return [...failed, ...queue.retrying().map((item) => describe(item, false))];
+}
+
+function describe(item: UploadItem, terminal: boolean): TransferQueueFailure {
+  return {
+    itemId: item.itemId,
+    ...(item.filename ? { filename: item.filename } : {}),
+    lastError: memberFacingError(item.lastError ?? "no reason was recorded"),
+    terminal,
+  };
+}
+
+/**
+ * Put a terminally failed transfer back in the queue with a fresh attempt
+ * budget — the member's answer to the failure list above (#1014, P7).
+ */
+export function retryTransfer(gatewayBase: string, itemId: string): void {
+  let queue: UploadQueue | undefined;
+  try {
+    queue = UploadQueue.open({
+      gatewayBaseUrl: gatewayBase,
+      headers: authHeader,
+    });
+    queue.retry(itemId);
+  } catch {
+    // Unreadable ledger: the list this acts on is already `readable: false`.
+  } finally {
+    queue?.close();
+  }
 }

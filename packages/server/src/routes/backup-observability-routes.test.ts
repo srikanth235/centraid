@@ -139,6 +139,8 @@ describe("backup-observability-routes", () => {
       pendingCount: 3,
       pendingBytes: 4_096,
       uploadingCount: 1,
+      quarantinedCount: 0,
+      quarantinedBytes: 0,
       lastError: null,
     });
     const out = response();

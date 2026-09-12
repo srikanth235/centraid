@@ -31,6 +31,9 @@ export interface DeviceMediaInput {
   durationS?: number;
   /** F10: delete the source after durable settle; never a camera-roll original. */
   deleteSourceAfterSettle?: boolean;
+  /** Told once, before the drain: were these bytes new to THIS vault's queue?
+   *  The camera-roll import's imported-vs-already-in count reads it (#1014). */
+  onEnqueued?: (info: { sha256: string; isNew: boolean }) => void;
   onProgress?: (progress: { completed: number; total: number }) => void;
 }
 
@@ -94,7 +97,11 @@ async function drainToSettlement(
   gatewayBase: string,
   queue: UploadQueue,
   sha256: string,
-  source: { localUri: string; deleteAfterSettle: boolean }
+  source: {
+    localUri: string;
+    deleteAfterSettle: boolean;
+    targetVaultId?: string;
+  }
 ): Promise<string> {
   await withDrainLock(async () => {
     // Foreground service owned only here; reconcile never starts it.
@@ -110,7 +117,7 @@ async function drainToSettlement(
       UploadForegroundService.stop();
     }
   });
-  const item = queue.bySha(sha256);
+  const item = queue.bySha(sha256, source.targetVaultId);
   if (item?.state === "failed") {
     throw new Error(
       `backup of ${sha256} did not settle: ${item.lastError ?? "unknown error"}`
@@ -150,7 +157,9 @@ export async function backupDeviceMedia(
       input.localUri,
       createNativeDigest
     );
-    const isNew = queue.bySha(digest.sha256) === undefined;
+    // Scoped to the target vault (#1014, P3): the same photograph queued for a
+    // second vault is a NEW row there, derivatives and follow-up included.
+    const isNew = queue.bySha(digest.sha256, input.targetVaultId) === undefined;
     const derivatives =
       isNew && input.kind !== "audio"
         ? await generateDeviceDerivatives(input.localUri, input.mediaType)
@@ -199,6 +208,7 @@ export async function backupDeviceMedia(
     return await drainToSettlement(session, gatewayBase, queue, item.sha256, {
       localUri: input.localUri,
       deleteAfterSettle: input.deleteSourceAfterSettle ?? false,
+      ...(input.targetVaultId ? { targetVaultId: input.targetVaultId } : {}),
     });
   } finally {
     queue.close();
@@ -237,6 +247,7 @@ export async function backupDocument(
     return await drainToSettlement(session, gatewayBase, queue, item.sha256, {
       localUri: input.localUri,
       deleteAfterSettle: input.deleteSourceAfterSettle ?? false,
+      ...(input.targetVaultId ? { targetVaultId: input.targetVaultId } : {}),
     });
   } finally {
     queue.close();
@@ -279,6 +290,7 @@ export async function backupReceiptExpense(
     return await drainToSettlement(session, gatewayBase, queue, item.sha256, {
       localUri: input.localUri,
       deleteAfterSettle: input.deleteSourceAfterSettle ?? false,
+      ...(input.targetVaultId ? { targetVaultId: input.targetVaultId } : {}),
     });
   } finally {
     queue.close();

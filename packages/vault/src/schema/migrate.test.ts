@@ -145,13 +145,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("TEN rungs: the baseline, #929's three, #928's ask tables, #996's key plane and unlock-credential drop, #1014's floor split, its poison registers and its one-log retirement, and a fresh vault stops at user_version 10", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(10);
+  test("ELEVEN rungs: the baseline, #929's three, #928's ask tables, #996's key plane and unlock-credential drop, #1014's floor split, poison registers, one-log retirement and transient holds, and a fresh vault stops at user_version 11", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(11);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(10);
+    expect(version.user_version).toBe(11);
     for (const table of [
       "locker_key",
       "core_entity",
@@ -237,7 +237,7 @@ describe("schema/migrate", () => {
     expect(
       (raw.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
-    ).toBe(10);
+    ).toBe(11);
     expect(
       raw
         .prepare(
@@ -268,7 +268,7 @@ describe("schema/migrate", () => {
     expect(
       (raw.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
-    ).toBe(10);
+    ).toBe(11);
     expect(columnNames(raw, "automation_trigger_cursor")).toContain(
       "dead_letter_json"
     );
@@ -296,7 +296,7 @@ describe("schema/migrate", () => {
     const version = raw.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(10);
+    expect(version.user_version).toBe(11);
     for (const table of ["share_authority_request", "share_authority_use"]) {
       expect(
         raw
@@ -579,10 +579,10 @@ describe("schema/migrate", () => {
     first.close();
 
     const vaultFile = path.join(dir, "vault.db");
-    expect(userVersionOf(vaultFile)).toBe(10);
+    expect(userVersionOf(vaultFile)).toBe(11);
 
     const second = openVaultDb({ dir });
-    expect(userVersionOf(vaultFile)).toBe(10);
+    expect(userVersionOf(vaultFile)).toBe(11);
     expect(shapeOf(second)).toBe(before);
     second.close();
   });

@@ -5,6 +5,7 @@ import {
   cleanupDeviceDerivatives,
   contributeDeviceDerivatives,
 } from "./derivatives-native";
+import { followupBelongsToSession } from "./followup-routing";
 import type { UploadQueue } from "./native-queue";
 
 /** After this many failed replays a follow-up is quarantined, not retried (F4). */
@@ -15,6 +16,13 @@ export interface FollowupReplaySummary {
   replayed: number;
   /** Records quarantined this pass after exhausting their attempts. */
   poisoned: number;
+  /**
+   * Records whose vault is not the one this session holds (#1014, P2), by
+   * vault id. NOT a failure and NOT an attempt: the bytes are durable and the
+   * write is waiting for the seat that owns the row, which is what the pending
+   * surface reports as "waiting for <vault>".
+   */
+  waitingForVault: Readonly<Record<string, number>>;
 }
 
 /**
@@ -34,12 +42,23 @@ export async function replaySettledUploadFollowups(
 ): Promise<FollowupReplaySummary> {
   let replayed = 0;
   let poisoned = 0;
+  const waitingForVault: Record<string, number> = {};
+  // A session holds exactly ONE vault (#996 wave 3). A follow-up addressed to
+  // another one is not this session's to write.
+  const sessionVaultId = session.scope?.()?.vaultId;
   const followups = queue.pendingFollowups();
   // Process the persisted follow-up queue in order: each canonical write may
   // alter the replica state observed by the next durable mutation.
   const replayNext = async (index: number): Promise<void> => {
     const followup = followups[index];
     if (!followup) return;
+    if (!followupBelongsToSession(followup.targetVaultId, sessionVaultId)) {
+      // P2 (#1014) — the rule and its history live in `followup-routing.ts`.
+      // A follow-up for another vault waits for the seat that holds it.
+      const waiting = followup.targetVaultId!;
+      waitingForVault[waiting] = (waitingForVault[waiting] ?? 0) + 1;
+      return replayNext(index + 1);
+    }
     try {
       // F14d: the parent sha addresses the derivatives and the canonical write.
       // A malformed value would POST `variant_of=undefined` and write garbage,
@@ -62,7 +81,7 @@ export async function replaySettledUploadFollowups(
         input: followup.input as ReplicaValue,
         intentId: followup.intentId,
       };
-      // One open vault, so one write target (#996 wave 3).
+      // One open vault, and the row said it is this one (checked above).
       const outcome = await session.write(followup.shape, write);
       if (outcome.status === "denied" || outcome.status === "failed") {
         throw new Error(
@@ -85,7 +104,7 @@ export async function replaySettledUploadFollowups(
     return replayNext(index + 1);
   };
   await replayNext(0);
-  return { replayed, poisoned };
+  return { replayed, poisoned, waitingForVault };
 }
 
 function messageOf(error: unknown): string {

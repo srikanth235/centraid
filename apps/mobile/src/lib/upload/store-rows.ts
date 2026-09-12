@@ -26,6 +26,10 @@ export interface ItemRow {
   attempts: number;
   last_error: string | null;
   receipt_json: string | null;
+  edge_digest?: string | null;
+  settled_at?: string | null;
+  dismissed_at?: string | null;
+  next_attempt_at?: string | null;
 }
 
 export interface PartRow {
@@ -56,6 +60,10 @@ export function toItem(row: ItemRow): UploadItem {
     ...(row.receipt_json === null
       ? {}
       : { receipt: JSON.parse(row.receipt_json) as Record<string, unknown> }),
+    ...(row.edge_digest ? { edgeDigest: row.edge_digest } : {}),
+    ...(row.settled_at ? { settledAt: row.settled_at } : {}),
+    ...(row.dismissed_at ? { dismissedAt: row.dismissed_at } : {}),
+    ...(row.next_attempt_at ? { nextAttemptAt: row.next_attempt_at } : {}),
   };
 }
 
