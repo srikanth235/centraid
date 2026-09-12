@@ -97,8 +97,8 @@ mod tests {
     /// its own side in `locker-item-type.test.ts`.
     #[test]
     fn the_type_list_matches_the_manifests_own_enum() {
-        let raw: serde_json::Value = serde_json::from_str(crate::manifest::MANIFEST_JSON)
-            .expect("the manifest is JSON");
+        let raw: serde_json::Value =
+            serde_json::from_str(crate::manifest::MANIFEST_JSON).expect("the manifest is JSON");
         let declared = raw["actions"]
             .as_array()
             .expect("the manifest declares actions")

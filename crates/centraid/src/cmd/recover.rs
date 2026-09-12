@@ -307,12 +307,18 @@ fn recover(
             .map_err(|error| error.to_string())?;
         adopted.push("identity.seed".to_owned());
     }
-    for entry in &target.locker_keys {
-        let name = centraid_vault::custody::locker_key_file_name(&target.vault_id, &entry.key_id);
-        keys.import(&name, &decode(&entry.key)?)
-            .map_err(|error| error.to_string())?;
-        adopted.push(name);
-    }
+    // THE MEMBER KEY IS NOT ADOPTED HERE (#1020, D-1020-L1, D-1020-L2).
+    //
+    // A v0-made kit carries Locker key files, and importing them into this
+    // host's `keys/` is exactly the door wave 4 deleted: a key that was once
+    // on the host was on the host. So the entries are COUNTED and NAMED, the
+    // member is told which seat gesture adopts them, and nothing is written.
+    // `crates/vault::custody::member_key::adopt_from_kit` is the seat's half.
+    let member_keys: Vec<&str> = target
+        .locker_keys
+        .iter()
+        .map(|entry| entry.key_id.as_str())
+        .collect();
     phase(
         RecoverPhase::Adopting,
         &format!(
@@ -321,6 +327,16 @@ fn recover(
             keys.dir().display()
         ),
     );
+    if !member_keys.is_empty() {
+        eprintln!(
+            "centraid: this kit carries {} member key file(s) ({}) and this host did NOT adopt \
+             them — a Locker secret is unwrapped only on the seat that reveals it. Restore them \
+             on a seat: `centraid seat adopt-member-key` reads the same kit under the same \
+             passphrase (#1020, open question 8).",
+            member_keys.len(),
+            member_keys.join(", ")
+        );
+    }
 
     let seal_key = target.seal_key.as_deref().map(decode).transpose()?;
     let check = backup::restore_check(&restored_file, seal_key.as_deref())

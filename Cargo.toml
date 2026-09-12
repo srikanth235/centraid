@@ -130,6 +130,11 @@ jiff = { version = "0.2", default-features = false, features = [
 # is already in the graph.
 psl = "2.1"
 url = "2.5"
+# The seat's at-rest wrap is v0's, primitive for primitive: PBKDF2-SHA-256 at
+# 600,000 rounds around `K` (`packages/client/src/locker/locker-unlock.ts:38`).
+# Already in the graph as scrypt's own dependency; declared here because
+# `crates/seat` calls it directly.
+pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
 
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).

@@ -52,6 +52,7 @@ pub mod chain;
 pub mod error;
 pub mod identity;
 pub mod intent;
+pub mod locker;
 pub mod occ;
 pub mod outbox;
 pub mod payload;

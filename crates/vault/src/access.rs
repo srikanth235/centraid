@@ -28,8 +28,23 @@
 //!    riding an acting owner who owns this vault; a standing grant to an
 //!    assistant would be a grant to whatever is driving it.
 //! 6. Everything else needs a `share_authority` row, and `reveal` is
-//!    deliberately unreachable through one — a sealed reveal is Locker's
-//!    permit, not an authority row.
+//!    deliberately unreachable through one — an authority row that could grant
+//!    one would be a second key custody.
+//!
+//! ## The reveal verb is gone from the public enum (#1020, D-1020-L2)
+//!
+//! [`Verb`] has two arms. A reveal is asked for through [`evaluate_reveal`],
+//! whose subject is a [`SealedSubject`] — and [`SealedSubject::new`] **cannot
+//! be constructed for the `locker` schema**. That is the key door's deletion:
+//! v0 refused Locker in a policy check, and a policy check is a line somebody
+//! can move. Here "the gateway reveals a Locker cell" is not a refused
+//! request; it is a value that does not exist.
+//!
+//! The asymmetry with the sealed-column class is the trust premise itself
+//! (W6-D1, census §D4): a connector token **must** be gateway-readable,
+//! because the gateway is what injects a bearer into an outbound request, and
+//! the product says so where a member reads it. Locker's secrets are the one
+//! class where a blind host is worth its cost.
 
 use std::collections::BTreeSet;
 
@@ -38,16 +53,121 @@ use rusqlite::Connection;
 use crate::error::{Result, VaultError};
 
 /// What is being asked for.
+///
+/// **THERE IS NO `Reveal` ARM, AND THAT IS THE KEY DOOR'S DELETION**
+/// (#1020, D-1020-L2). v0 had `GET /_vault/seat/locker-key` and a policy check
+/// that refused the `locker` schema for every principal including the owner
+/// (`docs/decisions.md:909`). A policy check is a line somebody can move; the
+/// trust premise asks for something a code path cannot *express*. So a reveal
+/// is not a verb you can point at a subject — it is [`evaluate_reveal`], whose
+/// argument is a [`SealedSubject`], and [`SealedSubject::new`] cannot be
+/// constructed for `locker`. "The gateway reveals a Locker cell" is therefore
+/// not a refused request; it is an unwritable one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Verb {
     Read,
     Act,
-    Reveal,
 }
 
 impl Verb {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Act => "act",
+        }
+    }
+
+    /// Does a granted verb satisfy a requested one?
+    ///
+    /// `read` is satisfied by `read` or `read+act`, `act` by `act` or
+    /// `read+act`. `reveal` never satisfies either, and neither satisfies it —
+    /// see [`Requested`].
+    #[must_use]
+    pub fn satisfied_by(self, granted: &str) -> bool {
+        Requested::from(self).satisfied_by(granted)
+    }
+}
+
+/// The schema whose cells no gateway code path may reveal.
+pub const BLIND_SCHEMA: &str = "locker";
+
+/// A REVEAL WAS ASKED FOR ON A SUBJECT THAT HAS NO REVEAL.
+///
+/// Returned by [`SealedSubject::new`], so the refusal happens where the value
+/// would have been built rather than where it would have been used.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "`{schema}.{table}` is sealed under the member key, which this host does not hold — a Locker secret is unwrapped only on the seat that reveals it (#1020, open question 8)"
+)]
+pub struct RevealUnrepresentable {
+    pub schema: String,
+    pub table: String,
+}
+
+/// A CELL THIS HOST COULD REVEAL, IF A PRINCIPAL IS ALLOWED TO.
+///
+/// The sealed-column class is host-readable **by design** and the product says
+/// so (W6-D1): a connector token has to be decryptable by the gateway, because
+/// the gateway is what injects a bearer into an outbound request. Locker's
+/// secrets are the one class where a blind host is worth its cost, and this
+/// type is the boundary between the two — a value of it is a proof that the
+/// subject is not Locker's.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SealedSubject {
+    schema: String,
+    table: String,
+}
+
+impl SealedSubject {
+    /// The subject, or the refusal. `locker` has no representation here.
+    pub fn new(schema: &str, table: &str) -> std::result::Result<Self, RevealUnrepresentable> {
+        if schema == BLIND_SCHEMA {
+            return Err(RevealUnrepresentable {
+                schema: schema.to_owned(),
+                table: table.to_owned(),
+            });
+        }
+        Ok(Self {
+            schema: schema.to_owned(),
+            table: table.to_owned(),
+        })
+    }
+
+    #[must_use]
+    pub fn schema(&self) -> &str {
+        &self.schema
+    }
+
+    #[must_use]
+    pub fn table(&self) -> &str {
+        &self.table
+    }
+}
+
+/// What the judgement is actually about, inside this module.
+///
+/// Private on purpose: `Reveal` exists here because the ORDER of judgement is
+/// one piece of code for all three, and it is unreachable from outside except
+/// through [`evaluate_reveal`], which takes a [`SealedSubject`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Requested {
+    Read,
+    Act,
+    Reveal,
+}
+
+impl From<Verb> for Requested {
+    fn from(verb: Verb) -> Self {
+        match verb {
+            Verb::Read => Self::Read,
+            Verb::Act => Self::Act,
+        }
+    }
+}
+
+impl Requested {
+    const fn as_str(self) -> &'static str {
         match self {
             Self::Read => "read",
             Self::Act => "act",
@@ -60,8 +180,7 @@ impl Verb {
     /// `read` is satisfied by `read` or `read+act`, `act` by `act` or
     /// `read+act`, and **`reveal` only by `reveal`** — never by the pair, and
     /// never by `act`. A reveal is the one verb that hands over plaintext.
-    #[must_use]
-    pub fn satisfied_by(self, granted: &str) -> bool {
+    fn satisfied_by(self, granted: &str) -> bool {
         match self {
             Self::Read => matches!(granted, "read" | "read+act"),
             Self::Act => matches!(granted, "act" | "read+act"),
@@ -98,6 +217,10 @@ pub struct Scope {
 impl Scope {
     #[must_use]
     pub fn covers(&self, schema: &str, table: &str, verb: Verb) -> bool {
+        self.covers_requested(schema, table, Requested::from(verb))
+    }
+
+    fn covers_requested(&self, schema: &str, table: &str, verb: Requested) -> bool {
         self.schema == schema
             && self.table.as_ref().is_none_or(|named| named == table)
             && verb.satisfied_by(&self.verb)
@@ -233,10 +356,42 @@ pub fn evaluate_access(
     table: &str,
     verb: Verb,
 ) -> Result<Decision> {
+    judge(connection, principal, schema, table, Requested::from(verb))
+}
+
+/// Judge a REVEAL of a sealed cell.
+///
+/// The order of judgement is the same as [`evaluate_access`]'s, which is why
+/// there is one implementation; what is different is that the subject had to
+/// be *constructible*, and [`SealedSubject::new`] refuses `locker`. A reveal is
+/// also deliberately unreachable through a `share_authority` row, so the only
+/// principals it can ever allow are the owner's own device and an agent riding
+/// one.
+pub fn evaluate_reveal(
+    connection: &Connection,
+    principal: &Principal,
+    subject: &SealedSubject,
+) -> Result<Decision> {
+    judge(
+        connection,
+        principal,
+        subject.schema(),
+        subject.table(),
+        Requested::Reveal,
+    )
+}
+
+fn judge(
+    connection: &Connection,
+    principal: &Principal,
+    schema: &str,
+    table: &str,
+    verb: Requested,
+) -> Result<Decision> {
     let subject = format!("{schema}.{table}");
 
     // 1. A read-only surface cannot act or reveal.
-    if matches!(verb, Verb::Act | Verb::Reveal) && !principal.may_act() {
+    if matches!(verb, Requested::Act | Requested::Reveal) && !principal.may_act() {
         return Ok(Decision::Deny {
             failing: format!(
                 "this device is read-only and cannot {} {subject}",
@@ -249,7 +404,7 @@ pub fn evaluate_access(
     // 2. AN AGENT CANNOT EXCEED THE OWNER IT ACTS FOR. Before the clamp, so a
     //    generous clamp on the agent cannot outrun a restricted owner.
     if let Principal::Agent { on_behalf_of, .. } = principal {
-        let owner = evaluate_access(connection, on_behalf_of, schema, table, verb)?;
+        let owner = judge(connection, on_behalf_of, schema, table, verb)?;
         if let Decision::Deny { failing, .. } = owner {
             return Ok(Decision::Deny {
                 failing: format!("the owner this agent acts for cannot do it either: {failing}"),
@@ -265,7 +420,7 @@ pub fn evaluate_access(
             let covering: Vec<&Scope> = clamp
                 .scopes
                 .iter()
-                .filter(|scope| scope.covers(schema, table, verb))
+                .filter(|scope| scope.covers_requested(schema, table, verb))
                 .collect();
             if covering.is_empty() {
                 return Ok(Decision::Deny {
@@ -362,9 +517,9 @@ fn standing_answer_id(
     principal: &Principal,
     schema: &str,
     table: &str,
-    verb: Verb,
+    verb: Requested,
 ) -> Result<Option<String>> {
-    if verb == Verb::Reveal {
+    if verb == Requested::Reveal {
         return Ok(None);
     }
     let Principal::Automation { manifest_ref, .. } = principal else {
@@ -492,11 +647,77 @@ mod tests {
         assert!(Verb::Act.satisfied_by("act"));
         assert!(Verb::Act.satisfied_by("read+act"));
         assert!(!Verb::Act.satisfied_by("read"));
-        assert!(Verb::Reveal.satisfied_by("reveal"));
+        assert!(Requested::Reveal.satisfied_by("reveal"));
         // THE ONE THAT MATTERS: nothing but `reveal` reveals.
-        assert!(!Verb::Reveal.satisfied_by("read+act"));
-        assert!(!Verb::Reveal.satisfied_by("act"));
-        assert!(!Verb::Reveal.satisfied_by("read"));
+        assert!(!Requested::Reveal.satisfied_by("read+act"));
+        assert!(!Requested::Reveal.satisfied_by("act"));
+        assert!(!Requested::Reveal.satisfied_by("read"));
+        // …and `reveal` satisfies neither of the two a caller can ASK for,
+        // which is the half that keeps a reveal grant from widening a read.
+        assert!(!Verb::Read.satisfied_by("reveal"));
+        assert!(!Verb::Act.satisfied_by("reveal"));
+    }
+
+    /// THE KEY DOOR, DELETED (#1020, D-1020-L2).
+    ///
+    /// v0 refused the `locker` schema in a policy check. This asserts the
+    /// stronger thing: the VALUE a gateway reveal would need cannot be built
+    /// for Locker, so there is no code path to refuse. The sealed-column
+    /// class — connector tokens, which are host-readable by design (W6-D1) —
+    /// still has one, and that asymmetry is the trust premise.
+    #[test]
+    fn a_reveal_subject_cannot_be_built_for_the_locker_schema() {
+        for table in ["item", "item_field", "item_passkey", "anything"] {
+            let refusal =
+                SealedSubject::new(BLIND_SCHEMA, table).expect_err("locker has no reveal subject");
+            assert_eq!(refusal.schema, "locker");
+            assert!(
+                refusal.to_string().contains("unwrapped only on the seat"),
+                "{refusal}"
+            );
+        }
+        // The sealed-column class still reveals, because the gateway has to
+        // be able to inject a bearer into an outbound request.
+        let subject = SealedSubject::new("sync", "connection_credential")
+            .expect("a connector token is revealable");
+        assert_eq!(subject.schema(), "sync");
+        assert_eq!(subject.table(), "connection_credential");
+    }
+
+    /// An OWNER on their own device reveals a connector token and cannot
+    /// reveal a Locker cell — and the second half is a compile-time fact, so
+    /// what is left to assert at runtime is the first.
+    #[test]
+    fn an_owner_reveals_a_sealed_column_and_an_automation_never_does() {
+        let connection = memory();
+        let subject = SealedSubject::new("sync", "connection_credential").expect("a subject");
+        assert!(
+            evaluate_reveal(&connection, &Principal::owner("laptop"), &subject)
+                .expect("judged")
+                .is_allow()
+        );
+        // A read-only surface cannot reveal.
+        let widget = Principal::OwnerDevice {
+            device_id: "widget".to_owned(),
+            may_act: false,
+            scope_clamp: None,
+        };
+        assert!(
+            !evaluate_reveal(&connection, &widget, &subject)
+                .expect("judged")
+                .is_allow()
+        );
+        // AND A REVEAL IS UNREACHABLE THROUGH A STANDING ANSWER: an
+        // authority row that could grant one would be a second key custody.
+        let automation = Principal::Automation {
+            manifest_ref: "manifest-1".to_owned(),
+            scope_clamp: None,
+        };
+        assert!(
+            !evaluate_reveal(&connection, &automation, &subject)
+                .expect("judged")
+                .is_allow()
+        );
     }
 
     #[test]
@@ -507,16 +728,22 @@ mod tests {
             may_act: false,
             scope_clamp: None,
         };
-        for verb in [Verb::Act, Verb::Reveal] {
-            let decision =
-                evaluate_access(&connection, &principal, "tally", "expense", verb).expect("judged");
-            match decision {
-                Decision::Deny { failing, .. } => {
-                    assert!(failing.contains("read-only"), "{failing}");
-                    assert!(failing.contains("tally.expense"), "{failing}");
-                }
-                Decision::Allow { .. } => panic!("{verb:?} must be denied"),
+        let decision = evaluate_access(&connection, &principal, "tally", "expense", Verb::Act)
+            .expect("judged");
+        match decision {
+            Decision::Deny { failing, .. } => {
+                assert!(failing.contains("read-only"), "{failing}");
+                assert!(failing.contains("tally.expense"), "{failing}");
             }
+            Decision::Allow { .. } => panic!("act must be denied"),
+        }
+        let subject = SealedSubject::new("tally", "expense").expect("a subject");
+        match evaluate_reveal(&connection, &principal, &subject).expect("judged") {
+            Decision::Deny { failing, .. } => {
+                assert!(failing.contains("read-only"), "{failing}");
+                assert!(failing.contains("tally.expense"), "{failing}");
+            }
+            Decision::Allow { .. } => panic!("reveal must be denied"),
         }
         assert!(
             evaluate_access(&connection, &principal, "tally", "expense", Verb::Read)
@@ -652,8 +879,9 @@ mod tests {
             scope_clamp: None,
         };
         // A row that says `reveal` in the table does not produce one.
+        let subject = SealedSubject::new("tally", "expense").expect("a subject");
         assert!(
-            !evaluate_access(&connection, &automation, "tally", "expense", Verb::Reveal)
+            !evaluate_reveal(&connection, &automation, &subject)
                 .expect("judged")
                 .is_allow()
         );

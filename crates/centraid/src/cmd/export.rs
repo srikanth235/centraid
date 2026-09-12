@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use centraid_vault::backup::{
     self, FsBlobStore, Keyring, LockerKeyEntry, RecoveryKitDocument, RecoveryKitTarget,
 };
-use centraid_vault::custody::{KeyStore, locker_key};
+use centraid_vault::custody::KeyStore;
 use centraid_vault::file::Vault;
 
 use crate::exit;
@@ -111,23 +111,29 @@ fn export(data_dir: &Path, out: &Path, password_file: &Path) -> Result<serde_jso
     )
     .map_err(|error| error.to_string())?;
 
-    // The custody kit. Every LIVE Locker key file, which is not always one:
-    // `K′` exists on disk before the DB names it, so a kit written mid-rotation
-    // must carry both or the restore it promises is a placebo.
-    let custody = locker_key::LockerCustody::new(
-        KeyStore::new(crate::cmd::keys_dir_in(data_dir)),
-        vault_id.clone(),
-    );
-    let locker_keys = vault
-        .read(|connection| Ok(custody.live_files(connection)))
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .map(|(key_id, key)| LockerKeyEntry {
-            key_id,
-            key: encode(&key),
+    // THE CUSTODY KIT, AND THE HALF THIS HOST CANNOT WRITE (#1020, D-1020-L1).
+    //
+    // Before wave 4 this read every live Locker key file out of the host's own
+    // `keys/`. The gateway holds no member key now — that is the trust
+    // premise, not a gap — so a kit written here carries the seal key and the
+    // identity seed and **no member key**, and the Locker half comes from a
+    // seat's own export.
+    //
+    // It is written down rather than left to be discovered: the kit's
+    // fingerprint deliberately includes which Locker keys it carries, because
+    // *a kit that lost one restores a vault whose secrets do not open* — a
+    // real capability difference an owner must be able to notice. A kit with
+    // none has a different fingerprint from a kit with one, which is correct.
+    let names_a_member_key: Option<String> = vault
+        .read(|connection| {
+            centraid_vault::custody::locker_key::live_locker_key_id(connection).map_err(|error| {
+                centraid_vault::VaultError::Invariant {
+                    context: error.to_string(),
+                }
+            })
         })
-        .collect::<Vec<_>>();
+        .map_err(|error| error.to_string())?;
+    let locker_keys: Vec<LockerKeyEntry> = Vec::new();
     vault.close().map_err(|error| error.to_string())?;
 
     let kit = RecoveryKitDocument {
@@ -173,6 +179,14 @@ fn export(data_dir: &Path, out: &Path, password_file: &Path) -> Result<serde_jso
         "centraid: content blobs are NOT in this bundle yet (wave 3 owns the content store); it \
          carries the vault and its custody."
     );
+    if let Some(key_id) = &names_a_member_key {
+        eprintln!(
+            "centraid: this kit carries NO member key. {vault_id} names Locker key {key_id}, \
+             which lives on a seat and never on this host — export a kit from a seat that \
+             holds it, and keep both. Without the seat's kit this bundle restores a vault \
+             whose Locker secrets cannot be opened."
+        );
+    }
     Ok(serde_json::json!({
         "command": "export",
         "vaultId": vault_id,
@@ -184,6 +198,8 @@ fn export(data_dir: &Path, out: &Path, password_file: &Path) -> Result<serde_jso
         "base": { "name": outcome.head.name, "digest": outcome.head.digest, "size": outcome.head.size },
         "bytes": outcome.bytes,
         "lockerKeys": kit.targets[0].locker_keys.len(),
+        "memberKeyCustody": if names_a_member_key.is_some() { "seat" } else { "none" },
+        "namesMemberKey": names_a_member_key,
         "carriesContentBlobs": false,
     }))
 }

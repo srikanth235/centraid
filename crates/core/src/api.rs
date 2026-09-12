@@ -13,7 +13,7 @@
 //! | [`parked`] | live | the outcomes waiting on somebody's decision |
 //! | [`search`] | **stub** | the FTS plane is wave 4 |
 //! | [`resolve`] | **stub** | entity resolution is wave 4 |
-//! | [`reveal`] | **online-only** | a sealed reveal is Locker's permit and never a queued write |
+//! | [`reveal`] | live, by ROLE | the gateway reveals a sealed COLUMN and cannot reveal a Locker cell at all; a seat unwraps `K` itself (D-1020-L2) |
 //! | [`content`] | **stub** | content path minting is wave 3 |
 
 use centraid_api_proto::core_v1 as wire;
@@ -21,6 +21,7 @@ use centraid_vault::Vault;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::page::KeysetPage;
 
+use crate::config::Role;
 use crate::convert::value_from_wire;
 use crate::error::{CoreError, Result};
 
@@ -206,24 +207,75 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
     })
 }
 
-/// Reveal a sealed value. **Online-only, always.**
+/// Reveal a sealed value — **answered by ROLE**, and the `locker` schema is
+/// not answerable on the gateway at all (#1020, D-1020-L2, D-1020-L3).
 ///
-/// Not a stub and not a capability gap: a mass reveal must never be queued,
-/// replayed, or answered from a durable store, so a seat with no gateway
-/// refuses rather than deferring. `export` carries nothing in and its result is
-/// every secret, which is why the refusal is structural rather than a policy
-/// somebody can relax.
-pub fn reveal(is_gateway: bool, app_id: &str, action: &str) -> Result<serde_json::Value> {
-    if !is_gateway {
-        return Err(CoreError::OnlineOnly {
-            app_id: app_id.to_owned(),
-            action: action.to_owned(),
-        });
+/// Three answers, and the split is the trust premise:
+///
+/// | Role | Schema | Answer |
+/// |---|---|---|
+/// | [`Role::Gateway`] | `locker` | **refused**, structurally: the value the
+///   judgement needs cannot be built (`centraid_vault::SealedSubject::new`) |
+/// | [`Role::Gateway`] | anything else | judged and revealed — a connector
+///   token is host-readable **by design** (W6-D1) |
+/// | `Role::Seat` | `locker` | unwrapped **locally**, by
+///   `centraid_seat::locker`, behind the member's unlock |
+///
+/// A reveal is still **online-only** on a seat for the reason it always was: a
+/// mass reveal must never be queued, replayed, or answered from a durable
+/// store, and the receipt the gateway owes has to land before the plaintext
+/// exists. `export` carries nothing in and its result is every secret, which
+/// is why that refusal is structural rather than a policy somebody can relax.
+pub fn reveal(
+    role: &Role,
+    schema: &str,
+    table: &str,
+    app_id: &str,
+    action: &str,
+) -> Result<RevealRoute> {
+    match role {
+        Role::Gateway => {
+            // THE KEY DOOR'S DELETION, AT THIS LAYER. The subject is what the
+            // authority plane judges, and it has no representation for
+            // Locker — so this arm cannot be written to succeed.
+            let subject = centraid_vault::SealedSubject::new(schema, table).map_err(|refusal| {
+                CoreError::InvalidRequest {
+                    detail: refusal.to_string(),
+                }
+            })?;
+            Ok(RevealRoute::Gateway { subject })
+        }
+        Role::Seat { .. } => {
+            if schema == centraid_vault::BLIND_SCHEMA {
+                // A SEAT UNWRAPS LOCALLY — and it still needs the gateway,
+                // for the receipt and for nothing else.
+                return Ok(RevealRoute::Seat {
+                    schema: schema.to_owned(),
+                    table: table.to_owned(),
+                });
+            }
+            // The sealed-column class lives on the host, so a seat asking for
+            // one is asking the gateway.
+            Err(CoreError::OnlineOnly {
+                app_id: app_id.to_owned(),
+                action: action.to_owned(),
+            })
+        }
     }
-    Err(CoreError::NotYetAvailable {
-        what: "reveal",
-        lands_in: "wave 3 (the Locker key plane)",
-    })
+}
+
+/// Who performs a reveal. There is no arm in which the gateway performs a
+/// Locker one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RevealRoute {
+    /// The gateway unseals a sealed **column** — a connector token — under its
+    /// own DEK, for a principal the authority plane allowed.
+    Gateway {
+        subject: centraid_vault::SealedSubject,
+    },
+    /// The seat unwraps `K` and opens the cell itself; the gateway's only part
+    /// is the receipt (`locker.reveal_receipt`).
+    Seat { schema: String, table: String },
 }
 
 /// Mint a path for content. **Stub**: wave 3.
@@ -338,18 +390,57 @@ mod tests {
         ));
     }
 
-    /// A reveal on a seat is ONLINE-ONLY, not "not yet available". The two are
-    /// different screens: one says "connect to your gateway", the other says
-    /// "this build cannot".
+    /// THE KEY DOOR IS DELETED AT THIS LAYER TOO (#1020, D-1020-L2).
+    ///
+    /// A gateway asked for a Locker cell cannot be written to succeed: the
+    /// subject the authority plane judges has no Locker representation, so
+    /// this is the refusal rather than a policy check. A gateway asked for a
+    /// **sealed column** still answers, because a connector token is
+    /// host-readable by design (W6-D1) — and that asymmetry is the premise.
     #[test]
-    fn a_reveal_off_the_gateway_is_online_only_and_not_a_capability_gap() {
-        assert!(matches!(
-            reveal(false, "locker", "export"),
-            Err(CoreError::OnlineOnly { .. })
-        ));
-        assert!(matches!(
-            reveal(true, "locker", "export"),
-            Err(CoreError::NotYetAvailable { what: "reveal", .. })
-        ));
+    fn a_gateway_cannot_route_a_locker_reveal_and_can_route_a_connector_token() {
+        let refusal = reveal(&Role::Gateway, "locker", "item", "locker", "reveal")
+            .expect_err("a gateway has no Locker reveal");
+        assert_eq!(refusal.code(), wire::ErrorCode::InvalidRequest);
+        assert!(
+            refusal.to_string().contains("unwrapped only on the seat"),
+            "{refusal}"
+        );
+
+        let route = reveal(
+            &Role::Gateway,
+            "sync",
+            "connection_credential",
+            "connectors",
+            "refresh",
+        )
+        .expect("a connector token is the gateway's to open");
+        assert!(matches!(route, RevealRoute::Gateway { .. }));
+    }
+
+    /// A SEAT UNWRAPS A LOCKER CELL ITSELF, and asks the gateway for a sealed
+    /// column — which is online-only, exactly as it was.
+    #[test]
+    fn a_seat_unwraps_a_locker_cell_and_forwards_a_sealed_column() {
+        let seat = Role::Seat {
+            kind: crate::config::SeatKind::Replicated,
+            gateway: Vec::new(),
+        };
+        assert_eq!(
+            reveal(&seat, "locker", "item", "locker", "reveal").expect("routed"),
+            RevealRoute::Seat {
+                schema: "locker".to_owned(),
+                table: "item".to_owned()
+            }
+        );
+        let refusal = reveal(
+            &seat,
+            "sync",
+            "connection_credential",
+            "connectors",
+            "refresh",
+        )
+        .expect_err("a sealed column is the gateway's");
+        assert!(matches!(refusal, CoreError::OnlineOnly { .. }));
     }
 }

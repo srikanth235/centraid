@@ -26,6 +26,7 @@
 
 pub mod keystore;
 pub mod locker_key;
+pub mod member_key;
 pub mod seal;
 
 pub use keystore::{
@@ -37,6 +38,11 @@ pub use locker_key::{
     LockerRotation, decrypt_under_locker_key, encrypt_under_locker_key, found_locker_key,
     is_locker_ciphertext, live_locker_key_id, locker_aad, locker_key_file_name, locker_key_rows,
     rotate_locker_key, sweep_retired_locker_keys,
+};
+pub use member_key::{
+    MEMBER_KEY_ENVELOPE_PREFIX, MemberKeyCustody, MemberKeyEnvelope, MemberKeyError,
+    MemberKeyFounded, adopt_from_kit, envelope_aad, found_member_key, fresh_transfer_secret,
+    is_member_key_envelope, member_key_dir_on_seat, open_member_key, seal_member_key,
 };
 pub use seal::{
     SEALED_PLACEHOLDER, SEALED_PREFIX, SealError, is_sealed_value, open_value,

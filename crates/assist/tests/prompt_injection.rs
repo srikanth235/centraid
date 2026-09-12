@@ -42,7 +42,7 @@ use centraid_vault::ledger::{consent, store};
 use centraid_vault::{
     Principal, SeededIds, Vault,
     access::{Scope, ScopeClamp},
-    commands::{CommandDefinition, CommandStatus, Idempotency, Registry, Risk},
+    commands::{CommandStatus, Registry},
 };
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake-acp-harness");
@@ -86,36 +86,16 @@ fn agent_principal() -> Principal {
 ///   whose schema `core` is outside the turn's `schedule + locker` grant. That
 ///   makes the `no-out-of-grant-entity` payloads a test of the real gate order
 ///   over a real handler rather than of a handler this file invented.
-/// - the confirm-gated call is registered here, because no granted schema has
-///   one yet. Its handler writes nothing: the four payloads that reach it are
-///   deferred on the park gate, and a handler with a side effect would make
-///   "nothing was written" true for the wrong reason.
+/// - the confirm-gated call is the REAL `locker.purge_item`, which the wave 4
+///   Locker lane landed: `confirm: true`, `Idempotency::Once`, `Risk::Medium`.
+///   It used to be a placeholder registered here, *because no granted schema
+///   had one yet*; one does now, so the placeholder is gone and the four
+///   deferred payloads exercise the real definition. Its precondition
+///   (`item_exists`) means a caller must name a real item to reach the handler,
+///   which is why `the_park_gate_is_still_missing` seeds one (#1020, wave 4
+///   lane Locker).
 fn registry() -> Registry {
-    let mut registry = Registry::with_system_commands().expect("the system commands register");
-    registry
-        .register(CommandDefinition {
-            name: "locker.purge_item",
-            owner_schema: "locker",
-            input_schema: r#"{"type":"object","properties":{"item_id":{"type":"string"}},"required":["item_id"]}"#,
-            idempotency: Idempotency::Once,
-            risk: Risk::High,
-            // THE FLAG THE FOUR DEFERRED PAYLOADS ARE ABOUT. Carried, and not
-            // yet read by the gate order.
-            confirm: true,
-            preconditions: &[],
-            postconditions: &[],
-            handler: purge_item,
-            sealed_input: &[],
-            online_only: false,
-        })
-        .expect("register");
-    registry
-}
-
-fn purge_item(
-    ctx: &centraid_vault::commands::CommandCtx<'_, '_>,
-) -> centraid_vault::Result<serde_json::Value> {
-    Ok(serde_json::json!({ "purged": ctx.optional_str("item_id") }))
+    Registry::with_system_commands().expect("the system commands register")
 }
 
 /// The corpus's command name, and the input, lowered onto what is registered.
@@ -454,6 +434,29 @@ fn the_park_gate_is_still_missing() {
     // `crates/api-proto`'s and `crates/core/src/api.rs` is another lane's file
     // this slot, which is why it is a hand-off and not a fix here.
     let scenario = scenario("park-gap");
+    // A REAL ITEM, seeded THROUGH THE REAL COMMAND — not through SQL, which
+    // this crate may not hold (`cargo xtask rules`' `sql-confinement`) and
+    // would not want to: a note with no secret needs no member key, which is
+    // itself the Locker lane's claim.
+    //
+    // Without the item the call is denied on `item_exists` and this test would
+    // read green for a reason that has nothing to do with the park gate.
+    let seeded = scenario
+        .vault
+        .execute(
+            &scenario.registry,
+            &centraid_vault::access::Principal::owner("seed"),
+            &centraid_vault::commands::Command::new(
+                "locker.add_item",
+                serde_json::json!({
+                    "item_id": "locker-1",
+                    "type": "note",
+                    "title": "A note"
+                }),
+            ),
+        )
+        .expect("the seed runs");
+    assert_eq!(seeded.status, CommandStatus::Executed, "{:?}", seeded.reason);
     let outcome = scenario
         .vault
         .execute(

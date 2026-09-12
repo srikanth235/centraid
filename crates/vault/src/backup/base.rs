@@ -120,8 +120,8 @@ pub fn build_backup_base(vault: &Vault, dir: &Path) -> Result<BaseHead> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::custody::keystore::KeyStore;
-    use crate::custody::locker_key::{self, LockerCustody};
+    use crate::custody::locker_key;
+    use crate::custody::member_key::MemberKeyCustody;
 
     /// The regression the restore drill found. A seat snapshot is sanitised and
     /// a backup base is not, and the difference is custody.
@@ -134,10 +134,11 @@ mod tests {
         vault
             .enrol_device("d-1", &founded.owner_party_id, "a laptop", "linux", "pk-1")
             .unwrap();
-        let custody = LockerCustody::new(
-            KeyStore::new(dir.path().join("keys")),
-            founded.vault_id.clone(),
-        );
+        // The member key is founded on a SEAT directory, never the host's
+        // `keys/` (#1020, D-1020-L1): what this test is about is that a base
+        // copy keeps the private bands, and `locker_key` — the row naming the
+        // generation — is one of them.
+        let custody = MemberKeyCustody::on_seat(&dir.path().join("seat"), founded.vault_id.clone());
         vault
             .commit(|tx| {
                 locker_key::found_locker_key(

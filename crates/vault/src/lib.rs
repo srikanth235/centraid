@@ -60,7 +60,10 @@ pub mod page;
 pub mod snapshot;
 pub mod value;
 
-pub use access::{Decision, Principal, Verb, evaluate_access};
+pub use access::{
+    BLIND_SCHEMA, Decision, Principal, RevealUnrepresentable, SealedSubject, Verb, evaluate_access,
+    evaluate_reveal,
+};
 pub use clock::{Clock, ClockIds, FixedClock, Ids, SeededIds, SystemClock};
 pub use commands::{
     Command, CommandDefinition, CommandOutcome, CommandStatus, Idempotency, Registry, Risk,

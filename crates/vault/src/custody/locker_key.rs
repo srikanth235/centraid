@@ -66,14 +66,14 @@
 //! gateway cannot get `K`; that is wave 4's box.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{Aes256Gcm, KeyInit};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 
-use super::keystore::{KeyStore, KeyStoreError};
+use super::keystore::KeyStoreError;
+use super::member_key::MemberKeyCustody;
 
 /// `K` is 32 bytes. Anything else is not a Locker key.
 pub const LOCKER_KEY_BYTES: usize = 32;
@@ -170,120 +170,20 @@ pub fn locker_key_file_name(vault_id: &str, key_id: &str) -> String {
     format!("{vault_id}.locker.{key_id}.key")
 }
 
-/// The `keys/` directory that owns a vault directory's key files.
-///
-/// Mirrors the seal key: `<dataRoot>/vault/<id>` → `<dataRoot>/keys`, so `K`
-/// shares custody, permissions and envelope with the seal key rather than
-/// inventing a second key directory nothing else knows to back up.
-#[must_use]
-pub fn locker_key_dir_for(vault_dir: &Path) -> std::path::PathBuf {
-    let vault_root = vault_dir.parent().unwrap_or(vault_dir);
-    let data_root = if vault_root.file_name().is_some_and(|n| n == "vault") {
-        vault_root.parent().unwrap_or(vault_root)
-    } else {
-        vault_root
-    };
-    data_root.join("keys")
-}
-
-/// Where a vault's Locker key files live, and what they are named for.
-///
-/// The vault id comes from `core_vault`, **not** from the directory's base
-/// name: a restored, adopted or renamed directory must not silently get a new
-/// key, and a vault carries its identity in its own file.
-pub struct LockerCustody {
-    pub store: KeyStore,
-    pub vault_id: String,
-}
-
-impl LockerCustody {
-    #[must_use]
-    pub fn new(store: KeyStore, vault_id: impl Into<String>) -> Self {
-        Self {
-            store,
-            vault_id: vault_id.into(),
-        }
-    }
-
-    fn name(&self, key_id: &str) -> String {
-        locker_key_file_name(&self.vault_id, key_id)
-    }
-
-    /// Load `K` for a key id, or fail loudly. A missing file is custody loss,
-    /// and the message says what the only repair is.
-    pub fn load(&self, key_id: &str) -> Result<Vec<u8>> {
-        let name = self.name(key_id);
-        match self.store.load(&name)? {
-            Some(key) => Ok(key),
-            None => Err(LockerKeyError::plane(
-                LockerKeyErrorCode::Missing,
-                format!(
-                    "locker key file missing at {} — this vault's Locker secrets are encrypted \
-                     under key {key_id} and are unrecoverable without it. The recovery kit \
-                     carries every live key file; a directory copy alone never does.",
-                    self.store.file(&name)?.display()
-                ),
-            )),
-        }
-    }
-
-    /// Every Locker key file for this vault, sorted by key id.
-    ///
-    /// "Every live key file" is not always one: `K′` exists on disk before the
-    /// DB names it, so a kit written mid-rotation must carry both or the
-    /// restore it promises is a placebo.
-    pub fn files_in_custody(&self) -> Result<Vec<(String, Vec<u8>)>> {
-        let prefix = format!("{}.locker.", self.vault_id);
-        let mut out = Vec::new();
-        for name in self.store.names()? {
-            let Some(rest) = name.strip_prefix(&prefix) else {
-                continue;
-            };
-            let Some(key_id) = rest.strip_suffix(".key") else {
-                continue;
-            };
-            if key_id.is_empty() {
-                continue;
-            }
-            if let Some(key) = self.store.load(&name)? {
-                out.push((key_id.to_owned(), key));
-            }
-        }
-        out.sort_by(|left, right| left.0.cmp(&right.0));
-        Ok(out)
-    }
-
-    /// The same set, checked against the DB's word on which key is live.
-    pub fn live_files(&self, connection: &rusqlite::Connection) -> Result<Vec<(String, Vec<u8>)>> {
-        let files = self.files_in_custody()?;
-        if let Some(live) = live_locker_key_id(connection)?
-            && !files.iter().any(|(key_id, _)| *key_id == live)
-        {
-            return Err(LockerKeyError::plane(
-                LockerKeyErrorCode::Missing,
-                format!(
-                    "recovery kit: vault \"{}\" names Locker key {live} but holds no key file for it",
-                    self.vault_id
-                ),
-            ));
-        }
-        Ok(files)
-    }
-
-    /// Destroy EVERY Locker key file for this vault — the erase half of
-    /// custody. [`sweep_retired_locker_keys`] cannot do this job: it asks the
-    /// database which key is live, and an erase has already removed it.
-    pub fn destroy_all(&self) -> Result<Vec<String>> {
-        let mut removed = Vec::new();
-        for (key_id, _) in self.files_in_custody()? {
-            let name = self.name(&key_id);
-            if self.store.destroy(&name)? {
-                removed.push(name);
-            }
-        }
-        Ok(removed)
-    }
-}
+// THE GATEWAY-SIDE KEY DIRECTORY IS GONE (#1020, D-1020-L2).
+//
+// `locker_key_dir_for(vault_dir)` used to map a vault directory to the host's
+// own `keys/`, so that `K` shared custody with the seal key. That sharing was
+// the right answer while the gateway held `K` and is the door itself now: a
+// function that hands out the path is a function a future read path can call.
+//
+// The only custody type is [`super::member_key::MemberKeyCustody`], and it is
+// constructed from a **seat's** data directory. The seal key and the identity
+// seed still live in the host's `keys/` and still reach it through
+// `crate::custody::keystore`, because those are the host's own and always were
+// (census §D4: the sealed-column class is host-readable by design).
+//
+// `crates/vault/tests/member_key_gate.rs` asserts the absence by name.
 
 /// One `locker_key` row. Ids only — never key material.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -336,7 +236,7 @@ pub fn live_locker_key_id(connection: &rusqlite::Connection) -> Result<Option<St
 /// key file no row names is a sweepable orphan.
 pub fn found_locker_key(
     connection: &rusqlite::Connection,
-    custody: &LockerCustody,
+    custody: &MemberKeyCustody,
     key_id: &str,
     now: &str,
 ) -> Result<(String, Vec<u8>)> {
@@ -344,7 +244,7 @@ pub fn found_locker_key(
         let key = custody.load(&live)?;
         return Ok((live, key));
     }
-    let key = custody.store.create(&custody.name(key_id))?;
+    let key = custody.store().create(&custody.file_name(key_id))?;
     connection.execute(
         "INSERT INTO locker_key (key_id, created_at, retired_at) VALUES (?1, ?2, NULL)",
         (key_id, now),
@@ -504,7 +404,7 @@ pub struct LockerRotation {
 /// revoked device already read. R13 is honest about the trade and so is this.
 pub fn rotate_locker_key(
     connection: &rusqlite::Connection,
-    custody: &LockerCustody,
+    custody: &MemberKeyCustody,
     new_key_id: &str,
     now: &str,
     crash: Option<RotationCrash>,
@@ -518,7 +418,7 @@ pub fn rotate_locker_key(
     let previous_key = custody.load(&previous_key_id)?;
 
     // STEP 1 — the new key file, before anything in the DB names it.
-    let key = custody.store.create(&custody.name(new_key_id))?;
+    let key = custody.store().create(&custody.file_name(new_key_id))?;
     if crash == Some(RotationCrash::BeforeTransaction) {
         return Err(LockerKeyError::plane(
             LockerKeyErrorCode::Missing,
@@ -609,7 +509,7 @@ pub fn rotate_locker_key(
         let _ = connection.execute_batch("ROLLBACK");
         // The new file is now an orphan no row names. Sweep it here rather than
         // leaving it for the next open: a failed rotation should cost nothing.
-        let _ = custody.store.destroy(&custody.name(new_key_id));
+        let _ = custody.store().destroy(&custody.file_name(new_key_id));
         return Err(error);
     }
 
@@ -621,7 +521,9 @@ pub fn rotate_locker_key(
     }
 
     // STEP 3 — the old file, last. Everything above already reads `K′`.
-    custody.store.destroy(&custody.name(&previous_key_id))?;
+    custody
+        .store()
+        .destroy(&custody.file_name(&previous_key_id))?;
     Ok(LockerRotation {
         previous_key_id,
         key_id: new_key_id.to_owned(),
@@ -638,19 +540,19 @@ pub fn rotate_locker_key(
 /// directory listing rather than an operator gesture.
 pub fn sweep_retired_locker_keys(
     connection: &rusqlite::Connection,
-    custody: &LockerCustody,
+    custody: &MemberKeyCustody,
 ) -> Result<Vec<String>> {
     let Some(live) = live_locker_key_id(connection)? else {
         return Ok(Vec::new());
     };
-    let keep = custody.name(&live);
+    let keep = custody.file_name(&live);
     let mut removed = Vec::new();
     for (key_id, _) in custody.files_in_custody()? {
-        let name = custody.name(&key_id);
+        let name = custody.file_name(&key_id);
         if name == keep {
             continue;
         }
-        if custody.store.destroy(&name)? {
+        if custody.store().destroy(&name)? {
             removed.push(name);
         }
     }
@@ -660,12 +562,13 @@ pub fn sweep_retired_locker_keys(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::custody::KeyStore;
     use crate::file::Vault;
 
     struct Fixture {
         _dir: tempfile::TempDir,
         connection: rusqlite::Connection,
-        custody: LockerCustody,
+        custody: MemberKeyCustody,
         vault_file: std::path::PathBuf,
         keys_dir: std::path::PathBuf,
     }
@@ -682,13 +585,12 @@ mod tests {
         connection
             .execute_batch("PRAGMA foreign_keys = ON")
             .unwrap();
-        let keys_dir = locker_key_dir_for(vault_file.parent().unwrap());
-        assert_eq!(
-            keys_dir,
-            dir.path().join("keys"),
-            "K shares the seal key's directory"
-        );
-        let custody = LockerCustody::new(KeyStore::new(&keys_dir), "v1");
+        // THE KEY FILES LIVE ON A SEAT, and this fixture's "seat" is a
+        // directory beside the vault. Before wave 4 the path came from
+        // `locker_key_dir_for(vault_dir)` — the host's own `keys/` — and that
+        // function is the door this wave deleted (#1020, D-1020-L2).
+        let keys_dir = crate::custody::member_key_dir_on_seat(&dir.path().join("seat"));
+        let custody = MemberKeyCustody::with_store(KeyStore::new(&keys_dir), "v1");
         Fixture {
             _dir: dir,
             connection,
@@ -1025,7 +927,7 @@ mod tests {
         .unwrap();
         fixture
             .custody
-            .store
+            .store()
             .destroy(&locker_key_file_name("v1", "k-1"))
             .unwrap();
         let error = fixture.custody.load("k-1").unwrap_err();

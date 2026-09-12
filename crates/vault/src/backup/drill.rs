@@ -48,7 +48,8 @@ use crate::backup::restore::{RestoreDrillReport, SealKeyVerdict};
 use crate::backup::store::{BlobStore as _, FsBlobStore};
 use crate::backup::{self, BackupError};
 use crate::custody::keystore::KeyStore;
-use crate::custody::locker_key::{self, LockerCustody};
+use crate::custody::locker_key;
+use crate::custody::member_key::MemberKeyCustody;
 use crate::error::{RebootstrapReason, VaultError};
 use crate::file::Vault;
 use crate::log::door::{self, Cursor};
@@ -137,9 +138,13 @@ pub fn run_restore_drill(root: &Path, recover: Recover<'_>) -> Result<DrillOutco
         "seat-public-key-1",
     )?;
 
-    // The Locker key plane, so the drill exercises the custody the kit carries.
+    // The member key plane, so the drill exercises the custody the kit
+    // carries — and it is founded on the drill's SEAT directory, not the
+    // host's `keys/` (#1020, D-1020-L1). The drill's whole point is that the
+    // kit is the one artefact between a member and total loss, and after wave
+    // 4 the kit's Locker half comes from a seat.
     let keys = KeyStore::new(live.join("keys"));
-    let custody = LockerCustody::new(KeyStore::new(live.join("keys")), vault_id.clone());
+    let custody = MemberKeyCustody::on_seat(&live.join("seat"), vault_id.clone());
     let locker_key_id = vault.ids().next();
     let seal_key = keys
         .load_or_create("seal.key")

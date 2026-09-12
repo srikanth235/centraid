@@ -12,9 +12,14 @@ name = "centraid_seat"
 path = "src/lib.rs"
 
 [dependencies]
+centraid-apps-locker = { path = "../apps/locker" }
 centraid-ontology = { path = "../ontology" }
 centraid-vault = { path = "../vault" }
+aes-gcm.workspace = true
+base64.workspace = true
 hex.workspace = true
+pbkdf2.workspace = true
+rand.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
