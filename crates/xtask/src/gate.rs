@@ -121,11 +121,7 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     }
     let mut release = nightly;
     release.extend([
-        step("restore-drill", |_| {
-            Ok(Outcome::Failed(
-                "not implemented: lands in wave 2 lane R (backup snapshot, WAL stream, recovery kit, `centraid recover`, restore-and-re-pair)".to_owned(),
-            ))
-        }),
+        step("restore-drill", run_restore_drill),
         step("vps-smoke", |_| {
             Ok(Outcome::Failed(
                 "not implemented: lands in wave 3 lane G (release smoke on a clean VPS from the Docker image)".to_owned(),
@@ -218,6 +214,71 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 // ---------------------------------------------------------------------------
 // Steps
 // ---------------------------------------------------------------------------
+
+/// THE RESTORE DRILL (#1020, wave 2 lane R, D-1020-R7).
+///
+/// The acceptance box is *"the restore drill runs in CI"*, and this is the step
+/// that makes it true. It runs `crates/centraid`'s `restore_drill` integration
+/// test, which:
+///
+/// - founds a vault, enrols a seat and writes commits;
+/// - takes a generation (a complete base copy + the sealed WAL tail + a
+///   manifest) and a password-wrapped recovery kit;
+/// - **deletes the live data directory, keys and all**;
+/// - runs the real `centraid recover` binary into a fresh directory;
+/// - proves `restore_check` is clean and every row is back, table by table;
+/// - proves the old seat is told `RebootstrapRequired{epoch-mismatch}`,
+///   re-pairs, re-bootstraps and converges.
+///
+/// It is a `cargo test` invocation rather than logic in this file on purpose:
+/// the drill needs the vault crate and the binary, and this runner is on the
+/// edit-run loop with three dependencies. `--nocapture` is passed so the
+/// drill's own wall-clock line reaches the artifact log, and the step records
+/// its own elapsed time beside it.
+///
+/// **It must FAIL, never skip.** A release profile that could pass without the
+/// drill would report "release is green" for a release nobody proved
+/// restorable.
+fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
+    let started = Instant::now();
+    let outcome = process(
+        ctx,
+        "restore-drill",
+        "cargo",
+        &[
+            "test",
+            "-p",
+            "centraid",
+            "--test",
+            "restore_drill",
+            "--",
+            "--nocapture",
+        ],
+    )?;
+    let seconds = started.elapsed().as_secs_f64();
+    if !matches!(outcome, Outcome::Ok(_)) {
+        return Ok(outcome);
+    }
+    // The wall clock, as evidence rather than as a ceiling. There is no
+    // `restoreDrillSeconds` slot in `contracts/ledgers/gate-budgets.json` —
+    // the release profile's budget is `null` by ruling — so the number is
+    // written to the artifact directory and quoted in the step's line. A
+    // ceiling invented here would be a number this lane ratcheted into a
+    // down-only ledger on the strength of one run.
+    let dir = ctx.artifacts.join("restore-drill");
+    fs::create_dir_all(&dir)?;
+    fs::write(
+        dir.join("timing.json"),
+        format!(
+            "{{\n  \"hardware\": \"{}\",\n  \"restoreDrillSeconds\": {seconds:.1}\n}}\n",
+            ctx.hardware
+        ),
+    )?;
+    Ok(Outcome::Ok(format!(
+        "restore, re-pair and converge in {seconds:.1}s (release budget is unbounded by ruling) — evidence: {}",
+        display_relative(&ctx.root, &dir)
+    )))
+}
 
 /// Run a command, buffered. On failure the whole output is written under
 /// `target/xtask/<profile>/<step>/` and the returned line names it.
@@ -797,7 +858,7 @@ mod tests {
     }
 
     #[test]
-    fn release_adds_exactly_the_two_unimplemented_placeholders() {
+    fn release_adds_exactly_the_restore_drill_and_the_vps_smoke() {
         let nightly = names(Profile::Nightly);
         let release = names(Profile::Release);
         assert_eq!(&release[nightly.len()..], ["restore-drill", "vps-smoke"]);
@@ -815,7 +876,10 @@ mod tests {
             artifacts: PathBuf::from("target/xtask/release"),
         };
         for entry in steps(Profile::Release) {
-            if !matches!(entry.name, "restore-drill" | "vps-smoke") {
+            // `restore-drill` is real as of wave 2 lane R, so it is no longer a
+            // placeholder and is not in this test's subject. `vps-smoke` still
+            // is, and the rule it proves is unchanged: a placeholder FAILS.
+            if entry.name != "vps-smoke" {
                 continue;
             }
             let outcome = (entry.run)(&ctx).expect("placeholder runs");

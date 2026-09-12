@@ -22,7 +22,8 @@
     "release": {
       "ci-linux-x64-4c": {
         "budgetSeconds": null,
-        "headroom": "Unbounded by ruling. Wave 2 lane R's restore drill and wave 3 lane G's VPS smoke are the two steps that will dominate it; both are deliberate FAILURES today, so the profile cannot pass vacuously before either exists."
+        "headroom": "Unbounded by ruling. Wave 3 lane G's VPS smoke is the remaining deliberate FAILURE, so the profile still cannot pass vacuously. Wave 2 lane R's restore drill is real as of #1020 and is the other step that dominates the profile.",
+        "_provenance": "restore-drill measured 3.9 s end to end on ci-linux-x64-4c (#1020, wave 2 lane R): found a vault, enrol a seat, 12 commits, take a generation, delete the live data directory, `centraid recover` into a fresh one, 247 tables compared and 209 rows back, the old seat told epoch-mismatch, re-paired and converged. Recorded as EVIDENCE and not as a ceiling: `budgetSeconds` for this profile is null by ruling, there was no restoreDrillSeconds slot to fall, and a ceiling invented from one run is a number a later author would learn to widen. The per-run number is written to target/xtask/release/restore-drill/timing.json."
       }
     }
   }
