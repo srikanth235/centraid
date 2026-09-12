@@ -192,4 +192,82 @@ describe("tally: groups", () => {
       )?.expense_id
     ).toBe(xid);
   });
+  // "OFF LEDGER" MEANS SETTLED UP (#1020, R-1020-35).
+  //
+  // The precondition used to count the expenses a member appeared in, so it
+  // refused for every member who had ever spent anything — which is every
+  // member a group has. `leave_group` was the only verb that worked, and the
+  // manifest offered both with no hint that one was unreachable.
+  test("a settled-up member can be removed; one with a balance cannot", () => {
+    const priya = addFriend();
+    const gid = out<{ group_id: string }>(
+      invoke("tally.create_group", {
+        name: "Flat",
+        icon: "\u{1F3E0}",
+        member_ids: [priya],
+      })
+    ).group_id;
+    const xid = out<{ expense_id: string }>(
+      invoke("tally.add_expense", {
+        group_id: gid,
+        description: "Rent",
+        amount_minor: 200,
+        paid_by: me,
+        category: "rent",
+        splits: [
+          { party_id: me, share_minor: 100 },
+          { party_id: priya, share_minor: 100 },
+        ],
+      })
+    ).expense_id;
+    expect(xid).toBeTruthy();
+
+    // Priya owes 100 of the 200 rent: she is ON the ledger, and the refusal
+    // names the currency and the amount rather than just saying no.
+    const refused = invoke("tally.remove_group_member", {
+      group_id: gid,
+      party_id: priya,
+    });
+    expect(refused.status).toBe("failed");
+    const detail = JSON.stringify(refused);
+    expect(detail).toContain("unsettled balance");
+    const checks = db.audit
+      .prepare(
+        `SELECT observed_json FROM agent_invocation_check
+          WHERE predicate LIKE 'member_off_ledger%'
+          ORDER BY rowid DESC LIMIT 1`
+      )
+      .get() as { observed_json: string } | undefined;
+    expect(JSON.parse(checks!.observed_json)).toMatchObject({
+      unsettled: 1,
+      worst_currency: "USD",
+      worst_amount_minor: -100,
+    });
+
+    // She settles up, and the same call now succeeds.
+    out(
+      invoke("tally.settle_up", {
+        group_id: gid,
+        from_party: priya,
+        to_party: me,
+        amount_minor: 100,
+      })
+    );
+    // Red before the fix: still "failed", because the expense she was split
+    // into still existed and always would.
+    out(
+      invoke("tally.remove_group_member", { group_id: gid, party_id: priya })
+    );
+    // Her history stays: the expense and its split are money history.
+    expect(
+      (
+        db.vault
+          .prepare(
+            `SELECT count(*) AS n FROM tally_expense_split
+              WHERE expense_id = ? AND party_id = ?`
+          )
+          .get(xid, priya) as { n: number }
+      ).n
+    ).toBe(1);
+  });
 });

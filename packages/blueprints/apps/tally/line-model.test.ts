@@ -12,6 +12,8 @@ import {
   lineItems,
   lineShares,
   lineTotal,
+  newLineDraft,
+  newLineId,
   unallocatedCount,
 } from "./line-model.ts";
 import type { LineDraft } from "./line-model.ts";
@@ -143,5 +145,39 @@ describe("the reconciliation, stated as arithmetic", () => {
       money,
     });
     expect(out.ok).toBe(false);
+  });
+});
+// TWO OFFLINE SEATS DO NOT MINT THE SAME LINE ID (#1020, R-1020-35).
+//
+// The id came off a module-level counter, so the FIRST line either seat drafts
+// was `line-1` on both, and on merge one seat's line was the other's. A
+// module's counter cannot see another process, which is the whole failure: the
+// test below is the closest a single process gets to two seats — two
+// independent runs of the minter, asked for the same ordinal line.
+describe("line ids", () => {
+  it("never collide across independent seats", () => {
+    const seatA = Array.from({ length: 200 }, () => newLineId());
+    const seatB = Array.from({ length: 200 }, () => newLineId());
+    // Red before the fix: both arrays were ["line-1", "line-2", …] and the
+    // union held 200 ids rather than 400.
+    expect(new Set([...seatA, ...seatB]).size).toBe(400);
+    // And the FIRST id of each seat differs, which is the row that collided.
+    expect(seatA[0]).not.toBe(seatB[0]);
+  });
+
+  it("sort by creation", () => {
+    const earlier = newLineId();
+    const later = newLineId();
+    // The time prefix is the same within a millisecond, so the assertion is
+    // the one that holds: the prefix never goes backwards.
+    const prefix = (id: string) => id.split("-")[1]!;
+    expect(Number.parseInt(prefix(earlier), 36)).toBeLessThanOrEqual(
+      Number.parseInt(prefix(later), 36)
+    );
+  });
+
+  it("gives every fresh draft its own id", () => {
+    const drafts = Array.from({ length: 50 }, () => newLineDraft());
+    expect(new Set(drafts.map((draft) => draft.lineId)).size).toBe(50);
   });
 });

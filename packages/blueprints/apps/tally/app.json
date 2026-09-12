@@ -1308,7 +1308,7 @@
     },
     {
       "name": "remove-group-member",
-      "description": "Remove a member from a group through tally.remove_group_member — refused while they are on the ledger.",
+      "description": "Remove a member from a group through tally.remove_group_member — refused while they have an unsettled balance in the group. Their expenses stay: the ledger keeps money history.",
       "confirmation": "required",
       "input": {
         "type": "object",
