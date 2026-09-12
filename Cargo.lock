@@ -637,6 +637,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-automations"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-ontology",
+ "hex",
+ "jiff",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "centraid-core"
 version = "1.0.0-alpha.0"
 dependencies = [
@@ -2393,6 +2406,7 @@ dependencies = [
  "defmt",
  "jiff-core",
  "jiff-static",
+ "jiff-tzdb",
  "jiff-tzdb-platform",
  "log",
  "portable-atomic",

@@ -113,6 +113,12 @@ agent-client-protocol = "2.1"
 # rather than reached through a re-export.
 futures = "0.3"
 
+# Wave 4 lane automations — civil time with a BUNDLED tzdb (#1020, D-1020-AU2).
+jiff = { version = "0.2", default-features = false, features = [
+  "std",
+  "tzdb-bundle-always",
+] }
+
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).
 #
