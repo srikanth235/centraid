@@ -188,12 +188,14 @@ mod tests {
 
         // An old seat: schema 1, floor 1, against a gateway whose floor is 3.
         let seat = Hello {
+            identity: None,
             schema_version: 1,
             min_supported: 1,
             product_version: "0.9.0".to_owned(),
             capabilities: Vec::new(),
         };
         let gateway = Hello {
+            identity: None,
             schema_version: 4,
             min_supported: 3,
             product_version: "4.0.0".to_owned(),

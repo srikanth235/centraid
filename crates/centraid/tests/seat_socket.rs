@@ -608,6 +608,7 @@ async fn the_core_channel_carries_an_envelope_unchanged() {
         request_id: 7,
         body: Some(wire::envelope::Body::Request(wire::Request {
             kind: Some(wire::request::Kind::Hello(wire::Hello {
+                identity: None,
                 schema_version: 1,
                 min_supported: 1,
                 product_version: "a test".to_owned(),

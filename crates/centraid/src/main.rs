@@ -22,7 +22,6 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 mod cmd;
-mod identity;
 mod run;
 
 /// The exit codes, stated once. A script that wraps this binary branches on
@@ -322,7 +321,10 @@ fn version_json_requested() -> bool {
 
 fn main() -> ExitCode {
     if version_json_requested() {
-        println!("{}", identity::ArtifactIdentity::current().to_json());
+        println!(
+            "{}",
+            centraid_core::identity::ArtifactIdentity::current().to_json()
+        );
         return ExitCode::from(exit::OK);
     }
     let cli = Cli::parse();

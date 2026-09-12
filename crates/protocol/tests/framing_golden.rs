@@ -56,6 +56,7 @@ fn text(literal: &str) -> Value {
 /// lane, not a synthetic shape.
 fn vectors() -> Vec<(&'static str, &'static str, Vec<u8>)> {
     let hello = Hello {
+        identity: None,
         schema_version: 1,
         min_supported: 1,
         // Pinned, not `env!("CARGO_PKG_VERSION")`: a fixture whose bytes move

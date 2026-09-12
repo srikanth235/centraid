@@ -60,6 +60,20 @@ pub struct CoreConfig {
     pub clock: Option<Box<dyn centraid_vault::Clock>>,
     /// The id source. `None` is the build's default.
     pub ids: Option<Box<dyn centraid_vault::Ids>>,
+    /// THE DIGEST THE SHELL WAS BUILT AGAINST (#1020 Artifacts, D-1020-G2).
+    ///
+    /// A shell that links a prebuilt core cannot tell by construction that the
+    /// core it loaded is the one its own build expects, and a stale core is the
+    /// worst failure shape in the design: it starts, it answers, and it answers
+    /// from a schema the shell stopped speaking. So a shell passes the digest
+    /// ITS build recorded and [`crate::Core::open`] refuses a mismatch with
+    /// [`crate::CoreError::StaleCore`] — before the handle exists.
+    ///
+    /// `None` means the caller claimed no expectation, which is a developer
+    /// running the binary by hand. **It is not treated as a match**: it is
+    /// treated as "not checked", and `crate::identity::require_digest` is what
+    /// says so out loud when a `dev` build is on either side.
+    pub expected_digest: Option<String>,
 }
 
 impl CoreConfig {
@@ -72,6 +86,7 @@ impl CoreConfig {
             create: true,
             clock: None,
             ids: None,
+            expected_digest: None,
         }
     }
 
@@ -87,6 +102,7 @@ impl CoreConfig {
             create: false,
             clock: None,
             ids: None,
+            expected_digest: None,
         }
     }
 
@@ -102,6 +118,7 @@ impl CoreConfig {
             create: false,
             clock: None,
             ids: None,
+            expected_digest: None,
         }
     }
 
@@ -109,6 +126,13 @@ impl CoreConfig {
     #[must_use]
     pub fn with_ui_thread(mut self, name: impl Into<String>) -> Self {
         self.ui_thread_name = Some(name.into());
+        self
+    }
+
+    /// Refuse to open unless this core's digest is `digest`.
+    #[must_use]
+    pub fn expecting_digest(mut self, digest: impl Into<String>) -> Self {
+        self.expected_digest = Some(digest.into());
         self
     }
 

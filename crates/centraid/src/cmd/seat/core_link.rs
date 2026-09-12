@@ -251,6 +251,7 @@ mod tests {
 
         let hello = wire::Request {
             kind: Some(wire::request::Kind::Hello(wire::Hello {
+                identity: None,
                 schema_version: 1,
                 min_supported: 1,
                 product_version: "test".to_owned(),

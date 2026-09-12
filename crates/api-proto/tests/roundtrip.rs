@@ -162,6 +162,7 @@ fn every_envelope_body_round_trips() {
     let bodies = [
         envelope::Body::Request(core::Request {
             kind: Some(core::request::Kind::Hello(core::Hello {
+                identity: None,
                 schema_version: 1,
                 min_supported: 1,
                 product_version: "1.0.0-alpha.0".to_owned(),
@@ -242,6 +243,7 @@ fn prost_drops_unknown_fields_which_is_why_nothing_relays_a_decoded_message() {
         request_id: 0,
         body: Some(envelope::Body::Request(core::Request {
             kind: Some(core::request::Kind::Hello(core::Hello {
+                identity: None,
                 schema_version: 2,
                 min_supported: 1,
                 product_version: "9.9.9".to_owned(),

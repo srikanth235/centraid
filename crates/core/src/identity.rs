@@ -31,16 +31,30 @@
 //! and continues. The message names both digests, because "the core is stale"
 //! with no numbers is a message that gets ignored.
 //!
-//! ## Where this lives, and where it is going
+//! ## Where this lives, and what reads it
 //!
-//! `crates/core` and `crates/core-ffi` are wave 2 lane D2's and were not on the
-//! umbrella when this landed, so the stamp and the refusal are here, in the one
-//! binary, with `centraid --version --json` as the surface. **The move is
-//! named, not implied**: when `crates/core-ffi` is on the umbrella this module
-//! moves to `crates/core` unchanged and `open`'s handshake response carries an
-//! `ArtifactIdentity` with these three field names, which is the contract lane
-//! E's KMP side asserts against. The field names are already `gitSha`,
-//! `digest`, `schemaVersion` in the JSON for exactly that reason.
+//! It lived in `crates/centraid` while `crates/core` and `crates/core-ffi`
+//! were not on the umbrella, with `centraid --version --json` as the only
+//! surface, and its header named the move rather than implying it: *"when
+//! `crates/core-ffi` is on the umbrella this module moves to `crates/core`
+//! unchanged and `open`'s handshake response carries an `ArtifactIdentity`
+//! with these three field names"*. Both halves happened here
+//! ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3, lane
+//! E finding 3):
+//!
+//! * this module is `crates/core`'s, and `crates/centraid` reads it from here
+//!   rather than keeping a second copy of the stamp;
+//! * `centraid.core.v1.Hello` carries `ArtifactIdentity`, filled by
+//!   `Handle::hello`, so a shell that linked a prebuilt core learns what it
+//!   loaded on the first message rather than never;
+//! * `centraid_open`'s JSON configuration takes `expectedIdentity`, and a
+//!   mismatch is refused with the typed [`crate::CoreError::StaleCore`] —
+//!   before the handle exists, so nothing answers one call from the wrong
+//!   schema.
+//!
+//! The JSON field names are `gitSha`, `digest`, `schemaVersion`, and the proto
+//! field names are `git_sha`, `digest`, `schema_version`: the same three facts,
+//! which is what `mobile/core`'s `identityOf` asserts against.
 
 use std::fmt;
 
@@ -73,6 +87,26 @@ impl ArtifactIdentity {
     #[must_use]
     pub fn is_dev(&self) -> bool {
         self.digest == DEV || self.git_sha == DEV
+    }
+
+    /// The handshake's `ArtifactIdentity`.
+    #[must_use]
+    pub fn to_wire(&self) -> centraid_api_proto::core_v1::ArtifactIdentity {
+        centraid_api_proto::core_v1::ArtifactIdentity {
+            git_sha: self.git_sha.clone(),
+            digest: self.digest.clone(),
+            schema_version: self.schema_version,
+        }
+    }
+
+    /// The same, read back off the wire.
+    #[must_use]
+    pub fn from_wire(wire: &centraid_api_proto::core_v1::ArtifactIdentity) -> Self {
+        Self {
+            git_sha: wire.git_sha.clone(),
+            digest: wire.digest.clone(),
+            schema_version: wire.schema_version,
+        }
     }
 
     #[must_use]
