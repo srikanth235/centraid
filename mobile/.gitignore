@@ -1,0 +1,7 @@
+# Gradle's outputs. `mobile/` is source; `build/` and `.gradle/` are not.
+build/
+.gradle/
+local.properties
+# XcodeGen's output: `project.yml` is the source, `*.xcodeproj` is generated
+# (the same rule `apps/mobile/android` broke by committing a prebuild output).
+*.xcodeproj/
