@@ -21,7 +21,7 @@ import {
   bumpReplicaEpoch,
   currentReplicaLogState,
   initializeReplicaProtocol,
-  readReplicaChanges,
+  readReplicaLogPage,
   ReplicaRebootstrapRequiredError,
 } from "./change-log.js";
 import { formatReplicaCursor, parseReplicaCursor } from "./cursor.js";
@@ -58,7 +58,7 @@ describe("change-log", () => {
         .run("scheme-1")
     );
 
-    const page = readReplicaChanges(vault);
+    const page = readReplicaLogPage(vault);
     // By (entity, row, op) and by ORDER, not by literal seq: one commit's
     // membership trigger writes rows of its own, and what a subscriber
     // depends on is the sequence of operations, not the arithmetic between
@@ -110,7 +110,7 @@ describe("change-log", () => {
         )
         .run()
     );
-    const change = readReplicaChanges(vault, { since }).changes.find(
+    const change = readReplicaLogPage(vault, { since }).changes.find(
       (entry) => entry.entity === "core.concept_scheme"
     );
     const prior = JSON.parse(change!.oldValuesJson!) as Record<string, unknown>;
@@ -140,7 +140,7 @@ describe("change-log", () => {
         )
         .run()
     );
-    const [change] = readReplicaChanges(vault, { since }).changes;
+    const [change] = readReplicaLogPage(vault, { since }).changes;
     expect(change?.oldValuesJson).not.toContain("never-log-me");
     expect(JSON.parse(change!.oldValuesJson!)).toMatchObject({
       item_id: "secret-item",
@@ -209,7 +209,7 @@ describe("change-log", () => {
         .run();
     });
 
-    const changes = readReplicaChanges(vault, { since }).changes;
+    const changes = readReplicaLogPage(vault, { since }).changes;
     // ONE entry per row per commit (#1014, R-1014-1): the write and the touch
     // trigger's own UPDATE bumping `row_version` (#996, R6) are one
     // transaction, so there is exactly one prior image per row to read.
@@ -242,10 +242,10 @@ describe("change-log", () => {
         throw new Error("abandon");
       })
     ).toThrow(/abandon/u);
-    expect(readReplicaChanges(vault).changes).toStrictEqual([]);
+    expect(readReplicaLogPage(vault).changes).toStrictEqual([]);
 
     commit(() => insertScheme(vault, "committed"));
-    const page = readReplicaChanges(vault);
+    const page = readReplicaLogPage(vault);
     expect(page.changes).toHaveLength(1);
     expect(page.changes[0]).toMatchObject({
       seq: 1,
@@ -302,7 +302,7 @@ describe("change-log", () => {
         )
         .run()
     );
-    const live = readReplicaChanges(opened.vault, { since: afterDdl });
+    const live = readReplicaLogPage(opened.vault, { since: afterDdl });
     expect(live.changes).toStrictEqual([
       expect.objectContaining({
         entity: "ext.gym-log.workout",
@@ -321,7 +321,7 @@ describe("change-log", () => {
         .run()
     );
     expect(
-      readReplicaChanges(opened.vault, {
+      readReplicaLogPage(opened.vault, {
         since: beforeDraftRow,
       }).changes.filter((change) => change.entity.startsWith("ext."))
     ).toStrictEqual([]);
@@ -340,7 +340,7 @@ describe("change-log", () => {
       epoch: currentReplicaLogState(vault).epoch,
       seq: 0,
     });
-    let page = readReplicaChanges(vault, { since: cursor, limit: 1 });
+    let page = readReplicaLogPage(vault, { since: cursor, limit: 1 });
     let guard = 0;
     for (;;) {
       for (const change of page.changes) {
@@ -350,7 +350,7 @@ describe("change-log", () => {
       expect((guard += 1)).toBeLessThan(50);
       cursor = formatReplicaCursor(page.next);
       expect(parseReplicaCursor(cursor)).toStrictEqual(page.next);
-      page = readReplicaChanges(vault, { since: cursor, limit: 1 });
+      page = readReplicaLogPage(vault, { since: cursor, limit: 1 });
     }
     expect(seen).toStrictEqual(["a", "b", "c"]);
     expect(page.next).toStrictEqual(page.watermark);
@@ -364,7 +364,7 @@ describe("change-log", () => {
       insertScheme(vault, "commit-b");
     });
 
-    const first = readReplicaChanges(vault, { limit: 1 });
+    const first = readReplicaLogPage(vault, { limit: 1 });
     expect(first.changes).toHaveLength(2);
     expect(new Set(first.changes.map((change) => change.commitId)).size).toBe(
       1
@@ -394,7 +394,7 @@ describe("change-log", () => {
         )
         .run(new Date().toISOString())
     );
-    const page = readReplicaChanges(vault);
+    const page = readReplicaLogPage(vault);
     expect(page.changes).toStrictEqual([]);
     expect(page.hasMore).toBe(false);
     expect(page.next).toStrictEqual(page.watermark);
@@ -413,11 +413,11 @@ describe("change-log", () => {
     expect(after.epoch).not.toBe(before.epoch);
     expect(after.floor.seq).toBe(before.watermark.seq);
     expect(() =>
-      readReplicaChanges(vault, { since: before.watermark })
+      readReplicaLogPage(vault, { since: before.watermark })
     ).toThrow(ReplicaRebootstrapRequiredError);
 
     commit(() => insertScheme(vault, "after"));
-    const page = readReplicaChanges(vault, { since: after.floor });
+    const page = readReplicaLogPage(vault, { since: after.floor });
     expect(page.changes).toStrictEqual([
       expect.objectContaining({
         epoch: after.epoch,

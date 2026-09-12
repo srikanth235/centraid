@@ -25,7 +25,7 @@ import {
   beginReplicaCommit,
   currentReplicaLogState,
   endReplicaCommit,
-  readReplicaChanges,
+  readReplicaLogPage,
 } from "../replica/change-log.js";
 import { registerEnrichCommands } from "./enrich.js";
 import { registerMediaCommands } from "./media.js";
@@ -322,7 +322,7 @@ describe("media.forget_person", () => {
     const since = currentReplicaLogState(db.vault).watermark;
     invoke("media.forget_person", { party_id: seeded.ana });
 
-    const page = readReplicaChanges(db.vault, { since });
+    const page = readReplicaLogPage(db.vault, { since });
     const deletes = page.changes.filter((change) => change.op === "delete");
     const deletedOf = (entity: string): string[] =>
       deletes

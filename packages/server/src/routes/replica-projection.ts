@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import {
   DEFAULT_REPLICA_TEXT_CEILING_BYTES,
-  readReplicaChanges,
+  readReplicaLogPage,
   readReplicaIntentOutcome,
   withReplicaSnapshot,
 } from "@centraid/vault";
@@ -341,7 +341,7 @@ export function projectReplicaPage(
       access,
       new Date(nowMs).toISOString()
     );
-    const page = readReplicaChanges(db, { since, limit });
+    const page = readReplicaLogPage(db, { since, limit });
     const shapeIds = replicaShapeIds(shapes);
     const rebootstrap = (): ReplicaProjectedPage => ({
       shapes,

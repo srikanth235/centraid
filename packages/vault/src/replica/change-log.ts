@@ -495,7 +495,7 @@ function changeEntry(
   };
 }
 
-export interface ReadReplicaChangesOptions {
+export interface ReadReplicaLogPageOptions {
   since?: ReplicaCursorInput;
   limit?: number;
 }
@@ -508,16 +508,16 @@ export interface ReadReplicaChangesOptions {
  * received. The bracket is re-entrant: `projectReplicaPage` already runs
  * inside `withReplicaSnapshot`.
  */
-export function readReplicaChanges(
+export function readReplicaLogPage(
   vault: DatabaseSync,
-  options: ReadReplicaChangesOptions = {}
+  options: ReadReplicaLogPageOptions = {}
 ): ReplicaChangePage {
-  return inReadTransaction(vault, () => readReplicaChangePage(vault, options));
+  return inReadTransaction(vault, () => readReplicaLogPageRows(vault, options));
 }
 
-function readReplicaChangePage(
+function readReplicaLogPageRows(
   vault: DatabaseSync,
-  options: ReadReplicaChangesOptions = {}
+  options: ReadReplicaLogPageOptions = {}
 ): ReplicaChangePage {
   const state = currentReplicaLogState(vault);
   const since = options.since

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import { currentReplicaLogState, readReplicaChanges } from "./change-log.js";
+import { currentReplicaLogState, readReplicaLogPage } from "./change-log.js";
 import {
   expiredOutcomeRecovery,
   pruneReplicaIntentOutcomes,
@@ -82,7 +82,7 @@ describe("intents", () => {
       readReplicaIntentOutcome(db.vault, identity.intentId, "another-device")
     ).toBeUndefined();
     expect(
-      readReplicaChanges(db.vault).changes.map(({ entity, rowId, op }) => ({
+      readReplicaLogPage(db.vault).changes.map(({ entity, rowId, op }) => ({
         entity,
         rowId,
         op,
@@ -108,7 +108,7 @@ describe("intents", () => {
     expect(
       readReplicaIntentOutcome(db.vault, identity.intentId, identity.deviceId)
     ).toBeUndefined();
-    expect(readReplicaChanges(db.vault).changes).toStrictEqual([]);
+    expect(readReplicaLogPage(db.vault).changes).toStrictEqual([]);
   });
 
   test("intent replay binds immutable identity without persisting arbitrary output", () => {
@@ -245,7 +245,7 @@ describe("intents", () => {
     // is the session's (by key), not the statement order — which is exactly
     // why a subscriber applies a commit whole rather than row by row.
     expect(
-      readReplicaChanges(db.vault, { since: beforeDelete })
+      readReplicaLogPage(db.vault, { since: beforeDelete })
         .changes.map(({ entity, rowId, op }) => ({ entity, rowId, op }))
         .sort((a, b) => (a.rowId < b.rowId ? -1 : 1))
     ).toStrictEqual([

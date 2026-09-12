@@ -7,7 +7,7 @@ import {
   currentReplicaLogState,
   endReplicaCommit,
   initializeReplicaProtocol,
-  readReplicaChanges,
+  readReplicaLogPage,
 } from "./change-log.js";
 
 // NO UNCACHED PREPARE ON THE CHANGE PATH (#922 A3).
@@ -61,7 +61,7 @@ describe("change-log statement cache", () => {
       endReplicaCommit(vault, handle);
       vault.exec("COMMIT");
       currentReplicaLogState(vault);
-      readReplicaChanges(vault, { limit: 10 });
+      readReplicaLogPage(vault, { limit: 10 });
     };
 
     // Warm-up: the first pass is allowed to compile every statement once.

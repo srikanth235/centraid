@@ -5,7 +5,7 @@ import type { VaultDb } from "../db.js";
 import {
   beginReplicaCommit,
   endReplicaCommit,
-  readReplicaChanges,
+  readReplicaLogPage,
 } from "./change-log.js";
 import {
   readReplicaRow,
@@ -106,7 +106,7 @@ describe("snapshot", () => {
         )
         .run();
     });
-    const change = readReplicaChanges(db.vault).changes[0];
+    const change = readReplicaLogPage(db.vault).changes[0];
     expect(change?.rowId).toBe("scheme-1");
     expect(
       readReplicaRow(db.vault, change?.entity ?? "", change?.rowId ?? "")
