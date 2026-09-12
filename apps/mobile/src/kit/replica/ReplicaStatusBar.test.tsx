@@ -185,8 +185,10 @@ vi.mock(
       pageMargin: 18,
       radii: { lg: 12, md: 7, pill: 999, sm: 4, xl: 16, xs: 0 },
       spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
-      subBase: { gutter: 2, hair: 1 },
+      subBase: { chip: 3, gutter: 2, hair: 1 },
       t: () => ({}),
+      // `StageRoom`'s close key sits on the touch floor (R-NY-14).
+      targetMin: { coarse: 44, fine: 34 },
       useTheme: () => ({
         colors: {
           accent: "#mock-accent",
@@ -205,6 +207,15 @@ const pendingMock = vi.hoisted(() => ({
   pending: [] as unknown[],
   refresh: vi.fn<() => void>(),
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 vi.mock(
   import("./pending-changes"),

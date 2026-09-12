@@ -1860,3 +1860,69 @@ Files: `apps/mobile/src/apps/insights/GatewayAlerts.tsx`, `apps/mobile/src/apps/
 
 1. **"Notice headlines are already member sentences, so deleting the filter costs nothing."** Checked by planting a rule name containing the very noun the filter rewrote: a notice with `headline: "Gateway usage did not finish"` rendered through `GatewayAlerts` on `cb997a7c9`. Result: `"Alertsvault host usage did not finish…"` — the filter was not protecting the member from the gateway, it was rewriting the member's own words. That is now the red assertion in `GatewayAlerts.test.tsx`.
 2. **"The queue row is the only place the raw upload error reached a screen."** Checked by grepping every reader of `lastError` rather than trusting the six `memberFacingError` call sites (`grep -rn "lastError" apps/mobile/src`). Result: it found a seventh reader the filter never covered — `apps/mobile/src/screens/BackupHealth.tsx:483` renders `failure.lastError` directly. Producing the sentence at the drainer fixes that surface too, which a seat-side filter could not have.
+## Owner items — Lane B: the docket grant, the chip token, the seventh room, native-state drift
+
+Four of the ten owner items the PR body listed, worked on `lane/1015-band` from `cb997a7c9`. Rulings: R-NY-8, R-NY-15, R-NY-14, R-NY-17 ([docs/decisions.md § Mobile UX consistency (#1015)](../docs/decisions.md#mobile-ux-consistency-1015)).
+
+### B1 — D-11 is granted (R-NY-8) · `dad656199`
+
+The owner granted docket row `D-11` (`estate-separation`, filed under #1005) on 2026-09-11 for #1017, so its `authority` is that pull request rather than the `"pending owner grant"` placeholder. D-9 and D-10 belong to another act and are untouched. Changed: `.governance/law/docket.json`.
+
+### B2 — the tile chip inset is a design token (R-NY-15) · `5c27585cb`
+
+Landed by this lane's previous worker and spot-checked here, not redone. `tileChipInset` (3) left `apps/mobile/src/kit/theme/native.ts` and became `subBase.chip` in `packages/design`, the third named sub-4px seam, lowered as `--sp-chip`; `PhotoTile` reads the token and the kit keeps no sub-4px constant. Changed: `apps/mobile/src/apps/photos/PhotoTile.tsx`, `apps/mobile/src/kit/replica/ReplicaStatusBar.test.tsx`, `apps/mobile/src/kit/theme/index.ts`, `apps/mobile/src/kit/theme/native.ts`, `apps/mobile/src/kit/theme/native.test.ts`, `docs/design-divergences.md`, `docs/design-machinery.md`, `docs/traps/design-tokens.md`, `packages/design/src/blueprint.ts`, `packages/design/src/contract.ts`, `packages/design/src/css.ts`, `packages/design/src/density.ts`, `scripts/docs-site/public/assets/centraid-tokens.css`, `scripts/home-site/public/assets/centraid-tokens.css`, `scripts/test-report/report-tokens.css`.
+
+### B3 — StageRoom is the seventh room (R-NY-14) · `156911b52`
+
+The full-bleed media stage becomes a room instead of the one screen standing outside them. `StageRoom` owns the three things a stage may not decide: the `--stage` ground resolved from the theme (never a literal), ONE close act reached by a swipe down and by a close control, and a ground that runs edge to edge under the notch while its chrome carries the insets. It takes no `PlaceHeader`, no band and no room state, which `room-contracts.ts` records as a decision rather than an omission — a stage has nothing to be empty of, nothing to search and no list to select from.
+
+The draft this lane inherited was kept and corrected: `targetMin` is `{coarse, fine}`, so `height: targetMin` was an object in a style sheet; there is no mobile icon named `close` (the glyph is `x`); `StageChrome.insets` had no consumer once `PhotoLightbox` kept its own hook, so it is gone; and `stageSwipeOutcome` is not a screen's import, so it left the barrel.
+
+`PhotoLightbox` moved in, chrome and overlay as slots, both hoisted out of the JSX (a render prop written inline is a component defined during render). It is handed `close` so it cannot invent a second way back. Its loading hold — which was a bare black ground with no visible way out — is now the room, which is where the room's own close key earns its keep. `buildDismissGesture` is deleted from `lightbox-gestures.ts`: leaving a stage is the room's act.
+
+`screen-root` reaches 0 and LEAVES the baseline, which is now empty: every rule in the rooms gate is unconditional, like `page-margin`. `lint-mobile-rooms.test.mjs` asserts that, and asserts the gate's `ROOMS` list against the barrel's default exports — a restatement drifts, and that drift is how `PhotoLightbox` came to sit in a baseline in the first place.
+
+Cost, stated rather than hidden: the rooms barrel now reaches `react-native-gesture-handler` and `react-native-reanimated`, neither of which parses under the stub tier's node resolution, so fifteen stub-tier tests that import the barrel mock both through two new helpers (`gestureHandlerStub`, `reanimatedStub`) in `react-native-stub.tsx`. Three theme stubs gained `targetMin`. `rooms.test.tsx` was one line under its 625-line ceiling, so the `PlaceRef` cases moved to a new `place.test.ts` beside the framework-free module they test, rather than the ceiling moving.
+
+New: `apps/mobile/src/kit/rooms/StageRoom.tsx`, `apps/mobile/src/kit/rooms/stage-gesture.ts`, `apps/mobile/src/kit/rooms/stage-room.test.tsx`, `apps/mobile/src/kit/rooms/place.test.ts`.
+Changed: `DESIGN.md`, `apps/mobile/src/apps/photos/PhotoLightbox.tsx`, `apps/mobile/src/apps/photos/lightbox-gestures.ts`, `apps/mobile/src/kit/rooms/README.md`, `apps/mobile/src/kit/rooms/index.ts`, `apps/mobile/src/kit/rooms/room-contracts.ts`, `apps/mobile/src/kit/rooms/rooms.styles.ts`, `apps/mobile/src/kit/rooms/rooms.test.tsx`, `apps/mobile/src/kit/rooms/room-gutter.test.tsx`, `apps/mobile/src/kit/rooms/rooms-keyboard.test.tsx`, `apps/mobile/src/test/react-native-stub.tsx`, `apps/mobile/src/kit/replica/ReplicaStatusBar.test.tsx`, `apps/mobile/src/apps/automations/Automations.test.tsx`, `apps/mobile/src/apps/insights/GatewayAlerts.test.tsx`, `apps/mobile/src/apps/insights/Insights.test.tsx`, `apps/mobile/src/apps/people/PersonGrants.test.tsx`, `apps/mobile/src/apps/photos/PhotosScreen.test.tsx`, `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`, `apps/mobile/src/screens/Home.test.tsx`, `apps/mobile/src/screens/Scan.test.tsx`, `apps/mobile/src/screens/Sharing.test.tsx`, `apps/mobile/src/screens/connectors/Connectors.test.tsx`, `apps/mobile/src/screens/home/SearchOverlay.test.tsx`, `apps/mobile/src/screens/home/VaultsSwitcher.test.tsx`, `apps/mobile/src/screens/needs-you/NeedsYou.test.tsx`, `scripts/lint-mobile-rooms.mjs`, `scripts/lint-mobile-rooms.test.mjs`, `scripts/lint-mobile-rooms.baseline.json`.
+
+Docs' `DocumentViewer` was judged and NOT migrated: it keeps `PushedPage` and its title and simply passes no `band` (#821). Its body is stage-coloured because a document reads better on the dark ground, but a member still needs the document's name and the way back to the shelf. The README says so, so the next census does not re-open it. Photos' slideshow, editor and video are MODES inside the one lightbox, not separate surfaces, so they arrived on the stage with it.
+
+### B4 — native-state L1 checks drift, not absence (R-NY-17) · `e9f6e98fa`, `b1dd97ca7`
+
+#1011 generates `ios/` and `android/` **and commits them**, so a native change arrives as a reviewable diff. L1 was still asserting the opposite — that nothing under them is tracked — while `apps/mobile/.gitignore` ignored two trees whose 60 files were already in the index. Tracked-and-ignored is the worst of both: the files stay committed and the next regeneration never reaches `git status`.
+
+L1 is now generated-tree **fidelity**. `validateGeneratedTreesTracked` asks that each tree is in the index and is NOT ignored. `validateGeneratedTreeDrift` compares each tree's git object id against one blessed beside the input fingerprints in `native-fingerprints.json`'s new `trees` block. A git tree id IS the directory's content: one byte changed anywhere under it moves the id and nothing else does. It is read from the **index** (`git write-tree` + `rev-parse <tree>:<dir>`), so a regeneration and the `--write` that blesses it are one commit, and on a clean checkout — every CI lane — the index is HEAD. A tree with no recorded id is a finding, never a pass. `--write` still refuses over a dirty L1/L2/L3 with L1's own drift excepted, because moving it is exactly what a reviewed `--write` is for.
+
+A real prebuild is too heavy for the unit test, so the unit test proves the comparison on fixtures and the live case asserts this repository's own trees. That live case is what an actual regeneration answers: `bunx expo prebuild --clean --no-install` in this worktree reproduced the committed `android/` tree byte for byte and left five `ios/` files differing — all of them rewritten by `pod install`, which `--no-install` does not run. That is why the drift half compares committed tree ids rather than shelling out to prebuild inside the gate: a comparison that can only be green on a machine that has run CocoaPods is a gate everyone learns to skip.
+
+Dropping the ignore rules revealed **eight prebuild outputs the old rules had kept out of the index** (the six adaptive-icon foregrounds, the two `mipmap-anydpi-v26` launcher XMLs, and `ios/ShareExtension/ShareExtensionPreprocessor.js`); they are committed here, and the blessed tree ids describe that state. The two generated trees leave oxlint's input for the reason every generated tree does, and the one `.js` among them takes an allowlist row beside mobile's `modules/` and `plugins/` rows — it runs in iOS's share-sheet preprocessor, in Safari's JavaScript context, never in the app bundle and never in node.
+
+**L4 is red on this head and was NOT blessed.** The committed input fingerprints already disagreed with the inputs before this change (`ios` committed `426f2060…`, current `9e78b3f2…` on the untouched `.gitignore`), so `--write` here would launder a drift nobody reviewed — the first thing `docs/traps/mobile-native-state.md` forbids. The gate goes from six errors to two, all L4.
+
+New: the `trees` block in `apps/mobile/native-fingerprints.json`.
+Changed: `apps/mobile/.gitignore`, `apps/mobile/scripts/verify-native-state.mjs`, `apps/mobile/scripts/verify-native-state-lib.mjs`, `apps/mobile/scripts/verify-native-state.test.mjs`, `apps/mobile/native-fingerprints.json`, `docs/dev-environment.md`, `docs/traps/mobile-native-state.md`, `oxlint.config.ts`, `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt`, `.github/workflows/ci.yml`, `.github/workflows/candidate.yml`, `.github/workflows/lane-release-mobile.yml`, and the eight newly tracked files under `apps/mobile/ios/` and `apps/mobile/android/`.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| B-x1 law before B1 | `10 rule(s), 0 error(s), 1 warning(s)` — `waiver-docket`, D-11 pending |
+| B-x1 law after B1 | `10 rule(s), no findings` |
+| B-x2 `grep -rn tileChipInset apps packages docs` | nothing |
+| B-x3 `node scripts/lint-mobile-rooms.mjs --enforce` | exit 0; all six rules 0 over 605 files; `lint-mobile-rooms.baseline.json` names no rule |
+| B-x3 planted violation | the early return in `PhotoLightbox` changed to `<View>` → `screen-root 1`, `fail … this rule is at zero`, exit 1; restored → 0 |
+| B-x4 `bunx vitest run scripts/verify-native-state.test.mjs` | 25 passed |
+| B-x4 planted drift | one line appended to `apps/mobile/android/gradle.properties`, staged → `L1 generated tree drift: apps/mobile/android drifted — blessed 756d3b90…, now 6b012e2c…`, 1 failed; restored → 25 passed |
+| E1 typecheck | `apps/mobile` 0; `packages/design` 0 |
+| E3 rooms lint | as B-x3 |
+| E5 law | `10 rule(s), no findings` |
+
+### Falsification
+
+The two riskiest claims, and the throwaway check each was put to.
+
+1. **"`screen-root` is genuinely unconditional now, not merely unpopulated."** A rule that reads text can go quiet instead of red. Planted `<View>` as `PhotoLightbox`'s root → `screen-root 1` and `fail lint-mobile-rooms — screen-root: 1 finding(s), and this rule is at zero`, exit 1. It also exposed a limit worth stating: `rootTagOf` reads the FIRST `return <Tag` after the default export, so planting inside the loaded tree while the loading hold still returns `<StageRoom>` is NOT seen. Both returns in `PhotoLightbox` are the room, so the claim holds for this file; the general limit is the one the script already documents about matching text rather than a render tree.
+
+2. **"L1's drift half would notice a hand-edited generated file."** A validator that compares two values it computes the same way can agree with itself forever. Appended one comment line to `apps/mobile/android/gradle.properties` and staged it; the live case went red naming the tree and both ids. Restoring the file returned it to green, which also proves the id is read from the index rather than from HEAD — an unstaged edit would have been invisible, and a staged one was not.

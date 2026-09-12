@@ -152,6 +152,15 @@ vi.mock(import("expo-crypto") as Promise<unknown>, () => ({
   digestStringAsync: () => Promise.resolve("digest"),
   randomUUID: () => "journey-id",
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 // The frame asks the wire client for one thing — the app's icon and colour.
 // The rest of that module is the phone's whole gateway transport, and none of

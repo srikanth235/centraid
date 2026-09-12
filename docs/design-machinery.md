@@ -23,6 +23,8 @@ The direction is one-way:
 
 A screen must not generate a token, a component must not invent a scale, and a lowering must not keep a second editable registry.
 
+The values under the 4px base are the registry's `subBase` seams — `hair` (1), `gutter` (2), `chip` (3) — lowered as `--sp-hair|gutter|chip` and re-exported unchanged through the mobile kit's `kit/theme`. A kit holds no sub-4px constant of its own: the photo tile's chip inset moved from the mobile kit into `subBase` as a recorded system change ([#1015](https://github.com/srikanth235/centraid/issues/1015), R-NY-15).
+
 ## Values lower per renderer; composition is per rendering technology
 
 Two different rules, often confused:

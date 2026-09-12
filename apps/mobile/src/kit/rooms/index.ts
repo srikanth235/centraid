@@ -1,4 +1,5 @@
-// THE SIX ROOMS (#1015, S1) — the only permitted screen roots. See README.md.
+// THE SEVEN ROOMS (#1015, S1; R-NY-14) — the only permitted screen roots. See
+// README.md.
 
 export { default as AppPlace } from "./AppPlace";
 export type { AppPlaceProps } from "./AppPlace";
@@ -10,6 +11,8 @@ export { default as PushedPage } from "./PushedPage";
 export type { PushedPageProps } from "./PushedPage";
 export { default as SheetRoom } from "./SheetRoom";
 export type { SheetRoomProps } from "./SheetRoom";
+export { default as StageRoom } from "./StageRoom";
+export type { StageChrome, StageRoomProps } from "./StageRoom";
 export { default as SystemPlace } from "./SystemPlace";
 export type { SystemPlaceProps } from "./SystemPlace";
 

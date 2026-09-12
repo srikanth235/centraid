@@ -159,18 +159,21 @@ export default defineConfig({
     "**/node_modules/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
+    // Written by `expo prebuild` (#996, tracked since #1011): a lint fix here
+    // dies at the next regeneration. Mobile's authored plugins/ and modules/
+    // are linted, and `ci:native-state` L1 watches these two trees.
+    "apps/mobile/{ios,android}/**",
     // Release-generated recognition bundles carry minified/transformed module
-    // imports that are not authored lint input. Their source modules are
-    // linted under packages/model-runtime and the emitted handlers have
-    // manifest, behavior, and size conformance tests.
+    // imports that are not authored lint input. Their source modules are linted
+    // under packages/model-runtime and the emitted handlers have manifest,
+    // behavior, and size conformance tests.
     "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
     "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
     "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
     "packages/blueprints/automations/faces/automations/faces/handler.js",
     // `place-names` (#816) is the same kind of artefact for a different reason:
     // no model, but a vendored settlement table inlined into the bundle. Its
-    // authored halves — the handler and the lookup — are linted under
-    // packages/model-runtime.
+    // authored halves — handler and lookup — are linted under model-runtime.
     "packages/blueprints/automations/place-names/automations/place-names/handler.js",
     "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   ]),

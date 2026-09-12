@@ -6,7 +6,7 @@
  * back affordances, five search placements, five confirm shapes, eight-plus
  * empty states and five date formats across nine surfaces. The kit that would
  * have prevented all of it already existed; what did not exist was anything
- * that noticed a screen ignoring it. So the six rooms (`kit/rooms/README.md`)
+ * that noticed a screen ignoring it. So the seven rooms (`kit/rooms/README.md`)
  * are only half the answer, and this is the other half.
  *
  * WIRED, as of Wave 4: `bun run lint:product` runs this with `--enforce`.
@@ -35,14 +35,14 @@
  * THE SIX RULES.
  *
  *   screen-root      A screen file's default export returns a root that is not
- *     one of the six rooms. This is the rule the other four exist to make
+ *     one of the seven rooms. This is the rule the other four exist to make
  *     unnecessary: a screen inside a room cannot hand-roll a header.
  *     ONE LEVEL OF FRAME (R-NY-7, #1015). An app frame — `LockerScreen`,
  *     `PeopleScreen`, `PhotosScreen`, `TallyScreen` — owns the band, the wall
  *     and the lockup, and its own default export roots in a room. A screen
  *     rooted in such a frame IS a room screen, so the rule resolves the root's
  *     default import (a relative `import X from "./X"`) and passes the screen
- *     when THAT file's root is one of the six. Exactly one level: a frame
+ *     when THAT file's root is one of the seven. Exactly one level: a frame
  *     rooted in another frame is a finding, because at two hops the text no
  *     longer proves which room the member stands in. `selfTest` plants both
  *     ways, and the two-hop case.
@@ -78,18 +78,19 @@
  * pass — the same rule `lint-app-conformance.mjs` and `lint-path-filters.mjs`
  * hold themselves to.
  *
- * HOW `--enforce` ENFORCES, and why it is per-rule. Four of the six rules are
- * at ZERO tree-wide and any new finding fails the gate outright — that is the
- * brief's requirement: a new hand-rolled screen root, back literal, gutter
- * literal, tint on a control or Title Case label is a red diff, not a
- * six-month audit. The other two carry a recorded baseline
- * (`lint-mobile-rooms.baseline.json`), because the app waves that burn them
- * down have not merged yet, and a gate that is red on arrival is a gate
- * everyone learns to skip. A baseline is a RATCHET: above it fails, and BELOW
- * it prints the number to lower it to. It may only ever go down.
+ * HOW `--enforce` ENFORCES, and why it is per-rule. EVERY rule is now at ZERO
+ * tree-wide and any new finding fails the gate outright — that is the brief's
+ * requirement: a new hand-rolled screen root, back literal, gutter literal,
+ * tint on a control or Title Case label is a red diff, not a six-month audit.
+ * `screen-root` was the last rule holding a baseline, for `PhotoLightbox`; the
+ * seventh room (`StageRoom`, R-NY-14) is the honest room that surface was
+ * waiting for, so the baseline file is empty and every rule is unconditional.
  *
- * A baseline is not a licence. Each entry names the wave that clears it; when
- * that wave lands, the entry goes to 0 and stays there.
+ * The per-rule ratchet machinery stays, because a baseline is a RATCHET and
+ * may only ever go DOWN: above it fails, BELOW it prints the number to lower
+ * it to, and a rule absent from the file is at zero. A baseline is not a
+ * licence — each entry names the wave that clears it, and when that wave
+ * lands the entry goes to 0 and stays there.
  *
  * Usage:
  *   node scripts/lint-mobile-rooms.mjs             # report-only, exit 0
@@ -110,6 +111,9 @@ export const ROOMS = [
   "EditorRoom",
   "SheetRoom",
   "SystemPlace",
+  // The full-bleed media stage (R-NY-14) — the room `PhotoLightbox` stood
+  // outside the six for, and the reason `screen-root` now has no baseline.
+  "StageRoom",
 ];
 
 /** Where screens live. `kit/` is the kit's own tree and is exempt by design. */
@@ -319,7 +323,7 @@ export function lintFile(
       !ROOMS.includes(root) &&
       !frameIsRoom(relative, source, root, readSource)
     )
-      add("screen-root", `root is <${root}>, not one of the six rooms`);
+      add("screen-root", `root is <${root}>, not one of the seven rooms`);
   }
 
   for (const match of source.matchAll(
@@ -476,12 +480,14 @@ export function selfTest() {
   if (captured.length > 0)
     throw new Error("lint-mobile-rooms: a captured exception is a finding");
 
-  const clean = lintFile(
-    "apps/mobile/src/apps/x/EScreen.tsx",
-    "export default function E() {\n return (\n <AppPlace>x</AppPlace>);}"
-  );
-  if (clean.length > 0)
-    throw new Error("lint-mobile-rooms: a room root is a finding");
+  for (const room of ROOMS) {
+    const clean = lintFile(
+      "apps/mobile/src/apps/x/EScreen.tsx",
+      `export default function E() {\n return (\n <${room}>x</${room}>);}`
+    );
+    if (clean.length > 0)
+      throw new Error(`lint-mobile-rooms: <${room}> is a finding`);
+  }
 
   if (registeredScreens().size === 0)
     throw new Error("lint-mobile-rooms: the screen registry read as empty");

@@ -1,4 +1,7 @@
-// The viewer, on the stage.
+// The viewer, in `StageRoom` — the seventh room (#1015, R-NY-14). The ground,
+// the swipe-down dismiss and the guarantee of a way out are the room's; this
+// screen brings the stage's own chrome, and is handed `close` so it cannot
+// invent a second way back.
 //
 // Full-bleed `--stage` in BOTH themes: focus and selection affordances must
 // take their colour from `--on-stage`/`--stage-line` or they vanish here (§7).
@@ -26,7 +29,6 @@ import React, {
 } from "react";
 import { FlatList, Pressable, View, useWindowDimensions } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
@@ -50,6 +52,8 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import StageRoom from "../../kit/rooms/StageRoom";
+import type { StageChrome } from "../../kit/rooms/StageRoom";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import {
@@ -57,7 +61,6 @@ import {
   retainCommonsItem,
 } from "../../lib/replica/commons-transport";
 import type { PhotosScreenProps } from "../../navigation";
-import { buildDismissGesture } from "./lightbox-gestures";
 import { MediaPage } from "./MediaPage";
 import { EDITOR_TITLE, editorMeta } from "./photo-edit-model";
 import { saveEditAsNewPhotograph } from "./photo-edit-save";
@@ -101,8 +104,10 @@ import {
   viewerWriteRefusal,
 } from "./viewer-model";
 
-// Gesture construction lives in lightbox-gestures.ts — see the comment there
-// for why the builder chains must stay outside component render bodies.
+// Zoom and pan construction lives in lightbox-gestures.ts — see the comment
+// there for why the builder chains must stay outside component render bodies.
+// The DISMISS is no longer here at all: it is the room's (`kit/rooms/
+// stage-gesture.ts`), so every stage leaves the same way.
 
 export default function PhotoLightbox({
   route,
@@ -279,11 +284,13 @@ export default function PhotoLightbox({
     };
   }, [current?.assetId, current?.sourceVaultId, gatewayBase]);
   const openInfo = useCallback(() => setInfoOpen(true), []);
+  // The room's one way out, named once: the swipe-down, the chrome's control
+  // and the loading hold's own key all reach this.
+  const handleClose = useCallback(() => navigation.goBack(), [navigation]);
   const toggleChrome = useCallback(
     () => setChromeHidden((hidden) => !hidden),
     []
   );
-  const dismiss = buildDismissGesture(navigation.goBack, openInfo);
   // Hoisted: a fresh renderer means a fresh MediaPage identity, which resets
   // the quality ladder mid-swipe.
   const renderPage = useCallback(
@@ -501,9 +508,12 @@ export default function PhotoLightbox({
   };
 
   // Hold on the stage rather than opening index 0 (the wrong photo). Once
-  // loaded without a match the asset is genuinely gone, so this stands in.
+  // loaded without a match the asset is genuinely gone, so this stands in — and
+  // it is the ROOM that stands in, which is what puts a close key on a stage
+  // that has no chrome of its own yet. A bare ground here was a black screen
+  // with no visible way back (#1015, R-NY-14).
   if (!current || initialIndex === null)
-    return <View style={[styles.fill, { backgroundColor: colors.stage }]} />;
+    return <StageRoom onClose={handleClose} />;
 
   const gatewayName = gatewayBase
     ? new URL(gatewayBase).hostname
@@ -563,275 +573,286 @@ export default function PhotoLightbox({
         : "This device is not paired with a gateway, so a new photograph cannot be written."
       : READ_ONLY_VAULT_REASON;
 
-  return (
-    <GestureDetector gesture={dismiss}>
-      {/* A plain View, NOT a SafeAreaView: the stage is full-bleed and must run
-          edge to edge, which a SafeAreaView would letterbox. The CONTROLS carry
-          the insets instead. */}
+  // Hoisted out of the JSX, like an app frame's `band`: a render prop written
+  // inline is a component defined during render, which remounts its whole
+  // subtree on every keystroke of the info sheet's caption field.
+  const stageChrome = ({ close }: StageChrome): React.JSX.Element => (
+    <>
+      {/* THE FOOT OF THE STAGE — one overlay, `box-none`, so the whole
+              window under it is still the photograph's to receive. */}
       <View
-        style={[styles.fill, { backgroundColor: colors.stage }]}
-        testID={TEST_IDS.photos.viewer}
+        pointerEvents="box-none"
+        style={[
+          styles.chromeBottom,
+          { paddingBottom: insets.bottom + VIEWER_CHROME_INSET },
+        ]}
       >
-        {/* The editor takes the whole body — no pager, no swipe target, no
-            filmstrip: a member mid-edit is never one gesture from a different
-            photograph. It is also the ONE body pushed clear of the floating
-            chrome, because its own controls sit at the top of it. */}
-        {editing ? (
-          <View style={styles.fill}>
-            <View style={{ height: viewerChromeHeight(insets.top) }} />
-            <PhotoEditor
-              asset={current}
-              onCancel={() => setEditing(false)}
-              onSave={saveEdit}
-              onStatus={setEditorLine}
-              saveDisabledReason={editRefusal}
-              width={width}
-            />
-          </View>
-        ) : (
-          <View
-            style={styles.stageLayer}
-            onLayout={(event) =>
-              setStageHeight(event.nativeEvent.layout.height)
-            }
-          >
-            {/* THE SWIPE TARGET. `flows/photos-viewer.mjs` paged this list with
-                `start: "80%,30%"` because it had no handle; a Maestro `swipe`
-                anchored on `from: { id }` survives every layout change. */}
-            <FlatList
-              testID={TEST_IDS.photos.viewerPager}
-              ref={list}
-              data={assets}
-              horizontal
-              pagingEnabled
-              initialScrollIndex={initialIndex}
-              getItemLayout={(_, itemIndex) => ({
-                length: width,
-                offset: width * itemIndex,
-                index: itemIndex,
-              })}
-              keyExtractor={(asset) => asset.id}
-              onMomentumScrollEnd={(event) => {
-                const nextIndex = Math.round(
-                  event.nativeEvent.contentOffset.x / width
-                );
-                setCurrentId((activeId) => assets[nextIndex]?.id ?? activeId);
-                // A swipe is navigation too: the controls come back with the
-                // next photograph.
-                setChromeHidden(false);
-              }}
-              renderItem={renderPage}
-              showsHorizontalScrollIndicator={false}
-            />
-            {/* Start and end, so they mirror under RTL. The pointer
-                equivalents of the swipe (§15) — they go away with the rest of
-                the chrome, and one tap on the photograph brings them back. */}
-            {chromeVisible ? (
-              <>
-                <Pressable
-                  accessibilityLabel="Previous photograph"
-                  accessibilityRole="button"
-                  testID={TEST_IDS.photos.viewerPrev}
-                  accessibilityState={{ disabled: index <= 0 }}
-                  disabled={index <= 0}
-                  onPress={() => goTo(index - 1)}
-                  style={[
-                    styles.pager,
-                    styles.pagerPrev,
-                    { borderColor: colors.stageLine },
-                  ]}
-                >
-                  <Icon
-                    name="chevron-left"
-                    size={20}
-                    // `--on-stage-soft`, like every other disabled control on
-                    // the stage: page-ramp `textDisabled` vanishes here, so the
-                    // circle would read as absent rather than as refused.
-                    color={index <= 0 ? colors.onStageSoft : colors.onStage}
-                  />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Next photograph"
-                  accessibilityRole="button"
-                  testID={TEST_IDS.photos.viewerNext}
-                  accessibilityState={{ disabled: index >= assets.length - 1 }}
-                  disabled={index >= assets.length - 1}
-                  onPress={() => goTo(index + 1)}
-                  style={[
-                    styles.pager,
-                    styles.pagerNext,
-                    { borderColor: colors.stageLine },
-                  ]}
-                >
-                  <Icon
-                    name="chevron-right"
-                    size={20}
-                    color={
-                      index >= assets.length - 1
-                        ? colors.onStageSoft
-                        : colors.onStage
-                    }
-                  />
-                </Pressable>
-              </>
-            ) : null}
-          </View>
-        )}
-
-        {/* THE FOOT OF THE STAGE — one overlay, `box-none`, so the whole
-            window under it is still the photograph's to receive. */}
-        <View
-          pointerEvents="box-none"
-          style={[
-            styles.chromeBottom,
-            { paddingBottom: insets.bottom + VIEWER_CHROME_INSET },
-          ]}
-        >
-          {/* The line goes away with the rest of the chrome — it is a plate on
-              the photograph, not a band under it. */}
-          {chromeVisible ? (
-            <ViewerStatusLine
-              colors={colors}
-              text={
-                editing
-                  ? editorLine
-                  : slideshow
-                    ? "Leaving the slideshow keeps the photograph you stopped on"
-                    : status.text
-              }
-              actionLabel={
-                !slideshow && !editing && status.action ? status.action : null
-              }
-              onAction={() => setFullQualityUnlocked(true)}
-            />
-          ) : null}
-
-          {/* The filmstrip sits DIRECTLY above the action row, both floating on
-              the photograph; the home-indicator inset is the overlay's, so it
-              lands under whichever control is last in each mode. */}
-          {chromeVisible && !slideshow && !editing ? (
-            <>
-              <PhotoFilmstrip
-                assets={assets}
-                currentId={currentId}
-                onSelect={(assetId) =>
-                  goTo(assets.findIndex((asset) => asset.id === assetId))
-                }
-              />
-              <PhotoLightboxToolbar
-                asset={current}
-                onEdit={() => setEditing(true)}
-                onInfo={openInfo}
-                {...(commonsResident
-                  ? { onSaveToMyVault: () => void saveToMyVault() }
-                  : {})}
-                onWrite={write}
-              />
-            </>
-          ) : null}
-        </View>
-
-        {/* LAST in the tree: paint order is what puts these on the stage, and
-            `zIndex` alone is not enough on every Android surface. */}
+        {/* The line goes away with the rest of the chrome — it is a plate
+                on the photograph, not a band under it. */}
         {chromeVisible ? (
-          <ViewerTopChrome
+          <ViewerStatusLine
             colors={colors}
-            insets={insets}
-            title={stampTitle}
-            meta={stampMeta}
-            name={photographName}
-            editing={editing}
-            slideshow={slideshow}
-            onClose={() => navigation.goBack()}
-            onLeaveSlideshow={() => setSlideshow(false)}
-            onOverflow={() => {
-              // Never cached: a rotation between openings would hang the card off
-              // a stale rectangle.
-              measureOverflowAnchor();
-              setOverflowOpen(true);
-            }}
-            overflowRef={overflowAnchorRef}
+            text={
+              editing
+                ? editorLine
+                : slideshow
+                  ? "Leaving the slideshow keeps the photograph you stopped on"
+                  : status.text
+            }
+            actionLabel={
+              !slideshow && !editing && status.action ? status.action : null
+            }
+            onAction={() => setFullQualityUnlocked(true)}
           />
         ) : null}
 
-        <PhotoInfoSheet
-          asset={current}
-          fullQualityUnlocked={fullQualityUnlocked}
-          gatewayName={gatewayName}
-          networkType={networkType}
-          onAddTag={(label) =>
-            writeReason("tag-asset", { asset_id: current.assetId!, label })
-          }
-          onCaption={(caption) =>
-            writeReason("update-asset", {
-              asset_id: current.assetId!,
-              title: caption,
-            })
-          }
-          onClose={() => setInfoOpen(false)}
-          onRemovePlace={() =>
-            void writeReason("set-place", { asset_id: current.assetId! })
-          }
-          namedPlaces={namedPlaces}
-          people={people}
-          // Rung 2 of the phrase ladder, present only once the opt-in
-          // automation has run; absent, the phrase falls to the relative rung.
-          placeGazetteer={placeGazetteer}
-          placeLat={sharePlace.lat ?? undefined}
-          placeLng={sharePlace.lng ?? undefined}
-          placeName={placeRowName}
-          placeSetByYou={currentPlace?.source === "member"}
-          screenHeight={height}
-          tags={tags}
-          vaultPersonal={currentScope?.personal}
-          vaultLabel={currentScope?.label ?? "This vault"}
-          visible={infoOpen}
-        />
-
-        <AnchoredMenu
-          visible={overflowOpen}
-          anchor={overflowAnchor}
-          groups={viewerOverflowMenuGroups({
-            albums: tags,
-            archived: current.archived,
-            hasVaultAsset: Boolean(current.assetId),
-            writable: current.canWrite === true,
-            onAddToAlbum: addToAlbum,
-            onAdjustLocation: openInfo,
-            onDelete: trashAsset,
-            onDownload: () =>
-              void saveToCameraRoll(current).catch(surfaceExportFailure),
-            onHide: hideAsset,
-            onMakeKeyPhoto: makeKeyPhoto,
-            // Sending asks first — see the sheet at the foot of this tree.
-            onSendCopy: () => setShareOpen(true),
-            onSlideshow: () => setSlideshow(true),
-          })}
-          onClose={() => setOverflowOpen(false)}
-        />
-
-        {/* Asked once per share, BEFORE any bytes leave. */}
-        <PhotoShareChoice
-          visible={shareOpen}
-          place={sharePlace}
-          onChoose={(precision) =>
-            void sendCopy(current, precision, sharePlace).catch(
-              surfaceExportFailure
-            )
-          }
-          onClose={() => setShareOpen(false)}
-        />
-
-        <PhotosChoiceSheet
-          choices={coverPick?.choices ?? []}
-          onChoose={(id: string) => coverPick?.onChoose(id)}
-          onClose={() => setCoverPick(null)}
-          subject={photographName}
-          title={coverPick?.title ?? ""}
-          visible={coverPick !== null}
-        />
-        {confirmSheet}
+        {/* The filmstrip sits DIRECTLY above the action row, both floating
+                on the photograph; the home-indicator inset is the overlay's, so
+                it lands under whichever control is last in each mode. */}
+        {chromeVisible && !slideshow && !editing ? (
+          <>
+            <PhotoFilmstrip
+              assets={assets}
+              currentId={currentId}
+              onSelect={(assetId) =>
+                goTo(assets.findIndex((asset) => asset.id === assetId))
+              }
+            />
+            <PhotoLightboxToolbar
+              asset={current}
+              onEdit={() => setEditing(true)}
+              onInfo={openInfo}
+              {...(commonsResident
+                ? { onSaveToMyVault: () => void saveToMyVault() }
+                : {})}
+              onWrite={write}
+            />
+          </>
+        ) : null}
       </View>
-    </GestureDetector>
+
+      {/* LAST in the chrome: paint order is what puts these on the stage,
+              and `zIndex` alone is not enough on every Android surface. */}
+      {chromeVisible ? (
+        <ViewerTopChrome
+          colors={colors}
+          insets={insets}
+          title={stampTitle}
+          meta={stampMeta}
+          name={photographName}
+          editing={editing}
+          slideshow={slideshow}
+          // The ROOM's close act, not this screen's own `goBack`: one way
+          // out, whichever control or gesture reaches it (R-NY-14).
+          onClose={close}
+          onLeaveSlideshow={() => setSlideshow(false)}
+          onOverflow={() => {
+            // Never cached: a rotation between openings would hang the card
+            // off a stale rectangle.
+            measureOverflowAnchor();
+            setOverflowOpen(true);
+          }}
+          overflowRef={overflowAnchorRef}
+        />
+      ) : null}
+    </>
+  );
+
+  // The stage's own presentations, over the chrome: sheets, the overflow card
+  // and the confirm. Outside the body on purpose — the body is the media.
+  const stageOverlay = (
+    <>
+      <PhotoInfoSheet
+        asset={current}
+        fullQualityUnlocked={fullQualityUnlocked}
+        gatewayName={gatewayName}
+        networkType={networkType}
+        onAddTag={(label) =>
+          writeReason("tag-asset", { asset_id: current.assetId!, label })
+        }
+        onCaption={(caption) =>
+          writeReason("update-asset", {
+            asset_id: current.assetId!,
+            title: caption,
+          })
+        }
+        onClose={() => setInfoOpen(false)}
+        onRemovePlace={() =>
+          void writeReason("set-place", { asset_id: current.assetId! })
+        }
+        namedPlaces={namedPlaces}
+        people={people}
+        // Rung 2 of the phrase ladder, present only once the opt-in
+        // automation has run; absent, the phrase falls to the relative rung.
+        placeGazetteer={placeGazetteer}
+        placeLat={sharePlace.lat ?? undefined}
+        placeLng={sharePlace.lng ?? undefined}
+        placeName={placeRowName}
+        placeSetByYou={currentPlace?.source === "member"}
+        screenHeight={height}
+        tags={tags}
+        vaultPersonal={currentScope?.personal}
+        vaultLabel={currentScope?.label ?? "This vault"}
+        visible={infoOpen}
+      />
+
+      <AnchoredMenu
+        visible={overflowOpen}
+        anchor={overflowAnchor}
+        groups={viewerOverflowMenuGroups({
+          albums: tags,
+          archived: current.archived,
+          hasVaultAsset: Boolean(current.assetId),
+          writable: current.canWrite === true,
+          onAddToAlbum: addToAlbum,
+          onAdjustLocation: openInfo,
+          onDelete: trashAsset,
+          onDownload: () =>
+            void saveToCameraRoll(current).catch(surfaceExportFailure),
+          onHide: hideAsset,
+          onMakeKeyPhoto: makeKeyPhoto,
+          // Sending asks first — see the sheet below.
+          onSendCopy: () => setShareOpen(true),
+          onSlideshow: () => setSlideshow(true),
+        })}
+        onClose={() => setOverflowOpen(false)}
+      />
+
+      {/* Asked once per share, BEFORE any bytes leave. */}
+      <PhotoShareChoice
+        visible={shareOpen}
+        place={sharePlace}
+        onChoose={(precision) =>
+          void sendCopy(current, precision, sharePlace).catch(
+            surfaceExportFailure
+          )
+        }
+        onClose={() => setShareOpen(false)}
+      />
+
+      <PhotosChoiceSheet
+        choices={coverPick?.choices ?? []}
+        onChoose={(id: string) => coverPick?.onChoose(id)}
+        onClose={() => setCoverPick(null)}
+        subject={photographName}
+        title={coverPick?.title ?? ""}
+        visible={coverPick !== null}
+      />
+      {confirmSheet}
+    </>
+  );
+
+  return (
+    <StageRoom
+      chrome={stageChrome}
+      onClose={handleClose}
+      onSwipeUp={openInfo}
+      overlay={stageOverlay}
+      testID={TEST_IDS.photos.viewer}
+    >
+      {/* The editor takes the whole body — no pager, no swipe target, no
+            filmstrip: a member mid-edit is never one gesture from a different
+            photograph. It is also the ONE body pushed clear of the floating
+            chrome, because its own controls sit at the top of it. */}
+      {editing ? (
+        <View style={styles.fill}>
+          <View style={{ height: viewerChromeHeight(insets.top) }} />
+          <PhotoEditor
+            asset={current}
+            onCancel={() => setEditing(false)}
+            onSave={saveEdit}
+            onStatus={setEditorLine}
+            saveDisabledReason={editRefusal}
+            width={width}
+          />
+        </View>
+      ) : (
+        <View
+          style={styles.stageLayer}
+          onLayout={(event) => setStageHeight(event.nativeEvent.layout.height)}
+        >
+          {/* THE SWIPE TARGET. `flows/photos-viewer.mjs` paged this list with
+                `start: "80%,30%"` because it had no handle; a Maestro `swipe`
+                anchored on `from: { id }` survives every layout change. */}
+          <FlatList
+            testID={TEST_IDS.photos.viewerPager}
+            ref={list}
+            data={assets}
+            horizontal
+            pagingEnabled
+            initialScrollIndex={initialIndex}
+            getItemLayout={(_, itemIndex) => ({
+              length: width,
+              offset: width * itemIndex,
+              index: itemIndex,
+            })}
+            keyExtractor={(asset) => asset.id}
+            onMomentumScrollEnd={(event) => {
+              const nextIndex = Math.round(
+                event.nativeEvent.contentOffset.x / width
+              );
+              setCurrentId((activeId) => assets[nextIndex]?.id ?? activeId);
+              // A swipe is navigation too: the controls come back with the
+              // next photograph.
+              setChromeHidden(false);
+            }}
+            renderItem={renderPage}
+            showsHorizontalScrollIndicator={false}
+          />
+          {/* Start and end, so they mirror under RTL. The pointer
+                equivalents of the swipe (§15) — they go away with the rest of
+                the chrome, and one tap on the photograph brings them back. */}
+          {chromeVisible ? (
+            <>
+              <Pressable
+                accessibilityLabel="Previous photograph"
+                accessibilityRole="button"
+                testID={TEST_IDS.photos.viewerPrev}
+                accessibilityState={{ disabled: index <= 0 }}
+                disabled={index <= 0}
+                onPress={() => goTo(index - 1)}
+                style={[
+                  styles.pager,
+                  styles.pagerPrev,
+                  { borderColor: colors.stageLine },
+                ]}
+              >
+                <Icon
+                  name="chevron-left"
+                  size={20}
+                  // `--on-stage-soft`, like every other disabled control on
+                  // the stage: page-ramp `textDisabled` vanishes here, so the
+                  // circle would read as absent rather than as refused.
+                  color={index <= 0 ? colors.onStageSoft : colors.onStage}
+                />
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Next photograph"
+                accessibilityRole="button"
+                testID={TEST_IDS.photos.viewerNext}
+                accessibilityState={{ disabled: index >= assets.length - 1 }}
+                disabled={index >= assets.length - 1}
+                onPress={() => goTo(index + 1)}
+                style={[
+                  styles.pager,
+                  styles.pagerNext,
+                  { borderColor: colors.stageLine },
+                ]}
+              >
+                <Icon
+                  name="chevron-right"
+                  size={20}
+                  color={
+                    index >= assets.length - 1
+                      ? colors.onStageSoft
+                      : colors.onStage
+                  }
+                />
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+      )}
+    </StageRoom>
   );
 }

@@ -150,19 +150,10 @@ export const metrics = shared.metrics;
 export const pageMargin = shared.pageMargin;
 export const radii = shared.radii;
 export const spacing = shared.spacing;
-// The named sub-4px seams (`gutter`, `hair`). Not part of `NativeTheme` —
-// they are not a rhythm scale — but a call site that needs one must claim it
-// by name rather than eyeball a 2 (#1015, R-B-6).
+// The named sub-4px seams (`gutter`, `hair`, `chip`). Not part of
+// `NativeTheme` — they are not a rhythm scale — but a call site that needs one
+// must claim it by name rather than eyeball a 2 (#1015, R-B-6). The kit holds
+// no sub-4px constant of its own: a new seam is a `packages/design` change
+// (R-NY-15).
 export { subBase } from "@centraid/design";
-/**
- * The inline inset of a chip drawn ON a photograph tile — the custody mark and
- * the state chip in a Photos grid cell (proto:4019, `padding: 1px 3px`). A
- * tile is 1/4 of a phone's width, so the chip is a seam on the image, not a
- * row on a page: `pageMargin` would swallow the cell, and the nearest rhythm
- * step (4) visibly fattens the chip. Named HERE, where the geometry is owned,
- * rather than allowlisted in a lint ratchet nobody lowers (#1015, R-NY-6).
- * Mobile-kit only: it is not a third `subBase` seam, because no other surface
- * draws a chip on a tile.
- */
-export const tileChipInset = 3;
 export const targetMin = shared.targetMin;

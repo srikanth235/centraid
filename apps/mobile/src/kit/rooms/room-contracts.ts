@@ -7,6 +7,15 @@
 //
 // Framework-free on purpose: the band models, the lint rule and the rooms all
 // read these shapes, and only the rooms may pull `react-native` in.
+//
+// SIX ROOMS SHARE THESE, AND THE SEVENTH SHARES NONE (#1015, R-NY-14).
+// `StageRoom` takes no header, no back, no search, no `empty`/`loading`/`error`
+// and no selection, and that is not an omission to be filled in later: a stage
+// is ONE piece of media with nothing to be empty of, nothing to search, and no
+// list to select from, and a skeleton the shape of a photograph is a grey
+// rectangle pretending to be one. What a stage owes its member instead is a way
+// out, which is the one thing it does take (`StageRoom.tsx`). A stage that
+// needs a room state needs a different room.
 
 import type { EmptyBlockProps } from "../components/EmptyBlock";
 
