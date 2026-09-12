@@ -32,69 +32,14 @@ impl std::fmt::Display for Finding {
 
 /// Every replicated table's rows, as comparable values.
 ///
-/// **Values, not bytes.** Two SQLite files holding the same rows are not
-/// byte-identical — page order, free pages and the WAL all differ, and a VACUUM
-/// changes the bytes without changing an answer. The claim that matters is that
-/// every replicated table answers the same, so the comparison is per-table,
-/// per-row, per-column, ordered by the whole projection.
-///
-/// This is D1's CONVERGENCE comparator, reproduced here because the gate test
-/// that holds it is a `#[test]` in another crate's test binary. Its shape is
-/// asserted against that one by `tests/comparator.rs`.
+/// **The vault's comparator, not a copy of it.** `crates/vault::converge`
+/// exists because the `sql-confinement` rule would not let this crate hold its
+/// own query — and the right answer to "I cannot put a query here" turned out
+/// to be "there should only have been one query". `tests/gates.rs`, lane R's
+/// restore drill and this file now walk the same code, so a narrowing of the
+/// walk is one change rather than three.
 pub fn replicated_state(connection: &Connection) -> BTreeMap<String, Vec<String>> {
-    let Ok(mut statement) = connection.prepare(
-        r"SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
-            ORDER BY name",
-    ) else {
-        return BTreeMap::new();
-    };
-    let Ok(tables) = statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-    else {
-        return BTreeMap::new();
-    };
-
-    let mut state = BTreeMap::new();
-    for table in tables {
-        if !centraid_ontology::registries::is_replicated_table(&table) {
-            continue;
-        }
-        let Ok(columns) = centraid_vault::log::table_columns(connection, &table) else {
-            continue;
-        };
-        let projection = columns
-            .iter()
-            .map(|column| centraid_vault::log::quoted(column))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!(
-            "SELECT {projection} FROM {} ORDER BY {projection}",
-            centraid_vault::log::quoted(&table)
-        );
-        let Ok(mut statement) = connection.prepare(&sql) else {
-            continue;
-        };
-        let Ok(rows) = statement
-            .query_map([], |row| {
-                let mut image = centraid_vault::RowImage::new();
-                for (index, column) in columns.iter().enumerate() {
-                    image.insert(
-                        column.clone(),
-                        centraid_vault::Value::from_ref(row.get_ref(index)?)
-                            .unwrap_or(centraid_vault::Value::Null),
-                    );
-                }
-                Ok(centraid_vault::value::row_image_to_json(&image))
-            })
-            .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-        else {
-            continue;
-        };
-        state.insert(table, rows);
-    }
-    state
+    centraid_vault::converge::replicated_state(connection).unwrap_or_default()
 }
 
 /// Check every invariant. An empty result is a clean run.
@@ -114,16 +59,12 @@ pub fn check_invariants(gateway: &Connection, seats: &[(String, Connection)]) ->
     findings
 }
 
-/// INVARIANT 3. The log's `seq` is gapless above the floor, and every row of
-/// one commit shares its `commit_seq`.
+/// INVARIANT 3. The log's `seq` is gapless above the floor, and no two commits
+/// are interleaved.
 fn log_is_contiguous(gateway: &Connection) -> Vec<Finding> {
     const NAME: &str = "3/log-contiguous";
     let mut findings = Vec::new();
-    let Ok((floor, epoch)) = gateway.query_row(
-        "SELECT floor_seq, epoch FROM replica_meta WHERE singleton = 1",
-        [],
-        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
-    ) else {
+    let Ok((epoch, floor, _)) = centraid_vault::converge::position(gateway) else {
         findings.push(Finding {
             invariant: NAME,
             host: "gateway".to_owned(),
@@ -131,48 +72,41 @@ fn log_is_contiguous(gateway: &Connection) -> Vec<Finding> {
         });
         return findings;
     };
-
-    let Ok(mut statement) =
-        gateway.prepare("SELECT seq, commit_seq FROM replica_log WHERE epoch = ?1 ORDER BY seq")
-    else {
-        return findings;
-    };
-    let Ok(rows) = statement
-        .query_map([&epoch], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-        })
-        .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-    else {
+    let Ok(rows) = centraid_vault::converge::log_positions(gateway, &epoch) else {
         return findings;
     };
 
     let mut previous: Option<i64> = None;
     let mut highest_commit = 0_i64;
-    for (seq, commit_seq) in &rows {
+    for position in &rows {
         if let Some(previous) = previous
-            && *seq != previous + 1
+            && position.seq != previous + 1
         {
             findings.push(Finding {
                 invariant: NAME,
                 host: "gateway".to_owned(),
-                detail: format!("seq jumps {previous} → {seq} above the floor of {floor}"),
+                detail: format!(
+                    "seq jumps {previous} → {} above the floor of {floor}",
+                    position.seq
+                ),
             });
         }
-        // A commit's rows are contiguous AND its number never falls: a row of
-        // commit 4 after a row of commit 5 would mean two commits interleaved
-        // in the log, which is the one thing the commit pair exists to prevent.
-        if *commit_seq < highest_commit {
+        // A commit's number never falls: a row of commit 4 after a row of
+        // commit 5 would mean two commits interleaved in the log, which is the
+        // one thing the commit pair exists to prevent.
+        if position.commit_seq < highest_commit {
             findings.push(Finding {
                 invariant: NAME,
                 host: "gateway".to_owned(),
                 detail: format!(
-                    "row {seq} carries commit_seq {commit_seq} after {highest_commit}: \
-                     two commits interleaved in the log"
+                    "row {} carries commit_seq {} after {highest_commit}: two commits \
+                     interleaved in the log",
+                    position.seq, position.commit_seq
                 ),
             });
         }
-        highest_commit = highest_commit.max(*commit_seq);
-        previous = Some(*seq);
+        highest_commit = highest_commit.max(position.commit_seq);
+        previous = Some(position.seq);
     }
     findings
 }
@@ -182,11 +116,9 @@ fn log_is_contiguous(gateway: &Connection) -> Vec<Finding> {
 fn commit_seq_is_monotonic(gateway: &Connection) -> Vec<Finding> {
     const NAME: &str = "5/commit-seq-monotonic";
     let mut findings = Vec::new();
-    let Ok((recorded, highest)) = gateway.query_row(
-        "SELECT (SELECT commit_seq FROM replica_meta WHERE singleton = 1),
-                COALESCE((SELECT MAX(commit_seq) FROM replica_log), 0)",
-        [],
-        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+    let (Ok((_, _, recorded)), Ok(highest)) = (
+        centraid_vault::converge::position(gateway),
+        centraid_vault::converge::highest_logged_commit(gateway),
     ) else {
         return findings;
     };
@@ -195,8 +127,8 @@ fn commit_seq_is_monotonic(gateway: &Connection) -> Vec<Finding> {
             invariant: NAME,
             host: "gateway".to_owned(),
             detail: format!(
-                "replica_meta.commit_seq is {recorded} and the log carries {highest}: \
-                 a commit allocated a position the meta row does not know about"
+                "replica_meta.commit_seq is {recorded} and the log carries {highest}: a \
+                 commit allocated a position the meta row does not know about"
             ),
         });
     }
@@ -207,46 +139,19 @@ fn commit_seq_is_monotonic(gateway: &Connection) -> Vec<Finding> {
 fn idempotency_ledger_has_one_row_per_intent(gateway: &Connection) -> Vec<Finding> {
     const NAME: &str = "7/idempotency-one-row";
     let mut findings = Vec::new();
-    let Ok(mut statement) = gateway.prepare(
-        "SELECT intent_id, payload_hash, COUNT(*) FROM replica_intent_outcome
-          GROUP BY intent_id, payload_hash HAVING COUNT(*) > 1",
-    ) else {
-        return findings;
-    };
-    let Ok(duplicates) = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)?,
-            ))
-        })
-        .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-    else {
-        return findings;
-    };
-    for (intent_id, hash, count) in duplicates {
-        findings.push(Finding {
-            invariant: NAME,
-            host: "gateway".to_owned(),
-            detail: format!("`{intent_id}` / `{hash}` has {count} rows"),
-        });
+    if let Ok(duplicates) = centraid_vault::converge::duplicate_outcome_rows(gateway) {
+        for (intent_id, hash, count) in duplicates {
+            findings.push(Finding {
+                invariant: NAME,
+                host: "gateway".to_owned(),
+                detail: format!("`{intent_id}` / `{hash}` has {count} rows"),
+            });
+        }
     }
-    // And an intent id holding TWO different payload hashes is the reuse the
-    // ledger exists to refuse — a different finding, because the remedy is the
-    // seat's rather than the gateway's.
-    let Ok(mut statement) = gateway.prepare(
-        "SELECT intent_id, COUNT(DISTINCT payload_hash) FROM replica_intent_outcome
-          GROUP BY intent_id HAVING COUNT(DISTINCT payload_hash) > 1",
-    ) else {
-        return findings;
-    };
-    if let Ok(reused) = statement
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })
-        .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-    {
+    // An intent id holding TWO different payload hashes is the reuse the ledger
+    // exists to refuse — a different finding, because the remedy is the seat's
+    // rather than the gateway's.
+    if let Ok(reused) = centraid_vault::converge::reused_intent_ids(gateway) {
         for (intent_id, hashes) in reused {
             findings.push(Finding {
                 invariant: NAME,
@@ -258,54 +163,35 @@ fn idempotency_ledger_has_one_row_per_intent(gateway: &Connection) -> Vec<Findin
     findings
 }
 
-/// INVARIANT 4. Every executed intent has exactly one outcome, and the
-/// invocation it names exists once.
+/// INVARIANT 4. Every executed intent has exactly one invocation and exactly
+/// one receipt.
 fn every_executed_intent_has_one_outcome(gateway: &Connection) -> Vec<Finding> {
     const NAME: &str = "4/one-receipt-per-intent";
     let mut findings = Vec::new();
-    let Ok(mut statement) = gateway.prepare(
-        "SELECT o.intent_id, o.invocation_id,
-                (SELECT COUNT(*) FROM agent_command_invocation i
-                  WHERE i.invocation_id = o.invocation_id),
-                (SELECT COUNT(*) FROM access_receipt r
-                  WHERE r.invocation_id = o.invocation_id)
-           FROM replica_intent_outcome o
-          WHERE o.status = 'executed' AND o.invocation_id IS NOT NULL",
-    ) else {
+    let Ok(evidence) = centraid_vault::converge::executed_intent_evidence(gateway) else {
         return findings;
     };
-    let Ok(rows) = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)?,
-                row.get::<_, i64>(3)?,
-            ))
-        })
-        .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-    else {
-        return findings;
-    };
-    for (intent_id, invocation_id, invocations, receipts) in rows {
-        if invocations != 1 {
+    for entry in evidence {
+        if entry.invocations != 1 {
             findings.push(Finding {
                 invariant: NAME,
                 host: "gateway".to_owned(),
                 detail: format!(
-                    "`{intent_id}` names invocation `{invocation_id}`, which has \
-                     {invocations} row(s) — an intent executed more than once, or not at all"
+                    "`{}` names invocation `{}`, which has {} row(s) — an intent executed \
+                     more than once, or not at all",
+                    entry.intent_id, entry.invocation_id, entry.invocations
                 ),
             });
         }
         // EXACTLY ONE RECEIPT. Neither duplicated nor lost by redelivery.
-        if receipts != 1 {
+        if entry.receipts != 1 {
             findings.push(Finding {
                 invariant: NAME,
                 host: "gateway".to_owned(),
                 detail: format!(
-                    "invocation `{invocation_id}` has {receipts} receipt(s); \
-                     an executed command is receipted exactly once"
+                    "invocation `{}` has {} receipt(s); an executed command is receipted \
+                     exactly once",
+                    entry.invocation_id, entry.receipts
                 ),
             });
         }

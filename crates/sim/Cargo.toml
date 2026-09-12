@@ -30,4 +30,5 @@ turmoil.workspace = true
 
 
 [dev-dependencies]
+centraid-vault = { path = "../vault" }
 serde_json.workspace = true

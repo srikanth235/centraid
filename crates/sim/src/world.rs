@@ -133,15 +133,10 @@ pub fn run_schedule(schedule: &Schedule, dir: &Path) -> SimOutcome {
         )
         .expect("the gateway's vault is created");
         vault.found("Simulation", "Owner").expect("it is founded");
-        let owner: String = vault
-            .read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT self_party_id FROM core_vault LIMIT 1",
-                    [],
-                    |row| row.get(0),
-                )?)
-            })
-            .expect("the owner reads");
+        // THE VAULT'S OWN NAMED READER. Every caller outside `crates/vault`
+        // was writing the same `SELECT`, which the `sql-confinement` rule
+        // caught — correctly, and the fix was a reader rather than an exemption.
+        let owner = vault.self_party_id().expect("the owner reads");
         for index in 0..schedule.seats {
             vault
                 .enrol_device(
@@ -251,13 +246,8 @@ fn bootstrap_seat(dir: &Path, head: &centraid_vault::SnapshotHead, path: &Path) 
     std::fs::write(path, inflated).expect("the seat file writes");
 
     let connection = rusqlite::Connection::open(path).expect("the seat file opens");
-    let (epoch, floor): (String, i64) = connection
-        .query_row(
-            "SELECT epoch, floor_seq FROM replica_meta WHERE singleton = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .expect("the copy carries its position");
+    let (epoch, floor, _) =
+        centraid_vault::converge::position(&connection).expect("the copy carries its position");
     centraid_seat::init_seat_state(
         &connection,
         &centraid_seat::SeatPosition {

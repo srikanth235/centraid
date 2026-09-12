@@ -35,6 +35,9 @@ const CALL_BUDGET_MS: f64 = 50.0;
 const SAMPLES: usize = 200;
 /// Rows per page — the issue's "page of 100 rows".
 const PAGE_ROWS: u32 = 100;
+/// How many rows the fixture holds, so the page is a real page and `next` is
+/// present rather than absent.
+const SEED_ROWS: u32 = PAGE_ROWS * 2;
 
 struct Scratch {
     dir: std::path::PathBuf,
@@ -94,17 +97,26 @@ fn the_p95_of_a_bounded_read_is_inside_the_budget() {
     // Enough rows that the page is a real page rather than a one-row probe.
     handle
         .with_vault(|vault| {
-            for index in 0..(PAGE_ROWS * 2) {
-                let id = format!("p-{index:05}");
-                vault.commit(|tx| {
-                    tx.set_producer("call-budget.seed");
-                    tx.connection().execute(
-                        "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-                         VALUES (?1, 'person', ?2, ?3, ?3)",
-                        rusqlite::params![id, format!("Party {index}"), "2026-01-01T00:00:00.000Z"],
-                    )?;
-                    Ok(())
-                })?;
+            // THROUGH THE REAL COMMAND PLANE, not a raw INSERT. The
+            // `sql-confinement` rule refuses SQL here — and the refusal
+            // improved the fixture: a page over rows the real `core.add_party`
+            // wrote is a page over rows with real `core_entity` siblings and a
+            // real `row_version`, which a hand-written INSERT was quietly
+            // missing.
+            let registry = centraid_vault::commands::Registry::with_system_commands()?;
+            let principal = centraid_vault::Principal::owner("budget-device");
+            for index in 0..SEED_ROWS {
+                vault.execute(
+                    &registry,
+                    &principal,
+                    &centraid_vault::commands::Command::new(
+                        "core.add_party",
+                        serde_json::json!({
+                            "display_name": format!("Party {index}"),
+                            "kind": "person"
+                        }),
+                    ),
+                )?;
             }
             Ok(())
         })

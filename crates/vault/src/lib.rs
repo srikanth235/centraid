@@ -46,6 +46,7 @@ pub mod backup;
 pub mod bootstrap;
 pub mod clock;
 pub mod commands;
+pub mod converge;
 pub mod custody;
 pub mod devices;
 pub mod error;

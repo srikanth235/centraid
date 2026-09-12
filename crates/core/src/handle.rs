@@ -858,17 +858,9 @@ mod tests {
     #[test]
     fn the_devices_door_answers_the_live_set() {
         let scratch = Scratch::gateway();
-        let owner: String = scratch
+        let owner = scratch
             .handle
-            .with_vault(|vault| {
-                Ok(vault.read(|connection| {
-                    Ok(connection.query_row(
-                        "SELECT self_party_id FROM core_vault LIMIT 1",
-                        [],
-                        |row| row.get(0),
-                    )?)
-                })?)
-            })
+            .with_vault(|vault| Ok(vault.self_party_id()?))
             .expect("the owner reads");
         scratch
             .handle

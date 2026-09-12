@@ -19,7 +19,7 @@
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::Vault;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
-use centraid_vault::page::{MAX_PAGE_ROWS, RawPage};
+use centraid_vault::page::KeysetPage;
 
 use crate::convert::value_from_wire;
 use crate::error::{CoreError, Result};
@@ -35,13 +35,6 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             detail: "a page request carries no query".to_owned(),
         });
     };
-    if request.limit == 0 {
-        return Err(CoreError::InvalidRequest {
-            detail: "a page limit is required and must be > 0; a default is how an unbounded \
-                     read gets written by accident"
-                .to_owned(),
-        });
-    }
     let Some(order) = &query.order else {
         return Err(CoreError::InvalidRequest {
             detail: "a page query carries no order; a keyset cursor is read off the row by the \
@@ -49,94 +42,36 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                 .to_owned(),
         });
     };
-    if query.select.is_empty() {
-        return Err(CoreError::InvalidRequest {
-            detail: "a page query selects nothing".to_owned(),
-        });
-    }
-    // BOTH ORDER COLUMNS must be in the projection. There is no `key_of`
-    // callback: the cursor IS the two columns' values, read off the row, so a
-    // projection missing one is a page whose `next` cannot exist.
-    for column in [&order.sort_column, &order.pk_column] {
-        if !query.select.iter().any(|selected| selected == column) {
-            return Err(CoreError::InvalidRequest {
-                detail: format!(
-                    "`{column}` is an order column and is not in the projection; the cursor is \
-                     read off the row by those two columns"
-                ),
-            });
-        }
-    }
-
-    let direction = if order.descending { "DESC" } else { "ASC" };
-    let mut binds: Vec<centraid_vault::Value> = query
-        .bind
-        .iter()
-        .map(value_from_wire)
-        .collect::<Result<Vec<_>>>()?;
-    let mut clauses: Vec<String> = query
-        .r#where
-        .as_ref()
-        .map(|text| vec![format!("({text})")])
-        .unwrap_or_default();
-    if let Some(after) = &request.after {
-        // The keyset predicate, as a tuple comparison on the two order
-        // columns. A `>` on the sort column alone would skip every row that
-        // ties with the cursor's sort value, and ties are the normal case for
-        // a date.
-        let comparison = if order.descending { "<" } else { ">" };
-        clauses.push(format!(
-            "({sort}, {pk}) {comparison} (?, ?)",
-            sort = centraid_vault::log::quoted(&order.sort_column),
-            pk = centraid_vault::log::quoted(&order.pk_column),
-        ));
-        binds.push(centraid_vault::Value::Text(after.sort_key.clone()));
-        binds.push(centraid_vault::Value::Text(after.pk.clone()));
-    }
-    let predicate = if clauses.is_empty() {
-        String::new()
-    } else {
-        format!(" WHERE {}", clauses.join(" AND "))
-    };
-    let projection = query
-        .select
-        .iter()
-        .map(|column| centraid_vault::log::quoted(column))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let limit = i64::from(request.limit).min(MAX_PAGE_ROWS);
-    let sql = format!(
-        "SELECT {projection} FROM {from}{predicate} ORDER BY {sort} {direction}, {pk} {direction} \
-         LIMIT {probe}",
-        from = centraid_vault::log::quoted(&query.from),
-        sort = centraid_vault::log::quoted(&order.sort_column),
-        pk = centraid_vault::log::quoted(&order.pk_column),
-        // The `+1` PROBE: it is what separates "the window filled" from "the
-        // rows ended", and without it `next` would point past the end.
-        probe = limit + 1,
-    );
-
-    let rows = vault.page_raw(&RawPage {
-        sql,
-        binds,
-        limit: limit + 1,
+    // THE SHAPE CROSSES THE BOUNDARY; THE SQL DOES NOT. Rendering the statement
+    // here would be `crates/core` knowing the query language, which the
+    // `sql-confinement` rule catches — and it is right to: the statement's
+    // shape is this crate's business and its syntax is the vault's.
+    let answer = vault.keyset_page(&KeysetPage {
+        name: query.name.clone(),
+        select: query.select.clone(),
+        from: query.from.clone(),
+        predicate: query.r#where.clone(),
+        binds: query
+            .bind
+            .iter()
+            .map(value_from_wire)
+            .collect::<Result<Vec<_>>>()?,
+        sort_column: order.sort_column.clone(),
+        pk_column: order.pk_column.clone(),
+        descending: order.descending,
+        // Required and validated by the vault, not defaulted here: proto3
+        // cannot say "required", so the validation is the contract.
+        limit: i64::from(request.limit),
+        after: request
+            .after
+            .as_ref()
+            .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
     })?;
-    let filled = i64::try_from(rows.len()).unwrap_or(i64::MAX) > limit;
-    let next = if filled {
-        rows.get(usize::try_from(limit).unwrap_or(0).saturating_sub(1))
-            .map(|row| wire::PageCursor {
-                sort_key: cursor_text(row, &order.sort_column),
-                pk: cursor_text(row, &order.pk_column),
-            })
-    } else {
-        // ABSENT when the rows ended. Never a `truncated` flag and never a
-        // cursor that points past the end.
-        None
-    };
+
     Ok(wire::Page {
-        rows: rows
+        rows: answer
+            .rows
             .into_iter()
-            .take(usize::try_from(limit).unwrap_or(0))
             .map(|image| wire::Row {
                 values: query
                     .select
@@ -152,24 +87,10 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                     .collect(),
             })
             .collect(),
-        next,
+        next: answer
+            .next
+            .map(|(sort_key, pk)| wire::PageCursor { sort_key, pk }),
     })
-}
-
-/// One cell as cursor text.
-///
-/// A cursor is text on the wire whatever the column's storage class, because it
-/// is an opaque token a caller hands back. The comparison is then text against
-/// text, which is why the sort column must be one whose lexical order is its
-/// real order — an ISO timestamp, an id. That is a constraint on the query's
-/// author and not something this function can check.
-fn cursor_text(row: &centraid_vault::RowImage, column: &str) -> String {
-    match row.get(column) {
-        Some(centraid_vault::Value::Text(text)) => text.clone(),
-        Some(centraid_vault::Value::Integer(int)) => int.to_string(),
-        Some(other) => other.to_wire_json(),
-        None => String::new(),
-    }
 }
 
 /// Run a command through D1's gate order.
@@ -332,13 +253,20 @@ mod tests {
         }
     }
 
+    /// The refusal arrives with the code a shell branches on.
+    ///
+    /// The *variant* is now the vault's (`InvalidInput`, because the vault is
+    /// what validates a page's shape since the SQL moved there), and what
+    /// matters is that it still reaches a shell as `INVALID_REQUEST` rather
+    /// than as an internal error the shell would restart the core over.
     #[test]
-    fn a_zero_limit_is_refused_rather_than_defaulted() {
+    fn a_zero_limit_and_a_missing_order_column_reach_the_shell_as_invalid_request() {
         let scratch = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
-        let error = page(
+
+        let zero = page(
             &vault,
             &wire::PageRequest {
                 query: Some(query(&["party_id", "created_at"], "created_at", "party_id")),
@@ -346,19 +274,11 @@ mod tests {
                 after: None,
             },
         )
-        .expect_err("it refuses");
-        assert!(matches!(error, CoreError::InvalidRequest { .. }));
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
+        .expect_err("a zero limit is refused");
+        assert_eq!(zero.code(), wire::ErrorCode::InvalidRequest);
 
-    #[test]
-    fn a_projection_missing_an_order_column_is_refused() {
-        let scratch = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
         // `created_at` orders and is NOT selected: the cursor could not exist.
-        let error = page(
+        let unprojected = page(
             &vault,
             &wire::PageRequest {
                 query: Some(query(&["party_id"], "created_at", "party_id")),
@@ -366,8 +286,9 @@ mod tests {
                 after: None,
             },
         )
-        .expect_err("it refuses");
-        assert!(error.to_string().contains("created_at"));
+        .expect_err("an unprojected order column is refused");
+        assert_eq!(unprojected.code(), wire::ErrorCode::InvalidRequest);
+        assert!(unprojected.to_string().contains("created_at"));
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
@@ -379,17 +300,19 @@ mod tests {
         vault.found("T", "O").expect("founded");
         let mut unordered = query(&["party_id"], "created_at", "party_id");
         unordered.order = None;
-        assert!(
-            page(
-                &vault,
-                &wire::PageRequest {
-                    query: Some(unordered),
-                    limit: 10,
-                    after: None,
-                },
-            )
-            .is_err()
-        );
+        // Refused HERE rather than by the vault: a `KeysetPage` has no way to
+        // express "no order", so the absence has to be caught at the wire
+        // boundary where it is representable.
+        let error = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(unordered),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect_err("a query with no order is refused");
+        assert!(matches!(error, CoreError::InvalidRequest { .. }));
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

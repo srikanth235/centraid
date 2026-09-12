@@ -150,13 +150,8 @@ fn a_run_actually_writes_through_the_real_command_plane() {
     let outcome = run_schedule(&schedule, &dir);
     let (gateway, seats) = outcome.open();
 
-    let invocations: i64 = gateway
-        .query_row(
-            "SELECT COUNT(*) FROM agent_command_invocation WHERE status = 'executed'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("the audit band reads");
+    let invocations =
+        centraid_vault::converge::executed_invocations(&gateway).expect("the audit band reads");
     assert!(
         invocations >= 1,
         "seed 1 executed no command; the run converged because nothing happened\n{}",
@@ -164,14 +159,12 @@ fn a_run_actually_writes_through_the_real_command_plane() {
     );
 
     // And the parties the workload asked for are on the gateway AND mirrored.
-    let on_gateway: i64 = gateway
-        .query_row("SELECT COUNT(*) FROM core_party", [], |row| row.get(0))
-        .expect("the parties read");
+    let on_gateway =
+        centraid_vault::converge::row_count(&gateway, "core_party").expect("the parties read");
     assert!(on_gateway > 1, "only the owner party exists");
     for (host, seat) in &seats {
-        let mirrored: i64 = seat
-            .query_row("SELECT COUNT(*) FROM core_party", [], |row| row.get(0))
-            .expect("the mirror reads");
+        let mirrored =
+            centraid_vault::converge::row_count(seat, "core_party").expect("the mirror reads");
         assert_eq!(
             mirrored, on_gateway,
             "{host} holds {mirrored} parties and the gateway holds {on_gateway}"

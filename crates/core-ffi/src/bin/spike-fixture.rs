@@ -30,21 +30,24 @@ fn main() {
     handle
         .with_vault(|vault| {
             vault.found("Spike", "Owner")?;
+            // THROUGH THE REAL COMMAND PLANE. `sql-confinement` refuses SQL in
+            // this crate, and the refusal improved the fixture: the rows the
+            // spike pages over now have the `core_entity` siblings and the
+            // `row_version` a real write produces.
+            let registry = centraid_vault::commands::Registry::with_system_commands()?;
+            let principal = centraid_vault::Principal::owner("spike-device");
             for index in 0..200 {
-                vault.commit(|tx| {
-                    tx.set_producer("spike.seed");
-                    tx.connection().execute(
-                        "INSERT INTO core_party
-                           (party_id, kind, display_name, created_at, updated_at)
-                         VALUES (?1, 'person', ?2, ?3, ?3)",
-                        rusqlite::params![
-                            format!("p-{index:05}"),
-                            format!("Party {index}"),
-                            "2026-01-01T00:00:00.000Z"
-                        ],
-                    )?;
-                    Ok(())
-                })?;
+                vault.execute(
+                    &registry,
+                    &principal,
+                    &centraid_vault::commands::Command::new(
+                        "core.add_party",
+                        serde_json::json!({
+                            "display_name": format!("Party {index}"),
+                            "kind": "person"
+                        }),
+                    ),
+                )?;
             }
             Ok(())
         })

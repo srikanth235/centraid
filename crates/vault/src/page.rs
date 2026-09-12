@@ -224,3 +224,268 @@ mod tests {
         assert_eq!(masked[0].keys().collect::<Vec<_>>(), vec!["a"]);
     }
 }
+
+// ---------------------------------------------------------------------------
+// The keyset page — the shape `crates/core` serves (#1020, lane D2)
+// ---------------------------------------------------------------------------
+
+/// A keyset-paged read, as a caller describes it.
+///
+/// [`RawPage`] takes SQL the caller wrote, which is what the `sql-confinement`
+/// rule catches the moment a caller outside this crate wants a page — and
+/// rightly: `crates/core` building a `SELECT … ORDER BY … LIMIT` string is
+/// `crates/core` knowing the query language. So the *shape* crosses the
+/// boundary and the SQL is rendered here.
+///
+/// **Both order columns must be in `select`.** There is no `key_of` callback:
+/// the cursor IS the two columns' values, read off the row, so a projection
+/// missing one is a page whose `next` cannot exist.
+#[derive(Debug, Clone)]
+pub struct KeysetPage {
+    /// The shape's name, for logs and budgets.
+    pub name: String,
+    pub select: Vec<String>,
+    pub from: String,
+    /// The handler's own predicate, already checked by its author.
+    pub predicate: Option<String>,
+    pub binds: Vec<Value>,
+    pub sort_column: String,
+    pub pk_column: String,
+    pub descending: bool,
+    /// Required, and validated `> 0` rather than defaulted: a zero is a request
+    /// for an unbounded read, and defaulting it would serve one.
+    pub limit: i64,
+    /// `(sort_key, pk)` — the cursor a caller hands back.
+    pub after: Option<(String, String)>,
+}
+
+/// One page of rows, plus the cursor to ask from next.
+#[derive(Debug, Clone)]
+pub struct KeysetAnswer {
+    pub rows: Vec<RowImage>,
+    /// **Absent when the rows ended.** Never a `truncated` flag and never a
+    /// cursor that points past the end.
+    pub next: Option<(String, String)>,
+}
+
+impl Vault {
+    /// Serve one keyset page.
+    ///
+    /// Renders the statement, runs it with the `+1` probe that separates "the
+    /// window filled" from "the rows ended", and reads the next cursor off the
+    /// last row it serves.
+    pub fn keyset_page(&self, page: &KeysetPage) -> Result<KeysetAnswer> {
+        if page.limit < 1 {
+            return Err(VaultError::InvalidInput {
+                name: page.name.clone(),
+                detail: "a page limit is required and must be > 0; a default is how an \
+                         unbounded read gets written by accident"
+                    .to_owned(),
+            });
+        }
+        if page.select.is_empty() {
+            return Err(VaultError::InvalidInput {
+                name: page.name.clone(),
+                detail: "a page query selects nothing".to_owned(),
+            });
+        }
+        for column in [&page.sort_column, &page.pk_column] {
+            if !page.select.iter().any(|selected| selected == column) {
+                return Err(VaultError::InvalidInput {
+                    name: page.name.clone(),
+                    detail: format!(
+                        "`{column}` is an order column and is not in the projection; the \
+                         cursor is read off the row by those two columns"
+                    ),
+                });
+            }
+        }
+
+        let limit = page.limit.min(MAX_PAGE_ROWS);
+        let direction = if page.descending { "DESC" } else { "ASC" };
+        let mut binds = page.binds.clone();
+        let mut clauses: Vec<String> = page
+            .predicate
+            .as_ref()
+            .map(|text| vec![format!("({text})")])
+            .unwrap_or_default();
+        if let Some((sort_key, pk)) = &page.after {
+            // A TUPLE COMPARISON on the two order columns. A `>` on the sort
+            // column alone would skip every row that ties with the cursor's
+            // sort value, and ties are the normal case for a date.
+            let comparison = if page.descending { "<" } else { ">" };
+            clauses.push(format!(
+                "({}, {}) {comparison} (?, ?)",
+                crate::log::quoted(&page.sort_column),
+                crate::log::quoted(&page.pk_column)
+            ));
+            binds.push(Value::Text(sort_key.clone()));
+            binds.push(Value::Text(pk.clone()));
+        }
+        let predicate = if clauses.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", clauses.join(" AND "))
+        };
+        let projection = page
+            .select
+            .iter()
+            .map(|column| crate::log::quoted(column))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT {projection} FROM {from}{predicate} \
+             ORDER BY {sort} {direction}, {pk} {direction} LIMIT {probe}",
+            from = crate::log::quoted(&page.from),
+            sort = crate::log::quoted(&page.sort_column),
+            pk = crate::log::quoted(&page.pk_column),
+            probe = limit + 1,
+        );
+
+        let mut rows = self.page_raw(&RawPage {
+            sql,
+            binds,
+            limit: limit + 1,
+        })?;
+        let filled = i64::try_from(rows.len()).unwrap_or(i64::MAX) > limit;
+        rows.truncate(usize::try_from(limit).unwrap_or(0));
+        let next = if filled {
+            rows.last().map(|row| {
+                (
+                    cursor_text(row, &page.sort_column),
+                    cursor_text(row, &page.pk_column),
+                )
+            })
+        } else {
+            None
+        };
+        Ok(KeysetAnswer { rows, next })
+    }
+}
+
+/// One cell as cursor text.
+///
+/// A cursor is text whatever the column's storage class, because it is an opaque
+/// token a caller hands back. The comparison is then text against text, which
+/// is why the sort column must be one whose lexical order is its real order —
+/// an ISO timestamp, an id. That is a constraint on the query's author and not
+/// something this function can check.
+fn cursor_text(row: &RowImage, column: &str) -> String {
+    match row.get(column) {
+        Some(Value::Text(text)) => text.clone(),
+        Some(Value::Integer(int)) => int.to_string(),
+        Some(other) => other.to_wire_json(),
+        None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod keyset_tests {
+    use super::*;
+
+    #[test]
+    fn a_zero_limit_and_a_missing_order_column_are_both_refused() {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let vault = Vault::create(dir.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+
+        let base = KeysetPage {
+            name: "parties".to_owned(),
+            select: vec!["party_id".to_owned(), "created_at".to_owned()],
+            from: "core_party".to_owned(),
+            predicate: None,
+            binds: Vec::new(),
+            sort_column: "created_at".to_owned(),
+            pk_column: "party_id".to_owned(),
+            descending: false,
+            limit: 10,
+            after: None,
+        };
+        assert!(vault.keyset_page(&base).is_ok());
+
+        let mut zero = base.clone();
+        zero.limit = 0;
+        assert!(vault.keyset_page(&zero).is_err());
+
+        let mut unprojected = base.clone();
+        unprojected.select = vec!["party_id".to_owned()];
+        let error = vault
+            .keyset_page(&unprojected)
+            .expect_err("an order column outside the projection is refused");
+        assert!(error.to_string().contains("created_at"));
+
+        let mut nothing = base;
+        nothing.select = Vec::new();
+        assert!(vault.keyset_page(&nothing).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_cursor_is_absent_when_the_rows_end_and_present_when_they_do_not() {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("made");
+        let vault = Vault::create(dir.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = crate::commands::Registry::with_system_commands().expect("registry");
+        let principal = crate::access::Principal::owner("d1");
+        for index in 0..5 {
+            vault
+                .execute(
+                    &registry,
+                    &principal,
+                    &crate::commands::Command::new(
+                        "core.add_party",
+                        serde_json::json!({ "display_name": format!("P{index}"), "kind": "person" }),
+                    ),
+                )
+                .expect("the command executes");
+        }
+
+        let base = KeysetPage {
+            name: "parties".to_owned(),
+            select: vec!["party_id".to_owned(), "created_at".to_owned()],
+            from: "core_party".to_owned(),
+            predicate: None,
+            binds: Vec::new(),
+            sort_column: "created_at".to_owned(),
+            pk_column: "party_id".to_owned(),
+            descending: false,
+            limit: 2,
+            after: None,
+        };
+        let first = vault.keyset_page(&base).expect("a page serves");
+        assert_eq!(first.rows.len(), 2);
+        let cursor = first.next.clone().expect("there are more rows");
+
+        // AND THE CURSOR WALKS: the second page starts after the first ends,
+        // with no row served twice and none skipped.
+        let mut second_query = base.clone();
+        second_query.after = Some(cursor);
+        let second = vault.keyset_page(&second_query).expect("a page serves");
+        assert_eq!(second.rows.len(), 2);
+        let first_ids: Vec<String> = first
+            .rows
+            .iter()
+            .map(|row| cursor_text(row, "party_id"))
+            .collect();
+        let second_ids: Vec<String> = second
+            .rows
+            .iter()
+            .map(|row| cursor_text(row, "party_id"))
+            .collect();
+        assert!(
+            first_ids.iter().all(|id| !second_ids.contains(id)),
+            "a row was served twice: {first_ids:?} / {second_ids:?}"
+        );
+
+        // The last page ends, and its cursor is ABSENT rather than pointing
+        // past the end.
+        let mut last = base;
+        last.limit = 500;
+        let whole = vault.keyset_page(&last).expect("a page serves");
+        assert_eq!(whole.rows.len(), 6, "five parties plus the vault's owner");
+        assert!(whole.next.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
