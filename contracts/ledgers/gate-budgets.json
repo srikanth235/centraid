@@ -28,8 +28,8 @@
     },
     "mobile-jvm": {
       "ci-linux-x64-4c": {
-        "budgetSeconds": null,
-        "headroom": "A PLACEHOLDER, and deliberately null (D-1020-B2-3). Kotlin/Gradle JVM tests are not charged to `pr`: they are a different toolchain with a different cold cost, and folding them into a Rust profile's ceiling would make one number answer for two build systems. Wave 3 lane E lands the Kotlin Multiplatform shared module, measures this profile on this hardware class and sets the number; `kotlinNativeLinkSeconds` in compile-time.json is the same promise one level down. Until then `cargo xtask gate --profile mobile-jvm` REFUSES with a line naming lane E rather than reporting green for a suite that does not exist. A null cannot be ratcheted, so seeding it costs the down-only discipline nothing."
+        "budgetSeconds": 420,
+        "headroom": "MEASURED AND SET by wave 3 lane E, written here when the step became real (#1020 wave 3 lane X3; the measurement is contracts/handoff/E/measured.md). Three consecutive `./gradlew mobileJvm` runs took 91 s, 15 s and 16 s on this container — the first compiling Kotlin from cold, the other two over a warm Gradle build cache; a fourth run from a clean `mobile/build` with `--no-daemon` and the wrapper distribution already on disk took 141 s. 420 s is roughly three times that cold number, which is what a fresh CI container pays: a Gradle distribution download, a cold Kotlin compile, a cold `cargo build -p centraid-core-ffi` and the fixture vault. A budget sized on the 16 s warm number would red on the first run of every container, which is the one run that always happens. Kotlin/Gradle JVM tests are still not charged to `pr` (D-1020-B2-3): a different toolchain with a different cold cost, and one number answering for two build systems is a number that answers for neither. Down-only from here."
       }
     }
   }

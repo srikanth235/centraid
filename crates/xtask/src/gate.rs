@@ -90,9 +90,11 @@ const fn step(name: &'static str, run: Runner) -> Step {
 /// in `pr` and missing from `release`.
 pub fn steps(profile: Profile) -> Vec<Step> {
     if profile == Profile::MobileJvm {
-        // A ledger placeholder, not a runnable profile (D-1020-B2-3). Wave 3
-        // lane E owns the Gradle steps and the measurement that sets its budget.
-        return Vec::new();
+        // ONE STEP, AND EVERYTHING ELSE MOBILE IS AN OWNER HAND-OFF
+        // (#1020 wave 3 lane E). `mobile/README.md` carries the table of what
+        // is provable on a machine with no Android SDK, no Xcode and no device
+        // — and what is not.
+        return vec![step("mobile-jvm", run_mobile_jvm)];
     }
     let local = vec![
         step("fmt", |ctx| {
@@ -318,18 +320,104 @@ fn has_linked_artifact(names: &[String], member: &str) -> bool {
     })
 }
 
+/// `mobile-jvm` — the JVM-provable half of `mobile/` (#1020 wave 3 lane E).
+///
+/// Three things, in one step because they share a Gradle invocation and a
+/// Gradle daemon is expensive to start twice:
+///
+///   1. `cargo build -p centraid-core-ffi` and the fixture vault, because
+///      `:core:jvmTest` runs a REAL ABI round trip against the real cdylib.
+///      It is not a skip when they are missing — a binding test that skipped
+///      would read green on a machine where the ABI does not work at all.
+///   2. `./gradlew mobileJvm` = `:shared:jvmTest :core:jvmTest
+///      :shared:koverXmlReport`.
+///   3. The generated-artifact drift check. The token table, the copy tables
+///      and the screen fixtures are all emitted and committed; one emitter, N
+///      committed artifacts, one lint that fails on drift.
+///
+/// WHAT THIS STEP DOES NOT DO, and says so rather than skipping quietly: it
+/// does not compile Compose, does not link Kotlin/Native, does not run a
+/// simulator and does not touch a device. Those are the `device-lanes` step's
+/// loud `Skipped` in `nightly`, and `mobile/README.md`'s hand-off table.
+fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
+    let gradlew = ctx.root.join("mobile/gradlew");
+    if !gradlew.is_file() {
+        return Ok(Outcome::Failed(
+            "mobile/gradlew is missing; the mobile tree brings its own wrapper (#1020)".to_owned(),
+        ));
+    }
+    // The cdylib the ABI round trip loads. Gradle's `:core:abiFixture` task
+    // founds the fixture vault itself; the build is here so a missing library
+    // fails with a cargo command rather than with a JNA `UnsatisfiedLinkError`
+    // three frames into a Kotlin test.
+    let built = process(
+        ctx,
+        "mobile-jvm",
+        "cargo",
+        &["build", "-p", "centraid-core-ffi"],
+    )?;
+    if !matches!(built, Outcome::Ok(_)) {
+        return Ok(built);
+    }
+    // ABSOLUTE PATHS, and `-p`. `process` sets the child's directory to the
+    // repository root, which does not change how a relative PROGRAM path is
+    // resolved — and `gradlew` run from the root would take the root as the
+    // project directory. Both are spelled out rather than relied on.
+    let wrapper = gradlew.display().to_string();
+    let project = ctx.root.join("mobile").display().to_string();
+    let gradle = process(
+        ctx,
+        "mobile-jvm",
+        &wrapper,
+        &["-p", &project, "mobileJvm", "--no-daemon"],
+    )?;
+    if !matches!(gradle, Outcome::Ok(_)) {
+        return Ok(gradle);
+    }
+    // THE DRIFT CHECK. `bun` is already a gate dependency (`ts-static`), and
+    // the check is a regeneration followed by a clean-tree assertion, which is
+    // the same shape `lint:site-tokens` uses for the CSS side.
+    for emitter in [
+        "contracts/tools/export-native-theme.ts",
+        "contracts/tools/build-screen-fixtures.ts",
+    ] {
+        let emitted = process(ctx, "mobile-jvm", "bun", &[emitter])?;
+        if !matches!(emitted, Outcome::Ok(_)) {
+            return Ok(emitted);
+        }
+    }
+    // THEN FORMAT, because the committed artifacts are formatted and the
+    // emitters do not format. Without this the check fails on every run over a
+    // clean tree — `copy/tally.json`'s `functions` array is one line from
+    // `JSON.stringify` and three from oxfmt — which is a drift check that
+    // reports drift that is not there, and a gate nobody believes is a gate
+    // nobody reads (#1020 wave 3 lane X3). JSON and YAML in this repository are
+    // oxfmt-owned, so the emitter's output is not the committed form until this
+    // has run.
+    let formatted = process(ctx, "mobile-jvm", "bun", &["run", "format"])?;
+    if !matches!(formatted, Outcome::Ok(_)) {
+        return Ok(formatted);
+    }
+    process(
+        ctx,
+        "mobile-jvm",
+        "git",
+        &[
+            "diff",
+            "--exit-code",
+            "--",
+            "design",
+            "copy",
+            "mobile",
+            "contracts/screens",
+        ],
+    )
+}
+
 /// Run a profile. Returns `true` when every step passed inside its budget.
 pub fn run(profile: Profile, root: &Path, forced_cold: bool, lane: Option<String>) -> Result<bool> {
     let hardware =
         std::env::var("CENTRAID_GATE_HARDWARE").unwrap_or_else(|_| DEFAULT_HARDWARE.to_owned());
-    if profile == Profile::MobileJvm {
-        println!(
-            "xtask gate — profile mobile-jvm · hardware {hardware}\n\n  REFUSED the `mobile-jvm` profile is a ledger placeholder with no steps. Its `budgetSeconds` in {} and `kotlinNativeLinkSeconds` in {} are both null, and wave 3 lane E — which lands the Kotlin Multiplatform shared module and its Gradle JVM suites — measures them and sets them (#1020, D-1020-B2-3). Running it here would report green for a suite that does not exist",
-            ledger::BUDGETS,
-            ledger::COMPILE_TIME
-        );
-        return Ok(false);
-    }
     let ctx = Ctx {
         root: root.to_path_buf(),
         lane: lane.clone(),
@@ -1704,9 +1792,252 @@ fn run_device_lanes(ctx: &Ctx) -> Result<Outcome> {
             missing.join(" and no ")
         )));
     }
-    Ok(Outcome::Failed(format!(
-        "the device runner is real and the lane bodies are not on this branch yet: {named}. Wave 3 lane E delivers them; until then a runner with phones attached must go RED rather than report a lane it did not run"
-    )))
+    // THE FOUR BODIES (#1020 wave 3 lane E, `contracts/handoff/E/device-lane-bodies.md`).
+    //
+    // In Rust rather than as four `run:` blocks in `gate-nightly.yml`, because
+    // the workflow's cell is already `cargo xtask gate --lane <name>` and a
+    // second copy of each body in YAML would be a second thing to keep true.
+    // An owner with a phone on a laptop can run the same lane the same way.
+    let mut outcomes: Vec<(String, Outcome)> = Vec::new();
+    for lane in &lanes {
+        let outcome = match *lane {
+            "ios-transfer-experiment" => device_transfer_evidence(ctx)?,
+            "android-macrobenchmark" => device_android_macrobenchmark(ctx)?,
+            "ios-xctest-metrics" => device_ios_xctest_metrics(ctx)?,
+            "battery-per-background-pass" => device_battery_per_pass(),
+            other => Outcome::Failed(format!("`{other}` is not a device lane")),
+        };
+        outcomes.push(((*lane).to_owned(), outcome));
+    }
+    if let Some((lane, Outcome::Failed(why))) = outcomes
+        .iter()
+        .find(|(_, outcome)| matches!(outcome, Outcome::Failed(_)))
+    {
+        return Ok(Outcome::Failed(format!("{lane}: {why}")));
+    }
+    let lines: Vec<String> = outcomes
+        .iter()
+        .map(|(lane, outcome)| match outcome {
+            Outcome::Ok(detail) => format!("{lane} ok — {detail}"),
+            Outcome::Skipped(why) => format!("{lane} SKIPPED — {why}"),
+            Outcome::Failed(why) => format!("{lane} FAILED — {why}"),
+        })
+        .collect();
+    // A DELIBERATE SKIP IS NOT A PASS, and it is not a failure either: two of
+    // these four cannot run without evidence an owner produces by hand, and
+    // `battery-per-background-pass` cannot be automated on either platform at
+    // all. The verdict says which is which, in one line per lane.
+    if outcomes
+        .iter()
+        .any(|(_, outcome)| matches!(outcome, Outcome::Skipped(_)))
+    {
+        return Ok(Outcome::Skipped(lines.join(" · ")));
+    }
+    Ok(Outcome::Ok(lines.join(" · ")))
+}
+
+/// `ios-transfer-experiment` — the EVIDENCE, not the run.
+///
+/// The protocol (`mobile/maestro/ios-transfer-experiment.md`) is an 8-hour
+/// overnight run per transport on a charging device, once per transport. A
+/// nightly cell that re-ran it would run nothing that finished; what a nightly
+/// can check is that the evidence the ruling rests on exists, is complete, is
+/// under 90 days old, and did not come from a simulator (R-1020-20).
+fn device_transfer_evidence(ctx: &Ctx) -> Result<Outcome> {
+    let dir = ctx.root.join("receipts/experiments/ios-transfer");
+    if !dir.is_dir() {
+        return Ok(Outcome::Skipped(format!(
+            "no evidence in {}. The protocol is mobile/maestro/ios-transfer-experiment.md: an 8-hour overnight run per transport on a NAMED reference device, not a nightly",
+            display_relative(&ctx.root, &dir)
+        )));
+    }
+    const NINETY_DAYS: Duration = Duration::from_secs(90 * 24 * 60 * 60);
+    let mut fresh = 0_usize;
+    let mut findings: Vec<String> = Vec::new();
+    for entry in fs::read_dir(&dir)? {
+        let path = entry?.path();
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        if !name.ends_with("-overnight.json") {
+            continue;
+        }
+        let text = fs::read_to_string(&path)?;
+        let run: serde_json::Value =
+            serde_json::from_str(&text).with_context(|| format!("{name} is not JSON"))?;
+        for key in [
+            "assets",
+            "bytes",
+            "hours",
+            "batteryDelta",
+            "transport",
+            "device",
+            "iosVersion",
+            "corpus",
+        ] {
+            if run.get(key).is_none() {
+                findings.push(format!("{name} is missing `{key}`"));
+            }
+        }
+        // A SIMULATOR IS NOT A DEVICE. Its background scheduler is not iOS's,
+        // and states 3-5 of the experiment are about that scheduler.
+        let device = run
+            .get("device")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        if device.to_lowercase().contains("simulator") {
+            findings.push(format!("{name} names a simulator (`{device}`, R-1020-20)"));
+        }
+        let age = path
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|when| when.elapsed().ok());
+        if age.is_some_and(|age| age < NINETY_DAYS) {
+            fresh += 1;
+        }
+    }
+    if !findings.is_empty() {
+        return Ok(Outcome::Failed(findings.join("; ")));
+    }
+    if fresh == 0 {
+        return Ok(Outcome::Failed(
+            "the transfer evidence is over 90 days old and the ruling rests on it; the transport may have changed underneath it".to_owned(),
+        ));
+    }
+    Ok(Outcome::Ok(format!("{fresh} fresh overnight run(s)")))
+}
+
+/// `android-macrobenchmark` — on a physical device, never an emulator.
+fn device_android_macrobenchmark(ctx: &Ctx) -> Result<Outcome> {
+    if std::env::var_os("ANDROID_HOME").is_none() {
+        return Ok(Outcome::Skipped(
+            "no ANDROID_HOME. Needs a self-hosted runner with a NAMED physical device (R-1020-20): `export ANDROID_HOME=…; adb devices`".to_owned(),
+        ));
+    }
+    // `adb` reports emulators too, and a benchmark on an emulator promotes a
+    // ceiling nobody measured.
+    let model = Command::new("adb")
+        .args(["shell", "getprop", "ro.product.model"])
+        .current_dir(&ctx.root)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_default();
+    if model.is_empty() {
+        return Ok(Outcome::Skipped(
+            "no attached Android device (`adb shell getprop ro.product.model` answered nothing)"
+                .to_owned(),
+        ));
+    }
+    let lowered = model.to_lowercase();
+    if ["sdk", "emulator", "generic"]
+        .iter()
+        .any(|marker| lowered.contains(marker))
+    {
+        return Ok(Outcome::Skipped(format!(
+            "`{model}` is an emulator, and an emulator is not a device (R-1020-20)"
+        )));
+    }
+    let wrapper = ctx.root.join("mobile/gradlew").display().to_string();
+    let project = ctx.root.join("mobile").display().to_string();
+    let outcome = process(
+        ctx,
+        "device-lanes",
+        &wrapper,
+        &[
+            "-p",
+            &project,
+            "-Pcentraid.android=true",
+            ":androidApp:connectedBenchmarkAndroidTest",
+            "--no-daemon",
+        ],
+    )?;
+    if let Outcome::Ok(_) = outcome {
+        return Ok(Outcome::Ok(format!("device={model}")));
+    }
+    Ok(outcome)
+}
+
+/// `ios-xctest-metrics` — needs Xcode AND a device, and says which is missing.
+fn device_ios_xctest_metrics(ctx: &Ctx) -> Result<Outcome> {
+    let xcodebuild = Command::new("xcodebuild")
+        .arg("-version")
+        .current_dir(&ctx.root)
+        .output()
+        .ok()
+        .is_some_and(|output| output.status.success());
+    if !xcodebuild {
+        return Ok(Outcome::Skipped(
+            "no Xcode on this runner. Needs a macOS runner with a NAMED physical device attached: `xcrun devicectl list devices`, then `xcodebuild test -scheme Centraid -destination 'platform=iOS,name=<device>' -only-testing:CentraidTests/BackgroundTransferMetrics`".to_owned(),
+        ));
+    }
+    let devices = Command::new("xcrun")
+        .args(["devicectl", "list", "devices"])
+        .current_dir(&ctx.root)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+        .unwrap_or_default();
+    if !devices.contains("available") {
+        return Ok(Outcome::Skipped(
+            "Xcode is here and a device is not. A SIMULATOR IS NOT A DEVICE: its background scheduler is not iOS's, and states 3-5 of the transfer experiment are about that scheduler".to_owned(),
+        ));
+    }
+    let Some(reference) = std::env::var_os("CENTRAID_REFERENCE_DEVICE") else {
+        return Ok(Outcome::Failed(
+            "a device is attached and CENTRAID_REFERENCE_DEVICE names none. R-1020-20 promotes a ceiling only from a NAMED reference device, so the name is required rather than guessed from the first device listed".to_owned(),
+        ));
+    };
+    let target = fs::read_to_string(ctx.root.join("mobile/ios-deployment-target"))?
+        .trim()
+        .to_owned();
+    let generated = process_with_env(
+        ctx,
+        "device-lanes",
+        "xcodegen",
+        &["generate", "--project", "mobile/iosApp"],
+        &[("CENTRAID_IOS_DEPLOYMENT_TARGET", target.as_str())],
+    )?;
+    if !matches!(generated, Outcome::Ok(_)) {
+        return Ok(generated);
+    }
+    let destination = format!("platform=iOS,name={}", reference.to_string_lossy());
+    process(
+        ctx,
+        "device-lanes",
+        "xcodebuild",
+        &[
+            "test",
+            "-project",
+            "mobile/iosApp/Centraid.xcodeproj",
+            "-scheme",
+            "Centraid",
+            "-destination",
+            &destination,
+            "-only-testing:CentraidTests/BackgroundTransferMetrics",
+            "-resultBundlePath",
+            "target/xtask/nightly/device-lanes/metrics.xcresult",
+        ],
+    )
+}
+
+/// `battery-per-background-pass` — the one lane that cannot be automated on
+/// either platform, and says so rather than pretending.
+///
+/// iOS reports energy in Settings → Battery, hours later and rounded to a
+/// percent; Android's `BatteryStats` is per-uid and per-wakelock, not per-pass.
+/// A number derived from a proxy — CPU seconds, wakelock duration — would be a
+/// number nobody could act on, and promoting a ceiling from one would be worse
+/// than having none.
+fn device_battery_per_pass() -> Outcome {
+    Outcome::Skipped(
+        "not automatable on either platform. The owner's procedure IS the measurement: charge to 100% and note the time, run the transfer experiment's overnight cell for one transport, read Settings → Battery → Centraid for the run window, record `batteryDelta` in the *-overnight.json evidence. It is a row in mobile/maestro/ios-transfer-experiment.md's measurement table, not a CI step".to_owned(),
+    )
 }
 
 /// THE STALE-ARTIFACT REFUSAL, as a gate step (D-1020-G2).
@@ -1722,9 +2053,8 @@ fn run_artifact_identity(ctx: &Ctx) -> Result<Outcome> {
         &[
             "test",
             "-p",
-            "centraid",
-            "--bin",
-            "centraid",
+            "centraid-core",
+            "--lib",
             "identity::",
             "--",
             "--nocapture",
@@ -1734,7 +2064,7 @@ fn run_artifact_identity(ctx: &Ctx) -> Result<Outcome> {
         return Ok(outcome);
     }
     Ok(Outcome::Ok(
-        "a core whose digest is not the one the shell was built against is REFUSED: \"STALE CORE REFUSED: this shell was built against core digest …, and the core it loaded reports …\". An empty expectation is refused too, and a `dev` build is allowed with the warning that the check did not run (crates/centraid/src/identity.rs)".to_owned(),
+        "a core whose digest is not the one the shell was built against is REFUSED: \"STALE CORE REFUSED: this shell was built against core digest …, and the core it loaded reports …\". An empty expectation is refused too, and a `dev` build is allowed with the warning that the check did not run (crates/core/src/identity.rs)".to_owned(),
     ))
 }
 
@@ -2098,16 +2428,59 @@ mod tests {
         }
     }
 
-    /// `mobile-jvm` is a ledger placeholder: no steps, and a refusal rather
-    /// than a vacuous pass. A profile with an empty step list that scored itself
-    /// green would report "the Kotlin suites passed" before one exists.
+    /// `mobile-jvm` IS A REAL PROFILE NOW, with one step and a measured
+    /// budget (#1020 wave 3 lane E, applied by lane X3).
+    ///
+    /// It replaces `the_mobile_jvm_profile_has_no_steps_and_refuses_to_run`,
+    /// which asserted an empty step list and a refusal. That rule was never
+    /// about emptiness: it was that the profile cannot pass VACUOUSLY, and a
+    /// profile with a step keeps the same rule differently — the step is real,
+    /// it FAILS rather than skips when the mobile tree is not there, and the
+    /// ledger row it is scored against is a number rather than a null.
+    ///
+    /// The step is not CALLED here: it starts a Gradle daemon-less build and a
+    /// `cargo build`, so invoking it from a unit test would be running the
+    /// profile inside `cargo test -p xtask`. Its wall clock is in the receipt.
     #[test]
-    fn the_mobile_jvm_profile_has_no_steps_and_refuses_to_run() {
-        assert!(steps(Profile::MobileJvm).is_empty());
+    fn the_mobile_jvm_profile_has_one_real_step_and_fails_without_the_mobile_tree() {
+        assert_eq!(
+            steps(Profile::MobileJvm)
+                .iter()
+                .map(|step| step.name)
+                .collect::<Vec<_>>(),
+            ["mobile-jvm"],
+            "one step, and the profile is not a superset of any other"
+        );
+        // A tree with no `mobile/gradlew`: FAILED, never Skipped. A skip would
+        // read green on a machine where the Kotlin side does not build at all,
+        // which is the whole thing the old refusal existed to prevent.
         let root = crate::testing::fixture_dir("mobile-jvm");
-        assert!(
-            !run(Profile::MobileJvm, &root, false, None).expect("the refusal is not an error"),
-            "a refusal must not be a pass"
+        let ctx = Ctx {
+            root: root.clone(),
+            lane: None,
+            hardware: DEFAULT_HARDWARE.to_owned(),
+            ci: false,
+            artifacts: root.join("target"),
+        };
+        match run_mobile_jvm(&ctx).expect("the step runs") {
+            Outcome::Failed(detail) => {
+                assert!(detail.contains("mobile/gradlew is missing"), "{detail}");
+            }
+            _ => panic!("a missing mobile tree must FAIL loudly, not skip or pass"),
+        }
+        // And the budget it is scored against is a number now.
+        assert_eq!(
+            ledger::budget_seconds(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .and_then(std::path::Path::parent)
+                    .expect("the repository root"),
+                "mobile-jvm",
+                DEFAULT_HARDWARE
+            )
+            .expect("the ledger reads"),
+            Some(420.0),
+            "a null budget would make the profile unscored"
         );
     }
 
