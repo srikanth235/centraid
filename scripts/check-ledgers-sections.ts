@@ -108,7 +108,7 @@ export const SECTIONS: ReadonlyArray<LedgerSectionSpec> = Object.freeze([
   },
   // The file-length exemptions (`max-lines`, oxlint.config.ts). `_budget` is
   // the row count and is down-only, so the set of files allowed past the
-  // 625-line ceiling can only shrink; scripts/lint-oversized-files.mjs refuses
+  // 625-line ceiling can only shrink; scripts/lint-oversized-files.ts refuses
   // to build the override list if the two ever disagree.
   { file: I, key: "fileSize", direction: "down", budget: "_budget" },
   { file: I, key: "naCells", direction: "reference" },

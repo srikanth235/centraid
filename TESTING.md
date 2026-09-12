@@ -22,7 +22,7 @@ Five principles follow, each with a mechanical consequence:
 
 The older working principles still hold and are now consequences rather than assertions: coverage of flows rather than a count of tests; one flow, one home, proven at the cheapest tier that can falsify it; runtime is a budget; duplication is visible; floors ratchet up, never down.
 
-The machine-readable source of product-flow ownership is [`tests/claims.json`](tests/claims.json), joined with the mobile roster by `node scripts/test-report/derive-flows.mjs --json`. `bun run test:claims` verifies its vocabulary, its lane registry, every owning path, unique flow ids, and minimum contract sizes. A new test either claims an unowned flow or extends its existing owner.
+The machine-readable source of product-flow ownership is [`tests/claims.json`](tests/claims.json), joined with the mobile roster by `node scripts/test-report/derive-flows.ts --json`. `bun run test:claims` verifies its vocabulary, its lane registry, every owning path, unique flow ids, and minimum contract sizes. A new test either claims an unowned flow or extends its existing owner.
 
 ## What the machine cannot check
 
@@ -626,7 +626,7 @@ The page is a **pure function of a directory**. Every lane on rungs 2–5 ends w
 
 Everything observable is derived at read time by [`derive.mjs`](scripts/test-report/derive.mjs): journeys and their tighten-only suite budgets from [`tests/agent-e2e-mobile/roster.json`](tests/agent-e2e-mobile/roster.json), mutation seeds from [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs), fuzz targets from [`scripts/fuzz/targets.mjs`](scripts/fuzz/targets.mjs), the Vitest projects from `vitest.config.ts`, the Stryker configs by glob, and the rig and experience budgets from their ledgers. `bun run test:claims` validates the file, holds every owner path to disk, and pins the app-axis registries to the code they name.
 
-Flow ownership no longer lives in one file, so the constitution's `coverage-scope-reachability` directive reads the derived view instead: `node scripts/test-report/derive-flows.mjs --json`.
+Flow ownership no longer lives in one file, so the constitution's `coverage-scope-reachability` directive reads the derived view instead: `node scripts/test-report/derive-flows.ts --json`.
 
 ### The page, section by section
 

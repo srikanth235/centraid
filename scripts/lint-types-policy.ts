@@ -9,7 +9,7 @@ import {
   sourceOnlyCompatibilityRules,
   typeAwareCatalogVersion,
   typeAwareOnlyRules,
-} from "./lint-types-rules.mjs";
+} from "./lint-types-rules.ts";
 
 const ordinaryConfigPath = "oxlint.config.ts";
 const fixturePath = "scripts/fixtures/lint-types/invalid.ts";
@@ -42,7 +42,7 @@ if (
   installedTypeAwarePackage.version !== typeAwareCatalogVersion
 ) {
   throw new Error(
-    `type-aware catalog targets oxlint-tsgolint ${typeAwareCatalogVersion}, but package.json/installed versions are ${isRecord(rootPackage.devDependencies) ? rootPackage.devDependencies["oxlint-tsgolint"] : undefined}/${installedTypeAwarePackage.version}; regenerate scripts/lint-types-rules.mjs before upgrading`
+    `type-aware catalog targets oxlint-tsgolint ${typeAwareCatalogVersion}, but package.json/installed versions are ${isRecord(rootPackage.devDependencies) ? rootPackage.devDependencies["oxlint-tsgolint"] : undefined}/${installedTypeAwarePackage.version}; regenerate scripts/lint-types-rules.ts before upgrading`
   );
 }
 
@@ -81,7 +81,7 @@ if (
   throw new Error(
     `type-aware catalog differs from the installed engine manifest: ${JSON.stringify(
       { catalogOnlyRules, engineOnlyRules }
-    )}; regenerate scripts/lint-types-rules.mjs before upgrading`
+    )}; regenerate scripts/lint-types-rules.ts before upgrading`
   );
 }
 

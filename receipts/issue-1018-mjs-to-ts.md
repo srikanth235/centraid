@@ -640,3 +640,28 @@ Remaining root `scripts/*.mjs`: `lint-oversized-files.mjs`, `lint-types-rules.mj
 - `scripts/test-report/*.mjs` (import/comment retargets only)
 - `CHANGELOG.md`
 - `receipts/issue-1018-mjs-to-ts.md`
+
+## Lane leftovers — oxlint-imported scripts + derive-flows CLI
+
+Deleted the `scripts/test-report/derive-flows.mjs` CLI shim. The constitution's `coverage-scope-reachability` directive and check now shell out to `node scripts/test-report/derive-flows.ts --json`. `oxlint.config.ts` is untouched (law). `scripts/lint-oversized-files.ts` and `scripts/lint-types-rules.ts` are in the NodeNext `scripts` program; tiny `.mjs` re-export shims keep the law imports working until a later law commit retargets them. `JSON.parse` of the file-size ledger is `unknown` then narrowed. Rule catalogs are `string[]`. No type-only imports to write as `import type`. No `any`.
+
+`.governance` was not converted; only `coverage-scope-reachability/check.sh` was retargeted at the `.ts` CLI.
+
+Lane branch: `issue-1018-lane-leftovers`.
+
+### Verification
+
+```sh
+tsc -p scripts --noEmit
+```
+
+### Paths this slice
+
+- `scripts/test-report/derive-flows.ts` (CLI; `.mjs` shim deleted)
+- `scripts/lint-oversized-files.ts` + `.mjs` re-export shim
+- `scripts/lint-types-rules.ts` + `.mjs` re-export shim
+- `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh` (path retarget only)
+- `CONSTITUTION.md`, `TESTING.md`, `docs/decisions.md`, `docs/coding-standards.md`
+- `scripts/lint-types.sh`, `scripts/lint-types-policy.ts`, `scripts/lint-law-registry.ts`
+- `CHANGELOG.md`
+- `receipts/issue-1018-mjs-to-ts.md`

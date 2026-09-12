@@ -9,8 +9,8 @@
  * deterministic, offline view, and one place to change when the sources move
  * again.
  *
- *   node scripts/test-report/derive-flows.mjs --json   # {"flows":[{id,owner}]}
- *   node scripts/test-report/derive-flows.mjs          # one owner path per line
+ *   node scripts/test-report/derive-flows.ts --json   # {"flows":[{id,owner}]}
+ *   node scripts/test-report/derive-flows.ts          # one owner path per line
  */
 
 import path from "node:path";

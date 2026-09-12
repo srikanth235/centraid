@@ -227,7 +227,7 @@ export function checkLawRegistry(input: CheckLawRegistryInput): {
       !flowIds.includes(entry.flow)
     ) {
       violations.push(
-        `law "${tag}": flow "${entry.flow}" is not a derived flow id (scripts/test-report/derive-flows.mjs).`
+        `law "${tag}": flow "${entry.flow}" is not a derived flow id (scripts/test-report/derive-flows.ts).`
       );
     }
   }

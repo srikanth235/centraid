@@ -9,7 +9,7 @@
  * quality-rig and experience budgets from their ledgers.
  *
  * Every function here is deterministic and offline — the constitution's
- * `coverage-scope-reachability` directive shells out to `derive-flows.mjs`,
+ * `coverage-scope-reachability` directive shells out to `derive-flows.ts`,
  * which sits on top of this module, so a network call or a clock read would
  * make a governance check nondeterministic.
  */

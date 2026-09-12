@@ -17,19 +17,19 @@ cd "$ROOT"
 RULES_ALL=()
 while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES_ALL+=(-D "$rule")
-done < <(node scripts/lint-types-rules.mjs all)
+done < <(node scripts/lint-types-rules.ts all)
 
 # Applied to source only. Vitest and Playwright deliberately use unawaited
 # it()/test() calls.
 RULES_SRC_ONLY=()
 while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES_SRC_ONLY+=(-D "$rule")
-done < <(node scripts/lint-types-rules.mjs source)
+done < <(node scripts/lint-types-rules.ts source)
 
 RULES_BLUEPRINT=()
 while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES_BLUEPRINT+=(-D "$rule")
-done < <(node scripts/lint-types-rules.mjs blueprint)
+done < <(node scripts/lint-types-rules.ts blueprint)
 
 # Every workspace with src/ and a TypeScript program. Keep this explicit list
 # so adding a workspace forces a conscious coverage decision.

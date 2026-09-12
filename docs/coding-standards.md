@@ -110,7 +110,7 @@ A source file stops at **625 lines**. `max-lines` in [oxlint.config.ts](../oxlin
 
 The ceiling lived in governance-kit's `repo-hygiene` directive until audit 0.11.0 retired that pack upstream. It came back under oxlint rather than as a repo-local directive because oxlint already reads every source file: same raw-line count, ~0.4s against the directive's 51.2s.
 
-The 131 files that predate the rule are exempt **by name**, in `tests/inventory.json#fileSize`, not by an inline `oxlint-disable`. That is the whole point of the design: a suppression comment is free to add and invisible in review, whereas a row in that section has to survive its down-only `_budget` in [check-ledgers.mjs](../scripts/check-ledgers.mjs) — splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation` note. [lint-oversized-files.mjs](../scripts/lint-oversized-files.mjs) reads the section and refuses to build the list at all if the budget and the rows disagree.
+The 131 files that predate the rule are exempt **by name**, in `tests/inventory.json#fileSize`, not by an inline `oxlint-disable`. That is the whole point of the design: a suppression comment is free to add and invisible in review, whereas a row in that section has to survive its down-only `_budget` in [check-ledgers.ts](../scripts/check-ledgers.ts) — splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation` note. [lint-oversized-files.ts](../scripts/lint-oversized-files.ts) reads the section and refuses to build the list at all if the budget and the rows disagree.
 
 A new file gets no row and no door.
 
