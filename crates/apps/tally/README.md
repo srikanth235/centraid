@@ -8,14 +8,15 @@ Tally's doctrine, from the manifest's own description (`manifest.json`, copied b
 - a settlement is real cash;
 - **balances are never stored.** They are derived at read time by one fold, and the simplification proposal and the rate suggestion are derived the same way and written nowhere.
 
-## The four modules
+## The five modules
 
 | Module | What it owns |
 | --- | --- |
 | `manifest` | The manifest, embedded with `include_str!` and parsed by the kit rather than restated in Rust. Two copies of "which tables does Tally write" is how the two answers drift, and the drift is invisible because both copies look right |
 | `queries` | `loadTally` — seventeen statements as `PageQuery` values, then the party resolution that depends on what the first sixteen named — and the fold into `TallyData`. Every Tally surface is a fold over this one read, not a second read |
 | `balance` | The pure engine: the single attribution rule, the per-member net, the pairwise matrix, the min-cash-flow simplification. No vault reaches it, which is why the phone can import it directly |
-| `commands` | The 23 actions, as a table of `action → command`. The projection lives in the command, not here |
+| `views` | What each of the eight manifest queries ANSWERS — the dashboard, a group, a friend, activity, search, export, history, matches — as pure functions of `TallyData` (plus a door for the three that read planes `loadTally` does not). Presentation comes from `crates/design`, the one lowering of `packages/design`; nothing here formats a number |
+| `commands` | The 23 actions, as a table of `action → command`. The projection lives in the command, not here. `door` (behind the `vault-door` feature) is the real `Commands` implementation over the vault's `execute`; the feature is off by default so an edit here rebuilds one crate |
 
 ## What this crate may not contain, and what stops it
 
@@ -48,9 +49,18 @@ The two fan-outs are stated at a page size of **500**, not v0's 1,000, because `
 
 - **`balances.json`** — all six balance-engine cases, compared answer for answer: attributions, net, pairwise, open debts, minimal transfers, and the simplification both opted in and out.
 - **`rows.json`** — the fixture ledger, replayed into a vault built from `contracts/schema/vault-ddl.sql` and read back through the kit's test door. What is asserted is the fold: the party set including the member who left, the live-versus-trashed split, each group's name coming off its circle, that every payer set and split set sums to its amount, and that every group's pairwise matrix reconciles with its net.
-- **`queries.json`** — all eight query outputs at 29 fixed inputs. **Not compared yet**: those outputs carry presentation the port has no source for (a party's colour from `partyHueValue`, its initials, a ledger row's tone), which lives in `packages/design` and moves with the token emitter in wave 3/4. The fixture is committed and is the target.
+- **`queries.json`** — all eight query outputs at 29 fixed inputs, **compared whole** by `tests/queries_parity.rs`: every field of every case, with the presentation going through `crates/design` (`design/identity-corpus.json` asserts that lowering row by row against `packages/design` itself). Two fields of a `recurring` row are the stated exception — `preview` and `next_start` are answers of v0's civil-time plane, which is the schedule lane's port, and they are named in one constant so the deferral cannot widen quietly.
+- **`commands.json`** — the 20-step command script the fixture's ledger is built from, with every minted id replaced by a reference to the step that produced it. `crates/vault/tests/tally_commands.rs` replays it through the real `tally.*` commands and compares the rows table by table, modulo ids and host instants: two runs mint different ids, and nothing in the product depends on which.
 
-`tests/year3.rs` seeds the year-3 Tally volume and times the read; see the ceiling note for the numbers and the two v0 findings it produced.
+`tests/year3.rs` seeds the year-3 Tally volume and times both the read and the eight views; `tests/door.rs --features vault-door` times the command path. See the ceiling note for the numbers and the v0 findings they produced.
+
+## What is still v0's and not this crate's
+
+| Not ported | Why, and whose it is |
+| --- | --- |
+| `tally.add_receipt_expense` | it claims a staged blob, mints a `core_content_item` and its representation, attaches it and writes OCR text through the enrichment plane. Four planes, none of them Tally's, and Tally is record-only — so the command refuses with a sentence naming the media lane rather than writing the expense and dropping the photo |
+| The occurrence half of the two recurrence commands | `expandRecurrence` over a series' own zone, with a timezone database behind it. A minimal expander here would be a second recurrence engine, which is the drift #996 R21 (ONT-25) was filed for |
+| The eight client-side models | form arithmetic and surface state, not the ledger (`split-model`, `line-model`, `draft-model`, `contrib-model`, `receipt-model`, `spending-model`, `schedule-model`, `activity-model`). The one that was a bug — `line-model.ts`'s module-level line-id counter — is fixed in v0, and the Rust port mints from `Ids` |
 
 ## Where Tally sits in the plane
 
