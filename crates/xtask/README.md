@@ -11,18 +11,23 @@ cargo xtask rules                    # the structural rules alone
 cargo xtask measure --write          # the edit-run loop, into the compile-time ledger
 ```
 
-## The four profiles
+## The four profiles (and one placeholder)
 
 Each profile is a **superset** of the one before, stated in code as concatenation rather than as a copied list, so a step can never be in `pr` and missing from `release` (there is a test for exactly that).
 
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
-| `local` | `fmt`, `clippy`, `test`, `rules`, `ledgers` | < 120 s | the pre-push loop, by hand |
-| `pr` | `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static` | < 900 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `local` | `fmt`, `clippy`, `test`, `rules`, `ledgers` | < 120 s **warm**, < 3000 s **cold** | the pre-push loop, by hand |
+| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static` | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `v0-oracle`, `device-lanes` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
 | `release` | `restore-drill`, `vps-smoke` | unbounded | wave 2 R and wave 3 G wire it to the release lane |
+| `mobile-jvm` | none — a ledger placeholder, not a superset of anything | null | nowhere yet; it **refuses** and names wave 3 lane E |
 
-The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledgers/gate-budgets.json) and are **enforced**: a profile whose steps together overran its `budgetSeconds` fails and prints the timing table. They are down-only, like every other gate knob in this repo.
+The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledgers/gate-budgets.json) and are **enforced**: a profile whose steps together overran its `budgetSeconds` fails, prints the timing table, and says `FAIL — over budget` on its last line. They are down-only, like every other gate knob in this repo; the one time they rose was the 2026-09-12 re-base for the Rust workspace, under an owner ruling recorded as [D-1020-B2](../../docs/decisions.md#decisions--lane-b2-1020).
+
+**`local` is scored warm or cold, and they are different numbers.** The 120 s promise is the developer's feedback time after an edit, not the cost of the first build after a clone — 24.0 s against 1394.6 s on this container at nine crates. The runner asks whether **every** workspace member has a *linked* artifact in `target/debug/deps` (a `.rlib` or an extensionless executable): an `.rmeta` from a previous `cargo check` does not count, so a tree that has only been checked cannot buy a warm budget while its `test` step still has to compile and link everything. A *stale* incremental tree does read as warm, on purpose — that is the tree the loop runs on, and rebuilding the delta is what the budget promises. Each run prints `tree warm` or `tree cold` with the reason; `--cold` forces the cold branch without deleting `target/`. A cold `local` run is charged against `coldLocalProfileSeconds` in `compile-time.json` and **fails** if that key states no ceiling, because cold must never be the answer that makes a slow gate green. No other profile has a cold ceiling: they run in CI on a runner that has never seen the workspace, so their budgets hold cold or they are not budgets.
+
+`mobile-jvm` is in the ledgers and not in the step lists. Running it prints a refusal naming wave 3 lane E, which lands the Kotlin Multiplatform shared module and the Gradle suites, measures `budgetSeconds` and `kotlinNativeLinkSeconds`, and sets them both. A profile with no steps that scored itself green would report "the Kotlin suites passed" before one exists.
 
 `release` **fails today, on purpose.** `restore-drill` and `vps-smoke` are steps that exit with `not implemented: lands in wave N`, so the profile cannot report green for a release nobody has proven restorable. A placeholder that skipped would be worse than no step at all.
 
@@ -98,25 +103,30 @@ Three files under [`contracts/ledgers/`](../../contracts/ledgers), all down-only
 | Ledger | Holds |
 | --- | --- |
 | `gate-budgets.json` | the per-profile feedback-time ceiling |
-| `compile-time.json` | clean check, incremental check, single-crate test and release build — "compile time is the new Hermes" |
+| `compile-time.json` | clean check, incremental check, single-crate test, release build, the cold `local` profile, and a null `kotlinNativeLinkSeconds` for wave 3 — "compile time is the new Hermes" |
 | `library-size.json` | the prebuilt core's size per ABI. **Seeded empty**: an empty ledger gates nothing and says so, and wave 3 lane G fills it from the first artifact |
 
 The comparison mirrors [`scripts/check-ledgers.mjs`](../../scripts/check-ledgers.mjs): the base copy is read with `git show <merge-base>:<path>`, and "the base has no such file" means the entry is new and passes — without that fallback the very commit that introduces a ledger could not pass its own gate. A number that rose is a finding, and so is a number that was **removed**, because deleting a ceiling is the widest possible widen.
 
-What each ledger stores is a ceiling with **stated headroom**, not the last measurement. The workspace is one crate today and a dozen after wave 2, so a ceiling pinned to today's number would fail the first time a crate landed, and the author would learn to widen ledgers instead of fixing loops. The wave-1 measurements are quoted in each entry's `headroom` and in the receipt.
+What each ledger stores is a ceiling with **stated headroom**, not the last measurement. The workspace held one crate in wave 1 and holds nine now, so a ceiling pinned to today's number would fail the first time a crate landed, and the author would learn to widen ledgers instead of fixing loops. Each entry's `headroom` quotes its measurement, the state of the tree it was taken on, and the multiplier that produced the ceiling.
+
+**There is no waiver, deviation or override path here, and adding one is not how a number moves.** `scripts/check-ledgers.mjs` has an `approvedDeviation` mechanism for v0's ledgers; these have none, because a waiver added before the first widen is asked for is an invitation. The numbers rose once, on 2026-09-12, under an owner ruling quoted per key — not through a mechanism — and the ratchet code is exactly as strict as it was: `ledger.rs`'s `a_risen_number_is_a_finding` still fails a raise against an existing base copy. That re-base passed the `ledgers` step only because `origin/main` carries no `contracts/ledgers/` yet, so the base copy is `None` and every entry reads as new. Once #1020 merges, these numbers are the baseline and they only fall.
 
 **A gate run never writes a ledger.** `cargo xtask measure --write` is the only writer, and it only ever _lowers_ `budgetSeconds`, printing one note per key saying what it did. A ratchet that records whatever the last run cost is a log.
 
 ## Where the numbers came from
 
-Wave 1, on this container (4 vCPU, 15 GB — the `ci-linux-x64-4c` hardware class in `tests/journeys.json`), with `CENTRAID_GATE_HARDWARE` overridable so a self-hosted device runner can score itself:
+On this container (4 vCPU, 15 GB — the `ci-linux-x64-4c` hardware class in `tests/journeys.json`), with `CENTRAID_GATE_HARDWARE` overridable so a self-hosted device runner can score itself. The wave-1 column is a workspace of **one** crate over clap and serde_json; the 2026-09-12 column is **nine** crates over iroh, quinn, tokio, prost and rusqlite-bundled, which is why the ceilings were re-based ([D-1020-B2](../../docs/decisions.md#decisions--lane-b2-1020)):
 
-| Measurement                                 | Wave 1 | Ceiling   |
-| ------------------------------------------- | ------ | --------- |
-| `gate --profile local`, after `cargo clean` | 4.9 s  | 120 s     |
-| `gate --profile pr`, after `cargo clean`    | 16.8 s | 900 s     |
-| `gate --profile nightly`, warm              | 8.7 s  | unbounded |
-| `cargo check --workspace`, clean            | 17.4 s | 180 s     |
-| `cargo check --workspace`, one line changed | 0.1 s  | 10 s      |
-| `cargo test -p xtask`                       | 10.4 s | 60 s      |
-| `cargo build --workspace --release`, clean  | 28.9 s | 600 s     |
+| Measurement                                        | Wave 1 | 2026-09-12    | Ceiling   |
+| -------------------------------------------------- | ------ | ------------- | --------- |
+| `gate --profile local`, **warm**                   | —      | 24.0 s        | 120 s     |
+| `gate --profile local`, **cold**                   | 4.9 s  | 1394.6 s      | 3000 s    |
+| `gate --profile pr`, cold                          | 16.8 s | 1420.1 s      | 1500 s    |
+| `gate --profile pr`, warm                          | —      | 575.8 s       | 1500 s    |
+| `cargo check --workspace`, clean                   | 17.4 s | 541.7 s       | 1200 s    |
+| `cargo check --workspace`, one line in an app crate | 0.1 s  | 0.6 s         | 10 s      |
+| `cargo test -p centraid-net`, repeated             | 10.4 s | 2.4 s         | 60 s      |
+| `cargo build --workspace --release`, clean         | 28.9 s | 240.3/475.0 s | 1000 s    |
+
+Two numbers that are not ceilings and are worth knowing. A cold `local` run spends 587.6 s in `clippy` and 806.5 s in `cargo test --workspace` — the same dependency graph compiled twice, once for check units and once for artifacts to link against. And alternating `cargo test -p centraid-net` with `cargo test --workspace` costs 185.8 s / 161.7 s each way against 2.4 s for either command repeated, because one package's feature resolution is not the workspace's union, so the two commands invalidate each other's artifacts.
