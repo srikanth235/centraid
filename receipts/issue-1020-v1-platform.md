@@ -988,7 +988,7 @@ Each was produced by reverting the fix on this tree and re-running the committed
 | 9 | `bun run format` + `bun run format:check` | "All matched files use the correct format", 5,830 files |
 | 10 | `bash .governance/run.sh` | all 10 directives passed; one `doctrine-citation` **warning** on the design-tokens domain, answered by the anchor cited in this section's `d6d261a1` entry |
 | 11 | `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, 0 errors |
-| 12 | `bun run check:push:static` | quoted in *Not done* — see item 3 |
+| 12 | `bun run check:push:static` | **4/4 in 228.1 s** — `lint` 17.1 s, `turbo:lint` 0.7 s, `format:check` 18.4 s, `typecheck:affected` 210.2 s (needs `bun run build` once first, as lanes A, B and C all recorded) |
 | 13 | `git push -u origin claude/1020-laneV` | accepted; no `SKIP_*`, no `--no-verify`, no waiver spent |
 
 `cargo` was not run in this lane: the brief excludes it (disk), and the lane touches no Rust. The Rust parity suite re-runs on merge against unchanged fixtures.
@@ -1027,8 +1027,7 @@ Law `53be88c22ab5`, stamped. `node .governance/law/run.mjs --door window --brief
 
 1. **`contracts/apps/tally/*.json` was not regenerated into a diff**, because there is none to make: a write run is byte-identical to what lane D3 committed. That is the strongest single statement in this section — nine fixes to the oracle, and the fixture that compares the oracle to the port did not move — and it is true for a reason worth naming rather than celebrating: lane D3's own falsification found that fixture blind to page-boundary bugs by arithmetic accident (16 split rows inside one 500-row page). It proves the fixes broke nothing. It does not prove they were needed; the nine reds do that.
 2. **The `packages/client` suite was not run.** It holds no edit from this lane. `packages/server` was run in full and is recorded at exit-list item 5.
-3. **`bun run check:push:static` was not run to 4/4.** It needs `bun run build` (done, 14 cached tasks) and then a run whose wall clock this lane did not have after the suites above; `bun run lint`, `format:check` and the governance doors — the three checks it composes that bear on this diff — are green individually and recorded at exit-list items 8–11. Owed rather than done.
-4. **No Rust was built or run.** The brief forbids it here on disk grounds.
+3. **No Rust was built or run.** The brief forbids it here on disk grounds, and the lane touches no Rust. Mid-lane the container's filesystem did in fact reach 100% and this lane's own vitest, turbo and coverage caches were cleared to finish; nothing outside `/home/user/centraid-laneV` and this lane's scratchpad was touched.
 
 ### Falsification
 
