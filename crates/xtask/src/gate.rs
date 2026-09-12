@@ -1110,6 +1110,17 @@ fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
                 .to_owned(),
         ));
     }
+    // The static gate typechecks the workspace through its PUBLISHED entry
+    // points, so it needs the packages' `dist/` on disk — the same prerequisite
+    // `v0-oracle` names. Without it tsc reports hundreds of "Cannot find module
+    // '@centraid/server/engine'" lines, which read as a product defect and are
+    // an unbuilt tree. Saying so is the difference between a gate and a puzzle.
+    if !ctx.root.join("packages/server/dist").is_dir() {
+        return Ok(Outcome::Failed(format!(
+            "the workspace is not built: packages/server/dist is absent, and `bun run check:push:static` resolves `@centraid/*` through the published entry points. Run `bun run build` once (gate.yml does it before this profile) — this is an unprovisioned tree, not a type error. {} .ts file(s) in the v1 tree made this step live",
+            found.len()
+        )));
+    }
     process(ctx, "ts-static", "bun", &["run", "check:push:static"])
 }
 

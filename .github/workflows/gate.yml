@@ -53,7 +53,12 @@ jobs:
     # against a hung job, not a second budget: a cancelled job is red with no
     # evidence (#557), and the profile's own timing table is the number that
     # matters.
-    timeout-minutes: 20
+    # The `pr` profile's own ceiling is `gate-budgets.json`'s 1500 s, measured
+    # on a COLD tree (a Cargo cache miss); a cache hit runs it in under two
+    # minutes. This bound has to sit above the budget plus the provisioning
+    # steps above it, or a cache-miss run would be killed by the runner before
+    # the budget it is scored against could report (#1020, D-1020-B2-3).
+    timeout-minutes: 40
     steps:
       - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
@@ -146,6 +151,14 @@ jobs:
           gitleaks version
           osv-scanner --version
           buf --version
+      # The profile's `ts-static` step runs `bun run check:push:static`, which
+      # resolves `@centraid/*` through the published entry points and so needs
+      # the packages' `dist/` on disk. Provisioning the tree is the workflow's
+      # job — it already installs four binaries — and not the gate's: a build
+      # inside `cargo xtask gate` would charge the profile's own budget for an
+      # environment prerequisite. Turbo-cached, and filtered to nothing because
+      # the static gate typechecks the whole workspace (#1020).
+      - run: bun run build
       - run: cargo xtask gate --profile pr
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()

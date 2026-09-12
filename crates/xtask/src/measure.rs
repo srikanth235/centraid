@@ -85,7 +85,7 @@ const KEYS: [Key; 5] = [
     },
     Key {
         name: "singleCrateTestSeconds",
-        what: "`cargo test -p centraid-net`, the heaviest crate, link included",
+        what: "`cargo test -p centraid-net` repeated, the heaviest crate's steady-state loop",
         take: take_single_crate_test,
     },
     Key {
@@ -178,7 +178,19 @@ fn take_incremental_check(root: &Path) -> Result<f64> {
     elapsed
 }
 
+/// The red-test loop, in its steady state.
+///
+/// The first run is discarded, for the same reason `incrementalCheckSeconds`
+/// checks before it edits: this key is the loop a red test puts you IN, not the
+/// cost of entering it. Entering it is expensive and measured separately —
+/// `cargo test -p centraid-net` after `cargo test --workspace` rebuilds the
+/// dependency graph, because a single package's feature resolution is not the
+/// workspace's union, so the two commands invalidate each other's artifacts.
+/// On this container that switch cost 185.8 s and 161.7 s on two runs against
+/// 2.4 s for the same command repeated. Timing the first run would ledger the
+/// switch and call it the loop (#1020; recorded as a finding, not absorbed).
 fn take_single_crate_test(root: &Path) -> Result<f64> {
+    time(root, "cargo", &["test", "-p", HEAVIEST_CRATE])?;
     time(root, "cargo", &["test", "-p", HEAVIEST_CRATE])
 }
 
