@@ -27,6 +27,7 @@ message RowImage {
 //     key columns.
 //   * "No prior is known" is not this message at all — it is the absence of the
 //     `prior` field on `LogRow`, which is the claim that forces a re-bootstrap.
+//
 // The last distinction is why `LogRow.prior` is `optional` and this message is
 // not merged into `RowImage`.
 message PriorDelta {
