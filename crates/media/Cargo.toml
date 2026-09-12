@@ -18,8 +18,10 @@ hmac.workspace = true
 # ECMAScript number spelling: the canonicalizer must agree with
 # `JSON.stringify`, not with serde_json's integer spelling (#1020, D-1020-R1).
 ryu-js.workspace = true
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true
+thiserror.workspace = true
 zstd.workspace = true
 
 [dev-dependencies]
