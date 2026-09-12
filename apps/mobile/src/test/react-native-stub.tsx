@@ -73,6 +73,7 @@ function domProps(props: Props): Props {
     accessibilityRole,
     accessibilityState,
     accessibilityValue,
+    autoFocus,
     children,
     numberOfLines,
     onPress,
@@ -115,6 +116,8 @@ function domProps(props: Props): Props {
       ? {}
       : { "data-lines": String(numberOfLines) }),
     ...(typeof testID === "string" ? { "data-testid": testID } : {}),
+    // Recorded, not applied: jsdom would steal focus from the test runner.
+    ...(autoFocus === undefined ? {} : { "data-autofocus": String(autoFocus) }),
     ...(typeof onPress === "function" ? { onClick: onPress } : {}),
   };
 }
@@ -140,6 +143,15 @@ const noopAnimation = {
   reset: () => undefined,
 };
 
+/**
+ * `Keyboard.dismiss` calls, in order — the rooms own dismissal now
+ * (#1015, R-A-17), so a test needs to see that leaving actually called it.
+ */
+export const keyboardDismissals: { count: number } = { count: 0 };
+const keyboardDismiss = (): void => {
+  keyboardDismissals.count += 1;
+};
+
 /** Stubbed module object; spread into the factory above. */
 export function reactNativeStub(): Record<string, unknown> {
   const Animated = {
@@ -161,6 +173,8 @@ export function reactNativeStub(): Record<string, unknown> {
     ActivityIndicator: (props: Props) => host("div", props),
     Animated,
     Easing: { inOut: () => undefined, ease: undefined },
+    Keyboard: { dismiss: keyboardDismiss },
+    KeyboardAvoidingView: (props: Props) => host("div", props),
     Modal: (props: Props & { visible?: boolean }) =>
       props.visible === false ? null : host("div", props),
     Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios },
@@ -281,6 +295,50 @@ export function svgStub(): Record<string, unknown> {
   const glyph = (props: Props) =>
     React.createElement("svg", { "data-glyph": true }, props.children);
   return { default: glyph, Path: () => null, Svg: glyph };
+}
+
+/** What a finished vertical drag hands a `Gesture.Pan().onEnd` handler. */
+export interface StubDrag {
+  translationY: number;
+  velocityY: number;
+}
+
+/**
+ * `react-native-gesture-handler`, for the blocks that own a gesture —
+ * `StageRoom` reaches it through `kit/rooms/index.ts`, so EVERY test that
+ * imports the rooms barrel needs it and its reanimated twin below, whether or
+ * not it touches a stage. Neither package parses under this project's plain
+ * node resolution (reanimated's `lib/module` is a directory import), so a test
+ * without them fails to load rather than failing an assertion.
+ *
+ * `sink` records the `onEnd` handler, so a test can finish a real drag and
+ * watch what the component does; a gesture is still a control. Pass one from
+ * `vi.hoisted`, because a `vi.mock` factory is hoisted above every other
+ * binding in the file.
+ */
+export function gestureHandlerStub(sink?: {
+  drag?: (event: StubDrag) => void;
+}): Record<string, unknown> {
+  const pan: Record<string, unknown> = {
+    activeOffsetY: () => pan,
+    failOffsetX: () => pan,
+    onEnd: (handler: (event: StubDrag) => void) => {
+      if (sink) sink.drag = handler;
+      return pan;
+    },
+  };
+  return {
+    Gesture: { Pan: () => pan },
+    GestureDetector: (props: Props) =>
+      React.createElement("div", null, props.children),
+  };
+}
+
+/** `react-native-reanimated`, reduced to the one export a gesture needs: off
+ *  the UI thread there is no thread to hop back from, so `runOnJS` is the
+ *  callback itself. */
+export function reanimatedStub(): Record<string, unknown> {
+  return { runOnJS: (callback: unknown) => callback };
 }
 
 /** Mount a block into a jsdom container. */

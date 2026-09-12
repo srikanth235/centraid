@@ -67,8 +67,14 @@ export const PHOTOS_MORE_ROWS: readonly MoreRow[] = [
   { key: "backup", label: "Backup", icon: "archive" },
 ];
 
-/** One clause only: a second sentence narrates a control already on screen. */
-export const PHOTOS_MORE_FOOT = "Everything Photos can show.";
+/** One clause only: a second sentence narrates a control already on screen.
+ *
+ *  IT SAID "Everything Photos can show." OVER ONE ROW (#1015,
+ *  photos/findings #16). Photos has a dozen other surfaces — People, Places,
+ *  Memories, Duplicates, Trash, Archive, Favorites, Albums — every one of them
+ *  reached from Collections, so the claim was false as printed. The foot names
+ *  what is actually behind this door. */
+export const PHOTOS_MORE_FOOT = "The rest of Photos is in Collections.";
 
 /**
  * A CROSS-STACK destination (#712), and the only one: Backup health is a frame

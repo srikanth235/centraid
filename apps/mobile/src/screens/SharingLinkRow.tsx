@@ -1,17 +1,21 @@
+import * as Clipboard from "expo-clipboard";
+import React, { useState } from "react";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
+
 // One link row for Sharing.tsx, kept separate so that file stays under the
 // repo's file-size guidance.
 //
 // `LinkTicketPanel` (below) is this file's one TextInput: pasting a ticket
 // someone showed you is external data, not a setting to cycle through.
-import * as Clipboard from "expo-clipboard";
-import React, { useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
-
-import { SHARING_UNREACHABLE } from "@centraid/client/sharing-copy";
+import {
+  SHARING_LINK_NOT_MADE,
+  SHARING_UNREACHABLE,
+} from "@centraid/client/sharing-copy";
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
 
 import { Text } from "../kit/components/NativeText";
 import type { useTheme } from "../kit/theme";
-import { density, family, radii, t } from "../kit/theme";
+import { density, family, radii, spacing, t } from "../kit/theme";
 import {
   mintLinkTicket,
   redeemLinkTicket,
@@ -95,7 +99,8 @@ export function LinkTicketPanel({
       const minted = await mintLinkTicket(gatewayBase, vaultId);
       setTicket(minted.ticket);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      console.warn("[sharing] link failed", error);
+      setErrorMessage(`${SHARING_LINK_NOT_MADE} ${RETRY_ACTION}`);
     } finally {
       setBusy(false);
     }
@@ -123,7 +128,8 @@ export function LinkTicketPanel({
         setErrorMessage(outcome.detail ?? SHARING_UNREACHABLE);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      console.warn("[sharing] link failed", error);
+      setErrorMessage(`${SHARING_LINK_NOT_MADE} ${RETRY_ACTION}`);
     } finally {
       setBusy(false);
     }
@@ -258,7 +264,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     marginTop: 4,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing[3],
     paddingVertical: 6,
   },
   rowActions: { flexDirection: "row", gap: 8 },

@@ -13,22 +13,23 @@
 // search + per-row switches need real layout.
 
 import React, { useMemo, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 
 import AppMark from "../../kit/components/AppMark";
 import Icon from "../../kit/components/Icon";
-import { Text, TextInput } from "../../kit/components/NativeText";
+import { Text } from "../../kit/components/NativeText";
+import SearchField from "../../kit/components/SearchField";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { SheetRoom } from "../../kit/rooms";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
-import { borders, family, metrics, radii, t, useTheme } from "../../kit/theme";
+import {
+  borders,
+  family,
+  metrics,
+  pageMargin,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
 import { togglePlacePin, usePlacePins } from "./home-pins";
@@ -82,7 +83,6 @@ export default function AllAppsSheet({
 }: AllAppsSheetProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
   const placePins = usePlacePins();
@@ -108,101 +108,73 @@ export default function AllAppsSheet({
   } of ${enabledPlaces(features).length} places`;
 
   return (
-    <Modal
-      transparent
+    <SheetRoom
+      cancelLabel="Close"
+      onClose={onClose}
+      testID={TEST_IDS.home.allApps}
+      title={ALL_APPS_TITLE}
       visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}
     >
-      <Pressable
-        accessibilityLabel="Close all apps and places"
-        style={styles.scrim}
-        onPress={onClose}
+      <SearchField
+        accessibilityLabel="Search all apps and places"
+        onChangeText={setQuery}
+        placeholder="Search apps and places"
+        value={query}
       />
-      <View
-        style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}
-        testID={TEST_IDS.home.allApps}
+      <ScrollView
+        style={styles.list}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>{ALL_APPS_TITLE}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            onPress={onClose}
-            style={styles.closeButton}
-          >
-            <Icon name="X" size={16} color={colors.text} />
-          </Pressable>
-        </View>
-        <View style={styles.field}>
-          <Icon name="Search" size={16} color={colors.textFaint} />
-          <TextInput
-            accessibilityLabel="Search all apps and places"
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search apps and places"
-            placeholderTextColor={colors.textFaint}
-            style={styles.input}
-            autoCorrect={false}
-            autoCapitalize="none"
-            returnKeyType="search"
+        {apps.length > 0 ? (
+          <Text style={styles.sectionHead}>
+            Apps · pinned apps come first on Home
+          </Text>
+        ) : null}
+        {apps.map((item) => (
+          <AppRow
+            key={item.meta.id}
+            item={item}
+            tile={tiles.get(item.meta.id)}
+            colors={colors}
+            styles={styles}
+            pinned={pinnedSet.has(item.meta.id)}
+            onOpen={() => {
+              onClose();
+              onOpenApp(item);
+            }}
+            onTogglePin={(next) => onTogglePin(item.meta.id, next)}
           />
-        </View>
-        <ScrollView
-          style={styles.list}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {apps.length > 0 ? (
-            <Text style={styles.sectionHead}>
-              Apps · pinned apps appear on Home
-            </Text>
-          ) : null}
-          {apps.map((item) => (
-            <AppRow
-              key={item.meta.id}
-              item={item}
-              tile={tiles.get(item.meta.id)}
-              colors={colors}
-              styles={styles}
-              pinned={pinnedSet.has(item.meta.id)}
-              onOpen={() => {
-                onClose();
-                onOpenApp(item);
-              }}
-              onTogglePin={(next) => onTogglePin(item.meta.id, next)}
-            />
-          ))}
-          {places.length > 0 ? (
-            <Text style={styles.sectionHead}>
-              Places · pinned places appear in the launcher
-            </Text>
-          ) : null}
-          {places.map((place) => (
-            <PlaceRow
-              key={place.id}
-              place={place}
-              colors={colors}
-              styles={styles}
-              pinned={isPlacePinned(placePins, place.id)}
-              onOpen={() => {
-                onClose();
-                onOpenPlace(place.id);
-              }}
-              onTogglePin={(next) => togglePlacePin(place.id, next)}
-            />
-          ))}
-          {apps.length === 0 && places.length === 0 ? (
-            <Text style={styles.empty}>
-              Nothing matches &ldquo;{trimmed}&rdquo;.
-            </Text>
-          ) : null}
-        </ScrollView>
-        <View style={styles.foot}>
-          <Text style={styles.footText}>{footText}</Text>
-        </View>
+        ))}
+        {places.length > 0 ? (
+          <Text style={styles.sectionHead}>
+            Places · pinned places come first in the launcher
+          </Text>
+        ) : null}
+        {places.map((place) => (
+          <PlaceRow
+            key={place.id}
+            place={place}
+            colors={colors}
+            styles={styles}
+            pinned={isPlacePinned(placePins, place.id)}
+            onOpen={() => {
+              onClose();
+              onOpenPlace(place.id);
+            }}
+            onTogglePin={(next) => togglePlacePin(place.id, next)}
+          />
+        ))}
+        {apps.length === 0 && places.length === 0 ? (
+          <Text style={styles.empty}>
+            Nothing matches &ldquo;{trimmed}&rdquo;.
+          </Text>
+        ) : null}
+      </ScrollView>
+      <View style={styles.foot}>
+        <Text style={styles.footText}>{footText}</Text>
       </View>
-    </Modal>
+    </SheetRoom>
   );
 }
 
@@ -319,44 +291,14 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: ROW_ICON,
     },
-    closeButton: {
-      alignItems: "center",
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      height: 34,
-      justifyContent: "center",
-      width: 34,
-    },
     empty: { ...t("small"), color: colors.textSoft, paddingVertical: 20 },
-    field: {
-      alignItems: "center",
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: radii.lg,
-      borderWidth: borders.hairline,
-      flexDirection: "row",
-      gap: 8,
-      height: 44,
-      marginHorizontal: 20,
-      marginTop: 4,
-      paddingHorizontal: 12,
-    },
     foot: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
       paddingVertical: 12,
     },
     footText: { ...t("mono"), color: colors.textFaint },
-    header: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 12,
-      marginBottom: 4,
-      paddingHorizontal: 20,
-    },
-    input: { ...t("body"), color: colors.text, flex: 1, padding: 0 },
     // "by law" fills the switch slot, same mono numeric register (:3226, :5479).
     lawLabel: { ...t("mono"), color: colors.textFaint, textAlign: "center" },
     list: { marginTop: 8, maxHeight: 440 },
@@ -365,7 +307,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 12,
       minHeight: metrics.row,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
       paddingVertical: 4,
     },
     rowLabel: { ...t("small"), color: colors.text },
@@ -373,7 +315,6 @@ const makeStyles = (colors: ThemeColors) =>
     rowMeta: { ...t("mono"), color: colors.textFaint },
     rowPressed: { backgroundColor: colors.bgHover },
     rowText: { flex: 1 },
-    scrim: { backgroundColor: colors.scrim, flex: 1 },
     // One style for both sub-heads (:5482-5485); border-top separates halves.
     sectionHead: {
       borderTopColor: colors.lineStrong,
@@ -384,23 +325,9 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: 0.7,
       marginTop: 8,
       paddingBottom: 4,
-      paddingHorizontal: 20,
+      paddingHorizontal: pageMargin,
       paddingTop: 12,
       textTransform: "uppercase",
     },
     // Elevated ground + hairline all round (:5976-5978).
-    sheet: {
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderTopLeftRadius: radii.lg,
-      borderTopRightRadius: radii.lg,
-      borderWidth: borders.hairline,
-      maxHeight: "80%",
-    },
-    title: {
-      color: colors.text,
-      flex: 1,
-      fontFamily: family.sansMedium,
-      fontSize: t("body").fontSize,
-    },
   });

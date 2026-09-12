@@ -32,3 +32,13 @@ export function taskRowModel(input: {
     priority: level > 0 ? (PRIORITY_CHIPS[level] ?? null) : null,
   };
 }
+
+/**
+ * What the row's CHECKBOX is called. It shares a row with the body, and both
+ * used to answer to the task's title (#1015 tasks/findings#23), so VoiceOver
+ * read the same name twice and named neither act. The box says the act it
+ * performs — and it performs the opposite one once the task is closed.
+ */
+export function checkboxLabel(title: string, done: boolean): string {
+  return done ? `Reopen ${title}` : `Mark ${title} done`;
+}

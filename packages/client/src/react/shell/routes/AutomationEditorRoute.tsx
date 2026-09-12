@@ -480,7 +480,7 @@ export default function AutomationEditorRoute({
             confirmLabel: "Delete",
             danger: true,
             message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
-            title: "Delete automation?",
+            title: "Delete rule?",
           });
           if (!ok) return false;
           try {

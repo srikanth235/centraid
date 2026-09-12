@@ -9,8 +9,14 @@
 // Capture, Voice, Tags, Trash and Version history are ACTS behind More. The
 // navigator has ONE Notes route, so a destination is state, not a pushed entry.
 import { FlashList } from "@shopify/flash-list";
-import React, { useMemo, useState } from "react";
-import { Alert, Pressable, RefreshControl, View } from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Pressable, RefreshControl, View } from "react-native";
 
 import {
   pendingChangeLabel,
@@ -42,38 +48,41 @@ import type { ShelfId } from "@centraid/blueprints/apps/notes/shelves";
 import type { LinkTarget } from "@centraid/blueprints/apps/notes/types";
 import {
   DELETE_NOTE_BODY,
-  DELETE_NOTE_TITLE,
   DELETE_NOTE_VERB,
   DELETE_NOTEBOOK_KEPT,
   DELETE_NOTEBOOK_VERB,
-  EMPTY_DAY_ONE,
-  HISTORY_NEEDS_NOTE,
-  JOURNAL_ROW,
-  SEARCH_EMPTY,
+  SEARCH_COPY,
   captionFor,
   deleteNotebookBody,
-  deleteNotebookTitle,
   notebookDeleted,
-  searchNoMatch,
   sentToTasks,
   shelfCopy,
 } from "@centraid/blueprints/apps/notes/view-copy";
 import type { ReplicaValue } from "@centraid/client/replica/native";
 
-import Icon from "../../kit/components/Icon";
+import { useBandOwner } from "../../kit/band/band-owner";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
-import { Text, TextInput } from "../../kit/components/NativeText";
+import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import { formatRelative } from "../../kit/format";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import AppPlace from "../../kit/rooms/AppPlace";
+import { parentPlace, placeStack } from "../../kit/rooms/place";
+import PushedPage from "../../kit/rooms/PushedPage";
+import { readFailure } from "../../kit/rooms/read-failure";
+import type { RoomEmpty, RoomError } from "../../kit/rooms/room-contracts";
 import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
+import { resolveAppMeta } from "../../lib/gateway";
+import type { NativeWriteResult } from "../../lib/replica/native-session-types";
 import type { NotesScreenProps as NotesRouteProps } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import NoteEditor from "./NoteEditor";
 import {
   NOTES_MORE_ROWS,
@@ -81,7 +90,14 @@ import {
   notesBandKeyFor,
 } from "./notes-band";
 import type { NotesBandDestinationKey, NotesPlace } from "./notes-band";
+import {
+  NOTES_EMPTY,
+  NOTES_EMPTY_REST,
+  NOTES_WRITE_FAILED,
+  NOTES_WRITE_REFUSED,
+} from "./notes-copy";
 import type { NativeNote } from "./notes-model";
+import NotesBand from "./NotesBand";
 import NotesHistory from "./NotesHistory";
 import { styles } from "./NotesHome.styles";
 import {
@@ -92,8 +108,11 @@ import {
   TrashPlace,
   VoicePlace,
 } from "./NotesPlaces";
-import NotesScreen from "./NotesScreen";
 import { useNotes } from "./useNotes";
+import { useNoteVersions } from "./useNoteVersions";
+
+/** The app's own mark and hue, from the one builtin table. */
+const NOTES = resolveAppMeta({ id: "notes" });
 
 const PLACE_FOR_TAB: Readonly<Record<NotesBandDestinationKey, NotesPlace>> = {
   library: null,
@@ -147,7 +166,10 @@ function NoteRow({
         </Text>
       ) : null}
       <Text style={[styles.noteMeta, { color: colors.textFaint }]}>
-        {new Date(note.updatedAt).toLocaleDateString()}
+        {/* ONE REGISTER FOR THE SEAT (#1015, S8): `today`, `yesterday`, a
+            weekday inside the week, a `4 Sep` date past it — never a locale
+            date string that says something different in each app. */}
+        {formatRelative(note.updatedAt)}
         {note.references.length ? ` · ${note.references.length} links` : ""}
       </Text>
       {/* A queued write says where it is, on the row it changed. */}
@@ -160,13 +182,36 @@ function NoteRow({
   );
 }
 
+/** Long enough that a sentence is one write, short enough that a member who
+ *  puts the phone down mid-thought has already been saved. */
+const AUTOSAVE_MS = 900;
+
+/** The id `create-note` handed back, when the write actually reached the vault. */
+function noteIdOf(result: NativeWriteResult): string | undefined {
+  const output = (result as { output?: { note_id?: unknown } }).output;
+  return typeof output?.note_id === "string" ? output.note_id : undefined;
+}
+
 export default function NotesHome({
   navigation,
 }: NotesRouteProps): React.JSX.Element {
   const { colors } = useTheme();
   const { session, refresh } = useReplica();
   const state = useNotes();
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
+  // Per app: a handback on one Notes surface is a handback on all of them.
+  const { bandOwner } = useBandOwner("notes");
   const [place, setPlace] = useState<NotesPlace>(null);
+  // WHERE A SUB-PLACE WAS ENTERED FROM (#1015, audit notes/findings#5). Notes
+  // gets one navigator screen, so a notebook, a tag filter and the version
+  // history are STATE — and state has no `goBack()`. `enter` records the
+  // origin so the head can name it and return to it; every other setter
+  // clears it, because a band tap is a new start, not a step deeper.
+  const [origin, setOrigin] = useState<NotesPlace>();
+  const enter = useCallback((next: NotesPlace, from: NotesPlace): void => {
+    setOrigin(from);
+    setPlace(next);
+  }, []);
   const [conceptId, setConceptId] = useState<string>();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
@@ -224,13 +269,48 @@ export default function NotesHome({
     term,
   ]);
 
+  /**
+   * THE NOTE THIS SESSION JUST MINTED (#1015, D3). A new note used to be
+   * written once, on close, because the seat had no id to save AGAINST: a
+   * second autosave tick would have created a second note. `create-note`
+   * hands the id back in its outcome, so the first save adopts it and every
+   * tick after it is an edit — a new note autosaves exactly like an old one.
+   * The saved text rides along, so an unchanged draft writes nothing while
+   * the replica is still catching up with the row.
+   */
+  const [created, setCreated] = useState<
+    { id: string; title: string; body: string } | undefined
+  >(undefined);
+  /** A save is in flight — never two creates for one draft. */
+  const saving = useRef(false);
+  /** A create landed without an id (queued offline): no autosave can name
+   *  that note, so the draft goes back to being written once, on close. */
+  const unnamed = useRef(false);
+
   const closeEditor = (): void => {
     setEditing(false);
     setCreating(false);
     setSelectedId(undefined);
+    setCreated(undefined);
+    unnamed.current = false;
     setTitle("");
     setBody("");
   };
+
+  // AUTOSAVE, AS THE BLUEPRINT COPY ALREADY PROMISED (#1015, D3, audit
+  // notes/findings#2). `editorStatus` says "Every change is saved as you
+  // write" and this seat never called it: saving was a manual press, the Save
+  // button looked identical whether or not there were unsaved edits, and the
+  // `X` — the same gesture iOS trains members to use on a page sheet — blanked
+  // the draft with no prompt and no write. A note editor holds a writing
+  // session; losing it in silence is not a state this app may have.
+  const dirty = editing
+    ? selected
+      ? title !== selected.title || body !== selected.body
+      : created
+        ? title !== created.title || body !== created.body
+        : Boolean(title.trim() || body.trim())
+    : false;
 
   const openNote = (note: NativeNote): void => {
     setSelectedId(note.id);
@@ -244,28 +324,29 @@ export default function NotesHome({
     action: string,
     input: Record<string, ReplicaValue>,
     note = selected
-  ): Promise<boolean> => {
-    if (!session) return false;
+  ): Promise<NativeWriteResult | undefined> => {
+    if (!session) return undefined;
     if (note && !note.canWrite) {
       postStatus("Read-only note — open the writable copy in its own vault.");
-      return false;
+      return undefined;
     }
     try {
       const request = { action, input: input as ReplicaValue };
       // One open vault, so one write target (#996 wave 3). The read-only
       // refusal above is still the gate — it is the row's own answer.
       const result = await session.write("notes", request);
-      return surfaceWriteOutcome(result, {
+      const ok = surfaceWriteOutcome(result, {
         onParked: () => {
           closeEditor();
-          navigation.navigate("Settings", { screen: "Approvals" });
+          navigation.navigate("Settings", { screen: "NeedsYou" });
         },
         queuedMessage: "This Notes change will sync automatically.",
-        failureTitle: "Not applied",
+        failureTitle: NOTES_WRITE_REFUSED,
       });
+      return ok ? result : undefined;
     } catch (error) {
-      surfaceWriteFailure(error, "Action failed");
-      return false;
+      surfaceWriteFailure(error, NOTES_WRITE_FAILED);
+      return undefined;
     }
   };
 
@@ -274,7 +355,8 @@ export default function NotesHome({
    * named by its own first line — which is exactly what `promote` reads back
    * out, so the member never sees the derivation.
    */
-  const save = async (): Promise<void> => {
+  const save = async ({ closeAfter = false } = {}): Promise<void> => {
+    if (saving.current) return;
     const typed = title.trim();
     const text = body.trim();
     if (!typed && !text) {
@@ -282,72 +364,113 @@ export default function NotesHome({
       return;
     }
     const name = typed || text.split("\n")[0]!.slice(0, 80);
-    const changed = selected
-      ? await write("edit-note", {
-          note_id: selected.rawId,
-          title: name,
-          body_text: text || name,
-          format: "markdown",
-        })
-      : await write(
-          "create-note",
-          {
+    const body_text = text || name;
+    const existingId = selected?.rawId ?? created?.id;
+    saving.current = true;
+    let changed: NativeWriteResult | undefined;
+    try {
+      changed = existingId
+        ? await write("edit-note", {
+            note_id: existingId,
             title: name,
-            body_text: text || name,
+            body_text,
             format: "markdown",
-            ...(notebookId ? { notebook_id: notebookId } : {}),
-          },
-          undefined
-        );
-    if (changed) closeEditor();
+          })
+        : await write(
+            "create-note",
+            {
+              title: name,
+              body_text,
+              format: "markdown",
+              ...(notebookId ? { notebook_id: notebookId } : {}),
+            },
+            undefined
+          );
+    } finally {
+      saving.current = false;
+    }
+    if (!changed) return;
+    // A queued write has no output yet; that note keeps the old shape and is
+    // written once more on close rather than adopted mid-flight.
+    const mintedId = noteIdOf(changed);
+    const savedId = existingId ?? mintedId;
+    if (savedId) {
+      setCreated({ id: savedId, title: name, body: body_text });
+      if (mintedId && !selectedId) setSelectedId(mintedId);
+    } else unnamed.current = true;
+    if (closeAfter) closeEditor();
+  };
+
+  // The debounce saves a NEW note too (#1015): the first tick creates it, the
+  // outcome hands the id back, and every tick after it is an edit of that row.
+  // `saving` is what makes that safe — two ticks can never both create. A
+  // create that landed without an id (queued offline) sets `unnamed` and the
+  // draft goes back to being written once, on close.
+  // `save` is rebuilt every render over the current draft, so the timer holds
+  // the latest through a ref rather than through a dependency that would reset
+  // it on every keystroke's re-render and therefore never fire.
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  });
+  useEffect(() => {
+    if (!editing || !dirty || unnamed.current) return undefined;
+    const timer = setTimeout(() => void saveRef.current(), AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [editing, dirty, selectedId, title, body]);
+
+  const editorVersions = useNoteVersions({
+    headContentId: selected?.bodyContentId ?? "",
+    currentRevisionId: selected?.currentRevisionId ?? null,
+    noteId: selected?.rawId ?? "",
+    createdAt: selected?.createdAt ?? "",
+    ...state.chainRows,
+  });
+
+  /** Closing IS finishing (D3): the draft goes to the vault, then the sheet
+   *  goes away. Nothing is discarded and nothing is asked. */
+  const finishEditing = (): void => {
+    if (dirty) void save({ closeAfter: true });
+    else closeEditor();
   };
 
   const confirmTrash = (): void => {
     if (!selected) return;
-    // The one place the 30-day reassurance is allowed, in the words the spec
-    // gives it — shared with the web seat so the two cannot drift.
-    Alert.alert(DELETE_NOTE_TITLE, DELETE_NOTE_BODY, [
-      { text: "Keep it", style: "cancel" },
-      {
-        text: DELETE_NOTE_VERB,
-        style: "destructive",
-        onPress: () => {
-          void write("delete-note", { note_id: selected.rawId }).then(
-            (done) => {
-              if (done) closeEditor();
-            }
-          );
-        },
+    // ONE CONFIRM SHAPE (#1015, S7): the noun and the count are in the title,
+    // the destructive verb is outlined `--net`, and the 30-day reassurance is
+    // the body — in the words the spec gives it, shared with the web seat.
+    confirmDestructive({
+      body: DELETE_NOTE_BODY,
+      noun: "note",
+      onConfirm: () => {
+        void write("delete-note", { note_id: selected.rawId }).then((done) => {
+          if (done) closeEditor();
+        });
       },
-    ]);
+      verb: DELETE_NOTE_VERB,
+    });
   };
 
   /** A notebook is pure structure: its notes are unfiled, never destroyed,
    *  and the confirm says how many before it happens. */
   const confirmDeleteNotebook = (book: NotebookShelf): void => {
     const orphaned = book.noteIds.length;
-    Alert.alert(
-      deleteNotebookTitle(book.name ?? "Notebook"),
-      `${deleteNotebookBody(orphaned)} ${DELETE_NOTEBOOK_KEPT}`,
-      [
-        { text: "Keep it", style: "cancel" },
-        {
-          text: DELETE_NOTEBOOK_VERB,
-          style: "destructive",
-          onPress: () => {
-            void write(
-              "delete-notebook",
-              { notebook_id: book.notebook_id },
-              undefined
-            ).then((done) => {
-              if (!done) return;
-              postStatus(notebookDeleted(orphaned));
-              if (notebookId === book.notebook_id) setPlace(BOOKS);
-            });
-          },
-        },
-      ]
-    );
+    confirmDestructive({
+      body: `${deleteNotebookBody(orphaned)} ${DELETE_NOTEBOOK_KEPT}`,
+      noun: "notebook",
+      onConfirm: () => {
+        void write(
+          "delete-notebook",
+          { notebook_id: book.notebook_id },
+          undefined
+        ).then((done) => {
+          if (!done) return;
+          postStatus(notebookDeleted(orphaned));
+          if (notebookId === book.notebook_id) setPlace(BOOKS);
+        });
+      },
+      verb: DELETE_NOTEBOOK_VERB,
+    });
   };
 
   const sendToTasks = async (line: number, text: string): Promise<void> => {
@@ -397,190 +520,179 @@ export default function NotesHome({
     }
   };
 
+  // The rows only. Every other state — a failed read, an empty shelf — is the
+  // room's (`RoomBody`), in the one order every surface now keeps.
   const list = (
-    <>
-      <ReplicaStateCard
-        connection={state.connection}
-        error={state.error}
-        unavailableReason={state.unavailableReason}
-        noun="Notes"
-        onRetry={() => void refresh?.()}
-      />
-      {state.connection !== "unavailable" && !state.error ? (
-        <FlashList
-          maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
-          data={visible}
-          keyExtractor={(note) => note.id}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void pull()}
-            />
-          }
-          renderItem={({ item, index }) => (
-            <NoteRow
-              note={item}
-              first={index === 0}
-              onOpen={() => openNote(item)}
-            />
-          )}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                {place === SEARCH
-                  ? term
-                    ? searchNoMatch(query.trim())
-                    : SEARCH_EMPTY
-                  : EMPTY_DAY_ONE}
-              </Text>
-              {place === JOURNAL ? (
-                <Text style={[styles.emptyBody, { color: colors.textSoft }]}>
-                  {JOURNAL_ROW}
-                </Text>
-              ) : null}
-            </View>
-          }
+    <FlashList
+      maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
+      data={visible}
+      keyExtractor={(note) => note.id}
+      contentContainerStyle={styles.list}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={() => void pull()} />
+      }
+      renderItem={({ item, index }) => (
+        <NoteRow
+          note={item}
+          first={index === 0}
+          onOpen={() => openNote(item)}
         />
-      ) : null}
-    </>
+      )}
+    />
   );
 
-  const pane = ((): React.JSX.Element => {
-    if (place === NOTES_MORE_SHEET)
-      return <MoreSheet rows={NOTES_MORE_ROWS} onPick={setPlace} />;
-    if (place === BOOKS)
-      return (
-        <NotebooksPlace
-          notebooks={state.notebooks}
-          unfiled={
-            unfiledNoteIds([...state.visibleNoteIds], state.notebooks).length
-          }
-          onOpen={(id) => setPlace(notebookShelf(id))}
-          onCreate={(name) => {
-            if (name.trim())
-              void write("create-notebook", { name: name.trim() }, undefined);
-          }}
-          onRename={(id, name) => {
-            if (name.trim())
-              void write(
-                "rename-notebook",
-                { notebook_id: id, name: name.trim() },
-                undefined
-              );
-          }}
-          onDelete={confirmDeleteNotebook}
-        />
-      );
-    if (place === TAGS)
-      return (
-        <TagsPlace
-          tags={state.tagShelves}
-          {...(conceptId ? { active: conceptId } : {})}
-          onSelect={(id) => {
-            setConceptId(id);
-            setPlace(null);
-          }}
-        />
-      );
-    if (place === TRASH)
-      return (
-        <TrashPlace
-          notes={visible}
-          onRestore={(note) => {
-            void write("restore-note", { note_id: note.rawId }, note);
-          }}
-        />
-      );
-    if (place === HISTORY)
-      return selected ? (
-        <NotesHistory
-          note={selected}
-          chainRows={state.chainRows}
-          unreadable={
-            state.error !== undefined || state.connection === "unavailable"
-          }
-          onRestore={(contentId) => {
-            // RESTORING APPENDS: the chain grows a head, nothing is rewritten.
-            void write("restore-note-version", {
-              note_id: selected.rawId,
-              content_id: contentId,
-            });
-          }}
-        />
-      ) : (
-        <View style={styles.empty}>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {HISTORY_NEEDS_NOTE}
-          </Text>
-        </View>
-      );
-    if (place === CAPTURE)
-      return <CapturePlace onScan={() => navigation.navigate("Scan")} />;
-    if (place === VOICE) return <VoicePlace />;
-    return list;
-  })();
+  // Assignments, not an IIFE with returns: the first `return (<` in this
+  // component has to be the room it is rooted in (`lint-mobile-rooms`).
+  let pane: React.JSX.Element = list;
+  if (place === NOTES_MORE_SHEET)
+    pane = (
+      <MoreSheet
+        rows={NOTES_MORE_ROWS}
+        onPick={(shelfId) => enter(shelfId, NOTES_MORE_SHEET)}
+      />
+    );
+  if (place === BOOKS)
+    pane = (
+      <NotebooksPlace
+        notebooks={state.notebooks}
+        unfiled={
+          unfiledNoteIds([...state.visibleNoteIds], state.notebooks).length
+        }
+        onOpen={(id) => enter(notebookShelf(id), BOOKS)}
+        onCreate={(name) => {
+          if (name.trim())
+            void write("create-notebook", { name: name.trim() }, undefined);
+        }}
+        onRename={(id, name) => {
+          if (name.trim())
+            void write(
+              "rename-notebook",
+              { notebook_id: id, name: name.trim() },
+              undefined
+            );
+        }}
+        onDelete={confirmDeleteNotebook}
+      />
+    );
+  else if (place === TAGS)
+    pane = (
+      <TagsPlace
+        tags={state.tagShelves}
+        {...(conceptId ? { active: conceptId } : {})}
+        onSelect={(id) => {
+          setConceptId(id);
+          enter(null, TAGS);
+        }}
+      />
+    );
+  else if (place === TRASH)
+    pane = (
+      <TrashPlace
+        notes={visible}
+        onRestore={(note) => {
+          void write("restore-note", { note_id: note.rawId }, note);
+        }}
+      />
+    );
+  else if (place === HISTORY && selected)
+    pane = (
+      <NotesHistory
+        note={selected}
+        chainRows={state.chainRows}
+        onRestore={(contentId) => {
+          // RESTORING APPENDS: the chain grows a head, nothing is rewritten.
+          void write("restore-note-version", {
+            note_id: selected.rawId,
+            content_id: contentId,
+          });
+        }}
+      />
+    );
+  else if (place === CAPTURE)
+    pane = <CapturePlace onScan={() => navigation.navigate("Scan")} />;
+  else if (place === VOICE) pane = <VoicePlace />;
 
   const caption = captionFor(shelf);
-  return (
-    <NotesScreen
-      current={notesBandKeyFor(place)}
-      onDestination={(key) => {
-        setPlace(PLACE_FOR_TAB[key]);
-        if (key !== "library") setConceptId(undefined);
-      }}
-      onHome={() => navigation.navigate("Home")}
-    >
-      <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>
-            {place === NOTES_MORE_SHEET ? "More" : shelfCopy(shelf).title}
-          </Text>
-          {caption ? (
-            <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-              {caption}
-            </Text>
-          ) : null}
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="New note"
-          testID={TEST_IDS.notes.capture}
-          onPress={() => {
-            setCreating(true);
-            setSelectedId(undefined);
-            setTitle("");
-            setBody("");
-            setEditing(true);
-          }}
-          style={styles.iconButton}
-        >
-          <Icon name="plus" size={24} color={colors.accent} />
-        </Pressable>
-      </View>
-      <ReplicaStatusBar />
+  // The notebook's own NAME, not the generic noun: `shelfCopy` takes it and
+  // Notes never passed it (#1015, audit notes/findings#5).
+  const notebookName = notebookId
+    ? state.notebooks.find((book) => book.notebook_id === notebookId)?.name
+    : undefined;
+  const placeTitle =
+    place === NOTES_MORE_SHEET ? "More" : shelfCopy(shelf, notebookName).title;
+  const originTitle =
+    origin === undefined
+      ? ""
+      : origin === NOTES_MORE_SHEET
+        ? "More"
+        : shelfCopy(origin).title;
 
-      {place === SEARCH ? (
-        <View style={styles.controls}>
-          <View
-            style={[
-              styles.search,
-              { backgroundColor: colors.bgElev, borderColor: colors.line },
-            ]}
-          >
-            <Icon name="search" size={17} color={colors.textFaint} />
-            <TextInput
-              accessibilityLabel="Search notes"
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search titles and bodies"
-              placeholderTextColor={colors.textFaint}
-              style={[styles.searchInput, { color: colors.text }]}
-            />
-          </View>
-        </View>
-      ) : null}
+  // WHERE THIS SCREEN IS, AS A VALUE (#1015, B7). Notes has one navigator
+  // entry, so its stack is the two places it holds in state — the origin a
+  // sub-place was entered from, and the sub-place itself. `parentPlace` reads
+  // the back target off that; no caller writes the word down.
+  const stack = placeStack(
+    origin === undefined
+      ? [{ key: String(place), title: placeTitle }]
+      : [
+          { key: String(origin), title: originTitle },
+          { key: String(place), title: placeTitle },
+        ]
+  );
+  const backTo = parentPlace(stack);
 
+  const unreachable = state.connection === "unavailable";
+  // ERROR OUTRANKS EMPTY (`RoomBody`): a shelf that could not be read is not
+  // an empty shelf, and Notes used to draw both at once.
+  // S14: the exception never reaches the member. `useSeatPages` logs the raw
+  // string at the catch; `readFailure` writes the sentence.
+  const roomError: RoomError | undefined = readFailure({
+    failed: Boolean(state.error),
+    noun: "Notes",
+    onRetry: () => void refresh?.(),
+    unavailableReason: state.unavailableReason,
+    unreachable,
+  });
+
+  const startNote = (): void => {
+    setCreating(true);
+    setSelectedId(undefined);
+    setTitle("");
+    setBody("");
+    setEditing(true);
+  };
+
+  /** The empty state of whichever place is showing; the blueprint's own words
+   *  where it has them (`SEARCH_COPY`), which this seat never used. */
+  let roomEmpty: RoomEmpty | undefined;
+  if (place === HISTORY && !selected)
+    roomEmpty = { ...NOTES_EMPTY.history!, routine: true };
+  else if (pane === list && visible.length === 0) {
+    if (place === SEARCH)
+      roomEmpty = term
+        ? {
+            body: SEARCH_COPY.miss.body,
+            routine: true,
+            title: SEARCH_COPY.miss.title(query.trim()),
+          }
+        : {
+            body: SEARCH_COPY.resting.body,
+            routine: true,
+            title: SEARCH_COPY.resting.title,
+          };
+    else if (place === JOURNAL)
+      roomEmpty = { ...NOTES_EMPTY.journal!, routine: true };
+    else if (place === TRASH)
+      roomEmpty = { ...NOTES_EMPTY.trash!, routine: true };
+    else
+      // No action here: the room's own header already carries "New note", and
+      // two doors with the same word is the duplication the empty was built to
+      // avoid, not an extra affordance.
+      roomEmpty = { ...NOTES_EMPTY_REST };
+  }
+
+  const content = (
+    <>
       {conceptId && place === null ? (
         <View style={styles.controls}>
           <Pressable
@@ -601,66 +713,151 @@ export default function NotesHome({
           </Pressable>
         </View>
       ) : null}
-
       {pane}
+    </>
+  );
 
-      <NoteEditor
-        open={editing && (creating || selected !== undefined)}
-        {...(selected ? { note: selected } : {})}
-        title={title}
-        body={body}
-        tags={selected ? tagsOfNote(selected.rawId, state.tagShelves) : []}
-        notebooks={state.notebooks}
-        filedIn={
-          selected ? notebookIdsOfNote(selected.rawId, state.notebooks) : []
+  const editor = (
+    <NoteEditor
+      open={editing && (creating || selected !== undefined)}
+      {...(selected ? { note: selected } : {})}
+      title={title}
+      body={body}
+      tags={selected ? tagsOfNote(selected.rawId, state.tagShelves) : []}
+      notebooks={state.notebooks}
+      filedIn={
+        selected ? notebookIdsOfNote(selected.rawId, state.notebooks) : []
+      }
+      journalNoteIds={state.journalNoteIds}
+      onTitle={setTitle}
+      onBody={setBody}
+      onClose={finishEditing}
+      dirty={dirty}
+      versions={editorVersions.length}
+      onTrash={confirmTrash}
+      onRestore={() => {
+        if (!selected) return;
+        void write("restore-note", { note_id: selected.rawId }).then((done) => {
+          if (done) closeEditor();
+        });
+      }}
+      onTogglePin={() => {
+        if (!selected) return;
+        void write("edit-note", {
+          note_id: selected.rawId,
+          pinned: selected.pinned ? 0 : 1,
+        });
+      }}
+      onMove={(target) => {
+        if (!selected) return;
+        // `move-note` with no notebook is the vault's way of saying unfiled.
+        void write("move-note", {
+          note_id: selected.rawId,
+          ...(target ? { notebook_id: target } : {}),
+        });
+      }}
+      onAddTag={(label) => {
+        if (!selected || !label.trim()) return;
+        void write("add-tag", {
+          note_id: selected.rawId,
+          label: label.trim(),
+        });
+      }}
+      onRemoveTag={(tagId) => {
+        // ONE EDGE, never the concept: other notes keep the tag.
+        void write("remove-tag", { tag_id: tagId });
+      }}
+      onSendToTasks={(line, text) => void sendToTasks(line, text)}
+      onOpenHistory={() => {
+        setEditing(false);
+        enter(HISTORY, place);
+      }}
+      onLink={(target, anchor) => void link(target, anchor)}
+    />
+  );
+  const overlay = (
+    <>
+      {editor}
+      {confirmSheet}
+    </>
+  );
+
+  // The vault lockup, then the replica's own line: the two facts true on every
+  // route of an app, above the header and outside the body so neither scrolls.
+  const chrome = (
+    <>
+      <VaultBar />
+      <ReplicaStatusBar />
+    </>
+  );
+  const band = (): React.JSX.Element => (
+    <NotesBand
+      owner={bandOwner}
+      current={notesBandKeyFor(place)}
+      onSelect={(key: NotesBandDestinationKey) => {
+        setOrigin(undefined);
+        setPlace(PLACE_FOR_TAB[key]);
+        if (key !== "library") setConceptId(undefined);
+      }}
+      onHome={() => navigation.navigate("Home")}
+    />
+  );
+  const search =
+    place === SEARCH
+      ? {
+          accessibilityLabel: "Search notes",
+          onChangeText: setQuery,
+          placeholder: "Search titles and bodies",
+          value: query,
         }
-        journalNoteIds={state.journalNoteIds}
-        onTitle={setTitle}
-        onBody={setBody}
-        onClose={closeEditor}
-        onSave={() => void save()}
-        onTrash={confirmTrash}
-        onRestore={() => {
-          if (!selected) return;
-          void write("restore-note", { note_id: selected.rawId }).then(
-            (done) => {
-              if (done) closeEditor();
-            }
-          );
+      : undefined;
+  const newNote = {
+    label: "New note",
+    onPress: startNote,
+    testID: TEST_IDS.notes.capture,
+  };
+
+  // A place entered FROM another place is a pushed page, and its back control
+  // names the place it descends from rather than the word "Back".
+  if (backTo)
+    return (
+      <PushedPage
+        action={newNote}
+        backTo={backTo}
+        band={band}
+        chrome={chrome}
+        {...(roomEmpty ? { empty: roomEmpty } : {})}
+        {...(roomError ? { error: roomError } : {})}
+        onBack={() => {
+          setPlace(origin ?? null);
+          setOrigin(undefined);
+          if (origin === TAGS) setConceptId(undefined);
         }}
-        onTogglePin={() => {
-          if (!selected) return;
-          void write("edit-note", {
-            note_id: selected.rawId,
-            pinned: selected.pinned ? 0 : 1,
-          });
-        }}
-        onMove={(target) => {
-          if (!selected) return;
-          // `move-note` with no notebook is the vault's way of saying unfiled.
-          void write("move-note", {
-            note_id: selected.rawId,
-            ...(target ? { notebook_id: target } : {}),
-          });
-        }}
-        onAddTag={(label) => {
-          if (!selected || !label.trim()) return;
-          void write("add-tag", {
-            note_id: selected.rawId,
-            label: label.trim(),
-          });
-        }}
-        onRemoveTag={(tagId) => {
-          // ONE EDGE, never the concept: other notes keep the tag.
-          void write("remove-tag", { tag_id: tagId });
-        }}
-        onSendToTasks={(line, text) => void sendToTasks(line, text)}
-        onOpenHistory={() => {
-          setEditing(false);
-          setPlace(HISTORY);
-        }}
-        onLink={(target, anchor) => void link(target, anchor)}
-      />
-    </NotesScreen>
+        overlay={overlay}
+        {...(search ? { search } : {})}
+        title={placeTitle}
+      >
+        {content}
+      </PushedPage>
+    );
+  return (
+    <AppPlace
+      action={newNote}
+      app={{
+        color: NOTES.color,
+        iconKey: NOTES.iconKey,
+        title: placeTitle,
+        ...(caption ? { subtitle: caption } : {}),
+      }}
+      band={band}
+      chrome={chrome}
+      {...(roomEmpty ? { empty: roomEmpty } : {})}
+      {...(roomError ? { error: roomError } : {})}
+      onBack={() => navigation.navigate("Home")}
+      overlay={overlay}
+      {...(search ? { search } : {})}
+    >
+      {content}
+    </AppPlace>
   );
 }

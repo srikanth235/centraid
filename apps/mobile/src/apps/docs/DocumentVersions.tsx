@@ -29,8 +29,15 @@ import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps, DocsShellNavigation } from "../../navigation";
 import {
@@ -38,14 +45,14 @@ import {
   VERSIONS_WHO_WITHHELD,
   versionsStatus,
 } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { useDocsRoom } from "./docs-room";
 import { useDocument, useDocsWrite } from "./useDocs";
 import { useVersionChain } from "./useVersionChain";
 
 export default function DocumentVersions({
   route,
 }: DocsScreenProps<"DocumentVersions">): React.JSX.Element {
+  const room = useDocsRoom("all");
   const { documentId } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -66,9 +73,14 @@ export default function DocumentVersions({
   };
 
   return (
-    <DocsScreen current="all">
-      <DocsShelfHeader title="Version history" backTo="All" />
-      <ReplicaStatusBar />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       {loading && !chain ? (
         <SkeletonRows accessibilityLabel="Reading the version chain" />
       ) : linksDenied ? (
@@ -118,7 +130,7 @@ export default function DocumentVersions({
           </Text>
         </ScrollView>
       )}
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -133,13 +145,13 @@ const makeStyles = (colors: ThemeColors) =>
       overflow: "hidden",
     },
     docTitle: { ...t("title"), color: colors.text, paddingBottom: 10 },
-    page: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
+    page: { flex: 1, paddingHorizontal: pageMargin, paddingTop: 8 },
     row: {
       alignItems: "center",
       flexDirection: "row",
       gap: 12,
       minHeight: 52,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: 8,
     },
     rowMain: { flex: 1, gap: 2, minWidth: 0 },
@@ -149,6 +161,6 @@ const makeStyles = (colors: ThemeColors) =>
       borderTopWidth: borders.hairline,
     },
     rowVersion: { ...t("body"), color: colors.text },
-    scroll: { paddingBottom: 32, paddingHorizontal: 18, paddingTop: 8 },
+    scroll: { paddingBottom: 32, paddingHorizontal: pageMargin, paddingTop: 8 },
     status: { ...t("mono"), color: colors.textFaint, paddingTop: 6 },
   });

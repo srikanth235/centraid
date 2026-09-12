@@ -274,8 +274,8 @@ export function buildCollectionSections(
         uri: asset.uri,
         originalUri: asset.originalUri,
       })),
-      empty:
-        "Deleted photographs wait here for 30 days before they are purged.",
+      // The trash header states the 30-day purge, once (R-NY-11).
+      empty: "Photographs you delete collect here.",
     },
   ];
 }

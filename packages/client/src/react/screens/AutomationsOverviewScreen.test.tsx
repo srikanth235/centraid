@@ -160,7 +160,7 @@ describe("AutomationsOverviewScreen suite", () => {
   describe(AutomationsOverviewScreen, () => {
     it("renders the two sections as row blocks, attention-first", async () => {
       const el = await mount(makeProps());
-      expect(el.textContent).toContain("Automations");
+      expect(el.textContent).toContain("Rules");
       expect(el.textContent).toContain("Recent runs across everything");
       // A row states what fires it and how it last went — no tile, no pill.
       expect(el.textContent).toContain("Every day at 8am");
@@ -222,7 +222,7 @@ describe("AutomationsOverviewScreen suite", () => {
       // Three in a row, stopped at the older success — not four.
       expect(el.textContent).toContain("failed 3 runs in a row, since");
       const health = readRouteHealth();
-      expect(health?.text).toContain("1 automation failing");
+      expect(health?.text).toContain("1 rule failing");
       expect(health?.text).toContain(
         "Invoice Sync has failed its last 3 runs, since"
       );
@@ -240,7 +240,7 @@ describe("AutomationsOverviewScreen suite", () => {
     it("publishes the count line and the ready state to the app bar", async () => {
       await mount(makeProps());
       expect(readVitals("automations")).toStrictEqual({
-        count: "2 automations · 1 failing · 1 paused",
+        count: "2 rules · 1 failing · 1 paused",
         state: "ready",
       });
     });
@@ -261,7 +261,7 @@ describe("AutomationsOverviewScreen suite", () => {
       expect(readRouteHealth()?.text).toContain("Nothing is failing");
       expect(readRouteHealth()?.action).toBeUndefined();
       expect(readVitals("automations")?.count).toBe(
-        "1 automation · 0 failing · 0 paused"
+        "1 rule · 0 failing · 0 paused"
       );
     });
 
@@ -276,9 +276,7 @@ describe("AutomationsOverviewScreen suite", () => {
 
     it("shows the filter chips only when the fleet is full, and filters on them", async () => {
       const small = await mount(makeProps());
-      expect(
-        small.querySelector('[aria-label="Filter automations"]')
-      ).toBeNull();
+      expect(small.querySelector('[aria-label="Filter rules"]')).toBeNull();
       act(() => root?.unmount());
       small.remove();
 
@@ -289,7 +287,7 @@ describe("AutomationsOverviewScreen suite", () => {
             .mockResolvedValue(bigData()),
         })
       );
-      const chips = el.querySelector('[aria-label="Filter automations"]');
+      const chips = el.querySelector('[aria-label="Filter rules"]');
       expect(chips).toBeTruthy();
       expect(readVitals("automations")?.state).toBe("full");
       await click(
@@ -301,9 +299,7 @@ describe("AutomationsOverviewScreen suite", () => {
       await click(
         buttons(el).find((b) => b.textContent === "Drafts") as HTMLElement
       );
-      const list = el.querySelector(
-        '[aria-label="Automations"]'
-      ) as HTMLElement;
+      const list = el.querySelector('[aria-label="Rules"]') as HTMLElement;
       expect(list.textContent).toContain("Filler 0");
       expect(list.textContent).not.toContain("Invoice Sync");
     });
@@ -317,14 +313,12 @@ describe("AutomationsOverviewScreen suite", () => {
       const el = await mount(props);
       expect(el.textContent).toContain("Nothing runs on its own yet");
       expect(el.textContent).toContain(
-        "An automation is a trigger and a thing to do."
+        "A rule is a trigger and a thing to do."
       );
       expect(readVitals("automations")?.state).toBe("empty");
-      // "New automation" is the app bar's commit — the page must not draw a
+      // "New rule" is the app bar's commit — the page must not draw a
       // second copy of the view's one filled control.
-      expect(buttons(el).some((b) => b.textContent === "New automation")).toBe(
-        false
-      );
+      expect(buttons(el).some((b) => b.textContent === "New rule")).toBe(false);
       await click(
         buttons(el).find((b) => b.textContent === "Browse templates")
       );
@@ -400,7 +394,7 @@ describe("AutomationsOverviewScreen suite", () => {
       expect(el.textContent).toContain("Recognition history");
       // The member count line never counts a built-in recipe.
       expect(readVitals("automations")?.count).toBe(
-        "2 automations · 1 failing · 1 paused"
+        "2 rules · 1 failing · 1 paused"
       );
       const recipes = el.querySelector(
         '[aria-label="Recognition recipes"]'

@@ -83,9 +83,7 @@ describe("AutomationEditorTriggers", () => {
       const props = makeProps(over);
       const el = await mount(props);
       setValue(
-        el.querySelector(
-          'input[placeholder="My Automation"]'
-        ) as HTMLInputElement,
+        el.querySelector('input[placeholder="My rule"]') as HTMLInputElement,
         "A"
       );
       return { el, props };
@@ -101,7 +99,7 @@ describe("AutomationEditorTriggers", () => {
         "  core.transaction , billing.invoice ,"
       );
       await act(async () =>
-        button(el, "Create automation").dispatchEvent(
+        button(el, "Create rule").dispatchEvent(
           new MouseEvent("click", { bubbles: true })
         )
       );
@@ -119,7 +117,7 @@ describe("AutomationEditorTriggers", () => {
       const { el, props } = await mountNamed();
       await addTrigger(el, "Data change");
       await act(async () =>
-        button(el, "Create automation").dispatchEvent(
+        button(el, "Create rule").dispatchEvent(
           new MouseEvent("click", { bubbles: true })
         )
       );

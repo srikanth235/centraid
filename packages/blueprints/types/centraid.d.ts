@@ -446,7 +446,7 @@ interface CentraidClient {
   /** Permanently discard a retained denied/conflict/failed outbox record. */
   discardPendingWrite?: (intentId: string, scope?: string) => Promise<boolean>;
   /** Navigate to the shell-owned approval inbox when this host provides one. */
-  openApprovals?: () => void;
+  openNeedsYou?: () => void;
   /**
    * Leave this app for another first-party one (#834). The projection doctrine
    * needs exactly this and nothing more: Agenda's due-task shelf shows that a

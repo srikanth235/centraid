@@ -105,6 +105,8 @@ Marketing + docs remain the apex `centraid` worker (`wrangler.json` → `./dist/
 
 Routine device pairing is identity-preserving: a bare `centraid-gateway pair --data-dir …` targets the existing owner. Creating a new household member must be explicit with `--new-member`; selecting an existing one uses `--member`. Device display names belong to the redeeming browser/extension and remain distinct from the gateway connection label. See [recovery/pairing.md](recovery/pairing.md) for the operational runbook.
 
+**Pairing a phone to the desktop enrols it too** ([#1015](https://github.com/srikanth235/centraid/issues/1015), ruling R-NY-18). The QR gesture admits the phone at two layers, and both are the same gesture: the desktop's `devices.json` is the iroh transport allowlist, and `POST /centraid/_gateway/phone-link` — host custody only — is where that EndpointId becomes a device row under the host's own owner in the gateway's enrolment store. A tunnelled request reaches the gateway as the phone, never as the host, so that row is what every vault door resolves. Revoking the phone in Settings drops the live connections **and** revokes the row; re-pairing the same phone clears the tombstone, because scanning the code again is the same admission gesture made at the same desk.
+
 ## After enrollment
 
 Point packaging work at the secret **names** above. Repo docs stay at: "secrets live in GH Actions / store consoles." First signed desktop tag attaches installers to the GitHub Release; until then tag builds stay workflow artifacts + prerelease note.

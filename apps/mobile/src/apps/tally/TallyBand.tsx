@@ -25,6 +25,7 @@ import type { BandOwner } from "../../kit/band/band-owner";
 import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticSelect } from "../../kit/haptics";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -37,7 +38,9 @@ const PLATE_GAP = 8;
 
 export interface TallyBandProps {
   owner: BandOwner;
-  current: TallyBandDestinationKey;
+  /** Which of the five is lit. Derived from the route's shelf
+   *  (`tally-places.ts`), never written down by a screen (#1015, audit B7). */
+  destination: TallyBandDestinationKey;
   onSelect: (key: TallyBandDestinationKey) => void;
   /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
@@ -45,7 +48,7 @@ export interface TallyBandProps {
 
 export default function TallyBand({
   owner,
-  current,
+  destination: lit,
   onSelect,
   onHome,
 }: TallyBandProps): React.JSX.Element {
@@ -74,7 +77,7 @@ export default function TallyBand({
 
       <View style={styles.group} accessibilityRole="tablist">
         {band.destinations.map((destination) => {
-          const active = destination.key === current;
+          const active = destination.key === lit;
           return (
             <Pressable
               key={destination.key}
@@ -85,7 +88,12 @@ export default function TallyBand({
               // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.tally}${destination.key}`}
               accessibilityState={{ selected: active }}
-              onPress={() => onSelect(destination.key)}
+              onPress={() => {
+                // The band moved to another place: the one selection tick
+                // (#1015, S15 — `kit/haptics.ts` names the three moments).
+                hapticSelect();
+                onSelect(destination.key);
+              }}
               style={styles.tab}
             >
               <View

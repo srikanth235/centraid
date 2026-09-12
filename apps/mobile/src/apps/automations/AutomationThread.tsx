@@ -7,12 +7,20 @@ import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { postStatus } from "../../kit/components/status-line";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { surfaceWriteFailure } from "../../kit/replica/write-outcome";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
 import type { AutomationTurnRow } from "../../lib/automations";
+
+/** One noun for this page (#1015, S14). */
+const AUTOMATION_NOT_READ = "This rule could not be read";
+
+/** …and when a run does not start. The retry word is not glued on here: the
+ *  failure door adds the product's one (`surfaceWriteFailure`, R-A-15); the
+ *  noun is the place's own (R-SH-11). */
+const AUTOMATION_NOT_RUN = "This rule did not run";
 
 type State =
   | { kind: "loading" }
@@ -37,10 +45,10 @@ export default function AutomationThread(props: {
         turns: await listAutomationTurns(props.automationRef),
       });
     } catch (error) {
-      setState({
-        kind: "error",
-        message: error instanceof Error ? error.message : "Could not load.",
-      });
+      // S14 (#1015): the exception is a fact about the program, so it goes to
+      // the log (docs/logs.md) and the pane gets this page's one noun.
+      console.warn("[automations] thread read failed", error);
+      setState({ kind: "error", message: AUTOMATION_NOT_READ });
     }
   }, [props.automationRef]);
 
@@ -54,11 +62,7 @@ export default function AutomationThread(props: {
     setRunning(true);
     void runAutomation(props.automationRef)
       .then(load)
-      .catch((error: unknown) =>
-        postStatus(
-          `Could not run: ${error instanceof Error ? error.message : "Please try again."}`
-        )
-      )
+      .catch((error: unknown) => surfaceWriteFailure(error, AUTOMATION_NOT_RUN))
       .finally(() => setRunning(false));
   };
 
@@ -77,7 +81,7 @@ export default function AutomationThread(props: {
   return (
     <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <HomeKey variant="leave" onPress={props.onLeave} />
+        <HomeKey onPress={props.onLeave} />
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Automation thread</Text>
           <Text style={styles.subtitle} numberOfLines={1}>

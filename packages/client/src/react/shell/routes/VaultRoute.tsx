@@ -99,7 +99,7 @@ export default function VaultRoute({
         />
         <VaultReachSection
           collapsed={closed.reach === true}
-          onOpenApprovals={() => navigate({ kind: "approvals" })}
+          onOpenNeedsYou={() => navigate({ kind: "needs-you" })}
           onOpenEnrichment={() =>
             navigate({ kind: "settings", page: "enrichment" })
           }

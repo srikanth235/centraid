@@ -4,7 +4,12 @@
 
 import { describe, expect, test } from "vitest";
 
-import { ATLAS_KIND_FRIENDLY, atlasTablesByLogical } from "./atlas.js";
+import {
+  ATLAS_KIND_FRIENDLY,
+  atlasTables,
+  atlasTablesByLogical,
+  humanizeKind,
+} from "./atlas.js";
 import { assertFtsSpecsRegistered } from "./fts.js";
 import {
   VAULT_ENTITIES,
@@ -96,5 +101,41 @@ describe("entity labels", () => {
 
   test("every live FTS spec names a registered entity", () => {
     expect(() => assertFtsSpecsRegistered()).not.toThrow();
+  });
+});
+
+// R-NY-13 (#1015): every kind a seat lists — the census and Browse both walk
+// `atlasTables()` — is named in member words by the registry, never by its
+// identifier humanized ("Content Derivative", "Asset Phash"). The exemptions
+// are the kinds whose one-word table name IS the member word, and the second
+// test keeps the set from outliving that coincidence.
+const TABLE_WORD_IS_THE_NAME: ReadonlySet<string> = new Set([
+  "core.vault",
+  "core.activity",
+]);
+
+describe("every listed kind has a member name (R-NY-13)", () => {
+  test("no kind is named by its identifier", () => {
+    const named = atlasTables()
+      .filter((entry) => !TABLE_WORD_IS_THE_NAME.has(entry.logical))
+      .filter(
+        (entry) =>
+          entry.friendly.trim() === "" ||
+          entry.friendly === humanizeKind(entry.table) ||
+          entry.friendly === entry.table ||
+          entry.friendly === entry.logical ||
+          entry.friendly === entry.physical
+      )
+      .map((entry) => `${entry.logical} is called "${entry.friendly}"`);
+    expect(named).toStrictEqual([]);
+  });
+
+  test("each exemption is still a kind whose table word is its name", () => {
+    const byLogical = atlasTablesByLogical();
+    for (const logical of TABLE_WORD_IS_THE_NAME) {
+      const entry = byLogical.get(logical);
+      expect(entry, logical).toBeDefined();
+      expect(entry!.friendly).toBe(humanizeKind(entry!.table));
+    }
   });
 });

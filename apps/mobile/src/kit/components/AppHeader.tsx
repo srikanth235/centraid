@@ -9,12 +9,21 @@ import AppMark from "./AppMark";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
+/** The bar's ONE trailing verb (#1015 B2). Quiet, never filled: the app's own
+ *  hero already owns the filled commit, and a view carries at most one primary.
+ *  A bar with nothing to offer here simply omits it. */
+export interface AppHeaderVerb {
+  label: string;
+  onPress: () => void;
+}
+
 export interface AppHeaderProps {
   title: string;
   subtitle?: string;
   color: string;
   iconKey: IconName;
   onBack: () => void;
+  trailing?: AppHeaderVerb;
 }
 
 export default function AppHeader({
@@ -23,8 +32,10 @@ export default function AppHeader({
   color,
   iconKey,
   onBack,
+  trailing,
 }: AppHeaderProps): React.JSX.Element {
   const { colors } = useTheme();
+  const handleTrailingPress = trailing?.onPress;
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.bar}>
@@ -48,6 +59,16 @@ export default function AppHeader({
           </Text>
         ) : null}
       </View>
+      {trailing ? (
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={handleTrailingPress}
+          style={styles.trailingBtn}
+        >
+          <Text style={styles.trailing}>{trailing.label}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -68,5 +89,12 @@ const makeStyles = (colors: ThemeColors) =>
     },
     subtitle: { ...t("control"), color: colors.textFaint, marginTop: 2 },
     title: { ...t("bodyStrong"), color: colors.text },
+    trailing: { ...t("control"), color: colors.link },
+    trailingBtn: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 44,
+      minWidth: 44,
+    },
     titleWrap: { flex: 1, minWidth: 0 },
   });

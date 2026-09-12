@@ -9,7 +9,7 @@
 // restore — one implementation with one Undo grammar (`showUndoStatus` + the
 // reverse write, only where a reverse write exists), so five shelves cannot
 // drift on what a verb does. The Undo is BOUNDED (#903). Outcomes surface through the kit's
-// `surfaceWriteOutcome` (parked → Approvals; queued → the one queued
+// `surfaceWriteOutcome` (parked → Needs you; queued → the one queued
 // sentence).
 
 import { useNavigation } from "@react-navigation/native";
@@ -32,14 +32,16 @@ import { postStatus, showUndoStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import { readOnlyRouteReason } from "../../kit/replica/row-provenance";
+import type { RoomSelection } from "../../kit/rooms/room-contracts";
 import GrantSheet from "../../kit/share/GrantSheet";
 import { useTheme } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
-import BulkVerb from "./BulkVerb";
 import { buildDocMenu } from "./doc-menu";
 import DocRow, { DocGridTile } from "./DocRow";
+import { DOCS_HANDOVER_FAILED } from "./docs-copy";
 import { openElsewhere } from "./docs-export";
 import type { MobileDriveDoc } from "./docs-projection";
+import { useDriveSelection } from "./drive-selection";
 import { makeStyles } from "./DriveList.styles";
 import { useDocsWrite } from "./useDocs";
 import { useDocsGrantAudiences } from "./useDocsGrantAudiences";
@@ -82,6 +84,14 @@ export interface DriveListProps {
    *  CONTROLLED: the button that turns it on lives in the app bar, which is
    *  the shelf's chrome and not this list's. */
   selecting?: boolean;
+  /**
+   * The chosen set, as the ROOM's selection (#1015, D5): the header swaps in
+   * place to "N documents selected · Cancel", the band dims and stops
+   * answering, and the verbs sit in the room's one foot row. This list used to
+   * dock a fourth bar of its own under a live band, which is audit B8.
+   * `undefined` means no set is being chosen.
+   */
+  onSelection?: (selection: RoomSelection | undefined) => void;
   onSelectingChange?: (active: boolean) => void;
 }
 
@@ -109,6 +119,7 @@ export default function DriveList({
   header,
   embedded,
   selecting = false,
+  onSelection,
   onSelectingChange,
 }: DriveListProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -124,11 +135,6 @@ export default function DriveList({
   const [renaming, setRenaming] = useState<MobileDriveDoc | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [picked, setPicked] = useState<readonly string[]>([]);
-  // Where the bulk Move-to card hangs from; `undefined` sends it to the top
-  // trailing corner rather than refusing to open (AnchoredMenu's own rule).
-  const [moveAnchor, setMoveAnchor] = useState<MenuAnchor | undefined>(
-    undefined
-  );
   const [movingOpen, setMovingOpen] = useState(false);
 
   // DERIVED, not cleared by an effect: leaving the mode empties the choice by
@@ -147,6 +153,7 @@ export default function DriveList({
     setMovingOpen(false);
     onSelectingChange?.(false);
   };
+
   const togglePick = (doc: MobileDriveDoc): void =>
     setPicked((current) =>
       current.includes(doc.document_id)
@@ -235,11 +242,9 @@ export default function DriveList({
       // only error that matters is the one the hand-over threw.
       // oxlint-disable-next-line no-shadow -- see above
     } catch (error) {
-      postStatus(
-        error instanceof Error
-          ? error.message
-          : "This document could not be handed over."
-      );
+      // The exception is for the LOG, never for the member (#1015, S14).
+      console.warn("[docs] hand-over failed", error);
+      postStatus(DOCS_HANDOVER_FAILED);
     }
   };
 
@@ -257,7 +262,11 @@ export default function DriveList({
     const id = doc.document_id;
     return buildDocMenu({ ...doc, canShare: audiences !== null }, folders, {
       share: () => setSharing(doc),
-      open: () => navigation.navigate("DocumentRead", { documentId: id }),
+      open: () =>
+        navigation.navigate("DocumentRead", {
+          documentId: id,
+          title: doc.title,
+        }),
       download: () => void handOver(doc),
       versions: () =>
         navigation.navigate("DocumentVersions", { documentId: id }),
@@ -306,6 +315,16 @@ export default function DriveList({
 
   // The bulk Move-to card. The same label set the per-row submenu offers, from
   // the same `folders` prop — a folder is a label on a document, so moving a
+  useDriveSelection({
+    actMany,
+    chosen: pickedDocs.length,
+    leaveSelection,
+    onMoveTo: () => setMovingOpen(true),
+    pickedDocs,
+    selecting,
+    ...(onSelection ? { onSelection } : {}),
+  });
+
   // chosen set is retagging each of them. No `checked` rung: a set can straddle
   // several folders, and a tick would be answering "which folder is this in?"
   // for documents that disagree.
@@ -405,6 +424,7 @@ export default function DriveList({
       ) : emptyView.visible ? (
         <EmptyBlock
           title={emptyCopy?.title ?? emptyView.title}
+          inset
           body={emptyCopy?.body ?? emptyView.body}
           routine={!emptyView.display}
         />
@@ -419,6 +439,7 @@ export default function DriveList({
               onOpen={(opened) =>
                 navigation.navigate("DocumentRead", {
                   documentId: opened.document_id,
+                  title: opened.title,
                 })
               }
               onMenu={openMenu}
@@ -437,6 +458,7 @@ export default function DriveList({
               const open = (opened: MobileDriveDoc): void =>
                 navigation.navigate("DocumentRead", {
                   documentId: opened.document_id,
+                  title: opened.title,
                 });
               if (arrangement === "grid") {
                 return (
@@ -466,69 +488,11 @@ export default function DriveList({
           />
         </View>
       )}
-      {/* In selection the bar REPLACES the caption and the status: those two
-          describe the set being read, and the member is no longer reading it.
-          Docked in normal flow, never floating over the rows — a bar that
-          covered the last row would hide something choosable. */}
-      {selecting ? (
-        <View style={styles.bulkBar}>
-          <Text style={styles.bulkCount}>
-            {pickedDocs.length === 0
-              ? "Choose documents"
-              : `${pickedDocs.length} chosen`}
-          </Text>
-          <BulkVerb
-            label="Star"
-            disabled={pickedDocs.length === 0}
-            onPress={() =>
-              void actMany(
-                "star",
-                pickedDocs.filter((doc) => !doc.starred),
-                "Starred",
-                (doc) => ({ document_id: doc.document_id }),
-                (doc) => ({
-                  action: "unstar",
-                  input: { document_id: doc.document_id },
-                })
-              )
-            }
-            styles={styles}
-          />
-          <BulkVerb
-            label="Move to"
-            disabled={pickedDocs.length === 0}
-            onPress={(event) => {
-              setMoveAnchor({
-                x: event.nativeEvent.pageX,
-                y: event.nativeEvent.pageY,
-                width: 1,
-                height: 1,
-              });
-              setMovingOpen(true);
-            }}
-            styles={styles}
-          />
-          <BulkVerb
-            label="Trash"
-            destructive
-            disabled={pickedDocs.length === 0}
-            onPress={() =>
-              void actMany(
-                "trash",
-                pickedDocs,
-                "Moved to trash",
-                (doc) => ({ document_id: doc.document_id }),
-                (doc) => ({
-                  action: "restore",
-                  input: { document_id: doc.document_id },
-                })
-              )
-            }
-            styles={styles}
-          />
-          <BulkVerb label="Done" onPress={leaveSelection} styles={styles} />
-        </View>
-      ) : (
+      {/* In selection the caption and the status go: they describe the set
+          being read, and the member is no longer reading it. The verbs are
+          the ROOM's foot row now — this list never docks a bar of its own
+          under a live band (#1015, D5, audit B8). */}
+      {selecting ? null : (
         <>
           {caption ? <Text style={styles.caption}>{caption}</Text> : null}
           {status ? <Text style={styles.status}>{status}</Text> : null}
@@ -544,7 +508,10 @@ export default function DriveList({
 
       <AnchoredMenu
         visible={movingOpen}
-        anchor={moveAnchor}
+        // No anchor: the verb now lives in the room's foot row, which has no
+        // page position to hang a card from, so the card takes the top
+        // trailing corner — `AnchoredMenu`'s own answer to an absent anchor.
+        anchor={undefined}
         groups={bulkMoveGroups}
         onClose={() => setMovingOpen(false)}
       />

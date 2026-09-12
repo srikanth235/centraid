@@ -6,6 +6,7 @@ import {
   BAND_DESTINATIONS,
   MORE_SHELVES,
   bandActiveId,
+  notebookIdFrom,
 } from "@centraid/blueprints/apps/notes/shelves";
 import type { ShelfId } from "@centraid/blueprints/apps/notes/shelves";
 import {
@@ -85,6 +86,10 @@ const BAND_KEYS = new Set(BAND_DESTINATIONS.map((entry) => entry.id));
  *  there, and another tab would point at a place they are not looking at. */
 export function notesBandKeyFor(place: NotesPlace): NotesBandDestinationKey {
   if (place === NOTES_MORE_SHEET) return "more";
+  // A notebook IS the Notebooks place, one level in — lighting Library there
+  // pointed at a place the member was not looking at (#1015,
+  // audit notes/findings#5).
+  if (notebookIdFrom(place)) return "books";
   const active = bandActiveId(place);
   return active && BAND_KEYS.has(active)
     ? (active as NotesBandDestinationKey)

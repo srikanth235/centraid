@@ -26,6 +26,7 @@ import type { BandOwner } from "../../kit/band/band-owner";
 import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { hapticSelect } from "../../kit/haptics";
 import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -43,6 +44,11 @@ export interface DocsBandProps {
   onSelect: (key: DocsBandDestinationKey) => void;
   /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
+  /** SELECTION IS A MODE (#1015, D5). While a set is being chosen the band is
+   *  dimmed on its LEAF tokens and stops answering: a live tab under a
+   *  selection bar navigates away mid-choice with no warning, and the phone
+   *  was carrying two bars at the foot at once. Never a container opacity. */
+  dimmed?: boolean;
 }
 
 export default function DocsBand({
@@ -50,6 +56,7 @@ export default function DocsBand({
   current,
   onSelect,
   onHome,
+  dimmed = false,
 }: DocsBandProps): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -73,7 +80,11 @@ export default function DocsBand({
     >
       <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
-      <View style={styles.group} accessibilityRole="tablist">
+      <View
+        style={styles.group}
+        accessibilityRole="tablist"
+        pointerEvents={dimmed ? "none" : "auto"}
+      >
         {band.destinations.map((destination) => {
           const active = destination.key === current;
           return (
@@ -85,8 +96,15 @@ export default function DocsBand({
               // handoff may re-word, and a flow that tapped it would then tap
               // nothing while still reporting COMPLETED (#890 W2).
               testID={`${TEST_ID_PREFIXES.band.docs}${destination.key}`}
-              accessibilityState={{ selected: active }}
-              onPress={() => onSelect(destination.key)}
+              accessibilityState={{ selected: active, disabled: dimmed }}
+              disabled={dimmed}
+              onPress={() => {
+                // The band moving to another place IS the one selection
+                // moment (#1015, S15) — the same tick the shell's own band
+                // gives, so a member feels one product, not five.
+                hapticSelect();
+                onSelect(destination.key);
+              }}
               style={styles.tab}
             >
               <View
@@ -98,11 +116,21 @@ export default function DocsBand({
               <Icon
                 name={destination.icon}
                 size={20}
-                color={active ? colors.text : colors.textSoft}
+                color={
+                  dimmed
+                    ? colors.textDisabled
+                    : active
+                      ? colors.text
+                      : colors.textSoft
+                }
               />
               <Text
                 numberOfLines={1}
-                style={[styles.label, active ? styles.labelActive : undefined]}
+                style={[
+                  styles.label,
+                  active ? styles.labelActive : undefined,
+                  dimmed ? styles.labelDimmed : undefined,
+                ]}
               >
                 {destination.label}
               </Text>
@@ -151,6 +179,9 @@ const makeStyles = (colors: ThemeColors) =>
       textAlign: "center",
     },
     labelActive: { color: colors.text },
+    // The LEAF carries the disabled tone; a container opacity would grey the
+    // plate and its rules with it (DESIGN.md, docs/traps/design-tokens.md).
+    labelDimmed: { color: colors.textDisabled },
     ruleHidden: { backgroundColor: "transparent" },
     tab: {
       alignItems: "center",

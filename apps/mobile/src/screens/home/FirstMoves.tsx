@@ -5,7 +5,6 @@
 // dashed placeholder cards (they scale to identical apologies and open empty
 // apps). Every move lands somewhere that can TAKE content.
 
-import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -21,7 +20,7 @@ import { radii } from "@centraid/design";
 
 import AppMark from "../../kit/components/AppMark";
 import { Text } from "../../kit/components/NativeText";
-import { borders, metrics, t, useTheme } from "../../kit/theme";
+import { borders, metrics, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { FirstMove } from "./first-moves";
 
@@ -139,10 +138,7 @@ function MoveRow({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${move.label}. ${move.hint}`}
-      onPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onPress();
-      }}
+      onPress={onPress}
       style={({ pressed }) => [styles.move, pressed && styles.movePressed]}
     >
       <AppMark
@@ -182,7 +178,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: radii.md,
       justifyContent: "center",
       minHeight: metrics.control,
-      paddingHorizontal: 16,
+      paddingHorizontal: spacing[4],
     },
     btnPrimaryLabel: { ...t("control"), color: colors.textInv },
     btnSecondary: {
@@ -192,7 +188,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       justifyContent: "center",
       minHeight: metrics.control,
-      paddingHorizontal: 16,
+      paddingHorizontal: spacing[4],
     },
     btnSecondaryLabel: { ...t("control"), color: colors.textSoft },
     dayOneBody: { ...t("reading"), color: colors.textSoft, marginBottom: 24 },

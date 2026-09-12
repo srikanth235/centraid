@@ -212,7 +212,7 @@ export function outboxAction(label: string): string {
  * a simplification: the phone's outbox holds the writes this device composed
  * and nothing else. `actorPartyId` is therefore `me` on every row, which is
  * what makes `contrib-model` file them under *in flight* and *ended* and never
- * under *Waiting on you* — a steward's inbox is the shell's Approvals surface,
+ * under *Waiting on you* — a steward's inbox is the shell's Needs you surface,
  * and Waiting hands over to it rather than drawing a decision it cannot take.
  *
  * `createdAt` is empty because the outbox row carries no stamp; the sections
@@ -240,7 +240,7 @@ export function outboxIntents(
  *
  * `cancel`, `retry` and `discard` are the outbox's own verbs and the
  * multi-vault session exposes all three. `approvals` is the hand-over to the
- * shell's Approvals inbox, which this phone does have as a route.
+ * shell's Needs you inbox, which this phone does have as a route.
  *
  * `decide` IS FALSE, and that is a fact about this transport rather than a
  * preference. The gateway grew a per-intent Approve/Decline door with the #872

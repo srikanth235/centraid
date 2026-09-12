@@ -9,6 +9,7 @@ import {
 } from "@centraid/client/surface-copy";
 
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
+import { formatRelative } from "../../kit/format";
 import type { ConnectionEntry } from "../../lib/connections";
 
 export type ConnectorAct = "reauthorize" | "pause" | "resume";
@@ -51,19 +52,12 @@ function parsed(iso: string | null): number | undefined {
   return Number.isNaN(at) ? undefined : at;
 }
 
-function dayPhrase(at: number): string {
-  return new Date(at).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "long",
-  });
-}
-
 export function agoPhrase(at: number, now: number): string {
-  const ago = now - at;
-  if (ago < MINUTE) return "just now";
-  if (ago < HOUR) return `${countWord(Math.round(ago / MINUTE), "minute")} ago`;
-  if (ago < DAY) return `${countWord(Math.round(ago / HOUR), "hour")} ago`;
-  return dayPhrase(at);
+  // The seat's ONE relative register (`kit/format`, #1015 S8). This ladder
+  // was typed out twice, byte for byte, in `needs-you-model` and
+  // `connectors-model`, and both said `10 September` where the rest of the
+  // product says `10 Sep`.
+  return formatRelative(new Date(at).toISOString(), now);
 }
 
 export function lastWorkedPhrase(entry: ConnectionEntry, now: number): string {

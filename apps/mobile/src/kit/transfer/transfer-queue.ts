@@ -5,7 +5,6 @@
 import { authHeader } from "../../lib/gateway";
 import { foldPendingUploadGroups } from "../../lib/replica/storage-accounting";
 import { UploadQueue } from "../../lib/upload/native-queue";
-import { memberFacingError } from "../member-error";
 
 export interface TransferQueueFailure {
   filename?: string;
@@ -56,7 +55,7 @@ function readFailures(queue: UploadQueue): TransferQueueFailure[] {
       ? [
           {
             ...(item.filename ? { filename: item.filename } : {}),
-            lastError: memberFacingError(item.lastError),
+            lastError: item.lastError,
           },
         ]
       : []

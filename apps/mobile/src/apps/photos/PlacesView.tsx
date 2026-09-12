@@ -40,12 +40,15 @@ export default function PlacesView({
   }, [assets, cards]);
 
   return (
-    // The band via the shell (#712): a bare SafeAreaView leaves the OS
-    // gesture as the only exit. current="more" = arrived via More.
-    <PhotosScreen current="more">
+    // The band via the room (#712, #1015): a bare SafeAreaView leaves the OS
+    // gesture as the only exit, and the back key names the Photos place this
+    // shelf actually descends from rather than the More tab it lights.
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="places"
+      title="Places"
+    >
       <View style={styles.header} testID={TEST_IDS.places.shelf}>
-        {/* No back chevron: two exits already; a third breaks §F's rule. */}
-        <Text style={styles.title}>Places</Text>
         {/* Places · N — shelf size, mono (proto:3939); "N of M" belongs to
             the map. */}
         <Text style={styles.count}>Places · {cards.length}</Text>
@@ -158,6 +161,13 @@ const makeStyles = (colors: ThemeColors) =>
       paddingEnd: spacing[4],
       paddingStart: spacing[4] - 2,
       paddingTop: spacing[2],
+    },
+    headerBtn: {
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      marginStart: -spacing[2],
+      minWidth: 44,
     },
     mapChip: {
       borderRadius: radii.pill,

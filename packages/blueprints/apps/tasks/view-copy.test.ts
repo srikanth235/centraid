@@ -107,7 +107,9 @@ describe("the copy table", () => {
   });
 
   it("says where the next occurrence landed on a repeating check-off", () => {
-    expect(copy.doneNext("Friday")).toBe("Done · the next one is Friday");
+    // The status names the noun (#1015, S11): "Done" alone is a fact about
+    // nothing to a member who looks up a second later.
+    expect(copy.doneNext("Friday")).toBe("Task done · the next one is Friday");
   });
 
   it("declares the window as a window on both surfaces", () => {
@@ -161,6 +163,19 @@ describe("the copy table", () => {
   it("offers four priorities and five efforts, absent by default", () => {
     expect(copy.PRIORITY_CHIPS).toStrictEqual(["None", "Soon", "Next", "Now"]);
     expect(copy.EFFORT_CHIPS[0]).toBe("None");
+    // Every chip carries its unit (#1015 tasks/findings#19): "5" beside
+    // "25 min" left the member guessing what the bare numbers counted.
+    for (const chip of copy.EFFORT_CHIPS.slice(1))
+      expect({ chip, unit: /\b(?:min|hour)\b/u.test(chip) }).toStrictEqual({
+        chip,
+        unit: true,
+      });
+  });
+
+  // The shout used to live in the WORD (#1015, D2): "HOUSE" was uppercase
+  // wherever it landed, even where the type ramp did not ask for it.
+  it("marks the shared vault in sentence case", () => {
+    expect(copy.VAULT_MARKER).toBe("House");
   });
 
   it("names each shelf in the bar's own words", () => {

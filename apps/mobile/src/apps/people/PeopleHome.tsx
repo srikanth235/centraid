@@ -31,19 +31,17 @@ import {
   whenLabel,
 } from "@centraid/blueprints/apps/people/format";
 import {
-  APP_TITLE,
   EMPTY,
   FIELDS,
   FIRST_RUN,
   LABELS,
   LINK_TOUCH_TILES,
-  SEARCH_TITLE,
   SECTIONS,
   STATUS,
   TOUCH_TILES,
-  TOUCH_TITLE,
   VERBS,
   filterChips,
+  touchKindLabel,
 } from "@centraid/blueprints/apps/people/people-copy";
 import type {
   RosterFilter,
@@ -53,23 +51,14 @@ import type {
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
-import { TextInput } from "../../kit/components/NativeText";
-import PlaceHeader from "../../kit/components/PlaceHeader";
+import SearchField from "../../kit/components/SearchField";
 import SeatList from "../../kit/components/SeatList";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import { TEST_IDS } from "../../kit/test-ids";
-import {
-  borders,
-  pageMargin,
-  radii,
-  spacing,
-  t,
-  useTheme,
-} from "../../kit/theme";
+import { pageMargin, spacing } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
 import type { PeopleBandKey } from "./people-band";
 import { applyRosterFilter, rosterSub, searchRoster } from "./people-model";
@@ -93,7 +82,7 @@ export default function PeopleHome({
 }: PeopleScreenProps<"PeopleHome">): React.JSX.Element {
   const data = usePeople();
   const writes = usePeopleWrites(() =>
-    navigation.navigate("Settings", { screen: "Approvals" })
+    navigation.navigate("Settings", { screen: "NeedsYou" })
   );
 
   // The band on a pushed People screen navigates here with the destination it
@@ -119,87 +108,75 @@ export default function PeopleHome({
   const openPerson = (partyId: string): void =>
     navigation.navigate("Person", { personId: partyId });
 
-  const title =
-    destination === "touch"
-      ? TOUCH_TITLE
-      : destination === "search"
-        ? SEARCH_TITLE
-        : APP_TITLE;
-
   return (
-    <PeopleScreen current={destination}>
-      <TopSafeArea edges={[]} style={styles.page}>
-        <View style={styles.head}>
-          <PlaceHeader
-            title={title}
-            {...(destination === "people"
-              ? {
-                  primary: {
-                    label: VERBS.add,
-                    onPress: () => navigation.navigate("PersonEditor"),
-                  },
-                  secondary: {
-                    label: VERBS.trash,
-                    onPress: () => navigation.navigate("PeopleTrash"),
-                  },
-                }
-              : {})}
-          />
-        </View>
-        <ReplicaStatusBar />
-        {destination === "people" ? (
-          <RosterBody
-            data={data}
-            filter={filter}
-            onFilter={setFilter}
-            onOpen={openPerson}
-            onStar={(person) => void writes.toggleStar(person)}
-            onAdd={() => navigation.navigate("PersonEditor")}
-          />
-        ) : destination === "touch" ? (
-          <TouchBody
-            data={data}
-            onOpen={openPerson}
-            onLog={(partyId) =>
-              navigation.navigate("PersonLog", { personId: partyId })
-            }
-            onTile={(tile) => {
-              // Each tile filters or navigates (handoff § Screens 2): the
-              // people-counting tiles land on the roster with the matching
-              // chip; Reconnect lands on the `Overdue` chip the copy table
-              // carries for exactly this tap; Upcoming stays here, where the
-              // Upcoming section is one screen inch below.
-              if (tile === "upcoming" || tile === "reconnect") {
-                if (tile === "reconnect") {
-                  setFilter("due");
-                  setDestination("people");
-                }
-                return;
+    <PeopleScreen
+      route={destination}
+      {...(destination === "people"
+        ? {
+            action: {
+              label: VERBS.add,
+              onPress: () => navigation.navigate("PersonEditor"),
+            },
+            secondary: {
+              label: VERBS.trash,
+              onPress: () => navigation.navigate("PeopleTrash"),
+            },
+          }
+        : {})}
+    >
+      <ReplicaStatusBar />
+      {destination === "people" ? (
+        <RosterBody
+          data={data}
+          filter={filter}
+          onFilter={setFilter}
+          onOpen={openPerson}
+          onStar={(person) => void writes.toggleStar(person)}
+          onAdd={() => navigation.navigate("PersonEditor")}
+        />
+      ) : destination === "touch" ? (
+        <TouchBody
+          data={data}
+          onOpen={openPerson}
+          onLog={(partyId) =>
+            navigation.navigate("PersonLog", { personId: partyId })
+          }
+          onTile={(tile) => {
+            // Each tile filters or navigates (handoff § Screens 2): the
+            // people-counting tiles land on the roster with the matching
+            // chip; Reconnect lands on the `Overdue` chip the copy table
+            // carries for exactly this tap; Upcoming stays here, where the
+            // Upcoming section is one screen inch below.
+            if (tile === "upcoming" || tile === "reconnect") {
+              if (tile === "reconnect") {
+                setFilter("due");
+                setDestination("people");
               }
-              setFilter(
-                tile === "linked"
-                  ? "linked"
-                  : tile === "to_link"
-                    ? "unlinked"
-                    : tile === "starred"
-                      ? "starred"
-                      : "all"
-              );
-              setDestination("people");
-            }}
-          />
-        ) : (
-          <SearchBody
-            data={data}
-            term={term}
-            onTerm={setTerm}
-            filter={filter}
-            onFilter={setFilter}
-            onOpen={openPerson}
-            onStar={(person) => void writes.toggleStar(person)}
-          />
-        )}
-      </TopSafeArea>
+              return;
+            }
+            setFilter(
+              tile === "linked"
+                ? "linked"
+                : tile === "to_link"
+                  ? "unlinked"
+                  : tile === "starred"
+                    ? "starred"
+                    : "all"
+            );
+            setDestination("people");
+          }}
+        />
+      ) : (
+        <SearchBody
+          data={data}
+          term={term}
+          onTerm={setTerm}
+          filter={filter}
+          onFilter={setFilter}
+          onOpen={openPerson}
+          onStar={(person) => void writes.toggleStar(person)}
+        />
+      )}
     </PeopleScreen>
   );
 }
@@ -441,7 +418,7 @@ function TouchBody({
               key={touch.interaction_id}
               avatar={touch}
               name={touch.name}
-              sub={touch.kind}
+              sub={touchKindLabel(touch.kind)}
               meta={whenLabel(touch.occurred_at)}
               onOpen={() => onOpen(touch.party_id)}
               last={index === dashboard.recent.length - 1}
@@ -477,7 +454,6 @@ function SearchBody({
   onOpen: (partyId: string) => void;
   onStar: (person: MobilePersonRow) => void;
 }): React.JSX.Element {
-  const { colors, targetMin } = useTheme();
   const active: RosterFilter =
     filter === "linked" || filter === "unlinked" ? "all" : filter;
   const results = useMemo(
@@ -494,35 +470,16 @@ function SearchBody({
   );
   return (
     <View style={styles.body}>
-      <View style={styles.searchRow}>
-        <TextInput
+      <View style={styles.searchBleed}>
+        <SearchField
           accessibilityLabel={FIELDS.searchPlaceholder}
+          // The search destination opens with the keyboard up (#1015, S4).
           autoFocus
-          value={term}
-          placeholder={FIELDS.searchPlaceholder}
-          placeholderTextColor={colors.textFaint}
+          clearLabel={VERBS.clearSearch}
           onChangeText={onTerm}
-          style={[
-            t("body"),
-            {
-              borderColor: colors.line,
-              borderRadius: radii.md,
-              borderWidth: borders.hairline,
-              color: colors.text,
-              flex: 1,
-              minHeight: targetMin.coarse,
-              paddingHorizontal: spacing[3],
-            },
-          ]}
+          placeholder={FIELDS.searchPlaceholder}
+          value={term}
         />
-        {term ? (
-          <Verb
-            label="✕"
-            quiet
-            accessibilityLabel={VERBS.clearSearch}
-            onPress={() => onTerm("")}
-          />
-        ) : null}
       </View>
       <ChipsBlock
         accessibilityLabel="Filter"
@@ -603,10 +560,7 @@ const styles = StyleSheet.create({
   head: { paddingHorizontal: pageMargin },
   page: { flex: 1 },
   scroll: { paddingBottom: spacing[6] },
-  searchRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing[2],
-    paddingBottom: spacing[3],
-  },
+  // The field owns its own gutter (kit/components/SearchField); the shelf
+  // cancels its own so the member sees one inset, not two.
+  searchBleed: { marginHorizontal: -pageMargin, paddingBottom: spacing[3] },
 });

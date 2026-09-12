@@ -6,7 +6,7 @@ import type {
   SearchStateCopy,
   SearchStatus,
 } from "./search-scaffold.ts";
-import { searchOpenLabel } from "./search-scaffold.ts";
+import { searchOpenLabel, searchRestingEyebrow } from "./search-scaffold.ts";
 
 import styles from "./SearchScaffold.module.css";
 
@@ -62,7 +62,9 @@ export function SearchScaffold({
     <>
       {asked ? null : (
         <div className={styles.panel}>
-          <p className={styles.eyebrow}>{copy.resting.eyebrow}</p>
+          <p className={styles.eyebrow}>
+            {searchRestingEyebrow(copy.resting.noun)}
+          </p>
           <h2 className={styles.title}>{copy.resting.title}</h2>
           <p className={styles.body}>{copy.resting.body}</p>
           <div className={styles.examples}>

@@ -465,7 +465,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.PHONE_REVOKE,
     async (_e, input: { deviceId: string }) => {
-      const removed = revokePhoneDevice(input.deviceId);
+      const removed = await revokePhoneDevice(input.deviceId);
       return { removed: Boolean(removed) };
     }
   );

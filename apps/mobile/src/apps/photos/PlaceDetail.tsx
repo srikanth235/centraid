@@ -5,7 +5,6 @@
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -82,29 +81,18 @@ export default function PlaceDetail({
   return (
     // Shell owns the band (#712); the back chevron STAYS because PlacesView
     // is this screen's genuine parent.
-    <PhotosScreen current="more">
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="placeDetail"
+      title={heading}
+    >
       <View style={styles.header}>
-        <Tappable
-          accessibilityLabel="Back to Places"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
+        <Text
+          numberOfLines={1}
+          style={[styles.meta, { color: colors.textSoft }]}
         >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Tappable>
-        <View style={styles.copy}>
-          <Text
-            style={[styles.title, { color: colors.text }]}
-            numberOfLines={1}
-          >
-            {heading}
-          </Text>
-          <Text
-            style={[styles.meta, { color: colors.textSoft }]}
-            numberOfLines={1}
-          >
-            {assets.length} {assets.length === 1 ? "photograph" : "photographs"}
-          </Text>
-        </View>
+          {assets.length} {assets.length === 1 ? "photograph" : "photographs"}
+        </Text>
       </View>
       {/* The naming UI (#816), only under an unnamed place: a typed name or
           the one-tap "This is home" — home makes every OTHER unnamed place

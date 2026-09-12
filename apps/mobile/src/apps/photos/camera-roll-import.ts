@@ -1,6 +1,10 @@
 // First-run camera-roll import as data (#724): vault staging spine, sha256 dedupe.
 import type { PhotoAsset } from "./timeline-model";
 
+/** One sentence for a file the import could not take (#1015, S14 — R-A-15).
+ *  What the attempt throws is an HTTP status or a media-library errno. */
+const IMPORT_NOT_LANDED = "This one did not import.";
+
 export interface ImportCandidate {
   /** Never the localId. */
   id: string;
@@ -87,9 +91,11 @@ export async function runCameraRollImport(
       // oxlint-disable-next-line no-await-in-loop -- serial by contract, see above.
       outcome = await deps.attempt(candidate);
     } catch (error) {
-      // Record and move on.
+      // Record and move on. The exception goes to the log (S14, #1015,
+      // R-A-15); the row that failed says so in the member's own words.
+      console.warn("[photos] import candidate failed", candidate.id, error);
       outcome = "failed";
-      reason = error instanceof Error ? error.message : String(error);
+      reason = IMPORT_NOT_LANDED;
     }
     current = recordOutcome(current, candidate.id, outcome, reason);
     deps.onProgress?.(current);

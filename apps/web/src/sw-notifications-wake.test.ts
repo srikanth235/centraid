@@ -186,7 +186,7 @@ describe("closed PWA Notifications wake", () => {
     expect(shown[0]?.title).toBe("Dinner plans");
     expect(shown[0]?.options).toMatchObject({
       body: "External write needs your approval",
-      data: { url: "/?notifications=1" },
+      data: { url: "/?needs-you=1" },
       tag: "outbox:item-1:2026-07-30T10:00:00.000Z",
     });
     expect(importScripts).toHaveBeenCalledWith(

@@ -184,20 +184,34 @@ describe("exporting from this seat", () => {
     expect(posted()).toBe(EXPORT_NOTHING);
   });
 
-  it("reports the vault's own refusal rather than an empty file", async () => {
+  it("names a refusal without the vault's own words", async () => {
+    // NOT THE VAULT'S SENTENCE (#1015, S14 — R-A-18). A refusal used to be
+    // wrapped in `new Error(reason)` so the failure door would print it; the
+    // reason goes to the log and the member gets Locker's own noun.
+    const logged = vi.spyOn(console, "warn").mockReturnValue(undefined);
     const { session: live } = session({
       status: "denied",
       reason: "Confirmation is required.",
     });
     await exportLockerVault(live, {});
     expect(files.hand).not.toHaveBeenCalled();
-    expect(posted()).toContain("Confirmation is required.");
+    expect(posted()).toBe(
+      "Locker not exported. The vault did not allow this change."
+    );
     expect(posted()).not.toContain(EXPORT_WRITTEN);
+    expect(logged).toHaveBeenCalledWith(
+      "[write] refused",
+      "Locker not exported",
+      "Confirmation is required."
+    );
+    logged.mockRestore();
   });
 
   it("refuses without a paired gateway rather than pretending", async () => {
     await exportLockerVault(undefined, {});
     expect(files.hand).not.toHaveBeenCalled();
-    expect(posted()).toContain("not paired");
+    expect(posted()).toBe(
+      "Locker not exported. Pair or reconnect a vault host."
+    );
   });
 });

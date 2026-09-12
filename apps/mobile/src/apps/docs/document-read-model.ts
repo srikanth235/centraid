@@ -1,7 +1,6 @@
 // One document's read surface (#821). The kind fork lives on the shared model
 // (`format.ts`) so phone and web agree. No react/react-native imports.
 
-import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import {
   canRender,
   fmtBytes,
@@ -9,6 +8,8 @@ import {
   typeMeta,
 } from "@centraid/blueprints/apps/docs/format";
 import type { DocFields } from "@centraid/blueprints/apps/docs/types";
+
+import { formatRelative } from "../../kit/format";
 
 export type ReadSurface = "reading" | "stage" | "facts";
 
@@ -77,26 +78,18 @@ export function docBytesUrl(
 
 // Nothing records an opening — no clause may claim who has opened a document.
 
-const MINUTE_MS = 60_000;
-const HOUR_MS = 3_600_000;
-
-/** Empty when the stamp is unreadable — an absent clause, never an invented one. */
+/**
+ * Empty when the stamp is unreadable — an absent clause, never an invented one.
+ *
+ * ONE REGISTER FOR THE SEAT (#1015, S8). This module used to own Docs' own
+ * relative clock; `kit/format.ts` absorbed its sub-hour grain when it became
+ * the seat's one formatter, so the words below are now the same ones Tasks,
+ * Notes and Agenda print. The "edited " prefix stays here, because the
+ * preposition belongs to the sentence and not to the clock.
+ */
 export function editedAgo(iso: string, now: number = Date.now()): string {
-  const stamp = Date.parse(iso);
-  if (Number.isNaN(stamp)) return "";
-  const delta = Math.max(0, now - stamp);
-  if (delta < MINUTE_MS) return "edited moments ago";
-  if (delta < HOUR_MS) {
-    const minutes = Math.floor(delta / MINUTE_MS);
-    return `edited ${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
-  }
-  if (delta < DAY_MS) {
-    const hours = Math.floor(delta / HOUR_MS);
-    return `edited ${hours} ${hours === 1 ? "hour" : "hours"} ago`;
-  }
-  const days = Math.floor(delta / DAY_MS);
-  if (days === 1) return "edited yesterday";
-  return `edited ${days} days ago`;
+  const said = formatRelative(iso, now);
+  return said ? `edited ${said}` : "";
 }
 
 export function readStatus(

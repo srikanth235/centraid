@@ -44,6 +44,10 @@ interface UploadEntry {
 }
 
 /** Debounce merged-timeline recomputes during the device walk; page one paints immediately. */
+/** `TimelineSnapshot.error` is a SIGNAL, never member copy (#1015, S14 —
+ *  R-A-15); `ReplicaStateCard` turns it into the sentence a member reads. */
+const TIMELINE_NOT_READ = "timeline read failed";
+
 const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
 
 /**
@@ -288,7 +292,11 @@ class PhotoTimelineEngine {
       this.recompute();
     } catch (error) {
       if (generation !== this.#generation) return;
-      this.#error = error instanceof Error ? error.message : String(error);
+      // `error` is a SIGNAL that the read failed, never the words a member
+      // reads (S14, #1015, R-A-15) — `ReplicaStateCard` says so in as many
+      // words. The raw goes to the log, where a debug session starts.
+      console.warn("[photos] timeline replica read failed", error);
+      this.#error = TIMELINE_NOT_READ;
       this.#replicaLoading = false;
       this.recompute();
     }
@@ -378,7 +386,8 @@ class PhotoTimelineEngine {
       await loadPage(0, 250);
     } catch (error) {
       if (generation !== this.#generation) return;
-      this.#error = error instanceof Error ? error.message : String(error);
+      console.warn("[photos] timeline device read failed", error);
+      this.#error = TIMELINE_NOT_READ;
       this.#deviceLoading = false;
       this.recompute();
     }

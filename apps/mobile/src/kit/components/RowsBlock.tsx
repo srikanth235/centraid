@@ -1,7 +1,7 @@
 // Rows (#765, §9): outlined trailing verb, `off`/`struck` recede on the leaf.
 
 import React, { useMemo } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import type { ActionData, RowData } from "@centraid/design/blocks";
 
@@ -19,6 +19,12 @@ export interface RowsBlockAction extends ActionData {
 export interface RowsBlockRow extends RowData {
   key: string;
   action?: RowsBlockAction;
+  /**
+   * The row itself as a tap target (#1015 R-NY-2): title, sub and meta answer
+   * one press. Drawn as the verb's SIBLING, never its parent, so no control is
+   * nested inside another and the verb keeps its own hit area.
+   */
+  onPress?: () => void;
   children?: React.ReactNode;
 }
 
@@ -54,6 +60,40 @@ export default function RowsBlock({
     >
       {rows.map((row, index) => {
         const rowAction = row.action;
+        const rowPress = row.onPress;
+        const face = (
+          <>
+            <View style={styles.text}>
+              <Text
+                style={[
+                  styles.title,
+                  row.struck === true ? styles.struck : undefined,
+                  {
+                    color:
+                      row.off === true || row.struck === true
+                        ? colors.textDisabled
+                        : colors.text,
+                  },
+                ]}
+              >
+                {row.title}
+              </Text>
+              {row.sub ? (
+                <Text style={[styles.sub, { color: metaInk(row, colors) }]}>
+                  {row.sub}
+                </Text>
+              ) : null}
+            </View>
+            {row.meta ? (
+              <Text
+                numberOfLines={1}
+                style={[styles.meta, { color: metaInk(row, colors) }]}
+              >
+                {row.meta}
+              </Text>
+            ) : null}
+          </>
+        );
         return (
           <View
             key={row.key}
@@ -64,35 +104,22 @@ export default function RowsBlock({
             ]}
           >
             <View style={styles.line}>
-              <View style={styles.text}>
-                <Text
-                  style={[
-                    styles.title,
-                    row.struck === true ? styles.struck : undefined,
-                    {
-                      color:
-                        row.off === true || row.struck === true
-                          ? colors.textDisabled
-                          : colors.text,
-                    },
-                  ]}
+              {rowPress ? (
+                <Pressable
+                  accessibilityHint={rowAction?.hint}
+                  accessibilityRole="button"
+                  // The same refusal `Button` reports: the state, the flag, and
+                  // no handler — an off row recedes on its leaves, never faded.
+                  accessibilityState={{ disabled: row.off === true }}
+                  disabled={row.off === true}
+                  onPress={row.off === true ? undefined : () => rowPress()}
+                  style={styles.face}
                 >
-                  {row.title}
-                </Text>
-                {row.sub ? (
-                  <Text style={[styles.sub, { color: metaInk(row, colors) }]}>
-                    {row.sub}
-                  </Text>
-                ) : null}
-              </View>
-              {row.meta ? (
-                <Text
-                  numberOfLines={1}
-                  style={[styles.meta, { color: metaInk(row, colors) }]}
-                >
-                  {row.meta}
-                </Text>
-              ) : null}
+                  {face}
+                </Pressable>
+              ) : (
+                face
+              )}
               {rowAction ? (
                 <Button
                   // Hint, not label: the control already renders its visible word (#708 B.4).

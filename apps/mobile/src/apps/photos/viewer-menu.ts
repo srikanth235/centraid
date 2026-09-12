@@ -7,12 +7,13 @@
 // write at all (`PhotoInfoSheet.tsx`'s capture time is a read-out). A row that
 // opens onto nothing is a promise the code cannot keep.
 //
-// Adjust Location OPENS the info sheet rather than growing a second place
+// Adjust location OPENS the info sheet rather than growing a second place
 // editor here — `PhotoInfoSheet.tsx` already owns place.
 //
-// Album pickers are the consumer's `Alert.alert`, NEVER a nested submenu: the
-// kit's `MenuSubmenuRow` carries no `disabled` field, so a submenu row cannot
-// state "this vault is read-only" the way an action row can.
+// Album pickers are the consumer's own SHEET (`PhotosChoiceSheet`, #1015 D4),
+// NEVER a nested submenu: the kit's `MenuSubmenuRow` carries no `disabled`
+// field, so a submenu row cannot state "this vault is read-only" the way an
+// action row can.
 //
 // Delete is here AND on the toolbar chip, as it is on iOS. The safety is the
 // confirm step behind it, never the row being hard to find.
@@ -53,8 +54,8 @@ export interface ViewerOverflowMenuInput {
  * iOS' OWN GROUP ORDER — the group boundaries are the menu's grammar, so a row
  * must sit in the same band it does on the phone a member came from:
  *
- *   Copy · Duplicate · Hide · Slideshow / Add to Album /
- *   Adjust Date & Time · Adjust Location / Delete
+ *   Copy · Duplicate · Hide · Slideshow / Add to album /
+ *   Adjust Date & Time · Adjust location / Delete
  *
  * with the rows this vault cannot honestly carry struck out, plus one group iOS
  * has no equivalent for: Download · Send a copy, because this vault's bytes can
@@ -80,7 +81,7 @@ export function viewerOverflowMenuGroups(
       rows: [
         {
           key: "hide",
-          // One text slot — refusal rides after an em dash, same as Add to Album.
+          // One text slot — refusal rides after an em dash, same as Add to album.
           label: canHide ? archiveVerb : `${archiveVerb} — ${hideReason}`,
           icon: "Archive",
           disabled: !canHide,
@@ -103,8 +104,8 @@ export function viewerOverflowMenuGroups(
           // an em dash rather than becoming a second, shorter phrasing of the
           // read-only truth (the drift `READ_ONLY_VAULT_REASON` forbids).
           label: canAddToAlbum
-            ? "Add to Album"
-            : `Add to Album — ${addToAlbumReason}`,
+            ? "Add to album"
+            : `Add to album — ${addToAlbumReason}`,
           icon: "FolderPlus",
           disabled: !canAddToAlbum,
           onSelect: input.onAddToAlbum,
@@ -130,7 +131,7 @@ export function viewerOverflowMenuGroups(
       rows: [
         {
           key: "adjust-location",
-          label: "Adjust Location",
+          label: "Adjust location",
           icon: "Pin",
           onSelect: input.onAdjustLocation,
         },

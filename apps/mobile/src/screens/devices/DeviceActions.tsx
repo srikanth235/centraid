@@ -18,9 +18,10 @@
 // would confirm nothing.
 
 import React, { useState } from "react";
-import { Alert, Modal, Pressable, TextInput, View } from "react-native";
+import { Modal, Pressable, TextInput, View } from "react-native";
 
 import Button from "../../kit/components/Button";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import { useTheme } from "../../kit/theme";
@@ -57,6 +58,10 @@ export default function DeviceActions({
   const [mode, setMode] = useState<Mode>("menu");
   const [name, setName] = useState(device.label);
   const [confirmName, setConfirmName] = useState("");
+  // The one confirm (#1015, S7). `Alert.alert` drew a system dialog that
+  // could draw neither the outlined `--net` verb nor a status line, and the
+  // question it asked ("Revoke this device?") was one of five shapes.
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
 
   const deviceId = device.deviceId;
   const vaultName = strandedVaultName(device);
@@ -77,18 +82,12 @@ export default function DeviceActions({
   };
 
   const askRevoke = (): void => {
-    Alert.alert(
-      device.current === true ? "Sign out this device?" : "Revoke this device?",
-      `${device.label} stops answering for this vault. The person keeps their access and their other devices, and past writes still resolve to it.`,
-      [
-        { onPress: close, style: "cancel", text: "Cancel" },
-        {
-          onPress: () => revoke(),
-          style: "destructive",
-          text: device.current === true ? "Sign out" : "Revoke",
-        },
-      ]
-    );
+    confirmDestructive({
+      body: `${device.label} stops answering for this vault. The person keeps their access and their other devices, and past writes still resolve to it.`,
+      noun: "this device",
+      onConfirm: () => revoke(),
+      verb: device.current === true ? "Sign out" : "Revoke",
+    });
   };
 
   const save = (): void => {
@@ -101,19 +100,22 @@ export default function DeviceActions({
 
   if (mode === "menu") {
     return (
-      <OptionSheet
-        onClose={close}
-        onSelect={(id) => (id === "rename" ? setMode("rename") : askRevoke())}
-        options={[
-          { id: "rename", label: "Rename" },
-          {
-            id: "revoke",
-            label: device.current === true ? "Sign out" : "Revoke",
-          },
-        ]}
-        title={device.label}
-        visible
-      />
+      <>
+        {confirmSheet}
+        <OptionSheet
+          onClose={close}
+          onSelect={(id) => (id === "rename" ? setMode("rename") : askRevoke())}
+          options={[
+            { id: "rename", label: "Rename" },
+            {
+              id: "revoke",
+              label: device.current === true ? "Sign out" : "Revoke",
+            },
+          ]}
+          title={device.label}
+          visible
+        />
+      </>
     );
   }
 

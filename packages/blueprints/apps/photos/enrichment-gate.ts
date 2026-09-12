@@ -7,7 +7,7 @@ import {
   ENRICHMENT_STATUS_LINE,
   PEOPLE_EMPTY_LINE,
   PRIORITISE_ACTION,
-  prioritiseAnswerFor,
+  prioritizeAnswerFor,
 } from "./enrichment-consent.ts";
 import type { AnswerAvailability } from "./enrichment-consent.ts";
 import { act, narrate, notice } from "./outcomes.ts";
@@ -22,10 +22,10 @@ export interface PeopleEmptyStateProps {
   statusLine: string;
   line: string;
   action: string;
-  prioritise: AnswerAvailability;
+  prioritize: AnswerAvailability;
   busy: boolean;
-  prioritised: boolean;
-  onPrioritise: () => void;
+  prioritized: boolean;
+  onPrioritize: () => void;
 }
 
 export interface PeopleEmptyState {
@@ -41,7 +41,7 @@ export function createPeopleEmptyState({
   let status: EnrichmentStatus | null = null;
   let statusLoading = false;
   let busy = false;
-  let prioritised = false;
+  let prioritized = false;
 
   function ensurePolicyLoaded(): void {
     if (status != null || statusLoading) return;
@@ -61,11 +61,11 @@ export function createPeopleEmptyState({
   }
 
   function answer(): AnswerAvailability {
-    return prioritiseAnswerFor(status?.tier, !!status?.vaultDenied);
+    return prioritizeAnswerFor(status?.tier, !!status?.vaultDenied);
   }
 
-  async function prioritise(): Promise<void> {
-    if (busy || prioritised) return;
+  async function prioritize(): Promise<void> {
+    if (busy || prioritized) return;
     if (!answer().available) return;
     busy = true;
     onData();
@@ -74,7 +74,7 @@ export function createPeopleEmptyState({
     });
     busy = false;
     if (narrate(outcome)) {
-      prioritised = true;
+      prioritized = true;
       notice(ENRICHMENT_PRIORITISED_NOTE);
     }
     onData();
@@ -87,10 +87,10 @@ export function createPeopleEmptyState({
       statusLine: ENRICHMENT_STATUS_LINE,
       line: PEOPLE_EMPTY_LINE,
       action: PRIORITISE_ACTION,
-      prioritise: answer(),
+      prioritize: answer(),
       busy,
-      prioritised,
-      onPrioritise: () => void prioritise(),
+      prioritized,
+      onPrioritize: () => void prioritize(),
     }),
   };
 }

@@ -20,7 +20,7 @@ export type ShellPage =
   | "starred"
   | "automations"
   | "connectors"
-  | "approvals"
+  | "needs-you"
   | "gateway"
   | "household"
   | "storage"
@@ -30,8 +30,8 @@ export type ShellPage =
 export interface LauncherDestination {
   /** Stable pin/test key, independent of the label. */
   id: ShellPage;
+  /** The one noun, on the stem and the compact band alike (R-NY-16). */
   label: string;
-  shortLabel?: string;
   icon: IconName;
   page: ShellPage;
   route: ShellRoute;
@@ -63,20 +63,21 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
   },
   {
     icon: DESTINATION_MARKS.notifications,
-    id: "approvals",
-    label: "Notifications",
-    page: "approvals",
-    route: { kind: "approvals" },
-    shortLabel: "Alerts",
+    id: "needs-you",
+    label: "Needs you",
+    page: "needs-you",
+    route: { kind: "needs-you" },
   },
   {
     icon: DESTINATION_MARKS.automations,
     id: "automations",
-    label: "Automations",
+    // One noun across both seats (#1015, R-SH-11): the place is Rules and its
+    // rows are rules. `id`/`page`/`route` stay `automations` — persisted pin
+    // keys and route keys, not copy. "Rules" needs no short form.
+    label: "Rules",
     page: "automations",
     requires: "automations",
     route: { kind: "automations" },
-    shortLabel: "Autos",
   },
   {
     icon: DESTINATION_MARKS.connectors,
@@ -138,7 +139,7 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
 /* Home is absent because it is pinned by law (`isPinned`); Assistant because
    #707 settled it as a pinned APP, not a launcher row. */
 export const DEFAULT_PINS: readonly ShellPage[] = [
-  "approvals",
+  "needs-you",
   "insights",
   "atlas",
 ];

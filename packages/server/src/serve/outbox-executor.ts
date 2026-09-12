@@ -18,7 +18,7 @@ import type { RuntimeLogger } from "@centraid/server/engine";
 
 import type { ConnectionBroker } from "./connection-broker.js";
 import { timeoutSignal } from "./fetch-timeout.js";
-import { noticeGist } from "./notices.js";
+import { noticeGist, outboxNoticeHeadline } from "./notices.js";
 import type { VaultPlane } from "./vault-plane.js";
 
 const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
@@ -344,22 +344,13 @@ export class OutboxExecutor {
           typeof value === "string" && value.trim() !== ""
       );
     const target = artifactLabel?.trim() ?? item?.target ?? "External write";
-    // D4: a failure headline names the reason, not just the disposition.
+    // R-NY-5 (#1015): the headline is a sentence naming the write; the
+    // refusal's gist is kept in `detail.gist` for the run log, never the title.
     const gist = disposition === "sent" ? undefined : noticeGist(detail);
-    const suffix =
-      disposition === "sent"
-        ? "sent"
-        : disposition === "failed"
-          ? gist
-            ? `failed: ${gist}`
-            : "failed"
-          : gist
-            ? `needs approval again: ${gist}`
-            : "needs approval again";
     plane.notices.put({
       kind: "outbox",
       sourceRef: itemId,
-      headline: `${target} — ${suffix}`,
+      headline: outboxNoticeHeadline(target, disposition),
       severity:
         disposition === "sent"
           ? "info"
@@ -386,6 +377,7 @@ export class OutboxExecutor {
             }
           : {}),
         ...(detail ? { detail } : {}),
+        ...(gist ? { gist } : {}),
         deepLink: "/notifications",
       },
     });

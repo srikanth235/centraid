@@ -27,6 +27,13 @@ export const subBase = {
   gutter: 2,
   /** The rule inside a tight text stack. */
   hair: 1,
+  /** The inline inset of a chip drawn ON a photograph tile — the photo
+   *  tile's custody mark and state chip (proto:4019, `padding: 1px 3px`).
+   *  The third seam, recorded as a system change (#1015, R-NY-15): a tile is
+   *  a quarter of a phone's width, so the chip is a seam on the image, not a
+   *  row on a page — the page margin would swallow the cell and the nearest
+   *  rung (4) visibly fattens the chip. */
+  chip: 3,
 } as const;
 
 /** Invariants, not preferences: below 34px a control stops being hittable,

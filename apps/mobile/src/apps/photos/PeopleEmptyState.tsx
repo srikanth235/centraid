@@ -20,20 +20,20 @@ import { useTheme } from "../../kit/theme";
 import { styles } from "./PeopleEmptyState.styles";
 
 export interface PeopleEmptyStateProps {
-  prioritise: AnswerAvailability;
+  prioritize: AnswerAvailability;
   busy?: boolean;
-  prioritised?: boolean;
-  onPrioritise: () => void;
+  prioritized?: boolean;
+  onPrioritize: () => void;
 }
 
 export default function PeopleEmptyState({
-  prioritise,
+  prioritize,
   busy,
-  prioritised,
-  onPrioritise,
+  prioritized,
+  onPrioritize,
 }: PeopleEmptyStateProps): React.JSX.Element {
   const { colors } = useTheme();
-  const inert = !prioritise.available || !!busy || !!prioritised;
+  const inert = !prioritize.available || !!busy || !!prioritized;
   return (
     <View style={styles.block}>
       <Text style={[styles.status, { color: colors.textFaint }]}>
@@ -43,9 +43,9 @@ export default function PeopleEmptyState({
         {PEOPLE_EMPTY_LINE}
       </Text>
       {/* The refusal is read BESIDE the control, never as a tooltip (E1). */}
-      {prioritise.reason ? (
+      {prioritize.reason ? (
         <Text style={[styles.reason, { color: colors.textFaint }]}>
-          {prioritise.reason}
+          {prioritize.reason}
         </Text>
       ) : null}
       <Pressable
@@ -53,7 +53,7 @@ export default function PeopleEmptyState({
         accessibilityRole="button"
         accessibilityState={{ disabled: inert }}
         disabled={inert}
-        onPress={inert ? undefined : onPrioritise}
+        onPress={inert ? undefined : onPrioritize}
         style={[styles.action, { borderColor: colors.line }]}
       >
         <Text

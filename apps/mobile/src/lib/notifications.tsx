@@ -94,7 +94,14 @@ async function handleNotificationResponse(
     }
     if (plan.kind === "open-notifications") {
       if (rootNavigationRef.isReady())
-        rootNavigationRef.navigate("Settings", { screen: "Approvals" });
+        rootNavigationRef.navigate("Settings", { screen: "NeedsYou" });
+      return;
+    }
+    // A notice is news, not a decision (#1015 R-NY-2): it stands in
+    // Activity's alerts view, never on an empty Needs you.
+    if (plan.kind === "open-alerts") {
+      if (rootNavigationRef.isReady())
+        rootNavigationRef.navigate("Insights", { initialTab: "alerts" });
       return;
     }
     if (plan.kind === "open-app") {
@@ -105,6 +112,6 @@ async function handleNotificationResponse(
       else rootNavigationRef.navigate("Tally", { screen: "TallyHome" });
     }
   } catch (error) {
-    surfaceWriteFailure(error, "Notification action failed");
+    surfaceWriteFailure(error, "Notification action not completed");
   }
 }

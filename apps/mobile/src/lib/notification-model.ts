@@ -7,6 +7,39 @@ export const EVENT_CATEGORY = "CENTRAID_EVENT_REMINDER";
 export const TALLY_CATEGORY = "CENTRAID_TALLY_SETTLE";
 export const INVITE_CATEGORY = "CENTRAID_HOUSEHOLD_INVITE";
 export const NOTIFICATIONS_CATEGORY = "CENTRAID_NOTIFICATIONS";
+/** A notice push's own category: its button names the alerts, not Needs you. */
+export const ALERTS_CATEGORY = "CENTRAID_ALERTS";
+
+/**
+ * Where a Notifications push lands, by what it is ABOUT (#1015 R-NY-2). A
+ * decision opens Needs you; a notice — a rule that did not finish, a gateway
+ * that went down — opens Activity's alerts view, because Needs you holds no
+ * notices and would open empty. The url carries the same answer, since a
+ * tapped push's url is followed by the linking table as well as by
+ * `notificationActionPlan`, and the two must not disagree.
+ */
+export function notificationsPushRouting(about: "decision" | "notice"): {
+  categoryIdentifier: string;
+  data: Record<string, string>;
+} {
+  return about === "notice"
+    ? {
+        categoryIdentifier: ALERTS_CATEGORY,
+        data: {
+          about,
+          kind: "notifications",
+          url: "centraid://insights?initialTab=alerts",
+        },
+      }
+    : {
+        categoryIdentifier: NOTIFICATIONS_CATEGORY,
+        data: {
+          about,
+          kind: "notifications",
+          url: "centraid://settings/notifications",
+        },
+      };
+}
 export const COMPLETE_TASK = "COMPLETE_TASK";
 export const SNOOZE_TASK = "SNOOZE_TASK";
 export const OPEN_ITEM = "OPEN_ITEM";
@@ -83,7 +116,8 @@ export type NotificationActionPlan =
   | { kind: "open-event"; eventId: string }
   | { kind: "open-app"; appId: "tasks" | "tally" }
   | { kind: "open-home" }
-  | { kind: "open-notifications" };
+  | { kind: "open-notifications" }
+  | { kind: "open-alerts" };
 
 export function notificationActionPlan(
   action: string,
@@ -101,6 +135,10 @@ export function notificationActionPlan(
   if (data.kind === "tally" || action === SETTLE_BALANCE)
     return { kind: "open-app", appId: "tally" };
   if (data.kind === "invite") return { kind: "open-home" };
-  if (data.kind === "notifications") return { kind: "open-notifications" };
+  // A push with no `about` predates it and was always a decision's.
+  if (data.kind === "notifications")
+    return data.about === "notice"
+      ? { kind: "open-alerts" }
+      : { kind: "open-notifications" };
   return { kind: "open-app", appId: "tasks" };
 }

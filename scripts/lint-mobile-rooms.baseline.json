@@ -1,0 +1,4 @@
+{
+  "$comment": "The rooms gate's per-rule ratchet (#1015, Wave 4). EMPTY — every one of the six rules is at zero tree-wide and unconditional: a rule absent here is at ZERO, so a new finding of any kind fails `bun run lint:product` outright. It may only ever go DOWN, so nothing may be added back. `back-literal`, `identity-tint`, `copy-title-case`, `error-detail` and `page-margin` reached zero earlier (`error-detail` by the R-A-15 sweep; `page-margin` by R-NY-6, which named PhotoTile's chip inset as a design token rather than allowlisting it here). `screen-root` was the last, held open by `PhotoLightbox` — the full-bleed viewer none of the six rooms fitted honestly; R-NY-14 gave it the seventh room, `StageRoom`, and the viewer moved into it. Run `node scripts/lint-mobile-rooms.mjs` to re-measure.",
+  "rules": {}
+}

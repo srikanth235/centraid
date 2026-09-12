@@ -245,7 +245,7 @@ export function countSentence(copies: readonly AutomationRowCopy[]): string {
   const failing = copies.filter((copy) => copy.status === "failing").length;
   const paused = copies.filter((copy) => copy.status === "paused").length;
   return join([
-    countWord(copies.length, "automation"),
+    countWord(copies.length, "rule"),
     failing > 0 ? `${String(failing)} failing` : undefined,
     paused > 0 ? `${String(paused)} paused` : undefined,
   ]);
@@ -310,16 +310,16 @@ export function automationsHealth(
         : `${worst.title} failed its last run.`,
       label:
         failing.length === 1
-          ? "1 automation is failing"
-          : `${countWord(failing.length, "automation")} are failing`,
+          ? "1 rule is failing"
+          : `${countWord(failing.length, "rule")} are failing`,
     };
   }
   const newest = runs[0];
   return {
     ...generic,
     detail: newest
-      ? `${countWord(copies.length, "automation")} on this gateway · last run ${whenLabel(newest.startedAt, now)}.`
-      : `${countWord(copies.length, "automation")} on this gateway · nothing has run yet.`,
+      ? `${countWord(copies.length, "rule")} on this gateway · last run ${whenLabel(newest.startedAt, now)}.`
+      : `${countWord(copies.length, "rule")} on this gateway · nothing has run yet.`,
     label: "Nothing is failing",
   };
 }

@@ -20,7 +20,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { DCAPS } from "@centraid/blueprints/apps/docs/capabilities";
 
 import { Text } from "../../kit/components/NativeText";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import { borders, pageMargin, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
 import { DUE_EMPTY_ACTION, DUE_EMPTY_TITLE, dueEmptyBody } from "./docs-copy";
@@ -86,7 +86,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       marginTop: 8,
       minHeight: 44,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
     },
     actionLabel: { ...t("control"), color: colors.text },
     body: { ...t("body"), color: colors.textSoft },
@@ -95,7 +95,7 @@ const makeStyles = (colors: ThemeColors) =>
     factRow: { flexDirection: "row", gap: 8 },
     factValue: { ...t("small"), color: colors.textSoft, flex: 1 },
     facts: { gap: 4, paddingTop: 4 },
-    page: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
+    page: { flex: 1, paddingHorizontal: pageMargin, paddingTop: 8 },
     panel: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,

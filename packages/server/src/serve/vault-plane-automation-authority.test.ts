@@ -74,7 +74,7 @@ describe("an automation is a principal in the one plane", () => {
       "granted agent.pack schedule read",
       "granted core.entity core.party read",
     ]);
-    // The Approvals read: the surface sees the answers beside the agent.
+    // The Needs you read: the surface sees the answers beside the agent.
     const agent = vault.listAgents().find((a) => a.enrollmentKey === "digest");
     expect(agent?.answers).toHaveLength(3);
   });

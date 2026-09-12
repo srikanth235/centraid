@@ -31,7 +31,6 @@ import {
   ALIAS_NONE,
   ALIAS_NOTE,
   ALIAS_ROW,
-  EDIT_CANCEL,
   FIELD_NOTE,
   MATCH_NOTE_DOMAIN,
   MATCH_NOTE_HOST,
@@ -45,6 +44,7 @@ import {
 } from "@centraid/blueprints/apps/locker/view-copy";
 
 import Button from "../../kit/components/Button";
+import { useConfirmDestructive } from "../../kit/components/ConfirmSheet";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { usePendingChanges } from "../../kit/replica/pending-changes";
@@ -54,7 +54,6 @@ import type { ThemeColors } from "../../kit/theme";
 import type { LockerScreenProps } from "../../navigation";
 import { copyLockerMetadata, copyLockerSecret } from "./locker-clipboard";
 import {
-  BACK_TO_ITEMS,
   OPEN_ITEM_ACT,
   OPEN_ITEM_BODY,
   OUTSIDE_WINDOW,
@@ -90,7 +89,7 @@ export default function LockerItemScreen({
   const vault = useLockerVault();
   const { itemId, title, type } = route.params;
   const [now, setNow] = useState(() => Date.now());
-  const [confirmingTrash, setConfirmingTrash] = useState(false);
+  const { confirmDestructive, confirmSheet } = useConfirmDestructive();
   const replica = useReplica();
   const { pending } = usePendingChanges(replica.session);
   const pendingWait = lockerPendingLine(pending);
@@ -139,7 +138,6 @@ export default function LockerItemScreen({
 
   return (
     <LockerScreen
-      current="items"
       hideBand
       onBack={() => navigation.popTo("LockerHome", { destination: "items" })}
       route="item"
@@ -168,7 +166,7 @@ export default function LockerItemScreen({
           <>
             {detail.compromised ? (
               <LockerFieldRow
-                label="Compromised"
+                label={FIELD_LABEL.compromised ?? ""}
                 note={COMPROMISED_WHY}
                 value="Flagged"
               />
@@ -195,7 +193,7 @@ export default function LockerItemScreen({
 
             {detail.url ? (
               <LockerFieldRow
-                label="Address"
+                label={FIELD_LABEL.url ?? ""}
                 note={
                   detail.url_match_policy === "exact-host"
                     ? MATCH_NOTE_HOST
@@ -240,7 +238,7 @@ export default function LockerItemScreen({
 
             {detail.notes ? (
               <LockerFieldRow
-                label="Memo"
+                label={FIELD_LABEL.notes ?? ""}
                 note={FIELD_NOTE.notes}
                 value={detail.notes}
               />
@@ -248,6 +246,13 @@ export default function LockerItemScreen({
           </>
         )}
 
+        {/* TWO ACTS AND A DESTRUCTIVE ONE, ON TWO LINES (#1015,
+            locker/findings #4). Four `Button`s used to sit in one row with no
+            `flexWrap`: on 402pt that is ~84pt each for labels of up to
+            seventeen characters, so at least two clipped. The fourth was
+            `Items`, a third exit on a screen the frame already gives a back
+            affordance and a band tab — deleted. And the trash is not peer to
+            an edit, so it stands on its own line. */}
         <View style={styles.acts}>
           <Button
             label={EDIT_ITEM}
@@ -269,43 +274,30 @@ export default function LockerItemScreen({
               }}
             />
           ) : null}
+        </View>
+        <View style={styles.destructive}>
           <Button
             label={TRASH_ITEM}
-            onPress={() => setConfirmingTrash(true)}
+            onPress={() =>
+              // ONE confirm shape (#1015, S7). Thirty days, with its star and
+              // its tags — the §6 sentence, so a member deciding is told what
+              // a restore brings back.
+              confirmDestructive({
+                body: TRASH_CONFIRM_BODY,
+                noun: "item",
+                onConfirm: () => {
+                  void trashLockerItem(replica.session, itemId).then((ok) => {
+                    if (ok)
+                      navigation.popTo("LockerHome", { destination: "items" });
+                  });
+                },
+                verb: TRASH_ITEM,
+              })
+            }
             variant="destructive"
           />
-          <Button
-            label={BACK_TO_ITEMS}
-            onPress={() =>
-              navigation.popTo("LockerHome", { destination: "items" })
-            }
-          />
         </View>
-        {confirmingTrash ? (
-          <View style={styles.confirm}>
-            {/* Thirty days, with its star and its tags — the §6 sentence, so
-                a member deciding is told what a restore brings back. */}
-            <Text style={styles.body}>{TRASH_CONFIRM_BODY}</Text>
-            <View style={styles.acts}>
-              <Button
-                label={EDIT_CANCEL}
-                onPress={() => setConfirmingTrash(false)}
-              />
-              <Button
-                label={TRASH_ITEM}
-                onPress={() => {
-                  setConfirmingTrash(false);
-                  void trashLockerItem(replica.session, itemId).then((ok) => {
-                    if (ok) {
-                      navigation.popTo("LockerHome", { destination: "items" });
-                    }
-                  });
-                }}
-                variant="destructive"
-              />
-            </View>
-          </View>
-        ) : null}
+        {confirmSheet}
         {row ? null : <Text style={styles.body}>{OUTSIDE_WINDOW}</Text>}
       </ScrollView>
     </LockerScreen>
@@ -314,10 +306,15 @@ export default function LockerItemScreen({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    destructive: {
+      paddingBottom: spacing[4],
+      paddingHorizontal: spacing[4],
+    },
     acts: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: spacing[2],
       marginTop: spacing[4],
       padding: spacing[4],
@@ -336,7 +333,7 @@ const makeStyles = (colors: ThemeColors) =>
       padding: spacing[4],
     },
     head: { gap: spacing[1], padding: spacing[4] },
-    lede: { ...t("mono"), color: colors.textFaint },
+    lede: { ...t("small"), color: colors.textFaint },
     scroll: { paddingBottom: spacing[6] },
     title: { ...t("title"), color: colors.text },
   });

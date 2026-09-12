@@ -1,10 +1,18 @@
 import * as MediaLibrary from "expo-media-library";
 
-import { sharePlaceReceipt } from "@centraid/blueprints/apps/photos/share-place";
+import {
+  SHARE_PLACE_NOT_REMOVABLE,
+  sharePlaceReceipt,
+} from "@centraid/blueprints/apps/photos/share-place";
 import type {
   SharePlaceInput,
   SharePlacePrecision,
 } from "@centraid/blueprints/apps/photos/share-place";
+import {
+  PHOTOS_ERROR_EXPORT_FAILED,
+  PHOTOS_ERROR_IN_CLOUD,
+} from "@centraid/blueprints/apps/photos/shared-copy";
+import { RETRY_ACTION } from "@centraid/client/surface-copy";
 
 import { postStatus } from "../../kit/components/status-line";
 import { InCloudOriginalError } from "./device-media";
@@ -35,9 +43,15 @@ export async function sendCopy(
 
 // Unremovable location refuses the share, loudly.
 export function surfaceExportFailure(error: unknown): void {
+  // `LocationNotRemovableError` carries AUTHORED copy — a loud, specific
+  // refusal the member can act on — so it speaks for itself. Everything else
+  // gets the noun and the retry word; the engine's sentence goes to the log.
+  if (error instanceof LocationNotRemovableError) {
+    postStatus(SHARE_PLACE_NOT_REMOVABLE);
+    return;
+  }
+  console.warn("[photos] export failed", error);
   postStatus(
-    error instanceof LocationNotRemovableError
-      ? error.message
-      : `${error instanceof InCloudOriginalError ? "Original is in iCloud" : "Export failed"}: ${error instanceof Error ? error.message : String(error)}`
+    `${error instanceof InCloudOriginalError ? PHOTOS_ERROR_IN_CLOUD : PHOTOS_ERROR_EXPORT_FAILED} ${RETRY_ACTION}`
   );
 }

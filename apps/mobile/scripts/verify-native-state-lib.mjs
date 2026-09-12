@@ -3,51 +3,113 @@
  * in #996). Kept free of project I/O so unit tests can drive fixtures without
  * the CLI.
  *
- * The layers changed subject when `ios/` and `android/` stopped being committed.
- * The INVARIANT did not: an incomplete or unreproducible native recipe must not
- * be blessed. What used to be "the committed native tree agrees with the config"
- * is now "the config, the plugins and the local modules are the ONLY native
- * inputs, and a fresh prebuild is reproducible from them alone".
+ * The layers changed subject twice, and the INVARIANT never did: an incomplete
+ * or unreproducible native recipe must not be blessed. #996 made `ios/` and
+ * `android/` gitignored outputs, so L1 asked that nothing under them be
+ * tracked. #1011 generates the projects and TRACKS them, so the diff of a
+ * native change is reviewable, and L1 asks the question that fits a tracked
+ * generated tree: does it still match what prebuild writes (R-NY-17, #1015)?
+ * Absence is no longer the property — DRIFT is.
  */
 
 export const WRITE_CMD = "bun run --cwd apps/mobile ci:native-state --write";
 export const FIX_INPUTS_HINT =
   "fix the native inputs first (app.config.ts, plugins/, modules/), then re-run verify; do not run --write until L1–L3 pass";
-/** The two generated trees, repo-relative. Nothing under them may be tracked. */
+/** The two generated trees, repo-relative. Tracked, and regenerated (#1011). */
 export const GENERATED_NATIVE_DIRS = ["apps/mobile/ios", "apps/mobile/android"];
 
 /**
- * L1 generated-tree purity — the regression guard that replaces every check
- * that used to read a committed native file.
+ * The blessed git tree object of each generated tree, as `native-fingerprints`
+ * records it beside the input hashes. A git tree id IS the content of the
+ * directory: one byte changed anywhere under it changes the id, and nothing
+ * else does — no walk, no hashing of our own, and no list of files to keep
+ * current as prebuild's output grows.
+ */
+export const GENERATED_TREE_KEY = "trees";
+
+/**
+ * L1 generated-tree fidelity — the regression guard over a TRACKED generated
+ * tree (#1011, R-NY-17).
  *
- * A tracked file under `ios/` or `android/` is not a small mistake: prebuild
- * overwrites it on the next run, so it is an edit that appears to work, ships
- * once, and vanishes. It also re-introduces exactly the drift L1–L3 used to
- * chase, because a committed generated file has no writer that keeps it current.
+ * Three failures, and each is silent in its own way.
  *
- * Two halves, because either alone is bypassable: the tracked-file list catches
- * a `git add -f`, and the ignore assertion catches a `.gitignore` edit that
- * would let the next `git add .` sweep the whole tree back in.
+ * **The tree leaves the index.** A generated tree that is tracked is a tree
+ * whose every regeneration arrives as a reviewable diff; one that is ignored,
+ * or absent from the index, takes that review away and takes every native
+ * change with it. So both halves are asserted, and the ignore half matters
+ * MORE now than it did when the tree was an output: a `.gitignore` rule over a
+ * tracked tree is the worst of both — the files are committed and the next
+ * regeneration never shows up in `git status`.
+ *
+ * **The tree is hand-edited.** The old failure, with a new shape. A tracked
+ * generated file can now be edited and committed and it will survive — until
+ * the next prebuild silently reverts it, with no error anywhere. The edit
+ * belongs in `app.config.ts`, a config plugin, or a local module; nothing
+ * else writes these trees.
+ *
+ * **The tree falls behind its inputs.** An input moves, nobody regenerates,
+ * and the committed projects describe an app that no longer exists.
+ *
+ * The first is answered by git's index and ignore rules; the second and third
+ * by the tree's git object id, recorded beside the input fingerprints and
+ * moved only by a reviewed `--write`.
  *
  * @param {{trackedNativeFiles: string[], ignoredDirs: Record<string, boolean>}} input the git-answered index and ignore state for the two generated trees
  */
-export function validateGeneratedTreesUntracked({
+export function validateGeneratedTreesTracked({
   trackedNativeFiles,
   ignoredDirs,
 }) {
   const errors = [];
-  const tracked = [...trackedNativeFiles].sort();
-  if (tracked.length > 0) {
-    const shown = tracked.slice(0, 5).join(", ");
-    const more = tracked.length > 5 ? `, +${tracked.length - 5} more` : "";
-    errors.push(
-      `L1 generated tree: ${tracked.length} tracked file(s) under the prebuild outputs (${shown}${more}). ios/ and android/ are generated; a file that must survive a regeneration is a file a config plugin writes (${FIX_INPUTS_HINT})`
-    );
-  }
   for (const dir of GENERATED_NATIVE_DIRS) {
-    if (ignoredDirs[dir] !== true) {
+    if (!trackedNativeFiles.some((file) => file.startsWith(`${dir}/`))) {
       errors.push(
-        `L1 generated tree: ${dir} is not ignored by git — the next \`git add .\` would commit a prebuild output (${FIX_INPUTS_HINT})`
+        `L1 generated tree: ${dir} has no tracked file — the generated projects are committed (#1011) so every regeneration is a reviewable diff (${FIX_INPUTS_HINT})`
+      );
+    }
+    if (ignoredDirs[dir] === true) {
+      errors.push(
+        `L1 generated tree: ${dir} is ignored by git while its files are tracked — the next prebuild's changes would never reach \`git status\` (${FIX_INPUTS_HINT})`
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * L1 drift — the committed tree's git object id against the blessed one.
+ *
+ * The comparison is the whole point: `expected` is what was blessed the last
+ * time someone reviewed a regeneration, `actual` is what the index carries now.
+ * A hand-edit under the tree moves `actual` and nothing else does, so the error
+ * names the tree rather than guessing which file.
+ *
+ * A tree with no recorded id is a FINDING, not a pass: a missing entry is
+ * exactly what a ratchet going quiet looks like.
+ *
+ * @param {Record<string, string|undefined>} expected blessed tree ids, by repo-relative dir
+ * @param {Record<string, string|undefined>} actual the ids the index carries now
+ */
+export function validateGeneratedTreeDrift(expected, actual) {
+  const errors = [];
+  for (const dir of GENERATED_NATIVE_DIRS) {
+    const was = expected?.[dir];
+    const now = actual?.[dir];
+    if (was === undefined) {
+      errors.push(
+        `L1 generated tree drift: ${dir} has no blessed tree id in native-fingerprints.json — a tree nobody recorded is a tree nothing is watching (${FIX_INPUTS_HINT})`
+      );
+      continue;
+    }
+    if (now === undefined) {
+      errors.push(
+        `L1 generated tree drift: ${dir} is not a tree in the index — it was blessed at ${was} (${FIX_INPUTS_HINT})`
+      );
+      continue;
+    }
+    if (was !== now) {
+      errors.push(
+        `L1 generated tree drift: ${dir} drifted — blessed ${was}, now ${now}. Regenerate with \`bun run --cwd apps/mobile native:prebuild\` and review the diff; a hand-edit belongs in app.config.ts, a plugin, or a local module (${FIX_INPUTS_HINT})`
       );
     }
   }
@@ -226,7 +288,7 @@ export function formatStatusReport({ errors, inputInventory, fingerprints }) {
   }
   const lines = [
     "native-state status:",
-    "  L1 generated-tree purity (nothing under ios/ or android/ is tracked or unignored)",
+    "  L1 generated-tree fidelity (ios/ and android/ are tracked, unignored, and at their blessed tree ids)",
     "  L2 input coverage (config plugins + local modules are what the fingerprint reads)",
     "  L3 host independence (no prebuild output contributes to the hash)",
     "  L4 identity ratchet (native-fingerprints.json vs @expo/fingerprint)",

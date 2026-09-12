@@ -63,6 +63,23 @@ describe("the field projection", () => {
     expect(dateOnly?.notes).toHaveLength(1);
   });
 
+  it("offers the repeats row even where the task runs once, so a first rule has a door", () => {
+    // #1015: the row used to appear only once a summary existed, which put the
+    // control that SETS a rule behind the rule it would set.
+    const once = taskFields({ task: task(), now: NOW }).find(
+      (field) => field.key === "repeats"
+    );
+    expect(once?.value).toBe("—");
+    // Nothing about a missed period is said until there is a period to miss.
+    expect(once?.notes).toStrictEqual([]);
+    const repeating = taskFields({
+      task: task({ rrule: "FREQ=WEEKLY", recurrence_summary: "every Monday" }),
+      now: NOW,
+    }).find((field) => field.key === "repeats");
+    expect(repeating?.value).toBe("every Monday");
+    expect(repeating?.notes).toHaveLength(2);
+  });
+
   it("draws the anchor ONLY where the task repeats", () => {
     expect(keysOf({ task: task(), now: NOW })).not.toContain("anchor");
     expect(

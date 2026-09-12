@@ -47,7 +47,7 @@ export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
     if (seat === "origin") {
       const onlyHere = input.onlyHereCount ?? 0;
       return {
-        action: { label: "What to do", route: { kind: "approvals" } },
+        action: { label: "What to do", route: { kind: "needs-you" } },
         copy:
           onlyHere > 0
             ? `Can’t reach your vault · ${onlyHere} ${onlyHere === 1 ? "item exists" : "items exist"} only here`
@@ -153,7 +153,7 @@ export function syncedStamp(
 export interface AmbientStatusInput {
   /** The heartbeat monitor's verdict; `undefined` before the first read. */
   gatewayStatus: "unknown" | "up" | "down" | undefined;
-  /** Approvals waiting on a human decision. */
+  /** Decisions waiting on the member in Needs you. */
   blockingCount: number;
   hasUnreadNotices: boolean;
 }

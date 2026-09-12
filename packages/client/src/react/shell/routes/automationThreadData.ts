@@ -127,7 +127,7 @@ function buildPlanStatus(
       ? { detail: null, label: "Plan ready", state: "ready" }
       : {
           detail:
-            "This automation has never been compiled, so it has nothing to run yet.",
+            "This rule has never been compiled, so it has nothing to run yet.",
           label: "No plan yet",
           state: "never",
         };

@@ -73,6 +73,49 @@ describe(composeWebNotifications, () => {
     ]);
   });
 
+  test("tags every row decision or notice, so a tap lands where it can be acted on (R-NY-16)", () => {
+    const notifications = pull({
+      outbox: [
+        {
+          itemId: "out-1",
+          target: "mail",
+          artifact: {},
+          stagedAt: "2026-07-30T10:00:00.000Z",
+        },
+      ],
+      needsAuth: [
+        {
+          connectionId: "conn-1",
+          label: "Gmail",
+          attentionAt: "2026-07-30T10:01:00.000Z",
+        },
+      ],
+      parked: [{ invocationId: "park-1", command: "calendar.create" }],
+      scopeRequests: [{ requestId: "scope-1", appId: "brief" }],
+    });
+    notifications.notices.push({
+      noticeId: "notice-1",
+      headline: "A rule could not finish",
+      severity: "high",
+      lastAt: "2026-07-30T10:02:00.000Z",
+      readAt: null,
+      archivedAt: null,
+    });
+
+    expect(
+      composeWebNotifications(notifications, new Set()).map((row) => [
+        row.key.split(":")[0],
+        row.about,
+      ])
+    ).toStrictEqual([
+      ["outbox", "decision"],
+      ["auth", "decision"],
+      ["parked", "decision"],
+      ["scope", "decision"],
+      ["notice", "notice"],
+    ]);
+  });
+
   test("a re-created decision gets a new delivery key", () => {
     const first = pull({
       outbox: [

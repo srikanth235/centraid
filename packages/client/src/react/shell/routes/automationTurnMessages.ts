@@ -318,8 +318,8 @@ export function automationTurnMessages(
 
   if (answers === 0 && turn.endedAt !== undefined) {
     const text = turn.ok
-      ? itemText(turn.outputJson, turn.summary ?? "The automation completed.")
-      : (turn.error ?? "The automation did not complete.");
+      ? itemText(turn.outputJson, turn.summary ?? "The rule completed.")
+      : (turn.error ?? "The rule did not complete.");
     messages.push({
       kind: "ai",
       streaming: false,

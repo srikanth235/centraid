@@ -8,7 +8,8 @@
 // A read-only row keeps every control visible and disabled with the reason
 // attached (`accessibilityHint`), never a press that quietly fails.
 
-import React from "react";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 
 import {
@@ -27,11 +28,30 @@ import {
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import { useTheme } from "../../kit/theme";
-import { ATTACHED_SEAT_NOTE, TAG_PLACEHOLDER } from "./tasks-seat-copy";
+import {
+  dueDate,
+  dueOf,
+  reminderWrite,
+  repeatWrite,
+  timeWrite,
+  whenWrite,
+} from "./task-when-write";
+import {
+  ATTACHED_SEAT_NOTE,
+  REMINDER_LEADS,
+  REPEAT_RULES,
+  TAG_PLACEHOLDER,
+  TIME_CLEAR,
+  TIME_PICK,
+  WHEN_CLEAR,
+  WHEN_PICK,
+} from "./tasks-seat-copy";
 import type { TasksStyles } from "./TasksHome.styles";
 
 export interface TaskDetailActs {
   onAnchor: (anchor: "scheduled" | "completion") => void;
+  /** The four scheduling writes, as `edit` inputs (`task-when-write.ts`). */
+  onEdit: (input: Record<string, string | number | boolean>) => void;
   onPriority: (priority: number) => void;
   onEffort: (minutes: number) => void;
   onProject: (projectId: string | null) => void;
@@ -112,6 +132,60 @@ function AnchorCards(props: TaskDetailFieldsProps): React.JSX.Element {
   );
 }
 
+/** The native picker, opened from the row it edits — DESIGN.md: DateTimeField
+ *  uses the native picker on mobile. The clear verb sits beside it because a
+ *  date a member cannot REMOVE is only half a control. */
+function DateField({
+  mode,
+  value,
+  pickLabel,
+  clearLabel,
+  writable,
+  styles,
+  onPick,
+  onClear,
+}: {
+  mode: "date" | "time";
+  value: Date;
+  pickLabel: string;
+  clearLabel: string;
+  writable: boolean;
+  styles: TasksStyles;
+  onPick: (next: Date) => void;
+  onClear: () => void;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={styles.chipRow}>
+      <Chip
+        label={pickLabel}
+        on={false}
+        writable={writable}
+        onPress={() => setOpen(true)}
+        styles={styles}
+      />
+      <Chip
+        label={clearLabel}
+        on={false}
+        writable={writable}
+        onPress={onClear}
+        styles={styles}
+      />
+      {open ? (
+        <DateTimePicker
+          value={value}
+          mode={mode}
+          display="default"
+          onChange={(_, next) => {
+            setOpen(false);
+            if (next) onPick(next);
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 function FieldControl({
   field,
   ...props
@@ -119,6 +193,71 @@ function FieldControl({
   const { colors } = useTheme();
   const { styles, task, writable } = props;
   if (field.key === "anchor") return <AnchorCards {...props} />;
+  // WHEN, TIME, REMINDER AND REPEATS ALL FELL THROUGH TO `null` (#1015, audit
+  // tasks/findings#2): the rows drew a value and two notes over nothing, and
+  // no surface on this seat could date a task, reschedule one, clear a date or
+  // set the reminder the Reminder place advertises a snooze vocabulary for.
+  // `edit` accepted all four the whole time.
+  if (field.key === "when") {
+    return (
+      <DateField
+        mode="date"
+        value={dueDate(dueOf(task), new Date())}
+        pickLabel={WHEN_PICK}
+        clearLabel={WHEN_CLEAR}
+        writable={writable}
+        styles={styles}
+        onPick={(next) => props.onEdit(whenWrite(task, next))}
+        onClear={() => props.onEdit(whenWrite(task, null))}
+      />
+    );
+  }
+  if (field.key === "time") {
+    return (
+      <DateField
+        mode="time"
+        value={dueDate(dueOf(task), new Date())}
+        pickLabel={TIME_PICK}
+        clearLabel={TIME_CLEAR}
+        writable={writable}
+        styles={styles}
+        onPick={(next) => props.onEdit(timeWrite(task, next, new Date()))}
+        onClear={() => props.onEdit(timeWrite(task, null, new Date()))}
+      />
+    );
+  }
+  if (field.key === "reminder") {
+    return (
+      <View style={styles.chipRow}>
+        {REMINDER_LEADS.map((lead) => (
+          <Chip
+            key={lead.label}
+            label={lead.label}
+            on={(task.remind_before_min ?? null) === lead.minutes}
+            writable={writable}
+            onPress={() => props.onEdit(reminderWrite(task, lead.minutes))}
+            styles={styles}
+          />
+        ))}
+      </View>
+    );
+  }
+  if (field.key === "repeats") {
+    return (
+      <View style={styles.chipRow}>
+        {REPEAT_RULES.map((rule) => (
+          <Chip
+            key={rule.label}
+            label={rule.label}
+            on={(task.rrule ?? null) === rule.rrule}
+            writable={writable}
+            onPress={() => props.onEdit(repeatWrite(task, rule.rrule))}
+            styles={styles}
+          />
+        ))}
+      </View>
+    );
+  }
   if (field.key === "priority") {
     return (
       <View style={styles.chipRow}>

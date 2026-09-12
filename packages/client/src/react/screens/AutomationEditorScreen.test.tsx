@@ -46,7 +46,7 @@ describe("screens/AutomationEditorScreen", () => {
       // Notifications — plus the compile rail, which explains itself in create
       // mode rather than offering buttons for an automation that doesn't exist.
       expect(el.querySelector('[data-mode="create"]')).toBeTruthy();
-      expect(el.textContent).toContain("New Automation");
+      expect(el.textContent).toContain("New rule");
       expect(el.textContent).toContain("Draft");
       expect(el.textContent).toContain("Triggers");
       expect(el.textContent).toContain(
@@ -71,7 +71,7 @@ describe("screens/AutomationEditorScreen", () => {
       expect(el.querySelector('[data-testid="compile-test-run"]')).toBeNull();
 
       const nameInput = el.querySelector(
-        'input[placeholder="My Automation"]'
+        'input[placeholder="My rule"]'
       ) as HTMLInputElement;
       const instructionsField = el.querySelector(
         "textarea"
@@ -80,7 +80,7 @@ describe("screens/AutomationEditorScreen", () => {
       expect(instructionsField).toBeTruthy();
       expect(instructionsField.placeholder).toMatch(/unread emails/iu);
 
-      const createBtn = button(el, "Create automation");
+      const createBtn = button(el, "Create rule");
       expect(createBtn.disabled).toBe(true);
 
       setValue(nameInput, "Weekly digest");
@@ -107,7 +107,7 @@ describe("screens/AutomationEditorScreen", () => {
       );
 
       await act(async () =>
-        button(el, "Create automation").dispatchEvent(
+        button(el, "Create rule").dispatchEvent(
           new MouseEvent("click", { bubbles: true })
         )
       );
@@ -216,7 +216,7 @@ describe("screens/AutomationEditorScreen", () => {
       expect(el.querySelector('[data-testid="compile-test-run"]')).toBeTruthy();
 
       const nameInput = el.querySelector(
-        'input[placeholder="My Automation"]'
+        'input[placeholder="My rule"]'
       ) as HTMLInputElement;
       setValue(nameInput, "Daily issues v2");
 
@@ -394,7 +394,7 @@ describe("screens/AutomationEditorScreen", () => {
         main.dispatchEvent(new MouseEvent("click", { bubbles: true }))
       );
       await act(async () =>
-        button(el, "Create automation").dispatchEvent(
+        button(el, "Create rule").dispatchEvent(
           new MouseEvent("click", { bubbles: true })
         )
       );
@@ -501,7 +501,7 @@ describe("screens/AutomationEditorScreen", () => {
         })
       );
       await act(async () =>
-        button(el, "Create automation").dispatchEvent(
+        button(el, "Create rule").dispatchEvent(
           new MouseEvent("click", { bubbles: true })
         )
       );

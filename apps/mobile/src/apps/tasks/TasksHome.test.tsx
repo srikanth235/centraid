@@ -33,7 +33,11 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 import { resolveTheme } from "../../kit/theme";
 import { REPLICA_CAN_WRITE } from "../../lib/replica/vault-source";
 import TaskRow from "./TaskRow";
-import { TASKS_BAND_DESTINATIONS } from "./tasks-band";
+import {
+  TASKS_BAND_DESTINATIONS,
+  TASKS_MORE_LABEL,
+  TASKS_MORE_ROWS,
+} from "./tasks-band";
 import { flattenGroups, groupsFor, windowItems } from "./tasks-groups";
 import TasksHome from "./TasksHome";
 import { makeTasksStyles } from "./TasksHome.styles";
@@ -160,13 +164,40 @@ describe("Tasks, on the real React Native host tree", () => {
     ).toHaveLength(TASKS_BAND_DESTINATIONS.length);
   });
 
+  // THE ROOM IS THE ROOT (#1015, Wave 2). `TasksScreen.tsx` and
+  // `TasksPlaceHeader.tsx` are gone: the header, the back row and the frame's
+  // vault lockup are `AppPlace`'s, and a row opened out of a place is a
+  // `PushedPage` whose back control names that place rather than "Back".
+  it("is rooted in the app place, and names the place a lens descends from", () => {
+    const screen = render(
+      <TasksHome
+        navigation={{ navigate: vi.fn<() => void>() } as never}
+        route={{ params: {} } as never}
+      />
+    );
+    // The app header's own back control, which only `AppPlace` draws.
+    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+
+    // A lens the band has no room for is reached THROUGH More, so the room it
+    // lands in is a pushed page whose back control names More — the fact
+    // `TasksPlaceHeader` used to be handed as a string.
+    fireEvent.press(screen.getByRole("tab", { name: TASKS_MORE_LABEL }));
+    fireEvent.press(
+      screen.getByRole("button", { name: TASKS_MORE_ROWS[0]!.label })
+    );
+    expect(
+      screen.getByRole("button", { name: `Back to ${TASKS_MORE_LABEL}` })
+    ).toBeTruthy();
+  });
+
   it("publishes each row as a native checkbox carrying its own checked trait", () => {
     const screen = renderRows([task("t1", "Renew the passport")]);
 
     // RNTL resolves `checkbox` through RN's accessibility tree, so this fails
     // if the box stops being one — a fact a prop echo cannot establish.
     expect(
-      screen.getByRole("checkbox", { name: "Renew the passport" }).props
+      screen.getByRole("checkbox", { name: "Mark Renew the passport done" })
+        .props
     ).toMatchObject({ accessibilityState: { checked: false } });
 
     // A closed row publishes the OPPOSITE trait from the same node. Rendered
@@ -184,7 +215,7 @@ describe("Tasks, on the real React Native host tree", () => {
       />
     );
     expect(
-      closed.getByRole("checkbox", { name: "File the receipts" }).props
+      closed.getByRole("checkbox", { name: "Reopen File the receipts" }).props
     ).toMatchObject({ accessibilityState: { checked: true } });
   });
 
@@ -193,7 +224,7 @@ describe("Tasks, on the real React Native host tree", () => {
     const screen = renderRows([task("t1", "Renew the passport")], { onToggle });
 
     fireEvent.press(
-      screen.getByRole("checkbox", { name: "Renew the passport" })
+      screen.getByRole("checkbox", { name: "Mark Renew the passport done" })
     );
     expect(onToggle.mock.calls.map(([row]) => row.task_id)).toStrictEqual([
       "t1",
@@ -209,7 +240,9 @@ describe("Tasks, on the real React Native host tree", () => {
       { onToggle }
     );
 
-    const box = screen.getByRole("checkbox", { name: "Held by another vault" });
+    const box = screen.getByRole("checkbox", {
+      name: "Mark Held by another vault done",
+    });
     expect(box.props).toMatchObject({
       accessibilityHint:
         "This vault is read-only for you, so meaning cannot be written into it.",

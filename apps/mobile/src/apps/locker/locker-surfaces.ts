@@ -12,7 +12,7 @@ import {
   IMPORT_STAGED,
 } from "@centraid/blueprints/apps/locker/route-copy";
 
-import { pickLockerImportFile } from "./locker-files";
+import { ImportFileRefusedError, pickLockerImportFile } from "./locker-files";
 import {
   discardLockerImport,
   lockerAccess,
@@ -27,8 +27,26 @@ import {
   setLockerSurfaceState,
 } from "./locker-store";
 
+/**
+ * S14 (#1015, R-A-15): the exception goes to the log, and the surface — the
+ * access log, an import review — gets one sentence a member can act on.
+ */
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  console.warn("[locker] surface read failed", error);
+  return SURFACE_NOT_READ;
+}
+
+const SURFACE_NOT_READ = "That did not load. Try again.";
+
+/**
+ * The picker's own refusals are AUTHORED copy carried by a typed error — "that
+ * file is too large", "that file could not be read" — so they speak for
+ * themselves. Anything else it throws is a fact about the program.
+ */
+function pickerNote(error: unknown): string {
+  if (error instanceof ImportFileRefusedError) return error.message;
+  console.warn("[locker] import file could not be picked", error);
+  return SURFACE_NOT_READ;
 }
 
 function emitBag(patch: Parameters<typeof setLockerSurfaceState>[0]): void {
@@ -103,7 +121,10 @@ export async function stageLockerImportFile(): Promise<void> {
   try {
     picked = await pickLockerImportFile();
   } catch (error) {
-    setLockerSurfaceState({ importNote: message(error), surfaceBusy: false });
+    setLockerSurfaceState({
+      importNote: pickerNote(error),
+      surfaceBusy: false,
+    });
     return;
   }
   if (!picked) {

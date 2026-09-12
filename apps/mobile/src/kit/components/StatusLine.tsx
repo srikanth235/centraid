@@ -3,10 +3,24 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BAND_HEIGHT } from "../band-surface";
-import { borders, radii, t, useTheme } from "../theme";
+import { borders, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { Text } from "./NativeText";
+import {
+  ROOT_STATUS_HOST,
+  activeStatusHost,
+  subscribeStatusHost,
+} from "./status-host";
 import { readStatus, subscribeStatus } from "./status-line";
+
+export interface StatusLineProps {
+  /**
+   * Which host this instance is. Omitted means the root host `App.tsx` mounts.
+   * A `Modal`-presented editor or sheet renders `StatusLineHost` instead of
+   * naming one itself.
+   */
+  hostId?: string;
+}
 
 /** Counts are numerics, so they are mono and tabular — and grouped, because
  *  "1904" and "1,904" are not equally readable at 11.5px. Mirrors
@@ -25,27 +39,37 @@ const count = (n: number): string => n.toLocaleString();
  * cleared or times out. That is the whole toast→status-line contract: one
  * mounted host, reused, never a spinner.
  *
- * It sits ABOVE the bottom band, never on it. This host is mounted at the app
- * root, outside the navigator, so it cannot ask which screen is showing — but
+ * It sits ABOVE the bottom band, never on it. The ROOT instance is mounted at
+ * the app root, outside the navigator, so it cannot ask which screen is showing — but
  * every screen in this product anchors something to the bottom edge: an app's
- * band, the frame's band, or the floating `HomeKey` on the screens that have
+ * band, the frame's band, or a docked health line on the places that have
  * neither. An opaque bar at `bottom: 0` therefore covered a navigation control
  * on ALL of them, hiding the band's labels and swallowing taps aimed at them.
  * A note carrying an action never expires (`postStatus` sets no timer for one),
  * so that cover could stand indefinitely.
  *
- * `BAND_HEIGHT` is the reservation because it is the tallest of the three; the
- * `HomeKey` screens gain a little clearance they do not need, which costs
- * nothing and is the honest trade for not plumbing band presence through eight
- * app bands and the frame to a host that renders at the root.
+ * `BAND_HEIGHT` is the reservation because it is the tallest of the three; a
+ * place with only a docked line gains a little clearance it does not need,
+ * which costs nothing and is the honest trade for not plumbing band presence
+ * through eight app bands and the frame to a host that renders at the root.
  */
-export default function StatusLine(): React.JSX.Element | null {
+export default function StatusLine({
+  hostId = ROOT_STATUS_HOST,
+}: StatusLineProps = {}): React.JSX.Element | null {
   const note = useSyncExternalStore(subscribeStatus, readStatus, readStatus);
+  // One channel, one painter: whichever host is topmost renders the note and
+  // every other mounted host stays quiet, so a note is never drawn twice and
+  // never drawn under a modal (#1015, S3).
+  const active = useSyncExternalStore(
+    subscribeStatusHost,
+    activeStatusHost,
+    activeStatusHost
+  );
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  if (!note) return null;
+  if (!note || active !== hostId) return null;
 
   const handleAction = note.action?.run;
   const progress = note.progress;
@@ -126,7 +150,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       left: 0,
       minHeight: 32,
-      paddingHorizontal: 14,
+      paddingHorizontal: spacing[3],
       paddingVertical: 8,
       position: "absolute",
       right: 0,

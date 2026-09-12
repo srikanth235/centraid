@@ -64,6 +64,10 @@ export const FIELD_NOTE: Readonly<Record<string, string>> = {
   cvv: "Three digits, sealed like any other secret.",
   expiry: "Read by Review · 90 days out is a verdict.",
   network: "Metadata · the network name is not a secret.",
+  // Two the phone's field renderer typed inline (#1015, locker/findings #9).
+  otp_steps: "Thirty-second steps · the seed is sealed like any other secret.",
+  strength:
+    "Scored against the same rule Review uses, so the two cannot disagree.",
 };
 
 /** What a sealed field says when it is standing in for one nobody revealed. */
@@ -265,9 +269,15 @@ export const SEARCH_SCOPE = "titles, usernames and addresses";
 export const SEARCH_MATCHED = "matched the title, username or address";
 export const SEARCH_RESULTS = "Results";
 
+// The no-match state, in the routine register (#1015, S4). It names the SCOPE
+// again, because §6's exclusion is the likeliest reason a member found
+// nothing and the note above the results has scrolled away by then.
+export const SEARCH_NO_MATCH = "No match";
+export const SEARCH_NO_MATCH_BODY = `Nothing in this locker matched the ${SEARCH_SCOPE}. Note bodies are never searched.`;
+
 export const SEARCH_COPY: SearchStateCopy = {
   resting: {
-    eyebrow: "Search",
+    noun: "keys",
     title: "Title, username, address",
     body: "A secret value is never searched, and neither is a note.",
   },
@@ -359,7 +369,7 @@ export const ACCESS_OFFLINE =
 export const ACCESS_NO_VALUES =
   "A receipt has never carried a value · these rows name the act, the item and the columns, and nothing else.";
 export const ACCESS_WHERE =
-  "Approvals shows the same receipts, across every app.";
+  "Needs you shows the same receipts, across every app.";
 
 // ---------------------------------------------------------------------------
 // Trash
@@ -373,7 +383,7 @@ export const TRASH_PURGE = "Purge";
 export const PURGE_CONFIRM_TITLE = "Purge it now?";
 export const PURGE_CONFIRM_LABEL = "Purge";
 export const PURGED = "Purged · gone for good";
-export const PURGE_PARKED = "Parked · it waits for the owner’s confirmation";
+export const PURGE_PARKED = "Parked · it waits for the owner's confirmation";
 export const RESTORED_WHOLE = "Restored · whole, with its star and its tags";
 
 // ---------------------------------------------------------------------------

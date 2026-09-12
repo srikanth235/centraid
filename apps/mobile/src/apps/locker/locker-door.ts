@@ -27,6 +27,11 @@ import {
 } from "@centraid/client/locker";
 
 import { lockerUnlocked, readLockerVaultKey } from "./locker-device-auth";
+import { DEVICE_NOT_ENROLLED_BODY } from "./locker-seat-copy";
+
+/** What a keychain read that threw means to a member: the lock held. The
+ *  OSStatus behind it is a fact about the program (#1015, S14 — R-A-15). */
+const STAYED_LOCKED = "Locker stayed locked.";
 
 /** Why a reveal was refused. The screen renders the reason, never "failed". */
 export type LockerRefusalReason =
@@ -92,18 +97,17 @@ export async function unlockLockerDoor(
   try {
     const record = await readLockerVaultKey(vaultId);
     if (!record) {
-      return refuse(
-        "not_enrolled",
-        "This device does not hold this vault's key yet."
-      );
+      // NOT A RETRY (#1015 B1): nothing writes `K` to this keychain today, so
+      // "yet" was the whole of the lie — pressing again could not change it.
+      return refuse("not_enrolled", DEVICE_NOT_ENROLLED_BODY);
     }
     return { ok: true };
   } catch (error) {
-    // A cancelled Face ID prompt lands here, and it is a lock, not a fault.
-    return refuse(
-      "locked",
-      error instanceof Error ? error.message : String(error)
-    );
+    // A cancelled Face ID prompt lands here, and it is a lock, not a fault —
+    // and what the keychain throws when it is cancelled is an OSStatus, not a
+    // sentence (S14, #1015, R-A-15). The raw goes to the log.
+    console.warn("[locker] vault key unreadable", error);
+    return refuse("locked", STAYED_LOCKED);
   }
 }
 
@@ -125,17 +129,11 @@ export async function revealLockerRow(
   try {
     record = await readLockerVaultKey(request.vaultId);
   } catch (error) {
-    // A cancelled Face ID prompt lands here, and it is a lock, not a fault.
-    return refuse(
-      "locked",
-      error instanceof Error ? error.message : String(error)
-    );
+    console.warn("[locker] vault key unreadable", error);
+    return refuse("locked", STAYED_LOCKED);
   }
   if (!record) {
-    return refuse(
-      "not_enrolled",
-      "This device does not hold this vault's key yet."
-    );
+    return refuse("not_enrolled", DEVICE_NOT_ENROLLED_BODY);
   }
   if (request.keyId !== null && request.keyId !== record.keyId) {
     return refuse(

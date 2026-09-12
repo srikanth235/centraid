@@ -80,7 +80,7 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Agenda.*")}
 - tapOn:
     id: "agenda-new-event"
 - extendedWaitUntil:
-    visible: "Save this event"
+    visible: "Cancel"
     timeout: 30000
 # The composer's Title field AUTOFOCUSES and carries neither a handle nor a
 # placeholder, so there is nothing to tap and nothing to name — the keystrokes
@@ -94,7 +94,10 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Agenda.*")}
 # native-v0-resilience.mjs).
 - assertVisible: "${composedEvent}"
 - hideKeyboard
-- tapOn: "Save this event"
+# CLOSING IS SAVING (#1015, D3). The composer has no Save: its leave key reads
+# "Cancel" while the draft is untitled — there is nothing to write — and "Done"
+# the moment it has a title. Pressing "Done" is the create.
+- tapOn: "Done"
 # The composer closes ONLY on a successful create (AgendaCreateModal's submit
 # calls onClose behind if (created)), so the sheet going away is the write
 # being accepted. It is NOT the write being readable, which is what the
@@ -106,7 +109,7 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Agenda.*")}
 # fails for half an hour a night is a flow people learn to re-run. The Schedule
 # window reads 120 days and holds it whichever side of midnight it landed.
 - extendedWaitUntil:
-    notVisible: "Save this event"
+    notVisible: "${composedEvent}"
     timeout: 30000
 - takeScreenshot: agenda-composed
 `,

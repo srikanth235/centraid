@@ -17,6 +17,7 @@
 
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
+import { StyleSheet } from "react-native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
@@ -102,6 +103,19 @@ describe("Agenda, on the real React Native host tree", () => {
     replicaRows.byEntity.clear();
   });
 
+  it("insets the FRAME, so the vault lockup clears the notch (#1015)", () => {
+    // Agenda was the one app that inset the BODY and left `VaultBar` above it,
+    // so the vault name and the gateway drew under the clock and the battery
+    // while a dead band opened between the bar and the title
+    // (audit agenda/findings#1). The inset is zero off-device — this tier may
+    // not depend on a notch — so what is asserted is WHICH element owns the
+    // top inset: the frame, above the bar, not a wrapper below it.
+    const root = mountAgenda().toJSON();
+    const style = (Array.isArray(root) ? root[0] : root)?.props["style"];
+    const flat = StyleSheet.flatten(style) as Record<string, unknown>;
+    expect(Object.hasOwn(flat, "paddingTop")).toBe(true);
+  });
+
   it("lights exactly one band place and moves it on a real press", () => {
     const screen = mountAgenda();
 
@@ -135,15 +149,31 @@ describe("Agenda, on the real React Native host tree", () => {
     expect(named[0]).toMatch(/^Dentist, \S/u);
   });
 
-  it("keeps Today and New event reachable by name from the day surface", () => {
+  it("keeps New event reachable by name from the day surface", () => {
     const screen = mountAgenda();
 
     expect(
-      screen.getByRole("button", { name: "Go to today" }).props.accessible
-    ).toBe(true);
-    expect(
       screen.getByRole("button", { name: "New event" }).props.accessible
     ).toBe(true);
+  });
+
+  it("reaches another day, and only then offers the way back to today", () => {
+    // THE DEFECT (#1015, audit agenda/findings#3): `anchor` was `new Date()`
+    // and its ONLY writer set it to `new Date()` again, so no day but today
+    // was reachable anywhere in the app — and "Go to today" was a no-op on
+    // every screen it appeared on, because you were always already there.
+    const screen = mountAgenda();
+    expect(screen.queryByRole("button", { name: "Go to today" })).toBeNull();
+
+    fireEvent.press(screen.getByRole("button", { name: "Next day" }));
+    expect(
+      screen.getByRole("button", { name: "Go to today" }).props.accessible
+    ).toBe(true);
+
+    // And it acts: pressing it puts the surface back on today, which is the
+    // state that offers no such control.
+    fireEvent.press(screen.getByRole("button", { name: "Go to today" }));
+    expect(screen.queryByRole("button", { name: "Go to today" })).toBeNull();
   });
 
   it("opens the create sheet in place rather than pushing a route", () => {

@@ -12,15 +12,22 @@ import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import { borders, radii, t, useTheme } from "../../kit/theme";
+import PushedPage from "../../kit/rooms/PushedPage";
+import {
+  borders,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  useTheme,
+} from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { STORAGE_ROWS, STORAGE_WITHHELD, storageStatus } from "./docs-copy";
-import DocsScreen from "./DocsScreen";
-import DocsShelfHeader from "./DocsShelfHeader";
+import { useDocsRoom } from "./docs-room";
 import { useDocs } from "./useDocs";
 
 export default function DocsStorage(): React.JSX.Element {
+  const room = useDocsRoom("more");
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const drive = useDocs();
@@ -39,9 +46,14 @@ export default function DocsStorage(): React.JSX.Element {
   const unswept = active.filter((doc) => !doc.custody_state).length;
 
   return (
-    <DocsScreen current="more">
-      <DocsShelfHeader title="Storage" backTo="All" />
-      <ReplicaStatusBar />
+    <PushedPage
+      backTo={room.backTo}
+      band={room.band}
+      chrome={room.chrome}
+      onBack={room.handleBack}
+      overlay={room.overlay}
+      title={room.title}
+    >
       <View style={styles.page}>
         <View style={styles.container}>
           {STORAGE_ROWS.map((row, index) => (
@@ -74,7 +86,7 @@ export default function DocsStorage(): React.JSX.Element {
         <Text style={styles.caption}>{STORAGE_WITHHELD}</Text>
         <Text style={styles.status}>{storageStatus(active.length)}</Text>
       </View>
-    </DocsScreen>
+    </PushedPage>
   );
 }
 
@@ -83,7 +95,7 @@ const makeStyles = (colors: ThemeColors) =>
     caption: {
       ...t("small"),
       color: colors.textFaint,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingTop: 8,
     },
     container: {
@@ -100,7 +112,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       justifyContent: "space-between",
       minHeight: 44,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
     },
     rowCount: { ...t("mono"), color: colors.text },
     rowLabel: { ...t("body"), color: colors.text, flexShrink: 1 },
@@ -111,7 +123,7 @@ const makeStyles = (colors: ThemeColors) =>
     status: {
       ...t("mono"),
       color: colors.textFaint,
-      paddingHorizontal: 18,
+      paddingHorizontal: pageMargin,
       paddingTop: 6,
     },
   });

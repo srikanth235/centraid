@@ -75,15 +75,9 @@ vi.mock(import("expo-media-library"), () => ({
   >(() => [null, vi.fn<() => Promise<never>>(), vi.fn<() => Promise<never>>()]),
 }));
 
-vi.mock(import("expo-haptics"), () => ({
-  NotificationFeedbackType: { Success: "success" } as never,
-  notificationAsync: vi.fn<
-    (typeof import("expo-haptics"))["notificationAsync"]
-  >(async () => undefined),
-  selectionAsync: vi.fn<(typeof import("expo-haptics"))["selectionAsync"]>(
-    async () => undefined
-  ),
-}));
+// No `expo-haptics` mock here: this file is in the RNTL project, whose
+// `native-device-seams.ts` setup stands the seam in front of the module for
+// every file it runs (#1015, S15).
 
 vi.mock(import("expo-notifications"), () => ({
   SchedulableTriggerInputTypes: { DATE: "date" } as never,
@@ -184,6 +178,10 @@ vi.mock(
       requireGatewayBase: vi.fn<(base?: string) => string>(
         (base) => base ?? ""
       ),
+      resolveAppMeta: vi.fn<() => object>(() => ({
+        color: "#345",
+        iconKey: "Camera",
+      })),
       resolveGatewayBase: vi.fn<() => Promise<string>>(async () => ""),
     }) as never
 );
@@ -266,6 +264,22 @@ describe("Photos native component coverage", () => {
       )
     ).toBeDefined();
     expect(screen.queryByLabelText("Opening your library")).toBeNull();
+  });
+
+  it("roots at the room, so the header and the back key are not its own", async () => {
+    // R-B-9 (#1015 Wave 2): PhotosHome was the last Photos surface drawing its
+    // own header and its own `paddingTop: insets.top`. `AppPlace` draws both
+    // now — the back key is the room's, and it is the proof the root swapped.
+    const screen = render(
+      <PhotosHome
+        navigation={{ navigate: vi.fn<() => void>() } as never}
+        route={{ params: { destination: "library" } } as never}
+      />
+    );
+    await act(async () => undefined);
+
+    expect(screen.getByRole("button", { name: "Back" })).toBeDefined();
+    expect(screen.getByText("Photos")).toBeDefined();
   });
 
   it("shares deterministic empty, temporal, video, and place fixtures", () => {
@@ -447,7 +461,7 @@ describe("Photos native component coverage", () => {
 
   it("distinguishes the empty-query search state from no hits", () => {
     const screen = render(<PhotosSearchRestingState />);
-    expect(screen.getByText("Nothing typed")).toBeTruthy();
+    expect(screen.getByText("Search your photos")).toBeTruthy();
     expect(screen.getByText("Search the whole library")).toBeTruthy();
     expect(screen.queryByText(/Nothing matches/u)).toBeNull();
   });

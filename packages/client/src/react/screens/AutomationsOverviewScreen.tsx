@@ -195,7 +195,7 @@ function deriveView(data: AuOverviewData, chip: ChipId): OverviewView {
   const newestRun = data.runs[0];
   return {
     countLine: [
-      plural(memberRows.length, "automation"),
+      plural(memberRows.length, "rule"),
       `${failing.length} failing`,
       `${paused.length} paused`,
     ].join(" · "),
@@ -208,11 +208,11 @@ function deriveView(data: AuOverviewData, chip: ChipId): OverviewView {
         ? `${worst.name} has failed its last ${plural(worstStreak.count, "run")}, since ${dayLabel(worstStreak.startedAt)}.`
         : `${worst.name} failed its last run.`
       : newestRun
-        ? `${plural(memberRows.length, "automation")} on this gateway · last run ${newestRun.whenLabel}.`
-        : `${plural(memberRows.length, "automation")} on this gateway · nothing has run yet.`,
+        ? `${plural(memberRows.length, "rule")} on this gateway · last run ${newestRun.whenLabel}.`
+        : `${plural(memberRows.length, "rule")} on this gateway · nothing has run yet.`,
     healthLabel:
       failing.length > 0
-        ? `${plural(failing.length, "automation")} failing`
+        ? `${plural(failing.length, "rule")} failing`
         : "Nothing is failing",
     lastRunClock: newestRun ? clockLabel(newestRun.startedAt) : null,
     memberRows,
@@ -348,7 +348,7 @@ export default function AutomationsOverviewScreen({
   if (state === "loading") {
     return (
       <div className={styles.page} data-testid="automations-loading">
-        <PageSkeleton label="Loading automations" rows={6} />
+        <PageSkeleton label="Loading rules" rows={6} />
         <NoteBlock>{LOADING_NOTE}</NoteBlock>
       </div>
     );
@@ -360,7 +360,7 @@ export default function AutomationsOverviewScreen({
         <PanelBlock
           action={{ label: ERROR_RETRY, onClick: reload }}
           body={errorBody(lastRunClock)}
-          eyebrow="Automations"
+          eyebrow="Rules"
           {...(errMsg ? { facts: [{ key: "Reason", value: errMsg }] } : {})}
           title={ERROR_TITLE}
           tone="net"
@@ -434,7 +434,7 @@ export default function AutomationsOverviewScreen({
         <>
           {v.full ? (
             <ChipsBlock
-              ariaLabel="Filter automations"
+              ariaLabel="Filter rules"
               chips={CHIP_ORDER.map((id) => ({
                 id,
                 label: CHIP_LABEL[id],
@@ -444,7 +444,7 @@ export default function AutomationsOverviewScreen({
             />
           ) : null}
           <SectionBlock
-            label="Automations"
+            label="Rules"
             meta={
               v.visibleRows.length === v.memberRows.length
                 ? String(v.memberRows.length)
@@ -452,10 +452,10 @@ export default function AutomationsOverviewScreen({
             }
           />
           {automationRows.length > 0 ? (
-            <RowsBlock ariaLabel="Automations" rows={automationRows} />
+            <RowsBlock ariaLabel="Rules" rows={automationRows} />
           ) : (
             <NoteBlock>
-              {`No automation is ${CHIP_LABEL[chip].toLowerCase()} right now.`}
+              {`No rule is ${CHIP_LABEL[chip].toLowerCase()} right now.`}
             </NoteBlock>
           )}
 

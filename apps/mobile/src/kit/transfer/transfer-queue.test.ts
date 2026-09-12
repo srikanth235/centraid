@@ -143,17 +143,20 @@ describe("transfer-queue", () => {
       ).toBe(107);
     });
 
-    it("surfaces retryable failures with member-facing wording", () => {
+    it("hands on a retryable failure's sentence untouched", () => {
       store.enqueue(upload(0, { filename: "IMG-0.heic" }));
       store.enqueue(upload(1));
-      store.fail("item-0", "the gateway refused the part", false);
+      // The row is already member copy: the drainer built it from what
+      // failed (`transfer-failure.ts`), and this readout is a readout
+      // (#1015 R-NY-10).
+      store.fail("item-0", "Your vault could not be reached", false);
 
       const counts = readTransferQueue("http://gw");
 
       expect(counts.failures).toStrictEqual([
         {
           filename: "IMG-0.heic",
-          lastError: "the vault host refused the part",
+          lastError: "Your vault could not be reached",
         },
       ]);
       expect(counts.pending, "a retryable failure is still pending work").toBe(

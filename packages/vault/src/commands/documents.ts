@@ -517,6 +517,82 @@ function restoreDocument(ctx: HandlerCtx): Record<string, unknown> {
   return { document_id: input.document_id };
 }
 
+/**
+ * `core.empty_document_trash` — collapse the grace window on EVERY document
+ * already in the trash so the next lifecycle sweep destroys them (#1015, D1).
+ *
+ * Nothing is deleted here. The sweep (gateway/duties.ts lapsedDocuments) is
+ * the only thing that destroys a document, and it keeps its rent checks, its
+ * authority revocations and its provenance receipts — emptying the trash is a
+ * DATE, not a second destruction path. `purge_at` collapses onto the row's own
+ * `deleted_at` rather than onto `now`: a moment that is provably in the past,
+ * so the postcondition can be exact without reading the clock.
+ *
+ * NOT container-routed (share/container-routing.ts): it names no container in
+ * its input, and it destroys nothing. `core.trash_document` — the write that
+ * put each document here — IS the routed, actable write on a shared folder,
+ * and the sweep revokes authority and writes provenance as each row goes.
+ *
+ * An empty trash is a no-op that still executes — a member who taps "Empty
+ * trash" on an empty trash is not shown a refusal.
+ * Not `confirm: true` — owner confirmation is in front of the command.
+ */
+const EMPTY_DOCUMENT_TRASH: CommandDefinition = {
+  name: "core.empty_document_trash",
+  ownerSchema: "core",
+  inputSchema: { type: "object", additionalProperties: false, properties: {} },
+  outputSchema: {
+    type: "object",
+    required: ["documents_released"],
+    properties: {
+      /** How many trashed documents were handed to the next sweep. */
+      documents_released: { type: "integer" },
+    },
+  },
+  preconditions: [],
+  postconditions: [
+    {
+      // No document may sit in the trash still waiting out a window.
+      name: "trash_window_collapsed",
+      sql: `SELECT count(*) AS n FROM core_document
+             WHERE deleted_at IS NOT NULL AND purge_at <> deleted_at`,
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+  ],
+  idempotency: "idempotent",
+  risk: "high",
+  handler: emptyDocumentTrash,
+};
+
+function emptyDocumentTrash(ctx: HandlerCtx): Record<string, unknown> {
+  const trashed = ctx.db
+    .prepare(
+      "SELECT document_id FROM core_document WHERE deleted_at IS NOT NULL"
+    )
+    .all() as { document_id: string }[];
+  const collapse = ctx.db.prepare(
+    "UPDATE core_document SET purge_at = deleted_at, updated_at = ? WHERE document_id = ?"
+  );
+  for (const doc of trashed) {
+    collapse.run(ctx.now, doc.document_id);
+    ctx.wrote("core.document", doc.document_id);
+  }
+  if (trashed.length > 0) {
+    const vault = ctx.db
+      .prepare("SELECT vault_id FROM core_vault LIMIT 1")
+      .get() as { vault_id: string } | undefined;
+    if (!vault) throw new Error("vault has no identity row");
+    ctx.cite({
+      claim: `trash emptied; ${trashed.length} document${trashed.length === 1 ? "" : "s"} handed to the next lifecycle sweep`,
+      entityType: "core.vault",
+      entityId: vault.vault_id,
+    });
+  }
+  return { documents_released: trashed.length };
+}
+
 const STAR_DOCUMENT: CommandDefinition = {
   name: "core.star_document",
   ownerSchema: "core",
@@ -1233,6 +1309,7 @@ export function registerDocumentCommands(gateway: Gateway): void {
   gateway.registerCommand(MOVE_DOCUMENT);
   gateway.registerCommand(TRASH_DOCUMENT);
   gateway.registerCommand(RESTORE_DOCUMENT);
+  gateway.registerCommand(EMPTY_DOCUMENT_TRASH);
   gateway.registerCommand(STAR_DOCUMENT);
   gateway.registerCommand(UNSTAR_DOCUMENT);
   gateway.registerCommand(EDIT_DOCUMENT);

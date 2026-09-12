@@ -182,14 +182,14 @@ export function useTasksWrite(
         if (
           !surfaceWriteOutcome(result, {
             onParked: () =>
-              navigation.navigate("Settings", { screen: "Approvals" }),
+              navigation.navigate("Settings", { screen: "NeedsYou" }),
             queuedMessage: "This change will sync automatically.",
           })
         )
           return undefined;
         return result;
       } catch (error) {
-        surfaceWriteFailure(error, "Task change failed");
+        surfaceWriteFailure(error, "Task change not saved");
         return undefined;
       }
     },

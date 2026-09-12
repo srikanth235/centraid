@@ -41,6 +41,15 @@ export interface MenuActionRow {
   checked?: boolean;
   destructive?: boolean;
   disabled?: boolean;
+  /**
+   * Why a disabled row is disabled, said as its OWN line under the label
+   * (#1015, S12 — audit S12). It used to be concatenated into the label —
+   * `Star — this document lives on a source this vault only reads` — inside a
+   * one-line, truncating `Text`, so the label was pushed out of view and the
+   * reason was the half that got cut. A second line wraps, and VoiceOver gets
+   * the verb first and the reason after it.
+   */
+  reason?: string;
   /** Keep the card up — repeated steps. A choice about the surface underneath dismisses. */
   staysOpen?: boolean;
   onSelect: () => void;
@@ -171,9 +180,7 @@ function ActionRowView({
     <Pressable
       accessibilityRole="menuitem"
       // `selected` alone is announced inconsistently across the two platforms.
-      accessibilityLabel={
-        row.checked === true ? `${row.label}. Selected` : row.label
-      }
+      accessibilityLabel={rowSpeech(row)}
       accessibilityState={{ disabled, selected: row.checked === true }}
       disabled={disabled}
       onPress={() => onChoose(row)}
@@ -190,21 +197,32 @@ function ActionRowView({
         </View>
       ) : null}
       {row.icon ? <Icon name={row.icon} size={16} color={ink} /> : null}
-      <Text
-        style={[
-          styles.label,
-          // Leaf takes the state's token; never a container opacity (§18).
-          disabled ? styles.labelDisabled : undefined,
-          !disabled && row.destructive === true
-            ? styles.labelDestructive
-            : undefined,
-        ]}
-        numberOfLines={1}
-      >
-        {row.label}
-      </Text>
+      <View style={styles.lines}>
+        <Text
+          style={[
+            styles.label,
+            // Leaf takes the state's token; never a container opacity (§18).
+            disabled ? styles.labelDisabled : undefined,
+            !disabled && row.destructive === true
+              ? styles.labelDestructive
+              : undefined,
+          ]}
+          numberOfLines={1}
+        >
+          {row.label}
+        </Text>
+        {/* The reason wraps: it is a sentence, and a truncated sentence is a
+            row that refuses without saying why. */}
+        {row.reason ? <Text style={styles.reason}>{row.reason}</Text> : null}
+      </View>
     </Pressable>
   );
+}
+
+/** What VoiceOver reads: the verb, then its answer, then the reason. */
+function rowSpeech(row: MenuActionRow): string {
+  const head = row.checked === true ? `${row.label}. Selected` : row.label;
+  return row.reason ? `${head}. ${row.reason}` : head;
 }
 
 function SubmenuRowView({
@@ -422,9 +440,13 @@ const makeStyles = (colors: ThemeColors) =>
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
     },
-    label: { ...t("small"), color: colors.text, flex: 1 },
+    label: { ...t("small"), color: colors.text },
     labelDestructive: { color: colors.danger },
     labelDisabled: { color: colors.textDisabled },
+    // Label over reason. `flex: 1` moved here from `label`, so the two lines
+    // share one column and the trailing glyphs still sit where they did.
+    lines: { flex: 1, gap: spacing[1] },
+    reason: { ...t("mono"), color: colors.textFaint },
     row: {
       alignItems: "center",
       flexDirection: "row",

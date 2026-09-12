@@ -61,7 +61,7 @@ export default function TemplatesRoute(): JSX.Element {
       ) : (
         <AutomationTemplatesScreen
           templates={state.data as unknown as CatalogTemplate[]}
-          subtitle="Proven automations, pre-wired with triggers and integrations."
+          subtitle="Proven rules, pre-wired with triggers and integrations."
           onPreview={(t) =>
             openAutomationTemplatePreview(
               t as unknown as TemplateEntry,

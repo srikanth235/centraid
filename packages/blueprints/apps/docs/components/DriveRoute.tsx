@@ -19,11 +19,11 @@ import type { DriveDoc, SortKey } from "../types.ts";
 import type { EmptyStateView } from "../view-state.ts";
 import { Breadcrumb } from "./Breadcrumb.tsx";
 import { EmptyState } from "./EmptyState.tsx";
+import { EmptyTrash } from "./EmptyTrash.tsx";
 import { FilterRow } from "./FilterRow.tsx";
 import { GridCard } from "./Grid.tsx";
 import { ListHead, ListRow, WindowFoot } from "./List.tsx";
 import type { DriveOwner } from "./List.tsx";
-import { TrashAsk } from "./TrashAsk.tsx";
 
 import styles from "../Chrome.module.css";
 import driveStyles from "./DriveRoute.module.css";
@@ -67,6 +67,9 @@ export interface DriveRouteProps {
   onOpenSortMenu: (anchor: HTMLElement) => void;
   /** Selection MODE, entered by app-bar Select (§4.1). */
   selecting: boolean;
+  /** How many documents the trash holds, so its foot can name them (#1015 D1). */
+  trashCount: number;
+  onEmptyTrash: () => void;
   owner: DriveOwner;
 }
 
@@ -210,7 +213,12 @@ export function DriveRoute(props: DriveRouteProps): ReactNode {
       {props.caption && !props.empty.visible ? (
         <p className={driveStyles.caption}>{props.caption}</p>
       ) : null}
-      {isTrash(props.shelf) ? <TrashAsk /> : null}
+      {isTrash(props.shelf) ? (
+        <EmptyTrash
+          count={props.trashCount}
+          onEmptyTrash={props.onEmptyTrash}
+        />
+      ) : null}
     </>
   );
 }

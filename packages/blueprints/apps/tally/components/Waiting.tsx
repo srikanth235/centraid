@@ -48,7 +48,7 @@ import type { RowAct } from "./LedgerRow.tsx";
 export interface WaitingScreenProps {
   sections: ContribSections;
   /** Does this host hold an approval inbox at all? */
-  hasApprovals: boolean;
+  hasNeedsYou: boolean;
   /** Does it hold the per-intent Approve/Decline door? */
   canDecide: boolean;
   /** Reminders the owner prepared. Nothing here was ever sent. */
@@ -99,7 +99,7 @@ export function WaitingScreen(props: WaitingScreenProps): ReactNode {
             pointing elsewhere would be a second one. */}
         {sections.waiting.length > 0 &&
         !props.canDecide &&
-        !props.hasApprovals ? (
+        !props.hasNeedsYou ? (
           <Note>{CONTRIB_NO_DOOR}</Note>
         ) : null}
       </Section>

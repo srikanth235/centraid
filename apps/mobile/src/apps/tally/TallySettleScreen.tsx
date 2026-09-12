@@ -25,6 +25,7 @@ import {
   SETTLE_FOOT_YOURS,
   SETTLE_HEAD,
   SETTLE_LEDE,
+  BANK_LINE_VALUE,
   SETTLE_NOTES,
   SIMPLIFICATION,
   SIMPLIFY_NONE,
@@ -79,8 +80,17 @@ export default function TallySettleScreen({
     if (draft.groupId) void loadTallyGroup(draft.groupId);
   }, [draft.groupId]);
 
-  const patch = (next: Partial<SettleDraft>): void =>
+  // A FORM IS NOT BORN FAILING (#1015, tally/findings #2, #6). The refusal
+  // names the field that is not filled yet, which is the right sentence at the
+  // wrong moment when nothing has been touched: it told a member they had made
+  // a mistake before they made one. The commit is disabled from the first
+  // frame either way, so nothing can be committed on the strength of a hidden
+  // refusal — only the sentence waits for the member to start.
+  const [touched, setTouched] = useState(false);
+  const patch = (next: Partial<SettleDraft>): void => {
+    setTouched(true);
     setDraft((prior) => ({ ...prior, ...next }));
+  };
 
   // ANYONE TO ANYONE. Everyone this vault knows is a candidate on both sides;
   // a group's own members join the list when a group is in scope.
@@ -104,6 +114,9 @@ export default function TallySettleScreen({
     people.find((person) => person.id === partyId)?.label ?? partyId;
 
   const commit = (): void => {
+    // A press on the disabled commit is a member asking why: reveal the
+    // sentence rather than answering with nothing at all.
+    setTouched(true);
     if (!verdict.ok) return;
     void issueTallyWrite(
       replica.session,
@@ -115,12 +128,7 @@ export default function TallySettleScreen({
   };
 
   return (
-    <TallyScreen
-      current="balances"
-      shelf={SETTLE}
-      hideBand
-      onBack={() => navigation.goBack()}
-    >
+    <TallyScreen shelf={SETTLE} hideBand onBack={() => navigation.goBack()}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={styles.title}>{SETTLE_HEAD}</Text>
         <Text style={styles.lede}>{SETTLE_LEDE}</Text>
@@ -170,7 +178,7 @@ export default function TallySettleScreen({
 
         <FieldRow
           label={FIELD_KEYS.bankLine}
-          value={SETTLE_NOTES.bankLine}
+          value={BANK_LINE_VALUE}
           note={SETTLE_NOTES.bankLine}
         />
 
@@ -216,7 +224,7 @@ export default function TallySettleScreen({
           </Text>
         ) : null}
 
-        {verdict.refusal ? (
+        {touched && verdict.refusal ? (
           <Text style={styles.refusal}>{verdict.refusal}</Text>
         ) : null}
         <Text style={styles.foot}>

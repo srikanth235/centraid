@@ -34,9 +34,9 @@ describe(PendingWriteActions, () => {
     (window as unknown as { centraid?: unknown }).centraid = undefined;
   });
 
-  test("parked rows navigate to the shell-owned Approvals inbox", async () => {
-    const openApprovals = vi.fn<() => void>();
-    (window as unknown as { centraid: unknown }).centraid = { openApprovals };
+  test("parked rows navigate to the shell-owned Needs you page", async () => {
+    const openNeedsYou = vi.fn<() => void>();
+    (window as unknown as { centraid: unknown }).centraid = { openNeedsYou };
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -53,11 +53,11 @@ describe(PendingWriteActions, () => {
     });
 
     const review = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Review in Approvals"
+      (button) => button.textContent === "Review in Needs you"
     );
     expect(review).toBeDefined();
     await act(async () => review?.click());
-    expect(openApprovals).toHaveBeenCalledOnce();
+    expect(openNeedsYou).toHaveBeenCalledOnce();
   });
 
   test("an attempted write that is still queued says how long it has waited", async () => {

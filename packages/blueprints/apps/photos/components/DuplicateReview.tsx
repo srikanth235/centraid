@@ -158,7 +158,7 @@ export function DuplicateReviewView({
         <p className={styles.panelBody}>
           {`The copy you keep stays in every album it is already in, and keeps its caption. ${
             n === 1 ? "The other copy goes" : `The other ${n} go`
-          } to trash for 30 days.`}
+          } to trash.`}
         </p>
         <div className={styles.panelActions}>
           <button

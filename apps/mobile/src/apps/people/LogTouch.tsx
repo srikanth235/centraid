@@ -19,11 +19,11 @@ import {
 import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { pageMargin, spacing } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
+import { personPlace } from "./people-places";
 import { usePeopleWrites } from "./people-writes";
-import { BackRow, Commits, FieldRow, PersonRow } from "./PeopleKit";
+import { Commits, FieldRow, PersonRow } from "./PeopleKit";
 import PeopleScreen from "./PeopleScreen";
 import { usePeople } from "./usePeople";
 
@@ -34,7 +34,7 @@ export default function LogTouch({
   const partyId = route.params.personId;
   const data = usePeople();
   const writes = usePeopleWrites(() =>
-    navigation.navigate("Settings", { screen: "Approvals" })
+    navigation.navigate("Settings", { screen: "NeedsYou" })
   );
   // The chip's word IS the word the vault stores (`people-copy.ts`).
   const [kind, setKind] = useState<string>(LOG_KINDS[0]);
@@ -52,57 +52,55 @@ export default function LogTouch({
   };
 
   return (
-    <PeopleScreen current="touch">
-      <TopSafeArea edges={[]} style={styles.page}>
-        <View style={styles.body}>
-          <BackRow
-            destination={person?.name ?? "Person"}
-            onPress={() => navigation.goBack()}
-          />
-          {data.loading && !person ? (
-            <SkeletonRows rows={3} accessibilityLabel="Reading this person" />
-          ) : person ? (
-            <>
-              <PersonRow
-                avatar={person}
-                name={person.name}
-                sub={whenLabel(person.last_contacted_at ?? person.created_at)}
-                subNumeric
-                last
+    <PeopleScreen
+      onBack={() => navigation.goBack()}
+      parent={person ? personPlace(person.name, person.party_id) : undefined}
+      route="logTouch"
+    >
+      <View style={styles.body}>
+        {data.loading && !person ? (
+          <SkeletonRows rows={3} accessibilityLabel="Reading this person" />
+        ) : person ? (
+          <>
+            <PersonRow
+              avatar={person}
+              name={person.name}
+              sub={whenLabel(person.last_contacted_at ?? person.created_at)}
+              subNumeric
+              last
+            />
+            <View style={styles.gap}>
+              <ChipsBlock
+                accessibilityLabel="Kind"
+                chips={LOG_KINDS.map((option) => ({
+                  id: option,
+                  label: option,
+                  on: option === kind,
+                  onPress: () => setKind(option),
+                }))}
               />
-              <View style={styles.gap}>
-                <ChipsBlock
-                  accessibilityLabel="Kind"
-                  chips={LOG_KINDS.map((option) => ({
-                    id: option,
-                    label: option,
-                    on: option === kind,
-                    onPress: () => setKind(option),
-                  }))}
-                />
-              </View>
-              <FieldRow
-                label={FIELDS.note}
-                value={text}
-                placeholder={FIELDS.notePlaceholder}
-                onChange={setText}
+            </View>
+            <FieldRow
+              label={FIELDS.note}
+              value={text}
+              placeholder={FIELDS.notePlaceholder}
+              onChange={setText}
+            />
+            <Commits>
+              <Button
+                label={VERBS.log}
+                variant="primary"
+                onPress={() => void save()}
               />
-              <Commits>
-                <Button
-                  label={VERBS.log}
-                  variant="primary"
-                  onPress={() => void save()}
-                />
-                <Button
-                  label={VERBS.cancel}
-                  variant="quiet"
-                  onPress={() => navigation.goBack()}
-                />
-              </Commits>
-            </>
-          ) : null}
-        </View>
-      </TopSafeArea>
+              <Button
+                label={VERBS.cancel}
+                variant="quiet"
+                onPress={() => navigation.goBack()}
+              />
+            </Commits>
+          </>
+        ) : null}
+      </View>
     </PeopleScreen>
   );
 }
@@ -110,5 +108,4 @@ export default function LogTouch({
 const styles = StyleSheet.create({
   body: { flex: 1, paddingHorizontal: pageMargin },
   gap: { paddingTop: spacing[3] },
-  page: { flex: 1 },
 });

@@ -274,14 +274,14 @@ export function useDocsWrite(navigation: DocsShellNavigation): DocsWrite {
         if (
           !surfaceWriteOutcome(result, {
             onParked: () =>
-              navigation.navigate("Settings", { screen: "Approvals" }),
+              navigation.navigate("Settings", { screen: "NeedsYou" }),
             queuedMessage: "This Docs change will sync automatically.",
           })
         )
           return undefined;
         return result;
       } catch (error) {
-        surfaceWriteFailure(error, "Docs change failed");
+        surfaceWriteFailure(error, "Docs change not saved");
         return undefined;
       }
     },

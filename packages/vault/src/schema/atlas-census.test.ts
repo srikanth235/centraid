@@ -15,7 +15,7 @@ import {
   atlasPulse,
   ATLAS_GRAPH_CENTER,
 } from "./atlas-census.js";
-import { VAULT_TABLES } from "./tables.js";
+import { VAULT_TABLES, entityDeclaration } from "./tables.js";
 
 const cleanups: (() => void)[] = [];
 describe("atlas-census", () => {
@@ -62,6 +62,21 @@ describe("atlas-census", () => {
     }
     return { total, toCenter };
   }
+
+  test("the census and Browse name each kind by the registry (R-NY-13)", () => {
+    const db = freshVault();
+    const tables = atlasCensus(db.vault).packs.flatMap((pack) => pack.tables);
+    for (const table of tables) {
+      expect(table.friendly, table.logical).toBe(
+        entityDeclaration(table.logical)!.label
+      );
+    }
+    const derivative = tables.find(
+      (table) => table.logical === "core.content_derivative"
+    );
+    expect(derivative?.friendly).toBe("Derivatives");
+    expect(derivative?.label).toBe("Content Derivative");
+  });
 
   test("graph edge counts are DERIVED from the PRAGMA walk, not hardcoded", () => {
     const db = freshVault();

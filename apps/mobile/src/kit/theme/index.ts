@@ -14,6 +14,7 @@ export {
   popoverShadow,
   radii,
   spacing,
+  subBase,
   t,
   targetMin,
   type,

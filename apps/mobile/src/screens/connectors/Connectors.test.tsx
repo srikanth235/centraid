@@ -37,6 +37,11 @@ vi.mock(import("@react-native-async-storage/async-storage"), async () => {
     default: typeof import("@react-native-async-storage/async-storage").default;
   };
 });
+// The Home band on this place (R-NY-1) is `usePlaceFrame`'s claim, held in
+// `place-frame.test.ts`; this file makes none about it.
+vi.mock(import("../home/usePlaceFrame"), () => ({
+  usePlaceFrame: () => ({}),
+}));
 vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
@@ -44,6 +49,15 @@ vi.mock(import("react-native-svg"), async () => {
 vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
 
 // Only session fact read: features advertised on `/info`. Provider mocked so
 // the replica machinery never mounts to state a capability.
@@ -239,7 +253,9 @@ describe(ConnectorsScreen, () => {
     expect(spans).toContain(
       "Connection health is unavailable; the connections themselves keep working."
     );
-    expect(spans).toContain("connect ECONNREFUSED");
+    // S14 (#1015): the exception is a fact about the program.
+    expect(spans).not.toContain("connect ECONNREFUSED");
+    expect(spans).toContain("Your connectors could not be loaded");
     const panel = nodesOf(container, "div").find(
       (node) => styleOf(node).borderColor === colors.net
     );

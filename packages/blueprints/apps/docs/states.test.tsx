@@ -172,13 +172,13 @@ describe("a Docs row whose write has not landed", () => {
   ];
 
   test.each(VIEWS)(
-    "%s: a parked rename says who is waiting and offers the Approvals inbox",
+    "%s: a parked rename says who is waiting and offers Needs you",
     async (_name, view) => {
       // Recorders rather than spies: what is asserted is the shell call the
       // press PRODUCED, arguments and all, not that some mock ran.
       const opened: string[] = [];
       (window as unknown as { centraid: unknown }).centraid = {
-        openApprovals: () => opened.push("approvals"),
+        openNeedsYou: () => opened.push("needs-you"),
       };
 
       const region = await paint(view, PARKED);
@@ -192,11 +192,11 @@ describe("a Docs row whose write has not landed", () => {
         "Waiting for the owner to approve this change."
       );
       const review = buttonsIn(region).find(
-        (button) => button.textContent === "Review in Approvals"
+        (button) => button.textContent === "Review in Needs you"
       );
       expect(review).toBeDefined();
       await act(async () => review?.click());
-      expect(opened).toStrictEqual(["approvals"]);
+      expect(opened).toStrictEqual(["needs-you"]);
     }
   );
 
@@ -217,16 +217,16 @@ describe("a Docs row whose write has not landed", () => {
   );
 
   test.each(VIEWS)(
-    "%s: with no Approvals door, the row still names where the change went",
+    "%s: with no Needs you door, the row still names where the change went",
     async (_name, view) => {
-      // A shell build without the inbox (`openApprovals` absent) must not draw
+      // A shell build without the inbox (`openNeedsYou` absent) must not draw
       // a button that would do nothing when pressed — but the member is still
       // owed the destination, so the affordance degrades to the sentence.
       (window as unknown as { centraid: unknown }).centraid = {};
 
       const region = await paint(view, PARKED);
 
-      expect(region.textContent).toContain("Review in Approvals.");
+      expect(region.textContent).toContain("Review in Needs you.");
       expect(
         buttonsIn(region).map((button) => button.textContent)
       ).toStrictEqual([]);

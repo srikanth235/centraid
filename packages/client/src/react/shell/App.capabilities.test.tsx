@@ -146,7 +146,7 @@ describe("the shell on a gateway without the experimental features", () => {
     const stem = el.querySelector(".stem")!;
     expect(stem.textContent).toContain("Home");
     expect(stem.textContent).toContain("Vault");
-    expect(stem.textContent).not.toContain("Automations");
+    expect(stem.textContent).not.toContain("Rules");
     expect(stem.textContent).not.toContain("Connectors");
     // Analytics reads the run rollup, which lives behind the same gate.
     expect(stem.textContent).not.toContain("Analytics");
@@ -158,7 +158,7 @@ describe("the shell on a gateway without the experimental features", () => {
     });
     const sheet = document.querySelector('[aria-label="All apps"]')!;
     expect(sheet.textContent).toContain("Starred");
-    expect(sheet.textContent).not.toContain("Automations");
+    expect(sheet.textContent).not.toContain("Rules");
     expect(sheet.textContent).not.toContain("Connectors");
   });
 
@@ -174,8 +174,8 @@ describe("the shell on a gateway without the experimental features", () => {
     // The frame still names where you are — a blank bar over the wall would
     // read as a broken screen — but offers no verb it cannot honour.
     const bar = el.querySelector(".appBar")!;
-    expect(bar.textContent).toContain("Automations");
-    expect(bar.textContent).not.toContain("New automation");
+    expect(bar.textContent).toContain("Rules");
+    expect(bar.textContent).not.toContain("New rule");
     expect(bar.textContent).not.toContain("Templates");
   });
 
@@ -201,7 +201,7 @@ describe("the shell on a gateway without the experimental features", () => {
       );
     });
     const sheet = document.querySelector('[aria-label="All apps"]')!;
-    expect(sheet.textContent).toContain("Automations");
+    expect(sheet.textContent).toContain("Rules");
     expect(sheet.textContent).toContain("Connectors");
     expect(sheet.textContent).toContain("Activity");
     expect(el.textContent).not.toContain("aren’t enabled on this gateway");
@@ -213,6 +213,6 @@ describe("the shell on a gateway without the experimental features", () => {
     // malformed-handshake path.
     caps.value = undefined;
     const el = await mount();
-    expect(el.querySelector(".stem")!.textContent).not.toContain("Automations");
+    expect(el.querySelector(".stem")!.textContent).not.toContain("Rules");
   });
 });

@@ -14,7 +14,7 @@ import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
-import { pageMargin, radii, t, useTheme } from "../../kit/theme";
+import { pageMargin, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { buildPeriods, periodContaining } from "./timeline-grains";
 import type { GrainPeriod, SummaryGrain } from "./timeline-grains";
@@ -299,7 +299,7 @@ const makeStyles = (colors: ThemeColors) =>
       insetInlineStart: 0,
       justifyContent: "flex-end",
       paddingBottom: 12,
-      paddingHorizontal: 14,
+      paddingHorizontal: spacing[4],
       pointerEvents: "none",
       position: "absolute",
     },

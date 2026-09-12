@@ -59,6 +59,7 @@
   --sp-6: 32px;
   --sp-gutter: 2px;
   --sp-hair: 1px;
+  --sp-chip: 3px;
   --ease: cubic-bezier(0.3, 0, 0.4, 1);
   --ease-entry: cubic-bezier(0.2, 0.7, 0.2, 1);
   --target-min: 44px;

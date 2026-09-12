@@ -50,6 +50,9 @@ import {
  *  under it must not straddle midnight and disagree about what "today" is;
  *  a screen reading the clock during render is a purity violation and an
  *  unstable result besides. */
+/** Tally's ONE read-failure sentence (#1015, S14 — R-A-15). */
+const TALLY_NOT_READ = "Tally could not be read. Try again.";
+
 const TICK_MS = 30_000;
 
 const EMPTY_DASHBOARD: DashboardData = {
@@ -186,11 +189,11 @@ function markLanded(
   });
 }
 
+/** S14 (#1015, R-A-15): the exception is a fact about the program. It goes to
+ *  the log (docs/logs.md) and the pane gets Tally's own sentence. */
 function failed(error: unknown): void {
-  set({
-    reading: false,
-    readError: error instanceof Error ? error.message : String(error),
-  });
+  console.warn("[tally] read failed", error);
+  set({ reading: false, readError: TALLY_NOT_READ });
 }
 
 /** The spine. Called by the frame on arrival and by every refresh. */

@@ -1,5 +1,6 @@
-import { memberFacingError } from "../../kit/member-error";
+import { custodyDurability } from "../../kit/storage/custody-durability";
 import type { CustodyStatus } from "../../kit/storage/custody-status";
+import { backupVerdict } from "../../kit/transfer/backup-verdict";
 import type { TransferQueueCounts } from "../../kit/transfer/transfer-queue";
 
 export type SignalTone = "quiet" | "attention" | "urgent";
@@ -47,7 +48,7 @@ export function originHealthSignal(
       action: "What to do",
       destination: "notifications",
       notificationDetail: "phone",
-      notificationCause: `Upload failed · ${memberFacingError(queue.failures[0]?.lastError ?? "no reason was recorded")}`,
+      notificationCause: `Upload failed · ${queue.failures[0]?.lastError ?? "no reason was recorded"}`,
     };
   }
   if (!facts.online && queue.pending > 0) {
@@ -80,9 +81,13 @@ export function originHealthSignal(
     };
   }
 
+  // ONE CUSTODY ARITHMETIC (#1015 B13). This used to sum `local-only` and
+  // `missing` itself, so Home called a photograph the gateway's own disk holds
+  // "no verified backup" while Backup health — which reads
+  // `custodyDurability`, the #996 R7 ruling — counted the same item as backed
+  // up. Two rollups, one question, and the two numbers on screen at once.
   const unsafeCopies = facts.custody
-    ? facts.custody.buckets["local-only"].count +
-      facts.custody.buckets.missing.count
+    ? custodyDurability(facts.custody).notBackedUp.count
     : 0;
   if (unsafeCopies > 0) {
     return {
@@ -95,11 +100,16 @@ export function originHealthSignal(
   if (!facts.paired) {
     return { tone: "quiet", copy: "On this phone · pair a vault when ready" };
   }
+  // The verified half is the VERDICT's to give, not a second reading of the
+  // same rollup: `complete` already means an empty readable queue AND a
+  // gateway sweep with nothing missing.
+  const verified =
+    backupVerdict(facts.queue, facts.custody) === "complete" &&
+    facts.custody?.uncounted.length === 0;
   return {
     tone: "quiet",
-    copy:
-      facts.custody?.computedAt && facts.custody.uncounted.length === 0
-        ? "Everything's uploaded · vault backup verified"
-        : "Everything's uploaded",
+    copy: verified
+      ? "Everything's uploaded · vault backup verified"
+      : "Everything's uploaded",
   };
 }

@@ -8,7 +8,7 @@ import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mountBlock, nodesOf, styleOf } from "../../test/react-native-stub";
-import { resolveTheme } from "../theme";
+import { pageMargin, resolveTheme } from "../theme";
 import EmptyBlock from "./EmptyBlock";
 
 vi.mock(import("react-native"), async () => {
@@ -38,6 +38,47 @@ function render(node: React.ReactNode): HTMLElement {
 
 const noop = (): void => undefined;
 const type = resolveTheme("light").type;
+
+describe("the block's own gutter", () => {
+  afterEach(() => {
+    dispose?.();
+    dispose = undefined;
+  });
+
+  // THE GUTTER IS THE CONTAINER'S (#1015, Round NY). A block that padded
+  // itself drew its title at twice the header's margin inside every padded
+  // body (Needs you's empty queue); the room pads its own states instead
+  // (`rooms.test.tsx`, "the room gutter").
+  it("brings no gutter of its own, in either register", () => {
+    const routine = render(
+      <EmptyBlock
+        body="Nothing is waiting on you."
+        routine
+        title="Nothing waiting"
+      />
+    );
+    expect(
+      styleOf(nodesOf(routine, "div")[0]).paddingHorizontal
+    ).toBeUndefined();
+    dispose?.();
+    dispose = undefined;
+    const firstRun = render(
+      <EmptyBlock body="Nothing is waiting on you." title="Nothing waiting" />
+    );
+    expect(
+      styleOf(nodesOf(firstRun, "div")[0]).paddingHorizontal
+    ).toBeUndefined();
+  });
+
+  // The complement (#1015, S5): inside a full-bleed list, whose rows carry
+  // their own inset, a bare block would put its title on the screen edge.
+  it("brings the page gutter when its container is full-bleed", () => {
+    const bled = render(
+      <EmptyBlock body="No match." inset routine title="Nothing found" />
+    );
+    expect(styleOf(nodesOf(bled, "div")[0]).paddingHorizontal).toBe(pageMargin);
+  });
+});
 
 describe(EmptyBlock, () => {
   afterEach(() => {

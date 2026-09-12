@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  leadLabel,
+  birthdayLeadPhrase,
   monthDayOf,
   nextOccurrence,
   planBirthdayNotifications,
@@ -128,7 +128,18 @@ describe(planBirthdayNotifications, () => {
     expect(
       planBirthdayNotifications({ people: [DANA], now: NOW })[0]?.body
     ).toBe("Inner circle · your phone tells you 2 days ahead.");
-    expect(leadLabel(2)).toBe("2 days");
+  });
+
+  it("never says a same-day reminder is ahead of the day", () => {
+    // #1015, R-A-19. The sheet's LABEL is "Same day"; gluing " ahead" onto it
+    // gave "your phone tells you same day ahead."
+    expect(birthdayLeadPhrase(0)).toBe("on the day");
+    expect(birthdayLeadPhrase(2)).toBe("2 days ahead");
+    expect(birthdayLeadPhrase(7)).toBe("1 week ahead");
+    expect(
+      planBirthdayNotifications({ people: [DANA], leadDays: 0, now: NOW })[0]
+        ?.body
+    ).toBe("Inner circle · your phone tells you on the day.");
   });
 });
 

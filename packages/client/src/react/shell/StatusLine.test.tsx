@@ -83,7 +83,7 @@ describe("shell/StatusLine", () => {
     describe("the route's standing health line (#765)", () => {
       const health = {
         action: { label: "Open the failure", run: vi.fn<() => void>() },
-        text: "1 automation is failing · Weekly digest has failed 3 runs.",
+        text: "1 rule is failing · Weekly digest has failed 3 runs.",
       };
 
       it("stands over the ambient sentence, with the same neutral dot", () => {

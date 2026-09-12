@@ -66,6 +66,7 @@ export {
   DENSITY_TIERS,
   metrics,
   spacing,
+  subBase,
 } from "./density";
 export type { DensityScale, DensityTier, MetricKey } from "./density";
 

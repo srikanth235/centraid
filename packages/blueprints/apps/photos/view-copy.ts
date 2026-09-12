@@ -256,7 +256,10 @@ export const SEARCH_EXAMPLES: readonly string[] = [
 
 export const SEARCH_COPY = {
   resting: {
-    eyebrow: "Nothing typed",
+    // `Nothing typed` is gone from every seat at once (#1015, photos/findings
+    // #9): the eyebrow is the house's, built from this noun by
+    // `searchRestingEyebrow`, so no app can drift its own state report back in.
+    noun: "photos",
     title: "Search the whole library",
     body: "Not only what is loaded here — try one of these.",
   },

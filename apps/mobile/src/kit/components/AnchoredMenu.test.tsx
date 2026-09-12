@@ -232,6 +232,7 @@ function groups(): MenuGroup[] {
           key: "share",
           label: "Share",
           disabled: true,
+          reason: "This vault is read-only for you.",
           onSelect: () => chose.push("share"),
         },
       ],
@@ -300,7 +301,7 @@ describe("the anchored menu's rows", () => {
       "Filter. Opens a submenu",
       "View Options. Opens a submenu",
       "Move to Trash",
-      "Share",
+      "Share. This vault is read-only for you.",
     ]);
   });
 
@@ -377,7 +378,7 @@ describe("one level of nesting, opened in place", () => {
       "Filter. Opens a submenu",
       "View Options. Opens a submenu",
       "Move to Trash",
-      "Share",
+      "Share. This vault is read-only for you.",
     ]);
   });
 
@@ -434,6 +435,22 @@ describe("the inks a row's own state takes", () => {
     expect(share.disabled).toBe(true);
     press("Share");
     expect(chose).toStrictEqual([]);
+  });
+
+  // The refusal used to be concatenated into the label — `Share — This vault
+  // is read-only for you.` — inside a one-line truncating `Text`, so the verb
+  // was pushed out of view and the reason was the half that got cut
+  // (#1015, S12).
+  it("gives a refused row its reason as a second, wrapping line", () => {
+    render();
+    const share = row("Share");
+    const lines = Array.from(share.querySelectorAll("span")).map(
+      (span) => span.textContent
+    );
+    expect(lines).toStrictEqual(["Share", "This vault is read-only for you."]);
+    expect(share.getAttribute("aria-label")).toBe(
+      "Share. This vault is read-only for you."
+    );
   });
 
   it("leaves an ordinary row the plain text ink", () => {

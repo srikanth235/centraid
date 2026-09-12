@@ -18,6 +18,7 @@ import { isGrantUnreachable } from "@centraid/blueprints/apps/_shared/grant-door
 import { grantWireCalls } from "@centraid/blueprints/apps/_shared/grant-transport";
 
 import {
+  LINK_TICKET_NOT_MADE,
   LINK_TICKET_UNAVAILABLE_HERE,
   nativeGrantDoor,
   nativeGrantHttp,
@@ -435,13 +436,17 @@ describe("the native link-ticket door", () => {
     });
   });
 
-  test("the gateway's own refusal words ride through, verbatim", async () => {
-    mintLinkTicket.mockRejectedValue(new Error("this vault will not mint"));
+  test("a mint that threw is one sentence, not the exception", async () => {
+    // WHAT THROWS HERE IS TRANSPORT (#1015, S14 — R-A-15): a fetch failure or
+    // an HTTP status, which `PersonGrants` and `TallyShareGroup` were posting
+    // into the status line verbatim. The raw goes to the log.
+    const logged = vi.spyOn(console, "warn").mockReturnValue(undefined);
+    const thrown = new Error("Network request failed");
+    mintLinkTicket.mockRejectedValue(thrown);
     await expect(
       nativeLinkTicketDoor(BASE, "vault-1")()
-    ).resolves.toStrictEqual({
-      ok: false,
-      message: "this vault will not mint",
-    });
+    ).resolves.toStrictEqual({ ok: false, message: LINK_TICKET_NOT_MADE });
+    expect(logged).toHaveBeenCalledWith("[share] link ticket failed", thrown);
+    logged.mockRestore();
   });
 });

@@ -189,5 +189,5 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing[3],
     },
     verdictLabel: { ...t("smallStrong"), color: colors.text, flex: 1 },
-    why: { ...t("mono"), color: colors.textFaint },
+    why: { ...t("small"), color: colors.textFaint },
   });

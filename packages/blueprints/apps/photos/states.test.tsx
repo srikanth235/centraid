@@ -209,11 +209,11 @@ describe("a Photos row whose write has not landed", () => {
   );
 
   test.each(VIEWS)(
-    "%s: a parked write says who is waiting and offers the Approvals inbox",
+    "%s: a parked write says who is waiting and offers Needs you",
     async (_name, view) => {
       const opened: string[] = [];
       (window as unknown as { centraid: unknown }).centraid = {
-        openApprovals: () => opened.push("approvals"),
+        openNeedsYou: () => opened.push("needs-you"),
       };
 
       const region = await paint(view, {
@@ -231,11 +231,11 @@ describe("a Photos row whose write has not landed", () => {
         "Waiting for the owner to approve this change."
       );
       const review = buttonsIn(region).find(
-        (button) => button.textContent === "Review in Approvals"
+        (button) => button.textContent === "Review in Needs you"
       );
       expect(review).toBeDefined();
       await act(async () => review?.click());
-      expect(opened).toStrictEqual(["approvals"]);
+      expect(opened).toStrictEqual(["needs-you"]);
     }
   );
 
@@ -366,7 +366,7 @@ describe("face review with an answer still in flight", () => {
         writes.push(`${action} ${input.answer} on ${input.region_id}`);
         return Promise.resolve({ status: "executed" });
       },
-      openApprovals: () => {},
+      openNeedsYou: () => {},
       read: ({ query }: { query: string }) =>
         query === "face-queue"
           ? Promise.resolve({
@@ -432,7 +432,7 @@ describe("face review with an answer still in flight", () => {
     );
     expect(
       [...container.querySelectorAll("button")].some(
-        (button) => button.textContent === "Review in Approvals"
+        (button) => button.textContent === "Review in Needs you"
       )
     ).toBe(true);
 

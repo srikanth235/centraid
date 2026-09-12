@@ -21,7 +21,7 @@ describe("the mobile band", () => {
   it("shows the v10 Origin destinations by default", () => {
     expect(bandTabs(DEFAULT_PLACE_PINS).map((tab) => tab.short)).toStrictEqual([
       "Home",
-      "Alerts",
+      "Needs you",
       "Activity",
       "Vault",
     ]);
@@ -40,7 +40,7 @@ describe("the mobile band", () => {
     expect(bandTabs([...DEFAULT_PLACE_PINS, "autos"])).toHaveLength(5);
     expect(
       bandTabs([...DEFAULT_PLACE_PINS, "autos"]).map((tab) => tab.short)
-    ).toStrictEqual(["Home", "Alerts", "Activity", "Vault", "Rules"]);
+    ).toStrictEqual(["Home", "Needs you", "Activity", "Vault", "Rules"]);
   });
 
   it("shows only Home when nothing is pinned", () => {

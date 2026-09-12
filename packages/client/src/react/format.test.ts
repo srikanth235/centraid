@@ -28,7 +28,7 @@ describe("insK / insUsd / insKindLabel", () => {
   it("maps known run kinds and passes others through", () => {
     expect(insKindLabel("chat")).toBe("Chat");
     expect(insKindLabel("build")).toBe("Build");
-    expect(insKindLabel("automation")).toBe("Automation");
+    expect(insKindLabel("automation")).toBe("Rule");
     expect(insKindLabel("other")).toBe("other");
   });
 

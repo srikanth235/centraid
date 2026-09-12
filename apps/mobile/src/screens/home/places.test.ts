@@ -1,7 +1,9 @@
-// The eleven places (the Binding Layer, v4 handoff — PLACES table).
+// The ten places (the Binding Layer, v4 handoff — PLACES table). Starred was an
+// eleventh until #1015 B15: it navigated nowhere and could still be pinned into
+// a band slot.
 //
 // Four things worth asserting rather than trusting a comment for: the table
-// really has eleven rows, Home is the only one pinned by law, the default pin
+// really has ten rows, Home is the only one pinned by law, the default pin
 // set is exactly the six the handoff ships pinned, and the band derivation
 // (`bandPlaces`) never lets a member's pin count push the compact band past
 // its cap. Every one of these is a rule a well-meaning table edit — adding a
@@ -24,10 +26,10 @@ import {
   searchPlaces,
 } from "./places";
 
-describe("the eleven places", () => {
-  it("has exactly eleven rows, matching PLACE_COUNT", () => {
-    expect(PLACES).toHaveLength(11);
-    expect(PLACE_COUNT).toBe(11);
+describe("the ten places", () => {
+  it("has exactly ten rows, matching PLACE_COUNT", () => {
+    expect(PLACES).toHaveLength(10);
+    expect(PLACE_COUNT).toBe(10);
   });
 
   it("gives every place a distinct id, name and short label", () => {
@@ -49,25 +51,27 @@ describe("the eleven places", () => {
   });
 
   it("uses the exact short labels a 61px band tab needs", () => {
-    // Two names do not fit a 61px tab (:3480): Notifications reads Alerts,
-    // Automations reads Rules. Every other place's short label is its own
-    // name — Connectors is short enough to stand as both.
-    expect(getPlace("notifs").short).toBe("Alerts");
+    // Every short label that is not the place's whole name only DROPS words
+    // from it (On this phone → On phone). Needs you, Rules and Connectors are
+    // short enough to stand as both (#1015 R-NY-4, R-SH-8).
+    expect(getPlace("notifs").short).toBe("Needs you");
+    expect(getPlace("notifs").name).toBe("Needs you");
     expect(getPlace("autos").short).toBe("Rules");
+    expect(getPlace("autos").name).toBe("Rules");
     expect(getPlace("conn").short).toBe("Connectors");
     expect(getPlace("stats").short).toBe("Activity");
     expect(getPlace("data").short).toBe("Vault");
     expect(getPlace("storage").name).toBe("On this phone");
   });
 
-  it("defaults to Alerts, Activity and Vault", () => {
+  it("defaults to Needs you, Activity and Vault", () => {
     expect(DEFAULT_PLACE_PINS).toStrictEqual(["notifs", "stats", "data"]);
   });
 
   it("treats Home as pinned even with an empty pin list", () => {
     expect(isPlacePinned([], "home")).toBe(true);
-    expect(isPlacePinned([], "starred")).toBe(false);
-    expect(isPlacePinned(["starred"], "starred")).toBe(true);
+    expect(isPlacePinned([], "devices")).toBe(false);
+    expect(isPlacePinned(["devices"], "devices")).toBe(true);
   });
 
   it("orders pinned places by the table, not by pin order", () => {

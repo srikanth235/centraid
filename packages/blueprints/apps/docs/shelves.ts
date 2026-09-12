@@ -36,7 +36,7 @@ export const DSHELVES: readonly Shelf[] = [
   { id: FOLDERS, label: "Folders", segment: "folders" },
   { id: RECENT, label: "Recently changed", segment: "recent" },
   { id: STARRED, label: "Starred", segment: "starred" },
-  { id: SHARED, label: "Shared with you", segment: "shared" },
+  { id: SHARED, label: "Shared", segment: "shared" },
   { id: TRASH, label: "Trash", segment: "trash" },
 ];
 

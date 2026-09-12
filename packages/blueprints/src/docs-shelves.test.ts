@@ -163,7 +163,7 @@ describe("docs shelves", () => {
       "Folders",
       "Recently changed",
       "Starred",
-      "Shared with you",
+      "Shared",
       "Trash",
     ]);
     // All is the app's own root, with no segment: `docs` IS All.

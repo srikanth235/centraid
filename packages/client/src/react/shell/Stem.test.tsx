@@ -18,7 +18,7 @@ function render(el: React.ReactElement): HTMLElement {
   return host;
 }
 
-const pins = { approvals: true, assistant: true };
+const pins = { "needs-you": true, assistant: true };
 
 const stemProps = {
   pins,
@@ -48,11 +48,7 @@ describe("shell/Stem", () => {
       const el = render(<Stem {...stemProps} />);
       expect(el.querySelector(".stemMark")).not.toBeNull();
       expect(el.querySelector(".stemSearch")).not.toBeNull();
-      expect(labelsOf(el)).toStrictEqual([
-        "Home",
-        "Assistant",
-        "Notifications",
-      ]);
+      expect(labelsOf(el)).toStrictEqual(["Home", "Assistant", "Needs you"]);
       expect(el.textContent).not.toContain("Recents");
       expect(el.textContent).not.toContain("Gateway offline");
     });
@@ -281,7 +277,7 @@ describe("shell/Stem", () => {
             compact
             onAllApps={onAllApps}
             pins={{
-              approvals: true,
+              "needs-you": true,
               assistant: true,
               atlas: true,
               automations: true,
@@ -298,19 +294,17 @@ describe("shell/Stem", () => {
         expect(onAllApps).toHaveBeenCalledOnce();
       });
 
-      it("uses the short label where a destination declares one", () => {
+      it("draws the same noun on the compact band as on the stem", () => {
         const el = render(
           <Stem
             {...stemProps}
             compact
-            pins={{ approvals: true, atlas: true, insights: true }}
+            pins={{ "needs-you": true, atlas: true, insights: true }}
           />
         );
-        expect(labelsOf(el)).toContain("Alerts");
-        expect(labelsOf(el)).not.toContain("Notifications");
         expect(labelsOf(el)).toStrictEqual([
           "Home",
-          "Alerts",
+          "Needs you",
           "Activity",
           "Vault",
           "More",

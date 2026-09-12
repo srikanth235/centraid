@@ -8,7 +8,7 @@
 // Approve and no Decline here, and the surface says whose rows it is showing
 // rather than implying it is showing everybody's. `contrib-model.ts` refuses
 // to invent an Accept for exactly this reason; its `approvals` verb is the
-// hand-over to the shell's own Approvals inbox, which this phone does have.
+// hand-over to the shell's own Needs you inbox, which this phone does have.
 //
 // EMPTY IS THE HEALTHY STATE (STATES.md). Three empty sections are the ordinary
 // Tuesday, so each says so in its own words rather than collapsing to one
@@ -40,6 +40,7 @@ import type { Nudge } from "@centraid/blueprints/apps/tally/types";
 import { NUDGE_PARKED } from "@centraid/blueprints/apps/tally/view-copy";
 
 import { Text } from "../../kit/components/NativeText";
+import { formatRelative } from "../../kit/format";
 import { spacing, t, useTheme } from "../../kit/theme";
 import { WAITING_OWN_SCOPE, waitingCount } from "./tally-seat-copy";
 import TallyNotice from "./TallyNotice";
@@ -52,6 +53,8 @@ export interface WaitingViewProps {
   nudges: readonly Nudge[];
   /** Party id → the name this vault knows them by. */
   names: ReadonlyMap<string, string>;
+  /** The vault's clock, so a prepared stamp reads as a relative clause. */
+  now: string;
   notice: TallyNoticeProps;
   onVerb: (verb: ContribVerb, row: ContribRow) => void;
 }
@@ -144,7 +147,7 @@ export default function WaitingView(
             key={nudge.nudge_id}
             title={nudgePrepared(
               props.names.get(nudge.party_id) ?? nudge.party_id,
-              nudge.prepared_at.slice(0, 10)
+              formatRelative(nudge.prepared_at, props.now)
             )}
             meta={NUDGE_PARKED}
             {...(nudge.note ? { chip: "NOTE", chipTone: "seam" as const } : {})}

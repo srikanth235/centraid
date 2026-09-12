@@ -21,6 +21,10 @@ import type {
 } from "./gateway-client";
 import { PENDING_PAGE_LIMIT } from "./store";
 import type { UploadItem, UploadQueueStore } from "./store";
+import {
+  memberTransferFailure,
+  transferFailureDetail,
+} from "./transfer-failure";
 import { assertGatewayMintedUploadUrl } from "./transfer-policy";
 
 const MAX_ATTEMPTS = 5;
@@ -123,7 +127,16 @@ export class UploadDrainer {
           const terminal =
             (error instanceof DirectTransferError && error.terminal) ||
             item.attempts + 1 >= MAX_ATTEMPTS;
-          this.deps.store.fail(item.itemId, messageOf(error), terminal);
+          // The row is member copy (`transfer-failure.ts`); the raw text is
+          // the log's alone (#1015 R-NY-10, docs/logs.md).
+          this.deps.store.fail(
+            item.itemId,
+            memberTransferFailure(error),
+            terminal
+          );
+          console.warn(
+            `[centraid] upload: ${item.itemId} was not sent — ${transferFailureDetail(error)}`
+          );
           if (terminal) summary.failed += 1;
         }
       }
@@ -191,7 +204,8 @@ export class UploadDrainer {
         // The local file changed under us; its sha no longer addresses it.
         throw new DirectTransferError(
           `local file is ${source.size} bytes, expected ${item.plaintextSize}`,
-          400
+          400,
+          "This file changed on this phone, so it was not sent"
         );
       }
       const outstanding = this.deps.store
@@ -332,10 +346,6 @@ async function pool<T>(
   );
   await Promise.all(runners);
   if (errors.length > 0) throw errors[0];
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** Simulated process death unwinds the whole drain — never retried as a

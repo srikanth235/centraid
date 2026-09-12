@@ -1,63 +1,42 @@
 import React, { useMemo } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
 
-import HomeKey from "../kit/components/HomeKey";
 import PanelBlock from "../kit/components/PanelBlock";
-import PlaceHeader from "../kit/components/PlaceHeader";
-import TopSafeArea from "../kit/components/TopSafeArea";
-import { pageMargin, spacing, useTheme } from "../kit/theme";
+import { SystemPlace } from "../kit/rooms";
 import type { SignalNotificationScreenProps } from "../navigation";
+import { SHELL_TITLES } from "./shell-copy";
 import { signalNotificationCopy } from "./signal-notification";
 
 export default function SignalNotification({
   navigation,
   route,
 }: SignalNotificationScreenProps): React.JSX.Element {
-  const { colors } = useTheme();
   const copy = useMemo(
     () => signalNotificationCopy(route.params.cause, route.params.detail),
     [route.params]
   );
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      <View style={styles.header}>
-        <HomeKey onPress={() => navigation.goBack()} variant="leave" />
-        <View style={styles.headerTitle}>
-          <PlaceHeader title="Notifications" />
-        </View>
-      </View>
-      <ScrollView contentContainerStyle={styles.body}>
-        <PanelBlock
-          eyebrow={copy.eyebrow}
-          title={copy.title}
-          body={copy.body}
-          tone="net"
-          facts={[
-            { key: "Cause", value: copy.cause },
-            { key: "If ignored", value: copy.consequence, net: true },
-          ]}
-          action={{
-            label: copy.actionLabel,
-            onPress: () =>
-              navigation.replace("Settings", {
-                screen: copy.destination,
-                params: copy.destinationParams,
-              }),
-          }}
-        />
-      </ScrollView>
-    </TopSafeArea>
+    <SystemPlace
+      onHome={() => navigation.goBack()}
+      title={SHELL_TITLES.needsYou}
+    >
+      <PanelBlock
+        action={{
+          label: copy.actionLabel,
+          onPress: () =>
+            navigation.replace("Settings", {
+              params: copy.destinationParams,
+              screen: copy.destination,
+            }),
+        }}
+        body={copy.body}
+        eyebrow={copy.eyebrow}
+        facts={[
+          { key: "Cause", value: copy.cause },
+          { key: "If ignored", net: true, value: copy.consequence },
+        ]}
+        title={copy.title}
+        tone="net"
+      />
+    </SystemPlace>
   );
 }
-
-const styles = StyleSheet.create({
-  body: { padding: pageMargin },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing[2],
-    paddingHorizontal: pageMargin,
-  },
-  headerTitle: { flex: 1 },
-  safe: { flex: 1 },
-});

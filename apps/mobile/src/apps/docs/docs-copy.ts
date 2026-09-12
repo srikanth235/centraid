@@ -7,8 +7,10 @@ export function allStatus(count: number): string {
   return `${fmt(count)} · press and hold a row for quick actions`;
 }
 
+/** The count alone: the caption under the set states what a folder is, once
+ *  (R-NY-11). */
 export function foldersStatus(count: number): string {
-  return `${fmt(count)} ${count === 1 ? "folder" : "folders"} · a folder is a label, not a place`;
+  return `${fmt(count)} ${count === 1 ? "folder" : "folders"}`;
 }
 
 /** A folder row's own count, as prose — see the row for why not a figure. */
@@ -19,8 +21,10 @@ export function folderCount(count: number): string {
 /** Unfiled is a condition, not a place; the row says which. */
 export const UNFILED_NOTE = "never put in a folder — not an error";
 
+/** The count alone: the shared trash caption states the 30-day purge, once
+ *  (R-NY-11). */
 export function trashStatus(count: number): string {
-  return `${fmt(count)} in trash · each purged 30 days after it was deleted`;
+  return `${fmt(count)} in trash`;
 }
 
 /** Photograph count WITHHELD: Docs' replica scope reads document tags only. */
@@ -37,7 +41,8 @@ export function starredStatus(count: number): string {
 // — naming the sender needs a live link binding for the origin vault, and
 // without one the vault stays unnamed rather than wearing a truncated id.
 
-export const SHARED_TITLE = "Shared with you";
+/** One noun per destination (R-NY-11): the band tab's word is the title. */
+export const SHARED_TITLE = "Shared";
 
 export function sharedStatus(count: number): string {
   return `${fmt(count)} ${count === 1 ? "document" : "documents"} · each stays while its share stands`;
@@ -171,3 +176,61 @@ export const SCAN_HANDOFF_BODY =
   "Scan cover: one capture, reviewed here, saved into Docs as an image with its extracted text";
 export const SCAN_PDF_WITHHELD =
   "Multi-page capture that lands as one PDF is not built on this phone yet, so this screen does not promise it.";
+
+/** The head of a running selection (#1015, D5). Sentence case, and it names
+ *  the noun — "3 documents selected", never a bare number. */
+export function selectionHead(count: number): string {
+  if (count === 0) return "Choose documents";
+  return `${count} ${count === 1 ? "document" : "documents"} selected`;
+}
+
+/**
+ * S14 (#1015 Wave 3). Three hand-over sites and the search each rendered the
+ * exception they caught — `error.message`, and `String(error)` when it was
+ * not even an Error — so a member met a stack's own words on a status line.
+ * The raw string belongs in the log, where a debug session starts
+ * (docs/logs.md); these are what the member is told.
+ */
+export const DOCS_HANDOVER_FAILED = "This document could not be handed over.";
+export const DOCS_SEARCH_REFUSED =
+  "This device could not search the vault just now. Try again.";
+/** Copy is signage: a status line names what it happened to. */
+export const DOCS_TRASHED = "Document moved to trash.";
+
+/**
+ * S11 (#1015 Wave 3): one label table per enum, in a `.ts`, never a switch or
+ * a ternary chain inside a `.tsx`. Docs spelled five enums at the point of
+ * use — custody, the upload's own progress, the arrangement, a capability's
+ * state — so no sweep could see them and each one drifted on its own.
+ */
+export const DOCS_CUSTODY: Readonly<Record<string, string>> = {
+  "local-only": "On this device only · not yet in the vault",
+  missing: "Missing — in neither place · needs attention",
+  "remote-only": "Only in the vault · not on this device",
+  replicated: "In the vault and on this device",
+  unswept:
+    "Not read yet · where this document lives is unknown until the vault next reads it",
+};
+
+/** An unknown custody value is unswept, never printed. */
+export function custodyLine(state: string | null | undefined): string {
+  return DOCS_CUSTODY[state ?? "unswept"] ?? DOCS_CUSTODY["unswept"]!;
+}
+
+export const DOCS_UPLOAD_STATE: Readonly<Record<string, string>> = {
+  failed: "Did not land",
+  landed: "Landed",
+  uploading: "Uploading…",
+  waiting: "Waiting",
+};
+
+export function uploadStateLabel(state: string): string {
+  return DOCS_UPLOAD_STATE[state] ?? DOCS_UPLOAD_STATE["failed"]!;
+}
+
+export const DOCS_ARRANGEMENT: Readonly<Record<string, string>> = {
+  grid: "Grid view",
+  list: "List view",
+};
+
+export const DOCS_CAPABILITY_STATE = { off: "Off", on: "On" } as const;

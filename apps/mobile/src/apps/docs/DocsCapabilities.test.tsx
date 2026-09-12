@@ -27,13 +27,21 @@ vi.mock(import("react-native-svg"), async () => {
   const stub = await import("../../test/react-native-stub");
   return stub.svgStub() as unknown as typeof import("react-native-svg");
 });
-// The shell and the head need a navigation tree; this test is about the
-// screen's own honesty, so both collapse to their content.
-vi.mock(import("./DocsScreen"), () => ({
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+// The room needs a navigation tree and the shell's vault lockup; this test is
+// about the screen's own honesty, so the frame collapses to its content
+// (#1015 — the room replaced `DocsScreen` and `DocsShelfHeader`).
+vi.mock(import("./docs-room"), () => ({
+  useDocsRoom: () => ({
+    backTo: undefined,
+    band: () => <></>,
+    chrome: <></>,
+    handleBack: () => undefined,
+    overlay: <></>,
+    title: "What Docs may read",
+  }),
 }));
-vi.mock(import("./DocsShelfHeader"), () => ({
-  default: () => <></>,
+vi.mock(import("react-native-safe-area-context"), () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
 let dispose: (() => void) | undefined;

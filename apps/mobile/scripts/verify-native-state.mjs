@@ -3,20 +3,21 @@
  * Native input purity + identity ratchet for apps/mobile (#587 E23, #646;
  * rebuilt for Continuous Native Generation in #996).
  *
- * `ios/` and `android/` are prebuild OUTPUTS and are gitignored, so the gate no
- * longer reads a committed Podfile.lock or a committed Xcode project — there is
- * none, and the checks that did (pod-lock completeness, pod version coherence,
- * REACT_NATIVE_PATH hygiene) protected a reviewable artifact that no longer
- * exists. `pod install` now runs only inside the macOS lanes that prebuild
- * first, against a lock those lanes generate and discard, so there is nothing
- * left for a repo-wide checker to compare it to.
+ * `ios/` and `android/` are prebuild OUTPUTS, and #1011 TRACKS them so that a
+ * native change arrives as a reviewable diff rather than as a hash nobody can
+ * read. That is why L1 asks about drift rather than absence (R-NY-17, #1015):
+ * the question a tracked generated tree raises is not "is it here" but "is it
+ * still what the inputs produce".
  *
- * What is left is the same invariant with its current subject: the inputs are
- * the whole recipe, and the recipe is reproducible.
+ * The rest of the CNG posture stands. The checks that read a committed
+ * Podfile.lock as a source of truth (pod-lock completeness, pod version
+ * coherence, REACT_NATIVE_PATH hygiene) stay retired: the lock is regenerated
+ * by `pod install` inside the macOS lanes, so a repo-wide checker has nothing
+ * independent to compare it to.
  *
  * Layers (fail-closed; L1-L3 must pass before fingerprints may be written):
- *   L1 generated-tree purity — nothing under ios/ or android/ is tracked, and
- *     both are ignored by git
+ *   L1 generated-tree fidelity — ios/ and android/ are tracked, are not
+ *     ignored, and each sits at the git tree id last blessed with the inputs
  *   L2 input coverage — every config plugin and local module directory is in
  *     the fingerprint's source list, and each module declares the platforms its
  *     directories imply
@@ -43,10 +44,12 @@ import {
   validateFingerprintInputCoverage,
   validateFingerprints,
   validateGeneratedTreesNotHashed,
-  validateGeneratedTreesUntracked,
+  validateGeneratedTreeDrift,
+  validateGeneratedTreesTracked,
   validateModulePlatformShape,
   FIX_INPUTS_HINT,
   GENERATED_NATIVE_DIRS,
+  GENERATED_TREE_KEY,
 } from "./verify-native-state-lib.mjs";
 
 // Re-export pure API for existing tests and external importers.
@@ -59,11 +62,13 @@ export {
   validateFingerprintInputCoverage,
   validateFingerprints,
   validateGeneratedTreesNotHashed,
-  validateGeneratedTreesUntracked,
+  validateGeneratedTreeDrift,
+  validateGeneratedTreesTracked,
   validateModulePlatformShape,
   WRITE_CMD,
   FIX_INPUTS_HINT,
   GENERATED_NATIVE_DIRS,
+  GENERATED_TREE_KEY,
 } from "./verify-native-state-lib.mjs";
 
 const mobileRoot = path.resolve(import.meta.dirname, "..");
@@ -71,7 +76,8 @@ const repoRoot = path.resolve(mobileRoot, "..", "..");
 
 /**
  * The tracked half of L1, asked of git rather than of the filesystem: the
- * question is what the INDEX carries, and a prebuilt worktree answers it wrong.
+ * question is what the INDEX carries, and a worktree full of build output
+ * answers it wrong.
  */
 export function trackedGeneratedNativeFiles(cwd = repoRoot) {
   const output = execFileSync(
@@ -85,15 +91,14 @@ export function trackedGeneratedNativeFiles(cwd = repoRoot) {
 /**
  * The ignore half of L1, asked of git so it survives however the rule is
  * spelled — a leading slash, a trailing slash, a parent `.gitignore`, or an
- * exclude file.
+ * exclude file. It must answer FALSE now: a rule over a tracked tree keeps its
+ * files committed while hiding every regeneration from `git status`.
  *
- * The path is queried WITH a trailing slash, and that is load-bearing: the rule
- * is `/ios/`, which matches directories only, and `git check-ignore` cannot tell
- * that a bare `apps/mobile/ios` names a directory when the directory is absent.
- * On a fresh checkout — the state this gate must be green in — the bare form
- * answers "not ignored" and the trailing-slash form answers correctly in both
- * states. `--no-index` so the answer is the RULE's, independent of whether
- * anything happens to be tracked; the tracked half is a separate check.
+ * The path is queried WITH a trailing slash, and that is load-bearing: a
+ * directory-only rule (`/ios/`) is invisible to `git check-ignore` on a bare
+ * path when the directory is absent, which is the state a fresh checkout of a
+ * future cut could be in. `--no-index` so the answer is the RULE's, independent
+ * of what happens to be tracked; the tracked half is a separate check.
  */
 export function generatedNativeDirsIgnored(cwd = repoRoot) {
   const ignored = {};
@@ -110,6 +115,50 @@ export function generatedNativeDirsIgnored(cwd = repoRoot) {
     }
   }
   return ignored;
+}
+
+/**
+ * The git tree object id of each generated tree — the drift half of L1.
+ *
+ * Read from the INDEX, not from HEAD and not from the filesystem. The index is
+ * what the next commit will carry, so a regeneration and the `--write` that
+ * blesses it belong in one commit rather than two; on a clean checkout — every
+ * CI lane — the index IS HEAD, so the gate answers identically there. A
+ * filesystem walk would answer neither question: build output, `DerivedData`
+ * and a half-finished prebuild all live down there.
+ *
+ * `git write-tree` turns the index into tree objects without touching HEAD or
+ * the worktree; `rev-parse <tree>:<dir>` then names the directory's own tree.
+ * That id IS the directory's content: one byte changed anywhere under it moves
+ * the id, and nothing else does. A path that is not a tree answers `undefined`,
+ * which the validator treats as a finding rather than as a pass.
+ */
+export function generatedNativeTreeIds(cwd = repoRoot) {
+  const ids = {};
+  let root;
+  try {
+    root = execFileSync("git", ["write-tree"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return Object.fromEntries(
+      GENERATED_NATIVE_DIRS.map((dir) => [dir, undefined])
+    );
+  }
+  for (const dir of GENERATED_NATIVE_DIRS) {
+    try {
+      ids[dir] = execFileSync("git", ["rev-parse", `${root}:${dir}`], {
+        cwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {
+      ids[dir] = undefined;
+    }
+  }
+  return ids;
 }
 
 /** Repo-owned config plugins, mobile-root-relative (the fingerprint's units). */
@@ -201,12 +250,15 @@ export function moduleNativeDirsFor(platform, modulePlatforms) {
 export function collectInputErrors({
   trackedNativeFiles,
   ignoredDirs,
+  blessedTreeIds,
+  treeIds,
   modulePlatforms,
   pluginFiles,
   reports,
 }) {
   const errors = [
-    ...validateGeneratedTreesUntracked({ trackedNativeFiles, ignoredDirs }),
+    ...validateGeneratedTreesTracked({ trackedNativeFiles, ignoredDirs }),
+    ...validateGeneratedTreeDrift(blessedTreeIds, treeIds),
   ];
   for (const mod of modulePlatforms) {
     if (mod.missingConfig || mod.config == null) {
@@ -251,9 +303,12 @@ export async function verifyNativeState(options = {}) {
       })),
     ]);
 
+  const treeIds = generatedNativeTreeIds();
   const inputErrors = collectInputErrors({
     trackedNativeFiles: trackedGeneratedNativeFiles(),
     ignoredDirs: generatedNativeDirsIgnored(),
+    blessedTreeIds: expected[GENERATED_TREE_KEY],
+    treeIds,
     modulePlatforms,
     pluginFiles,
     reports,
@@ -266,13 +321,22 @@ export async function verifyNativeState(options = {}) {
     reports.map(({ platform, hash }) => [platform, hash])
   );
 
-  if (write && inputErrors.length > 0) {
+  // The drift half of L1 is what a reviewed `--write` EXISTS to move, so it
+  // does not block one; the rest of L1 (tracked, unignored) and L2/L3 still do,
+  // because a tree nobody can review is not a tree anyone may bless.
+  const blockingInputErrors = write
+    ? inputErrors.filter(
+        (error) => !error.startsWith("L1 generated tree drift:")
+      )
+    : inputErrors;
+
+  if (write && blockingInputErrors.length > 0) {
     return {
-      errors: attachRemediation(inputErrors),
+      errors: attachRemediation(blockingInputErrors),
       wrote: false,
       statusText: status
         ? formatStatusReport({
-            errors: inputErrors,
+            errors: blockingInputErrors,
             inputInventory,
             fingerprints: null,
           })
@@ -285,13 +349,19 @@ export async function verifyNativeState(options = {}) {
   if (write) {
     const next = {
       _comment:
-        "Expected @expo/fingerprint hashes over the CNG inputs (app.config.ts, plugins/, modules/, the dependency set). Changing them must be a reviewed act — see docs/traps/mobile-native-state.md.",
+        "Expected @expo/fingerprint hashes over the CNG inputs (app.config.ts, plugins/, modules/, the dependency set), plus the git tree id of each GENERATED tree at the commit those inputs were blessed on. Changing either must be a reviewed act — see docs/traps/mobile-native-state.md.",
       ios: actualByPlatform.ios,
       android: actualByPlatform.android,
+      [GENERATED_TREE_KEY]: Object.fromEntries(
+        GENERATED_NATIVE_DIRS.map((dir) => [dir, treeIds[dir]])
+      ),
     };
-    const platformsMoved = ["ios", "android"].filter(
-      (p) => expected[p] !== next[p]
-    );
+    const platformsMoved = [
+      ...["ios", "android"].filter((p) => expected[p] !== next[p]),
+      ...GENERATED_NATIVE_DIRS.filter(
+        (dir) => expected[GENERATED_TREE_KEY]?.[dir] !== treeIds[dir]
+      ),
+    ];
     await writeFile(
       path.join(mobileRoot, "native-fingerprints.json"),
       `${JSON.stringify(next, null, 2)}\n`,
@@ -366,7 +436,7 @@ if (
   }
   if (!result.wrote && !result.statusText) {
     console.log(
-      "native-state: ios/ and android/ are untracked outputs, the inputs are what the ratchet reads, and both fingerprints agree"
+      "native-state: the generated trees are tracked and at their blessed ids, the inputs are what the ratchet reads, and both fingerprints agree"
     );
   }
 }

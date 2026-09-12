@@ -24,10 +24,10 @@ interface PeopleEmptyStateProps {
   statusLine: string;
   line: string;
   action: string;
-  prioritise: AnswerAvailability;
+  prioritize: AnswerAvailability;
   busy: boolean;
-  prioritised: boolean;
-  onPrioritise: () => void;
+  prioritized: boolean;
+  onPrioritize: () => void;
 }
 interface PeopleEmptyState {
   ensurePolicyLoaded: () => void;
@@ -50,7 +50,7 @@ interface ConsentCopy {
   ENRICHMENT_UNAVAILABLE: Record<string, string>;
   PEOPLE_EMPTY_LINE: string;
   PRIORITISE_ACTION: string;
-  prioritiseAnswerFor: (
+  prioritizeAnswerFor: (
     tier: string | null | undefined,
     denied?: boolean
   ) => AnswerAvailability;
@@ -114,7 +114,7 @@ describe("the People shelf's empty-state copy", () => {
   });
 
   it("labels the action as an action, not a question", () => {
-    expect(copy.PRIORITISE_ACTION).toBe("Prioritise faces");
+    expect(copy.PRIORITISE_ACTION).toBe("Prioritize faces");
   });
 });
 
@@ -149,13 +149,13 @@ describe("the provider-egress disclosure", () => {
 
 describe("whether the priority ask is offerable", () => {
   it("is takeable on the gateway tier — the Faces recipe's declared lane", () => {
-    expect(copy.prioritiseAnswerFor("gateway")).toStrictEqual({
+    expect(copy.prioritizeAnswerFor("gateway")).toStrictEqual({
       available: true,
     });
   });
 
   it("withholds it on the device tier, and says the lane is why", () => {
-    expect(copy.prioritiseAnswerFor("device")).toStrictEqual({
+    expect(copy.prioritizeAnswerFor("device")).toStrictEqual({
       available: false,
       reason: copy.ENRICHMENT_UNAVAILABLE.deviceTier,
     });
@@ -164,8 +164,8 @@ describe("whether the priority ask is offerable", () => {
     );
   });
 
-  it("keeps `off` meaning what it means: no run to prioritise", () => {
-    expect(copy.prioritiseAnswerFor("off")).toStrictEqual({
+  it("keeps `off` meaning what it means: no run to prioritize", () => {
+    expect(copy.prioritizeAnswerFor("off")).toStrictEqual({
       available: false,
       reason: copy.ENRICHMENT_UNAVAILABLE.offTier,
     });
@@ -175,8 +175,8 @@ describe("whether the priority ask is offerable", () => {
   });
 
   it("says nothing it cannot know while the policy is unread or denied", () => {
-    expect(copy.prioritiseAnswerFor(null)).toStrictEqual({ available: false });
-    expect(copy.prioritiseAnswerFor("gateway", true)).toStrictEqual({
+    expect(copy.prioritizeAnswerFor(null)).toStrictEqual({ available: false });
+    expect(copy.prioritizeAnswerFor("gateway", true)).toStrictEqual({
       available: false,
       reason: copy.ENRICHMENT_UNAVAILABLE.denied,
     });
@@ -227,13 +227,13 @@ describe("the People empty state (issue #712 C2, re-homed onto the shelf)", () =
     expect(props.action).toBe(copy.PRIORITISE_ACTION);
     expect(props.count).toBe(6214);
     // No latch, no "answered": there is no question to close.
-    expect(props.prioritised).toBe(false);
+    expect(props.prioritized).toBe(false);
   });
 
   it("writes exactly one manual request, from the press alone", async () => {
     const shelf = await loaded();
-    expect(shelf.props(6214).prioritise).toStrictEqual({ available: true });
-    shelf.props(6214).onPrioritise();
+    expect(shelf.props(6214).prioritize).toStrictEqual({ available: true });
+    shelf.props(6214).onPrioritize();
     await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
     const intent = write.mock.calls[0]?.[0] as {
       action: string;
@@ -242,15 +242,15 @@ describe("the People empty state (issue #712 C2, re-homed onto the shelf)", () =
     // `reason: "manual"` + `capability: "faces"` are pinned by the handler.
     expect(intent.action).toBe("request-enrichment");
     expect(intent.input["entity_type"]).toBe("media.asset");
-    await vi.waitFor(() => expect(shelf.props(6214).prioritised).toBe(true));
+    await vi.waitFor(() => expect(shelf.props(6214).prioritized).toBe(true));
   });
 
   it("never issues a second request once one has landed", async () => {
     const shelf = await loaded();
-    shelf.props(6214).onPrioritise();
-    await vi.waitFor(() => expect(shelf.props(6214).prioritised).toBe(true));
-    shelf.props(6214).onPrioritise();
-    shelf.props(6214).onPrioritise();
+    shelf.props(6214).onPrioritize();
+    await vi.waitFor(() => expect(shelf.props(6214).prioritized).toBe(true));
+    shelf.props(6214).onPrioritize();
+    shelf.props(6214).onPrioritize();
     expect(write).toHaveBeenCalledOnce();
   });
 
@@ -258,11 +258,11 @@ describe("the People empty state (issue #712 C2, re-homed onto the shelf)", () =
     read.mockResolvedValueOnce({ tier: "device" });
     const shelf = await loaded();
     const props = shelf.props(6214);
-    expect(props.prioritise.available).toBe(false);
-    expect(props.prioritise.reason).toBe(
+    expect(props.prioritize.available).toBe(false);
+    expect(props.prioritize.reason).toBe(
       copy.ENRICHMENT_UNAVAILABLE.deviceTier
     );
-    props.onPrioritise();
+    props.onPrioritize();
     expect(write).not.toHaveBeenCalled();
   });
 
@@ -270,8 +270,8 @@ describe("the People empty state (issue #712 C2, re-homed onto the shelf)", () =
     read.mockRejectedValueOnce(new Error("denied"));
     const shelf = await loaded();
     const props = shelf.props(6214);
-    expect(props.prioritise.reason).toBe(copy.ENRICHMENT_UNAVAILABLE.denied);
-    props.onPrioritise();
+    expect(props.prioritize.reason).toBe(copy.ENRICHMENT_UNAVAILABLE.denied);
+    props.onPrioritize();
     expect(write).not.toHaveBeenCalled();
   });
 });

@@ -44,3 +44,36 @@ export const READING_TASKS = "Reading your tasks";
 
 export const PROJECT_NAME_PLACEHOLDER = "What is this project for?";
 export const TASK_NAME_PLACEHOLDER = "What is it?";
+
+// ─── The detail place's four scheduling controls (#1015) ─────────────
+//
+// The choices, not the values: the values are the vault's and the §6 table
+// spells them (`reminderLead`, `recurrence_summary`). These are the phone's
+// shortcuts — the set a thumb can reach without a form.
+
+export const WHEN_PICK = "Pick a day";
+export const WHEN_CLEAR = "No day";
+export const TIME_PICK = "Pick a time";
+export const TIME_CLEAR = "No time";
+
+/** `null` clears the lead; `0` means at the moment itself. */
+export const REMINDER_LEADS: readonly {
+  label: string;
+  minutes: number | null;
+}[] = [
+  { label: "None", minutes: null },
+  { label: "At the time", minutes: 0 },
+  { label: "10 min before", minutes: 10 },
+  { label: "1 hour before", minutes: 60 },
+  { label: "1 day before", minutes: 1440 },
+];
+
+/** `null` clears the rule. RRULE, because that is what `edit` stores. */
+export const REPEAT_RULES: readonly { label: string; rrule: string | null }[] =
+  [
+    { label: "Never", rrule: null },
+    { label: "Daily", rrule: "FREQ=DAILY" },
+    { label: "Weekly", rrule: "FREQ=WEEKLY" },
+    { label: "Monthly", rrule: "FREQ=MONTHLY" },
+    { label: "Yearly", rrule: "FREQ=YEARLY" },
+  ];

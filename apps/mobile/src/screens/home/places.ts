@@ -1,4 +1,6 @@
-// The eleven place ids: frame destinations that are not apps. The Assistant is
+// The ten place ids: frame destinations that are not apps. Starred was an
+// eleventh until #1015 B15 — a row that navigated nowhere and could still be
+// pinned into a band slot; v0 drops it rather than shipping a dead tab. The Assistant is
 // deliberately not one (:3482); it lives in ./catalog. Order is fixed, never
 // sorted by recency (:3470) — readers filter this array, never reorder it.
 
@@ -15,7 +17,6 @@ export type PlaceId =
   | "stats"
   | "data"
   | "devices"
-  | "starred"
   | "gateway"
   | "storage"
   | "settings";
@@ -23,7 +24,16 @@ export type PlaceId =
 export interface Place {
   id: PlaceId;
   name: string;
-  /** The band is 61px wide (:3480): declare a short name, never ellipsise. */
+  /**
+   * The band is 61px wide (:3480): declare a short name, never ellipsise.
+   *
+   * ONE NOUN PER DESTINATION (#1015, shell/findings 6). `short` may only DROP
+   * words from `name` — "On this phone" → "On phone" — never substitute a
+   * different noun for the same place. The band speaks `name` to VoiceOver and
+   * paints `short`, so a substitution ships two names to two members at once,
+   * which is how Needs you once ended up wearing four (#1015 R-NY-4).
+   * `places.test.ts` holds this.
+   */
   short: string;
   icon: IconName;
   what: string;
@@ -48,10 +58,11 @@ export const PLACES: readonly Place[] = [
     icon: DESTINATION_MARKS.notifications,
     id: "notifs",
     law: false,
-    name: "Notifications",
+    // R-NY-4 (#1015): one noun, and short enough for the tab as it is.
+    name: "Needs you",
     pin: true,
-    short: "Alerts",
-    what: "Everything the vault wanted to tell you",
+    short: "Needs you",
+    what: "Decisions waiting on you",
   },
   {
     icon: DESTINATION_MARKS.analytics,
@@ -75,10 +86,10 @@ export const PLACES: readonly Place[] = [
     icon: DESTINATION_MARKS.automations,
     id: "autos",
     law: false,
-    name: "Automations",
+    name: "Rules",
     pin: false,
     short: "Rules",
-    what: "Rules that run on your vault's home machine",
+    what: "The standing rules that run on your vault's home machine",
   },
   {
     icon: DESTINATION_MARKS.connectors,
@@ -97,15 +108,6 @@ export const PLACES: readonly Place[] = [
     pin: false,
     short: "Copies",
     what: "The machines holding a copy",
-  },
-  {
-    icon: DESTINATION_MARKS.starred,
-    id: "starred",
-    law: false,
-    name: "Starred",
-    pin: false,
-    short: "Starred",
-    what: "Anything you marked, from any app",
   },
   {
     icon: DESTINATION_MARKS.gateway,
@@ -166,7 +168,8 @@ export function bandPlaces(pins: readonly PlaceId[]): readonly Place[] {
   return home ? [home, ...rest.slice(0, BAND_PLACE_SLOTS)] : [];
 }
 
-/* v0 gates: a gateway may not mount Automations or Connectors, and a tab onto a
+/* v0 gates: a gateway may not mount Rules (the wire's `automations`) or
+ * Connectors, and a tab onto a
  * dead route is worse than a missing one, so the derivations below FILTER the
  * fixed table. `undefined` (UNKNOWN) never hides a place. */
 const PLACE_CAPABILITY: Partial<Record<PlaceId, keyof MobileGatewayFeatures>> =

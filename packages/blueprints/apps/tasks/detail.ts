@@ -130,23 +130,27 @@ export function taskFields(input: TaskFieldsInput): TaskField[] {
       notes: isDateOnly(due) ? [DATE_ONLY_REMINDER] : [],
     });
   }
-  fields.push({
-    key: "reminder",
-    label: FIELDS.reminder,
-    value:
-      typeof task.remind_before_min === "number"
-        ? reminderLead(task.remind_before_min)
-        : FIELD_EMPTY,
-    notes: [REMINDER_NOTE_A, REMINDER_NOTE_B],
-  });
-  if (task.recurrence_summary) {
-    fields.push({
+  fields.push(
+    {
+      key: "reminder",
+      label: FIELDS.reminder,
+      value:
+        typeof task.remind_before_min === "number"
+          ? reminderLead(task.remind_before_min)
+          : FIELD_EMPTY,
+      notes: [REMINDER_NOTE_A, REMINDER_NOTE_B],
+    },
+    // ALWAYS A DOOR (#1015). This row used to appear only once a task already
+    // repeated, which meant a task that runs once had no way to become one:
+    // the control that SETS a first rule lived behind the summary that rule
+    // would produce. The value says whether it repeats; the row says it can.
+    {
       key: "repeats",
       label: FIELDS.repeats,
-      value: task.recurrence_summary,
-      notes: [MISSED_NOTE_A, MISSED_NOTE_B],
-    });
-  }
+      value: task.recurrence_summary ?? FIELD_EMPTY,
+      notes: task.recurrence_summary ? [MISSED_NOTE_A, MISSED_NOTE_B] : [],
+    }
+  );
   if (repeats(task)) {
     fields.push({
       key: "anchor",

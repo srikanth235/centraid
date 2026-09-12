@@ -157,7 +157,7 @@ describe("InsightsRoute suite", () => {
       expect(panel?.dataset.tone).toBe("net");
       expect(el.textContent).toContain("The run log is unavailable");
       expect(el.textContent).toContain(
-        "The rollup rebuilds every ten minutes; this rebuild has not finished."
+        "Activity is counted up every ten minutes, and this count has not finished yet."
       );
       // No rebuild trigger exists to offer, so the verb is the honest one.
       expect(el.textContent).toContain("Retry");

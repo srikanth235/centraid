@@ -73,7 +73,17 @@ vi.mock(
   import("../kit/theme"),
   () =>
     ({
+      // The room's own leaves read these; this suite asserts on none of them.
+      borders: { hairline: 1 },
+      density: { rowMin: 44 },
+      family: { sansMedium: "m", sansRegular: "r" },
+      metrics: { control: 44, hairline: 1, rowMin: 44, tap: 44 },
       pageMargin: 16,
+      // `StageRoom`'s close key sits on the touch floor (R-NY-14).
+      targetMin: { coarse: 44, fine: 34 },
+      radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
+      spacing: Array.from({ length: 8 }, (_, index) => index * 4),
+      t: () => ({}),
       useTheme: () => ({ colors: { accent: "#accent", bg: "#bg" } }),
     }) as unknown as Partial<ThemeModule>
 );
@@ -200,32 +210,66 @@ const blank = vi.hoisted(() => async () => {
   const ReactModule = await import("react");
   return { default: () => ReactModule.createElement("div") };
 });
+// The rooms barrel draws icons (`react-native-svg`), which this suite never
+// asserts on and the DOM stub cannot parse.
+vi.mock(import("react-native-svg"), async () => {
+  const stub = await import("../test/react-native-stub");
+  return stub.svgStub() as unknown as typeof import("react-native-svg");
+});
+// `StageRoom` reaches both through the rooms barrel (R-NY-14).
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const stub = await import("../test/react-native-stub");
+  return stub.gestureHandlerStub() as unknown as typeof import("react-native-gesture-handler");
+});
+vi.mock(import("react-native-reanimated"), async () => {
+  const stub = await import("../test/react-native-stub");
+  return stub.reanimatedStub() as unknown as typeof import("react-native-reanimated");
+});
+
 vi.mock(import("./home/VaultHeader"), blank);
 vi.mock(import("./home/HomeTitleRow"), blank);
 vi.mock(import("./home/HomeStatusLine"), blank);
 vi.mock(import("./home/HomeBand"), blank);
-vi.mock(import("./home/AllAppsSheet"), blank);
+// Publishes whether it is open: More pressed on a place's band arrives here
+// as a route param, and the sheet must open on the ONE Home (R-NY-1).
+vi.mock(import("./home/AllAppsSheet"), async () => {
+  const ReactModule = await import("react");
+  return {
+    default: ({ visible }: { visible: boolean }) =>
+      ReactModule.createElement("div", {
+        "data-testid": "all-apps",
+        "data-visible": String(visible),
+      }),
+  } as never;
+});
 vi.mock(import("./home/VaultsSwitcher"), blank);
 vi.mock(import("./home/SearchOverlay"), blank);
 
 interface MountedHome {
   container: HTMLElement;
   routed: unknown[][];
+  paramsSet: unknown[];
 }
 
-function mountHome(): MountedHome {
+function mountHome(params?: { sheet?: "all-apps" }): MountedHome {
   const routed: unknown[][] = [];
+  const paramsSet: unknown[] = [];
   const { container } = mountBlock(
     React.createElement(
-      HomeScreen as unknown as React.ComponentType<{ navigation: unknown }>,
+      HomeScreen as unknown as React.ComponentType<{
+        navigation: unknown;
+        route: unknown;
+      }>,
       {
         navigation: {
           navigate: (...args: unknown[]) => routed.push(args),
+          setParams: (next: unknown) => paramsSet.push(next),
         },
+        route: { key: "home-1", name: "Home", params },
       }
     )
   );
-  return { container, routed };
+  return { container, paramsSet, routed };
 }
 
 function renderHome(): HTMLElement {
@@ -278,6 +322,23 @@ describe("Home springboard composition", () => {
 
     expect(gridItems(container)).toStrictEqual(everyLauncherId);
     expect(nodesOf(container, '[data-testid="day-one"]')).toHaveLength(0);
+  });
+});
+
+describe("More, pressed on a place's band", () => {
+  const sheetOpen = (container: HTMLElement): string | undefined =>
+    nodesOf(container, '[data-testid="all-apps"]')[0]?.dataset.visible;
+
+  it("opens the all-apps sheet on the one Home and clears the param", () => {
+    const { container, paramsSet } = mountHome({ sheet: "all-apps" });
+    expect(sheetOpen(container)).toBe("true");
+    expect(paramsSet).toStrictEqual([{ sheet: undefined }]);
+  });
+
+  it("leaves the sheet shut on an ordinary arrival", () => {
+    const { container, paramsSet } = mountHome();
+    expect(sheetOpen(container)).toBe("false");
+    expect(paramsSet).toStrictEqual([]);
   });
 });
 

@@ -11,15 +11,14 @@ import type { MapPin } from "@centraid/blueprints/apps/photos/place-map";
 
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import type { MenuGroup } from "../../kit/components/AnchoredMenu";
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { usePhotoEntity } from "./photo-entity-reads";
+import PhotosScreen from "./PhotosScreen";
 import {
   mapModeNote,
   MAP_MODE_CHIP,
@@ -86,37 +85,38 @@ export default function PlacesMap({
     },
   ];
 
+  // The room draws the title, the back key — named for the Places shelf this
+  // map is opened from (`photosParentPlace`) — and the band (#1015, R-NY-7).
+  // The count and the mode chip pick what the stage shows, so they ride the
+  // room's toolbar, above the body and outside it.
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
-      <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-          style={styles.headerBtn}
-        >
-          <Icon name="chevron-left" size={24} color={colors.text} />
-        </Pressable>
-        <Text style={styles.title}>Places</Text>
-        {/* Geotagged plotted, of library total. */}
-        <Text style={styles.count}>
-          {points.reduce((sum, point) => sum + point.count, 0)} of{" "}
-          {assets.length}
-        </Text>
-        {/* Acts on what is on screen. */}
-        <Pressable
-          accessibilityLabel="Map mode"
-          accessibilityRole="button"
-          onPress={() => {
-            measureAnchor();
-            setModeOpen(true);
-          }}
-          ref={modeAnchorRef}
-          style={styles.modeChip}
-        >
-          <Text style={styles.modeChipText}>{MAP_MODE_CHIP}</Text>
-        </Pressable>
-      </View>
+    <PhotosScreen
+      onBack={() => navigation.goBack()}
+      route="placesMap"
+      title="Map"
+      toolbar={
+        <View style={styles.toolbar}>
+          {/* Geotagged plotted, of library total. */}
+          <Text style={styles.count}>
+            {points.reduce((sum, point) => sum + point.count, 0)} of{" "}
+            {assets.length}
+          </Text>
+          {/* Acts on what is on screen. */}
+          <Pressable
+            accessibilityLabel="Map mode"
+            accessibilityRole="button"
+            onPress={() => {
+              measureAnchor();
+              setModeOpen(true);
+            }}
+            ref={modeAnchorRef}
+            style={styles.modeChip}
+          >
+            <Text style={styles.modeChipText}>{MAP_MODE_CHIP}</Text>
+          </Pressable>
+        </View>
+      }
+    >
       <ReplicaStatusBar />
       <View style={styles.stage} testID={TEST_IDS.places.map}>
         {points.length ? (
@@ -161,13 +161,18 @@ export default function PlacesMap({
         groups={modeGroups}
         onClose={() => setModeOpen(false)}
       />
-    </TopSafeArea>
+    </PhotosScreen>
   );
 }
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    count: { ...t("mono"), color: colors.textSoft, marginEnd: spacing[2] },
+    count: {
+      ...t("mono"),
+      color: colors.textSoft,
+      flex: 1,
+      marginEnd: spacing[2],
+    },
     empty: {
       alignItems: "center",
       paddingVertical: spacing[5],
@@ -183,20 +188,6 @@ const makeStyles = (colors: ThemeColors) =>
       padding: spacing[4],
       textAlign: "center",
     },
-    header: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      minHeight: 48,
-      paddingEnd: spacing[4],
-      paddingStart: spacing[2],
-    },
-    headerBtn: {
-      alignItems: "center",
-      height: 44,
-      justifyContent: "center",
-      width: 44,
-    },
     modeChip: {
       borderColor: colors.line,
       borderRadius: radii.pill,
@@ -207,7 +198,12 @@ const makeStyles = (colors: ThemeColors) =>
     modeChipText: { ...t("mono"), color: colors.textSoft },
     note: { ...t("small"), marginTop: spacing[1] },
     readout: { ...t("small"), color: colors.textFaint, marginTop: spacing[2] },
-    safe: { flex: 1 },
     stage: { flex: 1, padding: spacing[4] },
-    title: { ...t("title"), color: colors.text, flex: 1 },
+    // Level with the stage's own inset, so the count sits over the map edge.
+    toolbar: {
+      alignItems: "center",
+      flexDirection: "row",
+      paddingHorizontal: spacing[4],
+      paddingVertical: spacing[1],
+    },
   });

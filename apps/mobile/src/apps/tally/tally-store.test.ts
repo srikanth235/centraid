@@ -111,7 +111,7 @@ describe("the Tally read plane", () => {
       await openTally();
       const state = readTallyVault();
       expect(state.loaded).toBe(false);
-      expect(state.readError).toContain("replica not mounted");
+      expect(state.readError).toBe("Tally could not be read. Try again.");
       expect(state.dashboard.friends).toStrictEqual([]);
     });
 

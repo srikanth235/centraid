@@ -6,7 +6,7 @@ import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mountBlock, nodesOf, styleOf } from "../../test/react-native-stub";
-import { resolveTheme } from "../theme";
+import { pageMargin, resolveTheme } from "../theme";
 import PlaceHeader from "./PlaceHeader";
 
 vi.mock(import("react-native"), async () => {
@@ -43,9 +43,9 @@ describe(PlaceHeader, () => {
   });
 
   it("is a title and nothing else when the page has no verbs", () => {
-    const container = render(<PlaceHeader title="Notifications" />);
+    const container = render(<PlaceHeader title="Needs you" />);
     const [title] = nodesOf(container, "span");
-    expect(title?.textContent).toBe("Notifications");
+    expect(title?.textContent).toBe("Needs you");
     expect(title?.dataset.role).toBe("header");
     expect(nodesOf(container, "button")).toHaveLength(0);
     expect(
@@ -58,12 +58,28 @@ describe(PlaceHeader, () => {
       <PlaceHeader
         primary={{ label: "Review all", onPress: noop }}
         secondary={{ label: "History", onPress: noop }}
-        title="Notifications"
+        title="Needs you"
       />
     );
     const [quiet, commit] = nodesOf(container, "button");
     expect(styleOf(quiet ?? null).backgroundColor).toBe("transparent");
     expect(styleOf(commit ?? null).backgroundColor).toBe(colors.accentFill);
+  });
+
+  // #1015 re-audit: neither room that draws this bar pads it, so the bar owns
+  // the page gutter, and a 44pt plate centres its one line of label.
+  it("keeps the page gutter and centres each verb's label", () => {
+    const container = render(
+      <PlaceHeader
+        primary={{ label: "Review all", onPress: noop }}
+        title="Needs you"
+      />
+    );
+    expect(
+      styleOf(nodesOf(container, "div")[0] ?? null).paddingHorizontal
+    ).toBe(pageMargin);
+    const [commit] = nodesOf(container, "button");
+    expect(styleOf(commit ?? null).justifyContent).toBe("center");
   });
 
   it("lets the caller publish the quiet verb alone", () => {

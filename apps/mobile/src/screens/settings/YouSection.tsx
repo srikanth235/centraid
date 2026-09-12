@@ -107,7 +107,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       color: colors.text,
       flex: 1,
-      paddingHorizontal: 12,
+      paddingHorizontal: spacing[3],
       paddingVertical: 10,
     },
   });
