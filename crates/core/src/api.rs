@@ -78,7 +78,7 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                     .select
                     .iter()
                     .map(|column| {
-                        image.get(column).map_or_else(
+                        image.get(output_name(column)).map_or_else(
                             || wire::Value {
                                 kind: Some(wire::value::Kind::Null(wire::NullValue {})),
                             },
@@ -92,6 +92,21 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             .next
             .map(|(sort_key, pk)| wire::PageCursor { sort_key, pk }),
     })
+}
+
+/// The name a projected entry answers to in the row image.
+///
+/// A select entry is either a plain column or `<expression> AS <alias>`
+/// (#1020, close pass, D-1020-CL5): the vault renders the whole entry into the
+/// SQL, and SQLite names the resulting column after the alias. Keying the image
+/// by the entry's own text worked while every entry was a bare column and
+/// answered NULL the moment one was not — which is how Locker's `has_totp`
+/// would have crossed the wire as "no code" while the vault said otherwise.
+fn output_name(entry: &str) -> &str {
+    let lower = entry.to_ascii_lowercase();
+    lower
+        .rfind(" as ")
+        .map_or(entry, |at| entry[at + 4..].trim())
 }
 
 /// Run a command through D1's gate order.

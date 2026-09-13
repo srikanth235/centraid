@@ -315,14 +315,27 @@ mod tests {
                 "{name} tiebreaks on {} without selecting it",
                 order.pk_column
             );
-            // No alias and no expression: `api::page` keys the row image by the
-            // literal select entry.
+            // A PLAIN COLUMN, OR AN EXPRESSION WITH A PLAIN ALIAS — and
+            // nothing else (#1020, close pass, D-1020-CL5). `api::page` keys
+            // the row image by the entry's OUTPUT NAME, which is the alias when
+            // there is one; an expression without an alias has no name for
+            // SQLite to give it and no name for the wire to read it back by.
             for column in &wired.select {
+                let plain = |text: &str| {
+                    !text.is_empty()
+                        && text
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                };
+                let lower = column.to_ascii_lowercase();
+                let named = lower
+                    .rfind(" as ")
+                    .map(|at| column[at + 4..].trim())
+                    .is_some_and(plain);
                 assert!(
-                    column
-                        .bytes()
-                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
-                    "{name} selects {column:?}, which is not a plain column"
+                    plain(column) || named,
+                    "{name} selects {column:?}, which is neither a plain column nor an \
+                     expression with a plain alias"
                 );
             }
         }
