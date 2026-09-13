@@ -4593,3 +4593,127 @@ Law `53be88c22ab5`. `amendment-pairing`, `commit-message-format`, `constitution-
 **Claim 1: "the share fold matches per subject TYPE, so a folder concept id cannot be mistaken for a document id."** The risk is that the corpus never puts the two namespaces in contact, making the claim accidentally true. Throwaway check, two halves. First the fold's per-document filter was reduced to `chain.contains(&answer.subject_id) || answer.subject_id == *document_id` — the id-only match a port would write — and **all six parity tests still passed**, so the corpus alone does not catch it. Second, `grant-document`'s `subject_type` was flipped to `docs.folder` in a copy of `rows.json`: two tests went red, `the_corpus_exercises_the_folds_it_is_here_to_compare` on "no document share" and `the_four_queries_answer_what_v0_answered` on the drive case. Both edits restored (`git diff --exit-code` clean on each). So the type match holds — but the honest statement is that what proves it is the **statement's** `subject_type = ?` bind and the `via` assertion, not the fold's filter, and the first half of this check is the reason to say so.
 
 **Claim 2: "the declared drive window is walked, not clamped."** The risk is that `read_window` silently falls back to one page — its own doc comment describes a door that clamps below `MAX_PAGE_ROWS` and is then treated as filled, which would make the change a rename. Throwaway check, measured at the year-3 axis with 8,000 documents seeded and `load_drive` asking for 2,000. Before the change (`door.page(.., first(window.min(MAX_PAGE_ROWS)))`): **500 documents in 141 ms**, `truncated: true`. After (`read_window`): **2,000 documents in 480 ms**, `truncated: true`. Then the walk was replaced again by a single `door.page(.., first(window))` — the shape v0 uses, with no `min` — and `the_year3_docs_axis_measures_the_drives_own_ceilings` failed on its 2,000-row assertion, confirming the 500 is the page contract's clamp and not the corpus. Restored; `git diff --exit-code crates/apps/docs/src/queries.rs` clean. The number moves with the mechanism in both directions, so the walk is real.
+## Wave 4 — lane Locker: the member key the gateway never holds, and the key door deleted structurally
+
+Locker is complete in Rust. Its eight queries and sixteen actions answer v0's own twenty-two
+fixtured cases, the `locker` schema's twenty-two commands write through the vault's gate order, and
+every Locker secret is sealed under a **member key `K` the gateway never holds** — not by policy but
+because the value that would name a Locker reveal cannot be constructed. Nine commits, rebased onto
+`b83ccfe1` (lanes Photos, Tally-finish, assist, automations and Docs landed first).
+
+### What landed
+
+**`b3473eff` — v0's `add-item` declares the fifteen item types, not the first six (R-1020-35)**
+
+- `packages/blueprints/apps/locker/app.json`, `packages/blueprints/apps/locker/locker-item-type.test.ts`. `add-item`'s `type` enum listed six of the fifteen, so nine types — every template-backed one, `ssh_key` onward — were rejected by the manifest before reaching a command that accepts them. Found by pinning the Rust type list to the manifest's own enum. Fixed at source with a third tripwire leg (manifest enum ↔ schema CHECK ↔ shared constant).
+
+**`f9cf7fe2` — the eight queries, the sixteen actions, the origin spec promoted**
+
+- `crates/apps/locker/{Cargo.toml,manifest.json,README.md,src/{lib,manifest,types,origin,queries,sidecars,watchtower,totp,commands}.rs}`.
+- `contracts/origin-matching-v1.json` — the 24-vector origin-matching spec **promoted out of the extension** into `contracts/`, now read by three implementations.
+- `tests/quality/origin-matching.contract.test.ts` — the same file through v0's two implementations (the blueprint's and the Companion's), 3/3.
+- `Cargo.toml` `[workspace.dependencies]`: `psl = "2.1"` (the Public Suffix List, whose version IS the list's date), `url = "2.5"`.
+
+**`c228ecbc` — the locker schema, written for a gateway that holds no key**
+
+- `crates/vault/src/commands/locker.rs` (new, 22 definitions: v0's 20 plus `locker.reveal_receipt` and `locker.rotate_key`), `crates/vault/src/commands/mod.rs` (registration, `CommandCtx.clock`, `write_subject_receipt`), `crates/vault/tests/locker_commands.rs` (new), `crates/vault/tests/commands.rs`.
+- `ONLINE_ONLY_ACTIONS` is exactly v0's five, with `export` re-meant seat-side.
+
+**`dadc2364` — the member key is born on a seat and the key door is deleted**
+
+- `crates/vault/src/access.rs` — `Verb` has only `Read | Act`; `BLUEPRINT`-side reveal is unrepresentable. `SealedSubject::new` **refuses the `locker` schema**, so the value a Locker reveal would need cannot be built.
+- `crates/vault/src/custody/member_key.rs` (new), `crates/vault/src/custody/locker_key.rs` (`locker_key_dir_for` and `LockerCustody` **deleted**), `crates/vault/src/custody/{mod.rs,README.md}`, `crates/vault/src/backup/{base.rs,drill.rs}`, `crates/centraid/src/cmd/export.rs`.
+- `crates/seat/src/locker/{mod,session,unlock,fill}.rs` (new) — the unlock boundary with v0's exact numbers; `Reveal` is neither `Clone` nor `Debug` and zeroes on drop.
+- `crates/core/src/api.rs` — `reveal()` is role-typed: a gateway asking for a Locker reveal cannot build the request.
+- `crates/vault/tests/member_key_gate.rs` (new) — **the wave 4 gate**, six tests including the falsification leg below.
+
+**`186f8057` — rotation across three seats, proven through six interruption windows**
+
+- `crates/sim/tests/rotation_across_seats.rs` (new), `crates/vault/src/custody/rotation_scenario.rs` (new — the scenario's SQL, in the layer `sql-confinement` allows), `crates/vault/src/custody/{mod.rs,README.md}`, `SECURITY.md`, `crates/apps/locker/README.md`.
+
+**`95646bf1` — `edit_item` rewrites the type's fields, as v0 does**
+
+- `crates/vault/src/commands/locker.rs`, `crates/vault/tests/locker_commands.rs`, `crates/apps/locker/manifest.json`, `crates/assist/tests/prompt_injection.rs`, `packages/blueprints/apps/locker/locker-item-type.test.ts`.
+
+**`08af749e` — the gate's search fires when a gateway can actually decrypt**
+
+- `crates/vault/tests/member_key_gate.rs`. The falsification below is what put this leg in the gate, and it is what stops the gate's green from being read as covering the door.
+
+**`214409e8` — the parity bundle, generated from v0 and compared in Rust**
+
+- `contracts/tools/{export-locker-parity.ts,locker-parity-bundle.ts}` (new), `contracts/apps/locker/{manifest.json,rows.json,queries.json,commands.json}` (new), `tests/quality/locker-parity.contract.test.ts` (new — the emitter AND the oracle), `crates/apps/locker/tests/parity.rs` (new, 17 tests), `contracts/tools/export-copy.ts` (Locker's three copy leaves and its shelf table).
+
+### The exit list
+
+| command | outcome |
+| --- | --- |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `cargo test --workspace` | green |
+| `cargo xtask gate --profile local` | **PASS on every step; `rules` FAILs on the two inherited Photos reds only** (`crates/apps/photos/tests/{parity,year3}.rs`, `sql-confinement`, landed by `c24cc561`). Warm on the pre-rebase tree: 105.9s of the 120s budget. The final run after rebasing onto `b83ccfe1` was cold (the kit and `core.rs` moved): 228.0s, inside `compile-time.json`'s 3,200s `coldLocalProfileSeconds` ceiling, which is the number a cold tree is scored against (D-1020-B2). |
+| `cargo xtask rules` | `sql-confinement` 2 findings, both inherited; `abi-five-symbols`, `no-listening-socket`, `commonmain-no-platform-import` clean |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, no findings |
+| `bash .governance/run.sh` | all 10 directives pass |
+| `bun run format` + `format:check` | all 6,005 files correct |
+| `bun run check:push:static` | 4/4 |
+| parity regeneration idempotent | `CENTRAID_WRITE_CONTRACTS=1 …` then the same test read-only, twice — equal |
+| v0 oracle | `tests/quality/{locker-parity,origin-matching}.contract.test.ts` — 5/5 |
+
+**Parity counts.** 8 queries at 22 named inputs; 35 command cases; 17 tables in `rows.json`; 24 origin vectors in three implementations; 15 item types pinned three ways; 22 commands registered.
+
+### Decisions — lane Locker
+
+- **D-1020-L1 — founding is on a seat.** `MemberKeyCustody` has `on_seat` and `with_store` and **no gateway constructor**; the vault learns that a generation exists and when, never the key. Options: (a) the gateway mints and hands out, (b) the first seat mints and the others adopt, (c) a KDF over the passphrase with no stored key at all. (c) makes rotation a re-derivation every seat must agree on at the same instant and loses the recovery kit; (a) is the door this wave deletes. Adopted (b).
+- **D-1020-L2 — the key door is deleted structurally, in three places.** `Verb` loses `Reveal`; `SealedSubject::new` refuses `locker`; `core::api::reveal` is role-typed. Options: (a) a runtime check in the reveal handler, (b) a feature flag, (c) make the request unrepresentable. A check is a line somebody deletes; adopted (c), and the gate test falsifies it against a gateway that still has the door.
+- **D-1020-L3 — the seat is the unlock boundary.** `SESSION_TIMEOUT_MS` 5 min, `REVEAL_WINDOW_MS` 30 s, `PASSPHRASE_MINIMUM` 12, `WRAP_ITERATIONS` 600,000 — v0's exact numbers. A `Session` **locks as a side effect** of being asked too late, so a caller cannot hold a stale handle.
+- **D-1020-L4 — three key layers, three AADs, never one helper** (D-1020-R2 upheld). `seal` binds `table.column:rowid`, `locker_key` binds `rowId‖keyId`, `member_key` binds `vaultId‖keyId‖deviceId`.
+- **D-1020-L5 — the gate is a search, not an assertion.** Five planted plaintexts are hunted across every sealed table through the paged door, eight command answers, the seat snapshot compressed **and** inflated, the backup base, and the vault file with its WAL and SHM — plus a non-vacuity assertion that the paged door *did* serve `lk1:`. Options: (a) assert the reveal API refuses, (b) assert no file holds a key, (c) search every byte a gateway can produce. Adopted (c); (a) and (b) are its two weakest legs and are kept as named tests beside it — and the falsification below shows why they carry the door's half of the claim rather than the search.
+- **D-1020-L6 — a derivation that needs plaintext answers addresses.** `locker.watchtower` answers the rows to score, `locker.totp_code` answers `{item_id, period, receipt_id, derived_on: "seat"}`, and the folds live in `crates/apps/locker::watchtower`/`::totp` where a seat calls them with what it unwrapped. Options: (a) keep v0's shapes and invent the values, (b) delete the commands, (c) split address from derivation. (a) is a security screen that invents an all-clear — the worst failure this app has. Adopted (c).
+- **D-1020-L7 — `locker.export` writes the receipt and the seat writes the file.** The manifest's two dead fields go with it (`auth_session` off the `items` input, `disabledOn: ["viewer"]` → `[]`), asserted as **exactly** two edits against v0's `app.json` byte for byte.
+- **D-1020-L8 — rotation is retire-before-insert, gated both ends.** `ROTATION_COVERS_EVERY_CELL` is the precondition and `no_cell_names_a_retired_key` the postcondition, both walking `LOCKER_ENCRYPTED_COLUMNS` rather than a list — so a sealed column added to the registry is covered without anybody remembering.
+- **D-1020-L9 — the seat mints the id of any row that carries a secret.** The AAD binds ciphertext to its row id, so a gateway-minted id would mean the gateway chose what the ciphertext is bound to.
+- **D-1020-L10 — the origin spec is promoted, not copied.** `contracts/origin-matching-v1.json`, 24 vectors, asserted byte-identical against the extension's copy and run through all three implementations. `psl`'s version number is the list's date; a bump re-runs the spec in both trees.
+- **D-1020-L11 — the member-key envelope uses HKDF over a one-time transfer secret, not a public-key box.** Options: (a) X25519 sealed box, (b) reuse the device ed25519 keys, (c) HKDF over a transfer secret the two seats already share through pairing. (b) needs an ed25519→X25519 conversion and re-keys `format-golden.json`; (a) adds an asymmetric primitive for one message. Adopted (c).
+- **D-1020-L12 — three v0 findings are recorded, not fixed** (R-1020-35's "anything wider is a finding"), each asserted so a fix turns the test red rather than passing silently.
+
+### Demonstrated reds
+
+1. `sql-confinement` FAILed on a DDL locator string in `crates/apps/locker/src/types.rs`. **The rule was not weakened.** The assertion moved into `crates/vault`, where reading a DDL statement is in the layer that owns one, and the Rust type list was pinned to the manifest's own enum instead — which is what exposed v0's six-of-fifteen `add-item` bug.
+2. `sql-confinement` FAILed again on `crates/sim/tests/rotation_across_seats.rs`. Same answer: the scenario's seven statements moved to `crates/vault::custody::rotation_scenario` and the simulation calls them.
+3. `crates/apps/locker/tests/parity.rs` passed under `cargo test -p centraid-apps-locker` and **failed under `cargo test --workspace`**, over values that were identical. `serde_json/preserve_order` is off for the single crate and on under feature unification, so a comparison that rendered objects to strings became key-order sensitive. `keys_sorted` makes the rendering canonical either way; the test now passes under both feature sets, checked separately.
+4. `open_contract_vault` refused to replay `rows.json`: `access_receipt.hash` is `UNIQUE` and forty-nine digests had been tokenised to one string. The token is keyed by the row's chain position now — reproducible **and** unique, which is the pair the column needs. A fixture that cannot be loaded is not a fixture.
+5. The generator's first run failed `item_has_seed` on `locker.totp_code`, which is how v0's **replace** semantics for `edit_item` were found (`95646bf1`).
+6. The sim's own coverage test caught that a uniform draw never reached `BatchAnswerLost` in 25 seeds; the window is round-robined over the seed now, and `the_default_seed_count_reaches_every_window_and_every_seat` proves the schedule is not degenerate.
+
+### Findings outside the slice
+
+- **`locker.access` answers nothing in v0, through any product path.** `queries/access.ts` reads `FROM access_receipt`, and `access_receipt` is not one of the vault's 96 catalog entities — so the paged door refuses (`gateway/paged-door.ts:436`) and the query's own catch arm returns `{entries: [], vaultDenied: …}`. The Locker access screen has been empty for as long as this door has been the read path. v0's suite is green because `queries-reveal-access.test.ts` drives a stub `ctx` that never reaches the door. **Not fixed at source**: the fix registers the audit band in the entity catalog, which widens the paged door's reach into a band it has never covered — an owner's security call, not a lane's. Asserted in `crates/apps/locker/tests/parity.rs` so a fix turns it red.
+- **`autofill-candidates` never reports a one-time code.** `autofill-candidates.ts:94` reads `row.otp_seed` off a row projected with `LOCKER_ITEM_COLUMNS`, which does not include it — so `has_totp` is `false` for every item in every vault, and the Companion is never told an item carries a code. **Not fixed at source**: the fix needs a projected `otp_seed IS NOT NULL` expression, because adding the column would hand the Companion ciphertext, and that is a change to the paged door's select grammar. The port takes `has_totp` as a value the vault answers rather than a column an app projects, so the seam the fix needs exists.
+- **Only the live shelf carries the connector alias.** `decorate`'s fifth parameter is passed by one of v0's four callers. Re-judged rather than cited: nothing depends on it, the alias is plaintext on a row the shelf already read, and the map is one bounded read — it reads as an omission, not a decision. Reproduced because parity is the exit criterion.
+- **`edit_item` REPLACES rather than patches.** An edit carrying only a password clears the username, url, OTP seed and notes. Invisible to the UI, which always sends the whole draft; a hazard for an assistant or an API caller reading the manifest's optional fields as a patch API.
+- **The wave 4 gate proves less than its name says, and the receipt corrects the claim rather than the test.** `a_gateway_without_the_key_door_cannot_produce_plaintext` is a plaintext search over everything a gateway can produce; restoring the key door does **not** make it fail, because a gateway with no key file still cannot decrypt. The door's deletion is carried by `access::tests::a_reveal_subject_cannot_be_built_for_the_locker_schema` and `no_symbol_in_the_vault_crate_reads_a_member_key_file` — both falsified and both fire. The search's own non-vacuity is now `the_search_fires_when_a_gateway_can_actually_decrypt`. Nobody should read the gate's green as "the door is gone"; three tests together say that, and each says a different third of it.
+- **The parity fixture cannot express order.** `updated_at` and `occurred_at` are stamped by a SQLite trigger reading the database's own clock, which the generator's JS clock cannot hold, so the canonicaliser flattens every one to `<host-clock>`. Five answers compare as multisets and the ordering claim is asserted against v0's own declared orders instead. Making it reproducible means the fixture epoch reaching SQLite's clock — a v0 schema change, filed below.
+
+### Owner hand-offs
+
+1. **Should the audit band be a catalog entity?** Without it `locker.access` cannot work in v0 and no other surface reading `access_receipt` through the paged door can either. Recommendation: yes, read-only, with the band's own access evaluation — but it is a widening of the door and wants the owner's eye.
+2. **Should `autofill-candidates` report TOTP presence?** Recommendation: yes, via a projected `IS NOT NULL`; the Companion's picker is worse without it and the column itself must never leave.
+3. **Should the port decorate all four shelves with the connector alias?** Options: keep v0's asymmetry / decorate all four / drop it from the live shelf too. **Recommendation: decorate all four** — a handle that depends on which screen found the row is not a handle.
+4. **Should `edit_item` become a patch, or should the manifest say it replaces?** Recommendation: the second, now, and the first as a proposal — a rename to `replace_item` would be clearer than either.
+5. **Make the fixture's instants reproducible.** `touchUpdatedAt`'s trigger reads SQLite's `now`; a `:ctx_now`-bound trigger (the change lane V made to v0's conditions) would let the parity bundle express order for every app, not just Locker's.
+6. **The exit criterion's wording wants amending.** "A gateway process with the key door deleted cannot produce plaintext for any `lk1:` cell, falsified against a gateway that still has the door" cannot be met as written: a gateway that still has the door but no key produces no plaintext either, so the falsification has nothing to find. The provable pair is *the key is absent* (the search, falsified by giving it a key) and *the door is unrepresentable* (two structural tests, both falsified). Recommendation: split the criterion in two, since conflating them is what made the single gate read stronger than it is.
+7. **OQ-10's boundary is undemonstrated here.** The gate proves a *gateway process* cannot produce plaintext. It does not prove a **host with root** cannot read the key off a seat's disk while that seat is unlocked: the at-rest wrap is PBKDF2-600k + AES-GCM, but an unlocked session holds `K` in process memory and no OS keychain is in the path yet. Recommendation: state that boundary in SECURITY.md as the next rung (a platform keystore per seat), and do not let the gate's green be read as covering it.
+
+### The doctrine digest
+
+`53be88c22ab5` — `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5`, 10 rules, no findings.
+
+### Falsification
+
+**Claim 1: "a gateway process with the key door deleted cannot produce plaintext for any `lk1:` cell."** A search that finds nothing is the same output as a search that looks nowhere. Throwaway check: the door was restored — `SealedSubject::new`'s `locker` refusal disabled, `evaluate_reveal` reachable — and the gate **still passed**. Only the unit test `access::tests::a_reveal_subject_cannot_be_built_for_the_locker_schema` went red.
+
+**That result changed what the gate claims, and the receipt says so rather than the claim I set out to make.** Opening the door makes a Locker reveal *representable*; it does not make a gateway with no key file able to decrypt, so there is no plaintext for the search to find. **The gate proves the KEY is absent, not that the door is.** The door's deletion is proven structurally instead — by that unit test and by `no_symbol_in_the_vault_crate_reads_a_member_key_file`, whose own falsification DID fire: `read_locker_key` was re-added as a private function beside `KeyStore::new` and the scan failed on it.
+
+The leg the gate was missing is now in it. `the_search_fires_when_a_gateway_can_actually_decrypt` takes the same vault's own ciphertext, opens it with the key a seat holds, and asserts `carries_no_secret` **fails** on that output — catching the panic, because its failing is the claim. If it ever stops finding the plaintext, the searcher has stopped looking and every assertion in the gate above it is vacuous.
+
+**Claim 2: "the parity comparison reaches the leaves, so a port that lost a field would go red."** Throwaway check: `subtitle_of`'s card branch was changed to show the last four digits without the bullets — the cheapest possible wrong answer in the least-inspected corner of the fold — and `the_items_shelf_answers_what_v0_answered` failed on the card row. Then `access_answer`'s fill/reveal discrimination was inverted (`detail["context"]["kind"] == "fill"` → `!=`) and `v0s_access_query_is_refused_by_its_own_door_and_the_port_answers` failed. Both reverted; 17/17 green after each restore.
