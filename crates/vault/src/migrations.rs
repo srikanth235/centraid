@@ -49,16 +49,34 @@ pub struct Migration {
 /// The baseline: the v1 schema as one statement per line, in dependency order.
 pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_baseline.sql");
 
+/// Rung two: the revision graph's four guards (#1020, D-1020-N2).
+///
+/// `core_entity_revision` is the ONLY history table (#916, ONT-revisions) and a
+/// revision is an OCCURRENCE (#996, R20(a)) — both were reader-enforced, and the
+/// schema still permitted a self-parent, a parent belonging to another object,
+/// an UPDATE re-pointing a parent (the only way a cycle can be closed) and a
+/// `revises` `core_link`. This rung makes all four unwritable, and refuses to
+/// run over a file that already carries one rather than deciding which of two
+/// histories a member keeps.
+pub const REVISIONS_SQL: &str = include_str!("../../../contracts/migrations/002_revisions.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
 /// file in the field has already run the old text, so an edit changes what a
 /// fresh file gets and nothing else, which is two schemas with one number.
-pub const LADDER: &[Migration] = &[Migration {
-    version: 1,
-    name: "baseline",
-    sql: BASELINE_SQL,
-}];
+pub const LADDER: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "baseline",
+        sql: BASELINE_SQL,
+    },
+    Migration {
+        version: 2,
+        name: "revisions",
+        sql: REVISIONS_SQL,
+    },
+];
 
 /// The `user_version` a file this build wrote carries.
 #[must_use]

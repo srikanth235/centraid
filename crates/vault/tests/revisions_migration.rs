@@ -43,9 +43,13 @@ struct Proposed {
 }
 
 impl Proposed {
-    /// A founded vault with the registry installed. `migrate` says whether the
-    /// proposal has been applied, so a test can seed a malformed row FIRST and
-    /// watch the migration refuse.
+    /// A founded vault with the registry installed, at rung two or at rung one.
+    ///
+    /// SINCE THE RUNG LANDED (#1020, close pass) a founded vault already
+    /// carries the guards, so `migrate: true` is simply what founding gives.
+    /// `migrate: false` winds the file BACK to rung one — which is the shape a
+    /// vault written by an older binary arrives in, and the only way to seed a
+    /// malformed chain and watch the rung refuse it.
     fn open(seed: &str, migrate: bool) -> Self {
         let scratch = common::Scratch::founded(seed).expect("a vault is founded");
         let registry = Registry::with_system_commands().expect("the registry builds");
@@ -57,10 +61,31 @@ impl Proposed {
             registry,
             principal: Principal::owner("phone"),
         };
-        if migrate {
-            proposed.migrate().expect("the proposal applies");
+        if !migrate {
+            proposed.unmigrate();
         }
         proposed
+    }
+
+    /// Wind the file back to rung one: drop the rung's four triggers and stamp
+    /// `user_version = 1`. Not a downgrade path the product has — the ladder is
+    /// forward-only — but the honest way for a TEST to produce the file an
+    /// older binary wrote, without committing a second copy of the schema.
+    fn unmigrate(&self) {
+        self.vault()
+            .commit(|tx| {
+                for trigger in [
+                    "core_entity_revision_no_self_parent",
+                    "core_entity_revision_parent_is_same_object",
+                    "core_entity_revision_parent_is_immutable",
+                    "core_link_no_revises_edge",
+                ] {
+                    tx.connection()
+                        .execute_batch(&format!("DROP TRIGGER IF EXISTS {trigger}"))?;
+                }
+                Ok(())
+            })
+            .expect("the guards come off");
     }
 
     fn vault(&self) -> &Vault {
@@ -447,18 +472,62 @@ fn the_migration_refuses_a_vault_that_already_holds_a_malformed_chain() {
     );
 }
 
-/// THE RUNG IS NOT ON THE LADDER, and that is deliberate: appending it is the
-/// root's per-slot migration (the Notes lane brief). A test that asserted
-/// otherwise would be this lane landing a model change on its own.
+/// THE RUNG IS ON THE LADDER (#1020, close pass, D-1020-N2 landed).
+///
+/// Four claims, because they are four different things: the rung is rung TWO
+/// and appended rather than inserted; the text the ladder compiles in is the
+/// same file this suite applies by hand; a fresh vault comes up already
+/// carrying the guards, so every test above describes what a member's file IS
+/// rather than what it could be; and a file from a newer build is still
+/// refused — the forward-only rule restated at the ladder's new head, because
+/// "the ladder grew" is exactly the change that would make a downgrade look
+/// survivable.
 #[test]
-fn the_proposal_is_not_on_the_ladder_yet() {
-    let names: Vec<&str> = centraid_vault::migrations::LADDER
-        .iter()
-        .map(|rung| rung.name)
-        .collect();
-    assert_eq!(names, ["baseline"]);
-    assert!(
-        proposal().contains("NOT ON THE LADDER YET"),
-        "the file says so too"
+fn the_rung_is_on_the_ladder_and_a_fresh_vault_carries_it() {
+    let ladder = centraid_vault::migrations::LADDER;
+    let names: Vec<&str> = ladder.iter().map(|rung| rung.name).collect();
+    assert_eq!(names, ["baseline", "revisions"]);
+    assert_eq!(centraid_vault::migrations::head_version(), 2);
+    assert_eq!(
+        centraid_vault::migrations::REVISIONS_SQL,
+        proposal(),
+        "the ladder compiles in the committed fixture, not a second copy"
     );
+
+    let fresh = Proposed::open("ladder-rung-two", true);
+    assert_eq!(fresh.vault().schema_version(), 2);
+    for guard in [
+        "core_entity_revision_no_self_parent",
+        "core_entity_revision_parent_is_immutable",
+        "core_link_no_revises_edge",
+    ] {
+        assert_eq!(
+            fresh.count(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = ?1",
+                &[guard],
+            ),
+            1,
+            "`{guard}` is missing from a freshly founded vault"
+        );
+    }
+
+    let path = fresh.scratch.join("vault.db");
+    let ahead = centraid_vault::migrations::head_version() + 1;
+    let connection = rusqlite::Connection::open(&path).expect("the file reopens");
+    connection
+        .pragma_update(None, "user_version", ahead)
+        .expect("the stamp writes");
+    drop(connection);
+    match Vault::open(&path) {
+        Err(centraid_vault::VaultError::DowngradeRefused {
+            found, expected, ..
+        }) => {
+            assert_eq!(found, ahead);
+            assert_eq!(expected, 2);
+        }
+        other => panic!(
+            "a newer file must be refused, not opened: {:?}",
+            other.err()
+        ),
+    }
 }

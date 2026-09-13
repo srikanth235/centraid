@@ -1,11 +1,17 @@
--- ONE REVISION GRAPH, ENFORCED ON STORAGE (#1020, D-1020-N2) — A PROPOSAL.
+-- ONE REVISION GRAPH, ENFORCED ON STORAGE (#1020, D-1020-N2) — RUNG TWO.
 --
--- **NOT ON THE LADDER YET.** `LADDER` in `crates/vault/src/migrations.rs` still
--- ends at rung one, and adding this rung is the root's per-slot migration (the
--- Notes lane brief). This file is the proposal plus its tests:
--- `crates/vault/tests/revisions_migration.rs` applies it to a founded vault,
--- proves each guard refuses what it is for, and proves the guards accept
--- everything the nine `knowledge.*` commands actually write.
+-- **ON THE LADDER.** `LADDER` in `crates/vault/src/migrations.rs` ends here,
+-- appended by the close pass under the ruling the Notes lane proposed. The file
+-- is both the migration and its fixture (D-1020-D1-13), and
+-- `crates/vault/tests/revisions_migration.rs` is what makes it reviewable: it
+-- applies the rung to a founded vault, proves each guard refuses what it is
+-- for, proves the guards accept everything the nine `knowledge.*` commands
+-- actually write, and proves a file already carrying a cycle fails the rung
+-- rather than losing a row to it.
+--
+-- **NEVER EDITED FROM HERE ON.** A file in the field has already run this text;
+-- an edit changes what a fresh file gets and nothing else, which is two schemas
+-- with one number. A correction is rung three.
 --
 -- ## What is broken today, and why a reader cannot fix it
 --
