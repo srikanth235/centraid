@@ -34,6 +34,7 @@
 //! | Invoke a command without an `invoke_key` | the key is a required field on the invocation, not an option (D-1020-D3-5): v0's fallback is the call's ordinal, which is stable only for a handler that makes the same call sequence every time |
 //! | Turn a denial into an error | a denial is a value in the app's own payload; the kit's [`error::KitError`] has no denial variant |
 
+pub mod canonical;
 pub mod changes;
 pub mod contract_vault;
 pub mod error;
@@ -48,6 +49,7 @@ pub mod row;
 pub mod statement;
 pub mod testdoor;
 
+pub use canonical::{canonical_json, compare_utf16};
 pub use error::{KitError, KitResult};
 pub use page::{MAX_PAGE_ROWS, Page, PageCursor, PageRequest, page_of, probe_limit};
 pub use reads::{

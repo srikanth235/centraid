@@ -136,53 +136,13 @@ fn as_set(value: &Value) -> Value {
 
 /// A value's text with **every object's keys in name order**, at every depth.
 ///
-/// FINDING PE-F8, AS CODE. `serde_json::Value::to_string` is not a canonical
-/// form: with the `preserve_order` feature a `Map` is an `IndexMap` and prints
-/// in insertion order, and without it a `BTreeMap` printing in key order. The
-/// feature is not this crate's to choose — `agent-client-protocol`, four
-/// crates away through `centraid-assist`, turns it on, and cargo unifies
-/// features across a build — so `cargo test -p centraid-apps-people` and
-/// `cargo test --workspace` hand the same code two different `to_string`s.
-/// Sorting a set by that text therefore agreed with the fixture in one command
-/// and disagreed in the other, which is a test whose answer depends on which
-/// other crates were in the build.
-///
-/// The fixture's own side is written by `stableJson`, which sorts keys. This is
-/// the same normal form on this side, so the sort key is a fact about the
-/// VALUE and the feature cannot reach it.
+/// FINDING PE-F8, AS CODE, and now as ONE implementation for the whole app
+/// plane: `centraid_apps_kit::canonical_json` (#1020, D-1020-CL8). This file
+/// carried its own copy while the finding was fresh; the close pass moved it to
+/// the kit and swept the tree, because a normal form with two implementations
+/// is a normal form with two answers.
 fn canonical_text(value: &Value) -> String {
-    let mut text = String::new();
-    write_canonical(value, &mut text);
-    text
-}
-
-fn write_canonical(value: &Value, out: &mut String) {
-    match value {
-        Value::Object(map) => {
-            let ordered: BTreeMap<&String, &Value> = map.iter().collect();
-            out.push('{');
-            for (index, (key, item)) in ordered.into_iter().enumerate() {
-                if index > 0 {
-                    out.push(',');
-                }
-                out.push_str(&Value::String(key.clone()).to_string());
-                out.push(':');
-                write_canonical(item, out);
-            }
-            out.push('}');
-        }
-        Value::Array(items) => {
-            out.push('[');
-            for (index, item) in items.iter().enumerate() {
-                if index > 0 {
-                    out.push(',');
-                }
-                write_canonical(item, out);
-            }
-            out.push(']');
-        }
-        other => out.push_str(&other.to_string()),
-    }
+    centraid_apps_kit::canonical_json(value)
 }
 
 fn roster_row_json(

@@ -54,6 +54,24 @@ pub type Row = serde_json::Map<String, serde_json::Value>;
 /// Canonical by SORTED KEY, because a gateway that returned columns in another
 /// order must not look like a changed row. 32 hex characters of SHA-256, as
 /// v0 takes.
+///
+/// **AT EVERY DEPTH, AND NOT BY `Value::to_string`** (#1020, close pass,
+/// D-1020-CL8). The column sort below is v0's own (`condition.ts:28`), but the
+/// VALUES used to be printed with `Value::to_string`, whose object key order is
+/// insertion order under the `preserve_order` feature and name order without —
+/// and cargo unifies that feature across the build from a crate four hops away.
+/// So the same row hashed two ways depending on which crates were compiled, and
+/// a cursor's remembered hashes stopped matching across a build change: every
+/// standing match would re-fire once. The values now go through
+/// `centraid_media::format::canonical_json`, which is a fact about the value.
+///
+/// **The one place this diverges from v0, stated.** `JSON.stringify` writes a
+/// nested object in JavaScript's insertion order; this writes it in name order.
+/// A gateway row is a set of COLUMNS, so every value here is a scalar or text
+/// and the two agree on every row a reader can actually be handed; a JSON
+/// column arrives as a STRING, not as an object. Determinism wins the one case
+/// where they could not both be had, and
+/// `a_row_hash_reaches_inside_a_value` is the case.
 #[must_use]
 pub fn row_hash(row: &Row) -> String {
     let mut keys: Vec<&String> = row.keys().collect();
@@ -69,7 +87,7 @@ pub fn row_hash(row: &Row) -> String {
             .collect(),
     );
     let mut hasher = Sha256::new();
-    hasher.update(canonical.to_string().as_bytes());
+    hasher.update(centraid_media::format::canonical_json(&canonical).as_bytes());
     hex::encode(hasher.finalize())[..32].to_owned()
 }
 
@@ -271,6 +289,27 @@ mod tests {
         assert_eq!(row_hash(&forward), row_hash(&backward));
         assert_eq!(row_hash(&forward).len(), 32);
         assert_ne!(row_hash(&forward), row_hash(&row("a", 1)));
+    }
+
+    /// THE NESTED CASE, AT EVERY DEPTH (#1020, D-1020-CL8). Under
+    /// `preserve_order` these two rows printed differently and hashed
+    /// differently; they are the same row.
+    #[test]
+    fn a_row_hash_reaches_inside_a_value() {
+        // The SAME two pairs, inserted in two orders.
+        let nested = |pairs: [(&str, i64); 2]| -> Row {
+            let mut map = serde_json::Map::new();
+            for (key, value) in pairs {
+                map.insert(key.to_owned(), serde_json::json!(value));
+            }
+            let mut out = Row::new();
+            out.insert("payload".to_owned(), serde_json::Value::Object(map));
+            out
+        };
+        assert_eq!(
+            row_hash(&nested([("z", 2), ("a", 1)])),
+            row_hash(&nested([("a", 1), ("z", 2)]))
+        );
     }
 
     #[test]
