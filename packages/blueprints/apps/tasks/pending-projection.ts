@@ -19,7 +19,7 @@ const TASK_FIELDS = [
   "section_id",
   "sort_order",
   "recurrence_anchor",
-  "recurrence_tz",
+  "tz",
 ] as const;
 
 export const tasksPendingProjection = definePendingProjection({

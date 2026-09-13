@@ -6,7 +6,7 @@
 // finished it. Watering.* That single choice is the difference between a bill
 // and a houseplant, and it is the place every recurring-task product in the
 // category has failed by never asking. It writes through `organize-task`, the
-// ONLY door for `recurrence_anchor`/`recurrence_tz`, which also requires the
+// ONLY door for `recurrence_anchor`/`tz`, which also requires the
 // row's `sort_order` — preserved, never reset, or a member's manual order would
 // quietly collapse every time they changed an anchor.
 //

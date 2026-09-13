@@ -239,7 +239,10 @@ export function anchorWrite(
     task_id: task.task_id,
     sort_order: task.sort_order ?? 0,
     recurrence_anchor: anchor,
-    recurrence_tz: task.recurrence_tz ?? timeZone,
+    // `tz`, the column's own name — see `types.ts`. Spelled `recurrence_tz`
+    // this write was refused by the command's input schema, so changing a
+    // repeating task's anchor did nothing at all (#1020, R-1020-35).
+    tz: task.tz ?? timeZone,
   };
 }
 

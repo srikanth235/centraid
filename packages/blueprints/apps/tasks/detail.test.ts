@@ -163,7 +163,7 @@ describe("the anchor", () => {
 
   it("carries the row's own sort order through, never a reset zero", () => {
     const write = anchorWrite(
-      task({ sort_order: 12, recurrence_tz: "Europe/Berlin" }),
+      task({ sort_order: 12, tz: "Europe/Berlin" }),
       "completion",
       "UTC"
     );
@@ -171,14 +171,14 @@ describe("the anchor", () => {
       task_id: "t1",
       sort_order: 12,
       recurrence_anchor: "completion",
-      recurrence_tz: "Europe/Berlin",
+      // `tz`, because that is the column and the only key
+      // `schedule.organize_task` accepts (#1020, R-1020-35).
+      tz: "Europe/Berlin",
     });
   });
 
   it("falls back to the seat's zone only when the row carries none", () => {
-    expect(anchorWrite(task(), "scheduled", "UTC")["recurrence_tz"]).toBe(
-      "UTC"
-    );
+    expect(anchorWrite(task(), "scheduled", "UTC")["tz"]).toBe("UTC");
   });
 });
 

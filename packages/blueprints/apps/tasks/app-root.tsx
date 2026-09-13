@@ -834,8 +834,8 @@ export function Root({
           onAnchor={(anchor) =>
             organize(openTaskRow, {
               recurrence_anchor: anchor,
-              recurrence_tz:
-                openTaskRow.recurrence_tz ??
+              tz:
+                openTaskRow.tz ??
                 Intl.DateTimeFormat().resolvedOptions().timeZone,
             })
           }

@@ -57,7 +57,14 @@ export interface Task {
   section_id?: string | null;
   sort_order?: number;
   recurrence_anchor?: "scheduled" | "completion";
-  recurrence_tz?: string | null;
+  /**
+   * THE COLUMN IS `tz` (#916, ruling R4; #1020, R-1020-35). `recurrence_tz`
+   * was renamed in the schema and the rename never reached this row shape —
+   * `ontology-rules.test.ts:180` asserts `schedule_task` has no such column —
+   * so every reader read `undefined` and every writer sent a key
+   * `schedule.organize_task` REFUSES (`additionalProperties: false`).
+   */
+  tz?: string | null;
   parent_task_id?: string | null;
   children?: Task[];
   done_children?: number;

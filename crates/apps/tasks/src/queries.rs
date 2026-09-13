@@ -505,11 +505,13 @@ fn task_of(row: &Row) -> Option<TaskRow> {
 /// resolves it, and a task with none falls back to the engine's neutral zone
 /// exactly as v0's `timeZone ?? "Etc/UTC"` does.
 ///
-/// **v0 reads `task.recurrence_tz` here and the column is `tz`** (`board.ts:483`
-/// and `search.ts:139`): the property is always `undefined`, so the collapse and
-/// the next due date are computed in UTC for every member outside it — drift
-/// ONT-25's exact shape in a second place. Fixed at source under R-1020-35 and
-/// named in the receipt.
+/// **v0 read `task.recurrence_tz` here and the column is `tz`** (`board.ts:483`
+/// and `search.ts:139`): the property was always `undefined`, so the collapse
+/// and the next due date were computed in UTC for every member outside it —
+/// drift ONT-25's exact shape in a second place. Both readers were fixed at
+/// source under R-1020-35 by lane Schedule; the WRITER half — `anchorWrite`
+/// sending a key `schedule.organize_task` refuses outright, so an anchor change
+/// silently did nothing — went with the close pass.
 fn recurrence_of(task: &TaskRow, now: &str) -> RecurrenceFacts {
     let (Some(rule), Some(start)) = (task.rrule.as_deref(), task.due_at.as_deref()) else {
         return RecurrenceFacts::default();

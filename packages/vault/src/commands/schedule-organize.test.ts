@@ -305,6 +305,38 @@ describe("schedule organization commands", () => {
     });
   });
 
+  // THE WRITER HALF OF THE `recurrence_tz` RENAME (#1020, R-1020-35). Tasks'
+  // `anchorWrite` spelled this key `recurrence_tz` long after the column became
+  // `tz`, and `additionalProperties: false` means that write was REFUSED — so
+  // changing a repeating task's anchor from the detail sheet did nothing, with
+  // no product surface saying so. Pinned from the vault's side, because the
+  // schema is what decides the spelling.
+  test("the anchor write names the column, and the old spelling is refused", () => {
+    const taskResult = invoke("schedule.add_task", {
+      title: "Water the fig",
+      due_at: "2026-08-01T09:00:00.000Z",
+      rrule: "FREQ=WEEKLY",
+    });
+    const taskId = (taskResult as { output: { task_id: string } }).output
+      .task_id;
+    expect(
+      invoke("schedule.organize_task", {
+        task_id: taskId,
+        sort_order: 3,
+        recurrence_anchor: "completion",
+        recurrence_tz: "Europe/Berlin",
+      }).status
+    ).toBe("failed");
+    expect(
+      invoke("schedule.organize_task", {
+        task_id: taskId,
+        sort_order: 3,
+        recurrence_anchor: "completion",
+        tz: "Europe/Berlin",
+      }).status
+    ).toBe("executed");
+  });
+
   test("a completion-relative monthly task anchors its next occurrence to completion", () => {
     const taskResult = invoke("schedule.add_task", {
       title: "Review household budget",
