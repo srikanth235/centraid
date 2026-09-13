@@ -5235,3 +5235,284 @@ fn seed_year3_tasks(
     }
     Ok(counts)
 }
+
+// ===========================================================================
+// THE PHOTOS SCRIPT (#1020, close pass, D-1020-CL6)
+//
+// The mutations `crates/apps/photos/tests/{parity,year3}.rs` script between
+// reads — trash a frame, answer a face proposal, stamp a duplicate cluster,
+// turn the enrichment mirror on — and the two read-backs those suites take
+// that are not app queries.
+//
+// **Why they are here.** `sql-confinement` scans an app crate's tests too, and
+// SQL lives only under `crates/{ontology,vault,seat,search}` and
+// `crates/apps/kit`. The Photos suites were the last two files in the tree
+// holding SQL outside those roots — the standing `rules` red on every gate run
+// since the Photos lane — and the Notes section above already states why the
+// kit is the answer rather than a second exemption. Each function is named for
+// the ACT, not the statement, so a test reads as the script it is.
+// ===========================================================================
+
+/// One rusqlite error, as the kit's door error. The generators above each
+/// declare this as a local closure; the script below shares one.
+fn door(error: rusqlite::Error) -> KitError {
+    KitError::Door(error.to_string())
+}
+
+/// The library's own shape, as one line per asset: the digest the generator's
+/// idempotency test compares between two seedings.
+///
+/// Not a hash — the text, so a failure names the row that moved.
+pub fn photos_asset_digest(connection: &Connection) -> KitResult<Vec<String>> {
+    let mut statement = connection
+        .prepare(
+            "SELECT asset_id || '|' || COALESCE(title,'') || '|' || COALESCE(captured_at,'')
+                    || '|' || COALESCE(place_id,'') || '|' || COALESCE(width,0)
+               FROM media_asset ORDER BY asset_id",
+        )
+        .map_err(door)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(door)?;
+    rows.collect::<rusqlite::Result<Vec<String>>>()
+        .map_err(door)
+}
+
+/// One photograph with bytes and NO capture time — the row that proves a
+/// keyset on a nullable column rides the first window and no other.
+pub fn seed_undated_asset(
+    connection: &Connection,
+    asset_id: &str,
+    content_id: &str,
+    now: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+             VALUES (?1, 'blob:ff', ?2, 10, ?3)",
+            rusqlite::params![content_id, format!("{:064x}", 0xffff_u32), now],
+        )
+        .map_err(door)?;
+    connection
+        .execute(
+            "INSERT INTO media_asset (asset_id, content_id, kind, created_at, updated_at)
+             VALUES (?1, ?2, 'photo', ?3, ?3)",
+            rusqlite::params![asset_id, content_id, now],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
+/// Trash one photograph, with or without the purge window.
+///
+/// `purge_at: None` is the trashed row that carries no purge date — a state the
+/// DDL permits and the shelf must report as "no date", never as zero days.
+pub fn trash_asset(
+    connection: &Connection,
+    asset_id: &str,
+    deleted_at: &str,
+    purge_at: Option<&str>,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "UPDATE media_asset SET deleted_at = ?2, purge_at = ?3 WHERE asset_id = ?1",
+            rusqlite::params![asset_id, deleted_at, purge_at],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
+/// Clear one trashed photograph's purge window, leaving it trashed.
+pub fn clear_asset_purge_at(connection: &Connection, asset_id: &str) -> KitResult<()> {
+    connection
+        .execute(
+            "UPDATE media_asset SET purge_at = NULL WHERE asset_id = ?1",
+            [asset_id],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
+/// The custody sweep's answer: one row per bucket, all stamped at one instant.
+pub fn seed_custody_rollup(
+    connection: &Connection,
+    buckets: &[(&str, i64, i64)],
+    computed_at: &str,
+) -> KitResult<()> {
+    for (bucket, item_count, byte_size) in buckets {
+        connection
+            .execute(
+                "INSERT INTO blob_custody_rollup (bucket, item_count, byte_size, computed_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![bucket, item_count, byte_size, computed_at],
+            )
+            .map_err(door)?;
+    }
+    Ok(())
+}
+
+/// Un-sweep the vault: the rollup has never been computed again.
+pub fn clear_custody_rollup(connection: &Connection) -> KitResult<()> {
+    connection
+        .execute("DELETE FROM blob_custody_rollup", [])
+        .map_err(door)?;
+    Ok(())
+}
+
+/// Answer a face proposal `confirm`: the region is that person's, judged by
+/// this member.
+///
+/// The two columns move together because the schema pins them to each other
+/// (`CHECK ((review_state = 'confirmed') = (confirmed_by_party_id IS NOT
+/// NULL))`).
+pub fn confirm_face_region(
+    connection: &Connection,
+    region_id: &str,
+    party_id: &str,
+    confirmed_by_party_id: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "UPDATE media_face_region
+                SET review_state = 'confirmed', party_id = ?2, confirmed_by_party_id = ?3
+              WHERE region_id = ?1",
+            rusqlite::params![region_id, party_id, confirmed_by_party_id],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
+/// Answer a face proposal `reject`: not a person this library names, and the
+/// party goes with the answer (`CHECK (review_state IN ('proposed','confirmed')
+/// OR party_id IS NULL)`).
+pub fn reject_face_region(connection: &Connection, region_id: &str) -> KitResult<()> {
+    connection
+        .execute(
+            "UPDATE media_face_region SET review_state = 'rejected', party_id = NULL
+              WHERE region_id = ?1",
+            [region_id],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
+/// The one photograph carrying this title, if the library has it.
+pub fn asset_id_by_title(connection: &Connection, title: &str) -> KitResult<Option<String>> {
+    connection
+        .query_row(
+            "SELECT asset_id FROM media_asset WHERE title = ?1",
+            [title],
+            |row| row.get::<_, String>(0),
+        )
+        .map(Some)
+        .or_else(|error| match error {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(door(other)),
+        })
+}
+
+/// The content ids behind a set of titles, newest title first — the hit list a
+/// search hands the fold, in the vault's own rank order.
+pub fn content_ids_by_title_desc(
+    connection: &Connection,
+    titles: &[&str],
+) -> KitResult<Vec<String>> {
+    let mut found: Vec<(String, String)> = Vec::new();
+    for title in titles {
+        let row = connection
+            .query_row(
+                "SELECT content_id FROM media_asset WHERE title = ?1",
+                [title],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(door)?;
+        found.push(((*title).to_owned(), row));
+    }
+    found.sort_by(|left, right| right.0.cmp(&left.0));
+    Ok(found.into_iter().map(|(_, content_id)| content_id).collect())
+}
+
+/// Stamp a duplicate cluster onto a set of fingerprints, as a sweep would.
+pub fn stamp_phash_cluster(
+    connection: &Connection,
+    cluster_id: &str,
+    asset_ids: &[&str],
+) -> KitResult<()> {
+    for asset_id in asset_ids {
+        connection
+            .execute(
+                "UPDATE media_asset_phash SET cluster_id = ?2 WHERE asset_id = ?1",
+                rusqlite::params![asset_id, cluster_id],
+            )
+            .map_err(door)?;
+    }
+    Ok(())
+}
+
+/// Set one enrichment domain's tier, whether or not it already has a row.
+pub fn set_enrich_policy(connection: &Connection, domain: &str, tier: &str) -> KitResult<()> {
+    let changed = connection
+        .execute(
+            "UPDATE enrich_policy SET tier = ?2 WHERE domain = ?1",
+            rusqlite::params![domain, tier],
+        )
+        .map_err(door)?;
+    if changed == 0 {
+        connection
+            .execute(
+                "INSERT INTO enrich_policy (domain, tier) VALUES (?1, ?2)",
+                rusqlite::params![domain, tier],
+            )
+            .map_err(door)?;
+    }
+    Ok(())
+}
+
+/// Give a place a name and a kind — the act that turns it into an anchor.
+pub fn name_place(
+    connection: &Connection,
+    place_id: &str,
+    name: &str,
+    kind: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "UPDATE core_place SET name = ?2, kind = ?3 WHERE place_id = ?1",
+            rusqlite::params![place_id, name, kind],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
+/// How many photographs a member would see in the grid: live, unarchived.
+pub fn live_asset_count(connection: &Connection) -> KitResult<i64> {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM media_asset
+              WHERE deleted_at IS NULL AND archived_at IS NULL",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(door)
+}
+
+/// Every live fingerprint as `(asset_id, phash, cluster_id)`, in asset order —
+/// the input `centraid_media::duplicates::cluster` takes, handed over as data
+/// so the app crate's suite never states the join itself.
+pub fn asset_fingerprints(
+    connection: &Connection,
+) -> KitResult<Vec<(String, String, Option<String>)>> {
+    let mut statement = connection
+        .prepare(
+            "SELECT p.asset_id, p.phash, p.cluster_id FROM media_asset_phash p
+               JOIN media_asset a ON a.asset_id = p.asset_id
+              WHERE a.deleted_at IS NULL
+              ORDER BY p.asset_id",
+        )
+        .map_err(door)?;
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map_err(door)?;
+    rows.collect::<rusqlite::Result<Vec<(String, String, Option<String>)>>>()
+        .map_err(door)
+}

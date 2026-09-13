@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf};
 
 use centraid_apps_kit::contract_vault::open_contract_vault;
 use centraid_apps_kit::fixtures::{
-    DEMO_ALBUM_FILES, DEMO_ALBUM_TITLE, DEMO_FACE_PEOPLE, DEMO_ROLL, SampleFrame, THUMB_EDGE,
+    self, DEMO_ALBUM_FILES, DEMO_ALBUM_TITLE, DEMO_FACE_PEOPLE, DEMO_ROLL, SampleFrame, THUMB_EDGE,
     photos_demo,
 };
 use centraid_apps_kit::testdoor::TestDoor;
@@ -99,12 +99,7 @@ fn seeded() -> Connection {
     let ddl = fs::read_to_string(root().join("contracts/schema/vault-ddl.sql"))
         .expect("the committed DDL is readable");
     let connection = open_contract_vault(&ddl, "[]").expect("the schema replays");
-    connection
-        .execute(
-            "INSERT INTO core_party (party_id, kind, display_name, created_at)
-             VALUES ('demo-owner', 'person', 'Priya', '2026-03-15T00:00:00.000Z')",
-            [],
-        )
+    fixtures::seed_owner_party(&connection, "demo-owner", "Priya", "2026-03-15")
         .expect("the owner lands");
     let counts = photos_demo(&connection, &samples(), "2026-03-15", "demo-owner")
         .expect("the demo roll seeds");
@@ -196,17 +191,7 @@ fn the_contracts_sample_directory_is_the_v0_roll() {
 #[test]
 fn the_generator_writes_the_same_rows_twice() {
     let digest = |connection: &Connection| -> Vec<String> {
-        connection
-            .prepare(
-                "SELECT asset_id || '|' || COALESCE(title,'') || '|' || COALESCE(captured_at,'')
-                        || '|' || COALESCE(place_id,'') || '|' || COALESCE(width,0)
-                   FROM media_asset ORDER BY asset_id",
-            )
-            .expect("the digest prepares")
-            .query_map([], |row| row.get::<_, String>(0))
-            .expect("the digest runs")
-            .collect::<Result<Vec<String>, _>>()
-            .expect("every row reads")
+        fixtures::photos_asset_digest(connection).expect("the digest reads")
     };
     assert_eq!(digest(&seeded()), digest(&seeded()));
 }
@@ -309,20 +294,13 @@ fn the_library_window_carries_the_roll_newest_first_with_its_joins() {
 fn the_cursor_reads_strictly_earlier_and_an_undated_asset_rides_the_first_window() {
     let connection = seeded();
     // One asset with no capture time at all.
-    connection
-        .execute(
-            "INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-             VALUES ('undated-content', 'blob:ff', ?1, 10, '2026-03-15T00:00:00.000Z')",
-            [format!("{:064x}", 0xffff_u32)],
-        )
-        .expect("the bytes land");
-    connection
-        .execute(
-            "INSERT INTO media_asset (asset_id, content_id, kind, created_at, updated_at)
-             VALUES ('undated-asset', 'undated-content', 'photo', ?1, ?1)",
-            ["2026-03-15T00:00:00.000Z"],
-        )
-        .expect("the asset lands");
+    fixtures::seed_undated_asset(
+        &connection,
+        "undated-asset",
+        "undated-content",
+        "2026-03-15T00:00:00.000Z",
+    )
+    .expect("the undated frame lands");
 
     let door = TestDoor::new(&connection);
     let first = load_library(&door, &LibraryInput::default(), NOW_MS).expect("the first page");
@@ -366,24 +344,20 @@ fn the_cursor_reads_strictly_earlier_and_an_undated_asset_rides_the_first_window
 #[test]
 fn a_trashed_photograph_rides_the_trash_shelf_with_its_days_and_leaves_the_grid() {
     let connection = seeded();
-    connection
-        .execute(
-            "UPDATE media_asset SET deleted_at = ?1, purge_at = ?2 WHERE asset_id = 'demo-asset-000000'",
-            ["2026-03-14T00:00:00.000Z", "2026-04-13T00:00:00.000Z"],
-        )
-        .expect("the trash lands");
+    fixtures::trash_asset(
+        &connection,
+        "demo-asset-000000",
+        "2026-03-14T00:00:00.000Z",
+        Some("2026-04-13T00:00:00.000Z"),
+    )
+    .expect("the trash lands");
     let door = TestDoor::new(&connection);
     let data = load_library(&door, &LibraryInput::default(), NOW_MS).expect("the library reads");
     assert_eq!(data.assets.len(), 18);
     assert_eq!(data.trash.len(), 1);
     assert_eq!(data.trash[0].purge_in_days, Some(29));
     // A trashed row with NO purge date reads `None`, not zero.
-    connection
-        .execute(
-            "UPDATE media_asset SET purge_at = NULL WHERE asset_id = 'demo-asset-000000'",
-            [],
-        )
-        .expect("the window clears");
+    fixtures::clear_asset_purge_at(&connection, "demo-asset-000000").expect("the window clears");
     let data = load_library(&door, &LibraryInput::default(), NOW_MS).expect("the library reads");
     assert_eq!(data.trash[0].purge_in_days, None);
 }
@@ -398,20 +372,17 @@ fn the_storage_summary_of_an_unswept_vault_is_not_counted_yet() {
     assert!(summary.offerable_release().is_none());
 
     // Now the sweep runs.
-    for (bucket, count, bytes) in [
-        ("replicated", 10, 20_000_000),
-        ("local-only", 9, 18_000_000),
-        ("freeable", 4, 8_000_000),
-        ("local-unproven", 5, 10_000_000),
-    ] {
-        connection
-            .execute(
-                "INSERT INTO blob_custody_rollup (bucket, item_count, byte_size, computed_at)
-                 VALUES (?1, ?2, ?3, '2026-03-15T01:00:00.000Z')",
-                rusqlite::params![bucket, count, bytes],
-            )
-            .expect("the rollup lands");
-    }
+    fixtures::seed_custody_rollup(
+        &connection,
+        &[
+            ("replicated", 10, 20_000_000),
+            ("local-only", 9, 18_000_000),
+            ("freeable", 4, 8_000_000),
+            ("local-unproven", 5, 10_000_000),
+        ],
+        "2026-03-15T01:00:00.000Z",
+    )
+    .expect("the rollup lands");
     let summary = storage_summary(&door).expect("the rollup reads");
     assert_eq!(summary.computed_at(), Some("2026-03-15T01:00:00.000Z"));
     let buckets = summary.buckets().expect("counted");
@@ -451,15 +422,13 @@ fn the_face_queue_counts_matches_and_dates_them_by_capture() {
     assert_eq!(queue.people.len(), DEMO_FACE_PEOPLE.len() + 1);
 
     // Answer one, and it leaves the queue for good.
-    connection
-        .execute(
-            "UPDATE media_face_region
-                SET review_state = 'confirmed', party_id = 'demo-party-000001',
-                    confirmed_by_party_id = 'demo-owner'
-              WHERE region_id = 'demo-region-000000'",
-            [],
-        )
-        .expect("the answer lands");
+    fixtures::confirm_face_region(
+        &connection,
+        "demo-region-000000",
+        "demo-party-000001",
+        "demo-owner",
+    )
+    .expect("the answer lands");
     let queue = face_queue(&door).expect("the queue reads");
     assert_eq!(queue.unmatched_total, 7);
     assert_eq!(queue.confirmed_total, 1);
@@ -470,14 +439,7 @@ fn the_people_roster_names_only_confirmed_parties_and_groups_the_rest_as_questio
     let connection = seeded();
     // Confirm two faces of one person, in two different photographs.
     for region in ["demo-region-000000", "demo-region-000002"] {
-        connection
-            .execute(
-                "UPDATE media_face_region
-                    SET review_state = 'confirmed', party_id = 'demo-party-000001',
-                        confirmed_by_party_id = 'demo-owner'
-                  WHERE region_id = ?1",
-                [region],
-            )
+        fixtures::confirm_face_region(&connection, region, "demo-party-000001", "demo-owner")
             .expect("the answer lands");
     }
     let door = TestDoor::new(&connection);
@@ -499,21 +461,11 @@ fn the_people_roster_names_only_confirmed_parties_and_groups_the_rest_as_questio
 #[test]
 fn one_photographs_faces_are_the_unanswered_and_the_confirmed_and_no_others() {
     let connection = seeded();
-    connection
-        .execute(
-            "UPDATE media_face_region SET review_state = 'rejected', party_id = NULL
-              WHERE region_id = 'demo-region-000004'",
-            [],
-        )
-        .expect("the answer lands");
+    fixtures::reject_face_region(&connection, "demo-region-000004").expect("the answer lands");
     let door = TestDoor::new(&connection);
     // `ana-and-marco-table.png` is the fifth portrait and carries TWO faces.
-    let asset_id = connection
-        .query_row(
-            "SELECT asset_id FROM media_asset WHERE title = 'Ana and Marco at the table'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
+    let asset_id = fixtures::asset_id_by_title(&connection, "Ana and Marco at the table")
+        .expect("the read runs")
         .expect("the frame is there");
     let faces = asset_faces(&door, &asset_id).expect("the faces read");
     assert_eq!(faces.regions.len(), 1, "the rejected face is gone for good");
@@ -532,13 +484,12 @@ fn duplicates_read_the_cluster_id_a_sweep_stamped_and_nothing_when_none_has() {
 
     // The sweep runs. `centraid_media::duplicates::cluster` is what decides the
     // value; here it is stamped so the QUERY can be read.
-    connection
-        .execute(
-            "UPDATE media_asset_phash SET cluster_id = 'demo-asset-000000'
-              WHERE asset_id IN ('demo-asset-000000', 'demo-asset-000001')",
-            [],
-        )
-        .expect("the stamp lands");
+    fixtures::stamp_phash_cluster(
+        &connection,
+        "demo-asset-000000",
+        &["demo-asset-000000", "demo-asset-000001"],
+    )
+    .expect("the stamp lands");
     let clusters = duplicate_clusters(&door).expect("the read runs");
     assert_eq!(clusters.len(), 1);
     assert_eq!(clusters[0].key, "demo-asset-000000");
@@ -547,14 +498,13 @@ fn duplicates_read_the_cluster_id_a_sweep_stamped_and_nothing_when_none_has() {
 
     // A cluster whose second member is TRASHED drops entirely: a duplicate of
     // one is a photograph.
-    connection
-        .execute(
-            "UPDATE media_asset SET deleted_at = '2026-03-14T00:00:00.000Z',
-                                    purge_at = '2026-04-13T00:00:00.000Z'
-              WHERE asset_id = 'demo-asset-000001'",
-            [],
-        )
-        .expect("the trash lands");
+    fixtures::trash_asset(
+        &connection,
+        "demo-asset-000001",
+        "2026-03-14T00:00:00.000Z",
+        Some("2026-04-13T00:00:00.000Z"),
+    )
+    .expect("the trash lands");
     assert!(duplicate_clusters(&door).expect("the read runs").is_empty());
 }
 
@@ -566,29 +516,14 @@ fn the_enrichment_mirror_is_off_until_a_policy_row_says_otherwise() {
         enrichment_status(&door).expect("the mirror reads"),
         Reading::Data(Tier::Off)
     );
-    connection
-        .execute(
-            "INSERT INTO enrich_policy (domain, tier) VALUES ('photos', 'gateway')",
-            [],
-        )
-        .expect("the policy lands");
+    fixtures::set_enrich_policy(&connection, "photos", "gateway").expect("the policy lands");
     assert_eq!(
         enrichment_status(&door).expect("the mirror reads"),
         Reading::Data(Tier::Gateway)
     );
     // The `docs` domain is not this app's mirror.
-    connection
-        .execute(
-            "UPDATE enrich_policy SET tier = 'off' WHERE domain = 'photos'",
-            [],
-        )
-        .expect("the policy changes");
-    connection
-        .execute(
-            "INSERT INTO enrich_policy (domain, tier) VALUES ('docs', 'gateway')",
-            [],
-        )
-        .expect("the other policy lands");
+    fixtures::set_enrich_policy(&connection, "photos", "off").expect("the policy changes");
+    fixtures::set_enrich_policy(&connection, "docs", "gateway").expect("the other policy lands");
     assert_eq!(
         enrichment_status(&door).expect("the mirror reads"),
         Reading::Data(Tier::Off)
@@ -602,17 +537,11 @@ fn the_enrichment_mirror_is_off_until_a_policy_row_says_otherwise() {
 fn search_keeps_the_vaults_rank_order() {
     let connection = seeded();
     let door = TestDoor::new(&connection);
-    let content_ids: Vec<String> = connection
-        .prepare(
-            "SELECT content_id FROM media_asset
-              WHERE title IN ('Emerald Bay overlook', 'Dusk over the west shore')
-              ORDER BY title DESC",
-        )
-        .expect("the ids prepare")
-        .query_map([], |row| row.get::<_, String>(0))
-        .expect("the ids run")
-        .collect::<Result<Vec<String>, _>>()
-        .expect("every id reads");
+    let content_ids = fixtures::content_ids_by_title_desc(
+        &connection,
+        &["Emerald Bay overlook", "Dusk over the west shore"],
+    )
+    .expect("every id reads");
     assert_eq!(content_ids.len(), 2);
     let data = load_search(&door, &content_ids, NOW_MS).expect("the search reads");
     assert_eq!(
@@ -666,11 +595,7 @@ fn a_place_the_member_has_not_named_still_gets_a_phrase_and_never_a_coordinate()
     }
 
     // Name one, and it becomes both a phrase and an anchor for the rest.
-    connection
-        .execute(
-            "UPDATE core_place SET name = 'The cabin', kind = 'home' WHERE place_id = 'demo-place-000002'",
-            [],
-        )
+    fixtures::name_place(&connection, "demo-place-000002", "The cabin", "home")
         .expect("the name lands");
     let data = load_library(&door, &LibraryInput::default(), NOW_MS).expect("the library reads");
     let anchors = NamedPlace::anchors(&data.places);
@@ -1092,9 +1017,7 @@ fn the_storage_summary_is_what_v0_answered_swept_and_unswept() {
         unswept["output"]["rollup"]["computedAt"].is_null(),
         "v0's pre-sweep answer is not counted yet"
     );
-    connection
-        .execute("DELETE FROM blob_custody_rollup", [])
-        .expect("the rollup clears");
+    fixtures::clear_custody_rollup(&connection).expect("the rollup clears");
     let summary = storage_summary(&door).expect("the rollup reads");
     assert!(!summary.counted_yet());
     assert_eq!(summary.buckets(), None);

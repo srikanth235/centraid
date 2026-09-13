@@ -27,7 +27,7 @@ use std::time::Instant;
 
 use centraid_apps_kit::contract_vault::open_contract_vault;
 use centraid_apps_kit::fixtures::{
-    YEAR3_DEFAULT_SEED, YEAR3_PHOTOS, Year3PhotosShape, year3_photos,
+    self, YEAR3_DEFAULT_SEED, YEAR3_PHOTOS, Year3PhotosShape, year3_photos,
 };
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_photos::duplicates::duplicate_clusters;
@@ -176,14 +176,7 @@ fn a_keyset_walk_over_tied_capture_times_reaches_every_live_asset_exactly_once()
     // `before` input, which is an input-schema change to the manifest and
     // belongs to the root — it is filed as a finding, not patched here.
     assert_eq!(seen.len(), unique.len(), "no row was seen twice");
-    let live: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM media_asset
-              WHERE deleted_at IS NULL AND archived_at IS NULL",
-            [],
-            |row| row.get(0),
-        )
-        .expect("the count reads");
+    let live = fixtures::live_asset_count(&connection).expect("the count reads");
     let reached = i64::try_from(unique.len()).expect("a count");
     assert!(
         reached <= live,
@@ -288,24 +281,15 @@ fn the_pre_stamped_cluster_ids_are_the_ones_the_sweep_would_compute() {
     use centraid_media::duplicates::{DUPLICATE_HAMMING_THRESHOLD, Fingerprint, cluster};
 
     let connection = seeded(SMALL);
-    let rows: Vec<Fingerprint> = connection
-        .prepare(
-            "SELECT p.asset_id, p.phash, p.cluster_id FROM media_asset_phash p
-               JOIN media_asset a ON a.asset_id = p.asset_id
-              WHERE a.deleted_at IS NULL
-              ORDER BY p.asset_id",
-        )
-        .expect("the fingerprints prepare")
-        .query_map([], |row| {
-            Ok(Fingerprint {
-                asset_id: row.get(0)?,
-                phash: row.get(1)?,
-                cluster_id: row.get(2)?,
-            })
+    let rows: Vec<Fingerprint> = fixtures::asset_fingerprints(&connection)
+        .expect("every row reads")
+        .into_iter()
+        .map(|(asset_id, phash, cluster_id)| Fingerprint {
+            asset_id,
+            phash,
+            cluster_id,
         })
-        .expect("the fingerprints run")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("every row reads");
+        .collect();
     let computed = cluster(&rows, DUPLICATE_HAMMING_THRESHOLD);
     for row in &rows {
         assert_eq!(
