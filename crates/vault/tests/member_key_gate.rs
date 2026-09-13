@@ -47,7 +47,8 @@ mod common;
 use centraid_vault::access::Principal;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::custody::locker_key::{
-    LOCKER_ENCRYPTED_COLUMNS, encrypt_under_locker_key, is_locker_ciphertext,
+    LOCKER_ENCRYPTED_COLUMNS, decrypt_under_locker_key, encrypt_under_locker_key,
+    is_locker_ciphertext,
 };
 
 /// The plaintexts planted, and the strings the gate hunts for.
@@ -598,4 +599,77 @@ fn the_gateway_cannot_be_talked_into_storing_a_plaintext_secret() {
             carries_no_secret(sidecar, &bytes);
         }
     }
+}
+
+/// THE FALSIFICATION, AND THE FINDING THAT PUT IT HERE.
+///
+/// The gate above is a **search for plaintext**, and a search that finds
+/// nothing is the same output as a search that looks nowhere. The obvious
+/// falsification — restore the key door and re-run — was tried and **the gate
+/// still passed**: opening `SealedSubject::new` to the `locker` schema makes a
+/// reveal *representable*, but a gateway with no key file still cannot
+/// decrypt, so there is no plaintext to find. Only
+/// `access::tests::a_reveal_subject_cannot_be_built_for_the_locker_schema`
+/// went red.
+///
+/// That is worth saying plainly, because it changes what the gate claims: **it
+/// proves the KEY is absent, not that the door is.** The door's deletion is
+/// proven structurally, by that unit test and by
+/// [`no_symbol_in_the_vault_crate_reads_a_member_key_file`]. A pre-wave
+/// gateway had both, and this test is the leg that shows the search fires when
+/// the pair is restored.
+///
+/// So: take the same vault's own ciphertext, open it with the key a seat
+/// holds, and assert the searcher **would** have failed on that output. If
+/// this test ever stops finding the plaintext, `carries_no_secret` has stopped
+/// looking and every assertion above it is vacuous.
+#[test]
+fn the_search_fires_when_a_gateway_can_actually_decrypt() {
+    let gateway = Gateway::founded();
+    let key = member_key();
+
+    // The ciphertext the gateway serves, read back through its own door.
+    let mut opened = 0usize;
+    for (table, row_id, column, plaintext) in PLANTED {
+        let cell: String = gateway
+            .scratch
+            .vault
+            .read(|connection| {
+                Ok(connection.query_row(
+                    &format!("SELECT {column} FROM {table} WHERE rowid IN (SELECT rowid FROM {table}) AND {column} IS NOT NULL LIMIT 1"),
+                    [],
+                    |row| row.get(0),
+                )?)
+            })
+            .expect("the cell reads");
+        if !is_locker_ciphertext(&cell) {
+            continue;
+        }
+        // WHAT A PRE-WAVE GATEWAY COULD DO, and this one cannot: open it.
+        let Ok(revealed) = decrypt_under_locker_key(&key, "key-1", row_id, &cell) else {
+            continue;
+        };
+        if revealed != plaintext {
+            // The planted rows share columns; only the matching pair proves
+            // anything, and one is enough.
+            continue;
+        }
+        // THE SEARCHER FIRES. Asserted by catching the panic, because
+        // `carries_no_secret` is an assertion and its failing IS the claim.
+        let caught = std::panic::catch_unwind(|| {
+            carries_no_secret("a gateway that could decrypt", revealed.as_bytes());
+        });
+        assert!(
+            caught.is_err(),
+            "the searcher did not fire on {table}.{column}'s own plaintext — \
+             `carries_no_secret` has stopped looking and every assertion in \
+             the gate above it is vacuous"
+        );
+        opened += 1;
+    }
+    assert!(
+        opened > 0,
+        "no planted cell could be opened even WITH the key: the falsification \
+         itself is vacuous"
+    );
 }
