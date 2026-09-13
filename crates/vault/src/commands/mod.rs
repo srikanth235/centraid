@@ -43,6 +43,7 @@ pub mod knowledge;
 pub mod locker;
 pub mod media;
 pub mod people;
+pub mod schedule;
 pub mod social;
 pub mod tally;
 
@@ -196,6 +197,7 @@ pub type CommandHandler = fn(&CommandCtx<'_, '_>) -> Result<serde_json::Value>;
 /// A condition returns `None` when it holds and an owner-facing sentence when
 /// it does not — never a boolean. The sentence is the thing a member reads, and
 /// a boolean forces the caller to invent one.
+#[derive(Clone, Copy)]
 pub struct CommandCondition {
     /// The raw predicate, for the audit trail. The owner never sees it.
     pub predicate: &'static str,
@@ -275,6 +277,9 @@ impl Registry {
             registry.register(definition)?;
         }
         for definition in people::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in schedule::definitions() {
             registry.register(definition)?;
         }
         for definition in social::definitions() {

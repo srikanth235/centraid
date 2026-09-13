@@ -56,6 +56,7 @@ pub mod intents;
 pub mod ledger;
 pub mod log;
 pub mod migrations;
+pub mod operations;
 pub mod page;
 pub mod snapshot;
 pub mod time;

@@ -285,23 +285,27 @@ fn capture_title(input: &serde_json::Value) -> String {
 
 /// The commands this host names that the vault does not register yet.
 ///
-/// Named rather than discovered: `schedule.*` is slot 4d's schema and
-/// nothing else — a host that silently mapped a capture onto a command nobody
-/// registered would be a capture button that reports success and writes
-/// nothing. The frames fixture marks these `pending`, and
-/// [`tests::the_pending_commands_are_the_ones_the_registry_lacks`] fails when
-/// one of them lands — which is the point: the list shrinks by being wrong.
+/// Named rather than discovered — a host that silently mapped a capture onto a
+/// command nobody registered would be a capture button that reports success and
+/// writes nothing. [`tests::the_pending_commands_are_the_ones_the_registry_lacks`]
+/// fails when one of them lands, which is the point: **the list shrinks by
+/// being wrong**.
 ///
-/// It has shrunk twice already, both in this wave and both because that test
-/// went red rather than because anybody remembered. `knowledge.create_note`
-/// came off when the Notes lane registered the `knowledge` schema —
-/// `capture:note` lowers to `{title, body_text}`, which is exactly what
-/// `CREATE_NOTE_SCHEMA` requires, so the button writes a note. And
-/// `people.add_person` came off when the People lane registered the `people`
-/// schema's twenty-eight commands, so `capture:person` is a real write and a
-/// refusal from here is the vault's own rather than "this capture needs a newer
-/// Centraid".
-pub const PENDING_COMMANDS: [&str; 2] = ["schedule.add_task", "schedule.propose_event"];
+/// It has shrunk three times in this wave, every one because that test went red
+/// rather than because anybody remembered. `knowledge.create_note` came off
+/// when the Notes lane registered the `knowledge` schema — `capture:note`
+/// lowers to `{title, body_text}`, which is exactly what `CREATE_NOTE_SCHEMA`
+/// requires, so the button writes a note. `people.add_person` came off when the
+/// People lane registered the `people` schema's twenty-eight commands. And
+/// `schedule.add_task` and `schedule.propose_event` came off when lane Schedule
+/// registered the `schedule` schema's sixteen, so `capture:task` and
+/// `agenda:add` are real writes and a refusal from here is the vault's own
+/// rather than "this capture needs a newer Centraid".
+///
+/// **THE LIST IS NOW EMPTY, and that is a claim the test still checks**: every
+/// command this host names is registered, so a new method whose command nobody
+/// has written fails loudly rather than joining a list nobody reads.
+pub const PENDING_COMMANDS: [&str; 0] = [];
 
 /// THE SOCKET HALF: one seat connection for the life of the browser port.
 ///

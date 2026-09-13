@@ -58,6 +58,9 @@ fn the_registry_carries_every_command_this_build_has() {
         // `social.*` one (wave 4 lane People).
         ("people.", 28),
         ("social.", 4),
+        // The whole 16-command `schedule.*` schema — events, occurrences,
+        // projects, sections and tasks (wave 4 lane Schedule).
+        ("schedule.", 16),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(
@@ -97,6 +100,12 @@ fn the_registry_carries_every_command_this_build_has() {
     assert!(registry.get("schedule.add_task").is_none());
     assert_eq!(count("schedule."), 0);
     assert!(registry.get("tally.add_expense").is_some());
+    // The three `schedule.*` names other lanes and surfaces call BY NAME:
+    // Notes' `send-to-tasks`, the extension's `capture:task` frame and its
+    // `agenda:add` frame.
+    assert!(registry.get("schedule.add_task").is_some());
+    assert!(registry.get("schedule.organize_task").is_some());
+    assert!(registry.get("schedule.propose_event").is_some());
     assert!(registry.get("locker.reveal_receipt").is_some());
     assert!(registry.get("tally.does_not_exist").is_none());
     // A duplicate name is refused rather than overwritten: two definitions
