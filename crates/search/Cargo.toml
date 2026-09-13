@@ -1,0 +1,27 @@
+[package]
+name = "centraid-search"
+description = "The FTS5 door: consent-checked text search over the vault's shadow tables, answering secret-free targets (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_search"
+path = "src/lib.rs"
+
+[dependencies]
+# The PAGE, not a second copy of it: one assembler for the paging law
+# (D-1020-N1a). `crates/search` is not an app and holds its own SQL; what it
+# borrows is the window's shape and the probe, so a search page and a drive page
+# continue the same way.
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-ontology = { path = "../ontology" }
+rusqlite.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

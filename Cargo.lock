@@ -793,6 +793,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-search"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-apps-kit",
+ "centraid-ontology",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "centraid-seat"
 version = "1.0.0-alpha.0"
 dependencies = [
