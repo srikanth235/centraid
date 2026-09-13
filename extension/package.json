@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "e2e": "../node_modules/.bin/playwright test -c \"$PWD/e2e/playwright.config.ts\"",
     "lint": "node scripts/lint.mjs",
     "round-trip": "node scripts/native-round-trip.mjs",
     "test": "vitest run --config ../desktop/vitest.config.ts",

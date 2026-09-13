@@ -23,17 +23,8 @@ declare const chrome: {
   };
 };
 
-interface Candidate {
-  readonly item_id: string;
-  readonly title: string;
-  readonly username?: string | null;
-  readonly warning?: boolean;
-}
-
 const state = document.querySelector<HTMLElement>("#state");
 const error = document.querySelector<HTMLElement>("#error");
-const logins = document.querySelector<HTMLElement>("#logins");
-const candidates = document.querySelector<HTMLElement>("#candidates");
 const capture = document.querySelector<HTMLElement>("#capture");
 
 function say(text: string): void {
@@ -50,8 +41,15 @@ async function send<T>(message: unknown): Promise<T> {
   return unwrapEnvelope(await chrome.runtime.sendMessage<T>(message));
 }
 
+/*
+ * THE POPUP ASKS NO LOCKER QUESTION, and that is a boundary rather than an
+ * omission. Every `locker:*` message is judged against the ACTIVE TAB's own
+ * origin (`page-origin.ts`, v0's `assertTopFramePage`), and a popup has no tab —
+ * so its claim about which page it is asking for has nothing to check it
+ * against. v0's popup does not ask either; the content script draws the picker
+ * in the page, where a click is a trusted gesture and the origin is the page's.
+ */
 async function draw(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const status = await send<{ paired?: boolean; product_version?: string }>({
     type: "status",
   });
@@ -61,37 +59,6 @@ async function draw(): Promise<void> {
   }
   say(`Connected to Centraid ${status.product_version ?? ""}`.trim());
   if (capture) capture.hidden = false;
-
-  if (!tab?.url) return;
-  const found = await send<Candidate[]>({
-    type: "locker:candidates",
-    pageUrl: tab.url,
-  });
-  if (found.length === 0 || !candidates || !logins) return;
-  logins.hidden = false;
-  for (const candidate of found) {
-    const item = document.createElement("li");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = candidate.username
-      ? `${candidate.title} — ${candidate.username}`
-      : candidate.title;
-    if (candidate.warning) button.dataset["warning"] = "true";
-    button.addEventListener("click", () => {
-      // THE FILL IS THE WORKER'S. The popup asks and never receives the
-      // material: the worker hands it to the content script on the page and
-      // drops its own copy (`HostLink.fillInto`).
-      void send({
-        type: "locker:fill",
-        itemId: candidate.item_id,
-        pageUrl: tab.url,
-      })
-        .then(() => window.close())
-        .catch(fail);
-    });
-    item.append(button);
-    candidates.append(item);
-  }
 }
 
 async function captureWith(type: string): Promise<void> {

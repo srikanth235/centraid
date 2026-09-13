@@ -138,6 +138,17 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // seconds. The Playwright run that needs a window is `desktop-e2e`, in
         // `nightly`.
         step("desktop-unit", run_desktop_unit),
+        // THE COMPANION'S OWN TWO PROGRAMS (#1020 wave 4 lane extension,
+        // D-1020-X11). Its vitest files are in `desktop-unit`'s project — one
+        // project over `desktop/electron`, `desktop/renderer` and
+        // `extension/src`, because the pure cores are shared across those
+        // boundaries and a second runner over three files would be a second
+        // thing to keep green (D-1020-F10). What is NOT in that project is the
+        // Companion's two type programs and its own lint, and both are about
+        // files outside this tree: the manifests' agreement with
+        // `contracts/extension/ids.json`, and every method name the popup and
+        // content script can send being one of the eighteen.
+        step("extension-unit", run_extension_unit),
         // THE CI-SHAPE GATES, re-homed out of `scripts/ci/**` (D-1020-G3).
         // They are not v0's gates — they are gates about the shape of CI and
         // about the supply chain — so taking `ci.yml` off `pull_request` had to
@@ -184,6 +195,12 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // Nightly rather than `pr` because it builds a release binary and
         // launches a browser — tens of seconds either side of the assertion.
         step("desktop-e2e", run_desktop_e2e),
+        // THE COMPANION IN A REAL BROWSER (#1020 wave 4 lane extension). In
+        // `nightly` for `desktop-e2e`'s reason and one more: extensions need a
+        // full Chromium rather than the headless shell, so the run is HEADED and
+        // needs a display — `xvfb-run` in CI, which is a dependency a pull
+        // request should not take.
+        step("extension-e2e", run_extension_e2e),
         step("device-lanes", run_device_lanes),
         step("lane-health", run_lane_health),
     ]);
@@ -1645,6 +1662,88 @@ fn run_desktop_unit(ctx: &Ctx) -> Result<Outcome> {
         "bun",
         &["run", "--cwd", "desktop/electron", "typecheck"],
     )
+}
+
+/// The Companion's two type programs and its own lint (D-1020-X11).
+///
+/// Its vitest files ride `desktop-unit`'s project (D-1020-F10); what runs here is
+/// what that project cannot: `tsc` over the shipped tree with `types: []` — so a
+/// `node:fs` import in `src/worker.ts` is a type error rather than a review
+/// comment — and `scripts/lint.mjs`, which checks this tree against two files
+/// outside it.
+fn run_extension_unit(ctx: &Ctx) -> Result<Outcome> {
+    if !ctx.root.join("extension/package.json").is_file() {
+        return Ok(Outcome::Skipped(
+            "no extension/ tree yet (#1020 wave 4 lane extension)".to_owned(),
+        ));
+    }
+    if !binary_available("bun") {
+        return Ok(missing_binary(
+            ctx,
+            "bun",
+            "the Companion's type programs and its own lint",
+            "`.github/actions/setup` installs it in CI; locally, see docs/toolchain.md",
+        ));
+    }
+    match process(
+        ctx,
+        "extension-unit",
+        "bun",
+        &["run", "--cwd", "extension", "typecheck"],
+    )? {
+        Outcome::Ok(_) => {}
+        other => return Ok(other),
+    }
+    process(
+        ctx,
+        "extension-unit",
+        "bun",
+        &["run", "--cwd", "extension", "lint"],
+    )
+}
+
+/// The Companion's Playwright run: the lane's exit criterion.
+///
+/// Chromium loads the unpacked build, a native-messaging host manifest is
+/// written into the profile with the id Chromium derived, and the host it names
+/// is a node script speaking the browser's framing. **Headed**, under a display:
+/// the headless shell cannot load an extension at all, and it fails with an
+/// empty service-worker list rather than an error — which is why the missing
+/// display is named here instead of being discovered as a timeout.
+fn run_extension_e2e(ctx: &Ctx) -> Result<Outcome> {
+    if !ctx
+        .root
+        .join("extension/e2e/playwright.config.ts")
+        .is_file()
+    {
+        return Ok(Outcome::Skipped(
+            "no extension/e2e yet (#1020 wave 4 lane extension)".to_owned(),
+        ));
+    }
+    if !binary_available("bun") {
+        return Ok(missing_binary(
+            ctx,
+            "bun",
+            "the Companion's Playwright run",
+            "`.github/actions/setup` installs it in CI; locally, see docs/toolchain.md",
+        ));
+    }
+    if std::env::var("DISPLAY").is_err() && !binary_available("xvfb-run") {
+        return Ok(Outcome::Skipped(
+            "no DISPLAY and no `xvfb-run`: an extension needs a full Chromium, which needs a              display. Run `xvfb-run -a bun run --cwd extension e2e` (#1020 wave 4 lane extension)"
+                .to_owned(),
+        ));
+    }
+    let under_xvfb = std::env::var("DISPLAY").is_err();
+    let (program, args): (&str, Vec<&str>) = if under_xvfb {
+        (
+            "xvfb-run",
+            vec!["-a", "bun", "run", "--cwd", "extension", "e2e"],
+        )
+    } else {
+        ("bun", vec!["run", "--cwd", "extension", "e2e"])
+    };
+    process(ctx, "extension-e2e", program, &args)
 }
 
 /// The desktop seat's Playwright run: the lane's exit criterion.

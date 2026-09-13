@@ -18,7 +18,13 @@
       "strict_min_version": "128.0"
     }
   },
-  "permissions": ["activeTab", "contextMenus", "nativeMessaging", "storage"],
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "contextMenus",
+    "nativeMessaging",
+    "storage"
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none';"
   },

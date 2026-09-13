@@ -12,7 +12,13 @@
     "service_worker": "worker.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "contextMenus", "nativeMessaging", "storage"],
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "contextMenus",
+    "nativeMessaging",
+    "storage"
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none';"
   },
