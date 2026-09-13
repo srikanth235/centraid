@@ -44,11 +44,19 @@
 //! [`crate::fire::cron_cursor`]'s job, because "once" is a property of a window
 //! and not of a minute.
 
-use std::fmt;
-
-use jiff::Timestamp;
-use jiff::civil::Weekday;
-use jiff::tz::TimeZone;
+// ONE ZONE SOURCE, AND IT IS THE VAULT'S (#1020, D-1020-S8).
+//
+// `FireZone`, `ZoneUnset`, `WallClock` and `sunday_zero` were defined here.
+// They are `crates/vault::time::zone`'s now and re-exported unchanged, because
+// RECURRENCE needs the same resolution cron already had — the same two tiers,
+// the same deleted host-local third, the same bundled `tzdb` — and a second
+// reader is exactly the drift `docs/cron-timezone.md` was written about. The
+// crate graph forces the direction: `automations` → `assist` → `vault`, so the
+// shared type can only live at the bottom.
+//
+// Nothing about this crate's behaviour changed: the module's public names,
+// their signatures and their doc comments are the ones that moved.
+pub use centraid_vault::time::zone::{FireZone, WallClock, ZoneUnset, sunday_zero};
 
 /// Milliseconds in a minute. The cron grain, everywhere.
 pub const MINUTE_MS: i64 = 60_000;
@@ -57,151 +65,6 @@ pub const MINUTE_MS: i64 = 60_000;
 #[must_use]
 pub const fn floor_minute(millis: i64) -> i64 {
     millis.div_euclid(MINUTE_MS) * MINUTE_MS
-}
-
-/// The wall-clock fields a cron expression is matched against.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WallClock {
-    pub year: i16,
-    pub month: i8,
-    pub day: i8,
-    pub hour: i8,
-    pub minute: i8,
-    /// 0 = Sunday … 6 = Saturday, as cron counts.
-    pub weekday: i8,
-}
-
-/// A zone that resolved. The newtype exists so a resolved zone cannot be
-/// confused with a name a manifest happened to carry.
-#[derive(Debug, Clone)]
-pub struct FireZone {
-    name: String,
-    zone: TimeZone,
-}
-
-impl FireZone {
-    /// Look up an IANA name in the **bundled** zone database.
-    pub fn named(name: &str) -> Result<Self, ZoneUnset> {
-        let trimmed = name.trim();
-        if trimmed.is_empty() {
-            return Err(ZoneUnset::Missing);
-        }
-        TimeZone::get(trimmed)
-            .map(|zone| Self {
-                name: trimmed.to_owned(),
-                zone,
-            })
-            .map_err(|_| ZoneUnset::Unknown {
-                name: trimmed.to_owned(),
-            })
-    }
-
-    /// The two tiers, in order. `trigger_tz` is the manifest's; `vault_zone` is
-    /// `core_vault.settings_json`'s. **There is no third argument** — that is
-    /// the deletion, expressed in the signature.
-    ///
-    /// An INVALID trigger zone is not silently demoted to the vault's: a
-    /// manifest that names `Asia/Calcutta/2` meant something, and firing it in
-    /// another zone would be answering a question nobody asked. Manifest
-    /// validation refuses it first ([`crate::manifest`]); this refusal is the
-    /// backstop for a row that predates the check.
-    pub fn resolve(trigger_tz: Option<&str>, vault_zone: Option<&str>) -> Result<Self, ZoneUnset> {
-        if let Some(name) = trigger_tz.map(str::trim).filter(|name| !name.is_empty()) {
-            return Self::named(name);
-        }
-        match vault_zone.map(str::trim).filter(|name| !name.is_empty()) {
-            Some(name) => Self::named(name),
-            None => Err(ZoneUnset::Missing),
-        }
-    }
-
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// The wall-clock fields at an instant, in this zone.
-    #[must_use]
-    pub fn wall_clock(&self, millis: i64) -> WallClock {
-        let stamp = Timestamp::from_millisecond(millis).unwrap_or(Timestamp::UNIX_EPOCH);
-        let civil = self.zone.to_datetime(stamp);
-        WallClock {
-            year: civil.year(),
-            month: civil.month(),
-            day: civil.day(),
-            hour: civil.hour(),
-            minute: civil.minute(),
-            weekday: sunday_zero(civil.weekday()),
-        }
-    }
-
-    /// The zone's offset from UTC in minutes at an instant. The DST detector's
-    /// input: a fall-back is an offset that decreased.
-    #[must_use]
-    pub fn offset_minutes(&self, millis: i64) -> i32 {
-        let stamp = Timestamp::from_millisecond(millis).unwrap_or(Timestamp::UNIX_EPOCH);
-        self.zone.to_offset(stamp).seconds() / 60
-    }
-
-    /// The dedupe key a fall-back's two absolute minutes share.
-    ///
-    /// v0's `wallClockMinuteKey`, with one difference: the zone name is always
-    /// present, because there is no `"local"` case left to spell.
-    #[must_use]
-    pub fn wall_minute_key(&self, millis: i64) -> String {
-        let wall = self.wall_clock(millis);
-        format!(
-            "{}:{}:{}:{}:{}:{}",
-            wall.year, wall.month, wall.day, wall.hour, wall.minute, self.name
-        )
-    }
-}
-
-impl PartialEq for FireZone {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-impl Eq for FireZone {}
-
-impl fmt::Display for FireZone {
-    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
-        out.write_str(&self.name)
-    }
-}
-
-/// Where v0's tier 3 was. **A typed refusal, surfaced as a system signal**
-/// ([`crate::signals`]) — never a fallback, and never a log line.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum ZoneUnset {
-    /// Neither the trigger nor the vault names a zone.
-    #[error(
-        "this schedule cannot be set until this vault has a time zone: the trigger names none and \
-         this vault's settings name none, and the machine's own clock is not an answer — a \
-         gateway on a server runs in UTC, so \"every morning at seven\" would mean seven in a \
-         place nobody lives"
-    )]
-    Missing,
-    /// A name that is not in the bundled zone database.
-    #[error(
-        "\"{name}\" is not a time zone this build knows; schedules are resolved against a zone \
-         database compiled into the binary, so the answer does not change when a host is \
-         reinstalled"
-    )]
-    Unknown { name: String },
-}
-
-const fn sunday_zero(weekday: Weekday) -> i8 {
-    match weekday {
-        Weekday::Sunday => 0,
-        Weekday::Monday => 1,
-        Weekday::Tuesday => 2,
-        Weekday::Wednesday => 3,
-        Weekday::Thursday => 4,
-        Weekday::Friday => 5,
-        Weekday::Saturday => 6,
-    }
 }
 
 /// Is `expr` a well-formed five-field expression?
@@ -426,7 +289,7 @@ fn matches_wall_minute(fields: &[&str], wall: WallClock) -> bool {
 /// Midnight on `date` in `zone`, resolved FORWARD through a gap — a zone whose
 /// clocks jump at midnight has no 00:00 that day, and the day still starts.
 fn first_instant_of(zone: &FireZone, date: jiff::civil::Date) -> Option<i64> {
-    zone.zone
+    zone.time_zone()
         .to_ambiguous_zoned(date.at(0, 0, 0, 0))
         .compatible()
         .ok()

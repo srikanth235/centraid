@@ -58,6 +58,7 @@ pub mod log;
 pub mod migrations;
 pub mod page;
 pub mod snapshot;
+pub mod time;
 pub mod value;
 
 pub use access::{

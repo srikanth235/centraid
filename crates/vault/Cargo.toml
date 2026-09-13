@@ -26,6 +26,7 @@ flate2.workspace = true
 hex.workspace = true
 hkdf.workspace = true
 hmac.workspace = true
+jiff.workspace = true
 jsonschema.workspace = true
 rand.workspace = true
 rusqlite.workspace = true

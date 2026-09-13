@@ -156,7 +156,7 @@ pub fn parse_iso_ms(text: &str) -> Option<i64> {
 }
 
 /// Howard Hinnant's `days_from_civil`, the proleptic Gregorian conversion.
-const fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+pub(crate) const fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     let year = if month <= 2 { year - 1 } else { year };
     let era = if year >= 0 { year } else { year - 399 } / 400;
     let year_of_era = year - era * 400;
@@ -166,7 +166,7 @@ const fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
 }
 
 /// Its inverse, `civil_from_days`.
-const fn civil_from_days(days: i64) -> (i64, i64, i64) {
+pub(crate) const fn civil_from_days(days: i64) -> (i64, i64, i64) {
     let shifted = days + 719_468;
     let era = if shifted >= 0 {
         shifted
