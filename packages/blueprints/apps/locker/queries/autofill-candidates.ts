@@ -18,7 +18,8 @@ interface LoginRow {
   username?: string | null;
   url?: string | null;
   url_match_policy?: "registrable-domain" | "exact-host" | null;
-  otp_seed?: string | null;
+  /** The projected `otp_seed IS NOT NULL`, as SQLite answers it: 0 or 1. */
+  has_totp?: number | boolean | null;
   compromised?: number | boolean | null;
 }
 
@@ -52,7 +53,13 @@ export default async function autofillCandidates({
         ctx,
         {
           name: "locker.autofill.logins",
-          select: LOCKER_ITEM_COLUMNS,
+          // PRESENCE, NEVER THE CELL (#1020, D-1020-CL5). `LOCKER_ITEM_COLUMNS`
+          // carries no sealed column, so `row.otp_seed` was `undefined` on
+          // every row and `has_totp` was FALSE FOR EVERY ITEM IN EVERY VAULT —
+          // the Companion was never told an item carries a one-time code.
+          // Asking for the column would hand the Companion ciphertext; asking
+          // whether it is set hands it a boolean.
+          select: `${LOCKER_ITEM_COLUMNS}, otp_seed IS NOT NULL AS has_totp`,
           from: "locker_item",
           where: "type = ? AND deleted_at IS NULL",
           bind: ["login"],
@@ -91,7 +98,7 @@ export default async function autofillCandidates({
           row.url_match_policy === "exact-host"
             ? "exact-host"
             : "registrable-domain",
-        has_totp: row.otp_seed != null,
+        has_totp: row.has_totp === 1 || row.has_totp === true,
         compromised: row.compromised === 1 || row.compromised === true,
         warning:
           row.compromised === 1 ||

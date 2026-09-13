@@ -272,8 +272,12 @@ function entityByPhysical(vault: DatabaseSync): Map<string, string> {
  * an unknown function, which is a refusal rather than a column: SQLite has
  * functions that read files.
  */
-function columnRefs(name: string, tokens: string[], label: string): string[] {
-  const refs: string[] = [];
+function columnRefs(
+  name: string,
+  tokens: string[],
+  label: string
+): ColumnRef[] {
+  const refs: ColumnRef[] = [];
   tokens.forEach((token, index) => {
     if (OPERATORS.includes(token)) return;
     if (token.startsWith("'") || /^[0-9]/u.test(token)) return;
@@ -288,9 +292,35 @@ function columnRefs(name: string, tokens: string[], label: string): string[] {
       return;
     }
     if (ALLOWED_WORDS.has(lower) && !token.includes(".")) return;
-    refs.push(token);
+    // AN OUTPUT ALIAS IS A NAME, NOT A COLUMN (#1020, D-1020-CL5). `x AS y`
+    // names the projected value; `y` belongs to no table and asking a table
+    // for it is what refused every aliased projection before this.
+    if (tokens[index - 1]?.toLowerCase() === "as") return;
+    refs.push({ ref: token, presence: isPresenceTest(tokens, index) });
   });
   return refs;
+}
+
+/** One column reference, and whether this occurrence only asks if it is set. */
+interface ColumnRef {
+  ref: string;
+  /**
+   * True when the ONLY thing this occurrence asks is `IS NULL` / `IS NOT NULL`.
+   *
+   * PRESENCE IS NOT PLAINTEXT (#1020, D-1020-CL5). A sealed cell's ciphertext
+   * never leaves the vault, but whether an item HAS a one-time code is already
+   * on the member's screen, and a door that refuses to answer it forces the
+   * caller to ask for the cell itself. So a sealed column may be tested for
+   * null and may not be read.
+   */
+  presence: boolean;
+}
+
+function isPresenceTest(tokens: string[], index: number): boolean {
+  if (tokens[index + 1]?.toLowerCase() !== "is") return false;
+  const third = tokens[index + 2]?.toLowerCase();
+  if (third === "null") return true;
+  return third === "not" && tokens[index + 3]?.toLowerCase() === "null";
 }
 
 /**
@@ -302,7 +332,7 @@ function columnRefs(name: string, tokens: string[], label: string): string[] {
  */
 function checkColumn(
   name: string,
-  ref: string,
+  { ref, presence }: ColumnRef,
   tables: PagedDoorTable[],
   label: string
 ): void {
@@ -323,7 +353,7 @@ function checkColumn(
         name,
         `${label} reads ${ref}, which this caller's field mask does not carry`
       );
-    if (table.sealed.includes(column))
+    if (table.sealed.includes(column) && !presence)
       refuse(
         name,
         `${label} reads ${ref}, which is sealed; plaintext takes reveal`
@@ -344,7 +374,7 @@ function checkColumn(
       name,
       `${label} reads ${ref}, which this caller's field mask does not carry`
     );
-  if (owner.sealed.includes(ref))
+  if (owner.sealed.includes(ref) && !presence)
     refuse(
       name,
       `${label} reads ${ref}, which is sealed; plaintext takes reveal`

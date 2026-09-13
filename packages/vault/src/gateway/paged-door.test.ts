@@ -179,6 +179,55 @@ describe("the door refuses what it cannot check", () => {
   });
 });
 
+// PRESENCE IS NOT PLAINTEXT (#1020, D-1020-CL5). Locker's Companion picker has
+// to know whether an item carries a one-time code and must never be handed the
+// seed; before this the only way to ask was to select the sealed cell, so the
+// answer was hardcoded `false` for every item in every vault.
+describe("a sealed column, asked whether it is set", () => {
+  beforeEach(() => {
+    vault = openOwnerVault();
+  });
+
+  const locker = (query: Record<string, unknown>) => (): unknown =>
+    vault.gateway.page(
+      vault.owner,
+      {
+        name: "locker.autofill.logins",
+        select: "item_id, title",
+        from: "locker_item",
+        order: {
+          sortColumn: "item_id",
+          pkColumn: "item_id",
+          descending: false,
+        },
+        ...query,
+      } as never,
+      { limit: 5 }
+    );
+
+  it("still refuses the cell itself", () => {
+    expect(locker({ select: "item_id, otp_seed" })).toThrow(
+      /sealed; plaintext takes reveal/u
+    );
+    expect(locker({ select: "item_id, lower(otp_seed) AS x" })).toThrow(
+      /sealed; plaintext takes reveal/u
+    );
+  });
+
+  it("answers IS NOT NULL, under a name the projection gives it", () => {
+    const page = locker({
+      select: "item_id, title, otp_seed IS NOT NULL AS has_totp",
+    })() as { rows: Record<string, unknown>[] };
+    expect(page.rows).toStrictEqual([]);
+  });
+
+  it("takes an output alias as a name and not as a column", () => {
+    // `has_totp` belongs to no table; before the alias rule the door asked
+    // `locker_item` for it and refused every aliased projection.
+    expect(locker({ select: "item_id, title AS label" })).not.toThrow();
+  });
+});
+
 describe("the door applies the caller's own decision", () => {
   beforeEach(() => {
     vault = openOwnerVault();
