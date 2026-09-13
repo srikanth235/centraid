@@ -1,9 +1,16 @@
 package dev.centraid.shared.screen
 
+import centraid.core.v1.Command
+import centraid.core.v1.Envelope
+import centraid.core.v1.ErrorCode
+import centraid.core.v1.PairErrorCode
+import centraid.core.v1.PairRequest
+import centraid.core.v1.Request
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
+import dev.centraid.core.CoreFailure
 import dev.centraid.core.CoreOutcome
 import dev.centraid.core.CoreRole
 import kotlinx.coroutines.CoroutineDispatcher
@@ -16,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okio.ByteString.Companion.toByteString
 
 /**
  * HOME, WIRED TO A REAL VAULT — AND TO THE OTHERS THE DEVICE HOLDS
@@ -72,6 +80,114 @@ public class HomeSession private constructor(
 
     public fun send(event: HomeEvent) {
         scope.launch { host.send(event) }
+    }
+
+    /**
+     * Redeem a pairing ticket (#1020, D-1020-B7).
+     *
+     * THROUGH THIS SESSION'S CORE, and that is the whole reason it lives here
+     * rather than in a bridge of its own. R-1020-24 is one core per device
+     * process: a second `CentraidCore` opened to do the pairing would be
+     * refused by `SingleHandleGuard`, and a bridge that held its own would be a
+     * second holder of the thing the guard exists to keep singular.
+     *
+     * `code` carries the ENCODED TICKET the camera read, not the ticket's
+     * secret — see `Handle::pair`, which mints the real redemption. The shell
+     * hands over exactly what it read off the screen and assembles nothing.
+     */
+    public suspend fun pair(ticket: String, deviceName: String, platform: String): PairOutcome {
+        val core = this.core ?: return PairOutcome.NoCore
+        val answer = core.call(
+            Envelope(
+                request = Request(
+                    pair = PairRequest(
+                        code = ticket.encodeToByteArray().toByteString(),
+                        device_name = deviceName,
+                        platform = platform,
+                    ),
+                ),
+            ),
+        )
+        return when (answer) {
+            // BY CODE, NOT BY WHATEVER TEXT ARRIVED. A failure's own words are
+            // for a log — the simulator showed a member "the gateway is
+            // unreachable: the gateway did not answer the pairing request",
+            // which is a Rust error's Display and not a sentence anyone should
+            // read. The pairing screen has three things to say and picks
+            // between them itself.
+            is CoreOutcome.Failed -> PairOutcome.Refused(
+                when (val failure = answer.failure) {
+                    is CoreFailure.Refused ->
+                        if (failure.code == ErrorCode.ERROR_CODE_PEER_UNREACHABLE.value ||
+                            failure.code == ErrorCode.ERROR_CODE_NO_RELAY_REACHABLE.value ||
+                            failure.code == ErrorCode.ERROR_CODE_TIMEOUT.value
+                        ) {
+                            "Centraid could not reach that gateway. Check it is running and try again."
+                        } else {
+                            "That pairing code was not accepted. Show a new one."
+                        }
+                    else -> "Centraid could not pair this device right now."
+                },
+            )
+            is CoreOutcome.Answered -> {
+                // WIRE FLATTENS A `oneof` INTO NULLABLE FIELDS. There is no
+                // `result` wrapper to read, and at most one of these is set.
+                val paired = answer.value.response?.pair
+                val ok = paired?.ok
+                when {
+                    ok != null -> PairOutcome.Paired(ok.vault_name)
+                    // THE GATEWAY'S VOCABULARY IS THREE CODES AND CARRIES NO
+                    // TEXT, so the sentence is made here. A member holding a
+                    // screenshot of an old QR must not learn from the answer
+                    // whether that ticket ever existed, which is why the two
+                    // "no" cases read the same.
+                    paired?.error?.code == PairErrorCode.PAIR_ERROR_CODE_EXPIRED_CODE ->
+                        PairOutcome.Refused("That pairing code has expired. Show a new one.")
+                    else ->
+                        PairOutcome.Refused("That pairing code was not accepted. Show a new one.")
+                }
+            }
+        }
+    }
+
+    /**
+     * Run one sync pass and report what it moved.
+     *
+     * Rides `Command` because the C ABI is five symbols and means it: a sixth
+     * entry point to trigger a sync would be a sixth entry point in production.
+     * `seat.sync` is answered by the core before the vault sees it, so it never
+     * reaches the command registry.
+     */
+    public suspend fun syncNow(): SyncOutcome {
+        val core = this.core ?: return SyncOutcome(unreachable = true, sentence = "No vault is open.")
+        val answer = core.call(
+            Envelope(
+                request = Request(
+                    command = Command(name = SEAT_SYNC_COMMAND, invoke_key = "shell"),
+                ),
+            ),
+        )
+        return when (answer) {
+            is CoreOutcome.Failed -> SyncOutcome(
+                unreachable = true,
+                sentence = answer.failure.sentence,
+            )
+            is CoreOutcome.Answered -> {
+                val outcome = answer.value.response?.command
+                SyncOutcome(
+                    // The numbers ride as canonical JSON in `output`, which is
+                    // every command's answer shape, so no shell needs a second
+                    // decoder. Read positionally rather than parsed: a JSON
+                    // parser in `commonMain` for five integers would be a
+                    // dependency for nothing.
+                    rowsApplied = outcome?.output?.utf8()?.intField("rowsApplied") ?: 0L,
+                    blobsCompleted = outcome?.output?.utf8()?.intField("blobsCompleted") ?: 0L,
+                    bytesMoved = outcome?.output?.utf8()?.intField("bytesMoved") ?: 0L,
+                    unreachable = outcome?.output?.utf8()?.boolField("unreachable") ?: true,
+                    sentence = outcome?.reason.orEmpty(),
+                )
+            }
+        }
     }
 
     public fun close() {

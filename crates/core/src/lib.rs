@@ -53,6 +53,7 @@ pub mod error;
 pub mod events;
 pub mod handle;
 pub mod identity;
+pub mod link;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.
 pub use centraid_api_proto::core_v1 as api_proto;

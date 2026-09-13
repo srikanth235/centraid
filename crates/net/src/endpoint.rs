@@ -127,6 +127,14 @@ pub struct Endpoint {
     events: broadcast::Sender<ConnectivityEvent>,
 }
 
+/// iroh's own connection type, re-exported.
+///
+/// The byte lane hands one to `iroh-blobs`, and `crates/seat-link` takes one as
+/// a parameter. Naming it here rather than making every caller depend on `iroh`
+/// directly keeps the "this crate is where iroh lives and nowhere else" rule
+/// true of the dependency graph and not only of the code.
+pub type RawConnection = iroh::endpoint::Connection;
+
 /// An accepted connection, with what the admission check decided.
 pub struct Accepted {
     /// The negotiated ALPN. **Routing is by this and nothing else** — never by
@@ -349,7 +357,14 @@ impl Endpoint {
         let peer = *connection.remote_id().as_bytes();
 
         // Routing by ALPN alone.
-        if negotiated == alpn::SEAT {
+        //
+        // ONE ADMISSION RULE, TWO LANES (#1020, D-1020-B1). `SEAT` and `BYTE`
+        // share this arm because they share an answer: a live enrolled device,
+        // or the connection closes before a stream is accepted. They are
+        // separate ALPNs because the PROTOCOL differs — envelopes on one,
+        // iroh-blobs' get/provide on the other — and that is a framing fact,
+        // not an authority one. Writing the check twice is how the two drift.
+        if negotiated == alpn::SEAT || negotiated == alpn::BYTE {
             let device = allowlist.device(&peer).await.filter(Device::is_live);
             let Some(device) = device else {
                 connection.close(
@@ -445,6 +460,20 @@ impl IrohConnection {
     /// that makes this class of bug come back on a slower network.
     pub async fn closed(&self) {
         self.inner.closed().await;
+    }
+
+    /// The connection itself, for a lane that speaks somebody else's protocol.
+    ///
+    /// The byte lane hands this to `iroh-blobs`, whose provider and whose
+    /// `execute_get` both take an `iroh::endpoint::Connection` directly. That is
+    /// the whole reason this accessor exists, and it is why the byte lane can
+    /// reuse a transfer implementation rather than reimplement bao: the
+    /// ADMISSION is ours and happens in `accept` above, the BYTES are iroh's.
+    ///
+    /// Not a general escape hatch. Everything that speaks `centraid_protocol`
+    /// goes through the `Connection` trait implementation below.
+    pub fn iroh(&self) -> &RawConnection {
+        &self.inner
     }
 
     pub fn close_unauthorized(&self) {

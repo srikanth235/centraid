@@ -71,7 +71,7 @@ pub use restore::{
     RecoverPhase, RestoreDrillReport, RestoredPairReport, SealKeyVerdict, restore_check,
     restore_drill,
 };
-pub use store::{BlobError, BlobStore, FsBlobStore, digest};
+pub use store::{BlobError, BlobStore, FsBlobStore, Naming, digest};
 pub use wal::{WalAddress, WalError, WalSegment};
 
 use crate::file::Vault;

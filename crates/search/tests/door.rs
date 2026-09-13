@@ -188,7 +188,7 @@ fn seed(connection: &Connection) {
     connection
         .execute(
             "INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
-             VALUES ('content-6', 'blob:sha256/f', ?1, 1024, ?2)",
+             VALUES ('content-6', 'blob:blake3/f', ?1, 1024, ?2)",
             rusqlite::params!["f".repeat(64), NOW],
         )
         .expect("a photo's bytes are inserted");

@@ -91,6 +91,41 @@ public class HomeBridge {
         session?.send(HomeEvent.ADAPTER.decode(event))
     }
 
+    /**
+     * Redeem a pairing ticket, and call back with what happened (#1020,
+     * D-1020-B7).
+     *
+     * Not `suspend`, for the same reason [send] is not: a SwiftUI button cannot
+     * await. The callback fires on the main dispatcher because its only caller
+     * is a `@Published` setter.
+     *
+     * A session with no core answers [PairOutcome.NoCore] rather than throwing.
+     * That is the state a device is in before a vault is placed on it, and it
+     * is not an error.
+     */
+    public fun pair(
+        ticket: String,
+        deviceName: String,
+        platform: String,
+        onOutcome: (PairOutcome) -> Unit,
+    ) {
+        val session = this.session ?: return onOutcome(PairOutcome.NoCore)
+        scope.launch { onOutcome(session.pair(ticket, deviceName, platform)) }
+    }
+
+    /**
+     * Run one sync pass.
+     *
+     * The pass BLOCKS the core's dispatcher for its duration — it is network
+     * I/O — which is why it is launched rather than awaited and why nothing
+     * here touches the UI thread beyond the callback.
+     */
+    public fun syncNow(onOutcome: (SyncOutcome) -> Unit) {
+        val session = this.session
+            ?: return onOutcome(SyncOutcome(unreachable = true, sentence = "No vault is open."))
+        scope.launch { onOutcome(session.syncNow()) }
+    }
+
     /** The current state, for a view that needs one before it subscribes. */
     public fun current(): ByteArray =
         (session?.state?.value ?: HomeMachine.initial()).encode()

@@ -55,7 +55,7 @@ impl Scratch {
         std::fs::create_dir_all(&dir)?;
         let clock = Arc::new(FixedClock::frozen());
         let file = dir.join("vault.db");
-        let blobs = centraid_vault::backup::store::FsBlobStore::open(
+        let blobs = centraid_vault::backup::store::FsBlobStore::open_content(
             centraid_vault::file::Vault::blobs_root_for(&file),
         )
         .expect("a content store opens");

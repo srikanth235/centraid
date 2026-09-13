@@ -137,7 +137,7 @@ fn content_item_for(ctx: &CommandCtx<'_, '_>, body_text: &str, format: &str) -> 
             ),
         });
     }
-    let sha = centraid_media::format::sha256_hex(body_text.as_bytes());
+    let sha = crate::content::content_digest(body_text.as_bytes());
     if let Ok(content_id) = ctx.connection().query_row(
         "SELECT content_id FROM core_content_item WHERE sha256 = ?1",
         [&sha],

@@ -554,7 +554,7 @@ fn sha_of_input(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     // uses, and the reason the same photograph declared under two media types
     // is one content item rather than two (v0's dedup hole, `blob/mint.ts:6`).
     let (_, bytes) = decode_data_uri(uri)?;
-    Ok(Some(centraid_media::format::sha256_hex(&bytes)))
+    Ok(Some(crate::content::content_digest(&bytes)))
 }
 
 /// The `kind` bytes imply, when the caller does not say

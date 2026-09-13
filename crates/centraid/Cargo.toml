@@ -18,6 +18,7 @@ centraid-apps-kit = { path = "../apps/kit" }
 centraid-apps-locker = { path = "../apps/locker" }
 centraid-apps-tally = { path = "../apps/tally" }
 centraid-core = { path = "../core" }
+centraid-blobs = { path = "../blobs" }
 centraid-net = { path = "../net" }
 centraid-protocol = { path = "../protocol" }
 centraid-seat = { path = "../seat" }
@@ -41,6 +42,9 @@ url.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+centraid-seat = { path = "../seat" }
+centraid-seat-link = { path = "../seat-link" }
+rusqlite.workspace = true
 # The no-listener test parses the ticket the binary printed, which is the
 # ticket codec's job and not the CLI's.
 centraid-net = { path = "../net" }

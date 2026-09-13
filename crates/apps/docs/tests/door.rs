@@ -640,7 +640,7 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
     }
 
     let drive = Drive::founded("docs-bytes");
-    let store = FsBlobStore::open(drive.dir.join("blobs")).expect("a store opens");
+    let store = FsBlobStore::open_content(drive.dir.join("blobs")).expect("a store opens");
     let door = StoreDoor { store };
     let pdf = b"%PDF-1.7\n% a scanned lease\ntrailer<</Root 1 0 R>>\n%%EOF\n".to_vec();
 

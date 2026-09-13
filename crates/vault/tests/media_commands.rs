@@ -1254,14 +1254,14 @@ fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
     assert_eq!(title, "A single pixel");
     // THE ROW NAMES THE BYTES BY DIGEST, never by carrying them: a photograph
     // inside a `data:` URI in a column is a photograph in the journal.
-    assert!(uri.starts_with("blob:sha256-"), "{uri}");
+    assert!(uri.starts_with("blob:blake3-"), "{uri}");
     assert!(size > 0);
 
     // And the bytes are ACTUALLY THERE. A `content_uri` naming bytes nothing
     // kept is the failure the refusal used to prevent, so this is the assertion
     // that has to replace it.
-    let sha = uri.trim_start_matches("blob:sha256-");
-    let store = centraid_vault::backup::store::FsBlobStore::open(
+    let sha = uri.trim_start_matches("blob:blake3-");
+    let store = centraid_vault::backup::store::FsBlobStore::open_content(
         centraid_vault::file::Vault::blobs_root_for(&scratch.join("vault.db")),
     )
     .expect("the store opens");

@@ -69,6 +69,16 @@ tracing = "0.1"
 base64 = "0.22"
 bytes = "1"
 iroh = "1.2"
+# Wave 3 lane B — the byte plane over BLAKE3 + bao (#1020, D-1020-B1).
+#
+# `iroh-blobs` is NOT an optional convenience over the endpoint: it is the only
+# reason the byte plane can be interrupted. Its transfer is verified per 16 KiB
+# chunk group against a bao outboard, so a window that ends mid-file leaves
+# durable, already-verified chunks behind — which is the single property the
+# whole mobile design rests on. A hand-rolled mover would have to re-verify from
+# the start of the file, and an 800 MB video would then need one unbroken window
+# no phone ever gets.
+iroh-blobs = "0.103"
 prost = "0.14"
 prost-build = "0.14"
 protox = "0.9"

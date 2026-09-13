@@ -6079,3 +6079,266 @@ answers `Request::Pair` with `NotYetAvailable`, so a phone cannot dial a gateway
 that is now ready to answer it. The `Send` finding above makes both tractable —
 the obstacle was never ownership — but the shell must decide which runtime the
 endpoint runs on, and that is a shell decision this lane did not take.
+
+## The byte plane — bytes get their own lane, and their own hash
+
+The design was reasoned from the platforms rather than from the code. Two facts
+set the shape:
+
+- **Bytes are immutable and content-addressed, so they never conflict.** Two
+  devices holding the same hash hold the identical file. No merge, no clock, no
+  last-writer-wins. Every hard question in sync stays on the log plane.
+- **On a phone every window of network time is short and unpredictable.** iOS
+  hands `BGAppRefreshTask` about thirty seconds at a moment of its own choosing;
+  Android defers a periodic worker into whatever Doze decides; either can
+  suspend the process between one packet and the next.
+
+So the one property that matters is: *any window of any length makes durable,
+verified progress, and nothing is ever redone.*
+
+### SHA-256 could not have delivered it
+
+This was the decision everything else leaned on, and it is not an optimisation.
+SHA-256 is all-or-nothing — the only way to know a stream of bytes is the file
+it claims to be is to receive every one of them. A window that moves 60% of a
+video produces nothing a device may keep, because nothing can say which 60% was
+genuine. The next window starts from zero and a large file is never transferred
+at all.
+
+BLAKE3 is a Merkle tree. With bao outboards each 16 KiB chunk group is verified
+as it arrives, against the one root hash the row already carried, so an
+interrupted transfer leaves chunks *proven* to belong to this file, from a peer
+that could not have forged them. Resumption then involves no trust in the
+interrupted transfer at all: it is set subtraction over chunk ranges.
+
+The schema did not have to move for it. Both hashes are 32 bytes and render as
+64 lowercase hex, so `core_content_item`'s
+`CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*')` holds unchanged,
+as does `core_content_derivative`'s. What changed is the column's meaning and
+the URI beside it — and the URI carries the hash's name (`blob:blake3-<hex>`)
+precisely so a v0 row is refused as superseded rather than verified against the
+wrong function.
+
+### What was built
+
+`crates/blobs`, over `iroh-blobs 0.103`:
+
+- `hash.rs` — `ContentHash`, the URI scheme, and the refusal of `blob:sha256-`.
+- `store.rs` — `ByteStore`, and `Holding`, which has **three** states. `Partial`
+  is the normal state of a phone that has been awake for thirty seconds, and
+  code that treats holding as a boolean re-downloads from zero.
+- `lane.rs` — `serve` (gateway) and `fetch` (seat), and the law in three lines.
+- `crates/protocol`: a fourth ALPN, `centraid/v1/byte`.
+- `crates/net`: `accept` gates `SEAT` and `BYTE` in one arm, and
+  `IrohConnection::iroh()` hands the raw connection to iroh-blobs.
+- `crates/centraid/src/run.rs`: the gateway opens a `ByteStore` at
+  `<data-dir>/blobs` and serves the lane, one task per connection.
+
+### The ALPN is ours, and that is a security decision
+
+`iroh_blobs::ALPN` (`/iroh-bytes/4`) would have worked and was rejected. The
+stock provider serves any blob it holds to anyone who knows the hash — the
+correct design for a public content network and the wrong one for a personal
+vault. Advertising it would have put a second admission rule in a second place.
+Under `centraid/v1/byte` the one rule in `Endpoint::accept` applies unchanged, an
+unenrolled peer is closed before a frame is read, and a generic iroh-blobs client
+cannot negotiate at all. `alpn.rs` carries a test that says so, because the
+"simplification" to the upstream constant would fail nowhere else.
+
+### The evidence
+
+`crates/blobs/tests/windows.rs` transfers a 24 MiB blob in 120 ms windows that
+are cut where they fall — the cut is a dropped future, which is what suspension
+looks like from inside the process and is the harder case than a closed socket.
+Five windows: four cut, and the fifth opens holding 23,543,808 verified bytes
+and moves the remaining 1,622,016.
+
+The assertions are the law restated: each window starts from exactly what the
+last one left; holding never goes backwards; the total moved is at most
+`size + one chunk group per window` (a cut window discards its unverified
+group); and the exported file is byte-identical and re-hashes to the name it was
+fetched under.
+
+**The falsification is what makes it worth having.** Replace `LocalInfo::
+missing()` with a request for the whole blob — the restart-from-zero
+implementation this plane exists to avoid — and the same test runs four hundred
+windows without ever finishing 24 MiB. The phone failure, reproduced in a unit
+test.
+
+A second test asserts an unenrolled peer that knows a hash gets nothing.
+
+### The wiring was wrong, and only the compiler noticed
+
+`run.rs`'s accept loop had the seat arm as an unguarded `Ok(Some(accepted))`,
+so it matched every lane that was not `PAIR`. The byte arm added beside it was
+**unreachable the moment it was written**: a `centraid/v1/byte` connection would
+have gone to the envelope reader, which would have tried to parse iroh-blobs'
+protocol as a length-framed frame. An `unreachable pattern` warning caught it.
+Nothing at runtime would have — the gateway would have started, paired, served
+rows, and refused every photograph with a framing error — and nothing in
+`crates/blobs` could have, because every test there serves the lane itself.
+
+Every arm now names its ALPN and there is a real catch-all that logs an
+advertised lane with no arm. `crates/centraid/tests/byte_lane.rs` is the test
+that would have caught it: it spawns the shipped binary, seeds a blob into
+`<data-dir>/blobs` before the gateway starts, pairs over QUIC and fetches 2 MiB
+across the real accept loop.
+
+### A bug the test found in the first hour
+
+`Holding::Partial` originally carried iroh-blobs' `BlobStatus::Partial { size }`
+as "bytes held". It is the **blob's size**, not what landed. The windows test
+failed on its first run — a resumed window reported 21,544,960 bytes already
+held while the store said zero — and the fix reads the bitfield, which is the
+only thing that knows. Had `size` been populated at that moment the mistake
+would have been invisible, and every progress figure in the product would have
+read as the file size from the first chunk onward. `Holding` now carries `held`
+and `size` as two separate, separately-named numbers.
+
+### What this crate deliberately does not decide
+
+**Which** blobs to move, and when. Tier policy (thumbnail / preview / original),
+metered links, charging state, what the vault's rows say is worth having — all
+of that is scheduling, it needs facts this crate does not have, and it belongs
+above it. This crate answers "move these bytes, as far as this window gets" and
+reports honestly how far that was.
+
+### And the thing that was considered and deferred
+
+An HTTPS store-and-forward mailbox, so a background `NSURLSession` could carry
+segments while the app is suspended — the one case iroh cannot serve, because a
+QUIC socket dies with the process and a remote wake needs a cloud this product
+does not have. It buys *away from home AND unopened for hours*. It costs a
+stable hostname, a certificate, a component someone operates, and a new trust
+line. Deferred on the owner's call, and cheap to defer because the hash is the
+contract: a mailbox is additive — one more provider the gateway fetches from by
+hash — and nothing built here is discarded if it lands. D-1020-B4 carries the
+triggers that would reopen it.
+
+## The seat's half, and what a simulator found that no test had
+
+The byte plane above gave a gateway something to serve. This closes the other
+end: the device half, the hash migration it needed, and the first time an
+iPhone paired with a gateway over QUIC.
+
+### The CAS moved to BLAKE3, and the backup plane did not
+
+D-1020-B2 was recorded with the byte plane and only landed here. The split that
+made it safe: `FsBlobStore` gained a `Naming` — `open()` stays sha256 and every
+existing caller is a BACKUP caller, `open_content()` is BLAKE3 and is what
+`Vault::with_blobs` takes. `contracts/golden/format-golden.json` seals the
+backup format across two languages, so an artefact's identity is a re-keying
+event and not housekeeping; a member's own bytes are a different question with a
+different answer.
+
+`content_digest` is now the ONE function every content-minting site calls —
+the mint, media, notes, people, social — because `core_content_item.sha256` is
+UNIQUE and is the dedupe key for every owner of those bytes. Two hash functions
+writing that column would file one photograph as two items and the column's own
+constraint could not catch it.
+
+The column did not move: both hashes are 32 bytes and render as 64 lowercase
+hex, so the `CHECK` holds. Its NAME is now historical.
+
+**Re-seeding the demo vault proved it end to end.** 19 photographs under
+`blob:blake3-…`, a CAS whose filenames are those hashes, and the grid rendering
+them on the simulator. A vault seeded before this reads `blob:sha256-…` and is
+refused as superseded with its own sentence — which is what v0-no-legacy looks
+like when it is done honestly rather than quietly.
+
+### The gateway's byte store had been pointed at the backup store
+
+`run.rs` opened the iroh-blobs index at `<data-dir>/blobs`. That path is
+`cmd::blobs_dir_in` — the BACKUP plane's shared artefact store. Two stores over
+one directory under two naming schemes, and nothing would have said so. It is
+now `<vault>.bytes`, per vault for the same reason the content CAS is per vault:
+a vault handed to someone else is handed over whole.
+
+And because the CAS is BLAKE3-named and so is the byte store, the gateway takes
+the CAS in place at startup — each file's own name is the hash it must have, so
+the import is a verification rather than a copy, and safe to repeat on every
+start.
+
+### What was built
+
+| | |
+| --- | --- |
+| `centraid_blobs::plan` | which blobs a window asks for, and in what order. Pure. |
+| `centraid_seat::needed_blobs` | what the replica has rows for and may not have bytes for. |
+| `crates/seat-link` | the gateway connection, the byte pass, the floor bootstrap, the runtime |
+| `centraid_core::link` | the `SeatNetwork` seam, so the core can hold a network it cannot depend on |
+| `Handle::pair` / `seat.sync` | pairing and one pass, over the five symbols the ABI already has |
+| `GatewaySheet.swift` | the door behind Settings |
+
+### The hang that cost an hour, and the ceiling that would not have
+
+`SeatLink::sync` opened a SECOND bidirectional stream for the intent sink. The
+gateway's `seat_lane::serve` calls `accept_bi` exactly once and then loops on
+that stream, so the second open waited for an accept that never came — with no
+error on either side, no close, and nothing to end it. Every pass hung forever.
+
+`link.rs`'s own module header says, in the file I wrote: *"A client that opened
+a stream per request would hang on the second one with no error on either side
+— the gateway is not accepting another."* I wrote the warning and then did the
+thing.
+
+What made it expensive was not the bug but the absence of a ceiling: a hang with
+no timeout is indistinguishable from a slow network, so it read as "the test is
+slow" for an hour while duplicate runs stacked up behind it. Both planes are now
+bounded by `PLANE_TIMEOUT`, which is correct on its own terms — a phone's window
+is bounded by definition — and would have turned an hour into sixty seconds. The
+suite now runs in **6.9 seconds**.
+
+### Two defects the simulator found and no test had
+
+**A gateway that was switched off was reported as a rejected pairing code.**
+`SeatLink::pair` had flattened every failure into one `Pair(String)` and the
+caller recovered the kind by matching on the sentence's TEXT. A dial that failed
+anywhere the matcher did not anticipate fell through to "refused" — so a member
+whose gateway was simply not running was told to mint a new code, which would
+fail exactly the same way. The refusal is now a variant, and
+`an_unreachable_gateway_is_not_reported_as_a_bad_pairing_code` is what stops it
+being flattened again.
+
+**A Rust error's `Display` was shown to a member**, twice: "`sync` is not yet
+available: a seat; this vault is …" and "the gateway is unreachable: the gateway
+did not answer the pairing request". `CoreError::sentence` is a table keyed by
+code precisely so this cannot happen, and both leaks got around it — one by
+propagating a typed refusal where an OUTCOME was wanted, one by a shell echoing
+whatever text arrived. The pairing screen now picks its own words from the code.
+
+Neither was reachable from a unit test. Both were obvious within seconds of
+looking at a phone.
+
+### What the simulator run actually showed
+
+1. **Paired.** The ticket typed into the sheet, `Paired with Centraid.` on the
+   phone, and on the gateway: `a device paired device=dev_6c87cb6030646cec
+   label=iPhone 17 Pro`. First time a Centraid device has joined a gateway over
+   QUIC.
+2. **Sync refused honestly** on a vault the device is the authority for: "This
+   vault lives on this device, so there is nothing to sync."
+3. **Gateway stopped, pairing retried:** "Centraid could not reach that gateway.
+   Check it is running and try again." — the right kind, the right remedy, and
+   the UI stayed responsive throughout.
+4. **Photos rendering under BLAKE3** after the re-seed.
+
+`crates/centraid/tests/seat_offline.rs` is the rigorous version of scenario 3:
+pair, sync, `Endpoint::idle` (what a backgrounded phone does), a pass with no
+socket, a wait, `resume`, and a pass that starts from the cursor it kept and is
+told it is caught up. It asserts the cursor never moves while offline, that the
+seat's identity survives the gap, and that the gateway re-serves nothing.
+
+### What is still not built
+
+- **A phone cannot yet sync rows**, because the vault it holds is placed as a
+  gateway-role artifact and a seat replica has no creation path through the
+  core. `bootstrap_from` lays a replica's schema from a served page; what is
+  missing is `Core::open` creating an empty replica FILE without founding a
+  vault. That is the next slice and it is small.
+- Linking iroh pulled in `SystemConfiguration`, `Network` and `Security`. Those
+  are declared in `mobile/shared/build.gradle.kts`; the framework had built
+  clean for two waves and failed with nineteen undefined symbols the moment a
+  seat could dial.
+- `IosMediaLibrary.page`, the video poster derivative, and the Keychain wrapper
+  are unchanged.

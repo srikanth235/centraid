@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SwiftUI
+import UIKit
 
 // THE FRAMEWORK IS OPTIONAL AT COMPILE TIME, AND `Package.swift` SAYS WHY.
 //
@@ -37,6 +38,14 @@ final class ShellModel: ObservableObject {
 
     @Published var path: [Route] = []
     @Published var masked = false
+    /// Whether the gateway sheet is up.
+    @Published var gatewaySheetOpen = false
+    /// The last thing pairing or a sync said, in a member's words.
+    ///
+    /// A SENTENCE THE CORE ALREADY DECIDED WAS SHOWABLE. Nothing here composes
+    /// one out of an error: `Error.detail` is logs-only, and a shell that made
+    /// its own sentence from a peer's words would be the hole in that rule.
+    @Published var gatewayStatus = ""
 
     /// The last finished state for each screen, as encoded bytes.
     ///
@@ -98,6 +107,62 @@ final class ShellModel: ObservableObject {
             .sorted()
     }
     #endif
+
+    /// Redeem a pairing ticket (#1020, D-1020-B7).
+    ///
+    /// The ticket goes over UNCHANGED — the core mints the redemption from it.
+    /// A shell that pulled the secret and the ticket id out and sent those
+    /// would be a second place they live, and the device's public key is the
+    /// endpoint's to state, not this class's.
+    func pair(ticket: String, done: @escaping () -> Void) {
+        #if canImport(CentraidShared)
+        home.pair(
+            ticket: ticket.trimmingCharacters(in: .whitespacesAndNewlines),
+            deviceName: UIDevice.current.name,
+            platform: "ios"
+        ) { [weak self] outcome in
+            // KOTLIN'S NESTED CLASSES FLATTEN IN OBJECTIVE-C. A sealed
+            // interface's members export as `PairOutcomePaired` and
+            // `PairOutcomeRefused`, not as nested types — so `PairOutcome.Paired`
+            // does not exist on this side and the compiler says so.
+            switch outcome {
+            case let paired as PairOutcomePaired:
+                self?.gatewayStatus = "Paired with \(paired.vaultName)."
+            case let refused as PairOutcomeRefused:
+                self?.gatewayStatus = refused.sentence
+            default:
+                self?.gatewayStatus = "There is no vault open on this device yet."
+            }
+            done()
+        }
+        #else
+        gatewayStatus = "This build has no core."
+        done()
+        #endif
+    }
+
+    /// Run one sync pass and report what moved.
+    func syncNow(done: @escaping () -> Void) {
+        #if canImport(CentraidShared)
+        home.syncNow { [weak self] outcome in
+            // AN UNREACHABLE GATEWAY IS A STATE, NOT A FAILURE. A phone in a
+            // lift is not a broken phone, and the sentence the core supplies
+            // says so without a red banner.
+            if outcome.unreachable {
+                self?.gatewayStatus = outcome.sentence.isEmpty
+                    ? "Centraid could not reach your gateway."
+                    : outcome.sentence
+            } else {
+                self?.gatewayStatus =
+                    "Synced: \(outcome.rowsApplied) changes, \(outcome.blobsCompleted) files."
+            }
+            done()
+        }
+        #else
+        gatewayStatus = "This build has no core."
+        done()
+        #endif
+    }
 
     /// Forward an event. The shared module reduces; nothing here decides.
     func send(screen: String, event: Data) {

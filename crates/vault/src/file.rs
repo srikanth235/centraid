@@ -48,7 +48,7 @@ pub struct Vault {
     pub(crate) fault: Cell<Option<crate::snapshot::Fault>>,
     /// THE LOCAL CONTENT STORE, where bytes that are not text go.
     ///
-    /// `core_content_item.content_uri` is `blob:sha256-<hex>` for anything
+    /// `core_content_item.content_uri` is `blob:blake3-<hex>` for anything
     /// binary, and the bytes themselves live here — a vault file is rows, and
     /// a photograph in a row is a photograph in the journal. See
     /// [`Vault::with_blobs`].
@@ -204,7 +204,7 @@ impl Vault {
     ///
     /// A vault file is rows. Text bodies stay in the row — the FTS triggers
     /// decode them in-transaction and cannot do I/O — and every other kind of
-    /// byte spills here, with the row keeping only `blob:sha256-<hex>`. That
+    /// byte spills here, with the row keeping only `blob:blake3-<hex>`. That
     /// is v0's split (`packages/vault/src/blob/mint.ts:88`-`:99`) and the port
     /// kept the split while dropping the store, so `media.add_asset` refused
     /// every photograph and `core.add_document` refused every PDF.

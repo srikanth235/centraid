@@ -115,6 +115,9 @@ private struct HeaderAction: View {
 /// to open.
 struct HomeTitleRow: View {
     @Environment(\.colorScheme) private var scheme
+    /// Optional so every existing call site — the fixture test's included —
+    /// keeps working without a shell.
+    var onSettings: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -122,12 +125,21 @@ struct HomeTitleRow: View {
                 .centraidType("title")
                 .foregroundStyle(Theme.color("text", scheme))
             Spacer(minLength: 0)
-            CentraidIconView(
-                iconKey: "Settings",
-                tint: Theme.color("text", scheme),
-                size: 22
-            )
-            .frame(minWidth: 44, minHeight: 44)
+            // THE GEAR IS THE GATEWAY'S DOOR (#1020, D-1020-B7). It had no
+            // action at all; "connect this device to a gateway" is settings and
+            // adding a fourth chrome control for it would be adding chrome the
+            // rulebook does not have a place for.
+            Button {
+                onSettings?()
+            } label: {
+                CentraidIconView(
+                    iconKey: "Settings",
+                    tint: Theme.color("text", scheme),
+                    size: 22
+                )
+                .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
             .accessibilityLabel("Settings")
             .accessibilityIdentifier("home-settings")
         }

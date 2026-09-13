@@ -461,7 +461,7 @@ fn encode_uri_component(text: &str) -> String {
 /// A `text/plain` content item for a body, deduped on its sha
 /// (`knowledge.ts:67`-`:99`).
 fn content_item_for(ctx: &CommandCtx<'_, '_>, body_text: &str) -> Result<String> {
-    let sha = centraid_media::format::sha256_hex(body_text.as_bytes());
+    let sha = crate::content::content_digest(body_text.as_bytes());
     let existing: Option<String> = ctx
         .connection()
         .query_row(

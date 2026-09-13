@@ -27,6 +27,9 @@ centraid-protocol = { path = "../protocol" }
 centraid-seat = { path = "../seat" }
 centraid-vault = { path = "../vault" }
 prost.workspace = true
+# The network seam hands a connection DOWN (`link::SeatNetwork::sync`): SQLite
+# allows one writer and this crate holds it, so the type has to be nameable here.
+rusqlite.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

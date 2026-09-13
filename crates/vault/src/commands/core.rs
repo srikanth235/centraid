@@ -556,10 +556,13 @@ const BODY_HISTORY_WRAPPERS: &[(&str, &str, &str)] = &[
     ("knowledge.note", "knowledge_note", "note_id"),
 ];
 
-/// `blob:sha256-<hex>` — the content URI of bytes that live in the CAS
-/// (`packages/vault/src/blob/store.ts:20`).
-fn blob_uri_for(sha256: &str) -> String {
-    format!("blob:sha256-{sha256}")
+/// `blob:blake3-<hex>` — the content URI of bytes that live in the CAS.
+///
+/// The prefix comes from [`crate::content::BLOB_URI_PREFIX`] and is not spelled
+/// here: the reader strips that constant, so a literal in the writer is one
+/// edit away from a vault whose rows nothing can read.
+fn blob_uri_for(hash: &str) -> String {
+    format!("{}{hash}", crate::content::BLOB_URI_PREFIX)
 }
 
 /// The instant a document trashed at `now` purges at.
@@ -1045,7 +1048,10 @@ pub(crate) struct Minted {
 /// `media.add_asset`'s rule.
 pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) -> Result<Minted> {
     let (media_type, bytes) = decode_data_uri(uri)?;
-    let sha = centraid_media::format::sha256_hex(&bytes);
+    // THE CONTENT DIGEST, not `sha256_hex`: this value goes in the UNIQUE
+    // `core_content_item.sha256` column and in the URI beside it, so it must be
+    // the one function every other content-minting site uses (D-1020-B2).
+    let sha = crate::content::content_digest(&bytes);
     let existing: Option<(String, Option<String>)> = ctx
         .connection()
         .query_row(
@@ -1072,7 +1078,8 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
     }
     // TEXT STAYS IN THE ROW (the FTS feed decodes it in-transaction); binary
     // bytes SPILL to the local content store and the row keeps only
-    // `blob:sha256-<hex>`. That is v0's split verbatim
+    // `blob:blake3-<hex>`. That is v0's SPLIT verbatim; the hash is not v0's
+    // (D-1020-B2)
     // (`packages/vault/src/blob/mint.ts:88`-`:99`), and the port shipped the
     // split with no store behind it: every photograph and every PDF was
     // refused by `media.add_asset` and `core.add_document` for a year of
@@ -1532,7 +1539,7 @@ pub(crate) fn pre_inline_bytes_are_storable(ctx: &CommandCtx<'_, '_>) -> Result<
     }
     let held: i64 = ctx.connection().query_row(
         "SELECT COUNT(*) FROM core_content_item WHERE sha256 = ?1",
-        [centraid_media::format::sha256_hex(&bytes)],
+        [crate::content::content_digest(&bytes)],
         |row| row.get(0),
     )?;
     Ok((held == 0).then(|| {
@@ -3929,16 +3936,48 @@ mod tests {
     #[test]
     fn only_text_over_a_data_uri_decodes() {
         assert!(content_text("application/pdf", "data:application/pdf;base64,JVBER").is_none());
-        assert!(content_text("text/plain", "blob:sha256-00").is_none());
+        assert!(content_text("text/plain", "blob:blake3-00").is_none());
     }
 
-    /// A `blob:` URI is the CAS spelling v0 writes, and a port that spelled it
-    /// differently would make every staged document unreadable.
+    /// THE WRITER AND THE READER SPELL IT THE SAME WAY, and that is the whole
+    /// of this test — it is asserted against
+    /// [`crate::content::BLOB_URI_PREFIX`] rather than a literal, because the
+    /// reader strips that constant and a literal here would pass while every
+    /// row it wrote was unreadable.
+    ///
+    /// It used to assert v0's `blob:sha256-`. The scheme moved to BLAKE3 in
+    /// D-1020-B2 so that a transfer interrupted by a phone's window keeps its
+    /// verified chunks; the SPLIT is still v0's, the hash is not.
     #[test]
-    fn the_cas_uri_is_v0s_spelling() {
+    fn the_cas_uri_is_spelled_the_way_the_reader_strips_it() {
+        let hash = "ab".repeat(32);
+        let uri = blob_uri_for(&hash);
         assert_eq!(
-            blob_uri_for("ab".repeat(32).as_str()),
-            format!("blob:sha256-{}", "ab".repeat(32))
+            uri,
+            format!("{}{hash}", crate::content::BLOB_URI_PREFIX),
+            "the writer and the reader disagree about the CAS scheme"
         );
+        assert_eq!(
+            uri.strip_prefix(crate::content::BLOB_URI_PREFIX),
+            Some(hash.as_str())
+        );
+        assert!(
+            !uri.starts_with(crate::content::SUPERSEDED_URI_PREFIX),
+            "a fresh row must never be written under the superseded scheme"
+        );
+    }
+
+    /// The digest that names a member's bytes is NOT the backup plane's.
+    /// `format-golden.json` seals the backup format across two languages, so
+    /// the day these two collapse into one function is the day an artefact's
+    /// identity silently changes (D-1020-B2, D-1020-R1).
+    #[test]
+    fn the_content_digest_is_not_the_backup_digest() {
+        let bytes = b"a photograph";
+        assert_ne!(
+            crate::content::content_digest(bytes),
+            crate::backup::store::digest(bytes)
+        );
+        assert_eq!(crate::content::content_digest(bytes).len(), 64);
     }
 }

@@ -1439,7 +1439,7 @@ mod tests {
         let blob = ContentRow {
             content_id: "c1".to_owned(),
             byte_size: Some(9),
-            content_uri: Some("blob:sha256-ab".to_owned()),
+            content_uri: Some("blob:blake3-ab".to_owned()),
             created_at: None,
         };
         let (src, poster) = uris_of(Some(&blob));

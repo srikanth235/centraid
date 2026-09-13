@@ -80,6 +80,30 @@ pub struct Handle {
     /// Monotonic counter for diagnostic ids, so two panics in one process are
     /// two filings.
     diagnostics: AtomicU64,
+    /// The network, when one has been attached (#1020, D-1020-B7).
+    ///
+    /// `None` is the ordinary state and is exactly a local-first vault: every
+    /// unit test in this crate runs this way, and so does a seat between
+    /// windows. `crates/seat-link` provides the implementation and the process
+    /// builder attaches it — the core cannot depend on that crate, because it
+    /// depends on this one.
+    network: Mutex<Option<Box<dyn crate::link::SeatNetwork>>>,
+}
+
+/// The command name a shell sends to run one sync pass.
+///
+/// Namespaced under `seat.` so it cannot collide with a vault command: those
+/// are `<app>.<action>` over registered apps, and no app is called `seat`.
+pub const SEAT_SYNC_COMMAND: &str = "seat.sync";
+
+/// A pairing refusal on the wire. The code carries the whole answer: the
+/// vocabulary has no text field, on purpose (`pair.proto`).
+const fn refused(code: wire::PairErrorCode) -> wire::PairResponse {
+    wire::PairResponse {
+        result: Some(wire::pair_response::Result::Error(wire::PairError {
+            code: code as i32,
+        })),
+    }
 }
 
 /// The opener.
@@ -159,7 +183,7 @@ impl Core {
         // The binary writes refuse with the sentence
         // `pre_inline_bytes_are_storable` gives them, which names the cause.
         let blobs_root = Vault::blobs_root_for(&path);
-        let vault = match centraid_vault::backup::store::FsBlobStore::open(&blobs_root) {
+        let vault = match centraid_vault::backup::store::FsBlobStore::open_content(&blobs_root) {
             Ok(store) => vault.with_blobs(Box::new(store)),
             Err(error) => {
                 tracing::warn!(
@@ -180,6 +204,7 @@ impl Core {
             session: Mutex::new(Session::new()),
             cancelled: Mutex::new(Vec::new()),
             diagnostics: AtomicU64::new(0),
+            network: Mutex::new(None),
         })
     }
 }
@@ -203,15 +228,195 @@ impl Handle {
         self.role == Role::Gateway
     }
 
-    /// Start the network endpoint. A no-op placeholder in wave 2: lane C's
-    /// `Endpoint::spawn` needs a tokio runtime, and which runtime a shell owns
-    /// is the shell's decision, so the core is handed one rather than making
-    /// one. Named here so the ordering claim ("`open` returns first") has a
-    /// place to be true of.
+    /// Redeem a pairing ticket (#1020, D-1020-B7).
+    ///
+    /// ## What `PairRequest` means on THIS side of the ABI
+    ///
+    /// The same message is used shell→core and seat→gateway, and it carries a
+    /// different thing in each direction. Seat→gateway it is the redemption:
+    /// `code` is the ticket's secret and `device_public_key` is the seat's
+    /// identity. Shell→core — here — `code` is **the encoded ticket the camera
+    /// read**, and the core mints the redemption itself.
+    ///
+    /// That is deliberate and it is the safer half. The secret, the ticket id
+    /// and this device's public key are all things the core knows or derives;
+    /// a shell that assembled them would be a second place they live, and the
+    /// public key in particular is the endpoint's and not the shell's to state.
+    /// So the shell hands over exactly what it read off the screen and nothing
+    /// else.
+    ///
+    /// A refusal is a `CoreError::Refused` carrying a member-facing sentence.
+    /// The gateway's own vocabulary is three coarse codes on purpose — a member
+    /// holding a screenshot of an old QR must not learn whether that ticket ever
+    /// existed — so the sentence is made from the code and never from a detail.
+    fn pair(&self, request: &wire::PairRequest) -> Result<wire::PairResponse> {
+        use crate::link::PairRefusal;
+        let held = self
+            .network
+            .lock()
+            .map_err(|_| CoreError::NotYetAvailable {
+                what: "pairing",
+                lands_in: "a core whose network lock was not poisoned",
+            })?;
+        let Some(network) = held.as_ref() else {
+            return Err(CoreError::NotYetAvailable {
+                what: "pairing",
+                lands_in: "a core with a network attached (`attach_network`)",
+            });
+        };
+        // The camera read text; it arrives as bytes because the field is bytes.
+        let Ok(encoded) = std::str::from_utf8(&request.code) else {
+            return Ok(refused(wire::PairErrorCode::InvalidCode));
+        };
+        match network.pair(encoded, &request.device_name, &request.platform) {
+            Ok(paired) => Ok(wire::PairResponse {
+                result: Some(wire::pair_response::Result::Ok(wire::PairOk {
+                    gateway_id: crate::link::hex_lower(&paired.endpoint_id),
+                    device_id: paired.device_id,
+                    vault_id: paired.vault_id,
+                    vault_name: paired.vault_name,
+                })),
+            }),
+            // A GATEWAY THAT WAS NOT REACHED IS NOT A REFUSED TICKET, and the
+            // member's action differs: come back in range rather than mint a new
+            // code. So it is a typed `CoreError` — whose sentence comes from the
+            // code table — and not a `PairResponse::Error`, which is a
+            // vocabulary about tickets.
+            Err(PairRefusal::Unreachable) => Err(CoreError::Unavailable {
+                reason: "the gateway did not answer the pairing request".to_owned(),
+            }),
+            Err(PairRefusal::Expired) => Ok(refused(wire::PairErrorCode::ExpiredCode)),
+            Err(PairRefusal::NotATicket | PairRefusal::Refused) => {
+                Ok(refused(wire::PairErrorCode::InvalidCode))
+            }
+        }
+    }
+
+    /// One sync pass, as a `CommandOutcome` a shell already knows how to read.
+    ///
+    /// The numbers go out as canonical JSON in `output`, which is what every
+    /// other command's answer is, so no shell needs a new decoder. `reason` is
+    /// the one member-facing sentence, and it is empty on a pass that reached
+    /// the gateway — a successful sync has nothing to say.
+    fn seat_sync(&self) -> Result<wire::CommandOutcome> {
+        // A MEMBER ASKED; A MEMBER IS ANSWERED (#1020, D-1020-B7). `sync_now`
+        // refuses a gateway role with `NotYetAvailable`, whose Display is
+        // developer text — "`sync` is not yet available: a seat; this vault is
+        // …" — and the shell put it on screen verbatim, because a status line
+        // shows what it is given. A typed refusal is right for a caller and
+        // wrong for a sentence, so the role case is turned into an OUTCOME here
+        // rather than propagated.
+        if self.is_gateway() {
+            return Ok(wire::CommandOutcome {
+                status: wire::CommandStatus::Executed as i32,
+                output: br#"{"rowsApplied":0,"blobsCompleted":0,"bytesMoved":0,"blobsDeferred":0,"unreachable":true}"#.to_vec(),
+                reason: "This vault lives on this device, so there is nothing to sync."
+                    .to_owned(),
+                ..Default::default()
+            });
+        }
+        let outcome = self.sync_now()?;
+        let output = serde_json::json!({
+            "rowsApplied": outcome.rows_applied,
+            "blobsCompleted": outcome.blobs_completed,
+            "bytesMoved": outcome.bytes_moved,
+            "blobsDeferred": outcome.blobs_deferred,
+            "unreachable": outcome.unreachable,
+        });
+        Ok(wire::CommandOutcome {
+            // AN UNREACHABLE GATEWAY IS NOT A FAILED COMMAND. The pass ran, it
+            // did what it could, and it reported honestly; a shell that drew a
+            // red banner every time a phone was in a lift would be wrong about
+            // what happened.
+            status: wire::CommandStatus::Executed as i32,
+            output: serde_json::to_vec(&output).unwrap_or_default(),
+            reason: outcome.sentence,
+            ..Default::default()
+        })
+    }
+
+    /// Attach a network to this core (#1020, D-1020-B7).
+    ///
+    /// **The ordering claim this method exists for still holds**: `Core::open`
+    /// returns before any of this, so a shell's first screen never waits on a
+    /// relay handshake. What changed is who owns the runtime.
+    ///
+    /// The old refusal said "which runtime a shell owns is the shell's
+    /// decision, so the core is handed one rather than making one". A Swift
+    /// shell owns no tokio runtime and never will, so that was a requirement
+    /// nothing could satisfy rather than a deferral — and it kept the endpoint
+    /// unbuilt for two waves. The runtime now belongs to the implementation
+    /// behind [`crate::link::SeatNetwork`], which owns one on threads of its
+    /// own and is attached here.
+    ///
+    /// Attaching twice replaces the first, which is what a re-pair or a
+    /// re-bind needs; the previous network is dropped and its socket with it.
+    pub fn attach_network(&self, network: Box<dyn crate::link::SeatNetwork>) {
+        if let Ok(mut held) = self.network.lock() {
+            *held = Some(network);
+        }
+    }
+
+    /// Whether a network is attached. A shell draws "not connected to a
+    /// gateway" from this and from [`crate::link::SeatNetwork::gateway`], which
+    /// are two different facts: no network at all, versus a network with no
+    /// gateway paired to it.
+    #[must_use]
+    pub fn has_network(&self) -> bool {
+        self.network
+            .lock()
+            .is_ok_and(|held| held.as_ref().is_some_and(|_| true))
+    }
+
+    /// Run one sync pass, if a network is attached.
+    ///
+    /// Blocks. Never call it on a UI thread: the callers are a background
+    /// refresh task and an explicit "sync now", both already off the main
+    /// thread on both platforms.
+    pub fn sync_now(&self) -> Result<crate::link::SyncOutcome> {
+        // A GATEWAY IS THE AUTHORITY FOR ITS OWN FILE, so there is nothing for
+        // it to sync FROM and a pass would be catastrophic rather than useless:
+        // the seat bootstrap lays a replica's schema and cursor over the file,
+        // and a vault that became a replica of someone else's log would stop
+        // being the thing it is the authority for. Refused by ROLE, which is
+        // the one place that fact lives.
+        if self.is_gateway() {
+            return Err(CoreError::NotYetAvailable {
+                what: "sync",
+                lands_in: "a seat; this vault is this device's own authority and has nothing to sync from",
+            });
+        }
+        let held = self
+            .network
+            .lock()
+            .map_err(|_| CoreError::NotYetAvailable {
+                what: "sync",
+                lands_in: "a core whose network lock was not poisoned",
+            })?;
+        let Some(network) = held.as_ref() else {
+            return Err(CoreError::NotYetAvailable {
+                what: "sync",
+                lands_in: "a core with a network attached (`attach_network`)",
+            });
+        };
+        self.with_vault(|vault| {
+            vault
+                .read(|connection| Ok(network.sync(connection)))
+                .map_err(CoreError::from)
+        })
+    }
+
+    /// The old name, kept because the ordering claim is documented against it.
+    ///
+    /// A core with a network attached is started; one without says so rather
+    /// than pretending.
     pub fn start_endpoint(&self) -> Result<()> {
+        if self.has_network() {
+            return Ok(());
+        }
         Err(CoreError::NotYetAvailable {
             what: "start_endpoint",
-            lands_in: "wave 3 lane G (the endpoint on a core thread, with the shell's runtime)",
+            lands_in: "a core with a network attached (`attach_network`)",
         })
     }
 
@@ -469,12 +674,22 @@ impl Handle {
             K::ContentUrls(refs) => Ok(response(wire::response::Kind::ContentUrls(
                 self.with_vault(|vault| crate::api::content_urls(vault, refs))?,
             ))),
+            // THE SEAT'S OWN COMMANDS, ANSWERED BEFORE THE VAULT SEES THEM
+            // (#1020, D-1020-B7). `seat.sync` is not a vault command: it has no
+            // handler, writes no row and would be refused as unregistered. It
+            // rides `Command` because clause 10 of the C ABI says five symbols
+            // and means it — a sixth entry point to trigger a sync would be a
+            // sixth entry point in production.
+            K::Command(command) if command.name == SEAT_SYNC_COMMAND => {
+                Ok(response(wire::response::Kind::Command(self.seat_sync()?)))
+            }
             K::Command(command) => Ok(response(wire::response::Kind::Command(
                 self.with_vault(|vault| crate::api::invoke(vault, &self.registry, command))?,
             ))),
-            K::SnapshotHead(_) | K::Intent(_) | K::Pair(_) => Err(CoreError::NotYetAvailable {
+            K::Pair(pair) => Ok(response(wire::response::Kind::Pair(self.pair(pair)?))),
+            K::SnapshotHead(_) | K::Intent(_) => Err(CoreError::NotYetAvailable {
                 what: "this request",
-                lands_in: "wave 2 lane R (snapshot head) / wave 3 (intent submission, pairing)",
+                lands_in: "wave 2 lane R (snapshot head) / wave 3 (intent submission)",
             }),
             K::DevicesList(_) => Ok(response(wire::response::Kind::DevicesList(
                 self.devices_list()?,

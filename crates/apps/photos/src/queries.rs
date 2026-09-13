@@ -1040,7 +1040,7 @@ mod tests {
     fn a_blob_uri_becomes_three_variants_and_a_data_uri_becomes_none() {
         let blob = ContentRow {
             content_id: "c-1".to_owned(),
-            content_uri: Some("blob:sha256-abc".to_owned()),
+            content_uri: Some("blob:blake3-abc".to_owned()),
             byte_size: Some(10),
             created_at: None,
             deleted_at: None,

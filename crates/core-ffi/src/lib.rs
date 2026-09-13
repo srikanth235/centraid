@@ -119,7 +119,17 @@ pub unsafe extern "C" fn centraid_open(
     // only on the success path.
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
         let config = marshal::config_from_json(bytes)?;
-        Core::open(config)
+        let vault_path = config.path.clone();
+        let handle = Core::open(config)?;
+        // EVERY ROLE, because the network belongs to the DEVICE and not to the
+        // vault's authority. A phone holding a local vault it is the authority
+        // for is still a phone that can pair with a gateway; refusing to bind a
+        // socket because of what a FILE is would be deciding a device question
+        // from a file fact. What a gateway-role core may not do is apply pages
+        // into its own authority — and that is refused in `Handle::sync_now`,
+        // where the role actually means something.
+        attach_network(&handle, &vault_path);
+        Ok::<_, CoreError>(handle)
     }));
     match outcome {
         Ok(Ok(handle)) => {
@@ -134,6 +144,30 @@ pub unsafe extern "C" fn centraid_open(
         // such and the caller gets no handle at all, which is the only honest
         // answer: a poisoned handle it never received cannot be restarted.
         Err(_) => CENTRAID_PANICKED,
+    }
+}
+
+/// Give a seat its network (#1020, D-1020-B7).
+///
+/// **Non-fatal on purpose.** A core with no network is exactly a local-first
+/// vault: every screen still reads, every write still queues, and the shell
+/// draws "not connected to a gateway" — which is a true state and the one every
+/// phone is in before it scans a code. Failing `centraid_open` because a UDP
+/// socket would not bind would be refusing to show a member their own vault
+/// over a network they were not using.
+///
+/// The byte store goes beside the vault file, `<stem>.bytes`, matching the
+/// gateway's layout and the content CAS's: a vault handed to someone else is
+/// handed over whole, and a sibling directory travels with the file it belongs
+/// to.
+fn attach_network(handle: &Handle, vault_path: &std::path::Path) {
+    let bytes_dir = vault_path.with_extension("bytes");
+    match centraid_seat_link::SeatLink::start(&bytes_dir, env!("CARGO_PKG_VERSION")) {
+        Ok(link) => handle.attach_network(Box::new(link)),
+        Err(error) => tracing::warn!(
+            %error,
+            "this seat has no network; it will read what it already holds"
+        ),
     }
 }
 

@@ -113,6 +113,16 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
     // opens its own reader over the same file.
     let mut vault_file: Option<PathBuf> = None;
     let mut vault_id: Option<String> = None;
+    // THE BYTE PLANE'S INDEX, and it is NOT `<data-dir>/blobs` (#1020,
+    // D-1020-B1). That path is `cmd::blobs_dir_in`, the BACKUP plane's shared
+    // artefact store, and putting an iroh-blobs index over it would have two
+    // stores writing one directory under two naming schemes. It is per vault
+    // for the same reason the content CAS is: a vault handed to someone else
+    // is handed over whole, and a sibling directory travels with its file.
+    let mut bytes_dir: Option<PathBuf> = None;
+    // The vault's own CAS, which since D-1020-B2 is BLAKE3-named — so the byte
+    // store can take it in place rather than translate it.
+    let mut content_cas: Option<PathBuf> = None;
     match &args.data_dir {
         Some(dir) => {
             match open_or_found_vault(dir, &args.vault_name) {
@@ -124,6 +134,8 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
                     );
                     vault_file = Some(founded.file.clone());
                     vault_id = Some(founded.vault_id.clone());
+                    bytes_dir = Some(founded.file.with_extension("bytes"));
+                    content_cas = Some(centraid_vault::Vault::blobs_root_for(&founded.file));
                     capture = Some(founded);
                 }
                 Err(why) => {
@@ -263,6 +275,51 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
         }
     };
 
+    // THE BYTE PLANE (#1020, D-1020-B1).
+    //
+    // Opened once and shared by every byte-lane connection: `ByteStore` is a
+    // handle over one `redb` index, and a second store over the same directory
+    // would be a second index over one set of files.
+    //
+    // Non-fatal, exactly like the seat-lane core above. A gateway that cannot
+    // open its blob store can still pair and still serve rows; what a seat gets
+    // is a byte lane that refuses, which shows up as photographs that have not
+    // arrived rather than as a gateway that will not start.
+    let blobs = match bytes_dir {
+        None => None,
+        Some(root) => match centraid_blobs::ByteStore::open(&root).await {
+            Ok(store) => {
+                // TAKE THE VAULT'S OWN BYTES IN. The CAS is BLAKE3-named and so
+                // is this store, so each file's name is the hash it must have —
+                // which makes the import a verification rather than a copy, and
+                // makes it safe to repeat on every start.
+                if let Some(cas) = &content_cas {
+                    match store.import_content_cas(cas).await {
+                        Ok((0, 0)) => {}
+                        Ok((imported, 0)) => {
+                            tracing::info!(imported, "the vault's files are on the byte lane");
+                        }
+                        Ok((imported, mismatched)) => tracing::warn!(
+                            imported,
+                            mismatched,
+                            "some files did not hash to their own name and were not served"
+                        ),
+                        Err(error) => tracing::warn!(%error, "the content store would not import"),
+                    }
+                }
+                Some(store)
+            }
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    root = %root.display(),
+                    "no byte store; this gateway can serve rows and cannot serve files"
+                );
+                None
+            }
+        },
+    };
+
     // The accept loop. A refused connection is logged and the loop continues:
     // one impostor must not take the gateway down.
     let serving = {
@@ -271,6 +328,7 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
         let vault_name = args.vault_name.clone();
         let vault_id = vault_id.clone();
         let core = core.clone();
+        let blobs = blobs.clone();
         tokio::spawn(async move {
             loop {
                 match endpoint.accept(allowlist.as_ref()).await {
@@ -321,7 +379,15 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
                             Err(error) => tracing::warn!(%error, "the pair lane failed"),
                         }
                     }
-                    Ok(Some(accepted)) => {
+                    // EVERY ARM NAMES ITS ALPN (#1020, D-1020-B1). This one
+                    // was an unguarded `Ok(Some(accepted))` and therefore
+                    // matched every lane that was not `PAIR`. The byte lane's
+                    // arm below became unreachable the moment it was added, so
+                    // a `centraid/v1/byte` connection would have been handed to
+                    // the envelope reader, which would have tried to parse
+                    // iroh-blobs' protocol as a length-framed frame. The
+                    // compiler said so; nothing at runtime would have.
+                    Ok(Some(accepted)) if accepted.alpn == alpn::SEAT => {
                         // THE SEAT LANE (#1020, lane D2). `accept` has already
                         // refused an unenrolled peer above this line, so the
                         // device on `accepted` is enrolled by construction.
@@ -359,6 +425,45 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
                                 }
                             }
                         });
+                    }
+                    Ok(Some(accepted)) if accepted.alpn == alpn::BYTE => {
+                        // THE BYTE LANE (#1020, D-1020-B1). `accept` gates this
+                        // ALPN on the same allowlist rule as the seat lane, so
+                        // the peer here is an enrolled, unrevoked device.
+                        let device = accepted
+                            .device
+                            .as_ref()
+                            .map(|device| device.device_id.clone())
+                            .unwrap_or_default();
+                        let Some(blobs) = blobs.clone() else {
+                            tracing::warn!(
+                                %device,
+                                "a seat asked for files and this gateway has no byte store"
+                            );
+                            continue;
+                        };
+                        // ONE TASK PER CONNECTION, and the connection is MOVED
+                        // into it. A seat's window can end at any moment and
+                        // the next one arrives as a new connection; holding
+                        // `accepted` for the task's length is what keeps QUIC
+                        // from discarding stream data the seat has not read,
+                        // which is the same rule the pair lane learned the hard
+                        // way (D-1020-G10).
+                        tokio::spawn(async move {
+                            centraid_blobs::serve(&blobs, accepted.connection.iroh().clone()).await;
+                            tracing::info!(%device, "a byte-lane window closed");
+                            drop(accepted);
+                        });
+                    }
+                    Ok(Some(accepted)) => {
+                        // An ALPN this build advertises and this loop does not
+                        // serve. `Endpoint::accept` refuses anything it does
+                        // not know, so reaching here means an advertised lane
+                        // lost its arm — worth a line rather than a silent drop.
+                        tracing::warn!(
+                            alpn = %String::from_utf8_lossy(&accepted.alpn),
+                            "an advertised lane has no arm in the accept loop"
+                        );
                     }
                     Err(error) => tracing::warn!(%error, "a connection was refused"),
                 }
@@ -463,7 +568,7 @@ fn open_or_found_vault(data_dir: &Path, display_name: &str) -> Result<FoundedVau
     // accepted, over the same file. `cmd::blobs_dir_in` is the BACKUP plane's
     // shared store and is a different question.
     let blobs_root = Vault::blobs_root_for(&file);
-    let vault = match centraid_vault::backup::store::FsBlobStore::open(&blobs_root) {
+    let vault = match centraid_vault::backup::store::FsBlobStore::open_content(&blobs_root) {
         Ok(store) => vault.with_blobs(Box::new(store)),
         Err(error) => {
             // Not fatal: the vault's rows still serve and every text write

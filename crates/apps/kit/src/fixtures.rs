@@ -3477,7 +3477,7 @@ fn seed_notes_demo(
             "INSERT INTO core_content_item
                (content_id, content_uri, sha256, byte_size, language, creator_party_id,
                 origin_device_id, deleted_at, purge_at, created_at, updated_at)
-             VALUES (?1, 'blob:sha256-aa', ?2, 4096, NULL, ?3, NULL, NULL, NULL, ?4, ?4)",
+             VALUES (?1, 'blob:blake3-aa', ?2, 4096, NULL, ?3, NULL, NULL, NULL, ?4, ?4)",
             rusqlite::params![
                 attachment_content,
                 text_sha256("the cabin's confirmation page"),

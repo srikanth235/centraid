@@ -325,7 +325,7 @@ fn a_text_document_files_edits_and_versions() {
 #[test]
 fn a_staged_pdf_files_and_an_inline_one_is_refused_by_name() {
     let drive = Drive::open("docs-staged");
-    let store = FsBlobStore::open(drive.scratch.join("blobs")).expect("a store opens");
+    let store = FsBlobStore::open_content(drive.scratch.join("blobs")).expect("a store opens");
     let bytes = pdf_bytes("a scanned lease");
     let sha = drive.stage(&store, &bytes, "application/pdf", "lease.pdf");
 
@@ -344,7 +344,7 @@ fn a_staged_pdf_files_and_an_inline_one_is_refused_by_name() {
                 &[&content_id]
             )
             .as_deref(),
-        Some(format!("blob:sha256-{sha}").as_str())
+        Some(format!("blob:blake3-{sha}").as_str())
     );
     // THE READING IS THIS DOCUMENT'S, from what the upload said.
     assert_eq!(
@@ -419,7 +419,7 @@ fn a_staged_pdf_files_and_an_inline_one_is_refused_by_name() {
 #[test]
 fn extracted_text_lands_from_the_claim_and_from_the_command() {
     let drive = Drive::open("docs-ocr");
-    let store = FsBlobStore::open(drive.scratch.join("blobs")).expect("a store opens");
+    let store = FsBlobStore::open_content(drive.scratch.join("blobs")).expect("a store opens");
     let sha = drive.stage(&store, &pdf_bytes("receipts"), "application/pdf", "r.pdf");
 
     let added = drive.run(
@@ -865,7 +865,7 @@ fn the_star_and_a_label_are_two_edges_and_untag_removes_one() {
 #[test]
 fn the_byte_source_gates_each_refuse_by_name() {
     let drive = Drive::open("docs-gates");
-    let store = FsBlobStore::open(drive.scratch.join("blobs")).expect("a store opens");
+    let store = FsBlobStore::open_content(drive.scratch.join("blobs")).expect("a store opens");
 
     // NEITHER SOURCE, and BOTH, are the same refusal: send the bytes one way.
     for input in [

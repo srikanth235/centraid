@@ -1,0 +1,31 @@
+[package]
+name = "centraid-seat-link"
+description = "The seat's network half: the gateway connection, the log pass, the byte pass, and the runtime that owns them (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_seat_link"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-blobs = { path = "../blobs" }
+centraid-core = { path = "../core" }
+centraid-net = { path = "../net" }
+centraid-protocol = { path = "../protocol" }
+centraid-seat = { path = "../seat" }
+centraid-vault = { path = "../vault" }
+rusqlite.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+
+[dev-dependencies]
+centraid-ontology = { path = "../ontology" }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time"] }

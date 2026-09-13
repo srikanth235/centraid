@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn an_absent_or_non_data_uri_is_external_and_a_broken_one_is_unreadable() {
         assert_eq!(decode_note_body(None), EXTERNAL_CONTENT);
-        assert_eq!(decode_note_body(Some("blob:sha256/aa")), EXTERNAL_CONTENT);
+        assert_eq!(decode_note_body(Some("blob:blake3/aa")), EXTERNAL_CONTENT);
         assert_eq!(
             decode_note_body(Some("data:text/plain")),
             UNREADABLE_CONTENT

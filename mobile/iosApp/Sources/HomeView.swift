@@ -29,7 +29,7 @@ struct HomeView: View {
             // drawn above the three-branch switch on purpose: a Home that
             // failed to read still has to say which vault failed.
             VaultHeader(vault: home.vault, shell: shell)
-            HomeTitleRow()
+            HomeTitleRow { shell.gatewaySheetOpen = true }
             StatusRibbon(status: home.data.status, shell: shell)
 
             // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
@@ -63,6 +63,9 @@ struct HomeView: View {
         // at the notch and the home indicator and the window's own black shows
         // through — which reads as the app sitting in a letterbox.
         .background(Theme.color("bg", scheme).ignoresSafeArea())
+        .sheet(isPresented: $shell.gatewaySheetOpen) {
+            GatewaySheet(shell: shell)
+        }
         .sheet(isPresented: .constant(home.allAppsSheetOpen)) {
             AllAppsSheet(tiles: home.data.tiles, shell: shell)
         }

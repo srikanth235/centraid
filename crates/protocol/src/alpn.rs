@@ -1,4 +1,4 @@
-//! The three v1 ALPNs (#1020, D-1020-C7).
+//! The four v1 ALPNs (#1020, D-1020-C7, D-1020-B1).
 //!
 //! New and v1-only. v0's four are listed below as `V0_ALPNS` for exactly one
 //! purpose: a test asserts no v1 ALPN equals a v0 one, so a v1 endpoint can
@@ -20,18 +20,36 @@ pub const SEAT: &[u8] = b"centraid/v1/seat";
 /// and `PAIR` must accept one.
 pub const PAIR: &[u8] = b"centraid/v1/pair";
 
+/// Bytes. A seat fetching a blob from its gateway, and nothing else.
+///
+/// **Separate from [`SEAT`] because a different PROTOCOL is spoken on it**, and
+/// routing is by ALPN alone. `SEAT` carries `centraid_protocol`'s length-framed
+/// envelopes; this carries iroh-blobs' own get/provide protocol verbatim, so a
+/// reader that guessed from the connection alone would frame one as the other.
+///
+/// **And it is ours, not `iroh_blobs::ALPN`** (`/iroh-bytes/4`), which is the
+/// security half. iroh-blobs' provider serves any blob it holds to anyone who
+/// knows the hash — that is the correct design for a public content network and
+/// the wrong one for a personal vault. Advertising the stock ALPN would put a
+/// second admission rule in a second place; under `centraid/v1/byte` the ONE
+/// rule in `centraid_net::Endpoint::accept` applies unchanged, an unenrolled
+/// peer is closed before a frame is read, and a generic iroh-blobs client
+/// cannot negotiate at all.
+pub const BYTE: &[u8] = b"centraid/v1/byte";
+
 /// Gateway ↔ gateway, for wave 4's sharing peer plane. Declared now and
 /// advertised by nothing: v0's rule is "no link policy ⇒ never negotiate the
 /// plane" (`packages/tunnel/src/gateway-endpoint.ts:149-154`), and an ALPN an
 /// endpoint does not advertise is a plane that cannot be reached.
 pub const PEER: &[u8] = b"centraid/v1/peer";
 
-/// The three, in a stable order.
-pub const ALL: [&[u8]; 3] = [SEAT, PAIR, PEER];
+/// The four, in a stable order.
+pub const ALL: [&[u8]; 4] = [SEAT, PAIR, BYTE, PEER];
 
-/// What a v1 endpoint advertises today: the seat lane and the pair lane. `PEER`
-/// is deliberately absent until wave 4 lands a link policy to gate it.
-pub const ADVERTISED: [&[u8]; 2] = [SEAT, PAIR];
+/// What a v1 endpoint advertises today: the seat lane, the pair lane and the
+/// byte lane. `PEER` is deliberately absent until wave 4 lands a link policy to
+/// gate it.
+pub const ADVERTISED: [&[u8]; 3] = [SEAT, PAIR, BYTE];
 
 /// v0's four, for the disjointness test only. Never advertised by a v1
 /// endpoint. Sources: `packages/tunnel/src/protocol.ts:7`, `:8`, `:11` and
@@ -49,7 +67,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn the_three_are_pairwise_distinct() {
+    fn the_four_are_pairwise_distinct() {
         let unique: BTreeSet<&[u8]> = ALL.into_iter().collect();
         assert_eq!(unique.len(), ALL.len(), "two v1 ALPNs are the same bytes");
     }
@@ -78,6 +96,7 @@ mod tests {
     fn the_peer_plane_is_declared_and_not_advertised() {
         assert!(ADVERTISED.contains(&SEAT));
         assert!(ADVERTISED.contains(&PAIR));
+        assert!(ADVERTISED.contains(&BYTE));
         assert!(
             !ADVERTISED.contains(&PEER),
             "the peer plane needs a link policy first (wave 4)"
@@ -93,5 +112,18 @@ mod tests {
             assert!(text.starts_with("centraid/v1/"), "{text}");
             assert_eq!(text.split('/').count(), 3, "{text}");
         }
+    }
+
+    /// THE BYTE LANE IS NOT `/iroh-bytes/4`, and the difference is an admission
+    /// rule rather than a preference. Under the stock ALPN any iroh-blobs
+    /// client in the world could negotiate and ask this endpoint for a hash;
+    /// under ours only a peer that reached `Endpoint::accept`'s allowlist check
+    /// can. A commit that "simplified" this to the upstream constant would open
+    /// the vault's bytes to anyone who learned a hash, and would fail nowhere
+    /// else.
+    #[test]
+    fn the_byte_lane_is_centraids_own_alpn() {
+        assert_eq!(BYTE, b"centraid/v1/byte");
+        assert_ne!(BYTE, b"/iroh-bytes/4");
     }
 }

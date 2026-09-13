@@ -3,7 +3,7 @@
 //!
 //! The write half of the byte door is [`crate::file::Vault::with_blobs`]: a
 //! command spills anything that is not `text/*` into the local store and the
-//! row keeps `blob:sha256-<hex>`. This is the read half, and it exists because
+//! row keeps `blob:blake3-<hex>`. This is the read half, and it exists because
 //! a row naming bytes is not a photograph a member can see.
 //!
 //! ## It answers a LOCATION, never the bytes
@@ -28,8 +28,47 @@
 use crate::error::Result;
 use crate::file::Vault;
 
-/// `content_uri` scheme for CAS-backed bytes. v0's `BLOB_URI_PREFIX`.
-pub const BLOB_URI_PREFIX: &str = "blob:sha256-";
+/// `content_uri` scheme for CAS-backed bytes.
+///
+/// **BLAKE3, superseding v0's sha256 (#1020, D-1020-B2).** The hash function is
+/// IN the value, so a vault written before the byte plane is refusable rather
+/// than silently verified against the wrong function — see
+/// [`SUPERSEDED_URI_PREFIX`].
+pub const BLOB_URI_PREFIX: &str = "blob:blake3-";
+
+/// v0's prefix. Present so a reader can tell "an older vault" from "not a blob
+/// URI at all", which are different answers to a member and different actions
+/// for an owner.
+pub const SUPERSEDED_URI_PREFIX: &str = "blob:sha256-";
+
+/// THE HASH THAT NAMES A MEMBER'S BYTES (#1020, D-1020-B2).
+///
+/// One function, because `core_content_item.sha256` is UNIQUE and is the dedupe
+/// key for every owner of those bytes: a mint that hashed one way and a media
+/// import that hashed another would file the same photograph as two items, and
+/// the column's own constraint would not catch it.
+///
+/// **Why not sha256.** sha256 is all-or-nothing — the only way to know a stream
+/// of bytes is the file it claims to be is to receive every one of them. On a
+/// phone that means a thirty-second window which moved 60% of a video produces
+/// nothing that may be kept, and a large file never crosses at all. BLAKE3 is a
+/// Merkle tree, so with bao every 16 KiB chunk group is verified as it arrives
+/// and an interrupted transfer leaves proven bytes behind. That property is
+/// what `crates/blobs` is built on and it is not reachable from sha256.
+///
+/// **The column does not move.** Both hashes are 32 bytes and render as 64
+/// lowercase hex, so `CHECK (length(sha256) = 64 AND sha256 NOT GLOB
+/// '*[^0-9a-f]*')` holds unchanged. The column's NAME is now historical; its
+/// meaning is this function.
+///
+/// **Not the BACKUP plane's digest.** `backup::store::digest` stays sha256:
+/// `contracts/golden/format-golden.json` seals the backup format across two
+/// languages, and changing an artefact's identity is a re-keying event and not
+/// housekeeping (D-1020-R1).
+#[must_use]
+pub fn content_digest(bytes: &[u8]) -> String {
+    hex::encode(blake3::hash(bytes).as_bytes())
+}
 
 /// Media types a browser executes in the origin of whatever page embeds them.
 ///
@@ -133,6 +172,15 @@ impl Vault {
         };
         let byte_size = byte_size.unwrap_or_default();
 
+        if uri.starts_with(SUPERSEDED_URI_PREFIX) {
+            // A VAULT FROM BEFORE THE BYTE PLANE. Named apart from "not a blob
+            // URI" because the remedy is an owner's, not a member's, and
+            // because verifying a sha256 name against blake3 bytes would be a
+            // silent mismatch on every file.
+            return Ok(absent(
+                "This file was stored by an older version of Centraid and needs to be re-imported.",
+            ));
+        }
         let Some(sha) = uri.strip_prefix(BLOB_URI_PREFIX) else {
             // TEXT LIVES IN THE ROW, by design: the search index decodes it
             // in-transaction and cannot do I/O. There is no file, and there

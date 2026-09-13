@@ -386,7 +386,7 @@ fn draft_message() -> CommandDefinition {
             };
             // RENT THE BYTES, OWN THE REFERENCE (P2): identical bodies dedupe
             // on sha256.
-            let sha = centraid_media::format::sha256_hex(body_text.as_bytes());
+            let sha = crate::content::content_digest(body_text.as_bytes());
             let existing: Option<String> = ctx
                 .connection()
                 .query_row(

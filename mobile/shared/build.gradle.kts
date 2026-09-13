@@ -89,6 +89,25 @@ kotlin {
             // was: the link succeeded, the app built, the app ran, and nothing
             // called the core until this wave wired a read.
             linkerOpts("-force_load", "$slice/libcentraid_core_ffi.a")
+            // THE FRAMEWORKS IROH NEEDS (#1020, D-1020-B7).
+            //
+            // The core gained an endpoint, and `netwatch` — iroh's interface
+            // and reachability watcher — calls `SCDynamicStore*` and
+            // `SCNetworkReachability*`. Those live in
+            // `SystemConfiguration.framework`, which nothing in the link
+            // referenced before, so the framework built clean for two waves and
+            // then failed with nineteen undefined symbols the moment a seat
+            // could dial. `Security` comes with it: rustls' platform verifier
+            // reaches `SecTrust*` on Apple targets.
+            //
+            // These are LINKER opts and not a cinterop: the symbols are
+            // referenced by Rust, not by Kotlin, so there is nothing to
+            // generate a binding for.
+            linkerOpts(
+                "-framework", "SystemConfiguration",
+                "-framework", "Network",
+                "-framework", "Security",
+            )
             // DYNAMIC IN DEBUG, STATIC IN RELEASE (#1020 Tooling coverage).
             //
             // The podspec precedent in v0 was `static_framework = true`

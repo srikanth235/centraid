@@ -48,6 +48,7 @@
 #![forbid(unsafe_code)]
 
 pub mod applier;
+pub mod bytes;
 pub mod chain;
 pub mod error;
 pub mod identity;
@@ -61,6 +62,7 @@ pub mod state;
 pub mod sync;
 
 pub use applier::{ApplyReport, apply_page};
+pub use bytes::{BlobNeed, needed_blobs};
 pub use error::{Result, SeatError};
 pub use identity::{SeatIdentity, replica_storage_key};
 pub use intent::{

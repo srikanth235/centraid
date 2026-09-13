@@ -71,10 +71,43 @@ pub trait BlobStore {
     fn size(&self, id: &str) -> Result<u64>;
 }
 
-/// The digest that names a blob.
+/// The digest that names a BACKUP artefact.
+///
+/// **sha256, and it stays sha256.** `contracts/golden/format-golden.json` seals
+/// the backup format across two languages and an artefact's identity is part of
+/// it, so changing this is a re-keying event and not housekeeping (D-1020-R1).
+/// A member's own bytes are named by `crate::content::content_digest`, which is
+/// BLAKE3 for reasons that have nothing to do with backup — see D-1020-B2.
 #[must_use]
 pub fn digest(bytes: &[u8]) -> String {
     centraid_media::format::sha256_hex(bytes)
+}
+
+/// Which hash names the blobs in a store.
+///
+/// TWO PLANES, TWO HASHES, ONE IMPLEMENTATION (#1020, D-1020-B2). The file
+/// layout, the atomic put and the verifying get are identical; only the naming
+/// function differs, and a second copy of this type would be a second place for
+/// the atomicity rule to be got wrong.
+///
+/// A store never guesses: the opener says which plane it is, because the
+/// opener is the only thing that knows what it is opening.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Naming {
+    /// Backup artefacts. Sealed by `format-golden.json`.
+    BackupSha256,
+    /// A member's own bytes, so they can move on the byte plane.
+    ContentBlake3,
+}
+
+impl Naming {
+    #[must_use]
+    pub fn digest(self, bytes: &[u8]) -> String {
+        match self {
+            Self::BackupSha256 => digest(bytes),
+            Self::ContentBlake3 => crate::content::content_digest(bytes),
+        }
+    }
 }
 
 fn check_id(id: &str) -> Result<()> {
@@ -89,14 +122,38 @@ fn check_id(id: &str) -> Result<()> {
 #[derive(Debug, Clone)]
 pub struct FsBlobStore {
     root: PathBuf,
+    naming: Naming,
 }
 
 impl FsBlobStore {
-    /// Open (creating) a store rooted at `root`.
+    /// Open (creating) a store of BACKUP artefacts, named by sha256.
+    ///
+    /// Every existing caller is a backup caller, which is why this keeps the
+    /// short name: the backup plane predates the byte plane and its format is
+    /// sealed.
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
+        Self::open_with(root, Naming::BackupSha256)
+    }
+
+    /// Open (creating) a store of a member's OWN bytes, named by BLAKE3.
+    ///
+    /// This is the store `Vault::with_blobs` takes, and the naming is what lets
+    /// `crates/blobs` move these files over the byte lane without a second
+    /// index or a translation table: the filename IS the hash a seat asks for.
+    pub fn open_content(root: impl AsRef<Path>) -> Result<Self> {
+        Self::open_with(root, Naming::ContentBlake3)
+    }
+
+    fn open_with(root: impl AsRef<Path>, naming: Naming) -> Result<Self> {
         let root = root.as_ref().to_path_buf();
         fs::create_dir_all(&root).map_err(io_at(&root))?;
-        Ok(Self { root })
+        Ok(Self { root, naming })
+    }
+
+    /// Which hash names the blobs here.
+    #[must_use]
+    pub const fn naming(&self) -> Naming {
+        self.naming
     }
 
     #[must_use]
@@ -112,7 +169,7 @@ impl FsBlobStore {
 
 impl BlobStore for FsBlobStore {
     fn put(&self, bytes: &[u8]) -> Result<String> {
-        let id = digest(bytes);
+        let id = self.naming.digest(bytes);
         let target = self.path_of(&id)?;
         if target.exists() {
             return Ok(id);
@@ -139,8 +196,10 @@ impl BlobStore for FsBlobStore {
             }
             Err(error) => return Err(io_at(&path)(error)),
         };
-        // The digest is the name. Bit-rot is reported, never returned.
-        let actual = digest(&bytes);
+        // The digest is the name. Bit-rot is reported, never returned — and it
+        // is THIS store's digest: a content blob verified with the backup
+        // plane's hash would be reported corrupt on every read.
+        let actual = self.naming.digest(&bytes);
         if actual != id {
             return Err(BlobError::Corrupt {
                 id: id.to_owned(),
