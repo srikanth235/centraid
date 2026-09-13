@@ -1,0 +1,28 @@
+# THE ALL-APPS LISTING IS A SHEET, NEVER A DESTINATION.
+#
+# It is not a second Home and it gets no route — the same law the Photos grid's
+# `more` follows. The Home underneath is unchanged, which is the whole reason
+# the flag sits on the state beside `data` rather than replacing it.
+all_apps_sheet_open: true
+data {
+  springboard: SPRINGBOARD_CONTENT
+  tiles {
+    app_id: "photos" status: TILE_STATUS_CONTENT size: TILE_SIZE_LARGE wide: true earns_grid: true
+    count { value: 3 } count_label: "photos"
+    body { photos { offline_pack: true cells { asset_id: "asset-1" thumbnail_path: "/thumbs/asset-1.jpg" } } }
+  }
+  tiles { app_id: "docs" status: TILE_STATUS_EMPTY size: TILE_SIZE_MEDIUM wide: true empty_copy: "Add your first document" }
+  tiles { app_id: "notes" status: TILE_STATUS_EMPTY size: TILE_SIZE_MEDIUM wide: true empty_copy: "Write your first note" }
+  tiles { app_id: "agenda" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }
+  tiles { app_id: "tasks" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Capture the next thing to do" }
+  tiles { app_id: "people" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
+  tiles { app_id: "tally" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
+  tiles { app_id: "locker" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL earns_grid: true empty_copy: "Unlock to see your items" body { locker { locked: true } } }
+  things { total: 3 settled: true }
+  status { tone: TONE_QUIET copy: "Everything is on your gateway" destination: DESTINATION_NONE }
+  # THE PACKED GRID, decided by the machine so the two shells cannot pack it
+  # differently. A wide tile takes a whole line; smalls pair. A lone small at
+  # the end is not a hole.
+  grid_rows { app_ids: "photos" }
+  grid_rows { app_ids: "locker" }
+}

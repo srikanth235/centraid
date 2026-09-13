@@ -1,6 +1,9 @@
 package dev.centraid.shared
 
 import centraid.screen.v1.BackupState
+import centraid.screen.v1.HomeState
+import centraid.screen.v1.Springboard
+import centraid.screen.v1.TileStatus
 import centraid.screen.v1.MediaPermission
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.PhotosGridState
@@ -14,6 +17,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import java.io.File
 
 /**
@@ -245,6 +249,83 @@ class ScreenFixtureSpec : StringSpec({
             contentCount(state.loading, state.failure, state.draft) shouldBe 1
         }
     }
+    // --- Home: the graded springboard -------------------------------------
+
+    fun home(case: String): HomeState =
+        HomeState.ADAPTER.decode(screens.resolve("home/$case.bin").readBytes())
+
+    "home: an unreadable springboard is NOT a first run" {
+        // THE FOURTH READ STATE, and the reason Home has one. Both fixtures
+        // show eight tiles with no content; only one of them may say the vault
+        // is empty, and it is the one whose reads LANDED.
+        val unreadable = home("every-tile-unreadable")
+        val firstRun = home("first-run")
+
+        unreadable.data_.shouldNotBeNull().every_tile_unreadable.shouldBeTrue()
+        unreadable.data_!!.springboard shouldBe Springboard.SPRINGBOARD_CONTENT
+        unreadable.data_!!.tiles.all { it.status == TileStatus.TILE_STATUS_UNKNOWN }.shouldBeTrue()
+
+        firstRun.data_!!.springboard shouldBe Springboard.SPRINGBOARD_FIRST_RUN
+        firstRun.data_!!.every_tile_unreadable.shouldBeFalse()
+
+        // The two must never decode to the same screen.
+        unreadable.data_!!.springboard shouldNotBe firstRun.data_!!.springboard
+    }
+
+    "home: a withheld count is ABSENT and never zero" {
+        val content = home("content")
+        val locker = content.data_!!.tiles.first { it.app_id == "locker" }
+        // Locker has CONTENT and hands over no count. A `0` here would be a lie
+        // about how many secrets a member holds.
+        locker.status shouldBe TileStatus.TILE_STATUS_CONTENT
+        locker.count.shouldBeNull()
+        // The vault total OMITS it rather than adding zero: 1284 + 42 + 7.
+        content.data_!!.things!!.total shouldBe 1333
+    }
+
+    "home: a capped count says the total is only a floor" {
+        val things = home("status-urgent").data_!!.things!!
+        things.capped.shouldBeTrue()
+        things.total shouldBe 500
+    }
+
+    "home: an unaddressable photo is still a CELL" {
+        val photos = home("content").data_!!.tiles.first { it.app_id == "photos" }
+        val cells = photos.body!!.photos!!.cells
+        cells.size shouldBe 3
+        // Dropping this row would reflow ten photos as one blank under a "10".
+        cells.last().thumbnail_path.shouldBeNull()
+    }
+
+    "home: Locker earns the grid while EMPTY" {
+        val locker = home("first-run").data_!!.tiles.first { it.app_id == "locker" }
+        locker.status shouldBe TileStatus.TILE_STATUS_EMPTY
+        locker.earns_grid.shouldBeTrue()
+    }
+
+    "home: a loading springboard reports its total unsettled" {
+        val loading = home("loading-first").data_!!
+        loading.springboard shouldBe Springboard.SPRINGBOARD_LOADING
+        loading.things!!.settled.shouldBeFalse()
+        // A read in flight holds its slot at full geometry.
+        loading.tiles.all { it.earns_grid }.shouldBeTrue()
+    }
+
+    "home: a refused Home has no grid at all" {
+        // Distinct from every tile being unreadable: that Home loaded and could
+        // not read its apps; this one could not load, so it invents no apps.
+        val refused = home("read-refused")
+        refused.data_.shouldBeNull()
+        refused.failure.shouldNotBeNull().kind shouldBe
+            ReadFailureKind.READ_FAILURE_KIND_NO_COPY_YET
+    }
+
+    "home: the all-apps sheet leaves the Home underneath intact" {
+        val sheet = home("all-apps-open")
+        sheet.all_apps_sheet_open.shouldBeTrue()
+        sheet.data_.shouldNotBeNull().tiles.size shouldBe 8
+    }
+
 }) {
     companion object {
         fun File.bytes(case: String): ByteArray = resolve("$case.bin").readBytes()

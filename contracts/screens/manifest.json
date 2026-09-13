@@ -3,6 +3,55 @@
   "$note": "Screen-state fixtures: one .textproto source, one .bin beside it. Decoded by mobile/shared's jvmTest (Wire) and by mobile/iosApp/Tests (SwiftProtobuf). Regenerate with `bun contracts/tools/build-screen-fixtures.ts && bun run format`; `git diff --exit-code contracts/screens` is the drift check (#1020).",
   "fixtures": [
     {
+      "case": "all-apps-open",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/all-apps-open.textproto",
+      "binary": "contracts/screens/home/all-apps-open.bin"
+    },
+    {
+      "case": "content",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/content.textproto",
+      "binary": "contracts/screens/home/content.bin"
+    },
+    {
+      "case": "every-tile-unreadable",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/every-tile-unreadable.textproto",
+      "binary": "contracts/screens/home/every-tile-unreadable.bin"
+    },
+    {
+      "case": "first-run",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/first-run.textproto",
+      "binary": "contracts/screens/home/first-run.bin"
+    },
+    {
+      "case": "loading-first",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/loading-first.textproto",
+      "binary": "contracts/screens/home/loading-first.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/read-refused.textproto",
+      "binary": "contracts/screens/home/read-refused.bin"
+    },
+    {
+      "case": "status-urgent",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/status-urgent.textproto",
+      "binary": "contracts/screens/home/status-urgent.bin"
+    },
+    {
       "case": "draft-dirty",
       "screen": "notes",
       "type": "centraid.screen.v1.NotesEditorState",

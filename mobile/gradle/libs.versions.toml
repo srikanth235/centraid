@@ -40,10 +40,18 @@ kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+# `libjnidispatch.so` for desktop ABIs only; the AAR carries the Android ones
+# and is the only way the native bridge loads on a device. Without it the app
+# runs, the screen draws, and the first `centraid_open` fails with
+# `dlopen failed: library "libjnidispatch.so" not found` — which is what the
+# first emulator run of a wired Home did.
 
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+# The Compose BOM stopped bringing the icon set in transitively; the three
+# screens that use `Icons.Filled.*` need it named (#1020, wave A).
+androidx-compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }

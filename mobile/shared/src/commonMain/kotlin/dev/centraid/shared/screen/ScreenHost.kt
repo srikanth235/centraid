@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.withLock
 
 /**
  * What holds a [ScreenMachine] while a screen is on the screen
@@ -31,6 +32,26 @@ public class ScreenHost<S, E>(private val machine: ScreenMachine<S, E>) {
     )
     private var _revision: ULong = 0uL
 
+    /**
+     * ONE REDUCE AT A TIME (#1020, wave A).
+     *
+     * `send` is read-modify-write over `_state` and `_revision`, and Home fans
+     * out ONE READ PER APP: seven answers land independently, on whatever
+     * threads the core's dispatcher gave them. Without this lock two of them
+     * read the same state, reduced their own event onto it, and the second
+     * write threw the first away — so a tile that had arrived went back to
+     * `LOADING` and stayed there.
+     *
+     * It was invisible on a single-threaded dispatcher and appeared the moment
+     * a real core answered from a pool: Docs, People and Tally sat loading on a
+     * simulator while Notes, Agenda and Tasks drew their rows, every run.
+     *
+     * A `Mutex` and not a single-threaded dispatcher, because which dispatcher
+     * a shell owns is the shell's decision — the same reason `start_endpoint`
+     * is handed a runtime rather than making one.
+     */
+    private val reducing = kotlinx.coroutines.sync.Mutex()
+
     public val state: StateFlow<S> = _state.asStateFlow()
 
     public val effects: SharedFlow<ScreenEffect> = _effects.asSharedFlow()
@@ -46,9 +67,18 @@ public class ScreenHost<S, E>(private val machine: ScreenMachine<S, E>) {
      * answer to a question it had not yet been recorded as asking.
      */
     public suspend fun send(event: E) {
-        val step = machine.reduce(_state.value, event)
-        _revision += 1uL
-        _state.value = step.state
+        val step = reducing.withLock {
+            val step = machine.reduce(_state.value, event)
+            _revision += 1uL
+            _state.value = step.state
+            step
+        }
+        // THE EFFECTS ARE EMITTED OUTSIDE THE LOCK. `emit` suspends when the
+        // buffer is full, and suspending there would hold the reduce lock while
+        // waiting for a runner that may itself be trying to send — which is the
+        // deadlock this ordering exists to avoid. The state is already
+        // published, so the claim above ("the state is visible before the
+        // effects") still holds.
         step.effects.forEach { _effects.emit(it) }
     }
 

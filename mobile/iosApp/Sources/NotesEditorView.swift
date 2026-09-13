@@ -23,7 +23,10 @@ struct NotesEditorView: View {
                     Text(sentence)
                     if !remedy.isEmpty { Text(remedy) }
                 }
-            case let .draft(draft):
+            // `ScreenContent`'s third case is `.data`, for every screen
+            // (#1020, D-1020-E3). `.draft` was a name this view invented
+            // and nothing declared — invisible until the first compile.
+            case let .data(draft):
                 HStack {
                     Text(state.saveLabel)
                     Spacer()

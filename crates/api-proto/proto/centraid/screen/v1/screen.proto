@@ -601,3 +601,416 @@ message NotesEditorEvent {
     SeatState seat = 1;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Home — the graded springboard
+// ---------------------------------------------------------------------------
+
+// HOW MUCH THIS APP HAS TO SAY, and how sure we are (#1020, wave A).
+//
+// FOUR states, not three, and the fourth is the point. v0's own words
+// (`apps/mobile/src/screens/home/tile-model.ts`): "empty != not-loaded". A
+// tile that read nothing because this seat has no copy yet is `UNKNOWN`, and
+// only a tile whose read LANDED and returned nothing is `EMPTY`. Collapsing
+// them is how a springboard tells a member their vault is empty when the truth
+// is that it has not looked.
+enum TileStatus {
+  TILE_STATUS_UNSPECIFIED = 0;
+  TILE_STATUS_LOADING = 1;
+  // No replica, no grant, or a read that failed. We do not KNOW.
+  TILE_STATUS_UNKNOWN = 2;
+  // A landed read returned nothing. The only state that may say "empty".
+  TILE_STATUS_EMPTY = 3;
+  TILE_STATUS_CONTENT = 4;
+}
+
+// `SMALL` 1x1, `MEDIUM` 2x1, `LARGE` 2x2 — which FLATTENS to 2x1 on the phone's
+// two-column grid. The class follows the app's BODY and never its importance: a
+// mosaic needs area, prose needs measure, a figure needs neither.
+enum TileSize {
+  TILE_SIZE_UNSPECIFIED = 0;
+  TILE_SIZE_SMALL = 1;
+  TILE_SIZE_MEDIUM = 2;
+  TILE_SIZE_LARGE = 3;
+}
+
+// A count a read ACTUALLY RETURNED.
+//
+// A message rather than a `uint32`, so its absence is a value: absent is the
+// withheld glyph and never a fabricated `0`. Locker withholds its count by
+// design, and a `0` there would be a lie about how many secrets a member has.
+message TileCount {
+  uint32 value = 1;
+  // The read hit its ceiling, so the true number is at least `value` — which is
+  // why the status line says "at least" when anything is capped.
+  bool capped = 2;
+}
+
+// What one app's tile renders. A discriminated union and not a bag of
+// optionals: the eight bodies share no field, and a reader of `photos` must not
+// be able to ask for `figure`.
+message TileBody {
+  oneof kind {
+    Photos photos = 1;
+    Docs docs = 2;
+    Agenda agenda = 3;
+    People people = 4;
+    Tasks tasks = 5;
+    Tally tally = 6;
+    Locker locker = 7;
+    Notes notes = 8;
+  }
+
+  message Photos {
+    repeated Cell cells = 1;
+    // The thumbnail pack is on this device. False means the mosaic's cells draw
+    // as placeholders for a reason the member can act on.
+    bool offline_pack = 2;
+
+    message Cell {
+      string asset_id = 1;
+      // Absent when the asset exists and its bytes are not addressable yet. It
+      // is STILL A CELL: dropping the row reflows ten photos as one blank under
+      // a "10".
+      optional string thumbnail_path = 2;
+    }
+  }
+
+  message Docs {
+    repeated Row rows = 1;
+
+    message Row {
+      string document_id = 1;
+      string name = 2;
+      // Already formatted by the core, which knows the vault's locale. Never
+      // formatted in a view from a byte count.
+      string size = 3;
+    }
+  }
+
+  message Agenda {
+    string title = 1;
+    // RFC 3339 in the VAULT's zone, never the host's (R-1020-33).
+    string at = 2;
+    // The relative phrase the core computed against the vault's clock.
+    string after = 3;
+  }
+
+  message People {
+    repeated Face faces = 1;
+    // How many more than the faces shown.
+    uint32 more = 2;
+
+    message Face {
+      // `party_id`, NEVER the display name: the avatar hue is derived from this
+      // so that a rename does not repaint a face the member recognises.
+      string party_id = 1;
+      string initials = 2;
+      // The stored colour, when the vault holds one. Absent falls through to
+      // derivation from `party_id`; a seeded vault leaves it empty and an empty
+      // string is not a choice.
+      optional string color = 3;
+    }
+  }
+
+  message Tasks {
+    repeated Row rows = 1;
+
+    message Row {
+      string task_id = 1;
+      string title = 2;
+      bool done = 3;
+    }
+  }
+
+  message Tally {
+    Money figure = 1;
+    string caption = 2;
+    // The rolling comparison, when there is one. Absent renders nothing rather
+    // than a zero delta.
+    optional string after = 3;
+  }
+
+  // Locker's body is a STATE and not a query result, which is why it always has
+  // something true to say and is never an invitation to fill it.
+  message Locker {
+    bool locked = 1;
+  }
+
+  message Notes {
+    string note_id = 1;
+    string title = 2;
+    string excerpt = 3;
+  }
+}
+
+message HomeTile {
+  string app_id = 1;
+  TileStatus status = 2;
+  // ABSENT is the withheld glyph. See `TileCount`.
+  TileCount count = 3;
+  // The count's own words, from the app's copy leaf.
+  string count_label = 4;
+  TileSize size = 5;
+  // `MEDIUM`, and `LARGE` flattened: full width on the two-column phone grid.
+  bool wide = 6;
+  // What to DO, never what is missing. Rendered only in the one case grading
+  // leaves: a tile that earned the grid while loading and settled with nothing.
+  string empty_copy = 7;
+  TileBody body = 8;
+  // This tile earned a place in the grid. `CONTENT` and `LOADING` earn it —
+  // a read in flight holds its slot at full geometry, because demoting and
+  // re-promoting a beat later is a relayout the member watches. Locker always
+  // earns it. `EMPTY` and `UNKNOWN` do not, and fall to first moves.
+  bool earns_grid = 9;
+}
+
+// Which of the three Homes this is.
+enum Springboard {
+  SPRINGBOARD_UNSPECIFIED = 0;
+  SPRINGBOARD_LOADING = 1;
+  // Every readable tile SETTLED and returned nothing. A claim about the vault,
+  // which an unsettled read has not earned.
+  SPRINGBOARD_FIRST_RUN = 2;
+  SPRINGBOARD_CONTENT = 3;
+}
+
+// An app that failed `earns_grid`, offered as something to do.
+message FirstMove {
+  // An app id, or `connectors` — the one move that is not an app.
+  string id = 1;
+  // Verb first, and it must land somewhere that can TAKE content.
+  string label = 2;
+  string hint = 3;
+  string icon_key = 4;
+  // Absent on the non-app move.
+  optional string color = 5;
+}
+
+// The one number describing the whole vault, assembled from numbers each true.
+message ThingCount {
+  // Sums ONLY counts a read returned. A withheld count is omitted, never
+  // treated as zero.
+  uint32 total = 1;
+  // Something contributed its ceiling, so the honest phrasing is "at least".
+  bool capped = 2;
+  // Every tile has settled. False means the total is still moving.
+  bool settled = 3;
+}
+
+// Home's health ribbon: the vault at a glance, and whether the gateway holding
+// it is answering.
+//
+// The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
+// red dot. `QUIET` is deliberately ignorable; the other two earn one rule and
+// one action, never a filled warning plate.
+message HomeStatus {
+  Tone tone = 1;
+  // The ambient sentence about the route.
+  string copy = 2;
+  // What a member can do, when there is something. Empty when there is not.
+  string action = 3;
+  Destination destination = 4;
+
+  enum Tone {
+    TONE_UNSPECIFIED = 0;
+    TONE_QUIET = 1;
+    TONE_ATTENTION = 2;
+    TONE_URGENT = 3;
+  }
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    // Not a button. A quiet signal with nowhere to go is still a true sentence.
+    DESTINATION_NONE = 1;
+    DESTINATION_PHONE = 2;
+    DESTINATION_NOTIFICATIONS = 3;
+    DESTINATION_BACKUP = 4;
+  }
+}
+
+message HomeState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    HomeData data = 4;
+  }
+  // The all-apps listing is a SHEET and never a destination — the same law the
+  // Photos grid's `more` follows.
+  bool all_apps_sheet_open = 5;
+  // The vault lockup, true on every route — see `VaultLockup`.
+  VaultLockup vault = 6;
+  // EVERY VAULT THIS DEVICE HOLDS, the active one included.
+  //
+  // A switcher that listed only the OTHERS would be a control that never shows
+  // a member where they already are, and the sheet's tick — "this is the one
+  // you are reading" — is the fact the member came to check. The order is the
+  // shell's listing order and is not re-sorted here: a roster that reordered
+  // itself as vaults were added would move the row under a thumb.
+  repeated VaultLockup vaults = 7;
+  // The vault switcher is a SHEET, exactly as the all-apps listing is: it is
+  // not a second Home, it gets no route, and it survives no navigation.
+  bool vault_sheet_open = 8;
+}
+
+message HomeData {
+  // The whole springboard's verdict, decided by the machine so that two shells
+  // cannot disagree about which Home this is.
+  Springboard springboard = 1;
+  // In `SPRINGBOARD_ORDER`, which is the hand-off's tile list and NOT the
+  // catalogue's order. Freshness decides what is IN a tile; it must never
+  // decide where the tile sits.
+  repeated HomeTile tiles = 2;
+  // At most three. A nudge as tall as its grid is no nudge.
+  repeated FirstMove first_moves = 3;
+  ThingCount things = 4;
+  HomeStatus status = 5;
+  // EVERY tile is `UNKNOWN` — no replica, no grant, or every read failed. The
+  // whole springboard's verdict and not one app's, because demoting one
+  // unreadable tile beside readable neighbours is right and demoting them ALL
+  // leaves a launcher with no tiles. The grid is shown anyway, precisely so the
+  // screen does not claim the vault is empty.
+  bool every_tile_unreadable = 6;
+  // THE PACKED GRID, DECIDED HERE SO THE TWO SHELLS CANNOT PACK IT DIFFERENTLY.
+  //
+  // Mixed sizes leave a HOLE whenever a 1x1 is followed by a full-width tile,
+  // and the fix is to pull the next small forward past the wides between them —
+  // never to resize, drop or demote a tile to make a row come out even. That is
+  // an ORDERING decision over `wide`, which is to say a decision, which is to
+  // say the machine's.
+  //
+  // The first build of wave A left it to the renderers and they disagreed
+  // immediately: Compose's `LazyVerticalGrid` honours a span and SwiftUI's
+  // `LazyVGrid` silently ignores `.gridCellColumns`, so one shell drew Photos
+  // full width and the other drew it at a half. A row here carries APP IDS and
+  // not tiles, so the tile itself is still stated exactly once.
+  repeated TileRow grid_rows = 7;
+}
+
+// One drawn row of the springboard: the app ids in it, left to right.
+message TileRow {
+  repeated string app_ids = 1;
+}
+
+// THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and which gateway.
+//
+// No greeting. The springboard was the only route in v0 that drew them, and
+// inside an app the member lost both — which vault they were reading, and
+// whether its gateway was reachable — so the lockup became chrome an app can
+// mount. It hangs off the STATE rather than off `HomeData` for the same reason
+// the sheet flag does: it is true while Home is loading and true while Home has
+// failed, and a lockup that vanished when a read failed would take the vault's
+// name away at the moment a member most needs to know which vault they are
+// looking at.
+message VaultLockup {
+  // THE VAULT'S OWN ID, which is what a switch names — never a path.
+  //
+  // Where a vault's bytes sit is the shell's business: one shell keeps them in
+  // an iOS container it is handed at launch and the other in an Android files
+  // dir, and a screen state that carried either would be a screen state with a
+  // filesystem in it. The shell resolves an id to a location; the machine only
+  // ever says WHICH vault.
+  //
+  // Empty on a lockup the shell has not yet identified — a vault whose file
+  // would not open, say — and such a vault cannot be switched to, which is
+  // correct: the switch would fail at the same door the identification did.
+  string vault_id = 5;
+  // Empty is a REAL STATE, not a missing value: a member with no vault yet gets
+  // "No vault yet" rather than a blank lockup.
+  string vault_name = 1;
+  // Empty means no gateway is connected. The line says so in place, never as a
+  // banner.
+  string gateway_name = 2;
+  // The vault's own identity hue as `#rrggbb`, or empty for plain ink. The
+  // shells wash it behind the mark exactly as an app chip is washed.
+  string color = 3;
+  // Said IN THE GATEWAY LINE — "home-gateway · offline" — and never as a
+  // banner, because offline is not an incident.
+  bool offline = 4;
+}
+
+message HomeEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    TileArrived tile = 3;
+    TileRefused tile_refused = 4;
+    StatusChanged status = 5;
+    AllAppsSheetToggled all_apps = 6;
+    SeatChanged seat_changed = 7;
+    MovePicked move_picked = 8;
+    VaultChanged vault_changed = 9;
+    VaultSwitchRequested vault_switch = 10;
+    VaultsListed vaults_listed = 11;
+    VaultPicked vault_picked = 12;
+  }
+
+  // The active vault, or the gateway behind it, changed. A vault switch
+  // re-points the whole app, so Home reloads: the tiles it is holding belong to
+  // the vault the member just left.
+  message VaultChanged {
+    VaultLockup vault = 1;
+  }
+
+  // The member pressed the lockup. THE MARK IS THE SWITCH — there is no
+  // separate control beside it, because a lockup that is not pressable and a
+  // chevron that is are two affordances for one act.
+  message VaultSwitchRequested {}
+
+  // The shell finished identifying the vaults it holds.
+  //
+  // It arrives SEPARATELY from `VaultChanged` and usually later: naming the
+  // open vault costs one read of a file that is already open, and naming the
+  // rest costs one core open apiece. A Home that waited for the roster before
+  // drawing its own lockup would hold the member's vault name hostage to every
+  // other vault's file.
+  message VaultsListed {
+    repeated VaultLockup vaults = 1;
+  }
+
+  // The member chose one from the sheet. The SHEET closes here and the vault
+  // changes later — re-pointing is I/O, and `VaultChanged` is what says it
+  // landed. A reducer that swapped the lockup on the tap would name a vault
+  // that was not open yet.
+  message VaultPicked {
+    string vault_id = 1;
+  }
+
+  message Opened {}
+
+  message Refreshed {}
+
+  // ONE APP'S tile landed. Home fans out one read per app and they arrive
+  // independently, so a tile is an event and not a field of one big answer: a
+  // Home that waited for the slowest app would be a Home nobody sees.
+  message TileArrived {
+    string app_id = 1;
+    TileStatus status = 2;
+    TileCount count = 3;
+    string count_label = 4;
+    TileBody body = 5;
+  }
+
+  // One app's read failed. `UNKNOWN`, never `EMPTY`.
+  message TileRefused {
+    string app_id = 1;
+    ReadFailure failure = 2;
+  }
+
+  message StatusChanged {
+    HomeStatus status = 1;
+  }
+
+  message AllAppsSheetToggled {
+    bool open = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message MovePicked {
+    string move_id = 1;
+  }
+}

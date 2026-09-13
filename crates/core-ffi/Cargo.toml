@@ -14,7 +14,13 @@ path = "src/lib.rs"
 # `.dll`) and what the symbol-count test runs `nm` over; `rlib` is what this
 # crate's own tests link so they can call the entry points directly as well as
 # through `libloading` on the built cdylib.
-crate-type = ["cdylib", "rlib"]
+# `staticlib` is the third: `libcentraid_core_ffi.a` is what
+# `lane-prebuilt-core.yml` hands to `lipo` and `xcodebuild
+# -create-xcframework`, and what the Kotlin/Native framework link
+# resolves the five symbols against. Its absence was invisible because
+# neither the lane nor the iOS link had ever run (#1020, hand-offs 1.2
+# and 3.4).
+crate-type = ["cdylib", "rlib", "staticlib"]
 
 [features]
 default = []

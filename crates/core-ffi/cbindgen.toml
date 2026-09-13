@@ -15,6 +15,19 @@ documentation = true
 documentation_style = "doxy"
 usize_is_size_t = true
 
+# THE HANDLE IS OPAQUE, AND C MUST BE TOLD SO (#1020, D-1020-D2).
+#
+# `Handle` is `centraid_core`'s, and `parse_deps = false` keeps cbindgen out of
+# the dependency tree on purpose — so cbindgen emits the NAME in all four
+# signatures and no declaration for it. A C or Kotlin/Native consumer then
+# fails with "unknown type name 'Handle'", which is what `cinterop` did on the
+# first real iOS compile. The type is opaque by contract (released only by
+# `centraid_close`), so an opaque forward declaration is the whole truth about
+# it, and `tests/symbols.rs` asserts this line is present.
+after_includes = """
+
+typedef struct Handle Handle;"""
+
 [export]
 include = []
 exclude = []

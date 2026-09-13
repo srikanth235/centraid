@@ -70,16 +70,23 @@ public fun PhotosGridScreen(
 
         BackupBanner(state, onEvent)
 
+        // A WIRE PROPERTY IS CROSS-MODULE PUBLIC API, so Kotlin will not smart-cast
+        // it after a null check. Binding each arm's value to a local first is
+        // what makes the branches type-check, and it is the shape every screen
+        // in this module uses.
+        val loading = state.loading
+        val failure = state.failure
+        val data = state.data_
         when {
-            state.loading != null -> CircularProgressIndicator()
+            loading != null -> CircularProgressIndicator()
 
-            state.failure != null -> Column {
-                Text(text = state.failure.sentence)
-                if (state.failure.remedy.isNotEmpty()) Text(text = state.failure.remedy)
+            failure != null -> Column {
+                Text(text = failure.sentence)
+                if (failure.remedy.isNotEmpty()) Text(text = failure.remedy)
             }
 
-            state.data_ != null -> {
-                val cells = state.data_.cells
+            data != null -> {
+                val cells = data.cells
                 if (cells.isEmpty()) {
                     Text(text = "No photos here yet.")
                 } else {
@@ -90,7 +97,7 @@ public fun PhotosGridScreen(
                             // evicted these must not read the same words.
                             val label = when {
                                 cell.thumbnail_path != null -> "Photo"
-                                state.data_.thumbnail_pack_absent ->
+                                data.thumbnail_pack_absent ->
                                     "Preview not downloaded to this device"
                                 else -> "Preview no longer on this device"
                             }

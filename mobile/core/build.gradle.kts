@@ -88,7 +88,39 @@ kotlin {
         jvmMain.get().dependsOn(jnaMain)
         if (androidEnabled) named("androidMain") { dependsOn(jnaMain) }
 
-        jnaMain.dependencies { implementation(libs.jna) }
+        // JNA IS ONE LIBRARY IN TWO PACKAGES, AND THE PACKAGE IS THE EXTENSION.
+        //
+        // Same group, same name, same version — `net.java.dev.jna:jna:5.19.1`
+        // — published BOTH as a jar and as an `.aar`. The jar bundles
+        // `libjnidispatch` for desktop ABIs only (aix, darwin, win32, linux) as
+        // ordinary resources; the aar carries the Android ones as real
+        // `lib/<abi>/libjnidispatch.so` entries, which is the only shape a
+        // packager will install and `System.loadLibrary` will find.
+        //
+        // Getting this wrong fails in two different ways and both were seen:
+        //
+        //   - **Jar on Android**: the app builds, installs, runs, and Home
+        //     draws — then the first `centraid_open` dies with `dlopen failed:
+        //     library "libjnidispatch.so" not found`, because the APK is full
+        //     of Windows DLLs and has nothing for arm64. A `@aar`-less
+        //     catalogue alias resolves to the jar, so an entry that merely
+        //     LOOKS like the Android one does exactly this.
+        //   - **Both**: `checkDebugDuplicateClasses` refuses the build out
+        //     loud, because every `com.sun.jna` class is in each.
+        //
+        // So the extension is named explicitly. `@aar` cannot be spelled in a
+        // version catalogue's `module`, and `variantOf` is a `DependencyHandler`
+        // API that KMP's `KotlinDependencyHandler` does not have — a string
+        // notation is what both of them do accept, and the VERSION still comes
+        // from the catalogue so there is one place to bump it.
+        jvmMain.get().dependencies { implementation(libs.jna) }
+        if (androidEnabled) {
+            named("androidMain").configure {
+                dependencies {
+                    implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
+                }
+            }
+        }
 
         commonMain.dependencies {
             implementation(libs.wire.runtime)

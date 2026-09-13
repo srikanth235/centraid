@@ -66,21 +66,29 @@ public fun TallyListScreen(
             Text(text = "Centraid adds recurring expenses when it can reach your gateway.")
         }
 
+        // A WIRE PROPERTY IS CROSS-MODULE PUBLIC API, so Kotlin will not smart-cast
+        // it after a null check — the value could in principle change between
+        // the check and the use. Binding each arm's value to a local first is
+        // what makes the three branches type-check, and it is the shape every
+        // screen in this module uses.
+        val loading = state.loading
+        val failure = state.failure
+        val data = state.data_
         when {
-            state.loading != null ->
-                if (state.loading.first_load) {
+            loading != null ->
+                if (loading.first_load) {
                     CircularProgressIndicator()
                 } else {
                     Text(text = "Refreshing")
                 }
 
-            state.failure != null -> Column {
-                Text(text = state.failure.sentence)
-                if (state.failure.remedy.isNotEmpty()) Text(text = state.failure.remedy)
+            failure != null -> Column {
+                Text(text = failure.sentence)
+                if (failure.remedy.isNotEmpty()) Text(text = failure.remedy)
             }
 
-            state.data_ != null -> {
-                val rows = state.data_.rows
+            data != null -> {
+                val rows = data.rows
                 if (rows.isEmpty()) {
                     // AN EMPTY LEDGER IS ITS OWN SENTENCE, and a different one
                     // from any failure above.
@@ -97,7 +105,7 @@ public fun TallyListScreen(
                             }
                         }
                     }
-                    state.data_.next_cursor?.let { cursor ->
+                    data.next_cursor?.let { cursor ->
                         TextButton(
                             onClick = {
                                 onEvent(

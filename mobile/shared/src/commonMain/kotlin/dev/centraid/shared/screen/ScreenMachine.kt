@@ -76,6 +76,20 @@ public sealed interface ScreenEffect {
     public data class Backup(public val action: Action) : ScreenEffect {
         public enum class Action { START, PAUSE, RESUME }
     }
+
+    /**
+     * RE-POINT THE WHOLE APP AT ANOTHER VAULT.
+     *
+     * An effect and not a reduce, because switching is closing one core and
+     * opening another — I/O that can fail, on a file the reducer has never
+     * seen. The machine names the vault by id and nothing else; which file that
+     * is, and whether it opens, belongs to the session that owns the core.
+     *
+     * It carries no path for the same reason `VaultLockup` does not: a screen
+     * effect with a filesystem in it is a screen effect one shell can serve and
+     * the other cannot.
+     */
+    public data class SwitchVault(public val vaultId: String) : ScreenEffect
 }
 
 /**

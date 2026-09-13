@@ -52,8 +52,17 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.work.runtime)
-    androidRuntimeClasspath(libs.androidx.compose.ui.tooling)
+    // `debugImplementation`, NOT `androidRuntimeClasspath` (#1020, wave A).
+    //
+    // `androidRuntimeClasspath` is the accessor the AGP 9 KMP LIBRARY plugin
+    // (`com.android.kotlin.multiplatform.library`) introduces in place of
+    // `debugImplementation`. This module is `com.android.application`, where
+    // that configuration does not exist and the debug variant accessor is still
+    // the right one — the two halves of the AGP 9 migration, applied to the
+    // wrong half. Invisible until a machine with an Android SDK compiled it.
+    debugImplementation(libs.androidx.compose.ui.tooling)
 
     // ROBORAZZI FOR COMPOSE SNAPSHOTS (D-1020-E7). Compile-gated with the rest
     // of this module: a snapshot suite needs an Android runtime, and Robolectric

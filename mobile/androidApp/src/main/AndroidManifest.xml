@@ -33,7 +33,8 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/full_backup_content"
         android:label="Centraid"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Centraid">
         <activity
             android:name="dev.centraid.android.MainActivity"
             android:exported="true"

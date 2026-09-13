@@ -13,16 +13,19 @@ mobile/
 
 ## What runs here, and what is a hand-off
 
-This is the most important table in this file. **Nothing in the right-hand column reads green anywhere**: there is no Android SDK, no Xcode, no simulator and no device on the machines that run `cargo xtask gate`, and every claim that needs one is an owner hand-off with a command below.
+This is the most important table in this file. **Nothing in the right-hand column reads green in CI**: there is no Android SDK, no Xcode, no simulator and no device on the machines that run `cargo xtask gate`, and every claim that needs one is an owner hand-off with a command below.
+
+**WAVE A CASHED SEVERAL OF THEM, AND BOTH SHELLS HAVE NOW BEEN SEEN.** On an owner's Mac with Xcode 26.6 the iOS shell compiles, links the XCFramework, runs `swift test` green, and runs on a simulator drawing Home from the real `HomeMachine` over the real Rust core. **Android now does the same** on an `sdk_gphone64_arm64` emulator: same seeded vault, same tiles, same thumbnails, same vault switcher. The rows below say so where it is true.
 
 | Provable on this machine (JVM) | An owner hand-off |
 | --- | --- |
-| the screen state machines, the navigation model, the mount rules, the sync scheduler, the write gate — Kotest + Turbine on `jvmTest` | the Compose screens compiling at all |
+| the screen state machines, the navigation model, the mount rules, the sync scheduler, the write gate — Kotest + Turbine on `jvmTest` | the Compose screens rendering — **seen**: Home on an emulator, reading a seeded vault through JNA and the real core |
 | the **real ABI round trip**: `open → call → next_event → free → close` from Kotlin over JNA against `libcentraid_core_ffi.so`, on a vault the Rust fixture binary founded | the same round trip through cinterop on iOS |
 | the UI-thread assertion, the buffer accounting, the poison handling, the bounded-queue behaviour | a panic injected by the real library (it has no fault-injection point — see `contracts/handoff/E/proposed-patches.md`) |
-| 19 `contracts/screens` fixtures decoded by Wire, with the screen laws asserted | the same 19 fixtures decoded by SwiftProtobuf (`mobile/iosApp/Tests/ScreenFixtureTests.swift`) |
+| 26 `contracts/screens` fixtures decoded by Wire, with the screen laws asserted | the same 26 decoded by SwiftProtobuf — **run: 17 tests, green**, `cd mobile/iosApp && swift test` |
+| the emitted app catalogue, identity marks and band places (`CatalogSpec`) | every emitted silhouette PARSING in the Swift path reader (`IconSilhouetteTests`) — **run: 3 tests, green** |
 | `commonMain` is platform-free (Konsist), icon-only controls carry labels (a source scan over both surfaces) | Roborazzi and swift-snapshot-testing snapshots |
-| the emitted token table matches `packages/design` in both schemes, in Kotlin, in Swift and in JSON | the iOS framework linking, and the XCFramework |
+| the emitted token table matches `packages/design` in both schemes, in Kotlin, in Swift and in JSON | the iOS framework linking, and the XCFramework — **both done** |
 | the `call` budget for the three screens' reads, measured | the device numbers that promote `tests/journeys.json`'s parked ceilings |
 
 ## The one command the gate runs
@@ -78,16 +81,28 @@ The AGP plugin is added to the build classpath **only** when the flag is set (`m
 Everything on iOS needs a macOS host. In order:
 
 ```sh
+# 0. THE RUST CORE, FIRST AND EVERY TIME IT CHANGES. The framework links this
+#    archive by PATH, so Gradle does not know it exists and will happily link a
+#    stale one with no error at all — see docs/traps/stale-core-slice.md, which
+#    was written after a byte door that compiled on every layer and ran as the
+#    version from five hours earlier.
+cargo build -p centraid-core-ffi --target aarch64-apple-ios-sim
+
 # 1. The Kotlin side. Cinterop needs an Apple toolchain, so klib
 #    cross-compilation is OFF on Linux and back ON here.
 cd mobile && ./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true \
     :shared:linkDebugFrameworkIosSimulatorArm64
 
-# 2. The generated Swift types. `buf.gen.yaml` names this lane's plugin.
-buf generate --template buf.gen.yaml     # after adding the protoc-gen-swift entry
+# 2. The generated Swift types. `buf.gen.yaml` is documentation-only
+#    (`plugins: []`), so this is protoc directly; the output is gitignored.
+protoc --proto_path=../../crates/api-proto/proto \
+    --swift_out=Sources/Generated --swift_opt=Visibility=Public \
+    $(find ../../crates/api-proto/proto -name '*.proto')
 
 # 3. The Xcode project. `project.yml` is the source; the `.xcodeproj` is NOT
-#    committed (mobile/.gitignore), which is the rule v0 broke.
+#    committed (mobile/.gitignore), which is the rule v0 broke. Re-run it after
+#    ADDING a source file: the target globs a directory, and a new
+#    `Sources/**.swift` is invisible until the project is regenerated.
 brew install xcodegen
 cd mobile/iosApp && export CENTRAID_IOS_DEPLOYMENT_TARGET=$(cat ../ios-deployment-target)
 xcodegen generate
@@ -107,7 +122,15 @@ cd mobile/iosApp && swift test
 | `IosNetworkStatus` | `NWPathMonitor`. Until then it reports `platformRefused`, which is a **true** statement, and `WriteGate` treats an unknown answer as not-reachable so a guess cannot send a write into a void. |
 | `ShellModel.send` | the bridge from SwiftUI to `CentraidShared`'s `ScreenHost`. A `fatalError`, so a half-wired build fails on the first tap instead of looking inert. |
 
-**`.xcode-version` stays `16.4`, and this lane did not change it.** No machine here can compile Kotlin/Native or run `xcodebuild`, so raising it would be a guess dressed as a decision. The census expects exactly this: E confirms or replaces it **on the first real iOS compile**. The command is `xcodes install $(cat ../.xcode-version)` followed by step 1 above; if Kotlin 2.4.20's Kotlin/Native refuses that Xcode, the refusal names the version it wants and that number goes in the file.
+**`.xcode-version` is `26.6`, confirmed by the first real iOS compile.** The
+pin was `16.4` and had never been tested against anything; D-1020-E5a's rule was
+that the first compile confirms or replaces it. Kotlin/Native 2.4.20 **accepted**
+Xcode 26.6 — it refused nothing and named no other version — so 26.6 is what the
+file now holds, and it is a measurement rather than the guess the `16.4` was.
+`:shared:linkDebugFrameworkIosSimulatorArm64` links in **26 s** on an M-series
+Mac. **Thirteen** defects stood between the committed tree and a green `swift test`,
+and a fourteenth (a `nm` invocation with GNU-only flags) kept the Rust symbol gate
+red on any Mac. None was visible to a machine that could not run these four steps.
 
 ## The other hand-offs
 
@@ -129,10 +152,117 @@ cd mobile/iosApp && swift test
 
 | File | Generator | The drift check |
 | --- | --- | --- |
-| `shared/src/commonMain/kotlin/dev/centraid/design/{Tokens,Copy}.kt` | `contracts/tools/export-native-theme.ts` | `git diff --exit-code design copy mobile` |
-| `iosApp/Design/Theme.swift` | the same | the same |
-| `design/native-theme.json`, `copy/*.json` | the same | the same |
+| `shared/src/commonMain/kotlin/dev/centraid/design/Tokens.kt` | `contracts/tools/export-native-theme.ts` | `git diff --exit-code design copy mobile` |
+| `shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt` | `contracts/tools/export-native-catalog.ts`, called by the above | the same |
+| `iosApp/Design/{Theme,Catalog}.swift` | the same two | the same |
+| `design/native-{theme,catalog}.json` | the same two | the same |
+| `shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`, `copy/*.json` | **nothing — its generator retired with the v0 tree.** See the banner in `contracts/tools/export-native-theme.ts`: `export-copy.ts` read `packages/blueprints/apps/*/…-copy.ts` and wave 6 deleted them. These files are now the SOURCE, not an artifact. | none |
 | `contracts/screens/**/*.bin` | `contracts/tools/build-screen-fixtures.ts` | `git diff --exit-code contracts/screens` |
 | the Wire and SwiftProtobuf types | `crates/api-proto/proto` | `buf lint` / `buf breaking` |
 
-One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate.
+One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue or icon set, which is why wave A extended the emitter rather than typing eight app names and 139 silhouettes into two languages.
+
+## Home, and the pattern the fan-out follows
+
+Home is built (#1020, wave A). It is the hardest single screen — a graded springboard over eight unlike tile bodies — and it was built alone so its pattern is settled before the other screens fan out. Four rules came out of it, and they are the ones a later screen should copy:
+
+1. **THE VIEWS DECIDE NOTHING, including layout.** `earns_grid`, `springboard`, `things`, `every_tile_unreadable` AND `grid_rows` are all computed in `HomeMachine` and written onto the state. `grid_rows` is there because the first build let each renderer pack the grid and they disagreed immediately: Compose's `LazyVerticalGrid` honours a span and SwiftUI's `LazyVGrid` **silently ignores `.gridCellColumns`**, so one shell drew Photos full width and the other drew it at a half. Two packers for one grid was the defect; one packer in the machine is the fix.
+2. **EVERY VALUE IS A TOKEN OR A STATED GEOMETRY.** No `.secondary`, no `.quaternary`, no SF Symbols, no Material icons. The first build of Home used all four and looked like a SwiftUI sample rather than the product; the token table and the emitted silhouettes are what make the two shells draw one thing.
+3. **ONE ICON SET.** `Catalog.kt`/`Catalog.swift` carry the same 24×24 path data the web renderer draws. Compose reads it with `PathParser`; iOS has `Sources/Icon.swift`, a small path reader, and `Tests/IconSilhouetteTests.swift` asserts every emitted silhouette parses — written after a greedy number scan made the Settings gear vanish with nothing failing.
+4. **THE FRAME IS PART OF THE SCREEN.** The vault lockup (which vault, which gateway — and the mark IS the switch), the title row and the floating band are v0's chrome, not decoration, and a Home without them is a grid rather than a shell.
+
+### Seeing it with real data, and switching between two vaults
+
+```sh
+mobile/scripts/demo-vault.sh ios      # or android, or nothing for both
+```
+
+That seeds **two** vaults — "Demo vault" with every app, and "Work" with only
+Docs, Tasks and Agenda — and places both on the device. Two, and deliberately
+unalike: the switcher is only testable against two, and two vaults holding the
+same rows under the same name would prove nothing, because a switch that quietly
+did not happen would look exactly like one that did.
+
+**The vault is PLACED, not paired.** The network is not built — `Handle::
+start_endpoint` is a stub, the C ABI answers `Request::Pair` with
+`NotYetAvailable`, and `centraid gateway` admits an enrolled seat and then closes
+the connection. What lands on the device is the same file a seat would hold after
+a download, minus the download. `<vault>.blobs/` travels with it: that is where
+every photograph's bytes are (`Vault::blobs_root_for`), and a vault copied
+without it is a library of rows pointing at nothing.
+
+Three things about the switcher are worth knowing before you touch it:
+
+- **The directory IS the roster.** Every `.db` in the shell's own data directory
+  is a vault; there is no manifest beside them, because a vault's name lives
+  inside the vault and a manifest would be a second place it lives.
+- **The survey runs before the active core opens.** `SingleHandleGuard` allows
+  one core per process (R-1020-24), so `VaultRoster.survey` opens each file in
+  turn and closes it before the next. A roster read afterwards is refused on
+  every file, including the one already open.
+- **A reload carries what the shell TOLD Home and replaces what Home READ.**
+  `HomeState.reloaded()` is the only caller of `firstLoad()`. That rule used to
+  live at the three call sites and was wrong at every one of them in turn — the
+  lockup, then the roster, then the roster again on the switch branch. If you
+  add a shell-known field to `HomeState`, add it to `reloaded()` in the same
+  commit or it will vanish on the next open.
+
+### Thumbnails, and the two traps between a byte and a pixel
+
+Home's mosaic draws real photographs (#1020, D-1020-DC1). The path is worth
+knowing because nothing about it is guessable from either end:
+
+1. `HomeReads`' photos query selects `content_id` **for the door, not for the
+   body** — a thumbnail is located by CONTENT and read as the ASSET, so the
+   runtime needs both ids off one row.
+2. `HomeRuntime.thumbnails` batches one `ContentUrlRequest` for the four cells
+   the mosaic will draw, **before** the tile's event is sent. A cell that
+   arrived blank and acquired its photograph a moment later would be two states
+   for one row and a visible pop on every open.
+3. The core answers a **path**, never bytes: the platform opens the file, so
+   decoding and caching stay where they belong.
+4. `ContentImage` opens it.
+
+Two things will waste an afternoon if you do not know them:
+
+- **`UIImage(contentsOfFile:)` leans on the path extension.** A
+  content-addressed file is named by its digest and has none, so that
+  initializer returns nil for every photograph in the store — silently.
+  `UIImage(data:)` sniffs the bytes, and is the only thing that can be right
+  when the name is a hash.
+- **The Rust archive is linked by path** and nothing rebuilds it. See
+  [docs/traps/stale-core-slice.md](../docs/traps/stale-core-slice.md) and step 0
+  above.
+
+A cell stays a placeholder when the door says the bytes are not here, when it
+refuses to call them embeddable (`image/svg+xml` is executed by a renderer in
+the embedding page's origin), or when they are **not a still image** — a video's
+thumbnail is its poster derivative, and handing a mosaic an MP4 draws a blank
+that reads as a failed render.
+
+### Android, end to end
+
+```sh
+mobile/scripts/android-core.sh                                   # the Rust core, first
+cd mobile && ./gradlew -Pcentraid.android=true :androidApp:installDebug
+mobile/scripts/demo-vault.sh android                             # seed and place both vaults
+```
+
+**JNA is one library in two packages and the package is the extension.** Same
+group, name and version — `net.java.dev.jna:jna` — published both as a jar and
+as an `.aar`. The jar bundles `libjnidispatch` for DESKTOP ABIs as ordinary
+resources; the aar carries the Android ones as real `lib/<abi>/libjnidispatch.so`
+entries, which is the only shape a packager installs and `System.loadLibrary`
+finds. Getting it wrong fails two ways and both were seen:
+
+- **jar on Android** — the app builds, installs, runs, Home draws, and the first
+  `centraid_open` dies with `dlopen failed: library "libjnidispatch.so" not
+  found`. A `@aar`-less catalogue alias resolves to the jar, so an entry that
+  merely *looks* like the Android one does exactly this. `unzip -l` the APK: if
+  you see `com/sun/jna/win32-x86-64/jnidispatch.dll` and no
+  `lib/arm64-v8a/libjnidispatch.so`, this is what happened.
+- **both** — `checkDebugDuplicateClasses` refuses out loud, because every
+  `com.sun.jna` class is in each.
+
+`mobile/core/build.gradle.kts` names the `@aar` extension explicitly and says
+why; the version still comes from the catalogue.

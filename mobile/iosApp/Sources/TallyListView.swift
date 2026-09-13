@@ -11,7 +11,7 @@ struct TallyListView: View {
     @ObservedObject var shell: ShellModel
 
     /// The decoded state. In the wired build this comes from
-    /// `Centraid_screen_v1_TallyListState(serializedData:)` over
+    /// `Centraid_Screen_V1_TallyListState(serializedData:)` over
     /// `shell.tallyState`; the SwiftProtobuf types are generated from the same
     /// `crates/api-proto/proto` tree the Kotlin side reads.
     var state: TallyListStateView { TallyListStateView(data: shell.tallyState) }

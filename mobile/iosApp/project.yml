@@ -51,10 +51,29 @@ targets:
       # point of view it is one XCFramework either way.
       - framework: ../shared/build/XCFrameworks/debug/CentraidShared.xcframework
         embed: true
+    # `Resources/Info.plist` IS XCODEGEN'S OUTPUT, NOT A SOURCE FILE (#1020).
+    #
+    # The keys below are the source; `xcodegen generate` writes the plist from
+    # them and overwrites whatever is there. The committed copy is kept so a
+    # reader can see the result without running the generator — and the first
+    # real run of the hand-off command showed it had drifted from what the
+    # generator actually emits (sorted keys, the `$(...)` bundle keys, and no
+    # XML comment, which xcodegen cannot preserve). This note lives here
+    # because this file survives regeneration and the plist does not.
     info:
       path: Resources/Info.plist
       properties:
         CFBundleDisplayName: Centraid
+        # WITHOUT THIS THE APP RUNS LETTERBOXED, AND EVERY SCREENSHOT LIES.
+        #
+        # An iOS app with neither a launch storyboard nor `UILaunchScreen` is
+        # treated as pre-modern and run at a legacy screen size, scaled up and
+        # centred inside black bars — which is how wave A's first Home renders
+        # were taken, with the page ground stopping short of the notch and every
+        # tile drawn about half again its real size. An empty dictionary is the
+        # whole declaration: the launch screen is the app's own background, and
+        # nothing else belongs on it.
+        UILaunchScreen: {}
         # BGTaskScheduler refuses an identifier that is not declared here, and
         # the refusal is what `BackgroundTasks.Registration` reports to a member
         # as "Background App Refresh is off".

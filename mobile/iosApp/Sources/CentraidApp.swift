@@ -8,6 +8,13 @@ import SwiftUI
 ///
 /// ONE ROOT STACK, NO TAB BAR — apps are covers over Home, which is v0's own
 /// ruling (`apps/mobile/src/navigation.ts:1-3`) and not a SwiftUI preference.
+// THE ENTRY POINT IS THE iOS APP'S, NOT THE TEST HOST'S (#1020).
+//
+// `Sources` is a LIBRARY target, so an unguarded `@main` emits `_main` into it
+// and `swift test` — reason 3 in `Package.swift`'s header — fails linking the
+// XCTest runner with a duplicate symbol. The app entry belongs to the platform
+// that has an app; the macOS host build is only ever the fixture test's.
+#if os(iOS)
 @main
 struct CentraidApp: App {
     @StateObject private var shell = ShellModel()
@@ -36,15 +43,8 @@ struct CentraidApp: App {
     }
 }
 
-struct HomeView: View {
-    @ObservedObject var shell: ShellModel
+#endif
 
-    var body: some View {
-        List {
-            NavigationLink("Tally", value: ShellModel.Route.tally)
-            NavigationLink("Photos", value: ShellModel.Route.photos)
-            NavigationLink("Notes", value: ShellModel.Route.note("note-0001"))
-        }
-        .navigationTitle("Centraid")
-    }
-}
+// `HomeView` lives in `HomeView.swift`: Home is the graded springboard
+// (#1020, wave A), not a list of links, and it is too large to sit in the
+// composition root.

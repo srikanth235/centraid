@@ -2,7 +2,12 @@
 
 package dev.centraid.core
 
-import dev.centraid.core.cinterop.Handle
+// CINTEROP PUTS AN OPAQUE STRUCT IN `cnames.structs` (#1020, D-1020-E2).
+// `centraid.def`'s `package = dev.centraid.core.cinterop` names where the
+// FUNCTIONS land; a forward-declared `typedef struct Handle Handle;` is not
+// placed there and never was. This import was written against a machine that
+// could not compile it, and the first real iOS build is what said so.
+import cnames.structs.Handle
 import dev.centraid.core.cinterop.centraid_call
 import dev.centraid.core.cinterop.centraid_close
 import dev.centraid.core.cinterop.centraid_free
@@ -12,6 +17,7 @@ import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.UByteVar
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
@@ -168,3 +174,6 @@ internal actual fun assertNotOnUiThread(operation: String, uiThreadName: String)
  * Written as one function so the claim lives in one place.
  */
 private fun Int.convertToSize(): platform.posix.size_t = toULong()
+
+/** `harvest` carries the length as a `Long`, so `size_t` needs both. */
+private fun Long.convertToSize(): platform.posix.size_t = toULong()

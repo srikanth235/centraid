@@ -1,5 +1,15 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.HomeEvent
+import centraid.screen.v1.TileCount
+import centraid.screen.v1.TileStatus
+import dev.centraid.shared.screen.HomeMachine
+import dev.centraid.shared.screen.SpringboardPolicy
+import io.kotest.assertions.withClue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 import app.cash.turbine.test
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.Loading
@@ -338,6 +348,42 @@ class ScreenMachineSpec : StringSpec({
         host.send(NotesEditorEvent(opened = NotesEditorEvent.Opened("note-1")))
         host.send(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
         host.revision shouldBe 2uL
+    }
+
+    "CONCURRENT SENDS DO NOT LOSE ONE ANOTHER'S STATE" {
+        // Home fans out one read per app and the answers land on whatever
+        // threads the core's dispatcher gave them. Before `ScreenHost` took a
+        // lock, two answers read the same state, reduced their own event onto
+        // it, and the second write threw the first away — so a tile that had
+        // arrived went back to LOADING and stayed there. It was invisible on a
+        // single-threaded dispatcher and showed up the first time a real core
+        // answered from a pool.
+        val host = ScreenHost(HomeMachine)
+        host.send(HomeEvent(opened = HomeEvent.Opened()))
+        val apps = SpringboardPolicy.SPRINGBOARD_ORDER
+        withContext(Dispatchers.Default) {
+            apps.map { appId ->
+                async {
+                    host.send(
+                        HomeEvent(
+                            tile = HomeEvent.TileArrived(
+                                app_id = appId,
+                                status = TileStatus.TILE_STATUS_CONTENT,
+                                count = TileCount(value_ = 1),
+                            ),
+                        ),
+                    )
+                }
+            }.awaitAll()
+        }
+        // EVERY one of them, not most of them. A lost update is a tile that
+        // never leaves `LOADING`, and the shape of the bug is that it is
+        // usually only one or two.
+        host.state.value.data_!!.tiles.forEach { tile ->
+            withClue(tile.app_id) {
+                tile.status shouldBe TileStatus.TILE_STATUS_CONTENT
+            }
+        }
     }
 }) {
     companion object {

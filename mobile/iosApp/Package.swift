@@ -32,6 +32,16 @@ let package = Package(
     platforms: [
         // KEEP IN STEP WITH `mobile/ios-deployment-target` (17.5).
         .iOS(.v17),
+        // THE HOST FLOOR IS WHAT MAKES `swift test` THE HAND-OFF COMMAND.
+        //
+        // `swift test` builds for the HOST, and a package that names only iOS
+        // gets SPM's default macOS floor (10.13) — under which every SwiftUI
+        // symbol in `Sources/` is unavailable and the fixture test cannot even
+        // link. Reason 3 in the header ("`swift test` works against this
+        // package directly") is only true with a macOS floor stated here.
+        // This is a floor for compiling the package on a developer's Mac; the
+        // shipped product's floor is `ios-deployment-target`, above.
+        .macOS(.v14),
     ],
     products: [
         .library(name: "CentraidApp", targets: ["CentraidApp"]),
@@ -57,12 +67,21 @@ let package = Package(
         //     name: "CentraidShared",
         //     path: "../shared/build/XCFrameworks/debug/CentraidShared.xcframework"
         // ),
+        // `Design/` IS PART OF THE TARGET, NOT A SIBLING FOLDER.
+        //
+        // The emitted token and catalogue tables live there because they are
+        // generated artifacts and the generator writes them somewhere a reader
+        // can find; the code in `Sources/` cannot compile without them. Naming
+        // only `Sources` here left `swift test` unable to see `CentraidTokens`
+        // at all while the XcodeGen project, which lists both, built fine —
+        // which is two different definitions of the target.
         .target(
             name: "CentraidApp",
             dependencies: [
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
             ],
-            path: "Sources"
+            path: ".",
+            sources: ["Sources", "Design"]
         ),
         .testTarget(
             name: "CentraidAppTests",

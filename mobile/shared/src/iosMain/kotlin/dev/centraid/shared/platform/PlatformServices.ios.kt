@@ -15,6 +15,7 @@ import platform.Photos.PHAuthorizationStatusNotDetermined
 import platform.Photos.PHAuthorizationStatusRestricted
 import platform.Photos.PHPhotoLibrary
 import platform.UIKit.UIDevice
+import platform.UIKit.UIDeviceBatteryState
 
 /**
  * iOS's platform services (#1020, D-1020-E4).
@@ -119,14 +120,16 @@ public class IosNetworkStatus : NetworkStatus {
     override suspend fun current(): NetworkStatus.Reading = NetworkStatus.Reading(
         online = false,
         metered = true,
-        charging = UIDevice.currentDevice.batteryState.toInt() == CHARGING,
+        // `batteryState` IS AN ENUM, NOT AN INT (#1020, D-1020-E2). cinterop maps
+        // `UIDeviceBatteryState` to a Kotlin enum class, so the old
+        // `.toInt() == 2` did not compile — and the `2` restated a value the
+        // enum already names. This reads `UIDeviceBatteryStateUnknown` until
+        // something enables `isBatteryMonitoringEnabled`, which is a hand-off
+        // and not a thing to switch on inside a read.
+        charging = UIDevice.currentDevice.batteryState ==
+            UIDeviceBatteryState.UIDeviceBatteryStateCharging,
         platformRefused = true,
     )
-
-    private companion object {
-        /** `UIDeviceBatteryStateCharging`. */
-        const val CHARGING = 2
-    }
 }
 
 public class IosMediaLibrary : MediaLibrary {

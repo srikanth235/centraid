@@ -33,9 +33,62 @@ if (androidEnabled) {
 kotlin {
     jvm()
 
+    // WHERE THE FIVE SYMBOLS COME FROM (#1020, hand-off 1.2).
+    //
+    // A debug framework is DYNAMIC (below), so `ld` resolves `centraid_open`
+    // and its four siblings at framework-link time rather than deferring them
+    // to the app. `centraid.def` deliberately carries no `staticLibraries`,
+    // because cinterop would then demand the artifact on every machine that
+    // merely COMPILES Kotlin. The link is the one step that genuinely needs
+    // it, so the path is named here and nowhere else.
+    //
+    // `cargo build -p centraid-core-ffi --target <triple>` produces it.
+    // `-Pcentraid.coreFfiLibDir` overrides the directory for CI, which takes
+    // the slice from `lane-prebuilt-core.yml` rather than rebuilding it.
+    val coreFfiProfile = (findProperty("centraid.coreFfiProfile") as String?) ?: "debug"
+    val rustTargetDir = rootProject.layout.projectDirectory.dir("../target")
+    val rustTripleOf = mapOf(
+        "iosArm64" to "aarch64-apple-ios",
+        "iosSimulatorArm64" to "aarch64-apple-ios-sim",
+        "iosX64" to "x86_64-apple-ios",
+    )
+
+    // THE XCFRAMEWORK IS WHAT XCODE CONSUMES (#1020, wave A).
+    //
+    // `iosApp/project.yml` names
+    // `shared/build/XCFrameworks/debug/CentraidShared.xcframework`, and no task
+    // produced one: the three `binaries.framework` blocks below each build a
+    // single-slice framework, which is not what a `binaryTarget` can resolve.
+    // `xcodebuild` said so the first time it ran, and nothing before that could
+    // have. The default output directory is exactly the path `project.yml`
+    // already expected, so this adds the missing producer and moves no path.
+    // `XCFrameworkConfig`, not the `XCFramework(...)` helper: Kotlin 2.4.20
+    // exposes the config class and no top-level function of that name.
+    val xcframework =
+        org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFrameworkConfig(project, "CentraidShared")
+
     listOf(iosArm64(), iosSimulatorArm64(), iosX64()).forEach { target ->
         target.binaries.framework {
             baseName = "CentraidShared"
+            xcframework.add(this)
+            val slice = (findProperty("centraid.coreFfiLibDir") as String?)
+                ?: rustTargetDir.dir("${rustTripleOf.getValue(target.targetName)}/$coreFfiProfile").asFile.path
+            // `-force_load`, NOT `-L` + `-l`, and the difference is the whole
+            // binding (#1020, wave A).
+            //
+            // Apple's linker drops the members of a static archive that nothing
+            // in the link references, and NOTHING references these: cinterop
+            // generates the Kotlin side of the five symbols, and a `@Suppress`d
+            // declaration is not a reference the linker can see. So the
+            // archive was searched, matched nothing, and the framework shipped
+            // with `_centraid_open` and its four siblings UNDEFINED in both
+            // architectures — a framework that loads and then traps the moment
+            // a screen asks the vault anything.
+            //
+            // It was invisible for the same reason every other Gate 0 defect
+            // was: the link succeeded, the app built, the app ran, and nothing
+            // called the core until this wave wired a read.
+            linkerOpts("-force_load", "$slice/libcentraid_core_ffi.a")
             // DYNAMIC IN DEBUG, STATIC IN RELEASE (#1020 Tooling coverage).
             //
             // The podspec precedent in v0 was `static_framework = true`
@@ -59,6 +112,19 @@ kotlin {
             api(project(":core"))
             implementation(libs.wire.runtime)
             implementation(libs.kotlinx.coroutines.core)
+        }
+        // WORKMANAGER BELONGS TO THE SOURCE SET THAT USES IT (#1020, wave A).
+        //
+        // `PlatformServices.android.kt` is `:shared`'s androidMain and schedules
+        // the sync pass; `androidx.work` was declared only in `:androidApp`, so
+        // the first machine with an Android SDK could not resolve a single
+        // symbol in that file. Under the AGP 9 KMP library plugin dependencies
+        // are declared per source set rather than in a top-level `dependencies`
+        // block, which is what makes "the app happens to bring it" stop working.
+        if (androidEnabled) {
+            androidMain.dependencies {
+                implementation(libs.androidx.work.runtime)
+            }
         }
         jvmTest.dependencies {
             implementation(libs.kotest.runner.junit5)

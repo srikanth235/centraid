@@ -31,16 +31,22 @@ public fun NotesEditorScreen(
     onEvent: (NotesEditorEvent) -> Unit,
 ) {
     Column(modifier = Modifier.padding(16.dp)) {
+        // A WIRE PROPERTY IS CROSS-MODULE PUBLIC API, so Kotlin will not smart-cast
+        // it after a null check. Binding each arm's value to a local first is
+        // what makes the branches type-check, and it is the shape every screen
+        // in this module uses.
+        val loading = state.loading
+        val failure = state.failure
+        val draft = state.draft
         when {
-            state.loading != null -> CircularProgressIndicator()
+            loading != null -> CircularProgressIndicator()
 
-            state.failure != null -> Column {
-                Text(text = state.failure.sentence)
-                if (state.failure.remedy.isNotEmpty()) Text(text = state.failure.remedy)
+            failure != null -> Column {
+                Text(text = failure.sentence)
+                if (failure.remedy.isNotEmpty()) Text(text = failure.remedy)
             }
 
-            state.draft != null -> {
-                val draft = state.draft
+            draft != null -> {
                 Row {
                     Text(text = saveLabel(state))
                     IconButton(

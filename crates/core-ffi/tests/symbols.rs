@@ -66,8 +66,20 @@ fn exactly_five_symbols_are_exported() {
         );
         return;
     };
+    // `nm`'S FLAGS ARE NOT PORTABLE, AND MACH-O HAS NO `-D` (#1020).
+    //
+    // `-D` asks for an ELF dynamic symbol table. A Mach-O dylib has none, so
+    // Apple's `nm` exits non-zero with "File format has no dynamic symbol
+    // table" and this test could only ever pass on Linux — which is where it
+    // had only ever run. A Mach-O's exported symbols ARE its global defined
+    // symbols, which is what `-g -U` asks for.
+    let dynamic_flags: &[&str] = if cfg!(target_os = "macos") {
+        &["-g", "-U", "--defined-only", "--format=posix"]
+    } else {
+        &["-D", "--defined-only", "--format=posix"]
+    };
     let Ok(output) = Command::new("nm")
-        .args(["-D", "--defined-only", "--format=posix"])
+        .args(dynamic_flags)
         .arg(&library)
         .output()
     else {
@@ -86,6 +98,8 @@ fn exactly_five_symbols_are_exported() {
         .filter_map(|line| {
             let mut fields = line.split_whitespace();
             let name = fields.next()?;
+            // Mach-O prefixes every C symbol with an underscore; ELF does not.
+            let name = name.strip_prefix('_').unwrap_or(name);
             let kind = fields.next()?;
             // `T` is a defined function in the text section. A `B`, `D` or `R`
             // named `centraid_*` would be a data export, which this ABI has
@@ -170,6 +184,20 @@ fn the_committed_header_is_what_cbindgen_generates() {
     assert!(
         text.contains("CENTRAID_H"),
         "the header has no include guard"
+    );
+
+    // THE OPAQUE HANDLE IS DECLARED, NOT MERELY REFERENCED (#1020).
+    //
+    // Four of the five signatures take a `Handle *`, and `Handle` is
+    // `centraid_core`'s, which `parse_deps = false` keeps cbindgen from
+    // reading. Before this assertion the header USED the name and declared
+    // nothing, so every consumer that actually compiles it — `cinterop` on the
+    // first real iOS build — failed with "unknown type name 'Handle'" while
+    // this test stayed green on the five names above.
+    assert!(
+        text.contains("typedef struct Handle Handle;"),
+        "the header references `Handle` but never declares it opaquely; \
+         `cbindgen.toml`'s `after_includes` is what emits the typedef"
     );
 
     // The regeneration itself: cbindgen over this crate must produce the same

@@ -37,6 +37,7 @@ import path from "node:path";
  * states of this type" — and a generated file is a bad place for a decision.
  */
 const TYPES: Record<string, string> = {
+  home: "centraid.screen.v1.HomeState",
   notes: "centraid.screen.v1.NotesEditorState",
   photos: "centraid.screen.v1.PhotosGridState",
   seat: "centraid.screen.v1.SeatState",

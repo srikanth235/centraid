@@ -18,6 +18,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef struct Handle Handle;
+
 /**
  * The call completed. The out-buffer, if there is one, holds the answer.
  */
