@@ -285,16 +285,20 @@ fn capture_title(input: &serde_json::Value) -> String {
 
 /// The commands this host names that the vault does not register yet.
 ///
-/// Named rather than discovered: `schedule.*` is slot 4d's schema,
-/// `knowledge.*` is the Notes lane's and `people.*` is the People lane's — all
-/// three landing in this same wave — and a host that silently mapped a capture
+/// Named rather than discovered: `schedule.*` is slot 4d's schema and
+/// `people.*` is the People lane's — and a host that silently mapped a capture
 /// onto a command nobody registered would be a capture button that reports
 /// success and writes nothing. The frames fixture marks these `pending`, and
 /// [`tests::the_pending_commands_are_the_ones_the_registry_lacks`] fails when
 /// one of them lands — which is the point: the list shrinks by being wrong.
-pub const PENDING_COMMANDS: [&str; 4] = [
+///
+/// It has shrunk once already. `knowledge.create_note` came off when the Notes
+/// lane registered the `knowledge` schema in this same wave, and the test above
+/// is what said so: `capture:note` lowers to `{title, body_text}`, which is
+/// exactly what `CREATE_NOTE_SCHEMA` requires, so the button now writes a note
+/// instead of answering "this capture needs a newer Centraid".
+pub const PENDING_COMMANDS: [&str; 3] = [
     "schedule.add_task",
-    "knowledge.create_note",
     "schedule.propose_event",
     "people.add_person",
 ];

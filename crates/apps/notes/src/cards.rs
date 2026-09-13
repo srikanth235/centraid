@@ -7,7 +7,7 @@
 //! far end even when the caller has no read scope on that entity, and a ref with
 //! neither is `denied` per ref rather than a failed screen.
 //!
-//! ## Why the fold is here and the decision is not
+//! ## Why the fold is here and the decision is not (#1020, D-1020-N9)
 //!
 //! Everything below is a projection over rows bounded by ids already in hand —
 //! statements-as-data, which is what an app crate may hold. The **decision**
