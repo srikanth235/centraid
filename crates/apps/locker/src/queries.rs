@@ -201,12 +201,25 @@ pub fn watchtower_statement() -> PageQuery {
     .filter("deleted_at IS NULL", Vec::new())
 }
 
+/// The browsable half PLUS one bit: whether the item carries a one-time code.
+///
+/// **PRESENCE, NEVER THE CELL** (#1020, D-1020-CL5). `ITEM_COLUMNS` carries no
+/// sealed column and must not, so `has_totp` was `false` for every item in
+/// every vault — the Companion was never told an item has a code. Asking for
+/// `otp_seed` would hand a browser ciphertext; asking whether it is set hands
+/// it a boolean, and the door's grammar now permits exactly that (a sealed
+/// column as the operand of `IS [NOT] NULL`, and nothing else).
+#[must_use]
+pub fn autofill_login_columns() -> String {
+    format!("{ITEM_COLUMNS}, otp_seed IS NOT NULL AS has_totp")
+}
+
 /// Every live login, for the Companion's candidate list.
 #[must_use]
 pub fn autofill_logins_statement() -> PageQuery {
     PageQuery::new(
         "locker.autofill.logins",
-        ITEM_COLUMNS,
+        &autofill_login_columns(),
         "locker_item",
         PageOrder::desc("updated_at", "item_id"),
     )
@@ -1056,12 +1069,25 @@ mod tests {
             search_statement(),
             trash_statement(),
             watchtower_statement(),
-            autofill_logins_statement(),
             autofill_item_statement("x"),
         ] {
             assert_eq!(query.select, ITEM_COLUMNS, "{} drifted", query.name);
             assert_eq!(query.from, "locker_item");
         }
+        // The Companion's candidate list is the browsable half plus ONE
+        // projected bit, and the bit is a presence test rather than a column
+        // (#1020, D-1020-CL5).
+        let candidates = autofill_logins_statement();
+        assert_eq!(candidates.from, "locker_item");
+        assert_eq!(candidates.select, autofill_login_columns());
+        assert!(candidates.select.starts_with(ITEM_COLUMNS));
+        assert!(
+            !candidates
+                .select
+                .split(',')
+                .any(|column| column.trim() == "otp_seed"),
+            "the seed itself must never be projected"
+        );
     }
 
     /// The review shelf reviews ARCHIVED items and the live shelf does not

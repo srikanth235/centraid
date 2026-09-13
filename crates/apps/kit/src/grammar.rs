@@ -106,6 +106,16 @@ pub struct ColumnRef {
     pub label: &'static str,
     /// As written, qualified or not.
     pub text: String,
+    /// True when the ONLY thing this occurrence asks is `IS NULL` /
+    /// `IS NOT NULL`.
+    ///
+    /// **PRESENCE IS NOT PLAINTEXT** (#1020, close pass, D-1020-CL5; ported
+    /// from `paged-door.ts`). A sealed cell's ciphertext never leaves the
+    /// vault, but whether an item HAS a one-time code is already on the
+    /// member's screen — and a door that refuses to answer that forces the
+    /// caller to ask for the cell instead. So a sealed column may be tested
+    /// for null and may not be read.
+    pub presence: bool,
 }
 
 /// A statement the grammar accepted, taken apart.
@@ -396,12 +406,39 @@ fn column_refs(name: &str, tokens: &[String], label: &'static str) -> KitResult<
         if is_allowed_word(&lower) && !token.contains('.') {
             continue;
         }
+        // AN OUTPUT ALIAS IS A NAME, NOT A COLUMN (#1020, D-1020-CL5). `x AS y`
+        // names the projected value; `y` belongs to no table, and asking a
+        // table for it is what refused every aliased projection before this.
+        if tokens
+            .get(index.wrapping_sub(1))
+            .is_some_and(|previous| index > 0 && previous.eq_ignore_ascii_case("as"))
+        {
+            continue;
+        }
         refs.push(ColumnRef {
             label,
             text: token.clone(),
+            presence: is_presence_test(tokens, index),
         });
     }
     Ok(refs)
+}
+
+/// Is this occurrence the operand of `IS [NOT] NULL`, and nothing else?
+fn is_presence_test(tokens: &[String], index: usize) -> bool {
+    if !tokens
+        .get(index + 1)
+        .is_some_and(|next| next.eq_ignore_ascii_case("is"))
+    {
+        return false;
+    }
+    match tokens.get(index + 2) {
+        Some(third) if third.eq_ignore_ascii_case("null") => true,
+        Some(third) if third.eq_ignore_ascii_case("not") => tokens
+            .get(index + 3)
+            .is_some_and(|fourth| fourth.eq_ignore_ascii_case("null")),
+        _ => false,
+    }
 }
 
 /// Take one statement apart, or refuse it.
@@ -490,7 +527,7 @@ fn check_column(name: &str, reference: &ColumnRef, facts: &[TableFacts]) -> KitR
                 format!("{label} reads {text}, which {} has not got", table.physical),
             ));
         }
-        return check_visibility(name, label, text, column, table);
+        return check_visibility(name, label, text, column, table, reference.presence);
     }
     let owners: Vec<&TableFacts> = facts
         .iter()
@@ -501,7 +538,7 @@ fn check_column(name: &str, reference: &ColumnRef, facts: &[TableFacts]) -> KitR
             name,
             format!("{label} reads {text}, which no table in the statement has"),
         )),
-        [owner] => check_visibility(name, label, text, text, owner),
+        [owner] => check_visibility(name, label, text, text, owner, reference.presence),
         _ => Err(KitError::refuse(
             name,
             format!("{label} reads {text} unqualified and more than one table has it"),
@@ -515,6 +552,7 @@ fn check_visibility(
     text: &str,
     column: &str,
     table: &TableFacts,
+    presence: bool,
 ) -> KitResult<()> {
     if let Some(mask) = table.field_mask.as_ref()
         && !mask.iter().any(|allowed| allowed == column)
@@ -524,7 +562,7 @@ fn check_visibility(
             format!("{label} reads {text}, which this caller's field mask does not carry"),
         ));
     }
-    if table.sealed.iter().any(|sealed| sealed == column) {
+    if table.sealed.iter().any(|sealed| sealed == column) && !presence {
         return Err(KitError::refuse(
             name,
             format!("{label} reads {text}, which is sealed; plaintext takes reveal"),

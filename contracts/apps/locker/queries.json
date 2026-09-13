@@ -851,7 +851,7 @@
       "candidates": [
         {
           "compromised": false,
-          "has_totp": false,
+          "has_totp": true,
           "item_id": "id-0177",
           "title": "The bank",
           "url": "https://login.bank.example",
@@ -871,7 +871,7 @@
         },
         {
           "compromised": false,
-          "has_totp": false,
+          "has_totp": true,
           "item_id": "id-0173",
           "title": "The bank copy",
           "url": "https://login.bank.example",

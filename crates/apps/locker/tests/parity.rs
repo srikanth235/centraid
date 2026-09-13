@@ -802,11 +802,18 @@ fn the_autofill_candidates_answer_what_v0_answered() {
         .rows
         .iter()
         .map(centraid_apps_locker::queries::ItemRow::of)
-        .filter_map(|row| {
-            // `has_totp` IS FALSE HERE ON PURPOSE, and it is v0's bug rather
-            // than the port's shape. See
-            // `v0s_candidate_list_never_reports_a_one_time_code`.
-            centraid_apps_locker::queries::AutofillCandidate::of(&row, false, &warned)
+        .zip(read.rows.iter())
+        .filter_map(|(row, raw)| {
+            // THE PRESENCE BIT COMES OFF THE PROJECTION (#1020, D-1020-CL5).
+            // The statement projects `otp_seed IS NOT NULL AS has_totp` — a
+            // boolean the vault answers, never the cell — and the close pass
+            // fixed the same omission in v0, so the two sides agree again. See
+            // `the_candidate_list_reports_a_one_time_code_without_carrying_one`.
+            let has_totp = matches!(
+                raw.get("has_totp"),
+                Some(centraid_apps_kit::Cell::Integer(n)) if *n != 0
+            );
+            centraid_apps_locker::queries::AutofillCandidate::of(&row, has_totp, &warned)
         })
         .map(|candidate| {
             serde_json::json!({
@@ -1089,14 +1096,15 @@ fn v0s_access_query_is_refused_by_its_own_door_and_the_port_answers() {
 /// `has_totp` is always `false`: the Companion is never told an item carries a
 /// one-time code, for every item in every vault.
 ///
-/// Recorded as a finding rather than fixed at source: the fix needs a
-/// projected `otp_seed IS NOT NULL` expression, because adding the column
-/// itself would hand the Companion ciphertext — and that is a change to the
-/// paged door's select grammar, which is wider than narrow. The port takes
-/// `has_totp` as a value the vault answers rather than a column an app
-/// projects (`AutofillCandidate::of`), so the port has the seam the fix needs.
+/// **Fixed at source in the close pass** (#1020, R-1020-35, D-1020-CL5). The
+/// fix is the projected `otp_seed IS NOT NULL` expression this lane said it
+/// needed: adding the column itself would hand the Companion ciphertext, so the
+/// paged door's grammar learned that a sealed column may be tested for null and
+/// still may not be read. Both trees project it now, and this test asserts the
+/// pair of claims that makes the fix safe — the Companion IS told, and the seed
+/// is NOT on the projection.
 #[test]
-fn v0s_candidate_list_never_reports_a_one_time_code() {
+fn the_candidate_list_reports_a_one_time_code_without_carrying_one() {
     // The corpus HAS an item with an OTP seed: `locker.totp_code` ran against
     // it and answered a code, so the fixture is not simply seedless.
     let commands = read_json("contracts/apps/locker/commands.json");
@@ -1111,19 +1119,24 @@ fn v0s_candidate_list_never_reports_a_one_time_code() {
         .expect("the corpus derives a one-time code from a real seed");
     assert!(totp["output"]["code"].is_string(), "v0 answered a code");
 
-    // …and every candidate says it has none.
+    // …and the candidate list says so: at least one item carries a code, and
+    // the list is not simply all-true either.
     let expected = case("autofill-candidates", serde_json::json!({}));
     let candidates = expected["output"]["candidates"].as_array().expect("a list");
     assert!(!candidates.is_empty());
-    for candidate in candidates {
-        assert_eq!(
-            candidate["has_totp"],
-            serde_json::json!(false),
-            "v0 reported a one-time code: the finding is fixed and this test \
-             should now compare the presence bit"
-        );
-    }
-    // The column the derivation reads is genuinely not on the projection.
+    let marked = candidates
+        .iter()
+        .filter(|candidate| candidate["has_totp"] == serde_json::json!(true))
+        .count();
+    assert!(
+        marked > 0 && marked < candidates.len(),
+        "{marked} of {} candidates carry a code — a list that is all one way \
+         proves nothing about the projection",
+        candidates.len()
+    );
+
+    // AND THE SEED ITSELF IS STILL NOT PROJECTED. The browsable column list is
+    // unchanged; what the query adds is a PRESENCE TEST over the sealed cell.
     let projection =
         fs::read_to_string(root().join("packages/blueprints/apps/locker/queries/items.ts"))
             .expect("v0's projection is readable");
@@ -1134,7 +1147,22 @@ fn v0s_candidate_list_never_reports_a_one_time_code() {
         .expect("the constant is there");
     assert!(
         !columns.contains("otp_seed"),
-        "otp_seed is on the projection now: the finding is fixed"
+        "the sealed cell is on the browsable projection: the fix went the wrong way"
+    );
+    let handler = fs::read_to_string(
+        root().join("packages/blueprints/apps/locker/queries/autofill-candidates.ts"),
+    )
+    .expect("v0's candidate handler is readable");
+    assert!(
+        handler.contains("otp_seed IS NOT NULL AS has_totp"),
+        "v0 projects the presence, not the cell"
+    );
+    // No answer in the bundle carries a seed, under any key.
+    assert!(
+        !serde_json::to_string(&expected)
+            .expect("it serialises")
+            .contains("otp_seed"),
+        "the candidate answer names the sealed column"
     );
 }
 

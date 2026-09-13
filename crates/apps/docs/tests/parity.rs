@@ -26,10 +26,12 @@
 //!    shape so the comparison is exact, and `a_denied_share_plane_is_null_not_empty`
 //!    is what proves the two are still distinguishable on this side.
 //! 2. **`shared_from.at` is an INSTANT here and epoch milliseconds in v0.** v0
-//!    writes `Date.parse(subscribed_at ?? "") || 0`, which turns an absent or
+//!    wrote `Date.parse(subscribed_at ?? "") || 0`, which turned an absent or
 //!    unparseable instant into `0` — "arrived on 1 January 1970" on the shelf.
-//!    The mapping parses the port's text to the same number, and the divergence
-//!    is a finding in the lane's receipt rather than a reproduced `0`.
+//!    Fixed at source in the close pass (#1020, R-1020-35, D-1020-CL4): v0's
+//!    field is `number | null` now, so the mapping lowers the port's `None` to
+//!    `null` and its text to the same number, and the two sides agree on the
+//!    absence as well as on the instant.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -129,13 +131,13 @@ fn shared_from_json(row: &DocumentRow) -> Value {
         "vault_id": from.vault_id,
         "party_id": from.party_id,
         "name": from.name,
-        // `Date.parse(…) || 0`: the port's `None` becomes v0's `0`, which is
-        // the finding rather than the design.
+        // `null`, not `0`: an instant nobody can read is nothing, and since
+        // the close pass v0 says so too (#1020, D-1020-CL4).
         "at": from
             .at
             .as_deref()
             .and_then(centraid_vault_clock_parse)
-            .unwrap_or(0),
+            .map_or(Value::Null, |ms| json!(ms)),
     })
 }
 
