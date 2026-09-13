@@ -76,16 +76,37 @@ fn every_golden_corpus_is_byte_identical_in_both_trees() {
     // suite still reads its own path, so "the same files" is only true while the
     // bytes are the same — and a corpus is exactly the artefact where a
     // well-meant re-freeze on one side goes unnoticed.
+    //
+    // WHEN THE V0 TREE IS GONE THIS TEST HAS NOTHING TO SAY, AND SAYS SO
+    // LOUDLY (#1020, close pass). The per-label `continue` below was already
+    // here, and the non-vacuity assertion at the end was not told about it — so
+    // on a tree with no `packages/` (wave 6, and the retirement branch today)
+    // every label skipped, `compared` stayed 0 and the test FAILED on
+    // "only 0 file pair(s) were compared". A gate that reads red because its
+    // subject is absent is a gate nobody can retire behind.
+    let v0_tree = repo_root().join("packages/vault/tests/golden");
+    if !v0_tree.exists() {
+        eprintln!(
+            "SKIPPED every_golden_corpus_is_byte_identical_in_both_trees: {} is absent, \
+             so there is no second tree to compare against. This is the wave 6 state; \
+             the v1 copies under contracts/golden are still asserted by the tests above.",
+            v0_tree.display()
+        );
+        return;
+    }
     let mut findings: Vec<String> = Vec::new();
     let mut compared = 0usize;
     for label in [GOLDEN_LABEL, GOLDEN_LABEL_CHECKPOINT] {
         let v0 = v0_golden_dir_for(label);
-        if !v0.exists() {
-            // Wave 6 deletes the v0 tree. When it does, this test has nothing
-            // left to compare and says so instead of failing.
-            eprintln!("{} is gone; nothing to compare", v0.display());
-            continue;
-        }
+        // BOTH TREES OR NEITHER. With `packages/vault/tests/golden` present, a
+        // MISSING LABEL inside it is drift rather than a retirement — the two
+        // corpora are frozen together — so it is a finding and not a skip.
+        assert!(
+            v0.exists(),
+            "{} is absent while the v0 golden tree is still here: one corpus was \
+             deleted and the other was not",
+            v0.display()
+        );
         let v1 = contracts_golden_dir_for(label);
         // Both are actually there: a missing file would otherwise make the
         // comparison below skip silently.
@@ -119,11 +140,27 @@ fn every_golden_corpus_is_byte_identical_in_both_trees() {
 
 #[test]
 fn both_manifests_parse_and_agree() {
+    // The same retirement shape as the test above (#1020, close pass): with no
+    // v0 tree there is no second manifest, and a silent `continue` per label
+    // would leave this reading green while asserting nothing.
+    let v0_tree = repo_root().join("packages/vault/tests/golden");
+    if !v0_tree.exists() {
+        eprintln!(
+            "SKIPPED both_manifests_parse_and_agree: {} is absent, so there is no \
+             second manifest to agree with.",
+            v0_tree.display()
+        );
+        return;
+    }
+    let mut compared = 0usize;
     for label in [GOLDEN_LABEL, GOLDEN_LABEL_CHECKPOINT] {
         let v0 = v0_golden_dir_for(label);
-        if !v0.exists() {
-            continue;
-        }
+        assert!(
+            v0.exists(),
+            "{} is absent while the v0 golden tree is still here",
+            v0.display()
+        );
+        compared += 1;
         let left = read_manifest(&v0).expect("the v0 manifest parses");
         let right = read_manifest(&contracts_golden_dir_for(label)).expect("the v1 one parses");
         assert_eq!(left.label, label);
@@ -132,6 +169,10 @@ fn both_manifests_parse_and_agree() {
         assert_eq!(left.user_version, right.user_version);
         assert_eq!(left.tables.len(), right.tables.len());
     }
+    assert_eq!(
+        compared, 2,
+        "only {compared} manifest pair(s) were compared"
+    );
 }
 
 #[test]
