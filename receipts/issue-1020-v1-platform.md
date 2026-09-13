@@ -4430,3 +4430,166 @@ Law `53be88c22ab5`. `amendment-pairing` · `commit-message-format` · `constitut
 **Claim 1: "a ledger table is refused by construction, so a table a later wave adds cannot be forgotten."** The risk is that the rule is accidentally true — that the entities happen to be arranged so any predicate would pass. Throwaway check: `contracts/schema/v0-registries.json` was patched in place to change `enrich.derivation`'s `lifecycle` from `machinery` to `mutable`, the single edit that would make a table the recognition handlers *write* watchable. Three tests went red — `machinery_is_exactly_the_band_schemas` naming the entity and both its readings, `the_outbox_and_the_enrichment_plane_refuse_as_machinery`, and `the_positive_list_is_life_data_and_only_life_data`. Restored; `git diff` clean. The rule is load-bearing and the band invariant is what holds it up.
 
 **Claim 2: "an overlapping wall minute fires once under a continuous minute-by-minute tick."** The risk is the one #846 P2 already caught once: a dedupe that works inside one window and not across two, which is invisible to any test that reads a single wide window. Throwaway check: the `fell_back_within` guard in `deliverable_instants` was short-circuited to `if true { return due; }`, leaving `due_instants`' own within-window dedupe intact. `an_overlapping_wall_minute_fires_once_across_windows` failed on the continuous-tick half and passed on the wide-window half — the exact asymmetry the bug had. Restored; 132 lib tests green.
+
+## Wave 4 — lane Docs: the drive, the share fold, and the `core` schema's document half
+
+Docs is 13,183 lines of v0 TypeScript — 4 queries, 16 actions, 34 scopes over five schemas — and its whole write surface belongs to the `core` schema, so this slot is `crates/vault` as much as it is an app crate. What landed: `crates/apps/docs` (six modules, no SQL), sixteen new `core.*` commands, the representation fold lifted into the kit for its second consumer, a generated parity bundle compared in both trees, the demo drive and the year-3 axis as generators, and Docs' copy leaf.
+
+### What landed, by commit
+
+**`28350dd5` — `refactor(kit): the representation fold moves to the kit for its second consumer`**
+
+- `crates/apps/kit/src/representations.rs` (new), `crates/apps/kit/src/lib.rs`, `crates/apps/photos/src/representations.rs`
+- `contracts/handoff/docs/README.md`, `contracts/handoff/docs/kit.patch` (new)
+
+Lane Photos wrote the fold and filed the lift "for whichever lane ports the second caller"; Docs is that caller. The kit's copy carries v0's second index, `by_content` (`packages/blueprints/apps/_shared/representation-reads.ts:36`), which Photos' narrowing dropped and which Docs' `history` query needs for a **superseded** version — bytes the document no longer reads, so no owner row names them. `by_owner` is re-keyed on the `(owner_type, owner_id)` pair as v0 keys it. `crates/apps/kit/**` has no wave 4 owner, so the change arrives as a patch file with its demonstrated red (`two_owners_over_one_sha_keep_their_own_readings`) and is applied here so the Docs crate could be written. Every name Photos exported still resolves.
+
+**`a54482bc` — `feat(vault): the core.* document, folder, tag and content commands`**
+
+- `crates/vault/src/commands/core.rs` (503 → 2,946 lines), `crates/vault/src/commands/mod.rs`, `crates/vault/tests/commands.rs`
+- `crates/vault/tests/docs_commands.rs` (new, 9 tests)
+
+Sixteen definitions join lane D1's three: the fourteen document and folder commands, `core.untag_item`, and `core.set_extracted_text`. The counts off v0's own definitions for the whole schema are **17 idempotent / 8 once / 2 retry-safe**, and the two command-level `confirm`s are the two merges; `the_idempotency_split_matches_v0` counts the nineteen this build carries.
+
+**`be356d41` — `feat(docs): the drive, the share fold, the byte door and sixteen actions`**
+
+- `crates/apps/docs/{Cargo.toml,manifest.json,README.md}`, `crates/apps/docs/src/{lib,manifest,queries,shares,origins,bytes,commands}.rs`, `crates/apps/docs/tests/door.rs` (7 tests), `Cargo.toml`
+- `crates/apps/kit/src/fixtures.rs` — the share/staging seeders the door suite reads through, because an app crate holds no SQL
+
+**`1fe40ede` — `fix(blueprints): the taxonomy read selects the parent column two readers walk`** — R-1020-35, finding 1 below.
+
+**`bd3081aa` — `test(contracts): Docs' parity fixtures, generated from v0 and compared whole`**
+
+- `contracts/tools/{export-docs-parity,docs-parity-bundle,docs-parity-share-plane}.ts` (new; split at the 625-line ceiling rather than taking a ledger row)
+- `contracts/apps/docs/{README.md,rows.json,queries.json,commands.json,scenarios.json}` (new, generated)
+- `tests/quality/docs-parity.contract.test.ts` (new, the emitter's own oracle), `crates/apps/docs/tests/parity.rs` (new, 6 tests)
+
+**`699ec25c` — `feat(kit): the Docs demo drive, the year-3 axis, and the copy leaf`**
+
+- `crates/apps/kit/src/fixtures.rs` — `docs_demo`, `year3_docs`, `YEAR3_DOCS`, `seed_owner_party`
+- `crates/apps/docs/tests/year3.rs` (new, 4 tests + 1 measured), `crates/apps/docs/src/queries.rs` (D-1020-DC10), `crates/apps/docs/README.md`
+- `contracts/tools/export-copy.ts`, `copy/docs.json` (new), `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`, `crates/design/tests/copy_routes.rs`
+- `packages/server/src/serve/app-query-plans.snapshot.md` — regenerated for the projection finding 1 widened
+
+**`8c10d78d` — `fix(automations): core.set_extracted_text is no longer pending`**
+
+- `crates/automations/src/handler/recipes.rs`, `crates/centraid/src/cmd/automations.rs`, `contracts/tools/docs-parity-share-plane.ts`
+
+**A cross-lane edit, named.** The automations lane listed `core.set_extracted_text` in `PENDING_COMMANDS` because a recipe whose result command does not exist is unavailable. It exists now, so two of that lane's tests went red on the flip the root predicted. The list is emptied and the machinery kept — the next recipe waiting on a lane that has not run needs exactly that seam — and both assertions become "nothing is pending", so a command that goes pending again still has to be named. Two files of another lane's, three lines, and the alternative was leaving the umbrella with a red.
+
+### Exit list
+
+| Command | Outcome |
+|---|---|
+| `cargo fmt --all` | clean |
+| `cargo clippy -p centraid-apps-docs -p centraid-apps-kit -p centraid-vault --all-targets` | clean, `-D warnings` |
+| `cargo test -p centraid-apps-docs` | **61 passed**, 1 ignored (the measured year-3 run) |
+| `cargo test -p centraid-vault` | 191 passed (of which `docs_commands` 9) |
+| `cargo test --workspace` | **1,385 passed, 0 failed** (1,123 at `333a8bff`) |
+| `cargo xtask gate --profile local` (warm) | FAIL — `rules` only, on the two inherited Photos findings. 120.5 s against the 120 s budget; the Tally-finish lane already recorded the warm profile over budget |
+| `cargo xtask gate --profile pr` | 842.4 s of 1,500 s. FAIL on `rules`, `ci-policy`, `secrets`, `osv` — all four inherited and named below. `ts-static` and `desktop-unit` failed in that run for lack of `node_modules` and pass with it: `check:push:static` 4/4, `desktop/electron test` 201 passed |
+| `cargo xtask rules` over `crates/apps/docs` | **clean** — 0 findings in the crate, tests included |
+| `bun contracts/tools/export-docs-parity.ts` via the oracle, twice | idempotent: `git diff --exit-code contracts/apps/docs` prints nothing on the second run |
+| `tests/quality/docs-parity.contract.test.ts` | 2 passed — the v0-side oracle, in both write and assert mode |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, no findings |
+| `bash .governance/run.sh` | all 10 directives pass |
+| `bun run format` / `format:check` | clean |
+| `bun run check:push:static` | 4/4 |
+
+### The numbers
+
+**Parity counts.** `queries.json` carries **24 cases** — drive 5 (the default, the declared floor, the declared ceiling, one under and one over, so both clamps are compared), search 4, history 8, activity 7. `commands.json` is a **35-step replayable script** over **all 16** of Docs' commands, every one of them `core.*`, with **11 refusals** in it. `rows.json` is **20 tables, 181 rows**: 6 documents, 24 concepts, 7 tags, 34 occurrences, 3 standing answers, 3 fulfillments.
+
+**The fold's windows and their measured page counts on the fixture** (`the_nine_share_windows_are_all_exercised_by_the_corpus`, printed):
+
+| Window | Rows |
+|---|---|
+| `docs.shares.answers.core.document` | 1 (the revoked answer is filtered in the READ) |
+| `docs.shares.answers.docs.folder` | 1 |
+| `docs.shares.circles` | 1 |
+| `docs.shares.circleMembers` | 2 |
+| `docs.shares.fulfillments` | 3 |
+| `docs.shares.parties` | 2 |
+| `docs.shares.bindings` | 2 |
+| `docs.origins.bindings` | 1 |
+| `docs.origins.parties` | 2 |
+
+**Nine, not eight.** `census-wave4.md:42` lists seven line numbers in `queries/_shared.ts` and three in `queries/document-origins.ts` and then states eight; the declaration line is one of the seven, so the true count of bounded windows is **six plus three**. `SHARE_WINDOWS` names all nine and the test is the count.
+
+**The year-3 drive number.** 8,000 documents / 7,600 live / 400 trashed, 10,000 content items, 10,000 occurrences, 12,600 tags, 400 folders four levels deep, 2,000 standing answers half of them on folders — seeded in **8.9 s**, and a 2,000-row drive answers **2,000 documents and 400 folders in 480 ms** on `ci-linux-x64-4c`. Projected provenance, D-1020-D3-7's pattern: one host, one run, not a ledger number.
+
+**The staged-PDF round trip.** `a_pdf_rides_in_through_stage_and_out_through_a_url` (`crates/apps/docs/tests/door.rs`), over a real `FsBlobStore` and a real founded vault:
+
+```
+stage   application/pdf, 57 bytes  -> sha256 = digest(bytes) = sha256_hex(bytes), well-formed
+claim   core.add_document{staged_sha} -> content_uri = blob:sha256-<sha>, staging row consumed
+read    representation(core.document, <id>) = application/pdf; core_content_text rows = 0
+drive   content_uri = /centraid/_vault/blobs/<content_id>   (same-origin, so Range works)
+url     centraid://blob/<content_id>, inline = true
+bytes   store.get(sha) == the original 57 bytes
+refuse  read_text(.., "text/html", 10) -> NeverInline; ServedUrl(image/svg+xml).inline = false
+```
+
+The door is the app's [`ByteDoor`] trait and the store is `crates/vault`'s. Lane F's `centraid://` handler exists (`crates/centraid/src/cmd/seat/blob.rs`) but lives in a **binary** crate an app crate cannot depend on, so the round trip is through `crates/vault`'s store in-process and the receipt says so rather than implying the protocol handler was exercised.
+
+**`the_share_fan_out_reaches_four_thousand_and_errors_at_the_next_row`** is the reachable-cap test: 4,000 seeded answers walk, the 4,001st makes `read_pages` answer `FanOutExceeded { cap: 4000 }`, and `load_drive` surfaces it as `Err` rather than drawing a document with fewer audiences than it has. **`n_wrappers_over_one_sha_are_n_drive_rows`** is the wrapper-identity property, generated over *n* ∈ 1..7.
+
+### Decisions — lane Docs
+
+Every row cites [#1020](https://github.com/srikanth235/centraid/issues/1020) and follows R-1020-34: the options, the recommendation, and the recommendation adopted.
+
+**D-1020-DC1 — identity is the `core.document` wrapper.** Options: key a drive row by content id (v0's own wire shape makes it tempting, since the row carries both); key it by the wrapper. Adopted: the wrapper. Two documents may legitimately share bytes (#352), and a content-keyed row merges two members' unrelated files. Proved as a property over *n* copies rather than a case at two, because a port that special-cased two would still be wrong at three; each of the *n* keeps its own history and its own representation over one content item.
+
+**D-1020-DC2 — the fold is one module with nine named windows.** Options: inline the share joins into each of the two callers, as v0's `drive.ts` and `search.ts` almost do; one module. Adopted: one module, with `SHARE_WINDOWS` as data so a tenth window cannot appear unnamed. `via` is `document` or `folder` and never a guess; `delivered_at IS NOT NULL` is the only thing that makes a member `current` (#846); a denial is `Reading::Denied`, and `Data(vec![])` is "shared with nobody".
+
+**D-1020-DC3 — the `core` schema's document half, and eight named absences.** Options: land all 27 of v0's `core.*` commands to hold the whole schema; land the ones Docs invokes plus the recognition writer. Adopted: the second — nineteen. `core.{link_entities,unlink_entities,anchor_link,attach,detach}` are Notes' link and attachment plane and `core.{merge_party,merge_entity,find_duplicate_parties}` are People's merge plane; no Docs action invokes any of them, and the two confirm-gated commands in the whole schema are the two merges, whose **non-owner park** is a People-lane behaviour to prove with People's fixtures rather than an eight-command stub written blind. "A lane takes a whole schema for its slot" is about not having two writers of one file at once; it is not an instruction to write commands no consumer exercises. `the_schema_carries_nineteen_of_v0s_twenty_seven` asserts the absences by name.
+
+**D-1020-DC4 — bytes ride a door the app crate does not hold.** Options: a `centraid://` request type in `crates/core`'s `Request` surface, as the brief suggests; a trait in the app crate. Adopted: the trait. Promoting the three verbs to `crates/core` touches `crates/api-proto`'s `.proto` and `crates/core/src/api.rs`, neither of which is this lane's file — filed as a hand-off below. The never-inline list is lane F's, carried unchanged, and refused **at the request** rather than at the surface: Docs' quick-look renders a text body and `text/html` is `text/*`. **No type is not permission** — a document whose representation this vault cannot read is offered, never embedded.
+
+**D-1020-DC5 — the seed is a generator, not a port of the script.** It reads no clock and holds no path: the bodies are declared facts and `now` is a civil date the caller states, so two runs of one date write the same rows. The row values are the ones the commands produce, so the same generator re-points at `Vault::execute` without the fixture changing.
+
+**D-1020-DC6 — the polymorphic reference, re-judged rather than cited.** The brief asks whether Docs' reads depend on `access_provenance`'s `(entity_type, entity_id)` and the share plane's `(subject_type, subject_id)`. **They do, and both are load-bearing rather than incidental.** `docs.activity.provenance` is scoped by the provenance pair; the share fold matches **per subject TYPE, never by id alone**, because a document id and a folder concept id are different namespaces and one `IN` over both would match a folder whose concept id happened to equal a document id. What the re-judgement finds is not the polymorphism but its **consequence**, finding 2 below: `access_provenance` has no `FOREIGN KEY (prov_id) REFERENCES core_entity(entity_id)`, so it is not an entity, so the gateway's paged door cannot serve it at all. The pair is fine. The band's absence from the entity registry is not.
+
+**D-1020-DC7 — there is no `core.add_content_item`.** The brief names one; `grep -rn add_content_item packages/ crates/ contracts/` finds nothing. The content item is minted inside `add_document`, `edit_document` and `replace_document_content`, so "add_content_item under the SB-text ceiling" is those three commands' shared mint path, and it landed there. **And the ceiling is not 1 MiB.** 1 MiB is `core.content_item`'s `replicaValues.textCeilingBytes` (`packages/vault/src/schema/entity-catalog.ts:77`) — a REPLICA rule about when a seat stops carrying a body's value and names the absence. What a command enforces is `INLINE_BODY_BUDGET_BYTES`, **64 KiB** of decoded text (`packages/vault/src/commands/inline-body-guard.ts:13`), sixteen times tighter, because a text body cannot redirect to the CAS at all: the FTS feed decodes it in-transaction and a trigger cannot do I/O. The `data:`-URI door has its own separate ceiling of 360,000 characters. All three are ported with their own predicates.
+
+**D-1020-DC8 — the inline binary path is a receipted refusal, per input shape.** Options: leave the three minting commands `not_implemented`, as lane Photos did for `media.add_asset`; refuse per input shape. Adopted: per input shape. Claiming a staged sha is **pure row work and v0 says so** (`packages/vault/src/blob/promote.ts:1`-`:5`), so the whole `staged_sha` path and the whole `text/*` path are real and a scanned PDF files, versions and restores for real; only bytes pasted inline as base64, that this vault does not already hold, refuse — and they refuse as a **precondition** with its own predicate (`inline_bytes_are_storable`), so the refusal is receipted with an owner-facing sentence rather than thrown. Bytes already held are exempt, because the mint dedupes before it would spill, which is v0's order too.
+
+**D-1020-DC9 — `enrich_request` rows are not written from `core.*`.** v0's staged claim queues them for a device that has contributed no derivative. `enrich.*` is the automations lane's schema; writing another lane's table from this one is how two writers of one plane happen. Hand-off below.
+
+**D-1020-DC10 — the declared drive window is walked to its stated size.** Options: one page, as v0 effectively takes and as Photos' library deliberately takes; walk the declared window. Adopted: the walk. `MAX_PAGE_ROWS` clamps a page to 500 and v0 asks for its 2,000-row window as one page, so a drive declaring `limit: 2000` answers **500 of 7,600 live documents** and discards the cursor that says there are more — measured at the year-3 profile. A list is where a clamp is defensible, but the clamp has to be the one the caller asked for and not one the page contract imposed behind it; `core_tag.tagged_at` is `NOT NULL`, so the keyset walk is continuable and the window is reachable. Photos takes one page because its own sort column is nullable and a walk there would silently drop every NULL (D-1020-P11). `truncated` is still the read's own claim. **This is a behaviour divergence from the oracle at volume that the parity fixture cannot reach** — its corpus is six documents — and it is named here for that reason.
+
+### Findings, and the two v0 edits
+
+**Finding 1 (fixed at source, R-1020-35): `conceptTaxonomyReads` did not select the column two of its readers walk.** `packages/blueprints/apps/_shared/taxonomy-reads.ts` projected `concept_id, scheme_id, pref_label, notation` and not `broader_concept_id`, which `docs/queries/drive.ts:68` reads for a folder's `parent_id` and `docs/queries/_shared.ts:261` reads to build the chain a folder share walks up. On the gateway's paged door an unselected column reads as `undefined` rather than throwing, so **both consequences are silent: every folder reported as top-level, and a share on a grandparent folder stopped reaching the document below it.** Fixed in `1fe40ede` — one column, plus the row type. The red is the new case in `docs/queries/shares.test.ts`: the suite's existing grandparent case passes because `pagedFixture` answers with whole rows whatever a statement selected, so the projection is exactly what its own fixture cannot see. `app-query-plans.snapshot.md` regenerated (two occurrences, plan text unchanged); the eight handlers that share the read are Docs', Notes' and People's and all 38 `packages/blueprints` suites stay green (355 passed).
+
+**Finding 2 (not narrow; for the close pass): Docs' activity rail has never shown an event on any surface.** `docs.activity.provenance` reads `access_provenance`. The paged door resolves a `FROM` through the entity registry and refuses anything that is not an entity (`packages/vault/src/gateway/paged-door.ts:436`), and `access_provenance` declares no `FOREIGN KEY (prov_id) REFERENCES core_entity(entity_id)` — so it is not one. Every call is refused **before any access decision**, for every caller including the owner. The manifest declares the scope, the handler ships, the rows are there, and the screen is empty for a reason no consent screen can fix. Evidence on both sides: the fixture records the refusal verbatim for all seven `activity` cases, and `the_activity_rail_the_gateways_door_refuses` reads the three events a filed-then-edited-then-starred document actually carries (`command.core.add_document`, `command.core.edit_document`, `command.core.star_document`, `agent_kind: owner`). Not fixed here because the fix is a choice between two planes — admit the audit band to the entity registry, or give the rail a door of its own — and either is wider than a lane.
+
+**Finding 3: `shared_from.at` is `Date.parse(subscribed_at ?? "") || 0`.** `queries/document-origins.ts:184`. An absent or unparseable instant becomes `0`, which renders as "arrived on 1 January 1970". The column is `NOT NULL`, so it is a latent defect rather than a live one; the port models the absence and the parity mapping lowers it to v0's number so the comparison stays exact.
+
+**Finding 4: the census's `core` idempotency split does not add up.** `census-wave4.md:47` reads `core 27 (17 / 6 once / 2 retry-safe)`, and 17 + 6 + 2 is 25. The `once` arm is **eight**: `add_party`, `add_document`, `trash_document`, `create_folder`, `link_entities`, `attach`, `merge_party`, `merge_entity`. Same class as the `media.*` miscount lane Photos recorded.
+
+**Finding 5 (outside the slice): two Photos test files hold SQL.** `crates/apps/photos/tests/{parity,year3}.rs` are the two `sql-confinement` findings that keep `rules` red on `local` and `pr`. Already recorded by the Tally-finish lane; the remedy is the one this lane used — the statements move to `crates/apps/kit::fixtures`, where `contract_vault.rs` already explains why that is their home. `crates/apps/docs` is clean, tests included.
+
+**Finding 6 (outside the slice): `crates/vault::clock` already exports the instant arithmetic that `commands/media.rs` keeps privately.** `format_iso_ms` and `parse_iso_ms` are public; `media.rs` carries its own `parse_instant_ms`, `format_instant_ms`, `days_from_civil` and `civil_from_days`. `core.rs` uses the public pair. The third copy is the one that drifts.
+
+**Finding 7 (inherited, argued rather than assumed): `manifest-scope-denial.sweep.test.ts` and `vault-plane-maintenance.test.ts` are red at the umbrella head.** The first expects `declaredScopes: 294` and the tree has 295; the second fails on "sweeps the retained ledger by its own expiry". Neither is this lane's: the sweep's count is a function of `packages/blueprints/**` manifests alone, and this lane's only edits under `packages/` are `_shared/taxonomy-reads.ts` and one `.test.ts` — no manifest. The ledger sweep is over the band lane assist landed. Both were confirmed red with this lane's uncommitted work stashed.
+
+**Inherited gate reds, named not fixed:** `secrets` (2 findings, first `contracts/golden/format-golden.json`), `osv` (`astro@7.1.5`), `ci-policy` (`copy`, `design`, `mobile` claimed by no `changes` filter — verbatim what the brief predicted), `rules` (finding 5), and the warm `local` profile at 120.5 s against 120 s.
+
+### Owner hand-offs
+
+1. **`content.read_text` / `content.url` / `content.stage` as `crates/core` messages.** The app crate's `ByteDoor` is the seam and its three request shapes are the wire shapes; promoting them needs one `.proto` message each in `crates/api-proto` and three `Request` variants in `crates/core/src/api.rs`, neither of which is this lane's file. The expected evidence is lane F's `centraid://` handler answering all three and `crates/apps/docs/tests/door.rs`'s `StoreDoor` being replaced by the real one, with the same assertions.
+2. **`enrich_request` on a staged claim (D-1020-DC9).** v0's `promoteStagedBlob` queues one per device with no contributed derivative (`packages/vault/src/enrich/leases.ts`). The rows belong to the automations lane's schema; one call at the end of `promote_staged_blob` in `crates/vault/src/commands/core.rs` is the whole change.
+3. **A blob door on `CommandCtx` (D-1020-DC8).** Then the inline-binary precondition `inline_bytes_are_storable` deletes itself and `media.add_asset` stops being `not_implemented`. One field on `CommandCtx` and one method; the evidence is the existing refusal test flipping to an execution.
+4. **`tests/journeys.json`'s `docs-drive` row.** The Playwright half (`apps/desktop/tests/e2e/docs-drive.spec.ts`) is the desktop lane's successor's; what is provable here is the parity half, and it is green. The share journey rides the peer plane's, not Docs'.
+5. **The year-3 docs row for the journey ledger.** The measured numbers are above; the ledger edit is the root's.
+
+### Doctrine digest
+
+Law `53be88c22ab5`. `amendment-pairing`, `commit-message-format`, `constitution-coverage`, `doc-integrity`, `doctrine-citation`, `estate-separation`, `managed-tree-integrity`, `receipt-per-issue`, `registry-completeness`, `waiver-docket` — all pass, no waivers spent. No policy weakened: the `sql-confinement` rule, the `max-lines` ceiling, the `gate-budgets` ledger and the `fileSize` exemption budget are all untouched, and the three files the 625-line ceiling would have caught were split rather than exempted.
+
+### Falsification
+
+**Claim 1: "the share fold matches per subject TYPE, so a folder concept id cannot be mistaken for a document id."** The risk is that the corpus never puts the two namespaces in contact, making the claim accidentally true. Throwaway check, two halves. First the fold's per-document filter was reduced to `chain.contains(&answer.subject_id) || answer.subject_id == *document_id` — the id-only match a port would write — and **all six parity tests still passed**, so the corpus alone does not catch it. Second, `grant-document`'s `subject_type` was flipped to `docs.folder` in a copy of `rows.json`: two tests went red, `the_corpus_exercises_the_folds_it_is_here_to_compare` on "no document share" and `the_four_queries_answer_what_v0_answered` on the drive case. Both edits restored (`git diff --exit-code` clean on each). So the type match holds — but the honest statement is that what proves it is the **statement's** `subject_type = ?` bind and the `via` assertion, not the fold's filter, and the first half of this check is the reason to say so.
+
+**Claim 2: "the declared drive window is walked, not clamped."** The risk is that `read_window` silently falls back to one page — its own doc comment describes a door that clamps below `MAX_PAGE_ROWS` and is then treated as filled, which would make the change a rename. Throwaway check, measured at the year-3 axis with 8,000 documents seeded and `load_drive` asking for 2,000. Before the change (`door.page(.., first(window.min(MAX_PAGE_ROWS)))`): **500 documents in 141 ms**, `truncated: true`. After (`read_window`): **2,000 documents in 480 ms**, `truncated: true`. Then the walk was replaced again by a single `door.page(.., first(window))` — the shape v0 uses, with no `min` — and `the_year3_docs_axis_measures_the_drives_own_ceilings` failed on its 2,000-row assertion, confirming the 500 is the page contract's clamp and not the corpus. Restored; `git diff --exit-code crates/apps/docs/src/queries.rs` clean. The number moves with the mechanism in both directions, so the walk is real.

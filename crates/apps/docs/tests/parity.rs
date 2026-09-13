@@ -591,3 +591,85 @@ fn the_instant_lowering_matches_date_parse() {
     );
     assert_eq!(centraid_vault_clock_parse("not an instant"), None);
 }
+
+/// THE NINE BOUNDED WINDOWS, AND WHAT EACH ONE READS ON THIS CORPUS.
+///
+/// The lane's receipt quotes these numbers, so they are measured rather than
+/// counted by hand — and a window that reads NOTHING on the fixture is a window
+/// the parity comparison is not exercising, which is the failure this test is
+/// for.
+#[test]
+fn the_nine_share_windows_are_all_exercised_by_the_corpus() {
+    use centraid_apps_docs::origins::{origin_bindings_statement, origin_parties_statement};
+    use centraid_apps_docs::shares::{
+        SHARE_WINDOWS, answers_statement, bindings_statement, circle_members_statement,
+        circles_statement, fulfillments_statement, parties_statement,
+    };
+    use centraid_apps_kit::reads::read_pages;
+
+    let connection = fixture_vault();
+    let door = TestDoor::new(&connection);
+    // The ids the fold would hand each window, read off the fixture's own answer
+    // rather than typed: a window fed ids nobody holds reads nothing for the
+    // wrong reason.
+    let (drive, _) = load_drive(&door, DriveInput::default(), PARITY_EPOCH).expect("it reads");
+    let documents: Vec<String> = drive
+        .documents
+        .iter()
+        .map(|row| row.document_id.clone())
+        .collect();
+    let folders: Vec<String> = drive
+        .folders
+        .iter()
+        .map(|folder| folder.folder_id.clone())
+        .collect();
+    let entries: Vec<_> = drive
+        .documents
+        .iter()
+        .filter_map(|row| row.shared_with.data())
+        .flatten()
+        .collect();
+    let grants: Vec<String> = entries.iter().map(|entry| entry.grant_id.clone()).collect();
+    let circles: Vec<String> = entries
+        .iter()
+        .filter_map(|entry| entry.circle_id.clone())
+        .collect();
+    let parties: Vec<String> = entries
+        .iter()
+        .flat_map(|entry| entry.members.iter().map(|member| member.party_id.clone()))
+        .collect();
+    let vaults: Vec<String> = drive
+        .documents
+        .iter()
+        .filter_map(|row| row.shared_from.as_ref().map(|from| from.vault_id.clone()))
+        .collect();
+
+    let mut measured: BTreeMap<String, usize> = BTreeMap::new();
+    let mut walk = |statement: centraid_apps_kit::statement::PageQuery| {
+        let rows = read_pages(&door, &statement, centraid_apps_docs::SHARE_FAN_OUT)
+            .expect("a bounded window walks");
+        measured.insert(statement.name.clone(), rows.len());
+    };
+    walk(answers_statement("core.document", &documents).expect("a statement"));
+    walk(answers_statement("docs.folder", &folders).expect("a statement"));
+    walk(circles_statement(&circles).expect("a statement"));
+    walk(circle_members_statement(&circles).expect("a statement"));
+    walk(fulfillments_statement(&grants).expect("a statement"));
+    walk(parties_statement(&parties).expect("a statement"));
+    walk(bindings_statement(&parties).expect("a statement"));
+    walk(origin_bindings_statement(&vaults).expect("a statement"));
+    walk(origin_parties_statement(&parties).expect("a statement"));
+
+    for window in SHARE_WINDOWS {
+        let rows = measured
+            .get(window)
+            .copied()
+            .unwrap_or_else(|| panic!("{window} was not walked"));
+        assert!(
+            rows > 0,
+            "{window} read nothing: the corpus is not exercising it"
+        );
+        println!("window {window}: {rows} rows");
+    }
+    assert_eq!(measured.len(), SHARE_WINDOWS.len());
+}
