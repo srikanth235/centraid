@@ -18,9 +18,7 @@
     {
       "name": "pair",
       "idempotent": false,
-      "http": [
-        "POST"
-      ],
+      "http": ["POST"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": null,
@@ -60,9 +58,7 @@
     {
       "name": "unpair",
       "idempotent": true,
-      "http": [
-        "DELETE"
-      ],
+      "http": ["DELETE"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": null,
@@ -89,9 +85,7 @@
     {
       "name": "warm",
       "idempotent": true,
-      "http": [
-        "GET"
-      ],
+      "http": ["GET"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": null,
@@ -100,9 +94,7 @@
     {
       "name": "modules",
       "idempotent": true,
-      "http": [
-        "GET"
-      ],
+      "http": ["GET"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": null,
@@ -111,9 +103,7 @@
     {
       "name": "blocking-count",
       "idempotent": true,
-      "http": [
-        "GET"
-      ],
+      "http": ["GET"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": null,
@@ -122,9 +112,7 @@
     {
       "name": "locker:candidates",
       "idempotent": false,
-      "http": [
-        "POST"
-      ],
+      "http": ["POST"],
       "reads_page": true,
       "stages_bytes": false,
       "writes": null,
@@ -139,10 +127,7 @@
     {
       "name": "locker:fill",
       "idempotent": false,
-      "http": [
-        "POST",
-        "POST"
-      ],
+      "http": ["POST", "POST"],
       "reads_page": true,
       "stages_bytes": false,
       "writes": null,
@@ -162,9 +147,7 @@
     {
       "name": "locker:save",
       "idempotent": false,
-      "http": [
-        "POST"
-      ],
+      "http": ["POST"],
       "reads_page": true,
       "stages_bytes": false,
       "writes": {
@@ -197,9 +180,7 @@
     {
       "name": "capture:task",
       "idempotent": false,
-      "http": [
-        "POST"
-      ],
+      "http": ["POST"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": {
@@ -217,9 +198,7 @@
     {
       "name": "capture:note",
       "idempotent": false,
-      "http": [
-        "POST"
-      ],
+      "http": ["POST"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": {
@@ -237,10 +216,7 @@
     {
       "name": "capture:document",
       "idempotent": false,
-      "http": [
-        "POST",
-        "POST"
-      ],
+      "http": ["POST", "POST"],
       "reads_page": true,
       "stages_bytes": true,
       "writes": {
@@ -263,9 +239,7 @@
     {
       "name": "agenda:add",
       "idempotent": false,
-      "http": [
-        "POST"
-      ],
+      "http": ["POST"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": {
@@ -298,9 +272,7 @@
     {
       "name": "people:add",
       "idempotent": false,
-      "http": [
-        "POST"
-      ],
+      "http": ["POST"],
       "reads_page": false,
       "stages_bytes": false,
       "writes": {

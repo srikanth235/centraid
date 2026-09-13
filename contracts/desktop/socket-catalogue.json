@@ -4,11 +4,7 @@
     {
       "name": "tally.vault",
       "statement": "tally.dashboard.vault",
-      "select": [
-        "vault_id",
-        "self_party_id",
-        "base_currency"
-      ],
+      "select": ["vault_id", "self_party_id", "base_currency"],
       "from": "core_vault",
       "where": null,
       "binds": 0,
@@ -19,10 +15,7 @@
     {
       "name": "tally.friends",
       "statement": "tally.dashboard.friends",
-      "select": [
-        "friend_id",
-        "party_id"
-      ],
+      "select": ["friend_id", "party_id"],
       "from": "tally_friend",
       "where": null,
       "binds": 0,
@@ -52,10 +45,7 @@
     {
       "name": "tally.circles",
       "statement": "tally.dashboard.circles",
-      "select": [
-        "circle_id",
-        "name"
-      ],
+      "select": ["circle_id", "name"],
       "from": "social_circle",
       "where": null,
       "binds": 0,
@@ -66,11 +56,7 @@
     {
       "name": "tally.circleMembers",
       "statement": "tally.dashboard.circleMembers",
-      "select": [
-        "member_id",
-        "circle_id",
-        "party_id"
-      ],
+      "select": ["member_id", "circle_id", "party_id"],
       "from": "social_circle_member",
       "where": null,
       "binds": 0,
@@ -106,11 +92,7 @@
     {
       "name": "tally.splits",
       "statement": "tally.dashboard.splits",
-      "select": [
-        "expense_id",
-        "party_id",
-        "share_minor"
-      ],
+      "select": ["expense_id", "party_id", "share_minor"],
       "from": "tally_expense_split",
       "where": null,
       "binds": 0,
@@ -121,11 +103,7 @@
     {
       "name": "tally.payers",
       "statement": "tally.dashboard.payers",
-      "select": [
-        "expense_id",
-        "party_id",
-        "paid_minor"
-      ],
+      "select": ["expense_id", "party_id", "paid_minor"],
       "from": "tally_expense_payer",
       "where": null,
       "binds": 0,
@@ -195,12 +173,7 @@
     {
       "name": "companion.apps",
       "statement": "companion.apps",
-      "select": [
-        "app_id",
-        "name",
-        "display_name",
-        "label"
-      ],
+      "select": ["app_id", "name", "display_name", "label"],
       "from": "access_app",
       "where": null,
       "binds": 0,
@@ -211,12 +184,7 @@
     {
       "name": "companion.outbox",
       "statement": "companion.outbox",
-      "select": [
-        "item_id",
-        "verb",
-        "target",
-        "staged_at"
-      ],
+      "select": ["item_id", "verb", "target", "staged_at"],
       "from": "outbox_item",
       "where": "status = ?",
       "binds": 1,
@@ -227,11 +195,7 @@
     {
       "name": "companion.connections",
       "statement": "companion.connections",
-      "select": [
-        "connection_id",
-        "kind",
-        "label"
-      ],
+      "select": ["connection_id", "kind", "label"],
       "from": "sync_connection",
       "where": "status = ?",
       "binds": 1,
@@ -242,10 +206,7 @@
     {
       "name": "companion.parked",
       "statement": "companion.parked",
-      "select": [
-        "intent_id",
-        "status"
-      ],
+      "select": ["intent_id", "status"],
       "from": "replica_intent_outcome",
       "where": "status = ?",
       "binds": 1,
@@ -256,11 +217,7 @@
     {
       "name": "companion.scopeRequests",
       "statement": "companion.scopeRequests",
-      "select": [
-        "request_id",
-        "principal_id",
-        "requested_at"
-      ],
+      "select": ["request_id", "principal_id", "requested_at"],
       "from": "share_authority_request",
       "where": "decided_at IS NULL",
       "binds": 0,
@@ -328,12 +285,7 @@
     {
       "name": "photos.content",
       "statement": "photos.timeline.content",
-      "select": [
-        "content_id",
-        "sha256",
-        "byte_size",
-        "created_at"
-      ],
+      "select": ["content_id", "sha256", "byte_size", "created_at"],
       "from": "core_content_item",
       "where": "deleted_at IS NULL",
       "binds": 0,

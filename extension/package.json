@@ -5,8 +5,10 @@
   "description": "The Centraid browser Companion: MV3 over native messaging to the app on this machine. No network, no WASM.",
   "type": "module",
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "lint": "node scripts/lint.mjs",
     "round-trip": "node scripts/native-round-trip.mjs",
     "test": "vitest run --config ../desktop/vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   }
 }
