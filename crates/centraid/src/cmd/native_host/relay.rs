@@ -651,6 +651,14 @@ mod tests {
     /// comes off the list rather than staying a silent no-op.
     #[test]
     fn the_pending_commands_are_the_ones_the_registry_lacks() {
+        // AND THE LIST IS EMPTY (#1020, close pass). Every lane of wave 4 has
+        // landed, so nothing this host can send is owed to anybody. Stated as
+        // its own assertion rather than inferred from the loop below, which
+        // would also pass over an empty method table.
+        assert!(
+            PENDING_COMMANDS.is_empty(),
+            "a command is owed to a lane that has already run: {PENDING_COMMANDS:?}"
+        );
         let registry = centraid_vault::commands::Registry::with_system_commands()
             .expect("the vault's own registry");
         let registered = registry.names();
