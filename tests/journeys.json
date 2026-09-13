@@ -35,7 +35,11 @@
     "mock-gateway": "The desktop e2e fixture: a mock gateway, one app, a fresh userData directory. NOT year-3, and the harness cannot be pointed at the golden artifact from this container — Electron does not launch on a display-less runner, so the rig is landed and the number stays parked.",
     "device-fixture": "Whatever the CI gateway fixture seeded onto the simulator's device replica. NOT the declared year-3 50,000 replica rows / 90,000 photo assets: reaching those needs a device run, which this container has none of.",
     "shared-album": "One album of 200 photos, shared whole. Big enough that projection dominates the grant plane's fixed cost.",
-    "year3-50k-assets": "50,000 photo assets in the library, on the device that is browsing them — the volume [#1020](https://github.com/srikanth235/centraid/issues/1020) states its memory, interaction and battery targets at. Distinct from `year3-photos` (90,000 assets), which is the GATEWAY-side library profile: 50k is the size at which a phone's grid, its thumbnail cache and its sync pass are all under real pressure at once, and stating a phone ceiling at 90k would be stating it at a volume no reference device has been asked to hold."
+    "year3-50k-assets": "50,000 photo assets in the library, on the device that is browsing them — the volume [#1020](https://github.com/srikanth235/centraid/issues/1020) states its memory, interaction and battery targets at. Distinct from `year3-photos` (90,000 assets), which is the GATEWAY-side library profile: 50k is the size at which a phone's grid, its thumbnail cache and its sync pass are all under real pressure at once, and stating a phone ceiling at 90k would be stating it at a volume no reference device has been asked to hold.",
+    "year3-tally": "Tally at year three: 2,000 expenses, 8,000 split rows, 40 groups, 240 pair rows. `crates/apps/kit::fixtures::year3_tally`. Distinct from `year3`, which is the whole golden vault — this volume is one app's plane at the size its own declared windows are stated for.",
+    "year3-docs": "The drive at year three: 8,000 documents (7,600 live / 400 trashed), 10,000 content items, 10,000 occurrences, 12,600 tags, 400 folders four levels deep, and 2,000 standing answers half of them on folders. `crates/apps/kit::fixtures::year3_docs`.",
+    "year3-notes": "The notebook at year three: 10,000 notes — 400 trashed, 200 pinned, 1,200 journal entries — with a 48 KiB body on 600 of them, the largest body the product holds. `crates/apps/kit::fixtures::year3_notes`.",
+    "year3-people": "The roster at year three: 5,000 people, 12,000 important dates, 20,000 interactions. `crates/apps/kit::fixtures::year3_people`. v0's own year-3 generator writes 5,000 `core_party` rows and no `people_profile` at all, so these reads had no artifact behind them before [#1020](https://github.com/srikanth235/centraid/issues/1020)."
   },
   "journeys": {
     "cold-open": "Process start to the first screen the owner can act on.",
@@ -67,10 +71,11 @@
     "reconnect-drain": "The radio returns to an empty outbox, every queued change executed in order.",
     "typing": "A keystroke to the character on screen, in a text editor over a real vault. Not `own-echo`: an echo may cost a round trip to the core, and a keystroke may not.",
     "background-pass": "Not a journey — the battery a single scheduled background sync pass costs, as a percentage of the device's charge.",
-    "memory": "Not a journey — resident memory the app holds while a library of the stated volume is open and scrolling."
+    "memory": "Not a journey — resident memory the app holds while a library of the stated volume is open and scrolling.",
+    "app-read": "Not a journey — the wall clock of one bundled app's declared read, folded, at the stated volume, measured through the v1 app crate's own query path ([#1020](https://github.com/srikanth235/centraid/issues/1020)). It is the gateway-side half of a screen: what the fold costs before a shell has drawn anything. The shell's half is `warm-switch` and `scroll`, and neither is measurable on a host with no device."
   },
   "entries": {
-    "approvedDeviation": "#996 W5 retires `mountedReplicaReadWithOutbox` and `year3-household` as above. Prior: #927. #927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness.",
+    "approvedDeviation": "#996 W5 retires `mountedReplicaReadWithOutbox` and `year3-household` as above. Prior: #927. #927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness. #1020's close pass ADDS five `gateway/app-read/*` entries, one `app-read` journey and four year-3 volumes. Additions only: no existing entry is re-keyed, no ceiling moves, and every number the five carry is parked under a leading underscore (`_observedMs`) with `status: \"projected\"`, so the ratchet reads none of them. They exist so the v1 app crates' year-3 numbers have an address rather than living only in a receipt; the device lane of R-1020-20 is what turns one into a ceiling.",
     "web/own-echo/none/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "own-echo",
@@ -2194,6 +2199,182 @@
             "at": "2026-09-12",
             "host": "none — no measurement was taken; see `probe`",
             "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. 1.5 s from launch to a screen the member can act on, at the year-3 volume, is the ceiling a member experiences as 'it opened' rather than as a wait. It is stated at year-3 and not at an empty vault deliberately: a cold start measured on a fresh install is the one number that cannot catch an O(vault-size) regression, and v0's own ledger records that failure mode. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-tally/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-tally",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/tally/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "dashboardFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tally --test year3 -- --ignored --nocapture",
+          "_observedMs": 35,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "`load_tally` plus the three extra pages measured 107 / 107 / 127 ms over three runs; the dashboard's own fold is 34-35 ms of that, and the balance fold over 40 groups is 22-23 ms. `matches` and `history` answer in 0 ms over an EMPTY plane — the year-3 generator writes no `core_transaction` and no `core_entity_revision` row, so two of the ten view numbers are round because the plane is empty rather than because the fold is free. Named as a kit hand-off rather than left to be inferred."
+          }
+        },
+        "searchFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tally --test year3 -- --ignored --nocapture",
+          "_observedMs": 218,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "209-218 ms over 1,960 decorated rows — the slowest of Tally's eight answers by an order of magnitude, and the one worth a device number first."
+          }
+        },
+        "writeThroughTheGate": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tally --test year3 -- --ignored --nocapture",
+          "_observedMs": 4.45,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "`tally.add_expense` through the WHOLE gate order — authority, preconditions, the handler, the postconditions, the receipt and the replica commit pair: 200 writes in 889 ms."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-50k-assets/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-50k-assets",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/photos/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryPage": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 48,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The library at its 500 default window. Asked for 2,000 it serves ONE page in 42 ms, deliberately: its sort column is nullable, so a keyset walk would silently drop every undated asset (D-1020-P11). Ten cursored pages are 458 ms."
+          }
+        },
+        "faceQueue": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 40,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Over the 4,000-region window."
+          }
+        },
+        "duplicates": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 16,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Over 4,000 clustered fingerprints. This is the number that says the year-3 library is NOT where the cost is: the pairwise clustering v0 avoids with multi-index banding is 16 ms here, which is why the banding is named as unported rather than ported without a rig that could check it."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-docs/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-docs",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/docs/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "driveWindowWalked": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-docs --test year3 -- --ignored --nocapture",
+          "_observedMs": 480,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "A 2,000-row drive answers 2,000 documents and 400 folders. The same read before D-1020-DC10 answered 500 of 7,600 live documents in 141 ms and discarded the cursor that said there were more — the number moves with the mechanism in both directions, which is what makes the walk real rather than a rename."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-notes/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-notes",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/notes/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture",
+          "_observedMs": 496,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "`library(limit=2000)` folds 2,200 rows plus 200 trashed — the window is 2,000 PLUS every pinned note on the shelf, which is the assertion that was wrong the first time. The same test prints that v0 would have folded 500 of those 2,200."
+          }
+        },
+        "editorOpenPull": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture",
+          "_observedMs": 1.13,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The on-open pull over the largest body the product holds (48 KiB). This is the RUST half of the typing target only: the round trip the target is stated on runs through the editor's state machine in Kotlin, which has no Rust twin, and that half is an owner hand-off."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-people/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-people",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/people/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "rosterWalk": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture",
+          "_observedMs": 825,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "4,750 live rows walked. v0 asks for `window = 9_999` as ONE page and `MAX_PAGE_ROWS` clamps it to 500, so a vault with more than 500 live people reports `all: 500` with no `truncated` anywhere in the payload — the axis measures both, 4,750 against 500."
+          }
+        },
+        "dashboardFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture",
+          "_observedMs": 4340,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The dashboard folds all 4,750. The largest number in this entry and the one that most wants a device figure beside it."
           }
         }
       }
