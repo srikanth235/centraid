@@ -5622,3 +5622,373 @@ The umbrella's last section. Everything above it is what happened; this is what 
 **Two things this umbrella did that are worth carrying to the next one.** The first is that **every wrong answer the port found was fixed at its source**, v0 included, red test first — a dashboard folding a quarter of its own ledger, a replicated commit refusing any integer above 2^53, a repeating task reading the vault's zone instead of its own, a note last-updated by the machine. A port that quietly agreed with a bug would have shipped the bug twice. The second is that **the interesting failures were all found by a machine, not by reading**: the restore drill's first run, the simulation's two seeds, the parity generator's own count, a merge sweep generated from the live schema that found a column v0's registry forgot. Each of those was a green-looking claim until something mechanical disagreed with it.
 
 **The owner's last two rulings, 2026-09-13 (R-1020-36, R-1020-37).** At 07:30 UTC the owner ruled *"push all fixes and stop"*: lane CL-FIX landed 13 of its 15 items plus two more it found (the `recurrence_tz` writer half was a live bug — every Tasks anchor change was being refused), skipped the `pr` gate and the mutants run by that ruling, and its two undone items (the audit band as catalog entities — whose premise the brief had wrong, both tables already replicate — and the year-3 Tally finance rows) are named in its section, not half-applied. At 07:45 UTC the owner ruled *"merge the retirement branch into the umbrella"*, overriding wave 6's device-evidence gate. **That merge is not in this tip.** The session's permission layer refused the `git merge` of `claude/1020-retire-v0` (a 5,395-file deletion) three times, in the umbrella checkout and in a scratch worktree, and the root stopped rather than route around a permission denial. The branch stays at `b318fba1`, pushed, one merge away, with the resolution rule the root would have applied written in the receipt's close: deletions win under `packages/` and `apps/`; docs keep the umbrella's text plus the supersession rows; the branch's own red (twelve two-tree tests, now partly closed by CL-FIX's corpus-gate skip, the `packages/design` cone, the deleted pre-push gate, the 160 links) rides the umbrella as open items. The follow-up for the mobile screens is [#1022](https://github.com/srikanth235/centraid/issues/1022).
+
+## Wave A — Home, the graded springboard, and the first compile of the iOS shell
+
+Appended 2026-09-13, after the merge of `claude/1020-retire-v0` landed as
+`faf7d0bc`. Everything above this line was written when the iOS shell had never
+been compiled and Home was three links. This section is what happened when a Mac
+with Xcode 26.6 and a simulator was finally in the room.
+
+### What Gate 0 found, which is the point of Gate 0
+
+The shell had been written blind — every Swift file in the tree had been read by
+no compiler. The first `xcodebuild` found **thirteen defects plus one in the
+Rust test harness**, and not one of them was visible by reading:
+
+| Where | What |
+| --- | --- |
+| `crates/core-ffi/cbindgen.toml` | `Handle` lives in `centraid_core` and `parse_deps = false`, so the generated header forward-declared nothing. Fixed with an `after_includes` typedef, and `tests/symbols.rs` now asserts the typedef is in the header. |
+| `crates/core-ffi/tests/symbols.rs` | `nm` takes different flags on macOS and Linux, and macOS prefixes every symbol with `_`. The test passed on Linux and could not run here. |
+| `crates/core-ffi/Cargo.toml` | no `staticlib`, so there was nothing for an iOS binary to link. |
+| `mobile/core/.../CentraidAbi.ios.kt` | `cnames.structs.Handle` was not imported, `addressOf` was not imported, and `size_t` had no conversion — three cinterop facts a JVM build cannot see. |
+| `mobile/shared/.../PlatformServices.ios.kt` | the charging check compared a `UIDeviceBatteryState` to the wrong member. |
+| `mobile/shared/build.gradle.kts` | the framework linked no `libcentraid_core_ffi`, declared no XCFramework, and pulled WorkManager unconditionally. |
+| `mobile/iosApp/Package.swift` | no macOS floor, so `swift test` built against 10.13 where no SwiftUI symbol exists. |
+| `mobile/iosApp/Sources/CentraidApp.swift` | an unguarded `@main` put `_main` in a library target and broke the XCTest link. |
+| `.xcode-version` | pinned 16.4; the machine has 26.6. |
+
+**The ledger was not written.** `kotlinNativeLinkSeconds` has one writer,
+`cargo xtask measure`, and this hardware is not the ledger's class; the number is
+an owner decision, not a lane's.
+
+### Home, and the four rules the fan-out inherits
+
+Home is v0's hardest single screen: a 376-line graded springboard over ~9,400
+lines of parts, with per-tile grading, a fourth read state, first moves, a status
+line and an all-apps sheet. It was built alone so its pattern is settled before
+the other screens fan out. The rulings are `D-1020-HOME1`..`HOME6` in
+[decisions.md](../docs/decisions.md#wave-a--home-the-graded-springboard-1020);
+what follows is the evidence.
+
+**The divergence OQ-10 predicted, found on the first run.** The first build let
+each shell pack the grid from the `wide` flag. Compose's `LazyVerticalGrid`
+honours a span; SwiftUI's `LazyVGrid` **silently ignores `.gridCellColumns`** —
+it applies only inside `Grid`/`GridRow` and there is no error anywhere. Photos,
+Docs and Notes drew full width on Android and half width on iOS. It was found by
+looking at a screenshot, not by a test, and the fix was not to mirror the
+packing: `HomeData.grid_rows` now carries the packed rows and neither renderer
+packs anything. **This is criterion (b) of OQ-10 with a name and a date.**
+
+**The second divergence was the whole visual language.** The first Home compiled,
+ran, and did not look like Centraid: it used `.headline`, `.caption`,
+`.secondary`, `.quaternary` and SF Symbols, because those are what a SwiftUI view
+reaches for. v0's tile is an invariant header — **icon chip, name, count, in that
+order** — over eight structurally distinct bodies, on `bgElev` with one hairline,
+a 152pt floor and static skeleton bars. None of that is reachable from a platform
+default. Two things followed:
+
+1. `contracts/tools/export-native-catalog.ts`, a second emitter called by the
+   first, lowering the eight apps, their identity marks composited per scheme
+   over `--bg`, all **139 silhouettes** as SVG path data, and the geometry the
+   token table does not carry (the hairline, the page margin, the two durations,
+   the chip ratio, the target minimums) into `Catalog.kt` and `Catalog.swift`.
+2. `Sources/Icon.swift`, an SVG path reader, because Compose has `PathParser` and
+   SwiftUI has nothing. **It shipped with a bug that nothing failed on**: a
+   greedy number scan read `l.1.1` as one malformed number, `parse` returned
+   `nil`, the renderer skipped that path and drew the next one — so the Settings
+   gear silently became the small circle inside it. `Tests/IconSilhouetteTests.swift`
+   now asserts all 139 parse, span their view box and stay inside it.
+
+**Two more things the emitter run found, both breakage the retire merge left.**
+`export-native-theme.ts` — the one command that writes every native artifact —
+imported `./export-copy.ts`, which wave 6 deleted along with the
+`packages/blueprints` leaves it read; and `export-design-corpus.ts` imported
+`figureTone` from the same deleted tree. The command had been unrunnable since
+`b318fba1` and nothing said so. Copy is now a source rather than an artifact
+(`D-1020-HOME4`) and `figureTone` moved into `packages/design`, where the rung it
+chooses between already lives. `design/identity-corpus.json` is byte-identical
+after the move.
+
+**And one test that was red for the wrong reason.** `NativeThemeSpec`'s "once per
+scheme, counted" assertion counted role names across the whole of
+`design/native-theme.json`, which grew a `colorRoleContract` block naming every
+role a third time. A complete table read as 3 and failed. The count is now scoped
+to `schemes`, which is what the assertion always meant.
+
+### What runs, and what has been seen
+
+| Claim | Where | State |
+| --- | --- | --- |
+| `HomeMachine`'s laws — the fourth read state, grading, the one number, first moves, the packer | `HomeMachineSpec`, 24 tests | green |
+| the emitted catalogue, every icon key a caller names, the band's cap and its one-noun rule | `CatalogSpec`, 10 tests | green |
+| 26 fixtures decoded by Wire | `ScreenFixtureSpec` | green |
+| the whole shared module | `:shared:jvmTest`, 116 tests | green |
+| the same 26 fixtures decoded by SwiftProtobuf | `swift test`, 17 tests | **green — first run in the project's life** |
+| every emitted silhouette parses | `IconSilhouetteTests`, 3 tests | green |
+| the Compose shell compiles | `:androidApp:assembleDebug` | green, 13.6 MB APK |
+| the iOS shell compiles, links the XCFramework and runs | `xcodebuild` + simulator | green, and **Home renders from the real `HomeMachine` through `HomeBridge`** |
+| any Compose screen as drawn | — | **nobody has seen one.** This machine has the SDK, no emulator package and no system image; the install was started and the Android half of Home is compiled and unobserved. |
+| any Maestro flow | — | none has run. `flows/home.yaml` is written and unexecuted. |
+
+### One more defect worth naming
+
+**The app was letterboxed, and every screenshot before the fix was a lie about
+its size.** `Info.plist` declared neither a launch storyboard nor
+`UILaunchScreen`, so iOS ran it at a legacy screen size, scaled up inside black
+bars — the page ground stopped short of the notch and every tile drew about half
+again its real size. One empty dictionary in `project.yml` fixes it. It is in
+this receipt because it is the exact shape of thing that a build gate cannot see
+and a screenshot can.
+
+### What wave A did not do
+
+The band's destinations other than Home go nowhere: `notifs`, `stats` and `data`
+are real places in `BandPolicy` with no screens behind them, and a press is
+currently ignored rather than routed. The lockup's Search and New chat are drawn
+and inert. The vaults sheet the lockup asks for does not exist — `HomeMachine`
+emits `ReadPage("vaults")` and nothing consumes it. No gateway read feeds a tile,
+so every Home in this receipt is the seeded `LOADING` one; the reads are the next
+wave's. None of that is hidden behind a placeholder card, which is v0's own rule:
+every first move lands somewhere that can take content.
+
+## Wave A, continued — the seeded vault, the vault switcher, and the blob door
+
+Three asks, one session, and each uncovered the next.
+
+### The demo journey, minus the network hop
+
+The ask was "a throwaway gateway with data seeded, connected to the iOS and
+Android devices". **Network pairing is blocked on three unbuilt planes and this
+does not pretend otherwise**: `Handle::start_endpoint` is a stub
+(`crates/core/src/handle.rs:190`), the C ABI answers `Request::Pair` with
+`NotYetAvailable` (`handle.rs:451`), and `centraid gateway` admits an enrolled
+seat and then closes the connection because the replica plane lands in wave 2
+lane D2. So the vault is **placed** rather than synced — the same file a seat
+would hold after a download, minus the download — and read through the real Rust
+core over the real C ABI. `mobile/scripts/demo-vault.sh` is the placement and
+says all of this in its own header.
+
+Two defects in the vault's own founding surfaced the moment real rows went in:
+
+- **`Vault::found` never minted the default "Personal" calendar** that v0's
+  `bootstrap.ts:150`-`:158` writes. `schedule.propose_event` has a
+  `calendar_exists` precondition and **no command mints a calendar**, so every
+  v1 vault founded before the fix refused every event with "That calendar
+  doesn't exist." Restored, with the relation vocabulary and the enrichment
+  policy beside it.
+- **`ScreenHost.send` lost concurrent updates.** Home fans out one read per app
+  and seven answers land on a pool; two would read the same state, reduce their
+  own event onto it, and the second write threw the first away. Docs, People and
+  Tally sat `LOADING` on the simulator, every run, while Notes, Agenda and Tasks
+  drew their rows. A `Mutex` around the reduce, effects emitted outside it; the
+  test was **falsified** — it fails without the lock.
+
+### `media.add_asset`, and the door it had been waiting on
+
+Owner hand-off 3 of lane DC is **closed**, and it closed exactly as that hand-off
+predicted: one field on `CommandCtx`, one method, and the refusal test flipping
+to an execution.
+
+`Vault::with_blobs` attaches a local CAS; `CommandCtx::blobs()` is the door;
+`mint_content_from_data_uri` spills anything that is not `text/*` and the row
+keeps `blob:sha256-<hex>`. The port had carried v0's text-versus-binary split
+(`packages/vault/src/blob/mint.ts:88`-`:99`) **without the store behind it**, so
+a vault could hold a note and not a photograph — `media.add_asset` was
+`not_implemented` and every inline binary byte refused.
+
+What did **not** change is the rule the refusal was protecting. A vault opened
+with no store still refuses, with a sentence naming the cause, because a
+`core_content_item` whose `content_uri` names bytes nothing kept is a library of
+rows with no photographs in it. `pre_inline_bytes_are_storable` survives, asking
+a narrower question. D-1020-HOME7 records the supersession.
+
+The handler is a port of `packages/vault/src/commands/media.ts:414`-`:549`:
+six preconditions plus the storable gate, mint-or-claim, adopt-by-content
+(unique `content_id`, so a re-upload of trashed bytes **restores**), find-or-
+create place at two rungs (~170m for a named place, ~11m for identity, and a
+coordinate-as-name is never adopted), phash, ThumbHash, and the asset's own
+representation. **The postcondition checks through the SHA, not the asset id**:
+a postcondition is handed the input and never the output, this command's input
+names no asset, and the dedupe path produces no new asset id at all — the sha is
+derivable from either door and is the thing the caller actually asked about.
+
+`seed-demo-vault` now carries v0's roll entire: the **18 sample PNGs restored
+from `origin/main`** (672 KB, `include_bytes!`), their places, both favourites,
+the ThumbHash and phash pairs, the one video and the "Tahoe scouting" album.
+`CENTRAID_SEEDED … photos=19` where it read `photos=0`, 19 blobs in the CAS, and
+nine `core_place` rows over sixteen placed frames — which is the grouping working
+rather than being skipped. The face BOXES are deliberately **not** ported: they
+are the recognition plane's, and seeding rows for a plane this build does not run
+would be rows nothing reads.
+
+### The vault switcher, and one defect found three times
+
+Two vaults on one device, and a switch between them. `HomeState.vaults` is the
+roster, `VaultPicked` carries a `vault_id`, and `ScreenEffect.SwitchVault` is
+served by `HomeSession` because it owns the core's lifecycle (D-1020-HOME8). A
+vault's name lives inside the vault, so the roster is built by opening each file
+and asking it — and that survey must run **before** the active core opens,
+because `SingleHandleGuard` allows one core per process (R-1020-24).
+
+The interesting part is the defect. `firstLoad()` builds a state from nothing, so
+every reload dropped what the shell had *told* Home and each call site had to
+remember to copy it back:
+
+1. `Opened` lost the lockup — Home said "No vault yet" over a vault it had just
+   named.
+2. The fix copied `vault` at that one site, so `Opened` then lost the roster —
+   the switcher said "this device holds one vault" over a device holding two.
+3. The fix for that copied two fields at the same one site, so the **switch
+   branch** lost the roster — the second switch had nowhere to go.
+
+Three simulator runs, one defect, because the rule lived at the call sites.
+`HomeState.reloaded()` is now the only caller of `firstLoad()` and the rule is
+stated once: a reload replaces what was READ and carries what was TOLD
+(D-1020-HOME9). Three tests pin it.
+
+### What has been seen
+
+On a booted simulator, against two real seeded vaults, switching both ways
+repeatedly: Demo vault draws Photos 19, Docs 3 with real titles, Notes 5,
+Agenda 5, Tasks 11, People 8, Tally 1; Work draws Docs 3, Agenda 5, Tasks 9,
+People 1 and **omits** Notes, Photos and Tally because it genuinely holds none —
+which is the fourth state doing its job rather than an empty grid.
+
+`:shared:jvmTest` green. `cargo test -p centraid-vault` — 26 media tests green,
+including the four that replaced the gap test. Three workspace failures remain
+and **all three pre-date this work**, confirmed by stashing:
+`a_live_gateways_data_directory_is_refused_and_a_stale_lock_is_taken_over`,
+`a_full_disk_during_a_snapshot_build_leaves_no_partial_artifact`, and
+`a_system_install_refuses_an_instance_name_that_is_not_one`. One failure was
+mine and is fixed: the restore drill's setup deleted the owner party and left
+the newly-restored default calendar dangling, which `foreign_key_check`
+correctly reported — the test wanted a vault that was sound and empty, not one
+that was broken.
+
+### Still open
+
+**Home's Photos tile draws grey cells over bytes that are now local.** The tile
+says "Photographs live on the gateway — these fill in when it is back", which is
+no longer true for a placed vault: the bytes are in `<vault>.blobs/` on the
+device. Drawing them needs a byte-read door on the core — owner hand-off 1 of
+lane DC, `content.read_text` / `content.url` / `content.stage` — and until that
+lands the sentence is wrong rather than merely incomplete.
+
+**Android is still not reading.** The core cross-compiles
+(`mobile/scripts/android-core.sh`) and the shell draws, but `jna-android`'s AAR
+and the plain jar both carry `com.sun.jna`, and `checkDebugDuplicateClasses`
+refuses the overlap. The fix is per-target packaging in `mobile/core` —
+`jvmMain` takes the jar, `androidMain` the AAR — rather than adding the AAR
+beside the jar. **(Closed below.)**
+
+### The read half, and the two traps between a byte and a pixel
+
+Hand-off DC1's `blobUrl` arm is promoted: `centraid.core.v1.ContentUrlRequest`
+answers `(content_id, owner_type, owner_id)` with a **local path**, a media
+type, a size and `embeddable`. Home's mosaic draws real photographs off it.
+
+Three properties are the ruling rather than the implementation (D-1020-HOME10):
+
+- **A location, never bytes.** `centraid.screen.v1.PhotoCell.thumbnail_path` has
+  said so since the contract was written, and bytes crossing the ABI would be
+  the core buffering a photograph so a view could buffer it again.
+- **The owner is part of the request.** A media type belongs to the
+  representation and not to the byte row (#996 R20(b)), so the door is told who
+  is reading. An owner this vault has no representation for gets the bytes
+  located and **not** marked embeddable — no type is not permission.
+- **The never-inline rule crosses with the answer.** `image/svg+xml` is executed
+  by a renderer in the embedding page's origin; the core decides, and a shell
+  that rendered a non-embeddable answer as an image is the bug. Four tests pin
+  the three types with and without a `; charset=` parameter.
+
+`crates/vault/src/content.rs` holds the lookup, because `sql-confinement`
+confines SQL to the vault and `crates/core` only shapes the answer. An absent
+answer is never an `Err`: a failed lookup would take a whole mosaic down over
+one cell, and every absent reason is a member-facing sentence that names no
+path, no sha and no store.
+
+**Two traps cost an afternoon between them, and both are now written down.**
+
+1. **The Rust archive is linked by PATH.** `mobile/shared/build.gradle.kts` does
+   `-force_load "$slice/libcentraid_core_ffi.a"`, which is a path and not a
+   Gradle dependency — so nothing declares it an input and nothing rebuilds it.
+   Every layer compiled, the app installed, and the simulator ran a core built
+   five hours earlier that had never heard of the request. The Kotlin
+   diagnostics showed a correct request; a Rust probe against the same vault
+   answered with real paths; both were true.
+   [docs/traps/stale-core-slice.md](../docs/traps/stale-core-slice.md), and
+   `mobile/README.md` now carries the `cargo build --target` as **step 0**.
+2. **`UIImage(contentsOfFile:)` leans on the path extension.** A
+   content-addressed file is named by its digest and has none, so it returns nil
+   for every photograph in the store, silently, and the mosaic drew four empty
+   cells over bytes sitting right there. `UIImage(data:)` sniffs the bytes,
+   which is the only thing that can be right when the name is a hash.
+
+**A video is not a still.** The mosaic asks the door for four cells and draws
+only the `image/*` ones: a video's thumbnail is its POSTER — a derivative keyed
+to the content — and handing `UIImage(data:)` or `BitmapFactory` an MP4 draws a
+blank that reads as a failed render rather than as a video with no poster yet.
+The seeded roll has exactly one video, which is what made that visible.
+
+**The placeholder sentence was wrong and is fixed.** It read "Photographs live
+on the gateway — these fill in when it is back", written when bytes were
+unreachable. A vault placed on the device holds its own photographs, so the
+sentence named a connection that is not the reason. It now reads "These
+photographs are not on this device yet", which is true in every case the cell
+draws.
+
+Seen on a booted simulator: Photos 19 with three drawn thumbnails and the video
+as a placeholder, and the vault switcher still correct — Work omits the Photos
+tile entirely because it holds none. `cargo test -p centraid-vault` 29 media
+tests green, `centraid-core` 58 green, `:shared:jvmTest` green. The same two
+pre-existing failures remain and no others.
+
+### Android reads the vault — the goal's other half
+
+`sdk_gphone64_arm64`, API 36 emulator: Home draws the seeded vault through JNA
+and the real Rust core. Photos 19 with three thumbnails and the video's
+placeholder, Docs 3, Notes 5, Agenda 5, Tasks 11, and the vault switcher
+listing both vaults with the open one ticked — switching to Work drops Photos,
+Notes and Tally from the grid and raises first moves, exactly as iOS does.
+
+**JNA is one library in two packages, and the package is the EXTENSION.** Same
+group, name and version — `net.java.dev.jna:jna:5.19.1` — published both as a
+jar and as an `.aar`. The jar bundles `libjnidispatch` for desktop ABIs as
+ordinary resources (`com/sun/jna/win32-x86-64/jnidispatch.dll` and friends); the
+aar carries the Android ones as real `lib/<abi>/libjnidispatch.so` entries, which
+is the only shape a packager installs and `System.loadLibrary` finds.
+
+Both wrong answers were reached before the right one:
+
+- **The jar on Android.** The app builds, installs, runs, Home draws, and the
+  first `centraid_open` dies with `dlopen failed: library "libjnidispatch.so"
+  not found`.
+- **Both at once.** `checkDebugDuplicateClasses` refuses out loud.
+- **A catalogue alias that only LOOKS like the Android one.** `jna-android-aar =
+  { module = "net.java.dev.jna:jna" }` is the same coordinates without `@aar`,
+  so it resolves to the jar and silently reproduces the first failure while
+  reading as though it had been fixed. The APK is the evidence: `unzip -l`
+  showed seven desktop `jnidispatch` binaries and no `lib/arm64-v8a/` entry at
+  all. The alias is deleted.
+
+`@aar` cannot be spelled in a version catalogue's `module`, and `variantOf` is a
+`DependencyHandler` API that KMP's `KotlinDependencyHandler` does not have — so
+the extension is named in a string notation with the version still read from the
+catalogue. `mobile/core/build.gradle.kts` carries the whole reasoning.
+
+**The Android core slice is a COPIED file** — `jniLibs/<abi>/
+libcentraid_core_ffi.so` — so it is staler than the iOS one and in exactly the
+same way: nothing in the Gradle build knows it exists.
+[docs/traps/stale-core-slice.md](../docs/traps/stale-core-slice.md) covers both,
+and `mobile/scripts/android-core.sh` now says re-run me on every `crates/core`
+change, in its own header.
+
+### The goal, as it now stands
+
+> "create a throwaway gateway with data seeeded and connect ios /android devices
+> to the gateway…there are missing pieces in this journey"
+
+Everything but the network hop is built and has been seen on both devices: a
+seeded throwaway vault with v0's whole scenario including nineteen photographs'
+bytes, placed on an iOS simulator and an Android emulator, read through the real
+Rust core over the real C ABI, with two vaults per device and a working switch
+between them.
+
+**The network hop is refused rather than faked**, and the three unbuilt planes
+are named in `mobile/scripts/demo-vault.sh`'s own header: `Handle::
+start_endpoint` is a stub (`crates/core/src/handle.rs:190`), the C ABI answers
+`Request::Pair` with `NotYetAvailable` (`handle.rs:451`), and `centraid gateway`
+admits an enrolled seat and then closes the connection because the replica plane
+lands in wave 2 lane D2. What a device holds is the same file a seat would hold
+after a download — minus the download.
