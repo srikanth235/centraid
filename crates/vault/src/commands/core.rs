@@ -81,6 +81,8 @@
 //! do the same). A condition that read `strftime('now')` could not be fixtured
 //! at any instant but the host's.
 
+use std::collections::BTreeMap;
+
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 
@@ -128,6 +130,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
         rename_folder(),
         delete_folder(),
         set_extracted_text(),
+        // PEOPLE'S SLOT (wave 4 slot 4c): the ontology primitive behind
+        // `merge-people`, and the second of the schema's two confirm-gated
+        // commands.
+        merge_party(),
     ]
 }
 
@@ -2980,6 +2986,710 @@ fn find_or_create_concept(
     Ok(concept_id)
 }
 
+// ---------------------------------------------------------------------------
+// `core.merge_party` — THE ONTOLOGY PRIMITIVE (#290, D-1020-PE2).
+//
+// Without a merge, every added source DEGRADES the vault: an import mints a
+// second "Grandpa Ray" and from then on half the birthdays, half the debts and
+// half the photographs are on the wrong card. So the fold is not a soft merge
+// and not a redirect — **every reference re-points and the merged party's row
+// is deleted.**
+//
+// ### The sweep is GENERATED, never a hand-kept list
+//
+// v0's merge walks two discovered sets plus one enumerated one
+// (`commands/merge-fold.ts`), and this port keeps the shape and widens the
+// discovery:
+//
+// 1. **Every engine foreign key onto `core_party`**, read live from
+//    `PRAGMA foreign_key_list` over every table in the file. Forty-four columns
+//    in the committed DDL, and a forty-fifth added by a migration is swept the
+//    day it exists rather than the day somebody remembers.
+// 2. **Every polymorphic `(type, id)` pointer into the entity supertype**, also
+//    read live: rung ten (#916) turned all thirteen of them into COMPOSITE
+//    foreign keys into `core_entity(entity_type, entity_id)`, so a two-column
+//    FK whose parent is `core_entity` IS the pointer set. v0 reads them from
+//    `schema/entity-refs.ts`'s `ENTITY_POINTERS`; reading the schema instead
+//    means the list and the DDL cannot drift, which is the whole failure the
+//    registry existed to prevent.
+// 3. **The pointers the engine cannot see** — [`PARTY_POINTERS`], which is one
+//    column: `share_authority.principal_id` under `principal_kind = 'person'`.
+//    It is polymorphic on a kind that selects a party, a circle, a harness or
+//    an automation, so **no single `REFERENCES` clause can express it** and
+//    neither walk above can find it. A merge that skipped it would delete the
+//    folded-in party out from under a LIVE standing answer, and a share the
+//    owner had already granted would silently stop being delivered.
+//
+// `merge_party_sweep` returns all three as one list, and
+// `the_sweep_finds_every_column_that_names_a_party` asserts that no column in
+// the file whose NAME looks like a party pointer is outside it — the mechanical
+// sweep, as a test rather than as a paragraph.
+//
+// ### RE-JUDGING THE POLYMORPHIC REFERENCE (AGENTS.md: a citation is not a
+// justification)
+//
+// The #916 wave filed polymorphic references as settled and had to reopen them.
+// Re-judged here on the merge's own evidence:
+//
+// * **Who depends on it.** `core_link`, `core_tag`, `core_collection_entry`,
+//   `core_attachment`, `knowledge_annotation`,
+//   `schedule_recurrence_exception`, the four `enrich_*` tables, `outbox_item`,
+//   `sync_external_entity` and `share_subscription_lineage` — thirteen tables,
+//   every one of which points at *any* entity kind. A typed reference table per
+//   (pointer × target kind) would be thirteen tables times the entity kinds
+//   each admits, and `core_tag` alone tags documents, notes, tasks, assets and
+//   parties.
+// * **What the FK buys.** Since rung ten each pair is a real composite FK, so
+//   the engine CHECKS the target on write and CASCADES the pointer when the
+//   target is purged. That is the property a typed table would also have, and
+//   it is the one that matters.
+// * **What it still costs.** `PRAGMA foreign_key_list` reports `core_entity` as
+//   the parent, so "what points at THIS party" is not answerable from the
+//   engine — which is exactly why this sweep has to read the pair shape rather
+//   than the parent name. That cost is real and it is paid once, here.
+//
+// **Verdict: the polymorphic reference stays, and the finding is elsewhere** —
+// it is that `share_authority.principal_id` is NOT one of them. It is the one
+// pointer with no type column the engine can read, it is the one a merge can
+// silently break, and it is enumerated in a hand-kept list. Making it a real
+// `(principal_type, principal_id)` pair into `core_entity` is the change that
+// would retire [`PARTY_POINTERS`] entirely; it is an owner hand-off in this
+// lane's receipt, not a schema edit from an app slot.
+//
+// ### What a collision means, per table
+//
+// A re-point can hit a UNIQUE constraint the survivor already satisfies, and
+// "delete the loser" is the wrong answer for money. #916 review 2.1 records how
+// that destroyed money: the splits and payers of a shared expense are keyed
+// `(expense_id, party_id)`, so folding two people who both appear on one bill
+// collides — and a deleted split threw away a share the total still counted.
+// A SHARE IS A NUMBER: the right answer is to add it to the survivor's.
+// [`MERGE_COLLISIONS`] is that table, and a CHECK failure is separate again: the
+// two sides of a two-party row just became one party, a payment to oneself is
+// not a payment, and the row is folded away and COUNTED as degenerate.
+// A FOREIGN KEY failure is a bug in this code or a corrupt vault and is
+// re-thrown, because the old blanket catch turned it into a silent delete.
+
+/// A column that holds a party id with **no foreign key on it**, plus the
+/// predicate that says which of its rows do.
+///
+/// One entry, and the header says why it cannot be discovered. A second entry
+/// arriving here is a schema change that should have been a composite FK.
+const PARTY_POINTERS: &[(&str, &str, &str, PointerCollision)] = &[(
+    "share_authority",
+    "principal_id",
+    "principal_kind = 'person'",
+    // A STANDING ANSWER IS NEVER SILENTLY DELETED: it is dated shut and THEN
+    // re-pointed, which is also the only order that works where the constraint
+    // covers live rows only.
+    PointerCollision::Revoke,
+)];
+
+/// Columns whose NAME reads as a party pointer and which hold something else.
+///
+/// The audit in `crates/vault/tests/people_commands.rs` scans every column in
+/// the file for a party-shaped name and asserts each one is either in the sweep
+/// or here. One entry, with the DDL's own reason:
+/// `share_authority_request.principal_id` carries **an automation's enrolment
+/// key** — the table has no `principal_kind` column and the baseline says
+/// outright that the id is "the same principal id
+/// `share_authority.principal_id` carries for an 'automation' row"
+/// (`contracts/migrations/001_baseline.sql`). A merge that re-pointed it would
+/// hand one automation's pending scope request to a person.
+pub const NOT_A_PARTY_POINTER: &[(&str, &str)] = &[("share_authority_request", "principal_id")];
+
+/// What happens to the loser when a pointer's re-point collides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PointerCollision {
+    /// The row is an ANSWER: date it shut, then re-point it.
+    Revoke,
+}
+
+/// What a UNIQUE collision means for a table the engine's FK walk reaches.
+///
+/// The default is "drop the duplicate" — machinery saying nothing the
+/// survivor's copy does not already say. These are the exceptions, and every
+/// one of them is a number or a primacy flag.
+const MERGE_COLLISIONS: &[(&str, Collision)] = &[
+    ("tally_expense_split", Collision::Sum("share_minor")),
+    ("tally_expense_payer", Collision::Sum("paid_minor")),
+    (
+        "tally_expense_line_allocation",
+        Collision::Sum("share_minor"),
+    ),
+    (
+        "tally_recurring_expense_split",
+        Collision::Sum("share_minor"),
+    ),
+    ("core_party_identifier", Collision::Demote("is_primary")),
+    ("social_contact_channel", Collision::Demote("is_preferred")),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Collision {
+    /// Both rows are real and their amounts ADD: fold onto the survivor's row.
+    Sum(&'static str),
+    /// A second row of a kind only one may be primary: keep it, demote it.
+    Demote(&'static str),
+    /// Duplicate machinery. The default.
+    DropDuplicate,
+}
+
+fn collision_for(table: &str) -> Collision {
+    MERGE_COLLISIONS
+        .iter()
+        .find(|(name, _)| *name == table)
+        .map_or(Collision::DropDuplicate, |(_, policy)| *policy)
+}
+
+/// One foreign key as `PRAGMA foreign_key_list` reports it: the parent table,
+/// and its `(seq, from, to)` columns. A two-column group is a polymorphic pair.
+type ForeignKeyGroup = (String, Vec<(i64, String, Option<String>)>);
+
+/// One column the sweep has to re-point.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartyRef {
+    pub table: String,
+    /// The column holding the party id.
+    pub column: String,
+    /// The type column beside it, on a polymorphic pointer.
+    pub type_column: Option<String>,
+    /// A raw predicate ANDed onto the match, for a hand-kept pointer.
+    pub predicate: Option<String>,
+    /// EVERY primary-key column, in key order.
+    pub key: Vec<String>,
+}
+
+/// THE PRIMARY KEY, WHOLE (#916, review 2.1).
+///
+/// This was once `cols.find(|c| c.pk == 1)`, read as "the primary key column".
+/// **`PRAGMA table_info.pk` is not a boolean**: it is the column's POSITION in
+/// the key, 1-based. On `tally_expense_split (expense_id, party_id)` that
+/// returned `expense_id` alone, so a merge's "re-point this one row" ran
+/// `UPDATE … WHERE expense_id = ?` and rewrote — or, on the collision path,
+/// DELETED — every split of the expense. A shared 900 became an expense with no
+/// splits and no payers, silently.
+fn primary_key_of(connection: &rusqlite::Connection, table: &str) -> Result<Vec<String>> {
+    let mut prepared = connection
+        .prepare("SELECT name, pk FROM pragma_table_info(?1) WHERE pk > 0 ORDER BY pk")?;
+    let rows = prepared.query_map([table], |row| row.get::<_, String>(0))?;
+    let key: Vec<String> = rows.collect::<std::result::Result<Vec<String>, _>>()?;
+    Ok(if key.is_empty() {
+        vec!["rowid".to_owned()]
+    } else {
+        key
+    })
+}
+
+/// Every table in the file, excluding SQLite's own and the full-text indexes.
+///
+/// **The `fts_*` tables are NOT swept**, and that is a decision rather than a
+/// gap: `fts_core_party` is an external-content FTS5 index whose rows are
+/// maintained by triggers on `core_party`, so a merge that hand-edited it would
+/// be a second writer of a derived table — and deleting the merged party fires
+/// the trigger that removes its row anyway.
+fn user_tables(connection: &rusqlite::Connection) -> Result<Vec<String>> {
+    let mut prepared = connection.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table'
+           AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%'
+           AND name NOT LIKE 'fts_%'
+         ORDER BY name",
+    )?;
+    let rows = prepared.query_map([], |row| row.get::<_, String>(0))?;
+    Ok(rows.collect::<std::result::Result<Vec<String>, _>>()?)
+}
+
+/// THE WHOLE SWEEP, generated from the live schema plus the one list it cannot
+/// generate.
+///
+/// The order is stable — engine FKs by table then column, then the polymorphic
+/// pairs, then the hand-kept pointers — so a merge's tally is reproducible and
+/// a fixture can be compared.
+pub fn merge_party_sweep(connection: &rusqlite::Connection) -> Result<Vec<PartyRef>> {
+    let mut refs: Vec<PartyRef> = Vec::new();
+    for table in user_tables(connection)? {
+        if table == "core_party" {
+            continue;
+        }
+        let key = primary_key_of(connection, &table)?;
+        // `id` groups the columns of ONE foreign key; `seq` orders them inside
+        // it. A two-column key is a `(type, id)` pair.
+        let mut prepared = connection.prepare(
+            "SELECT id, seq, \"table\", \"from\", \"to\"
+               FROM pragma_foreign_key_list(?1) ORDER BY id, seq",
+        )?;
+        let rows = prepared.query_map([&table], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })?;
+        let mut groups: BTreeMap<i64, ForeignKeyGroup> = BTreeMap::new();
+        for row in rows {
+            let (id, seq, parent, from, to) = row?;
+            groups
+                .entry(id)
+                .or_insert_with(|| (parent, Vec::new()))
+                .1
+                .push((seq, from, to));
+        }
+        for (parent, mut columns) in groups.into_values() {
+            columns.sort_by_key(|(seq, _, _)| *seq);
+            match (parent.as_str(), columns.len()) {
+                // A single-column FK straight onto the party table.
+                ("core_party", 1) => refs.push(PartyRef {
+                    table: table.clone(),
+                    column: columns[0].1.clone(),
+                    type_column: None,
+                    predicate: None,
+                    key: key.clone(),
+                }),
+                // A composite FK into the entity supertype: the pair IS a
+                // polymorphic pointer, whatever the columns are called.
+                ("core_entity", 2) => {
+                    let type_column = columns
+                        .iter()
+                        .find(|(_, _, to)| to.as_deref() == Some("entity_type"))
+                        .map(|(_, from, _)| from.clone());
+                    let id_column = columns
+                        .iter()
+                        .find(|(_, _, to)| to.as_deref() == Some("entity_id"))
+                        .map(|(_, from, _)| from.clone());
+                    if let (Some(type_column), Some(id_column)) = (type_column, id_column) {
+                        refs.push(PartyRef {
+                            table: table.clone(),
+                            column: id_column,
+                            type_column: Some(type_column),
+                            predicate: None,
+                            key: key.clone(),
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    for (table, column, predicate, _) in PARTY_POINTERS {
+        refs.push(PartyRef {
+            table: (*table).to_owned(),
+            column: (*column).to_owned(),
+            type_column: None,
+            predicate: Some((*predicate).to_owned()),
+            key: primary_key_of(connection, table)?,
+        });
+    }
+    Ok(refs)
+}
+
+/// What one fold did, for the citation and for the test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FoldTally {
+    pub repointed: usize,
+    pub deduped: usize,
+    pub summed: usize,
+    /// Rows whose two ends became one party. A payment to oneself is not a
+    /// payment.
+    pub degenerate: usize,
+    pub revoked: usize,
+}
+
+/// Which constraint refused, so the fold can ANSWER it rather than reach for
+/// the delete (#916, review 2.1).
+///
+/// The old code caught every failure and deleted the row, so a UNIQUE collision
+/// ("the survivor already has this"), a CHECK violation ("the merge just made
+/// this row nonsense") and a FOREIGN KEY refusal ("this is a bug") were all
+/// "duplicate relation removed" in the citation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConstraintClass {
+    Unique,
+    Check,
+    ForeignKey,
+    Other,
+}
+
+fn constraint_class_of(error: &rusqlite::Error) -> ConstraintClass {
+    let message = error.to_string();
+    if message.contains("UNIQUE constraint failed") || message.contains("PRIMARY KEY") {
+        ConstraintClass::Unique
+    } else if message.contains("CHECK constraint failed") {
+        ConstraintClass::Check
+    } else if message.contains("FOREIGN KEY constraint failed") {
+        ConstraintClass::ForeignKey
+    } else {
+        ConstraintClass::Other
+    }
+}
+
+fn quoted(parts: &[String]) -> String {
+    parts
+        .iter()
+        .map(|part| format!("\"{part}\" = ?"))
+        .collect::<Vec<String>>()
+        .join(" AND ")
+}
+
+/// Re-point ONE row from `merged` to `survivor`, answering whichever constraint
+/// refuses.
+fn repoint_row(
+    connection: &rusqlite::Connection,
+    reference: &PartyRef,
+    key_values: &[rusqlite::types::Value],
+    survivor: &str,
+    now: &str,
+    tally: &mut FoldTally,
+) -> Result<()> {
+    let where_key = quoted(&reference.key);
+    let mut binds: Vec<rusqlite::types::Value> =
+        vec![rusqlite::types::Value::Text(survivor.to_owned())];
+    binds.extend(key_values.iter().cloned());
+    let update = format!(
+        "UPDATE \"{}\" SET \"{}\" = ? WHERE {where_key}",
+        reference.table, reference.column
+    );
+    match connection.execute(&update, rusqlite::params_from_iter(binds.iter())) {
+        Ok(_) => {
+            tally.repointed += 1;
+            return Ok(());
+        }
+        Err(error) => match constraint_class_of(&error) {
+            ConstraintClass::Check => {
+                // BOTH ENDS ARE THE SURVIVOR NOW: the row says nothing.
+                connection.execute(
+                    &format!("DELETE FROM \"{}\" WHERE {where_key}", reference.table),
+                    rusqlite::params_from_iter(key_values.iter()),
+                )?;
+                tally.degenerate += 1;
+                return Ok(());
+            }
+            ConstraintClass::Unique => {}
+            // A BUG IN THIS CODE OR A CORRUPT VAULT. Re-thrown; the old blanket
+            // catch turned it into a silent delete.
+            ConstraintClass::ForeignKey | ConstraintClass::Other => return Err(error.into()),
+        },
+    }
+
+    match collision_for(&reference.table) {
+        Collision::Sum(amount_column) if reference.key.contains(&reference.column) => {
+            // The survivor's row carries the same key with this column swapped.
+            let survivor_key: Vec<rusqlite::types::Value> = reference
+                .key
+                .iter()
+                .zip(key_values)
+                .map(|(column, value)| {
+                    if column == &reference.column {
+                        rusqlite::types::Value::Text(survivor.to_owned())
+                    } else {
+                        value.clone()
+                    }
+                })
+                .collect();
+            let amount: i64 = connection
+                .query_row(
+                    &format!(
+                        "SELECT \"{amount_column}\" FROM \"{}\" WHERE {where_key}",
+                        reference.table
+                    ),
+                    rusqlite::params_from_iter(key_values.iter()),
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            let mut binds: Vec<rusqlite::types::Value> =
+                vec![rusqlite::types::Value::Integer(amount)];
+            binds.extend(survivor_key);
+            connection.execute(
+                &format!(
+                    "UPDATE \"{}\" SET \"{amount_column}\" = \"{amount_column}\" + ? WHERE {where_key}",
+                    reference.table
+                ),
+                rusqlite::params_from_iter(binds.iter()),
+            )?;
+            connection.execute(
+                &format!("DELETE FROM \"{}\" WHERE {where_key}", reference.table),
+                rusqlite::params_from_iter(key_values.iter()),
+            )?;
+            tally.summed += 1;
+            return Ok(());
+        }
+        Collision::Demote(flag_column) => {
+            let mut binds: Vec<rusqlite::types::Value> =
+                vec![rusqlite::types::Value::Text(survivor.to_owned())];
+            binds.extend(key_values.iter().cloned());
+            let demote = format!(
+                "UPDATE \"{}\" SET \"{}\" = ?, \"{flag_column}\" = 0 WHERE {where_key}",
+                reference.table, reference.column
+            );
+            match connection.execute(&demote, rusqlite::params_from_iter(binds.iter())) {
+                Ok(_) => {
+                    tally.repointed += 1;
+                    return Ok(());
+                }
+                // A collision on the VALUE, not on primacy: a genuine duplicate.
+                Err(error) if constraint_class_of(&error) == ConstraintClass::Unique => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Collision::Sum(_) | Collision::DropDuplicate => {}
+    }
+
+    if let Some(PointerCollision::Revoke) = PARTY_POINTERS
+        .iter()
+        .find(|(table, column, _, _)| *table == reference.table && *column == reference.column)
+        .map(|(_, _, _, policy)| *policy)
+    {
+        let mut binds: Vec<rusqlite::types::Value> = vec![
+            rusqlite::types::Value::Text(now.to_owned()),
+            rusqlite::types::Value::Text(survivor.to_owned()),
+        ];
+        binds.extend(key_values.iter().cloned());
+        connection.execute(
+            &format!(
+                "UPDATE \"{}\" SET revoked_at = ?, \"{}\" = ? WHERE {where_key}",
+                reference.table, reference.column
+            ),
+            rusqlite::params_from_iter(binds.iter()),
+        )?;
+        tally.repointed += 1;
+        tally.revoked += 1;
+        return Ok(());
+    }
+
+    connection.execute(
+        &format!("DELETE FROM \"{}\" WHERE {where_key}", reference.table),
+        rusqlite::params_from_iter(key_values.iter()),
+    )?;
+    tally.deduped += 1;
+    Ok(())
+}
+
+/// Read the primary keys of the rows one reference holds against `merged`.
+fn rows_naming(
+    connection: &rusqlite::Connection,
+    reference: &PartyRef,
+    merged: &str,
+) -> Result<Vec<Vec<rusqlite::types::Value>>> {
+    let projection = reference
+        .key
+        .iter()
+        .map(|column| format!("\"{column}\""))
+        .collect::<Vec<String>>()
+        .join(", ");
+    let mut predicate = format!("\"{}\" = ?1", reference.column);
+    if let Some(type_column) = reference.type_column.as_deref() {
+        predicate.push_str(&format!(" AND \"{type_column}\" = ?2"));
+    }
+    if let Some(scope) = reference.predicate.as_deref() {
+        predicate.push_str(&format!(" AND {scope}"));
+    }
+    let sql = format!(
+        "SELECT {projection} FROM \"{}\" WHERE {predicate}",
+        reference.table
+    );
+    let mut prepared = connection.prepare(&sql)?;
+    let width = reference.key.len();
+    let map = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Vec<rusqlite::types::Value>> {
+        (0..width).map(|at| row.get(at)).collect()
+    };
+    let rows = if reference.type_column.is_some() {
+        prepared.query_map(rusqlite::params![merged, PARTY_ENTITY_TYPE], map)?
+    } else {
+        prepared.query_map([merged], map)?
+    };
+    Ok(rows.collect::<std::result::Result<Vec<Vec<rusqlite::types::Value>>, _>>()?)
+}
+
+/// The logical entity name a party carries in every polymorphic pointer.
+const PARTY_ENTITY_TYPE: &str = "core.party";
+
+/// `people_profile.party_id` is UNIQUE, so the generic re-point would DELETE
+/// the duplicate's cadence, last-contacted and colour. Fold them first (#864).
+///
+/// The fold's rules, each one chosen so the merge cannot lose a fact:
+/// a real cadence beats "no cadence"; the LATER last-contacted wins, because
+/// "when did I last speak to them" is one question with one answer; and any
+/// other field the survivor lacks is taken from the loser.
+fn fold_people_profile(
+    connection: &rusqlite::Connection,
+    survivor: &str,
+    merged: &str,
+    now: &str,
+) -> Result<()> {
+    type Profile = (
+        i64,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    );
+    let load = |party_id: &str| -> Option<Profile> {
+        connection
+            .query_row(
+                "SELECT cadence_days, last_contacted_at, avatar_color, role, met
+                   FROM people_profile WHERE party_id = ?1",
+                [party_id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .ok()
+    };
+    let Some(extra) = load(merged) else {
+        return Ok(());
+    };
+    let Some(kept) = load(survivor) else {
+        connection.execute(
+            "UPDATE people_profile SET party_id = ?1, updated_at = ?2 WHERE party_id = ?3",
+            rusqlite::params![survivor, now, merged],
+        )?;
+        return Ok(());
+    };
+    let later = |left: Option<String>, right: Option<String>| -> Option<String> {
+        match (left, right) {
+            (None, right) => right,
+            (left, None) => left,
+            (Some(left), Some(right)) => Some(if left >= right { left } else { right }),
+        }
+    };
+    connection.execute(
+        "UPDATE people_profile
+            SET cadence_days = ?1, last_contacted_at = ?2, avatar_color = ?3,
+                role = ?4, met = ?5, updated_at = ?6
+          WHERE party_id = ?7",
+        rusqlite::params![
+            if kept.0 > 0 { kept.0 } else { extra.0 },
+            later(kept.1, extra.1),
+            kept.2.or(extra.2),
+            kept.3.or(extra.3),
+            kept.4.or(extra.4),
+            now,
+            survivor
+        ],
+    )?;
+    connection.execute("DELETE FROM people_profile WHERE party_id = ?1", [merged])?;
+    Ok(())
+}
+
+/// Fold `merged` into `survivor`, and DELETE the merged party.
+///
+/// The order is the one that works: the UNIQUE sidecar first, then every
+/// reference the sweep found, then the row itself.
+pub fn fold_party(
+    connection: &rusqlite::Connection,
+    survivor: &str,
+    merged: &str,
+    now: &str,
+) -> Result<FoldTally> {
+    let mut tally = FoldTally::default();
+    fold_people_profile(connection, survivor, merged, now)?;
+    for reference in merge_party_sweep(connection)? {
+        for key_values in rows_naming(connection, &reference, merged)? {
+            repoint_row(
+                connection,
+                &reference,
+                &key_values,
+                survivor,
+                now,
+                &mut tally,
+            )?;
+        }
+    }
+    connection.execute("DELETE FROM core_party WHERE party_id = ?1", [merged])?;
+    Ok(tally)
+}
+
+fn merge_party() -> CommandDefinition {
+    CommandDefinition {
+        name: "core.merge_party",
+        owner_schema: "core",
+        input_schema: r#"{
+          "type": "object",
+          "required": ["survivor_party_id", "merged_party_id"],
+          "additionalProperties": false,
+          "properties": {
+            "survivor_party_id": { "type": "string", "minLength": 1 },
+            "merged_party_id": { "type": "string", "minLength": 1 }
+          }
+        }"#,
+        idempotency: Idempotency::Once,
+        // TIER 4 (#306): an irreversible merge stays loud on purpose. `risk` is
+        // salience; `confirm` is what parks a NON-OWNER invocation.
+        risk: Risk::High,
+        confirm: true,
+        preconditions: &[
+            CommandCondition {
+                predicate: "two_distinct_live_people",
+                check: |ctx| {
+                    let survivor = ctx.required_str("survivor_party_id")?;
+                    let merged = ctx.required_str("merged_party_id")?;
+                    if survivor == merged {
+                        return Ok(Some("a person cannot be merged into themselves".to_owned()));
+                    }
+                    let count: i64 = ctx.connection().query_row(
+                        "SELECT COUNT(*) FROM core_party
+                          WHERE party_id IN (?1, ?2) AND kind <> 'agent'",
+                        rusqlite::params![survivor, merged],
+                        |row| row.get(0),
+                    )?;
+                    Ok((count != 2).then(|| {
+                        "both of those have to be people this vault knows, and neither may be an agent"
+                            .to_owned()
+                    }))
+                },
+            },
+            CommandCondition {
+                // THE VAULT'S OWNER IS NOT MERGEABLE AWAY. Every band of the
+                // file hangs off `core_vault.self_party_id`.
+                predicate: "merged_is_not_the_owner",
+                check: |ctx| {
+                    let merged = ctx.required_str("merged_party_id")?;
+                    let count: i64 = ctx.connection().query_row(
+                        "SELECT COUNT(*) FROM core_vault WHERE self_party_id = ?1",
+                        [merged],
+                        |row| row.get(0),
+                    )?;
+                    Ok((count != 0).then(|| "that is you; you cannot be merged away".to_owned()))
+                },
+            },
+        ],
+        postconditions: &[CommandCondition {
+            predicate: "merged_party_gone",
+            check: |ctx| {
+                let merged = ctx.required_str("merged_party_id")?;
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM core_party WHERE party_id = ?1",
+                    [merged],
+                    |row| row.get(0),
+                )?;
+                Ok((count != 0).then(|| "the folded-in person is still there".to_owned()))
+            },
+        }],
+        handler: |ctx| {
+            let survivor = ctx.required_str("survivor_party_id")?.to_owned();
+            let merged = ctx.required_str("merged_party_id")?.to_owned();
+            let tally = fold_party(ctx.connection(), &survivor, &merged, &ctx.now)?;
+            Ok(serde_json::json!({
+                "survivor_party_id": survivor,
+                "repointed": tally.repointed,
+                "deduped": tally.deduped,
+                "summed": tally.summed,
+                "degenerate": tally.degenerate,
+                "revoked": tally.revoked,
+            }))
+        },
+        sealed_input: &[],
+        online_only: false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3007,20 +3717,22 @@ mod tests {
         }
     }
 
-    /// THE TWENTY-FOUR, and the three named absences.
+    /// THE TWENTY-FIVE, and the two named absences.
     ///
     /// A schema this build carries part of is a schema whose other part has to
     /// be stated somewhere, or the next lane guesses. It is stated here.
     ///
     /// **The `core` schema arrives in two FILES and is one SCHEMA.** This module
     /// is the parties/tags/documents/folders half (slot 4b, nineteen commands)
-    /// and [`super::core_links`] is the link/attachment half (slot 4c, five) —
-    /// registered together by [`super::Registry::with_system_commands`], which is
-    /// why this test counts the REGISTRY rather than `definitions()`. The three
-    /// that remain are People's (`core.merge_party` and the two merge helpers,
-    /// census §A5).
+    /// plus People's ontology primitive `core.merge_party` — which lives here
+    /// because the fold engine it drives is `core`'s own (slot 4c, D-1020-PE2)
+    /// — and [`super::core_links`] is the link/attachment half (slot 4c, five),
+    /// registered together by [`super::Registry::with_system_commands`], which
+    /// is why this test counts the REGISTRY rather than `definitions()`. The
+    /// two that remain are `core.merge_entity` and
+    /// `core.find_duplicate_parties` (census §A5).
     #[test]
-    fn the_schema_carries_twenty_four_of_v0s_twenty_seven() {
+    fn the_schema_carries_twenty_five_of_v0s_twenty_seven() {
         let registry =
             crate::commands::Registry::with_system_commands().expect("the registry builds");
         let names = registry.names();
@@ -3029,10 +3741,10 @@ mod tests {
             .copied()
             .filter(|name: &&str| name.starts_with("core."))
             .collect();
-        assert_eq!(core.len(), 24, "{core:?}");
+        assert_eq!(core.len(), 25, "{core:?}");
         assert_eq!(
             definitions().len(),
-            19,
+            20,
             "this file is still the larger half"
         );
         for landed in [
@@ -3041,33 +3753,37 @@ mod tests {
             "core.anchor_link",
             "core.attach",
             "core.detach",
+            "core.merge_party",
         ] {
             assert!(
                 core.contains(&landed),
-                "{landed} is Notes' slot (#1020, slot 4c) and is not registered"
+                "{landed} landed in wave 4 slot 4c and is not registered"
             );
         }
         for absent in [
-            "core.merge_party",
+            // `core.merge_entity` merges two ENTITIES rather than two parties
+            // and nothing in this build invokes it; `find_duplicate_parties` is
+            // the read half of a surface that does not exist yet.
             "core.merge_entity",
             "core.find_duplicate_parties",
         ] {
             assert!(
-                !absent.is_empty() && !core.contains(&absent),
-                "{absent} is People's slot (census §A5) and is registered here"
+                !core.contains(&absent),
+                "{absent} is a named absence and is registered here"
             );
         }
     }
 
-    /// The split off v0's own definitions, for the nineteen IN THIS FILE.
+    /// The split off v0's own definitions, for the twenty IN THIS FILE.
     ///
     /// v0's whole `core` schema is 17 idempotent / 8 once / 2 retry-safe. Slot
-    /// 4c's five take two `once` (`link_entities`, `attach`) and three
-    /// idempotent (`super::core_links`'s own split test asserts that half); the
-    /// three still absent are People's and take two `once` (`merge_party`,
-    /// `merge_entity`) and one retry-safe. The census reads the `once` arm as
-    /// six (`census-wave4.md:47`), and 17 + 6 + 2 is 25 rather than the 27 the
-    /// same line states — a census arithmetic slip, filed as a finding.
+    /// 4c's link half takes two `once` (`link_entities`, `attach`) and three
+    /// idempotent (`super::core_links`'s own split test asserts that half), and
+    /// `core.merge_party` is the fifth `once` here; the two still absent take
+    /// one `once` (`merge_entity`) and one retry-safe. The census reads the
+    /// `once` arm as six (`census-wave4.md:47`), and 17 + 6 + 2 is 25 rather
+    /// than the 27 the same line states — a census arithmetic slip, filed as a
+    /// finding.
     #[test]
     fn the_idempotency_split_matches_v0() {
         let mut idempotent = 0;
@@ -3080,22 +3796,28 @@ mod tests {
                 Idempotency::RetrySafe => retry_safe += 1,
             }
         }
-        assert_eq!((idempotent, once, retry_safe), (14, 4, 1));
+        assert_eq!((idempotent, once, retry_safe), (14, 5, 1));
     }
 
     /// TWO GATES, NEVER ONE (census §A0). Docs' one manifest-confirmed action
     /// is `empty-trash`, and the command behind it deliberately does not carry
     /// the command-level park: `confirm: true` parks a NON-OWNER invocation,
     /// and the owner's confirmation is in front of the command.
+    ///
+    /// **`core.merge_party` is the schema's one exception in this build**, and
+    /// it is the reason the two gates are not one: People's manifest ALSO
+    /// declares `confirmation: "required"` on `merge-people`, so the owner sees
+    /// a dialog and a non-owner is parked, and neither substitutes for the
+    /// other. In v0 the schema has two such commands — the second, `merge_entity`,
+    /// is still Notes' slot to take.
     #[test]
-    fn no_command_in_this_build_carries_the_non_owner_park() {
-        for definition in definitions() {
-            assert!(
-                !definition.confirm,
-                "{} carries confirm: true; only the two merges do in v0",
-                definition.name
-            );
-        }
+    fn merge_party_is_the_only_command_that_parks_a_non_owner() {
+        let parked: Vec<&str> = definitions()
+            .iter()
+            .filter(|definition| definition.confirm)
+            .map(|definition| definition.name)
+            .collect();
+        assert_eq!(parked, ["core.merge_party"]);
         let trash = definitions()
             .into_iter()
             .find(|definition| definition.name == "core.empty_document_trash")

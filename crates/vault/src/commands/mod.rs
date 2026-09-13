@@ -42,6 +42,8 @@ pub mod enrich;
 pub mod knowledge;
 pub mod locker;
 pub mod media;
+pub mod people;
+pub mod social;
 pub mod tally;
 
 use std::collections::BTreeMap;
@@ -270,6 +272,12 @@ impl Registry {
             registry.register(definition)?;
         }
         for definition in media::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in people::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in social::definitions() {
             registry.register(definition)?;
         }
         for definition in tally::definitions() {

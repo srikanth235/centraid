@@ -35,11 +35,13 @@ fn the_registry_carries_every_command_this_build_has() {
     // lands a schema adds one row rather than editing a number every other
     // lane is also editing (#1020, wave 4 lane Locker).
     let by_schema = [
-        // Twenty-four `core.*` — the parties plane and Docs' whole write
-        // surface (#1020 slot 4b, D-1020-DC3) plus Notes' link and attachment
-        // half (slot 4c, D-1020-N6), which is twenty-four of v0's
-        // twenty-seven. The three still absent are People's merges.
-        ("core.", 24_usize),
+        // Twenty-five `core.*` — the parties plane and Docs' whole write
+        // surface (#1020 slot 4b, D-1020-DC3), Notes' link and attachment half
+        // (slot 4c, D-1020-N6) and People's ontology primitive
+        // `core.merge_party` (slot 4c, D-1020-PE2), which is twenty-five of
+        // v0's twenty-seven. The two still absent are `core.merge_entity` and
+        // `core.find_duplicate_parties`.
+        ("core.", 25_usize),
         // The whole 9-command `knowledge.*` schema (wave 4 slot 4c).
         ("knowledge.", 9),
         // The 23 `tally.*`, real since the Tally-finish lane.
@@ -52,6 +54,10 @@ fn the_registry_carries_every_command_this_build_has() {
         // v0's twenty `locker.*` plus `reveal_receipt` and `rotate_key`, the
         // two the member-key custody change needs (wave 4 lane Locker).
         ("locker.", 22),
+        // The whole 28-command `people.*` schema and the whole 4-command
+        // `social.*` one (wave 4 lane People).
+        ("people.", 28),
+        ("social.", 4),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(
@@ -74,10 +80,16 @@ fn the_registry_carries_every_command_this_build_has() {
     assert!(registry.get("core.link_entities").is_some());
     assert!(registry.get("knowledge.create_note").is_some());
     assert!(registry.get("knowledge.restore_note_version").is_some());
-    // A NAMED ABSENCE, not an oversight: People's merge plane takes these with
-    // its own fixtures (census §A5).
-    assert!(registry.get("core.merge_party").is_none());
+    assert!(registry.get("core.merge_party").is_some());
+    assert!(registry.get("people.add_person").is_some());
+    assert!(registry.get("people.save_contact_channel").is_some());
+    assert!(registry.get("social.send_message").is_some());
+    // A NAMED ABSENCE, not an oversight: `core.merge_entity` merges two
+    // ENTITIES rather than two parties and no People action invokes it, and
+    // `core.find_duplicate_parties` is the read half of a surface that does
+    // not exist yet (census §A5).
     assert!(registry.get("core.merge_entity").is_none());
+    assert!(registry.get("core.find_duplicate_parties").is_none());
     // AND `schedule.add_task` IS NOT HERE. `notes`' `send-to-tasks` invokes it
     // and the Agenda/Tasks lane owns the `schedule` schema (slot 4d), so the
     // name is reserved here and the Notes parity case is marked
