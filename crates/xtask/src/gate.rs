@@ -62,6 +62,10 @@ pub struct Ctx {
     /// infrastructure failure in CI, because the workflow installs it.
     pub ci: bool,
     pub artifacts: PathBuf,
+    /// The profile this run is. A step that must do LESS on the edit-run loop
+    /// than on the gate reads it here rather than being two steps with two
+    /// names — see [`run_tests`] (#1020, close pass, D-1020-CL9).
+    pub profile: Profile,
 }
 
 pub enum Outcome {
@@ -494,6 +498,7 @@ pub fn run(profile: Profile, root: &Path, forced_cold: bool, lane: Option<String
         hardware: hardware.clone(),
         ci: std::env::var_os("CI").is_some(),
         artifacts: root.join("target/xtask").join(profile.name()),
+        profile,
     };
     let budget = ledger::budget_seconds(root, profile.name(), &hardware)?;
     let (tree, why) = tree_state(root, &crate::target_dir(root), forced_cold);
@@ -892,13 +897,47 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
 /// `cargo nextest run` when it is installed, `cargo test` otherwise. Which one
 /// ran is in the step's line, because "the tests passed" means something
 /// different under a runner that reports per-test timings and one that does not.
+/// THE EDIT-RUN LOOP LEAVES THE SIMULATION TO THE GATE (#1020, close pass,
+/// D-1020-CL9).
+///
+/// `local`'s budget is the feedback-time promise a developer feels after an
+/// edit, and on the rebased tree the profile takes 150.7 s warm against 120 s —
+/// **all of it `test`** (147.8 s, of which ~133 s is test execution and the
+/// rest cargo's own accounting). The single largest binary is
+/// `crates/sim/tests/seeds.rs` at 22.9 s for three tests, and the sim crate's
+/// three suites together are ~29 s.
+///
+/// **Nothing is weakened, because `pr` runs the sim crate TWICE.** Its `test`
+/// step is this same function with the exclusion off, and `sim` is a second
+/// step over `-p centraid-sim` at 25 seeds; `nightly` adds `sim-nightly` on top
+/// of both. So the deterministic simulation — #1020's primary sync proof — is
+/// exercised by every gate that gates a merge, and what changes is that a
+/// developer editing an app crate no longer pays 29 s for it on every save.
+/// A developer editing `crates/sim` runs `cargo test -p centraid-sim`, which is
+/// what the `sim` step runs.
+///
+/// This is a PROFILE-TABLE change, stated in `crates/xtask/README.md` and in
+/// the receipt, not a silent move.
 fn run_tests(ctx: &Ctx) -> Result<Outcome> {
+    let local = ctx.profile == Profile::Local;
     if cargo_subcommand_available(&ctx.root, "nextest") {
-        process(ctx, "test", "cargo", &["nextest", "run", "--workspace"])
+        let mut args = vec!["nextest", "run", "--workspace"];
+        if local {
+            args.extend(["--exclude", SIM_PACKAGE]);
+        }
+        process(ctx, "test", "cargo", &args)
     } else {
-        process(ctx, "test", "cargo", &["test", "--workspace"])
+        let mut args = vec!["test", "--workspace"];
+        if local {
+            args.extend(["--exclude", SIM_PACKAGE]);
+        }
+        process(ctx, "test", "cargo", &args)
     }
 }
+
+/// The one package `local`'s `test` step leaves out; `pr`'s own `sim` step and
+/// its unexcluded `test` step both run it.
+const SIM_PACKAGE: &str = "centraid-sim";
 
 /// The deterministic simulation — #1020's primary sync proof (D-1020-D2-4).
 ///
@@ -2547,6 +2586,7 @@ mod tests {
             hardware: DEFAULT_HARDWARE.to_owned(),
             ci: false,
             artifacts: root.join("target"),
+            profile: Profile::Nightly,
         };
         match run_device_lanes(&ctx).expect("the step runs") {
             Outcome::Skipped(detail) => {
@@ -2573,6 +2613,7 @@ mod tests {
             hardware: DEFAULT_HARDWARE.to_owned(),
             ci: false,
             artifacts: root.join("target"),
+            profile: Profile::Local,
         };
         match run_buf(&ctx).expect("the step runs") {
             Outcome::Skipped(detail) => assert!(detail.contains("no buf.yaml"), "{detail}"),
@@ -2613,6 +2654,7 @@ mod tests {
             hardware: DEFAULT_HARDWARE.to_owned(),
             ci: false,
             artifacts: root.join("target"),
+            profile: Profile::Local,
         };
         match run_mobile_jvm(&ctx).expect("the step runs") {
             Outcome::Failed(detail) => {
@@ -2757,6 +2799,7 @@ mod tests {
             hardware: "h".to_owned(),
             ci: false,
             artifacts: root.join("target/xtask/local"),
+            profile: Profile::Local,
         }
     }
 

@@ -28,11 +28,13 @@ Each profile is a **superset** of the one before, stated in code as concatenatio
 
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
-| `local` | `fmt`, `clippy`, `test`, `rules`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | the pre-push loop, by hand |
-| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `desktop-unit`, `advisory`, `lockfile`, `sim`, `call-budget`, `fault-door` | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `local` | `fmt`, `clippy`, `test` (**minus `centraid-sim`** — see below), `rules`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | the pre-push loop, by hand |
+| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `desktop-unit`, `extension-unit`, `advisory`, `lockfile`, `prompt-injection`, `sim`, `call-budget`, `fault-door` — and its `test` step runs the **whole** workspace, sim included | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `sim-nightly`, `v0-oracle`, `desktop-e2e`, `device-lanes`, `lane-health` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
 | `release` | `restore-drill`, `artifact-identity`, `prebuilt-core-required`, `vps-smoke` | unbounded | wave 2 R and wave 3 G wire it to the release lane |
 | `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | < 420 s | `.github/workflows/gate-nightly.yml`; on demand from `mobile/` |
+
+**`local`'s `test` step leaves out `centraid-sim`, and nothing is weakened by it** ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-CL9). The sim crate's three suites are ~29 s of the profile's warm 150.7 s — `tests/seeds.rs` alone is 22.9 s for three tests — and `pr` runs that crate **twice**: once inside its own unexcluded `cargo test --workspace`, and again as the `sim` step at 25 seeds (`nightly` adds `sim-nightly` on top of both). So the deterministic simulation, #1020's primary sync proof, is exercised by every gate that gates a merge, and what changed is that a developer editing an app crate stops paying for it on every save. Editing `crates/sim` itself means running `cargo test -p centraid-sim`, which is exactly what the `sim` step runs. This is the profile table's own statement of the move; it is not a skip inside a test.
 
 The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledgers/gate-budgets.json) and are **enforced**: a profile whose steps together overran its `budgetSeconds` fails, prints the timing table, and says `FAIL — over budget` on its last line. They are down-only, like every other gate knob in this repo; the one time they rose was the 2026-09-12 re-base for the Rust workspace, under an owner ruling recorded as [D-1020-B2](../../docs/decisions.md#decisions--lane-b2-1020).
 
