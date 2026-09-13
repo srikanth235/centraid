@@ -850,3 +850,64 @@ fn an_unknown_attachment_subject_is_refused_by_the_allow_list() {
     // The SCHEMA's enum catches it first, which is the earliest honest gate.
     assert_eq!(refused.predicate.as_deref(), Some("schema"));
 }
+
+/// **A CREATED NOTE'S `updated_at` IS THE VAULT'S CLOCK, NOT THE HOST'S**
+/// (R-1020-35; #1020, D-1020-N10).
+///
+/// `create_note` inserts the row and then repoints `current_revision_id` — and
+/// `knowledge_note_touch_updated_at` fires `WHEN NEW.row_version =
+/// OLD.row_version` and stamps `updated_at` with `strftime('now')` whenever the
+/// update does not carry a new one. So the second statement of every note
+/// creation overwrote the injected clock with the machine's wall clock.
+///
+/// It is invisible in production, where the two are the same instant, and it is
+/// not invisible anywhere the clock is injected: the library sorts newest
+/// `updated_at` first, so **a parity fixture's page order became a fact about
+/// the host** rather than about the data. Four of the six notes in
+/// `contracts/apps/notes/rows.json` carried `(host-clock)` before this, and the
+/// Rust replay — which reads the tokenised rows — ordered them by `note_id`
+/// while v0 had ordered them by microseconds nobody can reproduce.
+///
+/// Fixed at source on both sides: this command carries `updated_at` through the
+/// repoint, and so does v0's (`packages/vault/src/commands/knowledge.ts`).
+#[test]
+fn a_created_notes_updated_at_is_the_injected_clock() {
+    let vault = Notebook::open("notes-clock");
+    let note = vault.note("Cabin", "Book it.", "plain");
+    let now = vault.vault().clock().now_text();
+    let (created, updated) = vault
+        .vault()
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT created_at, updated_at FROM knowledge_note WHERE note_id = ?1",
+                [&note],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )?)
+        })
+        .expect("the note reads");
+    assert_eq!(
+        created, updated,
+        "a note nobody has edited was last updated when it was created"
+    );
+    assert_eq!(
+        updated, now,
+        "and that instant is the vault's clock, not the machine's"
+    );
+}
+
+/// A NOTEBOOK HAS THE SAME SHAPE and does NOT have the problem, because
+/// `create_notebook` writes one statement. Asserted so a later edit that adds a
+/// second one is caught here rather than in a fixture's page order.
+#[test]
+fn a_created_notebook_is_written_in_one_statement() {
+    let vault = Notebook::open("notes-clock-notebook");
+    let notebook = id(
+        &vault.run("knowledge.create_notebook", json!({ "name": "Travel" })),
+        "notebook_id",
+    );
+    let version: i64 = vault.count(
+        "SELECT row_version FROM core_collection WHERE collection_id = ?1",
+        &[&notebook],
+    );
+    assert_eq!(version, 1, "one gesture, one version");
+}

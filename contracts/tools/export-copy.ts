@@ -74,6 +74,7 @@ export const COPY_LEAVES: Record<string, readonly string[]> = {
 export const SHELF_TABLES: Record<string, string> = {
   docs: "packages/blueprints/apps/docs/shelves.ts",
   locker: "packages/blueprints/apps/locker/shelves.ts",
+  notes: "packages/blueprints/apps/notes/shelves.ts",
   tally: "packages/blueprints/apps/tally/shelves.ts",
 };
 
@@ -115,19 +116,47 @@ function recordKeys(source: string, constName: string): string[] {
   ].map((match) => match.groups?.key ?? "");
 }
 
+/**
+ * THE ROOT SHELF'S ROUTE ID, read off the shelf table rather than assumed.
+ *
+ * A root shelf's `id` is `null` and its `segment` is the empty string, so the
+ * route id it is keyed on is neither — it is the band's, which every shelf table
+ * declares as `rootBandId` in its `createShelfRoutes` call. This used to be the
+ * literal `"balances"`, which is Tally's; Docs' root is `list`
+ * (`docs/shelves.ts:55`), so `copy/docs.json` named a shelf `balances` that no
+ * Docs screen has (#1020, slot 4c finding).
+ *
+ * The declaration is followed one hop: `rootBandId: ALL_ID` and
+ * `const ALL_ID = "list"`, or a literal in place.
+ */
+function rootBandId(source: string): string {
+  const declared =
+    /rootBandId:\s*(?<value>"(?<literal>[^"]*)"|[A-Za-z][A-Za-z0-9_]*)/u.exec(
+      source
+    );
+  if (!declared?.groups) return "";
+  if (declared.groups.literal !== undefined) return declared.groups.literal;
+  const name = declared.groups.value ?? "";
+  const resolved = new RegExp(
+    `const ${name}\\s*=\\s*"(?<literal>[^"]*)"`,
+    "u"
+  ).exec(source);
+  return resolved?.groups?.literal ?? "";
+}
+
 /** The `{ id, label, segment }` rows of a shelf table, read as text. */
 function shelfRows(
   source: string
 ): { id: string; label: string; segment: string }[] {
   const ROW =
     /\{\s*id:\s*(?<id>null|[A-Za-z][A-Za-z0-9_]*),\s*label:\s*"(?<label>[^"]*)",\s*segment:\s*"(?<segment>[^"]*)"\s*\}/gu;
+  const root = rootBandId(source);
   return [...source.matchAll(ROW)].map((match) => {
     const groups = match.groups ?? {};
     return {
-      // The ROUTE id, which for the root shelf is not its empty segment:
-      // `null` is Balances (`shelves.ts:41-46`) and the band names it
-      // `balances`, which is the id the copy table keys on.
-      id: groups.id === "null" ? "balances" : (groups.segment ?? ""),
+      // The ROUTE id, which for the root shelf is not its empty segment: the
+      // band names it, and `rootBandId` is where the table says so.
+      id: groups.id === "null" ? root : (groups.segment ?? ""),
       label: groups.label ?? "",
       segment: groups.segment ?? "",
     };

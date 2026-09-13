@@ -55,7 +55,7 @@
   "moreRoutes": [],
   "shelves": [
     {
-      "id": "balances",
+      "id": "list",
       "label": "All",
       "segment": ""
     },

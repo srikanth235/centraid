@@ -345,29 +345,39 @@ fn create_note() -> CommandDefinition {
             // `produced_ids[0]` — the same order `core.add_document` takes.
             let note_id = minted_id(ctx, "note_id");
             let content_id = content_item_for(ctx, &body_text, &format)?;
+            // THE FIRST OCCURRENCE IS RECORDED BEFORE THE ROW, AND THAT ORDER IS
+            // THE FIX FOR R-1020-35 / D-1020-N10.
+            //
+            // A note's original body is a version like any other (#996 R20(a)),
+            // so the chain starts here — and writing the occurrence first is
+            // what lets the note be inserted with `current_revision_id` already
+            // set, in ONE statement. The second statement it replaces was an
+            // `UPDATE` whose `updated_at` did not change, which is exactly when
+            // `knowledge_note_touch_updated_at` stamps the HOST's wall clock
+            // over the injected one — so every created note's `updated_at` was a
+            // fact about the machine, and the library sorts on it.
+            //
+            // `record_body_revision` reads the wrapper's current pointer for the
+            // parent and finds no row yet, which is the right answer: the first
+            // occurrence has no parent.
+            let revision_id =
+                record_body_revision(ctx, NOTE_TARGET_TYPE, &note_id, &content_id, None)?;
             ctx.connection().execute(
                 "INSERT INTO knowledge_note
-                   (note_id, author_party_id, title, body_content_id, format, pinned,
-                    created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6)",
+                   (note_id, author_party_id, title, body_content_id, current_revision_id,
+                    format, pinned, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?7)",
                 rusqlite::params![
                     note_id,
                     actor_party_id(ctx)?,
                     title,
                     content_id,
+                    revision_id,
                     format,
                     ctx.now
                 ],
             )?;
             set_note_representation(ctx, &note_id, &content_id, &format)?;
-            // The FIRST occurrence (#996 R20(a)): a note's original body is a
-            // version like any other, so the chain starts here.
-            let revision_id =
-                record_body_revision(ctx, NOTE_TARGET_TYPE, &note_id, &content_id, None)?;
-            ctx.connection().execute(
-                "UPDATE knowledge_note SET current_revision_id = ?1 WHERE note_id = ?2",
-                rusqlite::params![revision_id, note_id],
-            )?;
             if let Some(notebook_id) = notebook_id {
                 place_note(ctx, &note_id, &notebook_id)?;
             }

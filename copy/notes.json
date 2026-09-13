@@ -58,5 +58,56 @@
   ],
   "routes": [],
   "moreRoutes": [],
-  "shelves": []
+  "shelves": [
+    {
+      "id": "library",
+      "label": "Library",
+      "segment": ""
+    },
+    {
+      "id": "books",
+      "label": "Notebooks",
+      "segment": "books"
+    },
+    {
+      "id": "journal",
+      "label": "Journal",
+      "segment": "journal"
+    },
+    {
+      "id": "search",
+      "label": "Search",
+      "segment": "search"
+    },
+    {
+      "id": "note",
+      "label": "Note",
+      "segment": "note"
+    },
+    {
+      "id": "history",
+      "label": "Version history",
+      "segment": "history"
+    },
+    {
+      "id": "tags",
+      "label": "Tags",
+      "segment": "tags"
+    },
+    {
+      "id": "trash",
+      "label": "Trash",
+      "segment": "trash"
+    },
+    {
+      "id": "capture",
+      "label": "Capture",
+      "segment": "capture"
+    },
+    {
+      "id": "voice",
+      "label": "Voice",
+      "segment": "voice"
+    }
+  ]
 }

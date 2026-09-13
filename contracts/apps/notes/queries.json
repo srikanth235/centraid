@@ -1,0 +1,1346 @@
+[
+  {
+    "input": {},
+    "output": {
+      "notebooks": [
+        {
+          "name": "Travel",
+          "notebook_id": "id-0031",
+          "sort_order": 1
+        },
+        {
+          "name": "Recipes",
+          "notebook_id": "id-0032",
+          "sort_order": 2
+        },
+        {
+          "name": "Trips",
+          "notebook_id": "id-0033",
+          "sort_order": 3
+        }
+      ],
+      "notes": [
+        {
+          "attachments": [
+            {
+              "attachment_id": "id-0063",
+              "byte_size": 27,
+              "content_id": "id-0056",
+              "content_uri": "data:text/plain;charset=utf-8,Directions%20from%20the%20highway",
+              "is_primary": 0,
+              "media_type": "text/plain",
+              "role": "other"
+            }
+          ],
+          "backlinks": [],
+          "check": {
+            "done": 1,
+            "total": 2
+          },
+          "created_at": "2099-06-01T09:00:09.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0051",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 1,
+          "preview": "☐ South Lake\n☑ Truckee\nBook by Thursday.",
+          "purge_at": null,
+          "references": [
+            {
+              "card": {
+                "id": "id-0036",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Drive vs fly",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096",
+              "selector": {
+                "exact": "Truckee",
+                "prefix": "- [x] ",
+                "start": 30,
+                "suffix": "\n"
+              }
+            }
+          ],
+          "tags": [],
+          "title": "Cabin shortlist (booked)",
+          "updated_at": "2099-06-01T09:00:43.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:04.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0038",
+          "notebook_ids": ["id-0032"],
+          "notebook_names": ["Recipes"],
+          "pinned": 0,
+          "preview": "• Brown 2 lb chuck in batches — crowding steams it.\n• Onion, garlic, one poblano until soft.\n• Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n• Crushed tomatoes, beans, a splash of coffee. Two h",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Mom's chili, written down properly",
+          "updated_at": "2099-06-01T09:00:04.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [
+            {
+              "card": {
+                "id": "id-0051",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Cabin shortlist (booked)",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096"
+            }
+          ],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:03.000Z",
+          "deleted_at": null,
+          "format": "plain",
+          "note_id": "id-0036",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Drive vs fly",
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0029",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "• South Lake: walkable, closer to the good food\n• Truckee: quieter, longer drive to the water\nCabin ~$180/night, plus gas both ways.",
+          "purge_at": null,
+          "references": [],
+          "tags": [
+            {
+              "concept_id": "id-0026",
+              "label": "Café",
+              "tag_id": "id-0028"
+            }
+          ],
+          "title": "Tahoe long weekend — shortlist",
+          "updated_at": "2099-06-01T09:00:02.000Z"
+        }
+      ],
+      "tags": [
+        {
+          "concept_id": "id-0026",
+          "label": "Café"
+        }
+      ],
+      "trash": [
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "deleted_at": "2099-06-01T09:00:45.000Z",
+          "format": "plain",
+          "note_id": "id-0048",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 0,
+          "preview": "The Design of Everyday Things (again), Salt Fat Acid Heat, Project Hail Mary.",
+          "purge_at": "2099-07-01T09:00:45.000Z",
+          "references": [],
+          "tags": [],
+          "title": "Scratch — books people keep recommending",
+          "updated_at": "2099-06-01T09:00:45.000Z"
+        }
+      ],
+      "truncated": false,
+      "window": 200
+    },
+    "query": "library"
+  },
+  {
+    "input": {
+      "limit": 20
+    },
+    "output": {
+      "notebooks": [
+        {
+          "name": "Travel",
+          "notebook_id": "id-0031",
+          "sort_order": 1
+        },
+        {
+          "name": "Recipes",
+          "notebook_id": "id-0032",
+          "sort_order": 2
+        },
+        {
+          "name": "Trips",
+          "notebook_id": "id-0033",
+          "sort_order": 3
+        }
+      ],
+      "notes": [
+        {
+          "attachments": [
+            {
+              "attachment_id": "id-0063",
+              "byte_size": 27,
+              "content_id": "id-0056",
+              "content_uri": "data:text/plain;charset=utf-8,Directions%20from%20the%20highway",
+              "is_primary": 0,
+              "media_type": "text/plain",
+              "role": "other"
+            }
+          ],
+          "backlinks": [],
+          "check": {
+            "done": 1,
+            "total": 2
+          },
+          "created_at": "2099-06-01T09:00:09.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0051",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 1,
+          "preview": "☐ South Lake\n☑ Truckee\nBook by Thursday.",
+          "purge_at": null,
+          "references": [
+            {
+              "card": {
+                "id": "id-0036",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Drive vs fly",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096",
+              "selector": {
+                "exact": "Truckee",
+                "prefix": "- [x] ",
+                "start": 30,
+                "suffix": "\n"
+              }
+            }
+          ],
+          "tags": [],
+          "title": "Cabin shortlist (booked)",
+          "updated_at": "2099-06-01T09:00:43.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:04.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0038",
+          "notebook_ids": ["id-0032"],
+          "notebook_names": ["Recipes"],
+          "pinned": 0,
+          "preview": "• Brown 2 lb chuck in batches — crowding steams it.\n• Onion, garlic, one poblano until soft.\n• Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n• Crushed tomatoes, beans, a splash of coffee. Two h",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Mom's chili, written down properly",
+          "updated_at": "2099-06-01T09:00:04.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [
+            {
+              "card": {
+                "id": "id-0051",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Cabin shortlist (booked)",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096"
+            }
+          ],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:03.000Z",
+          "deleted_at": null,
+          "format": "plain",
+          "note_id": "id-0036",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Drive vs fly",
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0029",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "• South Lake: walkable, closer to the good food\n• Truckee: quieter, longer drive to the water\nCabin ~$180/night, plus gas both ways.",
+          "purge_at": null,
+          "references": [],
+          "tags": [
+            {
+              "concept_id": "id-0026",
+              "label": "Café",
+              "tag_id": "id-0028"
+            }
+          ],
+          "title": "Tahoe long weekend — shortlist",
+          "updated_at": "2099-06-01T09:00:02.000Z"
+        }
+      ],
+      "tags": [
+        {
+          "concept_id": "id-0026",
+          "label": "Café"
+        }
+      ],
+      "trash": [
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "deleted_at": "2099-06-01T09:00:45.000Z",
+          "format": "plain",
+          "note_id": "id-0048",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 0,
+          "preview": "The Design of Everyday Things (again), Salt Fat Acid Heat, Project Hail Mary.",
+          "purge_at": "2099-07-01T09:00:45.000Z",
+          "references": [],
+          "tags": [],
+          "title": "Scratch — books people keep recommending",
+          "updated_at": "2099-06-01T09:00:45.000Z"
+        }
+      ],
+      "truncated": false,
+      "window": 20
+    },
+    "query": "library"
+  },
+  {
+    "input": {
+      "limit": 2000
+    },
+    "output": {
+      "notebooks": [
+        {
+          "name": "Travel",
+          "notebook_id": "id-0031",
+          "sort_order": 1
+        },
+        {
+          "name": "Recipes",
+          "notebook_id": "id-0032",
+          "sort_order": 2
+        },
+        {
+          "name": "Trips",
+          "notebook_id": "id-0033",
+          "sort_order": 3
+        }
+      ],
+      "notes": [
+        {
+          "attachments": [
+            {
+              "attachment_id": "id-0063",
+              "byte_size": 27,
+              "content_id": "id-0056",
+              "content_uri": "data:text/plain;charset=utf-8,Directions%20from%20the%20highway",
+              "is_primary": 0,
+              "media_type": "text/plain",
+              "role": "other"
+            }
+          ],
+          "backlinks": [],
+          "check": {
+            "done": 1,
+            "total": 2
+          },
+          "created_at": "2099-06-01T09:00:09.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0051",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 1,
+          "preview": "☐ South Lake\n☑ Truckee\nBook by Thursday.",
+          "purge_at": null,
+          "references": [
+            {
+              "card": {
+                "id": "id-0036",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Drive vs fly",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096",
+              "selector": {
+                "exact": "Truckee",
+                "prefix": "- [x] ",
+                "start": 30,
+                "suffix": "\n"
+              }
+            }
+          ],
+          "tags": [],
+          "title": "Cabin shortlist (booked)",
+          "updated_at": "2099-06-01T09:00:43.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:04.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0038",
+          "notebook_ids": ["id-0032"],
+          "notebook_names": ["Recipes"],
+          "pinned": 0,
+          "preview": "• Brown 2 lb chuck in batches — crowding steams it.\n• Onion, garlic, one poblano until soft.\n• Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n• Crushed tomatoes, beans, a splash of coffee. Two h",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Mom's chili, written down properly",
+          "updated_at": "2099-06-01T09:00:04.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [
+            {
+              "card": {
+                "id": "id-0051",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Cabin shortlist (booked)",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096"
+            }
+          ],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:03.000Z",
+          "deleted_at": null,
+          "format": "plain",
+          "note_id": "id-0036",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Drive vs fly",
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0029",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "• South Lake: walkable, closer to the good food\n• Truckee: quieter, longer drive to the water\nCabin ~$180/night, plus gas both ways.",
+          "purge_at": null,
+          "references": [],
+          "tags": [
+            {
+              "concept_id": "id-0026",
+              "label": "Café",
+              "tag_id": "id-0028"
+            }
+          ],
+          "title": "Tahoe long weekend — shortlist",
+          "updated_at": "2099-06-01T09:00:02.000Z"
+        }
+      ],
+      "tags": [
+        {
+          "concept_id": "id-0026",
+          "label": "Café"
+        }
+      ],
+      "trash": [
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "deleted_at": "2099-06-01T09:00:45.000Z",
+          "format": "plain",
+          "note_id": "id-0048",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 0,
+          "preview": "The Design of Everyday Things (again), Salt Fat Acid Heat, Project Hail Mary.",
+          "purge_at": "2099-07-01T09:00:45.000Z",
+          "references": [],
+          "tags": [],
+          "title": "Scratch — books people keep recommending",
+          "updated_at": "2099-06-01T09:00:45.000Z"
+        }
+      ],
+      "truncated": false,
+      "window": 2000
+    },
+    "query": "library"
+  },
+  {
+    "input": {
+      "limit": 1
+    },
+    "output": {
+      "notebooks": [
+        {
+          "name": "Travel",
+          "notebook_id": "id-0031",
+          "sort_order": 1
+        },
+        {
+          "name": "Recipes",
+          "notebook_id": "id-0032",
+          "sort_order": 2
+        },
+        {
+          "name": "Trips",
+          "notebook_id": "id-0033",
+          "sort_order": 3
+        }
+      ],
+      "notes": [
+        {
+          "attachments": [
+            {
+              "attachment_id": "id-0063",
+              "byte_size": 27,
+              "content_id": "id-0056",
+              "content_uri": "data:text/plain;charset=utf-8,Directions%20from%20the%20highway",
+              "is_primary": 0,
+              "media_type": "text/plain",
+              "role": "other"
+            }
+          ],
+          "backlinks": [],
+          "check": {
+            "done": 1,
+            "total": 2
+          },
+          "created_at": "2099-06-01T09:00:09.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0051",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 1,
+          "preview": "☐ South Lake\n☑ Truckee\nBook by Thursday.",
+          "purge_at": null,
+          "references": [
+            {
+              "card": {
+                "id": "id-0036",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Drive vs fly",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096",
+              "selector": {
+                "exact": "Truckee",
+                "prefix": "- [x] ",
+                "start": 30,
+                "suffix": "\n"
+              }
+            }
+          ],
+          "tags": [],
+          "title": "Cabin shortlist (booked)",
+          "updated_at": "2099-06-01T09:00:43.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:04.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0038",
+          "notebook_ids": ["id-0032"],
+          "notebook_names": ["Recipes"],
+          "pinned": 0,
+          "preview": "• Brown 2 lb chuck in batches — crowding steams it.\n• Onion, garlic, one poblano until soft.\n• Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n• Crushed tomatoes, beans, a splash of coffee. Two h",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Mom's chili, written down properly",
+          "updated_at": "2099-06-01T09:00:04.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [
+            {
+              "card": {
+                "id": "id-0051",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Cabin shortlist (booked)",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096"
+            }
+          ],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:03.000Z",
+          "deleted_at": null,
+          "format": "plain",
+          "note_id": "id-0036",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Drive vs fly",
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0029",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "• South Lake: walkable, closer to the good food\n• Truckee: quieter, longer drive to the water\nCabin ~$180/night, plus gas both ways.",
+          "purge_at": null,
+          "references": [],
+          "tags": [
+            {
+              "concept_id": "id-0026",
+              "label": "Café",
+              "tag_id": "id-0028"
+            }
+          ],
+          "title": "Tahoe long weekend — shortlist",
+          "updated_at": "2099-06-01T09:00:02.000Z"
+        }
+      ],
+      "tags": [
+        {
+          "concept_id": "id-0026",
+          "label": "Café"
+        }
+      ],
+      "trash": [
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "deleted_at": "2099-06-01T09:00:45.000Z",
+          "format": "plain",
+          "note_id": "id-0048",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 0,
+          "preview": "The Design of Everyday Things (again), Salt Fat Acid Heat, Project Hail Mary.",
+          "purge_at": "2099-07-01T09:00:45.000Z",
+          "references": [],
+          "tags": [],
+          "title": "Scratch — books people keep recommending",
+          "updated_at": "2099-06-01T09:00:45.000Z"
+        }
+      ],
+      "truncated": false,
+      "window": 20
+    },
+    "query": "library"
+  },
+  {
+    "input": {
+      "limit": 9000
+    },
+    "output": {
+      "notebooks": [
+        {
+          "name": "Travel",
+          "notebook_id": "id-0031",
+          "sort_order": 1
+        },
+        {
+          "name": "Recipes",
+          "notebook_id": "id-0032",
+          "sort_order": 2
+        },
+        {
+          "name": "Trips",
+          "notebook_id": "id-0033",
+          "sort_order": 3
+        }
+      ],
+      "notes": [
+        {
+          "attachments": [
+            {
+              "attachment_id": "id-0063",
+              "byte_size": 27,
+              "content_id": "id-0056",
+              "content_uri": "data:text/plain;charset=utf-8,Directions%20from%20the%20highway",
+              "is_primary": 0,
+              "media_type": "text/plain",
+              "role": "other"
+            }
+          ],
+          "backlinks": [],
+          "check": {
+            "done": 1,
+            "total": 2
+          },
+          "created_at": "2099-06-01T09:00:09.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0051",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 1,
+          "preview": "☐ South Lake\n☑ Truckee\nBook by Thursday.",
+          "purge_at": null,
+          "references": [
+            {
+              "card": {
+                "id": "id-0036",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Drive vs fly",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096",
+              "selector": {
+                "exact": "Truckee",
+                "prefix": "- [x] ",
+                "start": 30,
+                "suffix": "\n"
+              }
+            }
+          ],
+          "tags": [],
+          "title": "Cabin shortlist (booked)",
+          "updated_at": "2099-06-01T09:00:43.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:04.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0038",
+          "notebook_ids": ["id-0032"],
+          "notebook_names": ["Recipes"],
+          "pinned": 0,
+          "preview": "• Brown 2 lb chuck in batches — crowding steams it.\n• Onion, garlic, one poblano until soft.\n• Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n• Crushed tomatoes, beans, a splash of coffee. Two h",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Mom's chili, written down properly",
+          "updated_at": "2099-06-01T09:00:04.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [
+            {
+              "card": {
+                "id": "id-0051",
+                "status": "live",
+                "subtitle": null,
+                "thumbnail_content_id": null,
+                "title": "Cabin shortlist (booked)",
+                "type": "knowledge.note"
+              },
+              "link_id": "id-0096"
+            }
+          ],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:03.000Z",
+          "deleted_at": null,
+          "format": "plain",
+          "note_id": "id-0036",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.",
+          "purge_at": null,
+          "references": [],
+          "tags": [],
+          "title": "Drive vs fly",
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "deleted_at": null,
+          "format": "markdown",
+          "note_id": "id-0029",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "• South Lake: walkable, closer to the good food\n• Truckee: quieter, longer drive to the water\nCabin ~$180/night, plus gas both ways.",
+          "purge_at": null,
+          "references": [],
+          "tags": [
+            {
+              "concept_id": "id-0026",
+              "label": "Café",
+              "tag_id": "id-0028"
+            }
+          ],
+          "title": "Tahoe long weekend — shortlist",
+          "updated_at": "2099-06-01T09:00:02.000Z"
+        }
+      ],
+      "tags": [
+        {
+          "concept_id": "id-0026",
+          "label": "Café"
+        }
+      ],
+      "trash": [
+        {
+          "attachments": [],
+          "backlinks": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "deleted_at": "2099-06-01T09:00:45.000Z",
+          "format": "plain",
+          "note_id": "id-0048",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 0,
+          "preview": "The Design of Everyday Things (again), Salt Fat Acid Heat, Project Hail Mary.",
+          "purge_at": "2099-07-01T09:00:45.000Z",
+          "references": [],
+          "tags": [],
+          "title": "Scratch — books people keep recommending",
+          "updated_at": "2099-06-01T09:00:45.000Z"
+        }
+      ],
+      "truncated": false,
+      "window": 2000
+    },
+    "query": "library"
+  },
+  {
+    "input": {},
+    "output": {
+      "entries": [
+        {
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:05.000Z",
+          "deleted_at": null,
+          "format": "plain",
+          "note_id": "id-0030",
+          "preview": "Boil the pasta short. Butter, flour, milk, then sharp cheddar off the heat. Freezes well in 2-portion boxes.",
+          "title": "Weeknight mac and cheese",
+          "updated_at": "2099-06-01T09:00:05.000Z"
+        }
+      ],
+      "truncated": false,
+      "window": 200
+    },
+    "query": "journal"
+  },
+  {
+    "input": {
+      "limit": 20
+    },
+    "output": {
+      "entries": [
+        {
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:05.000Z",
+          "deleted_at": null,
+          "format": "plain",
+          "note_id": "id-0030",
+          "preview": "Boil the pasta short. Butter, flour, milk, then sharp cheddar off the heat. Freezes well in 2-portion boxes.",
+          "title": "Weeknight mac and cheese",
+          "updated_at": "2099-06-01T09:00:05.000Z"
+        }
+      ],
+      "truncated": false,
+      "window": 20
+    },
+    "query": "journal"
+  },
+  {
+    "input": {
+      "term": "cabin"
+    },
+    "output": {
+      "notes": [
+        {
+          "attachments": [
+            {
+              "attachment_id": "id-0063",
+              "byte_size": 27,
+              "content_id": "id-0056",
+              "content_uri": "data:text/plain;charset=utf-8,Directions%20from%20the%20highway",
+              "is_primary": 0,
+              "media_type": "text/plain",
+              "role": "other"
+            }
+          ],
+          "check": {
+            "done": 1,
+            "total": 2
+          },
+          "created_at": "2099-06-01T09:00:09.000Z",
+          "format": "markdown",
+          "note_id": "id-0051",
+          "notebook_ids": [],
+          "notebook_names": [],
+          "pinned": 1,
+          "preview": "☐ South Lake\n☑ Truckee\nBook by Thursday.",
+          "snippet": "⟦Cabin⟧ shortlist (booked)",
+          "title": "Cabin shortlist (booked)",
+          "updated_at": "2099-06-01T09:00:43.000Z"
+        },
+        {
+          "attachments": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "format": "markdown",
+          "note_id": "id-0029",
+          "notebook_ids": ["id-0031"],
+          "notebook_names": ["Travel"],
+          "pinned": 0,
+          "preview": "• South Lake: walkable, closer to the good food\n• Truckee: quieter, longer drive to the water\nCabin ~$180/night, plus gas both ways.",
+          "snippet": "…quieter, longer drive to the water\n\n## Rough budget\n⟦Cabin⟧ ~$180/night, plus…",
+          "title": "Tahoe long weekend — shortlist",
+          "updated_at": "2099-06-01T09:00:02.000Z"
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "chili"
+    },
+    "output": {
+      "notes": [
+        {
+          "attachments": [],
+          "check": {
+            "done": 0,
+            "total": 0
+          },
+          "created_at": "2099-06-01T09:00:04.000Z",
+          "format": "markdown",
+          "note_id": "id-0038",
+          "notebook_ids": ["id-0032"],
+          "notebook_names": ["Recipes"],
+          "pinned": 0,
+          "preview": "• Brown 2 lb chuck in batches — crowding steams it.\n• Onion, garlic, one poblano until soft.\n• Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n• Crushed tomatoes, beans, a splash of coffee. Two h",
+          "snippet": "Mom's ⟦chili⟧, written down properly",
+          "title": "Mom's chili, written down properly",
+          "updated_at": "2099-06-01T09:00:04.000Z"
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "zzzz"
+    },
+    "output": {
+      "notes": []
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": ""
+    },
+    "output": {
+      "notes": []
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "cabin"
+    },
+    "output": {
+      "targets": [
+        {
+          "app": "Notes",
+          "id": "id-0051",
+          "subtitle": "Notes",
+          "title": "Cabin shortlist (booked)",
+          "type": "knowledge.note"
+        },
+        {
+          "app": "Notes",
+          "id": "id-0029",
+          "subtitle": "Notes",
+          "title": "Tahoe long weekend — shortlist",
+          "type": "knowledge.note"
+        }
+      ]
+    },
+    "query": "link-targets"
+  },
+  {
+    "input": {
+      "term": "zzzz"
+    },
+    "output": {
+      "targets": []
+    },
+    "query": "link-targets"
+  },
+  {
+    "input": {
+      "term": ""
+    },
+    "output": {
+      "targets": []
+    },
+    "query": "link-targets"
+  },
+  {
+    "input": {
+      "note_id": "id-0029"
+    },
+    "output": {
+      "body": "## Stays\n- South Lake: walkable, closer to the good food\n- Truckee: quieter, longer drive to the water\n\n## Rough budget\nCabin ~$180/night, plus gas both ways.",
+      "format": "markdown",
+      "note_id": "id-0029"
+    },
+    "query": "note"
+  },
+  {
+    "input": {
+      "note_id": "id-0029"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:02.000Z",
+          "body": "## Stays\n- South Lake: walkable, closer to the good food\n- Truckee: quieter, longer drive to the water\n\n## Rough budget\nCabin ~$180/night, plus gas both ways.",
+          "content_id": "id-0040",
+          "current": true,
+          "media_type": "text/markdown"
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "note_id": "id-0036"
+    },
+    "output": {
+      "body": "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.",
+      "format": "plain",
+      "note_id": "id-0036"
+    },
+    "query": "note"
+  },
+  {
+    "input": {
+      "note_id": "id-0036"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:03.000Z",
+          "body": "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.",
+          "content_id": "id-0042",
+          "current": true,
+          "media_type": "text/plain"
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "note_id": "id-0038"
+    },
+    "output": {
+      "body": "1. Brown 2 lb chuck in batches — crowding steams it.\n2. Onion, garlic, one poblano until soft.\n3. Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n4. Crushed tomatoes, beans, a splash of coffee. Two hours low.\n\n*Do not skip the coffee.*",
+      "format": "markdown",
+      "note_id": "id-0038"
+    },
+    "query": "note"
+  },
+  {
+    "input": {
+      "note_id": "id-0038"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:04.000Z",
+          "body": "1. Brown 2 lb chuck in batches — crowding steams it.\n2. Onion, garlic, one poblano until soft.\n3. Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n4. Crushed tomatoes, beans, a splash of coffee. Two hours low.\n\n*Do not skip the coffee.*",
+          "content_id": "id-0044",
+          "current": true,
+          "media_type": "text/markdown"
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "note_id": "id-0030"
+    },
+    "output": {
+      "body": "Boil the pasta short. Butter, flour, milk, then sharp cheddar off the heat. Freezes well in 2-portion boxes.",
+      "format": "plain",
+      "note_id": "id-0030"
+    },
+    "query": "note"
+  },
+  {
+    "input": {
+      "note_id": "id-0030"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:05.000Z",
+          "body": "Boil the pasta short. Butter, flour, milk, then sharp cheddar off the heat. Freezes well in 2-portion boxes.",
+          "content_id": "id-0046",
+          "current": true,
+          "media_type": "text/plain"
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "note_id": "id-0048"
+    },
+    "output": {
+      "body": "The Design of Everyday Things (again), Salt Fat Acid Heat, Project Hail Mary.",
+      "format": "plain",
+      "note_id": "id-0048"
+    },
+    "query": "note"
+  },
+  {
+    "input": {
+      "note_id": "id-0048"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:06.000Z",
+          "body": "The Design of Everyday Things (again), Salt Fat Acid Heat, Project Hail Mary.",
+          "content_id": "id-0049",
+          "current": true,
+          "media_type": "text/plain"
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "note_id": "id-0051"
+    },
+    "output": {
+      "body": "## Stays\n- [ ] South Lake\n- [x] Truckee\n\n*Book by Thursday.*",
+      "format": "markdown",
+      "note_id": "id-0051"
+    },
+    "query": "note"
+  },
+  {
+    "input": {
+      "note_id": "id-0051"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:19.000Z",
+          "body": "## Stays\n- [ ] South Lake\n- [x] Truckee\n\n*Book by Thursday.*",
+          "content_id": "id-0052",
+          "current": true,
+          "media_type": "text/markdown"
+        },
+        {
+          "asserted_at": "2099-06-01T09:00:16.000Z",
+          "body": "## Stays\n- [x] South Lake\n- [x] Truckee\n\n*Booked.*",
+          "content_id": "id-0055",
+          "current": false,
+          "media_type": "text/markdown"
+        },
+        {
+          "asserted_at": "2099-06-01T09:00:19.000Z",
+          "body": "## Stays\n- [ ] South Lake\n- [x] Truckee\n\n*Book by Thursday.*",
+          "content_id": "id-0052",
+          "current": false,
+          "media_type": "text/markdown"
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "note_id": "no-such-note"
+    },
+    "output": {
+      "body": "",
+      "format": null,
+      "note_id": "no-such-note"
+    },
+    "query": "note"
+  },
+  {
+    "input": {
+      "note_id": "no-such-note"
+    },
+    "output": {
+      "versions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {},
+    "output": {
+      "body": "",
+      "note_id": ""
+    },
+    "query": "note"
+  },
+  {
+    "input": {},
+    "output": {
+      "versions": []
+    },
+    "query": "history"
+  }
+]
