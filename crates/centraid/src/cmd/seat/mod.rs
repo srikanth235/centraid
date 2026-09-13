@@ -35,6 +35,7 @@ pub mod blob;
 pub mod catalogue;
 pub mod core_link;
 pub mod local;
+pub mod locker;
 pub mod peer;
 pub mod server;
 pub mod state;
@@ -171,11 +172,17 @@ pub async fn run(args: SeatArgs) -> u8 {
                 return exit::REFUSED;
             }
         };
+        // THE VAULT'S OWN ID, read once at startup, because the Locker
+        // passphrase wrap binds it (D-1020-L4, D-1020-X6). A seat that could
+        // not read it still serves every other app: the Locker plane simply has
+        // nothing to wrap against and reports `NotEnrolled`.
+        let vault_id = server::vault_id_of(&core).await.unwrap_or_default();
         let seat = Arc::new(server::Seat::new(
             instance,
             mode,
             BlobPaths::new(crate::cmd::blobs_dir_in(&data_dir)),
             core,
+            locker::LockerPlane::new(&data_dir, &vault_id),
         ));
 
         // The line the shell's supervisor waits for. A fixed prefix on stdout,

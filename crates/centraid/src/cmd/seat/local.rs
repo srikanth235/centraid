@@ -177,6 +177,38 @@ pub enum ClientMessage {
     },
     /// Send the current [`SeatStateJson`] now, and on every change after.
     SubscribeState { id: u64 },
+    /// Set the member's local Locker passphrase, wrapping `K` under it
+    /// (D-1020-X6). **Renderer only.**
+    ///
+    /// v0's gesture, carried: *the wrapped blob is all that is ever at rest*
+    /// (`packages/client/src/locker/locker-unlock.ts:13`–`:20`). The seat
+    /// already holds `K` in its own custody, so enrolment is the step that
+    /// turns "a key on this disk" into "a key behind something the member
+    /// knows".
+    LockerEnrol { id: u64, passphrase: String },
+    /// Open the Locker session. **Renderer only** — *a door that can raise the
+    /// passphrase prompt is a door that can be used to phish it*
+    /// (`crates/seat/src/locker/mod.rs`), and the browser is the one caller
+    /// that must never be able to ask.
+    LockerUnlock { id: u64, passphrase: String },
+    /// Close it now, without waiting for the five-minute session to lapse.
+    LockerLock { id: u64 },
+    /// THE SEAT-MEDIATED FILL (D-1020-X6, D-1020-L8).
+    ///
+    /// The one message on this channel that answers with a **secret**, and the
+    /// reason it is a message at all: the extension is not a seat and can never
+    /// become one (D-1020-X1), so the plaintext has to be produced by the
+    /// process that holds `K` behind the member's unlock and handed over with a
+    /// 30-second life and a receipt. `page_origin` is the caller's claim and is
+    /// **re-normalised and re-matched against the row's own stored policy** by
+    /// `centraid_seat::locker::fill_grant`, which is what makes a forged origin
+    /// useless rather than merely discouraged.
+    RevealForFill {
+        id: u64,
+        item_id: String,
+        page_origin: String,
+        column: String,
+    },
     /// The terminal command: stop serving and close. What quit sends before it
     /// signals (D-1020-F1).
     Terminate { id: u64 },

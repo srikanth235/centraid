@@ -51,6 +51,7 @@ use super::local::{
     self, Capabilities, ClientKind, ClientMessage, RefusalCode, SeatMessage, SeatMode,
     SeatStateJson,
 };
+use super::locker;
 use super::state::{self, Facts};
 
 /// How long a `BlobRange` waits for bytes that have not arrived.
@@ -70,6 +71,9 @@ pub struct Seat {
     pub mode: SeatMode,
     pub blobs: BlobPaths,
     pub core: CoreLink,
+    /// The unlock boundary and the fill (D-1020-X6). One per seat process,
+    /// because one seat serves one vault and the session is the member's.
+    pub locker: locker::LockerPlane,
     capabilities: Mutex<Capabilities>,
     facts: Mutex<Facts>,
     /// Set when a client sent `Terminate`, so the accept loop stops.
@@ -85,12 +89,19 @@ fn now_ms() -> u64 {
 
 impl Seat {
     #[must_use]
-    pub fn new(instance: String, mode: SeatMode, blobs: BlobPaths, core: CoreLink) -> Self {
+    pub fn new(
+        instance: String,
+        mode: SeatMode,
+        blobs: BlobPaths,
+        core: CoreLink,
+        locker: locker::LockerPlane,
+    ) -> Self {
         Self {
             instance,
             mode,
             blobs,
             core,
+            locker,
             capabilities: Mutex::new(Capabilities::new()),
             facts: Mutex::new(Facts {
                 mode,
@@ -530,6 +541,54 @@ async fn local_frame(seat: &Seat, kind: ClientKind, message: ClientMessage) -> A
                 value: serde_json::json!({ "token": token, "expires_at_ms": expires_at_ms }),
             })
         }
+        // THE LOCKER PLANE (D-1020-X6). Three of the four are renderer-only,
+        // and the gate is on the CLIENT KIND rather than on a grant: the
+        // browser must not be able to raise a passphrase prompt, and "ask
+        // nicely" is not a boundary.
+        ClientMessage::LockerEnrol { id, passphrase } => {
+            if !matches!(kind, ClientKind::Renderer) {
+                return Answer::error(
+                    id,
+                    "not-permitted",
+                    "only the shell takes a Locker passphrase",
+                );
+            }
+            locker_enrol(seat, id, &passphrase).await
+        }
+        ClientMessage::LockerUnlock { id, passphrase } => {
+            if !matches!(kind, ClientKind::Renderer) {
+                return Answer::error(
+                    id,
+                    "not-permitted",
+                    "only the shell takes a Locker passphrase",
+                );
+            }
+            match seat.locker.unlock(&passphrase, now_ms() as i64) {
+                Ok(()) => Answer::one(SeatMessage::Result {
+                    id,
+                    value: serde_json::json!({
+                        "state": format!("{:?}", seat.locker.state(now_ms() as i64)),
+                    }),
+                }),
+                Err(refusal) => Answer::error(id, refusal.code.as_str(), refusal.message),
+            }
+        }
+        ClientMessage::LockerLock { id } => {
+            // ANY LOCAL CLIENT MAY LOCK. Locking is never an escalation, and a
+            // Companion that saw a wrong-site page should be able to shut the
+            // session rather than file a bug.
+            seat.locker.lock();
+            Answer::one(SeatMessage::Result {
+                id,
+                value: serde_json::json!({ "state": "Locked" }),
+            })
+        }
+        ClientMessage::RevealForFill {
+            id,
+            item_id,
+            page_origin,
+            column,
+        } => reveal_for_fill(seat, id, &item_id, &page_origin, &column).await,
         ClientMessage::Terminate { id } => Answer {
             messages: vec![
                 SeatMessage::Result {
@@ -620,6 +679,258 @@ async fn command(seat: &Seat, id: u64, name: &str, input: &serde_json::Value) ->
         }),
         Ok(_) => Answer::error(id, "unexpected", "the core answered with another shape"),
         Err(error) => Answer::error(id, "refused", error),
+    }
+}
+
+/// The vault's own id, read through the core before a `Seat` exists.
+///
+/// Free-standing rather than a method, because it is needed to CONSTRUCT the
+/// seat: the Locker plane is built with it.
+pub async fn vault_id_of(core: &CoreLink) -> Option<String> {
+    let query = locker::vault_query();
+    let request = wire::Request {
+        kind: Some(wire::request::Kind::Page(wire::PageRequest {
+            query: Some(query),
+            limit: 1,
+            after: None,
+        })),
+    };
+    match core.call(request).await {
+        Ok(wire::Response {
+            kind: Some(wire::response::Kind::Page(page)),
+        }) => page
+            .rows
+            .first()
+            .and_then(|row| row.values.first())
+            .map(catalogue::value_to_json)
+            .and_then(|value| value.as_str().map(str::to_owned)),
+        _ => None,
+    }
+}
+
+/// One row of a sidecar-owned read, as column name → JSON.
+///
+/// `None` for no row, which is a different fact from an error and is answered
+/// differently by both callers below: a login that is not there is `missing`,
+/// and a core that refused is `refused`.
+async fn one_row(
+    seat: &Seat,
+    query: wire::PageQuery,
+) -> Result<Option<std::collections::BTreeMap<String, serde_json::Value>>, String> {
+    let columns = query.select.clone();
+    let request = wire::Request {
+        kind: Some(wire::request::Kind::Page(wire::PageRequest {
+            query: Some(query),
+            limit: 1,
+            after: None,
+        })),
+    };
+    match seat.core.call(request).await {
+        Ok(wire::Response {
+            kind: Some(wire::response::Kind::Page(page)),
+        }) => Ok(page.rows.first().map(|row| {
+            columns
+                .iter()
+                .cloned()
+                .zip(row.values.iter().map(catalogue::value_to_json))
+                .collect()
+        })),
+        Ok(_) => Err("the core answered with another shape".to_owned()),
+        Err(error) => Err(error),
+    }
+}
+
+fn text(row: &std::collections::BTreeMap<String, serde_json::Value>, key: &str) -> Option<String> {
+    row.get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+}
+
+/// `locker_enrol` — wrap this seat's `K` under a member passphrase.
+///
+/// The vault id and the live key generation are both read from the vault rather
+/// than taken from the caller: the wrap's AAD is `vaultId‖keyId` (D-1020-L4),
+/// so a caller that could name either could produce a blob that opens under a
+/// generation the vault does not name.
+async fn locker_enrol(seat: &Seat, id: u64, passphrase: &str) -> Answer {
+    let Some(key_id) = live_key_id(seat, id).await.transpose() else {
+        return Answer::error(
+            id,
+            locker::LockerCode::Missing.as_str(),
+            "this vault names no live Locker key generation",
+        );
+    };
+    let key_id = match key_id {
+        Ok(key_id) => key_id,
+        Err(answer) => return answer,
+    };
+    match seat.locker.enrol(passphrase, &key_id) {
+        Ok(()) => Answer::one(SeatMessage::Result {
+            id,
+            value: serde_json::json!({ "state": "Locked", "key_id": key_id }),
+        }),
+        Err(refusal) => Answer::error(id, refusal.code.as_str(), refusal.message),
+    }
+}
+
+/// The live generation, or the answer to send instead.
+async fn live_key_id(seat: &Seat, id: u64) -> Result<Option<String>, Answer> {
+    match one_row(seat, locker::live_key_query()).await {
+        Ok(Some(row)) => Ok(text(&row, "key_id")),
+        Ok(None) => Ok(None),
+        Err(error) => Err(Answer::error(id, "refused", error)),
+    }
+}
+
+/// `reveal_for_fill` — THE SEAT-MEDIATED FILL (D-1020-X6, D-1020-L8).
+///
+/// The order is the load-bearing part and it is the order v0's reveal had: the
+/// row is read, the origin is matched against **the row's** policy, the receipt
+/// is written, and only then does a plaintext exist. A caller cannot reorder it
+/// because every step is here and none of them is a parameter.
+async fn reveal_for_fill(
+    seat: &Seat,
+    id: u64,
+    item_id: &str,
+    page_origin: &str,
+    column: &str,
+) -> Answer {
+    let Some(sealed) = locker::sealed_column("locker.item", column) else {
+        return Answer::error(
+            id,
+            locker::LockerCode::NotFillable.as_str(),
+            format!("`{column}` is not a sealed cell of a Locker item"),
+        );
+    };
+    let row = match one_row(seat, locker::cell_query(item_id, sealed)).await {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return Answer::error(
+                id,
+                locker::LockerCode::Missing.as_str(),
+                "that login is not in this vault",
+            );
+        }
+        Err(error) => return Answer::error(id, "refused", error),
+    };
+    let Some(ciphertext) = text(&row, sealed.name()) else {
+        // A NULL CELL IS NOT AN ERROR OF THE KEY. A login with no password
+        // stored says so, rather than reporting a crypto failure.
+        return Answer::error(
+            id,
+            locker::LockerCode::Missing.as_str(),
+            "this login has no stored password",
+        );
+    };
+    let fill_row = locker::FillRow {
+        ciphertext,
+        key_id: text(&row, "key_id"),
+        url: text(&row, "url"),
+        url_match_policy: text(&row, "url_match_policy")
+            .unwrap_or_else(|| "registrable-domain".to_owned()),
+    };
+    let request = centraid_seat::locker::FillRequest {
+        item_id: item_id.to_owned(),
+        page_origin: page_origin.to_owned(),
+        column: column.to_owned(),
+    };
+    // THE ORDER IS THE POINT, and it is v0's: MATCH, then RECEIPT, then
+    // plaintext. The match runs here first so a wrong-site attempt writes
+    // nothing — `crates/apps/locker::matches_origin`, the same function
+    // `fill_grant` re-runs a moment later, which is deliberate rather than
+    // redundant: this wall decides whether a receipt is owed, and that one
+    // decides whether a key is used, and neither can be the other's proof.
+    let Some(origin) = centraid_apps_locker::page_origin(page_origin) else {
+        return Answer::error(
+            id,
+            locker::LockerCode::OriginMismatch.as_str(),
+            "that is not a page origin",
+        );
+    };
+    if !fill_row.matches(&origin) {
+        return Answer::error(
+            id,
+            locker::LockerCode::OriginMismatch.as_str(),
+            "this page is not the site this login is for",
+        );
+    }
+    // AND THE SESSION IS CHECKED BEFORE THE RECEIPT IS WRITTEN. A locked seat
+    // that had already written one would put a fill in the access history that
+    // never happened.
+    if !seat.locker.unlocked(now_ms() as i64) {
+        return Answer::error(
+            id,
+            locker::LockerCode::Locked.as_str(),
+            "Locker is locked — unlock it in Centraid.",
+        );
+    }
+    let receipt_id = match write_reveal_receipt(seat, item_id, sealed.name(), &origin).await {
+        Ok(receipt_id) => receipt_id,
+        Err(error) => return Answer::error(id, "refused", error),
+    };
+    let minted = receipt_id.clone();
+    let filled = match seat
+        .locker
+        .fill(&request, &fill_row, now_ms() as i64, &move |_, _| {
+            Ok(minted.clone())
+        }) {
+        Ok(filled) => filled,
+        // A REFUSAL AFTER THE RECEIPT IS STILL A REFUSAL. The receipt says the
+        // fill was asked for and authorised; the member sees an attempt that
+        // produced no value, which is the honest record.
+        Err(refusal) => return Answer::error(id, refusal.code.as_str(), refusal.message),
+    };
+    Answer::one(SeatMessage::Result {
+        id,
+        value: serde_json::json!({
+            "value": filled.value,
+            "receipt_id": filled.receipt_id,
+            "expires_at_ms": filled.expires_at_ms,
+            "origin": filled.origin,
+        }),
+    })
+}
+
+/// Write the `locker.reveal_receipt` the fill owes, answering its id.
+async fn write_reveal_receipt(
+    seat: &Seat,
+    item_id: &str,
+    column: &str,
+    origin: &str,
+) -> Result<String, String> {
+    let request = wire::Request {
+        kind: Some(wire::request::Kind::Command(wire::Command {
+            name: "locker.reveal_receipt".to_owned(),
+            // COLUMN NAMES, NEVER VALUES — the command's own rule
+            // (`crates/vault/src/commands/locker.rs`): the access history shows
+            // `columns: ["password"]` and an `origin` rides only a `fill`,
+            // because that is the only kind that happened on a page.
+            input: serde_json::to_vec(&serde_json::json!({
+                "object_type": "locker.item",
+                "item_id": item_id,
+                "columns": [column],
+                "kind": "fill",
+                "origin": origin,
+            }))
+            .map_err(|error| error.to_string())?,
+            ..wire::Command::default()
+        })),
+    };
+    match seat.core.call(request).await {
+        Ok(wire::Response {
+            kind: Some(wire::response::Kind::Command(outcome)),
+        }) => {
+            if outcome.receipt_id.is_empty() {
+                Err(format!(
+                    "the reveal receipt was not written: {}",
+                    outcome.reason
+                ))
+            } else {
+                Ok(outcome.receipt_id)
+            }
+        }
+        Ok(_) => Err("the core answered with another shape".to_owned()),
+        Err(error) => Err(error),
     }
 }
 
