@@ -4052,3 +4052,498 @@ pub fn notes_editor_note(
         .map_err(door)?;
     Ok(content_id)
 }
+
+// ---------------------------------------------------------------------------
+// THE PEOPLE AXIS OF YEAR-3 VOLUME (#1020, wave 4 slot 4c, D-1020-D3-7).
+// ---------------------------------------------------------------------------
+
+/// The declared shape of year-3 People volume.
+///
+/// **The gap this fills.** v0's year-3 generator writes 5,000 `core_party` rows
+/// and **no `people_profile`, no `people_important_date`, no reminder and no
+/// list at all** (`packages/test-kit/src/year3-vault.ts:77`-`:92`; `grep -c
+/// people_profile` over the whole generator is zero). So People's stated
+/// ceilings — the 20–10,000 roster window, the dashboard's 9,999-row fold, the
+/// 500-row trash shelf — have no golden artifact behind them, which is the same
+/// hole lane D3 found under Tally's ledger. A window nobody can seed is a window
+/// nobody can hold.
+///
+/// **A count is not a distribution** (`year3-shape.ts:18`-`:25`): every field
+/// here is *declared*, and changing one changes what year-3 People volume means
+/// repo-wide, so it moves with the journey ledger's year-3 table and a version
+/// bump.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3PeopleShape {
+    /// CRM people — a `people_profile` over a `core_party`. Five thousand is
+    /// v0's own `parties` count, so the two axes describe one vault.
+    pub people: usize,
+    /// In reversible trash, so the 500-row shelf has something to clamp.
+    pub trashed: usize,
+    /// Starred — **a flags-scheme tag on the PARTY**, not a column, so the
+    /// fixture exercises the join every People surface makes.
+    pub starred: usize,
+    /// Owner lists, and how many people are filed into one.
+    pub lists: usize,
+    pub filed: usize,
+    /// Important dates, and how many carry a live reminder. The dashboard's
+    /// Upcoming rail is a fold over the reminders alone.
+    pub important_dates: usize,
+    pub reminders: usize,
+    /// Logged interactions: an activity, an `about` link and an annotation each.
+    pub interactions: usize,
+    /// The owner's own notes on people.
+    pub notes: usize,
+    /// Live share bindings, which is what `linked` counts. **At most one per
+    /// party** — the DDL's partial unique index says so — so this is also the
+    /// number of linked people.
+    pub bindings: usize,
+    /// Open obligations, the cross-app table People reads and Tally owns.
+    pub obligations: usize,
+    /// The first day a person was added; every person is one day later.
+    pub start: &'static str,
+}
+
+/// THE YEAR-3 PEOPLE PROFILE: five thousand people over a 10,000-row window,
+/// with 250 in the trash and 12,000 important dates.
+///
+/// The numbers a ceiling is stated at, and each one is the reason it is here:
+///
+/// * **5,000 people against a declared 10,000-row window.** The roster's
+///   maximum is the widest in the tree and nothing explains it (D-1020-PE4), so
+///   the fixture sits inside it on purpose: what the year-3 run measures is the
+///   walk, not the refusal.
+/// * **250 trashed against a 500-row shelf.** The trash shelf is the one People
+///   read whose sort column is nullable, so it cannot be continued past one
+///   page (D-1020-PE5) — and a fixture of 250 proves the shelf without tripping
+///   the refusal a fixture of 600 would.
+/// * **12,000 important dates, 6,000 of them reminding.** The dashboard folds
+///   Upcoming over every live reminder in one window, so the rail's cost is the
+///   reminder count and not the person count.
+/// * **20,000 interactions over 5,000 people.** The recent rail reads 30, and
+///   the `IN`-bounded activity-link read that bounds it is over the whole
+///   roster window — which is where the fan-out is felt.
+pub const YEAR3_PEOPLE: Year3PeopleShape = Year3PeopleShape {
+    people: 5_000,
+    trashed: 250,
+    starred: 400,
+    lists: 20,
+    filed: 3_000,
+    important_dates: 12_000,
+    reminders: 6_000,
+    interactions: 20_000,
+    notes: 4_000,
+    bindings: 900,
+    obligations: 600,
+    start: "2097-01-01",
+};
+
+/// What one year-3 People seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3PeopleCounts {
+    pub parties: usize,
+    pub profiles: usize,
+    pub live_profiles: usize,
+    pub trashed: usize,
+    pub starred: usize,
+    pub lists: usize,
+    pub tags: usize,
+    pub important_dates: usize,
+    pub reminders: usize,
+    pub activities: usize,
+    pub links: usize,
+    pub annotations: usize,
+    pub bindings: usize,
+    pub obligations: usize,
+}
+
+/// Seed the People axis of year-3 volume into `connection`.
+///
+/// **Creation instants repeat on purpose.** People share a `created_at` in
+/// pairs, because the keyset page's whole reason for carrying the pk is that
+/// the sort key is not unique (#1020 apps seam 3) — a 5,000-person fixture with
+/// distinct instants cannot trip the page boundary the cursor exists for, and
+/// the roster's window is exactly such a walk.
+///
+/// The whole run is one transaction, as v0's seeder is (`year3-vault.ts:66`): a
+/// half-seeded roster is not a smaller fixture, it is a roster whose counts do
+/// not reconcile.
+pub fn year3_people(
+    connection: &Connection,
+    shape: Year3PeopleShape,
+    seed: u64,
+) -> KitResult<Year3PeopleCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    connection.execute_batch("BEGIN IMMEDIATE").map_err(door)?;
+    match seed_year3_people(connection, shape, seed) {
+        Ok(counts) => {
+            connection.execute_batch("COMMIT").map_err(door)?;
+            Ok(counts)
+        }
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
+/// The scheme and concept ids the People axis files into, created once.
+const PEOPLE_LIST_SCHEME: &str = "y3-scheme-lists";
+const PEOPLE_FLAGS_SCHEME: &str = "y3-scheme-flags";
+const PEOPLE_RELATIONS_SCHEME: &str = "y3-scheme-relations";
+const PEOPLE_STARRED_CONCEPT: &str = "y3-concept-starred";
+const PEOPLE_ABOUT_CONCEPT: &str = "y3-concept-about";
+const PEOPLE_TOUCH_CONCEPT: &str = "y3-concept-touch";
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "one generator, one reading order; see `seed_ledger`"
+)]
+fn seed_year3_people(
+    connection: &Connection,
+    shape: Year3PeopleShape,
+    seed: u64,
+) -> KitResult<Year3PeopleCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let mut stream = Seeded::new(seed);
+    let mut counts = Year3PeopleCounts::default();
+    let created = format!("{}T00:00:00.000Z", shape.start);
+
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+             VALUES (?1, 'person', 'Year Three', ?2, ?2)",
+            rusqlite::params![YEAR3_OWNER_PARTY, created],
+        )
+        .map_err(door)?;
+    counts.parties += 1;
+
+    // --- the vocabulary: three schemes, the star, the two relation concepts
+    // and the owner's lists.
+    for (scheme_id, uri, title) in [
+        (
+            PEOPLE_LIST_SCHEME,
+            "https://centraid.dev/schemes/lists",
+            "Lists",
+        ),
+        (
+            PEOPLE_FLAGS_SCHEME,
+            "https://centraid.dev/schemes/flags",
+            "Flags",
+        ),
+        (
+            PEOPLE_RELATIONS_SCHEME,
+            "urn:duaility:relations",
+            "Link relation types",
+        ),
+    ] {
+        connection
+            .execute(
+                "INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version, created_at)
+                 VALUES (?1, ?2, ?3, 'centraid', '1', ?4)",
+                rusqlite::params![scheme_id, uri, title, created],
+            )
+            .map_err(door)?;
+    }
+    for (concept_id, scheme_id, notation, label) in [
+        (
+            PEOPLE_STARRED_CONCEPT,
+            PEOPLE_FLAGS_SCHEME,
+            "starred",
+            "Starred",
+        ),
+        (
+            PEOPLE_ABOUT_CONCEPT,
+            PEOPLE_RELATIONS_SCHEME,
+            "about",
+            "About",
+        ),
+        (
+            PEOPLE_TOUCH_CONCEPT,
+            PEOPLE_RELATIONS_SCHEME,
+            "call",
+            "Call",
+        ),
+    ] {
+        connection
+            .execute(
+                "INSERT INTO core_concept
+                   (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                    broader_concept_id, definition, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, NULL, NULL, NULL, ?5, ?5)",
+                rusqlite::params![concept_id, scheme_id, notation, label, created],
+            )
+            .map_err(door)?;
+    }
+    for index in 0..shape.lists {
+        connection
+            .execute(
+                "INSERT INTO core_concept
+                   (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                    broader_concept_id, definition, created_at, updated_at)
+                 VALUES (?1, ?2, ?1, ?3, NULL, NULL, NULL, ?4, ?4)",
+                rusqlite::params![
+                    id("y3-list", index),
+                    PEOPLE_LIST_SCHEME,
+                    format!("List {index:06}"),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.lists += 1;
+    }
+
+    // --- the people. TWO PER CREATION INSTANT, so the keyset's pk tiebreak is
+    // exercised at every page boundary of the roster's walk.
+    for index in 0..shape.people {
+        let party_id = id("y3-person", index);
+        let added = day(shape.start, index / 2);
+        let stamped = format!("{added}T09:00:00.000Z");
+        connection
+            .execute(
+                "INSERT INTO core_party
+                   (party_id, kind, display_name, sort_name, birth_date,
+                    avatar_content_id, created_at, updated_at)
+                 VALUES (?1, 'person', ?2, NULL, NULL, NULL, ?3, ?3)",
+                rusqlite::params![party_id, format!("Person {index:06}"), stamped],
+            )
+            .map_err(door)?;
+        counts.parties += 1;
+        // A CADENCE OF ZERO IS "NO CADENCE" and is never overdue, so one person
+        // in five carries one — the Reconnect fold has to have something to
+        // exclude as well as something to include.
+        let cadence = if index % 5 == 0 { 0 } else { 7 + (index % 90) };
+        let trashed = index < shape.trashed;
+        connection
+            .execute(
+                "INSERT INTO people_profile
+                   (profile_id, party_id, role, nickname, avatar_color, cadence_days,
+                    last_contacted_at, met, created_at, updated_at, deleted_at, purge_at)
+                 VALUES (?1, ?2, ?3, NULL, NULL, ?4, ?5, NULL, ?6, ?6, ?7, ?8)",
+                rusqlite::params![
+                    id("y3-profile", index),
+                    party_id,
+                    format!("Role {}", index % 40),
+                    i64::try_from(cadence).unwrap_or_default(),
+                    (index % 3 == 0).then(|| format!("{}T09:00:00.000Z", day(shape.start, index))),
+                    stamped,
+                    trashed.then(|| stamped.clone()),
+                    trashed.then(|| format!("{}T09:00:00.000Z", day(shape.start, index + 30))),
+                ],
+            )
+            .map_err(door)?;
+        counts.profiles += 1;
+        if trashed {
+            counts.trashed += 1;
+        } else {
+            counts.live_profiles += 1;
+        }
+    }
+
+    // --- the star, and the filing. Both are `core_tag` rows on the PARTY, which
+    // is the join every People surface makes.
+    let mut tag_index = 0usize;
+    for index in 0..shape.starred.min(shape.people) {
+        connection
+            .execute(
+                "INSERT INTO core_tag
+                   (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                    confidence, tagged_at, updated_at)
+                 VALUES (?1, 'core.party', ?2, ?3, ?4, NULL, ?5, ?5)",
+                rusqlite::params![
+                    id("y3-tag", tag_index),
+                    id("y3-person", index * 7 % shape.people),
+                    PEOPLE_STARRED_CONCEPT,
+                    YEAR3_OWNER_PARTY,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        tag_index += 1;
+        counts.starred += 1;
+        counts.tags += 1;
+    }
+    for index in 0..shape.filed.min(shape.people) {
+        connection
+            .execute(
+                "INSERT INTO core_tag
+                   (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                    confidence, tagged_at, updated_at)
+                 VALUES (?1, 'core.party', ?2, ?3, ?4, NULL, ?5, ?5)",
+                rusqlite::params![
+                    id("y3-tag", tag_index),
+                    id("y3-person", index),
+                    id("y3-list", index % shape.lists.max(1)),
+                    YEAR3_OWNER_PARTY,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        tag_index += 1;
+        counts.tags += 1;
+    }
+
+    // --- the important dates. Half remind, and **one in every hundred is a
+    // leap day**, because `02-29` is the case the birthday rail clamps
+    // (D-1020-PE7) and a fixture without one cannot show it.
+    for index in 0..shape.important_dates {
+        let party = index % shape.people;
+        let leap = index % 100 == 0;
+        let month = if leap { 2 } else { 1 + (index % 12) };
+        let day_of_month = if leap { 29 } else { 1 + (index % 28) };
+        let reminder = i64::from(index < shape.reminders);
+        connection
+            .execute(
+                "INSERT INTO people_important_date
+                   (date_id, party_id, label, month_day, reminder_on, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+                rusqlite::params![
+                    id("y3-date", index),
+                    id("y3-person", party),
+                    if leap { "Birthday" } else { "Anniversary" },
+                    format!("{month:02}-{day_of_month:02}"),
+                    reminder,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.important_dates += 1;
+        if reminder == 1 {
+            counts.reminders += 1;
+        }
+    }
+
+    // --- the interactions: an activity, an `about` link and an annotation each.
+    // The link and annotation indexes ARE the interaction index here, and the
+    // annotation index carries on past it for the owner's own notes below.
+    let mut annotation_index = 0usize;
+    for index in 0..shape.interactions {
+        let party = stream.upto(shape.people);
+        let activity_id = id("y3-activity", index);
+        let at = format!(
+            "{}T{:02}:00:00.000Z",
+            day(shape.start, index / 20),
+            index % 24
+        );
+        connection
+            .execute(
+                "INSERT INTO core_activity
+                   (activity_id, actor_party_id, kind_concept_id, started_at, ended_at,
+                    location_place_id, source_app_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, NULL, NULL, NULL, ?4)",
+                rusqlite::params![activity_id, YEAR3_OWNER_PARTY, PEOPLE_TOUCH_CONCEPT, at],
+            )
+            .map_err(door)?;
+        counts.activities += 1;
+        connection
+            .execute(
+                "INSERT INTO core_link
+                   (link_id, from_type, from_id, to_type, to_id, relation_concept_id,
+                    valid_from, valid_to, asserted_by, provenance_id, updated_at)
+                 VALUES (?1, 'core.activity', ?2, 'core.party', ?3, ?4, ?5, NULL, 'owner', NULL, ?5)",
+                rusqlite::params![
+                    id("y3-link", index),
+                    activity_id,
+                    id("y3-person", party),
+                    PEOPLE_ABOUT_CONCEPT,
+                    at
+                ],
+            )
+            .map_err(door)?;
+        counts.links += 1;
+        connection
+            .execute(
+                "INSERT INTO knowledge_annotation
+                   (annotation_id, author_party_id, target_type, target_id, selector_json,
+                    body_text, created_at, updated_at)
+                 VALUES (?1, ?2, 'core.activity', ?3, NULL, ?4, ?5, ?5)",
+                rusqlite::params![
+                    id("y3-annotation", annotation_index),
+                    YEAR3_OWNER_PARTY,
+                    activity_id,
+                    format!("Touch {index:06}"),
+                    at
+                ],
+            )
+            .map_err(door)?;
+        annotation_index += 1;
+        counts.annotations += 1;
+    }
+
+    // --- the owner's own notes, on the PARTY rather than on an activity.
+    for index in 0..shape.notes {
+        connection
+            .execute(
+                "INSERT INTO knowledge_annotation
+                   (annotation_id, author_party_id, target_type, target_id, selector_json,
+                    body_text, created_at, updated_at)
+                 VALUES (?1, ?2, 'core.party', ?3, NULL, ?4, ?5, ?5)",
+                rusqlite::params![
+                    id("y3-annotation", annotation_index),
+                    YEAR3_OWNER_PARTY,
+                    id("y3-person", index % shape.people),
+                    format!("Note {index:06}"),
+                    format!("{}T12:00:00.000Z", day(shape.start, index / 4))
+                ],
+            )
+            .map_err(door)?;
+        annotation_index += 1;
+        counts.annotations += 1;
+    }
+
+    // --- the share plane. AT MOST ONE LIVE BINDING PER PARTY: the DDL carries a
+    // partial unique index on `(party_id) WHERE revoked_at IS NULL`, which is
+    // why `vault_count` is 0 or 1 and never more (finding PE-F6).
+    for index in 0..shape.bindings.min(shape.people) {
+        connection
+            .execute(
+                "INSERT INTO share_party_vault_binding
+                   (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
+                 VALUES (?1, ?2, ?3, NULL, ?4, NULL)",
+                rusqlite::params![
+                    id("y3-binding", index),
+                    id("y3-person", index * 5 % shape.people),
+                    id("y3-vault", index),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.bindings += 1;
+    }
+
+    // --- the obligations. TALLY'S TABLE, and the only cross-app read in the
+    // tree: an empty one would make the person sheet's debts rail unmeasurable.
+    for index in 0..shape.obligations {
+        let other = id("y3-person", index % shape.people);
+        connection
+            .execute(
+                "INSERT INTO tally_obligation
+                   (obligation_id, from_party, to_party, amount_minor, currency, reason,
+                    incurred_on, settled_at, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, 'GBP', ?5, ?6, ?7, ?8, ?8)",
+                rusqlite::params![
+                    id("y3-obligation", index),
+                    if index % 2 == 0 {
+                        YEAR3_OWNER_PARTY.to_owned()
+                    } else {
+                        other.clone()
+                    },
+                    if index % 2 == 0 {
+                        other
+                    } else {
+                        YEAR3_OWNER_PARTY.to_owned()
+                    },
+                    i64::try_from(100 + index * 7).unwrap_or_default(),
+                    format!("Reason {index:04}"),
+                    day(shape.start, index),
+                    // ONE IN FOUR IS SETTLED, so the sheet's open-debt filter
+                    // has something to exclude.
+                    (index % 4 == 0).then(|| created.clone()),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.obligations += 1;
+    }
+
+    Ok(counts)
+}

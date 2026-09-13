@@ -58,6 +58,12 @@ export const COPY_LEAVES: Record<string, readonly string[]> = {
     "packages/blueprints/apps/locker/item-copy.ts",
   ],
   notes: ["packages/blueprints/apps/notes/view-copy.ts"],
+  // People's ONE leaf, and the app with the largest action surface behind it.
+  // Nothing here keys on a route id: People's ambient sentences are `STATUS`
+  // functions of counts, not a `ROUTE_STATUS` table — so `copy/people.json`
+  // carries its shelves and an empty `routes`, and `crates/apps/people`'s own
+  // test asserts that shape rather than the route-gap claim Tally makes.
+  people: ["packages/blueprints/apps/people/people-copy.ts"],
   photos: ["packages/blueprints/apps/photos/shared-copy.ts"],
   shared: ["packages/blueprints/apps/_shared/shared-copy.ts"],
   tally: [
@@ -75,6 +81,7 @@ export const SHELF_TABLES: Record<string, string> = {
   docs: "packages/blueprints/apps/docs/shelves.ts",
   locker: "packages/blueprints/apps/locker/shelves.ts",
   notes: "packages/blueprints/apps/notes/shelves.ts",
+  people: "packages/blueprints/apps/people/shelves.ts",
   tally: "packages/blueprints/apps/tally/shelves.ts",
 };
 
@@ -123,8 +130,10 @@ function recordKeys(source: string, constName: string): string[] {
  * route id it is keyed on is neither — it is the band's, which every shelf table
  * declares as `rootBandId` in its `createShelfRoutes` call. This used to be the
  * literal `"balances"`, which is Tally's; Docs' root is `list`
- * (`docs/shelves.ts:55`), so `copy/docs.json` named a shelf `balances` that no
- * Docs screen has (#1020, slot 4c finding).
+ * (`docs/shelves.ts:55`), Locker's is `items` (`locker/shelves.ts:62`) and
+ * People's is `people`, so those three leaves named a shelf `balances` that no
+ * screen of theirs has (#1020, slot 4c, filed twice independently — finding
+ * PE-F7 here and the Notes lane's).
  *
  * The declaration is followed one hop: `rootBandId: ALL_ID` and
  * `const ALL_ID = "list"`, or a literal in place.
@@ -144,14 +153,21 @@ function rootBandId(source: string): string {
   return resolved?.groups?.literal ?? "";
 }
 
-/** The `{ id, label, segment }` rows of a shelf table, read as text. */
+/**
+ * The `{ id, label, segment }` rows of a shelf table, read as text.
+ *
+ * **Deduplicated by route id**, because a shelf table may list one destination
+ * in two arrays — People's `ROUTED` and `DESTINATION_SHELVES` share three rows
+ * (`people/shelves.ts:28`, `:45`) — and a shelf listed twice is still one
+ * shelf. Tally's fifteen are distinct, so its emitted table does not move.
+ */
 function shelfRows(
   source: string
 ): { id: string; label: string; segment: string }[] {
   const ROW =
     /\{\s*id:\s*(?<id>null|[A-Za-z][A-Za-z0-9_]*),\s*label:\s*"(?<label>[^"]*)",\s*segment:\s*"(?<segment>[^"]*)"\s*\}/gu;
   const root = rootBandId(source);
-  return [...source.matchAll(ROW)].map((match) => {
+  const rows = [...source.matchAll(ROW)].map((match) => {
     const groups = match.groups ?? {};
     return {
       // The ROUTE id, which for the root shelf is not its empty segment: the
@@ -161,6 +177,9 @@ function shelfRows(
       segment: groups.segment ?? "",
     };
   });
+  return rows.filter(
+    (row, at) => rows.findIndex((other) => other.id === row.id) === at
+  );
 }
 
 /**

@@ -1,0 +1,81 @@
+{
+  "$generatedBy": "contracts/tools/export-copy.ts",
+  "app": "people",
+  "strings": {
+    "APP_TITLE": "People",
+    "CADENCE_NEVER": "Never",
+    "SEARCH_TITLE": "Search",
+    "TOUCH_TITLE": "Touch"
+  },
+  "functions": [
+    "filterChips",
+    "channelKindLabel",
+    "touchKindLabel",
+    "ROUTE_TITLES",
+    "VERBS",
+    "FILTER_CHIPS",
+    "TOUCH_TILES",
+    "LINK_TOUCH_TILES",
+    "SECTIONS",
+    "LINK",
+    "LOG_KINDS",
+    "CHANNEL_KIND_LABEL",
+    "TOUCH_KIND_LABEL",
+    "CADENCE_CHIPS",
+    "FIELDS",
+    "FRAGMENTS",
+    "MERGE_HEADS",
+    "EMPTY",
+    "FIRST_RUN",
+    "SENTENCES",
+    "CONFIRMS",
+    "STATUS",
+    "OUTCOMES",
+    "REFUSALS",
+    "LABELS"
+  ],
+  "routes": [],
+  "moreRoutes": [],
+  "shelves": [
+    {
+      "id": "people",
+      "label": "People",
+      "segment": ""
+    },
+    {
+      "id": "touch",
+      "label": "Touch",
+      "segment": "touch"
+    },
+    {
+      "id": "search",
+      "label": "Search",
+      "segment": "search"
+    },
+    {
+      "id": "person",
+      "label": "Person",
+      "segment": "person"
+    },
+    {
+      "id": "log",
+      "label": "Log a touch",
+      "segment": "log"
+    },
+    {
+      "id": "edit",
+      "label": "Edit",
+      "segment": "edit"
+    },
+    {
+      "id": "trash",
+      "label": "Trash",
+      "segment": "trash"
+    },
+    {
+      "id": "merge",
+      "label": "Merge",
+      "segment": "merge"
+    }
+  ]
+}

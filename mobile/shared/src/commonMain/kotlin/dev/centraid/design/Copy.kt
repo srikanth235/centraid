@@ -75,6 +75,13 @@ public object CentraidCopy {
         public const val WINDOW_END_VERB: String = "Show older"
     }
 
+    public object People {
+        public const val APP_TITLE: String = "People"
+        public const val CADENCE_NEVER: String = "Never"
+        public const val SEARCH_TITLE: String = "Search"
+        public const val TOUCH_TITLE: String = "Touch"
+    }
+
     public object Photos {
         public const val PHOTOS_ARCHIVE: String = "Archive"
         public const val PHOTOS_ARCHIVE_EMPTY: String = "Archive is empty."
