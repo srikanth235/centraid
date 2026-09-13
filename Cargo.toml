@@ -10,6 +10,7 @@ members = [
   "crates/apps/docs",
   "crates/apps/kit",
   "crates/apps/locker",
+  "crates/apps/notes",
   "crates/apps/photos",
   "crates/apps/tally",
 ]

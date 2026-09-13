@@ -1,0 +1,29 @@
+[package]
+name = "centraid-apps-notes"
+description = "Notes as a projection of the vault: six queries, fifteen actions, and the powerbox over crates/search (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_apps_notes"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-apps-kit = { path = "../kit" }
+# The FTS door. An app holds no `MATCH` (the kit's grammar has no production for
+# one); the powerbox and `search` ask this crate (D-1020-N1).
+centraid-search = { path = "../../search" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+centraid-api-proto = { path = "../../api-proto" }
+centraid-ontology = { path = "../../ontology" }
+centraid-vault = { path = "../../vault" }
+prost.workspace = true
+rusqlite.workspace = true
