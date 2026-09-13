@@ -11,6 +11,7 @@ members = [
   "crates/apps/kit",
   "crates/apps/locker",
   "crates/apps/notes",
+  "crates/apps/people",
   "crates/apps/photos",
   "crates/apps/tally",
 ]
