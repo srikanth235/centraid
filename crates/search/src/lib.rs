@@ -43,9 +43,12 @@
 //!    secret cannot become a link target by *adding a probe*. Asking for it is a
 //!    typed [`SearchError::NotADomain`].
 //!
-//! `crates/search/tests/secret_free.rs` plants `lk1:` and `sealed:v1:` bytes in
-//! every sealed column this model has and asserts the door answers nothing that
-//! carries them.
+//! `crates/search/tests/door.rs` plants a secret in every sealed column the
+//! registry names — **sealed by `crates/vault::custody` itself**, the
+//! `sealed:v1:` envelope for a connector credential and the member key's `lk1:`
+//! cell for Locker's — and asserts the door answers nothing carrying either the
+//! plaintext or the ciphertext. A hand-typed prefix would prove something about
+//! a string; this proves something about the vault.
 //!
 //! ## What this crate is NOT
 //!

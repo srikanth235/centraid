@@ -170,6 +170,26 @@ export function canonicaliseBundle(
   return JSON.parse(canonical) as NotesParityBundle;
 }
 
+/**
+ * The `index`-th id, or a throw naming what was missing.
+ *
+ * `noUncheckedIndexedAccess` is on, and it is right to be: a script that
+ * referenced a seed row the seed did not write would otherwise pass `undefined`
+ * into a bind and produce a fixture with a hole in it. A length check does not
+ * narrow an indexed read, so the narrowing is this function.
+ */
+export function at(
+  ids: readonly string[],
+  index: number,
+  what: string
+): string {
+  const id = ids[index];
+  if (id === undefined) {
+    throw new Error(`the seed wrote no ${what} at index ${index}`);
+  }
+  return id;
+}
+
 /** Deep-sorted JSON, so two runs that agree on values agree on bytes. */
 export function stableJson(value: unknown): string {
   const sorted = (node: unknown): unknown => {

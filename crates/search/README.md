@@ -29,13 +29,13 @@ A result is a `Target`: five strings and a snippet, every one read from a column
 2. `SqliteDoor::open` re-checks each domain's **live index columns** against the same registry. v0 throws at DDL-build time for an FTS spec naming a sealed column (issue #293) — FTS exclusion is one of the six sealed-column enforcement points — and this keeps the DDL and the door from disagreeing about a file another build wrote.
 3. **Locker is not a domain.** The powerbox reaches seven and Locker is not one of them, so a secret cannot become a link target by adding a probe. Asking is `SearchError::NotADomain`, never an empty page — an empty page reads as "no matches", which is a different claim about the vault.
 
-`tests/door.rs` plants a marker in every sealed column this model has, proves the plant is real, and asserts no target from any domain carries it.
+`tests/door.rs` plants a secret in every sealed column the registry names — sealed by `crates/vault::custody` itself, the `sealed:v1:` envelope for a connector credential and the member key's `lk1:` cell for Locker's, never a hand-typed prefix — proves each cell is real ciphertext bound to its own row, and asserts that no target from any domain carries the plaintext OR the ciphertext. The planted set is compared against `sealed_physical_columns`, so a sealed column added to the model and not planted fails rather than being skipped.
 
 ## The seven domains
 
 | App | Entity | Label | Subtitle |
 | --- | --- | --- | --- |
-| notes | `knowledge.note` | `title` | the decoded body, capped at 200 chars |
+| notes | `knowledge.note` | `title` | the decoded body, capped at 200 chars — the subtitle v0 declares and has never served |
 | people | `core.party` | `display_name` | — (falls back to the app) |
 | agenda | `core.event` | `summary` | `dtstart` |
 | tasks | `schedule.task` | `title` | `due_at` |

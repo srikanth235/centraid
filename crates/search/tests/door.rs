@@ -10,10 +10,12 @@
 //! Not "the door filters secrets out" — a filter is a thing someone edits. Three
 //! independent properties, each with its own mechanism (#1020, D-1020-N1):
 //!
-//! 1. every sealed column in the model really does hold a planted marker, so the
-//!    run is not vacuous;
-//! 2. no `Target` from any of the seven domains carries one, for a query that
-//!    matches the marker itself;
+//! 1. every sealed column the registry names really does hold a secret sealed
+//!    by `crates/vault::custody` — the vault's own `sealed:v1:` envelope and its
+//!    own `lk1:` member-key cell, not a hand-typed prefix — so the run is
+//!    neither vacuous nor a claim about a string;
+//! 2. no `Target` from any of the seven domains carries the PLAINTEXT or the
+//!    CIPHERTEXT, for a query that asks for each by name;
 //! 3. the entities that HAVE sealed columns are not domains at all, and asking
 //!    for one is a typed refusal rather than an empty page — the empty page is
 //!    what a filter would produce, and it reads as "no matches".
@@ -23,12 +25,28 @@ use centraid_apps_kit::page::PageRequest;
 use centraid_search::{
     Answer, DOMAINS, Principal, Search, SearchError, SearchRequest, SqliteDoor, Target,
 };
+use centraid_vault::custody::locker_key::{
+    LOCKER_CIPHERTEXT_PREFIX, encrypt_under_locker_key, is_locker_ciphertext, locker_aad,
+};
+use centraid_vault::custody::seal::{SEALED_PREFIX, is_sealed_value, seal_aad, seal_value};
 use rusqlite::Connection;
 
-/// The two sealed-value prefixes this model mints. `sealed:v1:` is the envelope
-/// `packages/vault/src/schema/sealed.ts` writes; `lk1:` is the locker member
-/// key's. Planting both is what makes the test cover both classes (census §D2).
-const MARKERS: [&str; 2] = ["sealedv1zqmarker", "lk1zqmarker"];
+/// THE SECRETS THIS FIXTURE PLANTS, AS THE PRODUCT WRITES THEM.
+///
+/// Not a hand-made prefix: `crates/vault::custody` is what seals a cell, and a
+/// test that typed `"sealed:v1:…"` itself would be proving something about a
+/// string rather than about the vault. `seal_value` is the `sealed:v1:`
+/// envelope every sealed column takes; `encrypt_under_locker_key` is the `lk1:`
+/// form the Locker member key writes (wave 4 lane Locker) — and the two are
+/// different classes, so both are planted (census §D2).
+///
+/// The PLAINTEXT is what a member would search for and the CIPHERTEXT is what
+/// the column holds; the test asserts neither reaches a target.
+const PLAINTEXT: &str = "zqmarker recovery phrase seventeen";
+
+/// A key by value. There is no ambient seal key in the search crate, and there
+/// is none here either: the bytes are the fixture's.
+const KEY: [u8; 32] = [7u8; 32];
 
 const NOW: &str = "2099-06-01T09:00:00.000Z";
 
@@ -182,41 +200,124 @@ fn seed(connection: &Connection) {
         )
         .expect("an asset is inserted");
 
-    // THE PLANTED SECRETS. One marker per sealed column named by the registry.
+    // THE PLANTED SECRETS, sealed the way the product seals them.
+    //
+    // Locker's cells take the member key's `lk1:` form and the AAD binds them to
+    // their row and key id; the connector's take the `sealed:v1:` envelope whose
+    // AAD binds table, column and row. Neither is typed here: both come out of
+    // `crates/vault::custody`, so what the columns hold is what a real vault
+    // holds.
+    let locker = |column: &str| {
+        encrypt_under_locker_key(&KEY, LOCKER_KEY_ID, "item-1", PLAINTEXT)
+            .unwrap_or_else(|error| panic!("{column} seals: {error}"))
+    };
     connection
         .execute(
             "INSERT INTO locker_item
                (item_id, type, title, username, password, url, otp_seed, notes,
-                card_number, cvv, content, created_at)
+                card_number, cvv, content, created_at, key_id)
              VALUES ('item-1', 'login', 'Cabin booking site', 'priya', ?1, 'https://cabins.example',
-                     ?1, ?2, ?1, ?1, ?1, ?3)",
-            rusqlite::params![MARKERS[0], MARKERS[1], NOW],
+                     ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                locker("password"),
+                locker("otp_seed"),
+                // `notes` is NOT a sealed column and is deliberately not indexed
+                // either: it routinely carries recovery codes (`schema/fts.ts`).
+                "the kennel is booked",
+                locker("card_number"),
+                locker("cvv"),
+                locker("content"),
+                NOW,
+                LOCKER_KEY_ID
+            ],
         )
         .expect("a locker item is inserted");
     connection
         .execute(
             "INSERT INTO locker_item_field
-               (field_id, item_id, label, kind, value_sealed, created_at)
-             VALUES ('field-1', 'item-1', 'Recovery code', 'sealed', ?1, ?2)",
-            rusqlite::params![MARKERS[0], NOW],
+               (field_id, item_id, label, kind, value_sealed, created_at, key_id)
+             VALUES ('field-1', 'item-1', 'Recovery code', 'sealed', ?1, ?2, ?3)",
+            rusqlite::params![
+                encrypt_under_locker_key(&KEY, LOCKER_KEY_ID, "field-1", PLAINTEXT)
+                    .expect("a field seals"),
+                NOW,
+                LOCKER_KEY_ID
+            ],
         )
         .expect("a sealed field is inserted");
     connection
         .execute(
-            "INSERT INTO locker_item_passkey (item_id, rp_id, private_key, created_at)
-             VALUES ('item-1', 'cabins.example', ?1, ?2)",
-            rusqlite::params![MARKERS[1], NOW],
+            "INSERT INTO locker_item_passkey (item_id, rp_id, private_key, created_at, key_id)
+             VALUES ('item-1', 'cabins.example', ?1, ?2, ?3)",
+            rusqlite::params![
+                encrypt_under_locker_key(&KEY, LOCKER_KEY_ID, "item-1", PLAINTEXT)
+                    .expect("a passkey seals"),
+                NOW,
+                LOCKER_KEY_ID
+            ],
         )
         .expect("a passkey is inserted");
+    let credential = |column: &str| {
+        seal_value(
+            &KEY,
+            &seal_aad("sync_connection_credential", column, "connection-1"),
+            PLAINTEXT,
+        )
+        .unwrap_or_else(|error| panic!("{column} seals: {error}"))
+    };
     connection
         .execute(
             "INSERT INTO sync_connection_credential
                (connection_id, cred_kind, allowed_hosts, client_secret, access_token,
                 refresh_token, api_key, refresh_capability)
-             VALUES ('connection-1', 'oauth2', '[]', ?1, ?1, ?1, ?1, ?1)",
-            [MARKERS[0]],
+             VALUES ('connection-1', 'oauth2', '[]', ?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                credential("client_secret"),
+                credential("access_token"),
+                credential("refresh_token"),
+                credential("api_key"),
+                credential("refresh_capability")
+            ],
         )
         .expect("a connector credential is inserted");
+}
+
+/// The key id every planted locker cell is bound to. The AAD carries it, so a
+/// cell cannot be replayed under another key.
+const LOCKER_KEY_ID: &str = "key-000001";
+
+/// Every sealed cell this fixture holds, as `(table, column, row_id)`.
+///
+/// Derived from `centraid_ontology::registries::sealed_physical_columns` in
+/// `every_sealed_column_in_this_fixture_really_holds_a_secret`, so a column
+/// added to the registry and not planted here fails rather than being skipped.
+fn planted_rows() -> Vec<(&'static str, &'static str, &'static str)> {
+    vec![
+        ("locker_item", "password", "item-1"),
+        ("locker_item", "otp_seed", "item-1"),
+        ("locker_item", "card_number", "item-1"),
+        ("locker_item", "cvv", "item-1"),
+        ("locker_item", "content", "item-1"),
+        ("locker_item_field", "value_sealed", "field-1"),
+        ("locker_item_passkey", "private_key", "item-1"),
+        (
+            "sync_connection_credential",
+            "client_secret",
+            "connection-1",
+        ),
+        ("sync_connection_credential", "access_token", "connection-1"),
+        (
+            "sync_connection_credential",
+            "refresh_token",
+            "connection-1",
+        ),
+        ("sync_connection_credential", "api_key", "connection-1"),
+        (
+            "sync_connection_credential",
+            "refresh_capability",
+            "connection-1",
+        ),
+    ]
 }
 
 fn door(connection: &Connection) -> SqliteDoor<'_> {
@@ -234,28 +335,66 @@ fn targets(answer: &Answer) -> Vec<Target> {
 // The security property
 // ---------------------------------------------------------------------------
 
-/// THE PLANT IS REAL. A green run of the test below would prove nothing over an
-/// empty set, so the markers are read straight back out of the sealed columns
-/// first.
+/// THE PLANT IS REAL, AND IT IS EVERY COLUMN THE REGISTRY NAMES.
+///
+/// A green run of the test below would prove nothing over an empty set — and it
+/// would prove nothing over a HAND-TYPED string either, which is why every cell
+/// is read back and checked to be real ciphertext of the vault's own two forms.
+/// The set of planted cells is compared against
+/// `centraid_ontology::registries::sealed_physical_columns`, so a sealed column
+/// added to the model and not planted here fails rather than being skipped.
 #[test]
-fn every_sealed_column_in_this_fixture_really_holds_a_marker() {
+fn every_sealed_column_in_this_fixture_really_holds_a_secret() {
     let connection = vault();
-    let planted: i64 = connection
-        .query_row(
-            "SELECT (SELECT COUNT(*) FROM locker_item WHERE password = ?1 AND otp_seed = ?1
-                       AND card_number = ?1 AND cvv = ?1 AND content = ?1)
-                  + (SELECT COUNT(*) FROM locker_item_field WHERE value_sealed = ?1)
-                  + (SELECT COUNT(*) FROM locker_item_passkey WHERE private_key = ?2)
-                  + (SELECT COUNT(*) FROM sync_connection_credential
-                      WHERE client_secret = ?1 AND access_token = ?1 AND refresh_token = ?1
-                        AND api_key = ?1 AND refresh_capability = ?1)",
-            rusqlite::params![MARKERS[0], MARKERS[1]],
-            |row| row.get(0),
-        )
-        .expect("the plant reads back");
+    let mut registry: Vec<(String, String)> =
+        centraid_ontology::registries::sealed_physical_columns();
+    registry.sort_unstable();
+    let mut planted: Vec<(String, String)> = planted_rows()
+        .into_iter()
+        .map(|(table, column, _)| (table.to_owned(), column.to_owned()))
+        .collect();
+    planted.sort_unstable();
     assert_eq!(
-        planted, 4,
-        "the sealed columns this test defends are not all planted"
+        planted, registry,
+        "the planted cells and the sealed registry disagree"
+    );
+
+    for (table, column, row_id) in planted_rows() {
+        let pk = match table {
+            "locker_item" | "locker_item_passkey" => "item_id",
+            "locker_item_field" => "field_id",
+            _ => "connection_id",
+        };
+        let held: String = connection
+            .query_row(
+                &format!("SELECT {column} FROM {table} WHERE {pk} = ?1"),
+                [row_id],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|error| panic!("{table}.{column}: {error}"));
+        // REAL CIPHERTEXT, not a string that begins with the prefix: both
+        // checks decode the envelope and measure it.
+        if table == "sync_connection_credential" {
+            assert!(
+                is_sealed_value(&held),
+                "{table}.{column} is not a `{SEALED_PREFIX}` envelope"
+            );
+        } else {
+            assert!(
+                is_locker_ciphertext(&held),
+                "{table}.{column} is not a `{LOCKER_CIPHERTEXT_PREFIX}` cell"
+            );
+        }
+        assert!(
+            !held.contains(PLAINTEXT),
+            "{table}.{column} holds the plaintext"
+        );
+    }
+    // AND THE AAD BINDS THE CELL TO ITS ROW. A ciphertext that opened anywhere
+    // would make "the column is sealed" a weaker claim than it reads as.
+    assert!(
+        !locker_aad("item-1", LOCKER_KEY_ID).is_empty()
+            && locker_aad("item-1", LOCKER_KEY_ID) != locker_aad("field-1", LOCKER_KEY_ID)
     );
 }
 
@@ -265,7 +404,16 @@ fn every_sealed_column_in_this_fixture_really_holds_a_marker() {
 fn secrets_planted_in_every_sealed_column_never_reach_a_target() {
     let connection = vault();
     let door = door(&connection);
-    for marker in MARKERS {
+    // BOTH HALVES: the words a member would type, and the bytes the column
+    // holds. A door that leaked either would be leaking the secret.
+    let ciphertext: String = connection
+        .query_row(
+            "SELECT password FROM locker_item WHERE item_id = 'item-1'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the cell reads");
+    for marker in [PLAINTEXT, ciphertext.as_str()] {
         for domain in DOMAINS {
             let answer = door
                 .query(

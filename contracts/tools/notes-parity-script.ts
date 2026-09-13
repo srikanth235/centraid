@@ -15,6 +15,7 @@
 // inline budget, an edit of a trashed note, and a restore of a live one.
 
 import type { openVaultDb } from "../../packages/vault/src/db.js";
+import { at } from "./notes-parity-bundle.js";
 
 /** What `export-notes-parity.ts` hands in: one recorded, replayable step. */
 export type Execute = <T extends Record<string, unknown>>(
@@ -144,7 +145,7 @@ export function runNotesScript(
     .prepare(
       "SELECT body_content_id FROM knowledge_note WHERE note_id = ? LIMIT 1"
     )
-    .get(noteIds[0]) as { body_content_id: string } | undefined;
+    .get(at(noteIds, 0, "note")) as { body_content_id: string } | undefined;
   if (!foreign) throw new Error("the seed wrote a note with no body");
   execute(
     "knowledge.restore_note_version",
@@ -155,7 +156,10 @@ export function runNotesScript(
   // Refiling, then unfiling: an omitted notebook is an explicit intent.
   execute(
     "knowledge.move_note",
-    { note_id: { $from: "2.note_id" }, notebook_id: notebookIds[1] },
+    {
+      note_id: { $from: "2.note_id" },
+      notebook_id: at(notebookIds, 1, "notebook"),
+    },
     ["note_id"]
   );
   execute("knowledge.move_note", { note_id: { $from: "2.note_id" } }, [
@@ -186,7 +190,7 @@ export function runNotesScript(
     "core.tag_item",
     {
       subject_type: "knowledge.note",
-      subject_id: noteIds[0],
+      subject_id: at(noteIds, 0, "note"),
       label: "Café",
     },
     ["tag_id", "concept_id", "notation"]
@@ -201,7 +205,7 @@ export function runNotesScript(
       from_type: "knowledge.note",
       from_id: { $from: "2.note_id" },
       to_type: "knowledge.note",
-      to_id: noteIds[1],
+      to_id: at(noteIds, 1, "note"),
       relation: "references",
       selector: {
         exact: "South Lake",
@@ -219,7 +223,7 @@ export function runNotesScript(
       from_type: "knowledge.note",
       from_id: { $from: "2.note_id" },
       to_type: "knowledge.note",
-      to_id: noteIds[1],
+      to_id: at(noteIds, 1, "note"),
       relation: "references",
     },
     [],
@@ -232,7 +236,7 @@ export function runNotesScript(
       from_type: "knowledge.note",
       from_id: { $from: "2.note_id" },
       to_type: "knowledge.note",
-      to_id: noteIds[2],
+      to_id: at(noteIds, 2, "note"),
       relation: "smells-like",
     },
     [],
@@ -259,7 +263,7 @@ export function runNotesScript(
       from_type: "knowledge.note",
       from_id: { $from: "2.note_id" },
       to_type: "knowledge.note",
-      to_id: noteIds[2],
+      to_id: at(noteIds, 2, "note"),
       relation: "references",
     },
     ["link_id"]
@@ -333,7 +337,7 @@ export function runNotesScript(
     [],
     "any"
   );
-  execute("knowledge.delete_note", { note_id: noteIds[4] }, [
+  execute("knowledge.delete_note", { note_id: at(noteIds, 4, "note") }, [
     "note_id",
     "purge_at",
     "body_released",

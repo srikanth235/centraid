@@ -24,4 +24,9 @@ serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+# THE REAL SEALING, not a hand-made prefix. `tests/door.rs` plants what the
+# product actually writes — `seal_value` for a `sealed:v1:` cell and
+# `encrypt_under_locker_key` for an `lk1:` one — so the secret-free proof is
+# over the vault's own ciphertext rather than over a string that looks like it.
+centraid-vault = { path = "../vault" }
 serde_json.workspace = true

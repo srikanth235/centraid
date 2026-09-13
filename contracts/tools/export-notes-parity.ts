@@ -48,6 +48,7 @@ import { installFixtureClock } from "../../packages/vault/tests/fixtures/ontolog
 import {
   NOTES_PARITY_TABLES,
   PARITY_EPOCH,
+  at,
   canonicaliseBundle,
   loadHandlers,
   noteScenarios,
@@ -127,10 +128,10 @@ export async function buildNotesParity(): Promise<NotesParityBundle> {
               ? (value as { $from: string }).$from
               : null;
           if (reference === null) return [key, value];
-          const [at, field] = reference.split(".");
-          const produced = outputs[Number(at)]?.[field ?? ""];
+          const [stepIndex, field] = reference.split(".");
+          const produced = outputs[Number(stepIndex)]?.[field ?? ""];
           if (produced === undefined) {
-            throw new Error(`step ${at} produced no \`${field}\``);
+            throw new Error(`step ${stepIndex} produced no \`${field}\``);
           }
           return [key, produced];
         })
@@ -223,7 +224,7 @@ export async function buildNotesParity(): Promise<NotesParityBundle> {
     runNotesScript(execute, noteIds, notebookIds, db.vault);
 
     // THE JOURNAL MARKER — see the file header for why it is not a command.
-    seedJournalMarker(db.vault, boot.ownerPartyId, noteIds[3]);
+    seedJournalMarker(db.vault, boot.ownerPartyId, at(noteIds, 3, "note"));
 
     const ctx = {
       vault: {
@@ -345,20 +346,20 @@ function seedJournalMarker(
   ownerPartyId: string,
   noteId: string
 ): void {
-  const at = PARITY_EPOCH;
+  const stamp = PARITY_EPOCH;
   vault
     .prepare(
       `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version, created_at)
        VALUES ('scheme-journal', ?, 'People journal', 'centraid', '1', ?)`
     )
-    .run(JOURNAL_SCHEME_URI, at);
+    .run(JOURNAL_SCHEME_URI, stamp);
   vault
     .prepare(
       `INSERT INTO core_concept
          (concept_id, scheme_id, notation, pref_label, created_at, updated_at)
        VALUES ('concept-journal-entry', 'scheme-journal', ?, 'Journal entry', ?, ?)`
     )
-    .run(JOURNAL_ENTRY_NOTATION, at, at);
+    .run(JOURNAL_ENTRY_NOTATION, stamp, stamp);
   vault
     .prepare(
       `INSERT INTO core_tag
@@ -367,5 +368,5 @@ function seedJournalMarker(
        VALUES ('tag-journal-entry', 'knowledge.note', ?, 'concept-journal-entry', ?,
                NULL, ?, ?)`
     )
-    .run(noteId, ownerPartyId, at, at);
+    .run(noteId, ownerPartyId, stamp, stamp);
 }
