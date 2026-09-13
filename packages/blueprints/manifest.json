@@ -1402,6 +1402,7 @@
         "package.json",
         "pending-projection.ts",
         "queries/activity.ts",
+        "queries/dashboard-projection.test.ts",
         "queries/dashboard.ts",
         "queries/export.test.ts",
         "queries/export.ts",

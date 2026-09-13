@@ -286,8 +286,17 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
       ctx,
       {
         name: "tally.dashboard.expenses",
+        // THE PROJECTION CARRIES THE MONEY IT IS ASKED ABOUT (#1020,
+        // D-1020-CL3). This selected thirteen columns and `ledgerRow` reads
+        // eight more off the row: `original_amount_minor`, `original_currency`,
+        // `settlement_currency`, the four `rate_*` and `recurring_template_id`.
+        // On the paged door an unselected column reads as `undefined` rather
+        // than throwing, so every `?? data.currency` fallback fired and a
+        // foreign-currency expense was LABELLED IN THE VAULT'S BASE MONEY on
+        // every ledger surface, `rateSuggestions` could never produce a row,
+        // and `export` shipped the mislabelling to a file.
         select:
-          "expense_id, group_id, description, amount_minor, currency, paid_by, split_method, split_params_json, spent_on, category, txn_id, created_at, updated_at",
+          "expense_id, group_id, description, amount_minor, currency, paid_by, split_method, split_params_json, spent_on, category, txn_id, created_at, updated_at, original_amount_minor, original_currency, settlement_currency, rate_scaled, rate_scale, rate_source, rate_date, recurring_template_id",
         from: "tally_expense",
         where: "deleted_at IS NULL",
         order: {
