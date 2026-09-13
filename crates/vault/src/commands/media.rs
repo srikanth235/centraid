@@ -1808,11 +1808,20 @@ fn forget_person() -> CommandDefinition {
         )],
         handler: |ctx| {
             let party_id = ctx.required_str("party_id")?.to_owned();
+            // THE PARTY'S OWN FACES, AND ONLY THOSE (#1020, R-1020-35,
+            // D-1020-CL2). `confirmed_by_party_id` names the member who JUDGED
+            // the region, not the person in it; in a single-member vault that
+            // is the owner on every confirmation, so deleting on both columns
+            // made "forget me" erase everyone's confirmed faces. The judgement
+            // is erased below instead, by clearing the column — and the state
+            // goes with it, because the schema pins the two to each other
+            // (`CHECK ((review_state = 'confirmed') = (confirmed_by_party_id
+            // IS NOT NULL))`).
             let regions: Vec<String> = {
                 let connection = ctx.connection();
                 let mut statement = connection.prepare(
                     "SELECT region_id FROM media_face_region
-                      WHERE party_id = ?1 OR confirmed_by_party_id = ?1
+                      WHERE party_id = ?1
                       ORDER BY region_id",
                 )?;
                 let rows = statement.query_map([&party_id], |row| row.get::<_, String>(0))?;
@@ -1841,6 +1850,17 @@ fn forget_person() -> CommandDefinition {
                     [region_id],
                 )?;
             }
+            // The judgements this member made about OTHER people's faces. Read
+            // after the deletions, so a region that was both theirs and judged
+            // by them is counted once, as a deletion. The region goes back to
+            // being a PROPOSAL — the face is still there, still named, and no
+            // longer vouched for by anyone.
+            ctx.connection().execute(
+                "UPDATE media_face_region
+                    SET confirmed_by_party_id = NULL, review_state = 'proposed'
+                  WHERE confirmed_by_party_id = ?1",
+                [&party_id],
+            )?;
             // NOTHING IS KEPT (#916): a pre-mutation snapshot of a forgotten
             // face is a copy of exactly what the member asked to be destroyed,
             // sitting where the next export would carry it out. So this

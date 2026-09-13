@@ -1040,6 +1040,84 @@ fn forgetting_a_person_takes_every_face_that_names_them_and_nothing_else() {
     assert_eq!(output["regions_forgotten"], serde_json::json!(0));
 }
 
+/// **"FORGET ME" MUST NOT MEAN "ERASE EVERYONE"** (#1020, R-1020-35,
+/// D-1020-CL2).
+///
+/// `confirmed_by_party_id` names the member who JUDGED a region, not the person
+/// in it — and in a single-member vault the owner is the judge of every
+/// confirmation. The command deleted on both columns, so the one gesture a
+/// member has for erasing their own face data destroyed every confirmed face of
+/// everyone else in the library. The judgement is cleared in place instead, and
+/// the state goes with it because the schema pins the two together.
+#[test]
+fn forgetting_the_only_member_clears_their_judgements_and_erases_nobody_elses_face() {
+    let world = World::new("forget-one-member");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    let ana = world.executed(
+        "core.add_party",
+        serde_json::json!({ "kind": "person", "display_name": "Ana" }),
+    )["party_id"]
+        .as_str()
+        .expect("a party id")
+        .to_owned();
+    insert_region(&world, "region-ana", "asset-1", Some(&ana));
+    world.executed(
+        "media.answer_face_proposal",
+        serde_json::json!({
+            "region_id": "region-ana", "answer": "confirm", "party_id": ana
+        }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT confirmed_by_party_id FROM media_face_region WHERE region_id = ?1",
+            "region-ana"
+        ),
+        Some(world.owner.clone()),
+        "the owner is the judge, because there is nobody else to be one"
+    );
+
+    // The owner is in no photograph here, so there is nothing OF them to
+    // forget.
+    let output = world.executed(
+        "media.forget_person",
+        serde_json::json!({ "party_id": world.owner }),
+    );
+    assert_eq!(output["regions_forgotten"], serde_json::json!(0));
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_face_region WHERE region_id = ?1",
+            "region-ana"
+        ),
+        1,
+        "Ana's face survives the owner forgetting themself"
+    );
+    // What DID go is the member's own act — and the region is a proposal
+    // again, because nobody vouches for it now.
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_face_region
+              WHERE party_id = ?1 OR confirmed_by_party_id = ?1",
+            &world.owner
+        ),
+        0
+    );
+    assert_eq!(
+        world.text(
+            "SELECT review_state FROM media_face_region WHERE region_id = ?1",
+            "region-ana"
+        ),
+        Some("proposed".to_owned())
+    );
+    assert_eq!(
+        world.text(
+            "SELECT party_id FROM media_face_region WHERE region_id = ?1",
+            "region-ana"
+        ),
+        Some(ana),
+        "the person in the photograph is untouched"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The enrichment hint.
 // ---------------------------------------------------------------------------
