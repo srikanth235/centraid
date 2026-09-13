@@ -1532,6 +1532,10 @@ Written at the umbrella's close pass. The receipt is the evidence layer and this
 - **`queries/person.ts` makes one sharing read deny independently, not three** ([D-1020-PE1](#wave-4-lane-rulings-1020)). The census sentence describes the app's intent, which is why the port was written to the intent rather than from the sentence.
 - **Two rulings share the id `D-1020-X3`** — wave 3's close ruled open question 10 under it, and wave 4's extension lane used it for the staging chunk protocol. Both are recorded above; the extension one is disambiguated as `D-1020-X3 (extension)`. Named rather than silently renumbered, because a ruling id that moves is a citation that breaks.
 
+**R-1020-36** — **"push all fixes and stop"** (owner, 2026-09-13 07:30 UTC). Lane CL-FIX landed what was committed, skipped the `pr` gate and the mutants run under this ruling, and left its two unfinished items named in the receipt (the audit band as catalog entities — its brief's "never replicated" premise was wrong, both tables already replicate — and the year-3 Tally finance rows). No lane was spawned after it. Evidence: the receipt's `## Close — lane CL-FIX` and `## Close` sections ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+
+**R-1020-37** — **the retirement branch merges into the umbrella without the device evidence** (owner, 2026-09-13 07:45 UTC), overriding wave 6's gate. Not executed by the session: its permission layer refused the merge of `claude/1020-retire-v0` (a 5,395-file deletion) three times and the root stopped. The branch stays pushed at its recorded head, one merge away; the resolution rule and the red it carries are in the receipt's `## Close` ([#1020](https://github.com/srikanth235/centraid/issues/1020)). The mobile screens the deletion would leave without a v1 counterpart are [#1022](https://github.com/srikanth235/centraid/issues/1022).
+
 ## Related docs
 
 | Doc | Current contract |
