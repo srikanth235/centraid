@@ -154,10 +154,7 @@
           {
             "column": "object_type",
             "op": "in",
-            "value": [
-              "locker.item",
-              "locker.auth"
-            ]
+            "value": ["locker.item", "locker.auth"]
           }
         ]
       },
@@ -273,10 +270,7 @@
           },
           "url_match_policy": {
             "type": "string",
-            "enum": [
-              "registrable-domain",
-              "exact-host"
-            ]
+            "enum": ["registrable-domain", "exact-host"]
           },
           "otp_seed": {
             "type": "string"
@@ -321,10 +315,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "type",
-          "title"
-        ],
+        "required": ["type", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -382,10 +373,7 @@
           },
           "url_match_policy": {
             "type": "string",
-            "enum": [
-              "registrable-domain",
-              "exact-host"
-            ]
+            "enum": ["registrable-domain", "exact-host"]
           },
           "otp_seed": {
             "type": "string"
@@ -430,9 +418,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -469,9 +455,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -488,9 +472,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item"
-      ]
+      "writes": ["locker.item"]
     },
     {
       "name": "restore-item",
@@ -504,9 +486,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -523,9 +503,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item"
-      ]
+      "writes": ["locker.item"]
     },
     {
       "name": "purge-item",
@@ -539,9 +517,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -577,9 +553,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -596,11 +570,7 @@
           }
         }
       },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.tag"
-      ]
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
     },
     {
       "name": "unstar-item",
@@ -614,9 +584,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -633,11 +601,7 @@
           }
         }
       },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.tag"
-      ]
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
     },
     {
       "name": "archive-item",
@@ -651,9 +615,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -670,9 +632,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item"
-      ]
+      "writes": ["locker.item"]
     },
     {
       "name": "unarchive-item",
@@ -686,9 +646,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -705,9 +663,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item"
-      ]
+      "writes": ["locker.item"]
     },
     {
       "name": "duplicate-item",
@@ -721,9 +677,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -773,13 +727,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "text",
-              "sealed",
-              "url",
-              "date",
-              "otp"
-            ]
+            "enum": ["text", "sealed", "url", "date", "otp"]
           },
           "value": {
             "type": "string"
@@ -789,11 +737,7 @@
             "minimum": 0
           }
         },
-        "required": [
-          "item_id",
-          "label",
-          "kind"
-        ],
+        "required": ["item_id", "label", "kind"],
         "additionalProperties": false
       },
       "output": {
@@ -810,9 +754,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item_field"
-      ]
+      "writes": ["locker.item_field"]
     },
     {
       "name": "remove-field",
@@ -830,10 +772,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id",
-          "field_id"
-        ],
+        "required": ["item_id", "field_id"],
         "additionalProperties": false
       },
       "output": {
@@ -850,9 +789,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item_field"
-      ]
+      "writes": ["locker.item_field"]
     },
     {
       "name": "set-addresses",
@@ -876,23 +813,15 @@
                 },
                 "match_policy": {
                   "type": "string",
-                  "enum": [
-                    "registrable-domain",
-                    "exact-host"
-                  ]
+                  "enum": ["registrable-domain", "exact-host"]
                 }
               },
-              "required": [
-                "url"
-              ],
+              "required": ["url"],
               "additionalProperties": false
             }
           }
         },
-        "required": [
-          "item_id",
-          "addresses"
-        ],
+        "required": ["item_id", "addresses"],
         "additionalProperties": false
       },
       "output": {
@@ -909,9 +838,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item_address"
-      ]
+      "writes": ["locker.item_address"]
     },
     {
       "name": "set-passkey",
@@ -944,10 +871,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "item_id",
-          "rp_id"
-        ],
+        "required": ["item_id", "rp_id"],
         "additionalProperties": false
       },
       "output": {
@@ -964,9 +888,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item_passkey"
-      ]
+      "writes": ["locker.item_passkey"]
     },
     {
       "name": "clear-passkey",
@@ -980,9 +902,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
@@ -999,9 +919,7 @@
           }
         }
       },
-      "writes": [
-        "locker.item_passkey"
-      ]
+      "writes": ["locker.item_passkey"]
     },
     {
       "name": "export",
@@ -1020,9 +938,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "confirm"
-        ],
+        "required": ["confirm"],
         "additionalProperties": false
       },
       "output": {
@@ -1078,20 +994,14 @@
             "minLength": 8
           }
         },
-        "required": [
-          "item_id",
-          "page_origin"
-        ],
+        "required": ["item_id", "page_origin"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
           "fill": {
-            "type": [
-              "object",
-              "null"
-            ]
+            "type": ["object", "null"]
           },
           "vaultDenied": {
             "type": "object"
@@ -1166,19 +1076,14 @@
             "minLength": 1
           }
         },
-        "required": [
-          "item_id"
-        ],
+        "required": ["item_id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
           "item": {
-            "type": [
-              "object",
-              "null"
-            ]
+            "type": ["object", "null"]
           },
           "authRequired": {
             "type": "boolean"
@@ -1202,9 +1107,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "term"
-        ],
+        "required": ["term"],
         "additionalProperties": false
       },
       "output": {
@@ -1343,9 +1246,7 @@
   ],
   "seats": {
     "byteBearing": true,
-    "originActs": [
-      "autofill"
-    ],
+    "originActs": ["autofill"],
     "disabledOn": [],
     "northStar": "1password"
   },

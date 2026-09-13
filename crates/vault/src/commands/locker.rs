@@ -1667,14 +1667,33 @@ fn edit_item() -> CommandDefinition {
                 );
             }
 
-            // Only the type's own columns, and a round-tripped placeholder is
-            // SKIPPED rather than written: that is what "unchanged" means.
+            // EDIT REWRITES THE TYPE'S FIELDS; IT DOES NOT PATCH THEM.
+            //
+            // v0's own test is named *"edit_item rewrites the type fields and
+            // replaces tags"* (`packages/vault/src/commands/locker.test.ts`),
+            // and `fieldValues` is what makes it true: it returns **every**
+            // column of the item's type, `null` for the ones the input omits,
+            // and the handler writes all of them. So an edit carrying only a
+            // password clears the username, the url, the OTP seed and the
+            // notes.
+            //
+            // Reproduced, not improved, and the hazard is a finding rather
+            // than a silent divergence (receipt, lane Locker). The UI always
+            // sends the whole draft — `draft.ts`'s payload builder emits every
+            // key the type owns and round-trips a sealed one as the
+            // placeholder — so the replace semantics are invisible to it. An
+            // **assistant** or an API caller reading the manifest's optional
+            // fields as a patch API loses data, and the port making the same
+            // input produce a different vault than v0 would be worse than the
+            // footgun.
+            //
+            // A round-tripped placeholder is the one exception and is SKIPPED:
+            // that is what "leave this secret alone" means, and it is the
+            // mechanism that lets an edit form exist without holding the
+            // password.
             let mut changed: Vec<&str> = Vec::new();
             for (column, value) in field_values(ctx, &item_type) {
                 if ctx.optional_str(column) == Some(SEALED_PLACEHOLDER) {
-                    continue;
-                }
-                if ctx.input.get(column).is_none() {
                     continue;
                 }
                 push(&mut sets, &mut binds, column, Box::new(value.clone()));

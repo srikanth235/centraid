@@ -456,7 +456,12 @@ fn the_park_gate_is_still_missing() {
             ),
         )
         .expect("the seed runs");
-    assert_eq!(seeded.status, CommandStatus::Executed, "{:?}", seeded.reason);
+    assert_eq!(
+        seeded.status,
+        CommandStatus::Executed,
+        "{:?}",
+        seeded.reason
+    );
     let outcome = scenario
         .vault
         .execute(

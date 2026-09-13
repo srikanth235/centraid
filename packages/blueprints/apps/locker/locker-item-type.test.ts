@@ -69,13 +69,16 @@ function schemaLockerItemTypes(): string[] {
  */
 function manifestAddItemTypes(): string[] {
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as {
-    actions: { name: string; input: { properties?: Record<string, unknown> } }[];
+    actions: {
+      name: string;
+      input: { properties?: Record<string, unknown> };
+    }[];
   };
   const addItem = manifest.actions.find((action) => action.name === "add-item");
   if (!addItem) throw new Error("app.json declares no add-item action");
-  const declared = (addItem.input.properties as
-    | { type?: { enum?: string[] } }
-    | undefined)?.type?.enum;
+  const declared = (
+    addItem.input.properties as { type?: { enum?: string[] } } | undefined
+  )?.type?.enum;
   if (!declared) {
     throw new Error(
       "add-item's input schema declares no type enum — this tripwire's third " +

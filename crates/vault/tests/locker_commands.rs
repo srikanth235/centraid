@@ -515,10 +515,21 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
         &["item-1"],
     );
 
-    // A RETAG MUST NOT MAKE A THREE-YEAR-OLD PASSWORD LOOK FRESH.
+    // A RETAG MUST NOT MAKE A THREE-YEAR-OLD PASSWORD LOOK FRESH — and a
+    // retag is a FULL DRAFT with new tags, because `editItemWrite` always
+    // sends `itemPayload(draft)` and an edit REWRITES the type's fields
+    // (see `an_edit_rewrites_the_types_fields_rather_than_patching_them`). A
+    // tags-only edit is not a gesture the product has, and it would clear the
+    // password rather than retag the item.
     world.ok(
         "locker.edit_item",
-        serde_json::json!({ "item_id": "item-1", "tags": ["rotated"] }),
+        serde_json::json!({
+            "item_id": "item-1",
+            "username": "ada@example.com",
+            "url": "https://bank.example",
+            "password": "«sealed»",
+            "tags": ["rotated"]
+        }),
     );
     let after: String = world.one(
         "SELECT password_set_at FROM locker_item WHERE item_id = ?1",
@@ -530,7 +541,12 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
     // rotation either.
     world.ok(
         "locker.edit_item",
-        serde_json::json!({ "item_id": "item-1", "password": "«sealed»" }),
+        serde_json::json!({
+            "item_id": "item-1",
+            "username": "ada@example.com",
+            "url": "https://bank.example",
+            "password": "«sealed»"
+        }),
     );
     let untouched: String = world.one(
         "SELECT password FROM locker_item WHERE item_id = ?1",
@@ -548,6 +564,8 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
         "locker.edit_item",
         serde_json::json!({
             "item_id": "item-1",
+            "username": "ada@example.com",
+            "url": "https://bank.example",
             "password": ciphertext("rotated"),
             "password_rotated": true,
             "key_id": "key-1"
@@ -564,6 +582,83 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
 // ---------------------------------------------------------------------------
 // The lifecycle, which did not change.
 // ---------------------------------------------------------------------------
+
+/// AN EDIT REWRITES THE TYPE'S FIELDS AND DOES NOT PATCH THEM.
+///
+/// v0's contract, named by v0's own test: *"edit_item rewrites the type fields
+/// and replaces tags"*. An edit carrying only a password clears the username,
+/// the url, the OTP seed and the notes, because `fieldValues` returns every
+/// column of the type with `null` for the omitted ones.
+///
+/// This is pinned rather than improved for one reason: the same input must
+/// produce the same vault in both trees. The hazard — a caller reading the
+/// manifest's optional fields as a patch API — is in the receipt as a finding
+/// with an owner question, not fixed quietly here.
+#[test]
+fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
+    let world = World::new("locker-replace", "key-1");
+    world.login("item-1", "key-1");
+    assert_eq!(
+        world.one::<String>(
+            "SELECT username FROM locker_item WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        "ada@example.com"
+    );
+
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({
+            "item_id": "item-1",
+            "password": ciphertext("rotated"),
+            "password_rotated": true,
+            "key_id": "key-1"
+        }),
+    );
+    // THE OMITTED COLUMNS ARE CLEARED. This is v0.
+    for column in ["username", "url", "otp_seed", "notes"] {
+        let value: Option<String> = world.one(
+            &format!("SELECT {column} FROM locker_item WHERE item_id = ?1"),
+            &["item-1"],
+        );
+        assert_eq!(value, None, "{column} survived a rewrite");
+    }
+    // …and the title, which is NOT a type field, is untouched.
+    assert_eq!(
+        world.one::<String>(
+            "SELECT title FROM locker_item WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        "The bank"
+    );
+
+    // A FULL DRAFT — which is what the UI sends — keeps everything.
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({
+            "item_id": "item-1",
+            "username": "ada@example.com",
+            "url": "https://bank.example",
+            "notes": "the joint account",
+            "password": "«sealed»"
+        }),
+    );
+    assert_eq!(
+        world.one::<String>(
+            "SELECT username FROM locker_item WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        "ada@example.com"
+    );
+    // The placeholder left the secret alone.
+    assert_eq!(
+        world.one::<String>(
+            "SELECT password FROM locker_item WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        ciphertext("rotated")
+    );
+}
 
 #[test]
 fn trash_is_reversible_and_a_lapsed_window_is_not() {
