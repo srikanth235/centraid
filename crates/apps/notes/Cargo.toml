@@ -23,6 +23,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 centraid-api-proto = { path = "../../api-proto" }
+centraid-media = { path = "../../media" }
 centraid-ontology = { path = "../../ontology" }
 centraid-vault = { path = "../../vault" }
 prost.workspace = true

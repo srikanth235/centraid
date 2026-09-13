@@ -2770,3 +2770,1285 @@ pub fn seed_owner_party(
         .map_err(|error| KitError::Door(error.to_string()))?;
     Ok(())
 }
+
+// ===========================================================================
+// THE NOTES AXES (#1020, wave 4 slot 4c, D-1020-N8)
+//
+// Two of them, and they answer different questions:
+//
+// * [`notes_demo`] is the corpus the six query folds are read over — the demo
+//   seed's two notebooks and five notes, plus the rows the seed cannot make
+//   because no Notes action writes them: a PINNED note outside the recent
+//   window, a TRASHED note, a JOURNAL entry (People's, #834 R-journal), an
+//   attachment, a link with a standoff anchor, and a tag. Every one of those is
+//   a branch in `library`'s fold that a five-note seed never reaches.
+// * [`year3_notes`] is the volume the declared window is stated at: 10,000
+//   notes with long bodies, which is five windows deep at the manifest's 2,000
+//   and twenty at the page's own 500.
+//
+// **Why they are here and not in `crates/apps/notes/tests`.** `sql-confinement`
+// scans an app crate's tests too, and SQL lives only under
+// `crates/{ontology,vault,seat,search}` and `crates/apps/kit`. Two Photos test
+// files are the standing red for exactly this, and the answer is the kit rather
+// than a second exemption.
+// ===========================================================================
+
+/// The scheme URIs the Notes fixtures name. Restated here because the kit is
+/// the app plane's import-free floor, and asserted against
+/// `centraid_apps_notes::journal`'s copy by that crate's own test.
+pub const NOTES_JOURNAL_SCHEME_URI: &str = "https://centraid.dev/schemes/people-journal";
+pub const NOTES_TAGS_SCHEME_URI: &str = "centraid:tags:v1";
+/// The relations scheme, whose `references` concept a `[[wikilink]]` compiles to.
+pub const NOTES_RELATIONS_SCHEME_URI: &str = "urn:duaility:relations";
+
+/// The party every seeded note is authored by.
+pub const NOTES_DEMO_OWNER: &str = "party-000000";
+
+/// What one demo seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct NotesDemoCounts {
+    pub notebooks: usize,
+    /// Live notes, excluding the journal entry and the trashed one.
+    pub notes: usize,
+    pub pinned: usize,
+    pub trashed: usize,
+    pub journal_entries: usize,
+    pub content_items: usize,
+    pub revisions: usize,
+    pub attachments: usize,
+    pub links: usize,
+    pub tags: usize,
+}
+
+/// One seeded note, as the fixture declares it.
+struct DemoNote {
+    id: &'static str,
+    title: &'static str,
+    body: &'static str,
+    format: &'static str,
+    pinned: bool,
+    /// The notebook it is filed into, or `None` for a loose note.
+    notebook: Option<&'static str>,
+    /// Days before `now` it was last updated. **Two notes share one day on
+    /// purpose**: the keyset page carries the pk because the sort key is not
+    /// unique, and a fixture with distinct instants cannot trip the boundary the
+    /// cursor exists for.
+    updated_days_ago: usize,
+    trashed: bool,
+    /// A People-journal entry: excluded from the library, search and the
+    /// powerbox, and reachable by id (#834 R-journal).
+    journal: bool,
+}
+
+/// THE DEMO CORPUS. The five notes of `notes/seed.js`, plus the six rows the
+/// seed cannot write.
+const DEMO_NOTES: &[DemoNote] = &[
+    DemoNote {
+        id: "note-000001",
+        title: "Tahoe long weekend — shortlist",
+        body: "## Stays\n- South Lake: walkable, closer to the good food\n- Truckee: quieter, longer drive to the water\n\n## Rough budget\nCabin ~$180/night, plus gas both ways.",
+        format: "markdown",
+        pinned: false,
+        notebook: Some("notebook-000001"),
+        updated_days_ago: 1,
+        trashed: false,
+        journal: false,
+    },
+    DemoNote {
+        id: "note-000002",
+        title: "Drive vs fly",
+        body: "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.",
+        format: "plain",
+        pinned: false,
+        notebook: Some("notebook-000001"),
+        // SHARES A DAY with `note-000003`: the page boundary case.
+        updated_days_ago: 2,
+        trashed: false,
+        journal: false,
+    },
+    DemoNote {
+        id: "note-000003",
+        title: "Mom's chili, written down properly",
+        body: "1. Brown 2 lb chuck in batches — crowding steams it.\n2. Onion, garlic, one poblano until soft.\n3. Chili powder 3 tbsp, cumin 1 tbsp, bloom in the fat.\n4. Crushed tomatoes, beans, a splash of coffee. Two hours low.\n\n*Do not skip the coffee.*",
+        format: "markdown",
+        pinned: false,
+        notebook: Some("notebook-000002"),
+        updated_days_ago: 2,
+        trashed: false,
+        journal: false,
+    },
+    DemoNote {
+        id: "note-000004",
+        title: "Weeknight mac and cheese",
+        body: "Boil the pasta short. Butter, flour, milk, then sharp cheddar off the heat. Freezes well in 2-portion boxes.",
+        format: "plain",
+        pinned: false,
+        notebook: Some("notebook-000002"),
+        updated_days_ago: 4,
+        trashed: false,
+        journal: false,
+    },
+    DemoNote {
+        id: "note-000005",
+        title: "Scratch — books people keep recommending",
+        body: "The Design of Everyday Things (again), Salt Fat Acid Heat, Project Hail Mary.",
+        format: "plain",
+        pinned: false,
+        notebook: None,
+        updated_days_ago: 6,
+        trashed: false,
+        journal: false,
+    },
+    DemoNote {
+        // A PIN OUTSIDE THE RECENT WINDOW. The oldest note in the corpus, so a
+        // window of one reaches it only through the pinned shelf — which is the
+        // whole reason the pinned read is BESIDE the window.
+        id: "note-000006",
+        title: "Packing list, reusable",
+        body: "- [x] Passport\n- [ ] Charger\n- [ ] Kennel booking\n- [x] Snow chains",
+        format: "markdown",
+        pinned: true,
+        notebook: Some("notebook-000001"),
+        updated_days_ago: 400,
+        trashed: false,
+        journal: false,
+    },
+    DemoNote {
+        // THE TRASH SHELF.
+        id: "note-000007",
+        title: "Reno flights — cancelled",
+        body: "Refunded on the 3rd. Nothing to do.",
+        format: "plain",
+        pinned: false,
+        notebook: Some("notebook-000001"),
+        updated_days_ago: 8,
+        trashed: true,
+        journal: false,
+    },
+    DemoNote {
+        // THE JOURNAL ENTRY. Excluded from the library, the trash shelf, the tag
+        // chips, search and the powerbox — and reachable by id.
+        id: "note-000008",
+        title: "Coffee with Marco",
+        body: "He is moving to Lisbon in the spring. Ask about the flat.",
+        format: "plain",
+        pinned: false,
+        notebook: None,
+        updated_days_ago: 3,
+        trashed: false,
+        journal: true,
+    },
+];
+
+/// The two notebooks, in the order the seed creates them.
+const DEMO_NOTEBOOKS: &[(&str, &str)] = &[
+    ("notebook-000001", "Travel"),
+    ("notebook-000002", "Recipes"),
+];
+
+/// Seed the Notes demo corpus into `connection`.
+///
+/// The whole run is one transaction, as v0's seeder is: a half-seeded library is
+/// not a smaller fixture, it is a library whose notebook rail names notebooks
+/// that do not exist.
+///
+/// # Errors
+///
+/// [`KitError::Door`] for anything SQLite refuses.
+pub fn notes_demo(
+    connection: &Connection,
+    now: &str,
+    owner_party_id: &str,
+) -> KitResult<NotesDemoCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    connection.execute_batch("BEGIN IMMEDIATE").map_err(door)?;
+    match seed_notes_demo(connection, now, owner_party_id) {
+        Ok(counts) => {
+            connection.execute_batch("COMMIT").map_err(door)?;
+            Ok(counts)
+        }
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
+/// A note body as the vault stores it: an inline `data:` URI over the text,
+/// percent-encoded, with the sha taken over the TEXT.
+///
+/// The sha is the TEXT's and not the URI's, which is
+/// `crates/vault/src/commands/knowledge.rs`'s rule — so a fixture built here and
+/// a note written by the command land on the same content id for the same words.
+fn notes_body_uri(media_type: &str, text: &str) -> String {
+    format!("data:{media_type};charset=utf-8,{}", percent_encode(text))
+}
+
+/// `encodeURIComponent`'s unreserved set: letters, digits and `-_.!~*'()`.
+fn percent_encode(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for byte in text.as_bytes() {
+        let character = char::from(*byte);
+        if character.is_ascii_alphanumeric() || "-_.!~*'()".contains(character) {
+            out.push(character);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// The media type a note's `format` reads as.
+fn notes_media_type(format: &str) -> &'static str {
+    match format {
+        "markdown" => "text/markdown",
+        "html" => "text/html",
+        _ => "text/plain",
+    }
+}
+
+/// Insert a note body's content item, its decoded text and the note's own
+/// reading of it. Returns the content id.
+///
+/// **DEDUPED ON THE TEXT**: two notes with the same words share one content
+/// item, and each keeps its own representation (#996 R20(b), drift ONT-28).
+fn seed_note_body(
+    connection: &Connection,
+    note_id: &str,
+    text: &str,
+    format: &str,
+    created: &str,
+    owner_party_id: &str,
+    // `minted` is how many content items this RUN has minted: a SHARED counter,
+    // not a per-call one. The id is `content-<n>`, so a caller that handed in a
+    // fresh zero would mint `content-000001` twice and the second insert would
+    // hit the primary key. The year-3 generator did exactly that, and the UNIQUE
+    // constraint is what said so.
+    minted: &mut usize,
+) -> KitResult<String> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let media_type = notes_media_type(format);
+    let sha = text_sha256(text);
+    let existing: Option<String> = connection
+        .query_row(
+            "SELECT content_id FROM core_content_item WHERE sha256 = ?1",
+            [&sha],
+            |row| row.get(0),
+        )
+        .ok();
+    let content_id = match existing {
+        Some(content_id) => content_id,
+        None => {
+            let content_id = format!("content-{:06}", *minted + 1);
+            connection
+                .execute(
+                    "INSERT INTO core_content_item
+                       (content_id, content_uri, sha256, byte_size, language,
+                        creator_party_id, origin_device_id, deleted_at, purge_at,
+                        created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+                    rusqlite::params![
+                        content_id,
+                        notes_body_uri(media_type, text),
+                        sha,
+                        i64::try_from(text.len()).unwrap_or(i64::MAX),
+                        owner_party_id,
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            connection
+                .execute(
+                    "INSERT INTO core_content_text
+                       (content_id, body_text, decoder, byte_size, created_at, updated_at)
+                     VALUES (?1, ?2, 'data-uri/v1', ?3, ?4, ?4)",
+                    rusqlite::params![
+                        content_id,
+                        text,
+                        i64::try_from(text.len()).unwrap_or(i64::MAX),
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            *minted += 1;
+            content_id
+        }
+    };
+    connection
+        .execute(
+            "INSERT INTO core_content_representation
+               (representation_id, content_id, owner_type, owner_id, media_type,
+                charset, interpretation, created_at, updated_at)
+             VALUES (?1, ?2, 'knowledge.note', ?3, ?4, 'utf-8', 'body', ?5, ?5)",
+            rusqlite::params![
+                format!("representation-{note_id}"),
+                content_id,
+                note_id,
+                media_type,
+                created
+            ],
+        )
+        .map_err(door)?;
+    Ok(content_id)
+}
+
+/// The sha256 of a body's TEXT, in hex. Exposed so an app crate's test can hold
+/// the kit's answer against `centraid_media`'s
+/// (`the_fixtures_sha_is_the_one_the_command_deduplicates_on`), which is what
+/// keeps a fixture-seeded note and a command-written note one content item.
+#[must_use]
+pub fn fixture_text_sha256(text: &str) -> String {
+    text_sha256(text)
+}
+
+/// The sha256 of a body's TEXT, in hex.
+///
+/// The kit depends on no hashing crate, so this is the 32-bit-word reference
+/// implementation of FIPS 180-4 — fifty lines, no dependency, and byte-identical
+/// to `centraid_media::format::sha256_hex` over the same input (which
+/// `the_fixture_sha_is_the_vaults_sha` in `crates/apps/notes` proves).
+fn text_sha256(text: &str) -> String {
+    const K: [u32; 64] = [
+        0x428a_2f98,
+        0x7137_4491,
+        0xb5c0_fbcf,
+        0xe9b5_dba5,
+        0x3956_c25b,
+        0x59f1_11f1,
+        0x923f_82a4,
+        0xab1c_5ed5,
+        0xd807_aa98,
+        0x1283_5b01,
+        0x2431_85be,
+        0x550c_7dc3,
+        0x72be_5d74,
+        0x80de_b1fe,
+        0x9bdc_06a7,
+        0xc19b_f174,
+        0xe49b_69c1,
+        0xefbe_4786,
+        0x0fc1_9dc6,
+        0x240c_a1cc,
+        0x2de9_2c6f,
+        0x4a74_84aa,
+        0x5cb0_a9dc,
+        0x76f9_88da,
+        0x983e_5152,
+        0xa831_c66d,
+        0xb003_27c8,
+        0xbf59_7fc7,
+        0xc6e0_0bf3,
+        0xd5a7_9147,
+        0x06ca_6351,
+        0x1429_2967,
+        0x27b7_0a85,
+        0x2e1b_2138,
+        0x4d2c_6dfc,
+        0x5338_0d13,
+        0x650a_7354,
+        0x766a_0abb,
+        0x81c2_c92e,
+        0x9272_2c85,
+        0xa2bf_e8a1,
+        0xa81a_664b,
+        0xc24b_8b70,
+        0xc76c_51a3,
+        0xd192_e819,
+        0xd699_0624,
+        0xf40e_3585,
+        0x106a_a070,
+        0x19a4_c116,
+        0x1e37_6c08,
+        0x2748_774c,
+        0x34b0_bcb5,
+        0x391c_0cb3,
+        0x4ed8_aa4a,
+        0x5b9c_ca4f,
+        0x682e_6ff3,
+        0x748f_82ee,
+        0x78a5_636f,
+        0x84c8_7814,
+        0x8cc7_0208,
+        0x90be_fffa,
+        0xa450_6ceb,
+        0xbef9_a3f7,
+        0xc671_78f2,
+    ];
+    let mut hash: [u32; 8] = [
+        0x6a09_e667,
+        0xbb67_ae85,
+        0x3c6e_f372,
+        0xa54f_f53a,
+        0x510e_527f,
+        0x9b05_688c,
+        0x1f83_d9ab,
+        0x5be0_cd19,
+    ];
+    let mut message = text.as_bytes().to_vec();
+    let bit_length = (message.len() as u64) * 8;
+    message.push(0x80);
+    while message.len() % 64 != 56 {
+        message.push(0);
+    }
+    message.extend_from_slice(&bit_length.to_be_bytes());
+    for chunk in message.chunks(64) {
+        let mut words = [0u32; 64];
+        for (index, word) in chunk.chunks(4).enumerate() {
+            words[index] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
+        }
+        for index in 16..64 {
+            let s0 = words[index - 15].rotate_right(7)
+                ^ words[index - 15].rotate_right(18)
+                ^ (words[index - 15] >> 3);
+            let s1 = words[index - 2].rotate_right(17)
+                ^ words[index - 2].rotate_right(19)
+                ^ (words[index - 2] >> 10);
+            words[index] = words[index - 16]
+                .wrapping_add(s0)
+                .wrapping_add(words[index - 7])
+                .wrapping_add(s1);
+        }
+        let mut state = hash;
+        for index in 0..64 {
+            let s1 =
+                state[4].rotate_right(6) ^ state[4].rotate_right(11) ^ state[4].rotate_right(25);
+            let choose = (state[4] & state[5]) ^ ((!state[4]) & state[6]);
+            let temp1 = state[7]
+                .wrapping_add(s1)
+                .wrapping_add(choose)
+                .wrapping_add(K[index])
+                .wrapping_add(words[index]);
+            let s0 =
+                state[0].rotate_right(2) ^ state[0].rotate_right(13) ^ state[0].rotate_right(22);
+            let majority = (state[0] & state[1]) ^ (state[0] & state[2]) ^ (state[1] & state[2]);
+            let temp2 = s0.wrapping_add(majority);
+            state[7] = state[6];
+            state[6] = state[5];
+            state[5] = state[4];
+            state[4] = state[3].wrapping_add(temp1);
+            state[3] = state[2];
+            state[2] = state[1];
+            state[1] = state[0];
+            state[0] = temp1.wrapping_add(temp2);
+        }
+        for (index, word) in state.iter().enumerate() {
+            hash[index] = hash[index].wrapping_add(*word);
+        }
+    }
+    hash.iter().map(|word| format!("{word:08x}")).collect()
+}
+
+/// The three schemes the Notes corpus needs, and their concepts.
+///
+/// The journal marker is People's (#834 R-journal) and it is seeded here because
+/// the EXCLUSION is what the library fold is being tested on: a corpus with no
+/// journal entry cannot tell an exclusion that works from one that never ran.
+fn seed_notes_schemes(connection: &Connection, created: &str) -> KitResult<()> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    for (scheme_id, uri, title) in [
+        (
+            "demo-scheme-journal",
+            NOTES_JOURNAL_SCHEME_URI,
+            "People journal",
+        ),
+        ("demo-scheme-note-tags", NOTES_TAGS_SCHEME_URI, "Tags"),
+        (
+            "demo-scheme-relations",
+            NOTES_RELATIONS_SCHEME_URI,
+            "Link relation types",
+        ),
+    ] {
+        connection
+            .execute(
+                "INSERT INTO core_concept_scheme
+                   (scheme_id, uri, title, publisher, version, created_at)
+                 VALUES (?1, ?2, ?3, 'centraid', '1', ?4)
+                 ON CONFLICT (uri) DO NOTHING",
+                rusqlite::params![scheme_id, uri, title, created],
+            )
+            .map_err(door)?;
+    }
+    for (concept_id, scheme_id, notation, label) in [
+        (
+            "demo-journal-entry",
+            "demo-scheme-journal",
+            "entry",
+            "Journal entry",
+        ),
+        (
+            "demo-tag-travel",
+            "demo-scheme-note-tags",
+            "travel",
+            "Travel",
+        ),
+        (
+            "demo-tag-recipes",
+            "demo-scheme-note-tags",
+            "recipes",
+            "Recipes",
+        ),
+        // A non-ASCII label, because the library's tag list is sorted by
+        // `localeCompare` and a byte sort is where the two diverge.
+        ("demo-tag-cafe", "demo-scheme-note-tags", "café", "Café"),
+        (
+            "demo-relation-references",
+            "demo-scheme-relations",
+            "references",
+            "References",
+        ),
+    ] {
+        connection
+            .execute(
+                "INSERT INTO core_concept
+                   (concept_id, scheme_id, notation, pref_label, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+                 ON CONFLICT (scheme_id, notation) DO NOTHING",
+                rusqlite::params![concept_id, scheme_id, notation, label, created],
+            )
+            .map_err(door)?;
+    }
+    Ok(())
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "one generator, one reading order; see `seed_ledger`"
+)]
+fn seed_notes_demo(
+    connection: &Connection,
+    now: &str,
+    owner_party_id: &str,
+) -> KitResult<NotesDemoCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let mut counts = NotesDemoCounts::default();
+    let mut minted = 0usize;
+    let created = format!("{now}T00:00:00.000Z");
+    seed_notes_schemes(connection, &created)?;
+
+    for (index, (collection_id, name)) in DEMO_NOTEBOOKS.iter().enumerate() {
+        connection
+            .execute(
+                "INSERT INTO core_collection
+                   (collection_id, owner_party_id, name, cover_content_id,
+                    parent_collection_id, sort_order, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, NULL, NULL, ?4, ?5, ?5)",
+                rusqlite::params![
+                    collection_id,
+                    owner_party_id,
+                    name,
+                    i64::try_from(index + 1).unwrap_or(1),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.notebooks += 1;
+    }
+
+    let mut entry = 0usize;
+    for note in DEMO_NOTES {
+        let updated = format!("{}T09:00:00.000Z", day_before(now, note.updated_days_ago));
+        let content_id = seed_note_body(
+            connection,
+            note.id,
+            note.body,
+            note.format,
+            &created,
+            owner_party_id,
+            &mut minted,
+        )?;
+        let (deleted_at, purge_at) = if note.trashed {
+            (
+                Some(updated.clone()),
+                Some(format!("{}T09:00:00.000Z", day_after(now, 22))),
+            )
+        } else {
+            (None, None)
+        };
+        connection
+            .execute(
+                "INSERT INTO knowledge_note
+                   (note_id, author_party_id, title, body_content_id, current_revision_id,
+                    format, pinned, created_at, updated_at, deleted_at, purge_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                rusqlite::params![
+                    note.id,
+                    owner_party_id,
+                    note.title,
+                    content_id,
+                    format!("revision-{}", note.id),
+                    note.format,
+                    i64::from(note.pinned),
+                    created,
+                    updated,
+                    deleted_at,
+                    purge_at
+                ],
+            )
+            .map_err(door)?;
+        // THE FIRST OCCURRENCE. Every note's original body is a version like any
+        // other (#996 R20(a)), so the chain starts at creation and `history`
+        // never has to infer one from the absence of a parent.
+        connection
+            .execute(
+                "INSERT INTO core_entity_revision
+                   (revision_id, entity_type, entity_id, operation, snapshot_json,
+                    recorded_at, undo_until, undone_at, actor_party_id, invocation_id,
+                    content_id, parent_revision_id, updated_at)
+                 VALUES (?1, 'knowledge.note', ?2, 'revise', '{\"previous_content_id\":null}',
+                         ?3, ?3, NULL, NULL, NULL, ?4, NULL, ?3)",
+                rusqlite::params![
+                    format!("revision-{}", note.id),
+                    note.id,
+                    created,
+                    content_id
+                ],
+            )
+            .map_err(door)?;
+        counts.revisions += 1;
+        if let Some(notebook) = note.notebook {
+            entry += 1;
+            connection
+                .execute(
+                    "INSERT INTO core_collection_entry
+                       (entry_id, collection_id, target_type, target_id, position, added_at)
+                     VALUES (?1, ?2, 'knowledge.note', ?3, ?4, ?5)",
+                    rusqlite::params![
+                        format!("entry-{entry:06}"),
+                        notebook,
+                        note.id,
+                        i64::try_from(entry).unwrap_or(1),
+                        created
+                    ],
+                )
+                .map_err(door)?;
+        }
+        if note.journal {
+            counts.journal_entries += 1;
+            connection
+                .execute(
+                    "INSERT INTO core_tag
+                       (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                        confidence, tagged_at, updated_at)
+                     VALUES (?1, 'knowledge.note', ?2, 'demo-journal-entry', ?3, NULL, ?4, ?4)",
+                    rusqlite::params![
+                        format!("tag-journal-{}", note.id),
+                        note.id,
+                        owner_party_id,
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            counts.tags += 1;
+        } else if note.trashed {
+            counts.trashed += 1;
+        } else {
+            counts.notes += 1;
+            if note.pinned {
+                counts.pinned += 1;
+            }
+        }
+    }
+
+    // TAGS ON TWO LIVE NOTES AND ON THE JOURNAL ENTRY. The last one is the
+    // leak the library's in-memory re-narrowing exists to stop: a journal-only
+    // concept must not reach the tag chips.
+    for (tag_id, note_id, concept_id) in [
+        ("tag-000001", "note-000001", "demo-tag-travel"),
+        ("tag-000002", "note-000003", "demo-tag-recipes"),
+        ("tag-000003", "note-000003", "demo-tag-cafe"),
+        ("tag-000004", "note-000008", "demo-tag-cafe"),
+    ] {
+        connection
+            .execute(
+                "INSERT INTO core_tag
+                   (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                    confidence, tagged_at, updated_at)
+                 VALUES (?1, 'knowledge.note', ?2, ?3, ?4, NULL, ?5, ?5)",
+                rusqlite::params![tag_id, note_id, concept_id, owner_party_id, created],
+            )
+            .map_err(door)?;
+        counts.tags += 1;
+    }
+
+    // AN ATTACHMENT on the shortlist, with its own reading of the bytes.
+    let attachment_content = format!("content-{:06}", minted + 1);
+    connection
+        .execute(
+            "INSERT INTO core_content_item
+               (content_id, content_uri, sha256, byte_size, language, creator_party_id,
+                origin_device_id, deleted_at, purge_at, created_at, updated_at)
+             VALUES (?1, 'blob:sha256-aa', ?2, 4096, NULL, ?3, NULL, NULL, NULL, ?4, ?4)",
+            rusqlite::params![
+                attachment_content,
+                text_sha256("the cabin's confirmation page"),
+                owner_party_id,
+                created
+            ],
+        )
+        .map_err(door)?;
+    minted += 1;
+    counts.content_items = minted;
+    connection
+        .execute(
+            "INSERT INTO core_attachment
+               (attachment_id, target_type, target_id, content_id, role, is_primary, created_at)
+             VALUES ('attachment-000001', 'knowledge.note', 'note-000001', ?1, 'receipt', 1, ?2)",
+            rusqlite::params![attachment_content, created],
+        )
+        .map_err(door)?;
+    counts.attachments += 1;
+    connection
+        .execute(
+            "INSERT INTO core_content_representation
+               (representation_id, content_id, owner_type, owner_id, media_type,
+                charset, interpretation, created_at, updated_at)
+             VALUES ('representation-attachment-000001', ?1, 'core.attachment',
+                     'attachment-000001', 'application/pdf', NULL, 'receipt', ?2, ?2)",
+            rusqlite::params![attachment_content, created],
+        )
+        .map_err(door)?;
+
+    // A LINK WITH A STANDOFF ANCHOR, note→note, plus an ENDED one so the
+    // `valid_to IS NULL` predicate has something to exclude.
+    connection
+        .execute(
+            "INSERT INTO core_link
+               (link_id, from_type, from_id, to_type, to_id, relation_concept_id,
+                valid_from, valid_to, asserted_by, provenance_id, updated_at)
+             VALUES ('link-000001', 'knowledge.note', 'note-000001', 'knowledge.note',
+                     'note-000002', 'demo-relation-references', ?1, NULL, 'owner', NULL, ?1)",
+            [&created],
+        )
+        .map_err(door)?;
+    counts.links += 1;
+    connection
+        .execute(
+            "INSERT INTO core_link_anchor
+               (anchor_id, link_id, selector_json, created_at, updated_at)
+             VALUES ('anchor-000001', 'link-000001',
+                     '{\"exact\":\"South Lake\",\"prefix\":\"- \",\"suffix\":\":\",\"start\":11}',
+                     ?1, ?1)",
+            [&created],
+        )
+        .map_err(door)?;
+    connection
+        .execute(
+            "INSERT INTO core_link
+               (link_id, from_type, from_id, to_type, to_id, relation_concept_id,
+                valid_from, valid_to, asserted_by, provenance_id, updated_at)
+             VALUES ('link-000002', 'knowledge.note', 'note-000001', 'knowledge.note',
+                     'note-000004', 'demo-relation-references', ?1, ?1, 'owner', NULL, ?1)",
+            [&created],
+        )
+        .map_err(door)?;
+    Ok(counts)
+}
+
+/// `start + count days`, for the trash shelf's purge instant.
+fn day_after(start: &str, count: usize) -> String {
+    day(start, count)
+}
+
+/// A CYCLIC REVISION CHAIN — the fixture the cycle refusal needs (D-1020-N2).
+///
+/// `parent_revision_id` has no constraint that forbids a cycle: the DDL's only
+/// guard is the foreign key, so A→B→A is representable today and caught by a
+/// reader. This writes exactly that, so the refusal has something to refuse —
+/// and `contracts/migrations/002_revisions.sql` is the proposal that would make
+/// the row unwritable instead.
+///
+/// # Errors
+///
+/// [`KitError::Door`] for anything SQLite refuses.
+pub fn notes_revision_cycle(
+    connection: &Connection,
+    note_id: &str,
+    now: &str,
+) -> KitResult<(String, String)> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let created = format!("{now}T00:00:00.000Z");
+    let head = format!("revision-cycle-head-{note_id}");
+    let tail = format!("revision-cycle-tail-{note_id}");
+    let content_id: String = connection
+        .query_row(
+            "SELECT body_content_id FROM knowledge_note WHERE note_id = ?1",
+            [note_id],
+            |row| row.get(0),
+        )
+        .map_err(door)?;
+    for (revision_id, parent) in [(&head, &tail), (&tail, &head)] {
+        connection
+            .execute(
+                "INSERT INTO core_entity_revision
+                   (revision_id, entity_type, entity_id, operation, snapshot_json,
+                    recorded_at, undo_until, undone_at, actor_party_id, invocation_id,
+                    content_id, parent_revision_id, updated_at)
+                 VALUES (?1, 'knowledge.note', ?2, 'revise', '{}', ?3, ?3, NULL, NULL, NULL,
+                         ?4, ?5, ?3)",
+                rusqlite::params![revision_id, note_id, created, content_id, parent],
+            )
+            .map_err(door)?;
+    }
+    // The version bump is the trigger escape — see `seed_year3_notes`.
+    connection
+        .execute(
+            "UPDATE knowledge_note
+                SET current_revision_id = ?1, row_version = row_version + 1
+              WHERE note_id = ?2",
+            rusqlite::params![head, note_id],
+        )
+        .map_err(door)?;
+    Ok((head, tail))
+}
+
+/// The declared shape of year-3 Notes volume.
+///
+/// **A count is not a distribution.** Every field is DECLARED, and changing one
+/// changes what year-3 Notes volume means repo-wide — so it moves with the
+/// journey ledger's year-3 table and a version bump.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3NotesShape {
+    /// Notes, live and trashed together.
+    pub notes: usize,
+    /// How many of them are in the trash.
+    pub trashed: usize,
+    /// How many carry a pin. Every one is read BESIDE the window.
+    pub pinned: usize,
+    /// How many are People-journal entries — excluded from the library, search
+    /// and the powerbox, and the set every one of those folds re-narrows over.
+    pub journal_entries: usize,
+    /// Notebooks, and how many notes are filed into one.
+    pub notebooks: usize,
+    pub filed: usize,
+    /// Free-form labels, and how many notes carry one.
+    pub labels: usize,
+    pub labelled: usize,
+    /// Occurrences beyond the first, spread over the notes.
+    pub extra_versions: usize,
+    /// `[[wikilink]]` references, and how many carry a standoff anchor.
+    pub links: usize,
+    pub anchored: usize,
+    /// The length of a LONG body, in bytes of text. Under the 64 KiB inline
+    /// budget on purpose: a body over it is unwritable, so year-3 volume is the
+    /// largest body the product actually holds.
+    pub long_body_bytes: usize,
+    /// How many notes carry one.
+    pub long_bodies: usize,
+}
+
+/// THE YEAR-3 NOTES PROFILE: 10,000 notes against a 2,000-row window, 600 of
+/// them carrying a 48 KiB body.
+///
+/// The numbers a ceiling is stated at, and each one is the reason it is here:
+///
+/// * **10,000 notes against a 2,000-row window.** The library's declared
+///   maximum is 2,000 (`library.limit`), so a year-3 library is five windows
+///   deep — and twenty pages deep at `MAX_PAGE_ROWS`, which is what makes
+///   D-1020-D3-12's "walked, not clamped" divergence measurable rather than
+///   theoretical.
+/// * **200 pinned notes, which is `SHELF_ROWS` exactly.** The pinned shelf is
+///   read beside the window at 200 rows, so a profile at the shelf's own size is
+///   the case where the shelf fills and says nothing more is owed.
+/// * **600 long bodies at 48 KiB.** A list row carries a 200-character preview,
+///   so the fold decodes 28 MB of text to draw 120 KB of shelf. That ratio is
+///   the whole reason `preview` exists, and the number is what makes it a
+///   measurement rather than an argument.
+/// * **1,200 journal entries.** Every one of the four excluding folds
+///   re-narrows over this set in memory, so the exclusion's own cost is part of
+///   the library's.
+pub const YEAR3_NOTES: Year3NotesShape = Year3NotesShape {
+    notes: 10_000,
+    trashed: 400,
+    pinned: 200,
+    journal_entries: 1_200,
+    notebooks: 60,
+    filed: 6_000,
+    labels: 300,
+    labelled: 3_000,
+    extra_versions: 2_000,
+    links: 1_500,
+    anchored: 700,
+    long_body_bytes: 48 * 1024,
+    long_bodies: 600,
+};
+
+/// What one year-3 Notes seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3NotesCounts {
+    pub notes: usize,
+    pub live_notes: usize,
+    pub trashed: usize,
+    pub pinned: usize,
+    pub journal_entries: usize,
+    pub notebooks: usize,
+    pub content_items: usize,
+    pub revisions: usize,
+    pub tags: usize,
+    pub links: usize,
+    pub anchors: usize,
+    /// Bytes of note text this fixture holds, which is what a fold that decodes
+    /// every body is actually reading.
+    pub body_bytes: usize,
+}
+
+/// Seed the Notes axis of year-3 volume.
+///
+/// **Update instants repeat on purpose.** Notes share an `updated_at` in pairs,
+/// because the keyset page's whole reason for carrying the pk is that the sort
+/// key is not unique (#1020 apps seam 3) — a 10,000-note fixture with distinct
+/// instants cannot trip the page boundary the cursor exists for.
+///
+/// # Errors
+///
+/// [`KitError::Door`] for anything SQLite refuses.
+pub fn year3_notes(
+    connection: &Connection,
+    shape: Year3NotesShape,
+    seed: u64,
+) -> KitResult<Year3NotesCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    connection.execute_batch("BEGIN IMMEDIATE").map_err(door)?;
+    match seed_year3_notes(connection, shape, seed) {
+        Ok(counts) => {
+            connection.execute_batch("COMMIT").map_err(door)?;
+            Ok(counts)
+        }
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "one generator, one reading order; see `seed_ledger`"
+)]
+fn seed_year3_notes(
+    connection: &Connection,
+    shape: Year3NotesShape,
+    seed: u64,
+) -> KitResult<Year3NotesCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let mut stream = Seeded::new(seed);
+    let mut counts = Year3NotesCounts::default();
+    let mut minted = 0usize;
+    let start = "2097-01-01";
+    let created = format!("{start}T00:00:00.000Z");
+    seed_notes_schemes(connection, &created)?;
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+             VALUES (?1, 'person', 'Year Three', ?2, ?2)
+             ON CONFLICT (party_id) DO NOTHING",
+            rusqlite::params![YEAR3_OWNER_PARTY, created],
+        )
+        .map_err(door)?;
+
+    for index in 0..shape.notebooks {
+        connection
+            .execute(
+                "INSERT INTO core_collection
+                   (collection_id, owner_party_id, name, cover_content_id,
+                    parent_collection_id, sort_order, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, NULL, NULL, ?4, ?5, ?5)",
+                rusqlite::params![
+                    id("notebook", index),
+                    YEAR3_OWNER_PARTY,
+                    format!("Notebook {index:04}"),
+                    i64::try_from(index + 1).unwrap_or(1),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.notebooks += 1;
+    }
+
+    // The LABEL concepts, so the tag chips have somewhere to resolve.
+    for index in 0..shape.labels {
+        connection
+            .execute(
+                "INSERT INTO core_concept
+                   (concept_id, scheme_id, notation, pref_label, created_at, updated_at)
+                 VALUES (?1, 'demo-scheme-note-tags', ?2, ?3, ?4, ?4)",
+                rusqlite::params![
+                    id("concept", index),
+                    format!("label-{index:04}"),
+                    format!("Label {index:04}"),
+                    created
+                ],
+            )
+            .map_err(door)?;
+    }
+
+    // THE LONG BODY, written ONCE and rented by every note that carries one:
+    // bodies are sha256-deduped, so 600 notes over one 48 KiB body is what the
+    // product actually stores — and it is also the case a fold that decodes per
+    // ROW rather than per CONTENT gets wrong.
+    let long_text = "lorem ipsum dolor sit amet ".repeat(shape.long_body_bytes / 27 + 1);
+    let long_text = &long_text[..shape.long_body_bytes.min(long_text.len())];
+
+    let mut entry = 0usize;
+    let mut tags = 0usize;
+    for index in 0..shape.notes {
+        let note_id = id("note", index);
+        let long = index % (shape.notes / shape.long_bodies.max(1)).max(1) == 0
+            && counts.body_bytes / shape.long_body_bytes.max(1) < shape.long_bodies;
+        let body = if long {
+            long_text.to_owned()
+        } else {
+            format!(
+                "Note {index:05}\n- [ ] follow up\n- [x] filed\n\nA short body, {} words.",
+                stream.upto(40) + 3
+            )
+        };
+        let content_id = seed_note_body(
+            connection,
+            &note_id,
+            &body,
+            if index % 2 == 0 { "markdown" } else { "plain" },
+            &created,
+            YEAR3_OWNER_PARTY,
+            &mut minted,
+        )?;
+        counts.body_bytes += body.len();
+        // INSTANTS REPEAT IN PAIRS.
+        let updated = format!("{}T09:00:00.000Z", day(start, index / 2));
+        let trashed = index < shape.trashed;
+        let pinned = !trashed && index >= shape.trashed && index < shape.trashed + shape.pinned;
+        let journal = !trashed
+            && index >= shape.trashed + shape.pinned
+            && index < shape.trashed + shape.pinned + shape.journal_entries;
+        connection
+            .execute(
+                "INSERT INTO knowledge_note
+                   (note_id, author_party_id, title, body_content_id, current_revision_id,
+                    format, pinned, created_at, updated_at, deleted_at, purge_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                rusqlite::params![
+                    note_id,
+                    YEAR3_OWNER_PARTY,
+                    format!("Note {index:05}"),
+                    content_id,
+                    id("revision", index),
+                    if index % 2 == 0 { "markdown" } else { "plain" },
+                    i64::from(pinned),
+                    created,
+                    updated,
+                    if trashed { Some(updated.clone()) } else { None },
+                    if trashed {
+                        Some(format!("{}T09:00:00.000Z", day(start, index / 2 + 30)))
+                    } else {
+                        None
+                    }
+                ],
+            )
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO core_entity_revision
+                   (revision_id, entity_type, entity_id, operation, snapshot_json,
+                    recorded_at, undo_until, undone_at, actor_party_id, invocation_id,
+                    content_id, parent_revision_id, updated_at)
+                 VALUES (?1, 'knowledge.note', ?2, 'revise', '{\"previous_content_id\":null}',
+                         ?3, ?3, NULL, NULL, NULL, ?4, NULL, ?3)",
+                rusqlite::params![id("revision", index), note_id, created, content_id],
+            )
+            .map_err(door)?;
+        counts.notes += 1;
+        counts.revisions += 1;
+        counts.content_items = minted;
+        if trashed {
+            counts.trashed += 1;
+        } else {
+            counts.live_notes += 1;
+        }
+        if pinned {
+            counts.pinned += 1;
+        }
+        if journal {
+            connection
+                .execute(
+                    "INSERT INTO core_tag
+                       (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                        confidence, tagged_at, updated_at)
+                     VALUES (?1, 'knowledge.note', ?2, 'demo-journal-entry', ?3, NULL, ?4, ?4)",
+                    rusqlite::params![id("tag", tags), note_id, YEAR3_OWNER_PARTY, created],
+                )
+                .map_err(door)?;
+            tags += 1;
+            counts.tags += 1;
+            counts.journal_entries += 1;
+        }
+        if index < shape.filed {
+            entry += 1;
+            connection
+                .execute(
+                    "INSERT INTO core_collection_entry
+                       (entry_id, collection_id, target_type, target_id, position, added_at)
+                     VALUES (?1, ?2, 'knowledge.note', ?3, ?4, ?5)",
+                    rusqlite::params![
+                        id("entry", entry),
+                        id("notebook", index % shape.notebooks.max(1)),
+                        note_id,
+                        i64::try_from(entry).unwrap_or(1),
+                        created
+                    ],
+                )
+                .map_err(door)?;
+        }
+        if index < shape.labelled {
+            connection
+                .execute(
+                    "INSERT INTO core_tag
+                       (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                        confidence, tagged_at, updated_at)
+                     VALUES (?1, 'knowledge.note', ?2, ?3, ?4, NULL, ?5, ?5)",
+                    rusqlite::params![
+                        id("tag", tags),
+                        note_id,
+                        id("concept", index % shape.labels.max(1)),
+                        YEAR3_OWNER_PARTY,
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            tags += 1;
+            counts.tags += 1;
+        }
+    }
+
+    // THE EXTRA OCCURRENCES. Each one's parent is the note's previous head, so
+    // the chain a `history` read walks is as deep as the fixture says.
+    for index in 0..shape.extra_versions {
+        let note = index % shape.notes.max(1);
+        let note_id = id("note", note);
+        let revision_id = format!("{}-v{index:06}", id("revision", note));
+        let parent: String = connection
+            .query_row(
+                "SELECT current_revision_id FROM knowledge_note WHERE note_id = ?1",
+                [&note_id],
+                |row| row.get(0),
+            )
+            .map_err(door)?;
+        let content_id: String = connection
+            .query_row(
+                "SELECT body_content_id FROM knowledge_note WHERE note_id = ?1",
+                [&note_id],
+                |row| row.get(0),
+            )
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO core_entity_revision
+                   (revision_id, entity_type, entity_id, operation, snapshot_json,
+                    recorded_at, undo_until, undone_at, actor_party_id, invocation_id,
+                    content_id, parent_revision_id, updated_at)
+                 VALUES (?1, 'knowledge.note', ?2, 'revise', '{}', ?3, ?3, NULL, NULL, NULL,
+                         ?4, ?5, ?3)",
+                rusqlite::params![revision_id, note_id, created, content_id, parent],
+            )
+            .map_err(door)?;
+        // **THE UPDATE BUMPS `row_version` ITSELF, AND THAT IS NOT COSMETIC.**
+        // `knowledge_note_touch_updated_at` fires `WHEN NEW.row_version =
+        // OLD.row_version` and stamps `updated_at` with the HOST clock — so an
+        // ordinary update here would date every note with extra versions to the
+        // moment the fixture was generated, and the corpus would stop being
+        // byte-reproducible. `two_runs_of_one_seed_write_the_same_corpus` is
+        // what found it. Bumping the version is the same escape an applier
+        // takes: the writer owns the version, so the trigger stands aside.
+        connection
+            .execute(
+                "UPDATE knowledge_note
+                    SET current_revision_id = ?1, row_version = row_version + 1
+                  WHERE note_id = ?2",
+                rusqlite::params![revision_id, note_id],
+            )
+            .map_err(door)?;
+        counts.revisions += 1;
+    }
+
+    for index in 0..shape.links {
+        let from = id("note", index % shape.notes.max(1));
+        let to = id("note", (index + 7) % shape.notes.max(1));
+        if from == to {
+            continue;
+        }
+        let link_id = id("link", index);
+        connection
+            .execute(
+                "INSERT INTO core_link
+                   (link_id, from_type, from_id, to_type, to_id, relation_concept_id,
+                    valid_from, valid_to, asserted_by, provenance_id, updated_at)
+                 VALUES (?1, 'knowledge.note', ?2, 'knowledge.note', ?3,
+                         'demo-relation-references', ?4, NULL, 'owner', NULL, ?4)",
+                rusqlite::params![link_id, from, to, created],
+            )
+            .map_err(door)?;
+        counts.links += 1;
+        if index < shape.anchored {
+            connection
+                .execute(
+                    "INSERT INTO core_link_anchor
+                       (anchor_id, link_id, selector_json, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?4)",
+                    rusqlite::params![
+                        id("anchor", index),
+                        link_id,
+                        format!(
+                            "{{\"exact\":\"follow up\",\"prefix\":\"- [ ] \",\"suffix\":\"\",\"start\":{}}}",
+                            stream.upto(40)
+                        ),
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            counts.anchors += 1;
+        }
+    }
+    Ok(counts)
+}
+
+/// ONE NOTE, exactly as a screen fixture describes it (#1020, D-1020-N5).
+///
+/// `contracts/screens/notes/*.bin` are `NotesEditorState` messages carrying a
+/// title, a body and a format; this seeds the row that answers one, so the
+/// editor contract is checked against the HANDLER and not only against a
+/// renderer. It is here rather than in `crates/apps/notes/tests` for the reason
+/// [`notes_demo`] is: `sql-confinement` scans an app crate's tests too.
+///
+/// # Errors
+///
+/// [`KitError::Door`] for anything SQLite refuses.
+pub fn notes_editor_note(
+    connection: &Connection,
+    note_id: &str,
+    title: &str,
+    body: &str,
+    format: &str,
+    now: &str,
+    owner_party_id: &str,
+) -> KitResult<String> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let created = format!("{now}T00:00:00.000Z");
+    let mut minted = 0usize;
+    let content_id = seed_note_body(
+        connection,
+        note_id,
+        body,
+        format,
+        &created,
+        owner_party_id,
+        &mut minted,
+    )?;
+    connection
+        .execute(
+            "INSERT INTO knowledge_note
+               (note_id, author_party_id, title, body_content_id, current_revision_id,
+                format, pinned, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, NULL, ?5, 0, ?6, ?6)",
+            rusqlite::params![note_id, owner_party_id, title, content_id, format, created],
+        )
+        .map_err(door)?;
+    Ok(content_id)
+}
