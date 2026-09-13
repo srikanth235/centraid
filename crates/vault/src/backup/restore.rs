@@ -673,8 +673,21 @@ mod tests {
             connection
                 .execute_batch("PRAGMA foreign_keys = OFF")
                 .unwrap();
+            // THE CALENDAR GOES WITH THE OWNER. `Vault::found` mints a private
+            // "Personal" calendar owned by the party it just wrote — v0's
+            // `bootstrap.ts:150`-`:158`, restored to the port because
+            // `schedule.propose_event` has a `calendar_exists` precondition and
+            // no command mints one. Deleting the party and leaving the calendar
+            // is a genuinely DANGLING reference, which `foreign_key_check`
+            // reports and should: this test wants a vault that is sound and
+            // empty, not one that is broken.
             connection
-                .execute_batch("DELETE FROM core_vault; DELETE FROM core_party; VACUUM")
+                .execute_batch(
+                    "DELETE FROM schedule_calendar;
+                     DELETE FROM core_vault;
+                     DELETE FROM core_party;
+                     VACUUM",
+                )
                 .unwrap();
         }
         let structural = restore_check(&file, None).unwrap();

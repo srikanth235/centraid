@@ -49,6 +49,53 @@ const SEED_RELATIONS: &[(&str, &str)] = &[
 
 /// Seed the relations scheme and its notations. Idempotent over an existing
 /// scheme, so re-founding a restored file adds nothing.
+/// THE DEFAULT CALENDAR, WITHOUT WHICH AGENDA CANNOT BE USED AT ALL.
+///
+/// `schedule.propose_event` has a `calendar_exists` precondition and **no
+/// command mints a calendar** — in v0 this row came from bootstrap
+/// (`packages/vault/src/bootstrap.ts:150-158`, "Events require a calendar
+/// … but no command mints one — seed a private 'Personal' calendar so
+/// schedule works from first boot"). The port left it out, so every v1
+/// vault founded before this line refused every event with "That calendar
+/// doesn't exist." There is no other door: the app is inert without it.
+///
+/// UTC, and not a guess at the owner's zone. v0 took a `defaultTz` option
+/// and defaulted it to UTC for the same reason — founding happens before
+/// anybody has said where they are, and a calendar stamped with the
+/// founding machine's zone is a wrong answer that looks like a right one.
+fn seed_default_calendar(
+    connection: &rusqlite::Connection,
+    ids: &dyn crate::clock::Ids,
+    owner_party_id: &str,
+    now: &str,
+) -> Result<()> {
+    connection.execute(
+        "INSERT INTO schedule_calendar
+           (calendar_id, owner_party_id, name, color, default_tz, visibility,
+            external_uri, created_at)
+         VALUES (?1, ?2, 'Personal', NULL, 'UTC', 'private', NULL, ?3)",
+        rusqlite::params![ids.next(), owner_party_id, now],
+    )?;
+    Ok(())
+}
+
+/// The enrichment-policy mirror, `gateway` on both domains.
+///
+/// v0 wrote these at bootstrap too (`bootstrap.ts:140-149`): the table shadows
+/// the settings bag, and a domain with no row is a domain whose reader has to
+/// invent a default — which is how two readers end up inventing two.
+fn seed_enrichment_policy(connection: &rusqlite::Connection, now: &str) -> Result<()> {
+    for domain in ["photos", "docs"] {
+        connection.execute(
+            "INSERT INTO enrich_policy (domain, tier, updated_at)
+             VALUES (?1, 'gateway', ?2)
+             ON CONFLICT (domain) DO NOTHING",
+            rusqlite::params![domain, now],
+        )?;
+    }
+    Ok(())
+}
+
 fn seed_relation_vocabulary(
     connection: &rusqlite::Connection,
     ids: &dyn crate::clock::Ids,
@@ -116,6 +163,8 @@ impl Vault {
                 rusqlite::params![vault_id, owner_party_id, display_name, now],
             )?;
             seed_relation_vocabulary(tx.connection(), self.ids(), &now)?;
+            seed_default_calendar(tx.connection(), self.ids(), &owner_party_id, &now)?;
+            seed_enrichment_policy(tx.connection(), &now)?;
             Ok(())
         })?;
         Ok(Founded {
@@ -124,7 +173,7 @@ impl Vault {
         })
     }
 
-    /// The vault's own id, if it has been founded.
+        /// The vault's own id, if it has been founded.
     pub fn vault_id(&self) -> Result<Option<String>> {
         self.read(|connection| {
             Ok(connection

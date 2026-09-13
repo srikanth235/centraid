@@ -1071,19 +1071,49 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
         });
     }
     // TEXT STAYS IN THE ROW (the FTS feed decodes it in-transaction); binary
-    // bytes spill to the CAS, and the spill needs a blob door `CommandCtx` does
-    // not carry — D-1020-DC8, the module note. A refusal, never a
-    // `core_content_item` whose `content_uri` names bytes nothing stored.
-    if !media_type.starts_with("text/") {
-        return Err(VaultError::InvalidInput {
-            name: "data_uri".to_owned(),
-            detail: format!(
-                "`{media_type}` bytes cannot ride a command's own JSON in this build: \
-                 the local content store is not on the command context yet. \
-                 Stage them first (POST /_vault/blobs) and send `staged_sha`"
-            ),
-        });
-    }
+    // bytes SPILL to the local content store and the row keeps only
+    // `blob:sha256-<hex>`. That is v0's split verbatim
+    // (`packages/vault/src/blob/mint.ts:88`-`:99`), and the port shipped the
+    // split with no store behind it: every photograph and every PDF was
+    // refused by `media.add_asset` and `core.add_document` for a year of
+    // commits because `CommandCtx` had no blob door. It has one now.
+    //
+    // A vault opened WITHOUT a store still refuses, and says so — see
+    // `pre_inline_bytes_are_storable`, which is the gate that should have
+    // stopped this call before it got here.
+    let content_uri = if media_type.starts_with("text/") {
+        uri.to_owned()
+    } else {
+        let Some(blobs) = ctx.blobs() else {
+            return Err(VaultError::InvalidInput {
+                name: "data_uri".to_owned(),
+                detail: format!(
+                    "`{media_type}` bytes cannot be stored: this vault was opened with no \
+                     local content store. Stage them first (POST /_vault/blobs) and send \
+                     `staged_sha`"
+                ),
+            });
+        };
+        // THE SPILL IS VERIFIED AGAINST ITS OWN NAME. The store returns the
+        // digest it wrote under, and a digest that is not the one we hashed
+        // means the row we are about to write would point at other bytes —
+        // which is the one failure a content-addressed store exists to make
+        // impossible, so it is an invariant and not a warning.
+        let spilled = blobs
+            .put(&bytes)
+            .map_err(|error| VaultError::Invariant {
+                context: format!("the content store refused {} bytes: {error}", bytes.len()),
+            })?;
+        if spilled != sha {
+            return Err(VaultError::Invariant {
+                context: format!(
+                    "the content store wrote {spilled} for bytes that hash to {sha} — \
+                     refusing to mint a row that names the wrong bytes"
+                ),
+            });
+        }
+        blob_uri_for(&sha)
+    };
     let content_id = ctx.next_id();
     ctx.connection().execute(
         "INSERT INTO core_content_item
@@ -1092,7 +1122,7 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
          VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
         rusqlite::params![
             content_id,
-            uri,
+            content_uri,
             sha,
             byte_size,
             actor_party_id(ctx).ok(),
@@ -1474,14 +1504,20 @@ pub(crate) fn pre_text_body_within_budget(ctx: &CommandCtx<'_, '_>) -> Result<Op
     )
 }
 
-/// D-1020-DC8, AS A GATE RATHER THAN A THROW.
+/// CAN THESE BYTES ACTUALLY BE KEPT? A gate rather than a throw.
 ///
-/// Inline bytes that are not `text/*` have to be spilled into the local
-/// content store, and `CommandCtx` carries no blob door. v0 throws from the
-/// handler and its HTTP layer turns the throw into `{status: "denied"}`; here
-/// it is a PRECONDITION, so the refusal is receipted with its own predicate and
-/// an owner-facing sentence, and the audit trail names the gate rather than an
+/// Inline bytes that are not `text/*` spill into the local content store, and
+/// a vault opened without one cannot keep them. v0 throws from the handler and
+/// its HTTP layer turns the throw into `{status: "denied"}`; here it is a
+/// PRECONDITION, so the refusal is receipted with its own predicate and an
+/// owner-facing sentence, and the audit trail names the gate rather than an
 /// exception type.
+///
+/// **This used to refuse unconditionally** (D-1020-DC8), because `CommandCtx`
+/// had no blob door at all: the port carried v0's text-versus-binary split
+/// without the store behind it, so every photograph through `media.add_asset`
+/// and every PDF through `core.add_document` was refused. The door exists now
+/// ([`CommandCtx::blobs`]) and this asks whether THIS vault has one.
 ///
 /// It does NOT refuse bytes this vault already holds: the mint dedupes before
 /// it would spill, so a second wrapper over a content item that exists needs no
@@ -1493,7 +1529,7 @@ pub(crate) fn pre_inline_bytes_are_storable(ctx: &CommandCtx<'_, '_>) -> Result<
     let Ok((media_type, bytes)) = decode_data_uri(uri) else {
         return Ok(None);
     };
-    if media_type.starts_with("text/") {
+    if media_type.starts_with("text/") || ctx.blobs().is_some() {
         return Ok(None);
     }
     let held: i64 = ctx.connection().query_row(
@@ -1503,9 +1539,8 @@ pub(crate) fn pre_inline_bytes_are_storable(ctx: &CommandCtx<'_, '_>) -> Result<
     )?;
     Ok((held == 0).then(|| {
         format!(
-            "`{media_type}` bytes cannot ride a command's own JSON in this build: \
-             the local content store is not on the command context yet. \
-             Stage them first (POST /_vault/blobs) and send `staged_sha`"
+            "`{media_type}` bytes cannot be stored: this vault was opened with no local \
+             content store. Stage them first (POST /_vault/blobs) and send `staged_sha`"
         )
     }))
 }

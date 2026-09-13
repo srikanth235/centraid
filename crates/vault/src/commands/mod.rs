@@ -116,6 +116,8 @@ pub struct CommandCtx<'tx, 'conn> {
     ids: &'tx dyn Ids,
     clock: &'tx dyn crate::clock::Clock,
     produced_ids: std::cell::RefCell<Vec<String>>,
+    /// The vault's local content store, when it has one. See [`CommandCtx::blobs`].
+    blobs: Option<&'tx (dyn crate::backup::store::BlobStore + Send + Sync)>,
 }
 
 impl<'conn> CommandCtx<'_, 'conn> {
@@ -124,6 +126,17 @@ impl<'conn> CommandCtx<'_, 'conn> {
     #[must_use]
     pub const fn connection(&self) -> &'conn Connection {
         self.tx.connection()
+    }
+
+    /// THE BLOB DOOR: where bytes that are not text go.
+    ///
+    /// `None` means this vault was opened without a content store, and a
+    /// handler that needs one must REFUSE rather than write a row pointing at
+    /// bytes nothing kept. `pre_inline_bytes_are_storable` is that refusal, so
+    /// in practice a handler reaching here has already been gated.
+    #[must_use]
+    pub const fn blobs(&self) -> Option<&(dyn crate::backup::store::BlobStore + Send + Sync)> {
+        self.blobs
     }
 
     /// A fresh id.
@@ -624,6 +637,7 @@ impl Vault {
                 ids: self.ids(),
                 clock: self.clock(),
                 produced_ids: std::cell::RefCell::new(Vec::new()),
+                blobs: self.blobs(),
             };
 
             // Gate 4. EVERY precondition's result is written, then the first

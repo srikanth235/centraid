@@ -23,21 +23,30 @@
 //! do the same. A condition that read `strftime('now')` could not be fixtured
 //! at any instant but the host's (D-1020-D3-6's two-clocks finding).
 //!
-//! ## The one command that is not real, and why
+//! ## `media.add_asset`, and the door it waited on
 //!
-//! `media.add_asset` is registered with its real schema, idempotency and risk,
-//! and its handler refuses with a sentence naming the missing seam: **moving
-//! bytes needs a blob door on [`CommandCtx`]**, and `CommandCtx` is not this
-//! slot's file. v0's path is `ctx.blobs.spill(bytes)` into the CAS for anything
-//! that is not `text/*` (`packages/vault/src/blob/mint.ts:90-99`), plus the
-//! staged-claim door; `crates/vault`'s `FsBlobStore` exists for the backup
-//! plane and is not wired to a command context. Faking it — writing a
-//! `core_content_item` whose `content_uri` names bytes nothing stored — would
-//! produce a library of rows with no photographs in it, which is worse than a
-//! refusal. Named as an owner hand-off in the lane's receipt.
+//! It was registered with its real schema, idempotency and risk, and its
+//! handler refused every call with a sentence naming the missing seam: moving
+//! bytes needs a blob door on [`CommandCtx`], and `CommandCtx` had none. The
+//! port had carried v0's text-versus-binary split
+//! (`packages/vault/src/blob/mint.ts:88`-`:99`) without the store behind it,
+//! so a vault could hold a note and not a photograph. `FsBlobStore` existed
+//! the whole time, for the backup plane, and was simply not wired to a command
+//! context.
+//!
+//! [`Vault::with_blobs`](crate::file::Vault::with_blobs) is that wiring and
+//! this command is real. What did NOT change is the rule the refusal was
+//! protecting: a vault opened with no store still refuses binary inline bytes,
+//! because a `core_content_item` whose `content_uri` names bytes nothing kept
+//! is a library of rows with no photographs in it.
 
+use crate::commands::core::{
+    decode_data_uri,
+    minted_bytes, pre_exactly_one_source, pre_inline_bytes_are_storable, pre_is_data_uri,
+    pre_staged_or_owned, pre_within_size_cap, set_representation,
+};
 use crate::commands::{
-    CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk, not_implemented,
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk,
 };
 use crate::error::{Result, VaultError};
 
@@ -438,14 +447,453 @@ fn add_asset() -> CommandDefinition {
         idempotency: Idempotency::Once,
         risk: Risk::Low,
         confirm: false,
-        preconditions: &[],
-        postconditions: &[],
-        // See the module note: moving bytes needs a blob door on `CommandCtx`,
-        // which is not this slot's file.
-        handler: not_implemented,
+        preconditions: ADD_ASSET_PRE,
+        postconditions: &[CommandCondition {
+            predicate: "asset_backed_by_content",
+            check: |ctx| {
+                // THE WHOLE CLAIM, CHECKED THROUGH THE BYTES: a live asset now
+                // stands over the bytes this call carried. A `media_asset`
+                // whose content item is trashed is a photograph in a library
+                // that has already thrown it away.
+                //
+                // By SHA and not by asset id, deliberately. A postcondition is
+                // handed the INPUT and never the output, and this command's
+                // input names no asset — so an id-based check would have to
+                // guess one out of `produced_ids`, which breaks twice over:
+                // the mint takes the first id (bytes come before the wrapper
+                // here, unlike a document), and the DEDUPE path produces no
+                // asset id at all because it adopted an existing row. The sha
+                // is derivable from the input in both cases and is the thing
+                // the caller actually asked about.
+                let Some(sha) = sha_of_input(ctx)? else {
+                    // Neither door named bytes; `exactly_one_source` already
+                    // refused this and has the better sentence.
+                    return Ok(None);
+                };
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM media_asset a
+                       JOIN core_content_item c ON c.content_id = a.content_id
+                      WHERE c.sha256 = ?1 AND c.deleted_at IS NULL AND a.deleted_at IS NULL",
+                    [&sha],
+                    |row| row.get(0),
+                )?;
+                Ok((count < 1).then(|| "the asset did not enter the library".to_owned()))
+            },
+        }],
+        handler: add_asset_handler,
         sealed_input: &[],
         online_only: false,
     }
+}
+
+/// v0's six gates, plus the one this build adds
+/// (`packages/vault/src/commands/media.ts:344`-`:395`).
+const ADD_ASSET_PRE: &[CommandCondition] = &[
+    CommandCondition {
+        predicate: "exactly_one_source",
+        check: pre_exactly_one_source,
+    },
+    CommandCondition {
+        predicate: "coordinate_pair_complete",
+        check: |ctx| {
+            // A COORDINATE IS A PAIR. Half of one is no location at all, and
+            // dropping it silently would let a caller believe it had placed a
+            // photograph it had not.
+            let lat = ctx.input.get("latitude").is_some_and(|v| !v.is_null());
+            let lng = ctx.input.get("longitude").is_some_and(|v| !v.is_null());
+            Ok((lat != lng).then(|| {
+                "A location needs both a latitude and a longitude.".to_owned()
+            }))
+        },
+    },
+    CommandCondition {
+        predicate: "is_data_uri",
+        check: pre_is_data_uri,
+    },
+    CommandCondition {
+        predicate: "within_size_cap",
+        check: pre_within_size_cap,
+    },
+    CommandCondition {
+        predicate: "inline_bytes_are_storable",
+        check: pre_inline_bytes_are_storable,
+    },
+    CommandCondition {
+        predicate: "staged_or_owned",
+        check: pre_staged_or_owned,
+    },
+    CommandCondition {
+        predicate: "source_asset_exists",
+        check: |ctx| {
+            // A claimed source must be a real asset in THIS vault (#711). Named
+            // here rather than left to the foreign key, so a mistyped lineage
+            // names the failing gate instead of a raw constraint error landing
+            // mid-insert.
+            let Some(source) = ctx.optional_str("source_asset_id") else {
+                return Ok(None);
+            };
+            let count: i64 = ctx.connection().query_row(
+                "SELECT COUNT(*) FROM media_asset WHERE asset_id = ?1",
+                [source],
+                |row| row.get(0),
+            )?;
+            Ok((count != 1).then(|| "That photo is not in this library.".to_owned()))
+        },
+    },
+];
+
+/// The digest of the bytes this call carries, whichever door they came through.
+///
+/// `None` when it named neither, which `exactly_one_source` has already
+/// refused.
+fn sha_of_input(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if let Some(sha) = ctx.optional_str("staged_sha") {
+        return Ok(Some(sha.to_owned()));
+    }
+    let Some(uri) = ctx.optional_str("data_uri") else {
+        return Ok(None);
+    };
+    // THE RAW DECODED BYTES, never the URI text — the same identity the mint
+    // uses, and the reason the same photograph declared under two media types
+    // is one content item rather than two (v0's dedup hole, `blob/mint.ts:6`).
+    let (_, bytes) = decode_data_uri(uri)?;
+    Ok(Some(centraid_media::format::sha256_hex(&bytes)))
+}
+
+/// The `kind` bytes imply, when the caller does not say
+/// (`packages/vault/src/commands/media.ts:71`-`:76`).
+fn asset_kind_for(media_type: &str) -> &'static str {
+    if media_type.starts_with("video/") {
+        "video"
+    } else if media_type.starts_with("audio/") {
+        "audio"
+    } else if media_type.starts_with("image/") {
+        "photo"
+    } else {
+        "scan"
+    }
+}
+
+/// ~11m identity precision, so burst photos share one `core_place`. The ROW
+/// keeps the precise coordinates (#352).
+fn round_coord(value: f64) -> f64 {
+    (value * 10_000.0).round() / 10_000.0
+}
+
+/// ~170m: the radius at which an existing NAMED place is adopted. Looser than
+/// the ~11m identity rung on purpose — "the cabin" covers a garden.
+const NAMED_PLACE_RADIUS_DEG: f64 = 0.0015;
+
+/// A COORDINATE-AS-NAME IS NOT A NAME, so it is never adopted: adopting one
+/// would spread a placeholder over every later photograph taken nearby, and
+/// the member would then have to rename a place they never named.
+fn is_coordinate_label(name: &str) -> bool {
+    let trimmed = name.trim();
+    let Some((lat, lng)) = trimmed.split_once(',') else {
+        return false;
+    };
+    fn is_decimal(text: &str) -> bool {
+        let text = text.trim();
+        let text = text.strip_prefix('-').unwrap_or(text);
+        matches!(text.split_once('.'), Some((whole, fraction))
+            if (1..=3).contains(&whole.len())
+                && whole.bytes().all(|b| b.is_ascii_digit())
+                && !fraction.is_empty()
+                && fraction.bytes().all(|b| b.is_ascii_digit()))
+    }
+    is_decimal(lat) && is_decimal(lng)
+}
+
+/// Find-or-create a place: a NAMED one within ~170m, else the rounded identity
+/// rung at ~11m, else a new coordinate-labelled row. The stored coordinates
+/// stay precise either way (`packages/vault/src/commands/media.ts:97`-`:147`).
+fn find_or_create_place(ctx: &CommandCtx<'_, '_>, lat: f64, lng: f64) -> Result<String> {
+    // The box is divided by cos(lat) so it stays roughly square as it moves
+    // away from the equator — SQLite has no trigonometry, so the shaping
+    // happens here and the query gets a plain bounding box.
+    let lng_radius = NAMED_PLACE_RADIUS_DEG / (lat.to_radians().cos()).max(0.05);
+    let mut statement = ctx.connection().prepare(
+        "SELECT place_id, name FROM core_place
+          WHERE geo_lat IS NOT NULL AND geo_lng IS NOT NULL
+            AND geo_lat BETWEEN ?1 AND ?2
+            AND geo_lng BETWEEN ?3 AND ?4
+            AND name IS NOT NULL AND trim(name) <> ''
+          ORDER BY (geo_lat - ?5) * (geo_lat - ?5) + (geo_lng - ?6) * (geo_lng - ?6)
+          LIMIT 8",
+    )?;
+    let named: Vec<(String, String)> = statement
+        .query_map(
+            rusqlite::params![
+                lat - NAMED_PLACE_RADIUS_DEG,
+                lat + NAMED_PLACE_RADIUS_DEG,
+                lng - lng_radius,
+                lng + lng_radius,
+                lat,
+                lng,
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?
+        .collect::<std::result::Result<_, _>>()?;
+    if let Some((place_id, _)) = named
+        .iter()
+        .find(|(_, name)| !is_coordinate_label(name))
+    {
+        return Ok(place_id.clone());
+    }
+    drop(statement);
+
+    let existing: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT place_id FROM core_place
+              WHERE geo_lat IS NOT NULL AND geo_lng IS NOT NULL
+                AND ROUND(geo_lat, 4) = ?1 AND ROUND(geo_lng, 4) = ?2
+              LIMIT 1",
+            rusqlite::params![round_coord(lat), round_coord(lng)],
+            |row| row.get(0),
+        )
+        .ok();
+    if let Some(place_id) = existing {
+        return Ok(place_id);
+    }
+    let place_id = ctx.next_id();
+    ctx.connection().execute(
+        "INSERT INTO core_place
+           (place_id, name, kind, geo_lat, geo_lng, geohash, address_json, tz,
+            parent_place_id, created_at, updated_at)
+         VALUES (?1, ?2, NULL, ?3, ?4, NULL, NULL, NULL, NULL, ?5, ?5)",
+        rusqlite::params![
+            place_id,
+            format!("{lat:.4}, {lng:.4}"),
+            lat,
+            lng,
+            ctx.now
+        ],
+    )?;
+    Ok(place_id)
+}
+
+/// The staging band's own reading of these bytes, as JSON.
+///
+/// v0's gateway sniffs the type and reads EXIF server-side at staging time, and
+/// the claim then inherits what it found. v1 has the column and no producer
+/// filling it yet, so this is almost always `{}` — which is why every read of
+/// it below is a FALLBACK behind the caller's own value, exactly as v0 orders
+/// them, rather than a field this command depends on.
+fn staged_meta(ctx: &CommandCtx<'_, '_>) -> serde_json::Value {
+    let Some(sha) = ctx.optional_str("staged_sha") else {
+        return serde_json::Value::Null;
+    };
+    ctx.connection()
+        .query_row(
+            "SELECT meta_json FROM blob_staging WHERE sha256 = ?1 AND variant IS NULL",
+            [sha],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or(serde_json::Value::Null)
+}
+
+/// UNIQUE `content_id`: ADOPT, do not duplicate.
+///
+/// Two members importing the same photograph, or one member importing it
+/// twice, are one asset — `media_asset.content_id` is unique and says so. A
+/// re-upload of trashed bytes RESTORES them, which is `media.add_asset`'s own
+/// rule and the reason the schema calls it "re-upload = restore".
+///
+/// It deliberately does not stamp `source_asset_id` (#711): these bytes do not
+/// DERIVE from that asset, they ARE it.
+fn adopt_asset_for_content(
+    ctx: &CommandCtx<'_, '_>,
+    content_id: &str,
+    capture_group_id: Option<&str>,
+) -> Result<Option<String>> {
+    let existing: Option<(String, Option<String>, Option<String>)> = ctx
+        .connection()
+        .query_row(
+            "SELECT asset_id, deleted_at, capture_group_id FROM media_asset
+              WHERE content_id = ?1",
+            [content_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .ok();
+    let Some((asset_id, deleted_at, group)) = existing else {
+        return Ok(None);
+    };
+    if deleted_at.is_some() || (group.is_none() && capture_group_id.is_some()) {
+        ctx.connection().execute(
+            "UPDATE media_asset
+                SET deleted_at = NULL,
+                    purge_at = NULL,
+                    capture_group_id = COALESCE(capture_group_id, ?1)
+              WHERE asset_id = ?2",
+            rusqlite::params![capture_group_id, asset_id],
+        )?;
+    }
+    Ok(Some(asset_id))
+}
+
+/// EXIF as this command stores it: everything the staging band read, minus the
+/// extracted text (`packages/vault/src/commands/media.ts:149`-`:155`).
+///
+/// The text is excluded because it belongs in the search index rather than in a
+/// JSON blob nothing queries, and because an OCR pass over a page of a passport
+/// would otherwise sit in a column no policy covers.
+fn exif_json_for_meta(meta: &serde_json::Value) -> Option<String> {
+    let object = meta.as_object()?;
+    let kept: serde_json::Map<String, serde_json::Value> = object
+        .iter()
+        .filter(|(key, value)| key.as_str() != "text" && !value.is_null())
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    (!kept.is_empty()).then(|| serde_json::Value::Object(kept).to_string())
+}
+
+/// A number the caller gave, else one the staging band read, else nothing.
+fn number_of(ctx: &CommandCtx<'_, '_>, meta: &serde_json::Value, key: &str) -> Option<f64> {
+    ctx.input
+        .get(key)
+        .and_then(serde_json::Value::as_f64)
+        .or_else(|| meta.get(key).and_then(serde_json::Value::as_f64))
+}
+
+/// The same, for a string.
+fn text_of(ctx: &CommandCtx<'_, '_>, meta: &serde_json::Value, key: &str) -> Option<String> {
+    ctx.optional_str(key).map(str::to_owned).or_else(|| {
+        meta.get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    })
+}
+
+/// ONE PHOTOGRAPH ENTERS THE LIBRARY
+/// (`packages/vault/src/commands/media.ts:414`-`:549`).
+///
+/// The order is v0's and each step depends on the one before it: the bytes are
+/// minted or claimed FIRST, because an asset is meaning over bytes and there is
+/// nothing to mean without them; the adopt check comes next, because
+/// `media_asset.content_id` is unique and a second wrapper over one sha is the
+/// same photograph; and the asset's own id is minted before anything hangs off
+/// it, which is what makes `produced_ids[0]` the asset for the postcondition.
+fn add_asset_handler(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let meta = staged_meta(ctx);
+    let minted = minted_bytes(ctx)?;
+    let content_id = minted.content_id.clone();
+    let capture_group_id = ctx.optional_str("capture_group_id").map(str::to_owned);
+
+    if let Some(adopted) = adopt_asset_for_content(ctx, &content_id, capture_group_id.as_deref())? {
+        return Ok(serde_json::json!({
+            "asset_id": adopted,
+            "content_id": content_id,
+            "deduped": 1,
+        }));
+    }
+
+    let asset_id = ctx.next_id();
+    // The caller's pair wins over the staging band's, like every other field on
+    // this command. Staged GPS only rides here when the owner kept it — it has
+    // already passed the location policy at staging time.
+    let place_id = match (
+        number_of(ctx, &meta, "latitude"),
+        number_of(ctx, &meta, "longitude"),
+    ) {
+        (Some(lat), Some(lng)) => Some(find_or_create_place(ctx, lat, lng)?),
+        _ => None,
+    };
+    let kind = ctx
+        .optional_str("kind")
+        .map_or_else(|| asset_kind_for(&minted.media_type).to_owned(), str::to_owned);
+    ctx.connection().execute(
+        "INSERT INTO media_asset
+           (asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id,
+            source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json,
+            deleted_at, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10, ?11, ?12, ?13, NULL, ?14, ?14)",
+        rusqlite::params![
+            asset_id,
+            content_id,
+            kind,
+            ctx.optional_str("title"),
+            text_of(ctx, &meta, "captured_at"),
+            number_of(ctx, &meta, "tz_offset_min").map(|value| value as i64),
+            capture_group_id,
+            // EDIT LINEAGE (#711) has deliberately no fallback: only the caller
+            // knows it, because nothing in the bytes says "I was cropped out of
+            // that one".
+            ctx.optional_str("source_asset_id"),
+            place_id,
+            number_of(ctx, &meta, "width").map(|value| value as i64),
+            number_of(ctx, &meta, "height").map(|value| value as i64),
+            number_of(ctx, &meta, "duration_s"),
+            exif_json_for_meta(&meta),
+            ctx.now,
+        ],
+    )?;
+
+    // PERCEPTUAL HASH (#299 §2, Tier 0): producer-agnostic, like thumbnails.
+    // Derived data in a sidecar — near-duplicates are one join away and nothing
+    // is merged automatically, which is the rule the whole tier exists under.
+    let contributed: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT text_content FROM core_content_derivative
+              WHERE content_id = ?1 AND variant = 'phash'",
+            [&content_id],
+            |row| row.get(0),
+        )
+        .ok();
+    if let Some(phash) = ctx
+        .optional_str("phash")
+        .map(str::to_owned)
+        .or(contributed)
+    {
+        ctx.connection().execute(
+            "INSERT INTO media_asset_phash (asset_id, phash, computed_at, updated_at)
+             VALUES (?1, ?2, ?3, ?3)
+             ON CONFLICT (asset_id) DO UPDATE SET
+               phash = excluded.phash, computed_at = excluded.computed_at",
+            rusqlite::params![asset_id, phash, ctx.now],
+        )?;
+    }
+
+    // A DEVICE-CONTRIBUTED THUMBHASH (#419) lands only in the inline derivative
+    // row. It is a placeholder a client draws while the real thumbnail loads,
+    // never a thumbnail: it has no sha, because there are no bytes in the store
+    // behind it.
+    if let Some(thumbhash) = ctx.optional_str("thumbhash") {
+        let byte_size = i64::try_from(thumbhash.len()).unwrap_or(i64::MAX);
+        ctx.connection().execute(
+            "INSERT INTO core_content_derivative
+               (derivative_id, content_id, variant, sha256, media_type, byte_size,
+                text_content, created_at, updated_at)
+             VALUES (?1, ?2, 'thumbhash', NULL, 'text/plain', ?3, ?4, ?5, ?5)
+             ON CONFLICT (content_id, variant) DO UPDATE SET
+               text_content = excluded.text_content,
+               byte_size = excluded.byte_size,
+               media_type = excluded.media_type,
+               created_at = excluded.created_at",
+            rusqlite::params![ctx.next_id(), content_id, byte_size, thumbhash, ctx.now],
+        )?;
+    }
+
+    // THIS ASSET'S OWN READING OF THE BYTES (#996, R20(b)). The same sha pinned
+    // to two rows carries two readings, so the media type goes on the
+    // REPRESENTATION and never on the byte row.
+    set_representation(
+        ctx,
+        &content_id,
+        ASSET_TARGET_TYPE,
+        &asset_id,
+        &minted.media_type,
+        Some("original"),
+    )?;
+
+    Ok(serde_json::json!({
+        "asset_id": asset_id,
+        "content_id": content_id,
+        "deduped": 0,
+    }))
 }
 
 fn update_asset() -> CommandDefinition {

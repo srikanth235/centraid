@@ -46,6 +46,13 @@ pub struct Vault {
     read_depth: Cell<u32>,
     /// A fault to inject, for the snapshot builder's interrupted-build test.
     pub(crate) fault: Cell<Option<crate::snapshot::Fault>>,
+    /// THE LOCAL CONTENT STORE, where bytes that are not text go.
+    ///
+    /// `core_content_item.content_uri` is `blob:sha256-<hex>` for anything
+    /// binary, and the bytes themselves live here — a vault file is rows, and
+    /// a photograph in a row is a photograph in the journal. See
+    /// [`Vault::with_blobs`].
+    blobs: Option<Box<dyn crate::backup::store::BlobStore + Send + Sync>>,
 }
 
 impl Vault {
@@ -188,7 +195,64 @@ impl Vault {
             depth: Cell::new(0),
             read_depth: Cell::new(0),
             fault: Cell::new(None),
+            blobs: None,
         })
+    }
+
+    /// ATTACH THE LOCAL CONTENT STORE. Without one, this vault can hold text
+    /// and nothing else.
+    ///
+    /// A vault file is rows. Text bodies stay in the row — the FTS triggers
+    /// decode them in-transaction and cannot do I/O — and every other kind of
+    /// byte spills here, with the row keeping only `blob:sha256-<hex>`. That
+    /// is v0's split (`packages/vault/src/blob/mint.ts:88`-`:99`) and the port
+    /// kept the split while dropping the store, so `media.add_asset` refused
+    /// every photograph and `core.add_document` refused every PDF.
+    ///
+    /// **Optional, and honestly so.** A vault with no store refuses binary
+    /// inline bytes rather than writing a `core_content_item` whose
+    /// `content_uri` names bytes nothing kept — a library of rows with no
+    /// photographs in it. `pre_inline_bytes_are_storable` is that refusal and
+    /// it now asks THIS.
+    ///
+    /// It is the OPENER's decision where the store lives, because only the
+    /// opener knows the layout it is opening into: the CLI has a data
+    /// directory with a `blobs/` beside the vaults, and a phone has one file
+    /// in a container. Neither convention belongs in here.
+    #[must_use]
+    pub fn with_blobs(
+        mut self,
+        blobs: Box<dyn crate::backup::store::BlobStore + Send + Sync>,
+    ) -> Self {
+        self.blobs = Some(blobs);
+        self
+    }
+
+    /// The local content store, if one was attached.
+    #[must_use]
+    pub fn blobs(&self) -> Option<&(dyn crate::backup::store::BlobStore + Send + Sync)> {
+        self.blobs.as_deref()
+    }
+
+    /// WHERE A VAULT'S OWN BYTES LIVE: `<stem>.blobs/` beside the file.
+    ///
+    /// One convention, stated once, because the alternative is what the tree
+    /// nearly shipped — the core deriving one location and the CLI passing
+    /// another, so the same vault file would hold a photograph when the phone
+    /// opened it and refuse one when the gateway did.
+    ///
+    /// **Per vault, not per data directory.** `cmd::blobs_dir_in` is the BACKUP
+    /// plane's shared store and stays what it is; this is custody of a
+    /// member's live bytes, and a vault handed to someone else has to be
+    /// handed over whole. A sibling directory is a thing you can copy, move
+    /// and delete alongside the file it belongs to, which is exactly the
+    /// property a shared pool does not have.
+    #[must_use]
+    pub fn blobs_root_for(path: &Path) -> PathBuf {
+        let stem = path
+            .file_name()
+            .map_or_else(|| "vault".to_owned(), |name| name.to_string_lossy().into_owned());
+        path.with_file_name(format!("{stem}.blobs"))
     }
 
     #[must_use]

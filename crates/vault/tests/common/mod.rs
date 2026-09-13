@@ -43,6 +43,32 @@ impl Scratch {
         Ok(scratch)
     }
 
+    /// The same, with a LOCAL CONTENT STORE beside it.
+    ///
+    /// Separate from [`Self::founded`] and deliberately so: a vault with no
+    /// store refuses every binary byte, and that is a real configuration with
+    /// its own behaviour worth testing — a command that silently wrote a row
+    /// pointing at bytes nothing kept would pass a test that always had a
+    /// store. See `Vault::with_blobs`.
+    pub fn founded_with_blobs(seed: &str) -> Result<Self> {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir)?;
+        let clock = Arc::new(FixedClock::frozen());
+        let file = dir.join("vault.db");
+        let blobs = centraid_vault::backup::store::FsBlobStore::open(
+            centraid_vault::file::Vault::blobs_root_for(&file),
+        )
+        .expect("a content store opens");
+        let vault = Vault::create_with(
+            file,
+            Box::new(Arc::clone(&clock)),
+            Box::new(SeededIds::new(seed)),
+        )?
+        .with_blobs(Box::new(blobs));
+        vault.found("Test", "Test Owner")?;
+        Ok(Self { dir, vault, clock })
+    }
+
     #[must_use]
     pub fn dir(&self) -> &Path {
         &self.dir

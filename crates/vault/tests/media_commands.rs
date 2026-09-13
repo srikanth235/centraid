@@ -1189,28 +1189,168 @@ fn a_manual_ask_with_no_capability_is_refused_with_a_sentence() {
 }
 
 // ---------------------------------------------------------------------------
-// The one command that is not real.
+// `media.add_asset` — the door that took a blob store to open.
+//
+// It was registered with its real schema and REFUSED every call, because
+// `CommandCtx` had no way to move bytes: the port carried v0's
+// text-versus-binary split without the store behind it, so a vault could hold
+// a note and not a photograph. `Vault::with_blobs` is that store, and these
+// are both halves — what a vault WITH one does, and what a vault without one
+// still refuses.
 // ---------------------------------------------------------------------------
 
-/// `media.add_asset` is REGISTERED with its real schema and refuses with a
-/// TYPED error rather than panicking or writing a row with no bytes behind it.
+/// A one-pixel PNG, as base64. Real bytes with a real header, so the sha is a
+/// real sha and the media type is not a claim.
+const ONE_PIXEL_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+fn png_uri() -> String {
+    format!("data:image/png;base64,{ONE_PIXEL_PNG}")
+}
+
+/// A PHOTOGRAPH ENTERS THE LIBRARY, bytes and all.
 #[test]
-fn adding_an_asset_is_registered_and_refuses_rather_than_writing_a_hollow_row() {
-    let world = World::new("add-asset");
-    let error = world
-        .scratch
+fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
+    let scratch = common::Scratch::founded_with_blobs("add-asset-real").expect("a vault");
+    let registry = registry();
+    registry.install(&scratch.vault).expect("the record installs");
+    let outcome = scratch
         .vault
         .execute(
-            &world.registry,
+            &registry,
             &Principal::owner("phone"),
             &Command::new(
                 "media.add_asset",
-                serde_json::json!({ "data_uri": "data:image/png;base64,AA", "kind": "photo" }),
+                serde_json::json!({
+                    "data_uri": png_uri(),
+                    "kind": "photo",
+                    "title": "A single pixel",
+                    "width": 1,
+                    "height": 1,
+                }),
             ),
         )
-        .expect_err("the body is not there yet");
-    // A shell renders "not in this build yet" rather than losing the process.
-    assert!(error.to_string().contains("no body yet"), "{error}");
+        .expect("the command runs");
+    assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+
+    let (kind, title, uri, size): (String, String, String, i64) = scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT a.kind, a.title, c.content_uri, c.byte_size
+                   FROM media_asset a JOIN core_content_item c USING (content_id)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?)
+        })
+        .expect("the row reads");
+    assert_eq!(kind, "photo");
+    assert_eq!(title, "A single pixel");
+    // THE ROW NAMES THE BYTES BY DIGEST, never by carrying them: a photograph
+    // inside a `data:` URI in a column is a photograph in the journal.
+    assert!(uri.starts_with("blob:sha256-"), "{uri}");
+    assert!(size > 0);
+
+    // And the bytes are ACTUALLY THERE. A `content_uri` naming bytes nothing
+    // kept is the failure the refusal used to prevent, so this is the assertion
+    // that has to replace it.
+    let sha = uri.trim_start_matches("blob:sha256-");
+    let store = centraid_vault::backup::store::FsBlobStore::open(
+        centraid_vault::file::Vault::blobs_root_for(&scratch.join("vault.db")),
+    )
+    .expect("the store opens");
+    let bytes = centraid_vault::backup::store::BlobStore::get(&store, sha).expect("the bytes read");
+    assert_eq!(i64::try_from(bytes.len()).unwrap_or_default(), size);
+    assert_eq!(&bytes[1..4], b"PNG");
+}
+
+/// THE SAME BYTES TWICE ARE ONE PHOTOGRAPH. `media_asset.content_id` is unique
+/// and says so; a second call adopts the row rather than duplicating it.
+#[test]
+fn the_same_bytes_twice_adopt_one_asset() {
+    let scratch = common::Scratch::founded_with_blobs("add-asset-dedupe").expect("a vault");
+    let registry = registry();
+    registry.install(&scratch.vault).expect("the record installs");
+    let add = || {
+        scratch
+            .vault
+            .execute(
+                &registry,
+                &Principal::owner("phone"),
+                &Command::new(
+                    "media.add_asset",
+                    serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+                ),
+            )
+            .expect("the command runs")
+    };
+    let first = add();
+    assert_eq!(first.status, CommandStatus::Executed, "{:?}", first.reason);
+    let second = add();
+    assert_eq!(second.status, CommandStatus::Executed, "{:?}", second.reason);
+    assert_eq!(
+        second.output.get("deduped"),
+        Some(&serde_json::json!(1)),
+        "the second call must say it adopted rather than minted"
+    );
+    let assets: i64 = scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row("SELECT COUNT(*) FROM media_asset", [], |row| row.get(0))?)
+        })
+        .expect("the count reads");
+    assert_eq!(assets, 1);
+}
+
+/// A COORDINATE IS A PAIR. Half of one is no location at all, and accepting it
+/// would let a caller believe it had placed a photograph it had not.
+#[test]
+fn half_a_coordinate_is_refused() {
+    let scratch = common::Scratch::founded_with_blobs("add-asset-half-coord").expect("a vault");
+    let registry = registry();
+    registry.install(&scratch.vault).expect("the record installs");
+    let outcome = scratch
+        .vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "media.add_asset",
+                serde_json::json!({ "data_uri": png_uri(), "latitude": 39.0 }),
+            ),
+        )
+        .expect("the command runs");
+    assert_eq!(outcome.status, CommandStatus::Failed);
+    assert!(
+        outcome
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("latitude and a longitude")),
+        "{:?}",
+        outcome.reason
+    );
+}
+
+/// A VAULT WITH NO CONTENT STORE STILL REFUSES, and names the cause.
+///
+/// This is the half the old gap test was really asserting, and it is still
+/// true: writing a `core_content_item` whose `content_uri` names bytes nothing
+/// kept would be a library of rows with no photographs in it.
+#[test]
+fn a_vault_with_no_content_store_refuses_binary_bytes_and_writes_nothing() {
+    let world = World::new("add-asset-no-store");
+    let outcome = world.run(
+        "media.add_asset",
+        serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+    );
+    assert_eq!(outcome.status, CommandStatus::Failed);
+    assert!(
+        outcome
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("no local content store")),
+        "{:?}",
+        outcome.reason
+    );
     let assets: i64 = world
         .scratch
         .vault
@@ -1219,17 +1359,104 @@ fn adding_an_asset_is_registered_and_refuses_rather_than_writing_a_hollow_row() 
         })
         .expect("the count reads");
     assert_eq!(assets, 0);
-    // The SCHEMA is already the contract: a malformed call is refused today
-    // with the same message it will be refused with when the handler is real,
-    // and it is refused BEFORE the missing body is reached.
+}
+
+/// The SCHEMA is the first gate, before any of the above.
+#[test]
+fn a_malformed_kind_is_refused_by_the_schema() {
+    let world = World::new("add-asset-schema");
     let outcome = world.run("media.add_asset", serde_json::json!({ "kind": "hologram" }));
     assert_eq!(outcome.status, CommandStatus::Failed);
     assert!(
         outcome
             .reason
             .as_deref()
-            .is_some_and(|reason| !reason.contains("no body yet")),
-        "a malformed input must be refused by the schema, not by the missing body: {:?}",
+            .is_some_and(|reason| reason.contains("kind")),
+        "{:?}",
         outcome.reason
     );
+}
+
+/// THE READ HALF: a photograph that entered the library can be LOCATED again.
+///
+/// The write half spilling bytes into the store is only half a photograph; a
+/// row naming bytes is not something a member can see. This is the other half,
+/// and it is the one Home's mosaic reads.
+#[test]
+fn a_seeded_photograph_can_be_located_by_the_owner_that_reads_it() {
+    let scratch = common::Scratch::founded_with_blobs("locate-asset").expect("a vault");
+    let registry = registry();
+    registry.install(&scratch.vault).expect("the record installs");
+    let outcome = scratch
+        .vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "media.add_asset",
+                serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+            ),
+        )
+        .expect("the command runs");
+    assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+    let asset_id = outcome.output["asset_id"].as_str().expect("an asset id");
+    let content_id = outcome.output["content_id"].as_str().expect("a content id");
+
+    let found = scratch
+        .vault
+        .content_location(content_id, "media.asset", asset_id)
+        .expect("the lookup runs");
+    let path = found.path.expect("the bytes are on this device");
+    assert!(path.is_file(), "{}", path.display());
+    assert_eq!(std::fs::read(&path).expect("the file reads")[1..4], *b"PNG");
+    // THE MEDIA TYPE IS THE ASSET'S READING of the bytes, off the
+    // representation and never off the byte row (#996 R20(b)).
+    assert_eq!(found.media_type, "image/png");
+    assert!(found.embeddable);
+    assert!(found.absent_reason.is_empty());
+    assert!(found.byte_size > 0);
+}
+
+/// NO READING IS NOT PERMISSION. An owner this vault has no representation for
+/// gets the bytes located and **not** marked embeddable — the whole reason the
+/// never-inline list exists is that the bytes may be authored by someone else.
+#[test]
+fn an_unknown_owner_locates_the_bytes_and_refuses_to_call_them_embeddable() {
+    let scratch = common::Scratch::founded_with_blobs("locate-unknown-owner").expect("a vault");
+    let registry = registry();
+    registry.install(&scratch.vault).expect("the record installs");
+    let outcome = scratch
+        .vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "media.add_asset",
+                serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+            ),
+        )
+        .expect("the command runs");
+    let content_id = outcome.output["content_id"].as_str().expect("a content id");
+    let found = scratch
+        .vault
+        .content_location(content_id, "media.asset", "not-an-asset-in-this-vault")
+        .expect("the lookup runs");
+    assert!(found.path.is_some(), "the bytes are still there");
+    assert!(found.media_type.is_empty());
+    assert!(!found.embeddable);
+}
+
+/// A CONTENT ITEM THIS VAULT DOES NOT HOLD is an absent answer with a sentence,
+/// never an error: a failed lookup would take a whole mosaic down over one cell.
+#[test]
+fn a_content_id_that_is_not_here_is_absent_with_a_sentence() {
+    let scratch = common::Scratch::founded_with_blobs("locate-missing").expect("a vault");
+    let found = scratch
+        .vault
+        .content_location("no-such-content", "media.asset", "no-such-asset")
+        .expect("the lookup runs");
+    assert!(found.path.is_none());
+    assert!(!found.absent_reason.is_empty());
+    // NEVER A PATH, NEVER A SHA, NEVER A STACK — this sentence reaches a member.
+    assert!(!found.absent_reason.contains('/'), "{}", found.absent_reason);
 }
