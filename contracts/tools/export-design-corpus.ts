@@ -19,14 +19,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-// `figureTone` lives with Tally's formatters rather than in `packages/design`
-// (`packages/blueprints/apps/tally/format.ts:37`) because the sign convention
-// it expresses is the app's. It is emitted here with the two design functions
-// for one reason: it is the third PRESENTATION field the Tally parity fixture
-// carries, and `crates/design` is the one place a presentation rule is lowered
-// into Rust.
-import { figureTone } from "../../packages/blueprints/apps/tally/format.ts";
+// `figureTone` lived with Tally's formatters until wave 6 retired that tree; it
+// is now `packages/design/src/format.ts`, beside the rungs it chooses between.
+// It is emitted here with the two identity functions for one reason: it is the
+// third PRESENTATION field the Tally parity fixture carries, and
+// `crates/design` is the one place a presentation rule is lowered into Rust.
 import {
+  figureTone,
   identityInitials,
   partyHueKey,
   partyHueValue,

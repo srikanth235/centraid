@@ -24,12 +24,15 @@
 // The last line is the gate. It is in `cargo xtask`'s `mobile-jvm` step, so a
 // token change that forgets to regenerate reds in the same place a test would.
 //
-// COPY travels the same road. There is no central copy file in v0 — the leaves
-// are per-app `*-copy.ts` modules of named strings, deliberately import-free
-// where both the shell and the mobile kit read them
-// (`packages/blueprints/apps/_shared/shared-copy.ts:1-11`) — so the emitter
-// takes the STRING-VALUED exports of the named leaves and leaves the functions
-// behind, listing them so a reader can see what did not cross.
+// COPY NO LONGER TRAVELS THIS ROAD, AND THAT IS A SUPERSESSION RATHER THAN A
+// REGRESSION (#1020, wave 6). `export-copy.ts` read v0's per-app `*-copy.ts`
+// leaves under `packages/blueprints`, and wave 6 deleted that tree; the emitter
+// and its input went with it. So `copy/*.json` and
+// `mobile/shared/.../design/Copy.kt` are no longer generated — they are the
+// SOURCE now, the last artifact of a lowering whose upstream is retired, and
+// their own banners say so. Leaving the dead `emitCopy` import here is what
+// made this whole command — the one command that writes every native artifact —
+// unrunnable between the retire commit and wave A.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -40,8 +43,8 @@ import {
   NATIVE_COLOR_ROLE_MAP,
   assertNativeColorRoleContract,
 } from "../../packages/design/src/roles.ts";
-import { emitCopy } from "./export-copy.ts";
 import { emitIdentityCorpus } from "./export-design-corpus.ts";
+import { emitNativeCatalog } from "./export-native-catalog.ts";
 
 const repositoryRoot = new URL("../..", import.meta.url).pathname;
 
@@ -389,19 +392,22 @@ writeFileSync(
   `${swiftLines.join("\n")}`
 );
 
-// --- copy and the identity corpus ----------------------------------------
+// --- the identity corpus and the app catalogue ----------------------------
 //
 // Both are their OWN emitters and are called here, so one command still emits
-// every artifact (#1020, D-1020-T5): `copy/*.json` has exactly one writer, and
-// the eight wave-4 app lanes each add a leaf to `export-copy.ts` alone.
+// every artifact it can (#1020, D-1020-T5). Copy is no longer among them — see
+// the banner at the top of this file.
 
-const copyCounts = emitCopy(repositoryRoot);
 const corpusCounts = emitIdentityCorpus(repositoryRoot);
+const catalogCounts = emitNativeCatalog(repositoryRoot);
 
 console.error(
-  `emitted design/native-theme.json, mobile/shared .../design/{Tokens,Copy}.kt, ` +
-    `mobile/iosApp/Design/Theme.swift and copy/*.json ` +
+  `emitted design/native-{theme,catalog}.json, ` +
+    `mobile/shared .../design/{Tokens,Catalog}.kt and ` +
+    `mobile/iosApp/Design/{Theme,Catalog}.swift ` +
     `(${colorNames.length} colour roles, ${effectNames.length} non-colour effect ` +
-    `entries, ${copyCounts.leaves} copy leaves, ${copyCounts.strings} strings, ` +
-    `${corpusCounts.hues + corpusCounts.initials + corpusCounts.tones} corpus rows)`
+    `entries, ` +
+    `${corpusCounts.hues + corpusCounts.initials + corpusCounts.tones} corpus rows, ` +
+    `${catalogCounts.apps} apps, ${catalogCounts.icons} icons, ` +
+    `${catalogCounts.paths} icon paths)`
 );

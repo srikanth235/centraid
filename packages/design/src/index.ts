@@ -23,6 +23,7 @@ export {
 } from "./identity";
 export type { IdentityPaletteKey } from "./identity";
 export {
+  figureTone,
   formatBytes,
   formatRelativeTime,
   fmtMoney,

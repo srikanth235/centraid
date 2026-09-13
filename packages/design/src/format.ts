@@ -140,3 +140,32 @@ export function localDayKey(
   if (!year || !month || !day) return String(dateish).slice(0, 10);
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * How a figure leaf is painted. `net` is the `--net` token — you owe; `owed`
+ * is plain ink — you are owed; `settled` is the recessive rung. NEVER a green:
+ * a settled balance is a fact, not a reward.
+ */
+export type FigureTone = "net" | "owed" | "settled";
+
+/**
+ * A net's tone, on Tally's one sign convention: **positive is owed to you,
+ * negative is owed by you**, so a figure never needs a legend.
+ *
+ * The dead band is a single minor unit — a balance that rounds to nothing IS
+ * level, and a row reading "you owe £0.00" in `--net` would be a warning about
+ * nothing.
+ *
+ * IT LIVES HERE, IN THE TOKEN PACKAGE, BECAUSE IT IS A TOKEN DECISION. It was
+ * written in `packages/blueprints/apps/tally/format.ts` beside Tally's other
+ * formatters, and wave 6 retired that tree (#1020); the rule itself did not
+ * retire, because `crates/design`'s `figure_tone` is its port and
+ * `contracts/tools/export-design-corpus.ts` runs THIS function over 252 rows to
+ * produce the corpus `crates/design/tests/corpus.rs` asserts against. Choosing
+ * which of three prominence rungs a number takes is the same kind of decision
+ * as choosing the rung itself, so `packages/design` is where it belongs.
+ */
+export function figureTone(netMinor: number): FigureTone {
+  if (Math.abs(netMinor) < 1) return "settled";
+  return netMinor < 0 ? "net" : "owed";
+}

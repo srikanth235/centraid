@@ -95,7 +95,14 @@ class NativeThemeSpec : StringSpec({
             System.getProperty("centraid.repositoryRoot")
                 ?: error("centraid.repositoryRoot is unset"),
         )
-        val json = repositoryRoot.resolve("design/native-theme.json").readText()
+        val wholeJson = repositoryRoot.resolve("design/native-theme.json").readText()
+        // THE SCHEMES ONLY. The emitted JSON also carries `colorRoleContract`,
+        // a role -> CSS-custom-property map that names every role a third time
+        // — so a whole-file count reads 3 for a table that is perfectly
+        // complete, and this assertion red-lit a green tree until it was
+        // taught where the two schemes actually start. The counted region is
+        // still both schemes and nothing else, which is the claim.
+        val json = wholeJson.substring(wholeJson.indexOf("\"schemes\""))
         val swift = repositoryRoot.resolve("mobile/iosApp/Design/Theme.swift").readText()
         // ONCE PER SCHEME, COUNTED — not "appears somewhere".
         //
