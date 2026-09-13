@@ -44,8 +44,22 @@ export interface SharedFromEntry {
   /** `null` is "cannot say who", never "nobody": no live binding names them. */
   party_id: string | null;
   name: string | null;
-  /** Landed here, epoch ms. */
-  at: number;
+  /**
+   * Landed here, epoch ms — or `null` when the instant cannot be read.
+   *
+   * NOT `0` (#1020, D-1020-CL4). `Date.parse(…) || 0` turned both an absent
+   * and an unparseable `subscribed_at` into the epoch, and the shelf renders
+   * that as "1 January 1970". The column is `NOT NULL`, so this was latent
+   * rather than live — which is exactly the kind of defect that surfaces the
+   * first time a peer sends a row this vault did not write.
+   */
+  at: number | null;
+}
+
+/** An instant as epoch ms, or `null` — never the epoch itself (#1020). */
+function instantMs(raw: string | null | undefined): number | null {
+  const parsed = Date.parse(raw ?? "");
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 async function readSenderNames({
@@ -187,7 +201,7 @@ export async function readOriginsByDocument({
               vault_id: subscription.origin_vault_id,
               party_id: partyId,
               name: partyId ? (nameByParty.get(partyId) ?? null) : null,
-              at: Date.parse(subscription.subscribed_at ?? "") || 0,
+              at: instantMs(subscription.subscribed_at),
             } satisfies SharedFromEntry,
           ] as const,
         ];

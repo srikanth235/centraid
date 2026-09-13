@@ -42,8 +42,8 @@ export interface SharedFrom {
   /** `null` is "cannot say who", never "nobody": no live binding names them. */
   party_id: string | null;
   name: string | null;
-  /** Landed here, epoch ms. */
-  at: number;
+  /** Landed here, epoch ms; `null` when the instant cannot be read (#1020). */
+  at: number | null;
 }
 
 /** One free-form label (core.tag_item over the shared Tags scheme). */

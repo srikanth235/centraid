@@ -119,7 +119,7 @@ interface OriginRow {
     vault_id: string;
     party_id: string | null;
     name: string | null;
-    at: number;
+    at: number | null;
   } | null;
 }
 
@@ -178,6 +178,27 @@ describe("the drive's shared_from (#903)", () => {
       name: "Ravi",
       at: Date.parse("2026-02-25T04:53:20.000Z"),
     });
+  });
+
+  it("says nothing rather than 1970 when the arrival instant cannot be read", async () => {
+    // `Date.parse(…) || 0` made an absent or unparseable instant the epoch,
+    // and the shelf renders an epoch as "1 January 1970" — a date the member
+    // is told with the same confidence as a real one (#1020, D-1020-CL4).
+    const subscription = ROWS["share.subscription"]?.[0];
+    if (!subscription) throw new Error("expected the ferry subscription");
+    const held = subscription["subscribed_at"];
+    subscription["subscribed_at"] = "some time last spring";
+    try {
+      const { documents } = await run();
+      expect(rowFor(documents, "doc-sent").shared_from).toStrictEqual({
+        vault_id: "vault-ravi",
+        party_id: "party-ravi",
+        name: "Ravi",
+        at: null,
+      });
+    } finally {
+      subscription["subscribed_at"] = held;
+    }
   });
 
   it("leaves an ordinary filed document with no placement record", async () => {

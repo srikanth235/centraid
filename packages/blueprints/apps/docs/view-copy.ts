@@ -97,7 +97,7 @@ export const SHARED_SENDER_UNKNOWN = "Another vault";
  *  a row carries one or the other, never both. */
 export function sharedFromLine(from: {
   name: string | null;
-  at: number;
+  at: number | null;
 }): string {
   const who = from.name ?? SHARED_SENDER_UNKNOWN;
   const when = from.at ? fmtDate(new Date(from.at).toISOString()) : "";
