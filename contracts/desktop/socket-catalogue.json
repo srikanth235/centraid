@@ -80,7 +80,15 @@
         "category",
         "txn_id",
         "created_at",
-        "updated_at"
+        "updated_at",
+        "original_amount_minor",
+        "original_currency",
+        "settlement_currency",
+        "rate_scaled",
+        "rate_scale",
+        "rate_source",
+        "rate_date",
+        "recurring_template_id"
       ],
       "from": "tally_expense",
       "where": "deleted_at IS NULL",
@@ -251,7 +259,8 @@
         "updated_at",
         "archived_at",
         "deleted_at",
-        "purge_at"
+        "purge_at",
+        "otp_seed IS NOT NULL AS has_totp"
       ],
       "from": "locker_item",
       "where": "type = ? AND deleted_at IS NULL",
