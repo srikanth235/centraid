@@ -83,13 +83,14 @@ pub struct ExpenseRow {
     /// The division's own parameters, as v0 stores them: JSON text or nothing.
     /// PROVENANCE, never a second arithmetic path.
     pub split_params_json: Option<String>,
-    /// **Not selected by [`expenses_statement`]** — see its note. The columns
-    /// exist and the dashboard's read does not ask for them, so every row the
-    /// dashboard folds has `None` here: the money falls back to the group's and
-    /// the rate suggestion can never be made. Kept as fields rather than
-    /// dropped, so the day v0's projection is fixed both sides start answering.
+    /// Selected since the close pass fixed v0's projection (#1020,
+    /// D-1020-CL3) — see [`expenses_statement`]'s note for what these columns
+    /// answered before it, which was the vault's base money for every expense
+    /// in every currency.
     pub settlement_currency: Option<String>,
     pub original_currency: Option<String>,
+    pub original_amount_minor: Option<i64>,
+    pub recurring_template_id: Option<String>,
     pub rate_scaled: Option<i64>,
     pub rate_scale: Option<i64>,
     pub rate_source: Option<String>,
@@ -318,22 +319,25 @@ pub fn circle_members_statement() -> PageQuery {
 /// A single page and not a walk: the window is the promise, and a ledger
 /// longer than it is a ledger the dashboard states it did not read all of.
 ///
-/// **THE PROJECTION IS v0's, EXACTLY, AND THAT IS A FINDING NOT A CHOICE**
-/// (#1020, D-1020-T2a). v0 selects these thirteen columns and no others
-/// (`queries/dashboard.ts:287-290`), which means `settlement_currency`,
-/// `original_amount_minor`, `original_currency` and the four `rate_*` columns
-/// are **undefined in every row the dashboard folds** — so `ledgerRow`'s
-/// `e.settlement_currency ?? data.currency` labels a JPY expense with the
-/// vault's base money, `rateSuggestions` can never produce a row, and the
-/// export ships the same mislabelling to a file. The port reproduces it,
-/// because the 29 committed cases are v0's answers; the receipt carries the
-/// one-line fix and the evidence. Selecting the columns here would have made
-/// the port silently right and the parity comparison impossible.
+/// **THE PROJECTION CARRIES THE MONEY IT IS ASKED ABOUT** (#1020, D-1020-T2a,
+/// closed in the close pass as D-1020-CL3).
+///
+/// v0 selected thirteen columns and `ledgerRow` reads eight more off the row —
+/// `original_amount_minor`, `original_currency`, `settlement_currency`, the
+/// four `rate_*` and `recurring_template_id` — so on the paged door, where an
+/// unselected column reads as `undefined` rather than throwing, every `??`
+/// fallback fired: a JPY expense was LABELLED IN THE VAULT'S BASE MONEY on
+/// every ledger surface, `rateSuggestions` could never produce a row, and
+/// `export` shipped the mislabelling to a file. The port reproduced it while
+/// the 29 committed cases were v0's answers; the close pass fixed v0's
+/// projection and regenerated them, and this statement follows.
 pub fn expenses_statement() -> PageQuery {
     query(
         "tally.dashboard.expenses",
         "expense_id, group_id, description, amount_minor, currency, paid_by, split_method, \
-         split_params_json, spent_on, category, txn_id, created_at, updated_at",
+         split_params_json, spent_on, category, txn_id, created_at, updated_at, \
+         original_amount_minor, original_currency, settlement_currency, rate_scaled, \
+         rate_scale, rate_source, rate_date, recurring_template_id",
         "tally_expense",
         PageOrder::desc("spent_on", "expense_id"),
     )
@@ -642,6 +646,8 @@ fn expense_row(row: &Row) -> Option<ExpenseRow> {
         split_params_json: text_of(row, "split_params_json"),
         settlement_currency: text_of(row, "settlement_currency"),
         original_currency: text_of(row, "original_currency"),
+        original_amount_minor: optional_integer(row, "original_amount_minor"),
+        recurring_template_id: text_of(row, "recurring_template_id"),
         rate_scaled: optional_integer(row, "rate_scaled"),
         rate_scale: optional_integer(row, "rate_scale"),
         rate_source: text_of(row, "rate_source"),

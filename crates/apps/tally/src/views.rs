@@ -225,11 +225,12 @@ fn line_items_json(data: &TallyData, expense_id: &str) -> Value {
 /// A LEDGER ROW: the expense as every ledger surface renders it
 /// (`queries/dashboard.ts:770-860`).
 ///
-/// **The seven columns that read as defaults are v0's own missing projection**,
-/// not this port's shortcut — `expenses_statement`'s note has the whole
-/// finding. `settlement_currency` reads the vault's BASE money and
-/// `rate_source` reads `"identity"` because the dashboard's statement never
-/// selects the stored values.
+/// **The eight columns that used to read as defaults were v0's own missing
+/// projection** — `expenses_statement`'s note has the whole finding, closed in
+/// the close pass (#1020, D-1020-CL3). They are the stored values now, with
+/// v0's own fallbacks where a column is NULL: the base money for a currency
+/// nobody set, and the identity rate (1.000000, `"identity"`) for an expense
+/// that was never converted.
 #[must_use]
 pub fn ledger_row(data: &TallyData, expense: &ExpenseRow) -> Value {
     let (your_role, your_amount_minor) = owner_stance(data, expense);
@@ -244,16 +245,29 @@ pub fn ledger_row(data: &TallyData, expense: &ExpenseRow) -> Value {
         "group_id": optional(expense.group_id.as_deref()),
         "description": expense.description,
         "amount_minor": expense.amount_minor,
-        // `?? e.amount_minor`, over a column the statement does not select.
-        "original_amount_minor": expense.amount_minor,
-        "original_currency": data.currency,
-        "settlement_currency": data.currency,
-        // The identity rate, for the same reason: 1.000000, from "identity".
-        "rate_scaled": 1_000_000,
-        "rate_scale": 6,
-        "rate_source": "identity",
-        "rate_date": expense.spent_on,
-        "recurring_template_id": Value::Null,
+        // `?? e.amount_minor` and the rest of v0's own fallbacks, over the
+        // columns the statement now selects.
+        "original_amount_minor": expense.original_amount_minor.unwrap_or(expense.amount_minor),
+        "original_currency": expense
+            .original_currency
+            .clone()
+            .unwrap_or_else(|| data.currency.clone()),
+        "settlement_currency": expense
+            .settlement_currency
+            .clone()
+            .unwrap_or_else(|| data.currency.clone()),
+        // The identity rate when nothing was converted: 1.000000, "identity".
+        "rate_scaled": expense.rate_scaled.unwrap_or(1_000_000),
+        "rate_scale": expense.rate_scale.unwrap_or(6),
+        "rate_source": expense
+            .rate_source
+            .clone()
+            .unwrap_or_else(|| "identity".to_owned()),
+        "rate_date": expense
+            .rate_date
+            .clone()
+            .unwrap_or_else(|| expense.spent_on.clone()),
+        "recurring_template_id": optional(expense.recurring_template_id.as_deref()),
         "category": expense.category,
         "spent_on": expense.spent_on,
         "paid_by": expense.paid_by,
@@ -400,11 +414,12 @@ pub fn pairwise(data: &TallyData) -> BTreeMap<String, MoneyBag> {
 /// The remembered rates, one per currency pair
 /// (`queries/dashboard.ts:906-936`).
 ///
-/// **Always empty against v0's dashboard read**, and that is the finding, not
-/// the design: the statement selects neither `original_currency` nor
-/// `settlement_currency` nor the `rate_*` pair, so every candidate row is
-/// discarded on the first check. Ported as the fold it is so that the fix to
-/// the projection makes it work on both sides at once.
+/// **Always empty against v0's dashboard read until the close pass**, and that
+/// was the finding, not the design: the statement selected neither
+/// `original_currency` nor `settlement_currency` nor the `rate_*` pair, so
+/// every candidate row was discarded on the first check. Ported as the fold it
+/// is, which is why fixing the projection made it answer on both sides at once
+/// (#1020, D-1020-CL3).
 #[must_use]
 pub fn rate_suggestions(data: &TallyData) -> Value {
     let mut latest: BTreeMap<String, Value> = BTreeMap::new();
@@ -1149,13 +1164,28 @@ pub fn export_view(
                         "expense_id": expense.expense_id,
                         "description": expense.description,
                         "amount_minor": expense.amount_minor,
-                        "original_amount_minor": expense.amount_minor,
-                        "original_currency": expense_currency,
+                        // v0's own fallbacks over the columns the projection
+                        // carries since the close pass (#1020, D-1020-CL3):
+                        // the identity rate for an expense nobody converted,
+                        // and the stored one for an expense somebody did.
+                        "original_amount_minor": expense
+                            .original_amount_minor
+                            .unwrap_or(expense.amount_minor),
+                        "original_currency": expense
+                            .original_currency
+                            .clone()
+                            .unwrap_or_else(|| expense_currency.clone()),
                         "settlement_currency": expense_currency,
-                        "rate_scaled": Value::Null,
-                        "rate_scale": Value::Null,
-                        "rate_source": Value::Null,
-                        "rate_date": Value::Null,
+                        "rate_scaled": expense.rate_scaled.unwrap_or(1_000_000),
+                        "rate_scale": expense.rate_scale.unwrap_or(6),
+                        "rate_source": expense
+                            .rate_source
+                            .clone()
+                            .unwrap_or_else(|| "identity".to_owned()),
+                        "rate_date": expense
+                            .rate_date
+                            .clone()
+                            .unwrap_or_else(|| expense.spent_on.clone()),
                         "category": expense.category,
                         "spent_on": expense.spent_on,
                         "split_method": expense.split_method,
