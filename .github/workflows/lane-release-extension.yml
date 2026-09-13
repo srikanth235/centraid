@@ -36,6 +36,17 @@ jobs:
       matrix:
         browser: [chrome, firefox]
     steps:
+      # THE RUNNER IS HARDENED BEFORE ANYTHING THIRD-PARTY RUNS (W6.3, #842).
+      # This lane calls `./.github/actions/setup`, which runs `bun install`, so
+      # a build plugin or a test could open a socket beside whatever the
+      # release job holds. `audit` is the learning mode: it names every
+      # destination in the run summary so the allowlist can be read off a real
+      # run before the policy flips to `block`. No `egress-ledger.json` row goes
+      # with this — the ledger holds only workflows that have NO step, and a row
+      # beside a hardened workflow fails the gate as stale.
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       # THE SAME TWO PROGRAMS THE GATE RUNS, so a release cannot ship what a pull
@@ -84,6 +95,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - name: The id register is the release artifact (D-1020-X5)
