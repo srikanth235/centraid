@@ -302,6 +302,27 @@ Where the producer is the seat itself — nothing crossed the wire — the same 
 
 **A seat never repairs a string it was given.** The phone used to run gateway headlines and queue rows through a regex that lowered "gateway" to "vault host", which laundered the vocabulary of sentences that should never have reached a screen, and rewrote the member's own words when a rule they named contained one of those nouns. That filter is deleted; a producer that emits engine vocabulary is a bug at the producer.
 
+## The v1 wire: two packages, two promises ([#1020](https://github.com/srikanth235/centraid/issues/1020))
+
+Everything above is v0's HTTP protocol and stays current until wave 6 deletes that tree. The v1 wire is protobuf over iroh QUIC, defined in [`crates/api-proto`](../crates/api-proto/README.md) as **two packages with two different compatibility promises** ([R-1020-4](decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020)):
+
+| Package | What it carries | Promise | Checked against |
+| --- | --- | --- | --- |
+| `centraid.core.v1` | Queries, commands, rows, change events, the pairing handshake, the admin command inputs | A **gateway compatibility commitment**: a member's paired phone depends on it | `buf breaking` against **the PR base and every released tag inside the version window** — a chain of individually-compatible commits can still break the release a member is running |
+| `centraid.screen.v1` | Screen states and screen events | **Shell-internal**; it may change every release | `buf breaking` against the PR base only |
+
+One schema with one promise would force the weaker half to carry the stronger half's cost: a screen-state field rename would become a wire break, so screen shapes would ossify or the promise would quietly stop being kept.
+
+**The framing is `u32BE(len) ‖ body`** with a 256 KiB ceiling and three named refusals, in [`crates/protocol`](../crates/protocol/src/lib.rs) — a crate in which **no iroh type appears**, because deterministic simulation is the primary sync proof and a protocol that named a real network could not be one. `crates/net` implements the transport traits over iroh and `crates/sim` implements them over `turmoil`. The byte-level facts are a fixture (`contracts/protocol/framing-golden.json`), regenerated and diffed by a test, because that is the only form in which a Swift or Kotlin implementation can be held to the same answer.
+
+**Compatibility, in four rules.** A gateway supports seats from the last **N = 3** minor releases; `open` and the pairing handshake exchange `{schema_version, min_supported}`; a seat outside the window gets a typed `UpgradeRequired` the shell renders, and a gateway older than the seat is allowed as long as the seat's `min_supported` admits it. Migrations are forward-only, held as fixtures in `contracts/migrations`, and a file newer than its binary refuses to open with `DowngradeRefused` rather than guessing.
+
+**Unknown fields, and the honest limit.** The rule is that unknown fields are preserved and unknown message types are answered with `Unsupported{type_url}`, never dropped silently. prost 0.14 does not retain unknown fields — verified in the vendored source rather than assumed — so the invariant is held **one layer out**, at the frame: nothing in the v1 plane relays a *decoded* message, and every payload that crosses a version boundary is opaque `bytes`. The residual gap is named rather than papered over: a **field** added in a future release is invisible to this build, and a middlebox that decoded and re-encoded would lose it. A test turns red if prost ever gains the feature ([D-1020-C13](decisions.md#wave-2-lane-rulings-1020)).
+
+**An intent's and a command's `input` are `bytes` carrying canonical JSON**, not a message per action and not `Any`. The input *is* the hash preimage — `intentPayloadHash` hashes canonical JSON and the gateway compares in constant time — and protobuf serialisation is explicitly not canonical, so a proto body could not carry a payload hash at all ([D-1020-C12](decisions.md#wave-2-lane-rulings-1020)).
+
+**The desktop's local channel is not on this wire.** The seat socket's frame carries a channel tag: `0x00` is a `centraid.core.v1` envelope byte-identical to what crosses iroh, `0x01` is one UTF-8 JSON local message naming things that cannot exist remotely — a peer uid, a byte offset into a file this process can see, a capability token for a child on this machine. Adding those to `centraid.core.v1` would put them under its FILE promise to seats that update on their own schedule ([D-1020-F9](decisions.md#wave-3-lane-rulings-1020)). A new local message is **additive** and does not bump `LOCAL_PROTOCOL_VERSION`, whose own rule is that it is bumped when a message changes shape.
+
 ## Stream authority
 
 | Channel | Authority | Use |

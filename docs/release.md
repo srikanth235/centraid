@@ -210,6 +210,18 @@ sudo systemctl restart centraid-gateway@home          # comes back, no second va
 
 What the container cannot prove and this run must: that `DynamicUser` + `StateDirectory` actually start (the unit has never been loaded by a real systemd), that `systemd-creds` hands the secret over, that the service survives a reboot, and that a seat on another machine pairs across a real network rather than over loopback. Record the transcript in the issue.
 
+## What a release workflow owes the egress ratchet
+
+A release lane is where the interesting secrets live — `NPM_TOKEN`, GHCR push, Apple and Azure signing, Cloudflare deploy — and a build step, a test, a codegen plugin or a dependency the installer decided to trust can all open a socket. Identity gates cannot see any of that. `node scripts/security/lint-ci-egress.mjs` (`bun run lint:ci-egress`, and the `ci-policy` step of `cargo xtask gate --profile pr`) is the control, and it is a **tighten-only ratchet**:
+
+- **A workflow that ever executes third-party code carries `step-security/harden-runner` as the FIRST step of the job**, with `egress-policy: block`, or `audit` while an allowlist is being learned — and an `audit` policy must carry a ledger note saying so. A workflow that only calls other workflows, or runs a vendored shell script, executes nothing it did not already have and needs no step.
+- **Every workflow that has no harden-runner today is pinned in `scripts/security/egress-ledger.json` with a reason.** The ledger is the historical allowance, not a place to put new work: a **new** workflow, or a new job in an unledgered one, must carry the step.
+- **A stale ledger entry fails.** An entry for a workflow that has since been hardened, or that no longer exists, is a failure — which is what stops the allowlist growing back.
+
+The failure mode this buys: an exfiltration attempt becomes a failed DNS lookup with a named destination in the run log, instead of a successful upload nobody sees.
+
+**Currently red, and named rather than allowlisted:** `lane-release-extension.yml` installs and runs dependency code with no harden-runner step and no ledger entry. It is a **release** lane, which is the worst place for the gap, and it is recorded in [`receipts/issue-1020-v1-platform.md`](../receipts/issue-1020-v1-platform.md)'s close section. The remedy is the step, not a ledger row.
+
 ## Enrollment / signing secrets
 
 Signing identities and enrollment steps live in [enrollment.md](enrollment.md). Secrets stay in platform stores / GitHub Actions — never in the repo. Prepare may verify "secrets present" without printing them (`bun run release:verify-secrets`). Groups include desktop Apple/Azure, mobile, web/Assist CF deploy, `NPM_TOKEN`, and GHCR readiness. Assist additionally has an external evidence gate in [release/oauth-assist-google.md](release/oauth-assist-google.md).

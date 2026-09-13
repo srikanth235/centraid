@@ -18,6 +18,17 @@ Form factor (`compact`) says how wide the window is. The **seat** says where byt
 
 Code constant: each bundle declares `SEAT: "origin" | "custodian" | "viewer"` as a build-time fact — never a user-agent sniff. See [platform-gating.md](platform-gating.md) for the signal table it joins.
 
+## The v1 vocabulary, and what survives ([#1020](https://github.com/srikanth235/centraid/issues/1020))
+
+The v1 platform uses **seat** for a different axis, and the two must not be confused. Here a seat is `origin` / `custodian` / `viewer` — **where bytes live**. In v1 a *seat* is a role of the core (the thing that is not the gateway), and its axis is **replicated or thin** — whether it holds a local copy of the vault. The v0 triple stays current for the v0 tree; [glossary.md](glossary.md#hosts-and-clients) carries both rows side by side for exactly this reason.
+
+What carries over unchanged is the **class** split below: an app whose payloads are rows needs none of the custody machinery, and an app that carries bytes needs all of it. What changes is where each half lives:
+
+- **The record-only half is a crate.** One crate per app under `crates/apps/*`, holding the read plane (queries as pure folds over `PageQuery` values) and the action table. An app crate holds **no SQL and no `Connection`** — its reads go through the paged door and its writes are one typed vault command each ([ARCHITECTURE.md](../ARCHITECTURE.md#the-crates)).
+- **The byte-bearing half is a door the app crate does not hold.** Bytes ride `centraid://` on desktop and a materialised path with a `ready_bytes` event on phones; the app crate declares what it needs through a trait and never opens the store. **No type is not permission** — a document whose representation this vault cannot read is offered, never embedded.
+- **The web / PWA column retires.** [R-1020-1](decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020) retires the PWA and every browser-only plane it forced into the seat engine; `viewer` has no v1 successor. Desktop and mobile are the two surfaces.
+- **The three-state read is the contract, per plane.** A failed read is *loading*, *denied-or-unavailable*, or *data* — never an empty list and never a `0`. `Option<T>` collapses two of the three, which is how v0's person sheet came to answer `linked: null` and `vault_count: 0` on the same row.
+
 ## Two classes of blueprint
 
 | Class | Apps | What the seats must do |
