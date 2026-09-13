@@ -168,37 +168,47 @@ function createNote(ctx: HandlerCtx): Record<string, unknown> {
   const format = input.format ?? "plain";
   const contentId = contentItemFor(ctx, input.body_text, format);
   const noteId = mintedId(ctx, "note_id");
+  // THE FIRST OCCURRENCE IS RECORDED BEFORE THE ROW, AND THAT ORDER IS THE
+  // POINT (#1020, R-1020-35).
+  //
+  // A note's original body is a version like any other (#996, R20(a)), so the
+  // chain starts here — and writing the occurrence first is what lets the note
+  // be inserted with `current_revision_id` already set, in ONE statement.
+  //
+  // It used to be an `UPDATE` after the insert, and that update did not change
+  // `updated_at` — which is exactly when `knowledge_note_touch_updated_at`
+  // stamps `strftime('now')` over it. So every created note's `updated_at` was
+  // the HOST's wall clock rather than `ctx.now`, and the library sorts newest
+  // `updated_at` first: with an injected clock the shelf's order became a fact
+  // about the machine. Four of the six notes in `contracts/apps/notes/rows.json`
+  // carried a host instant before this, and the ported replay could not
+  // reproduce their page order at all.
+  //
+  // `recordBodyRevision` reads the wrapper's current pointer for the parent and
+  // finds no row yet, which is the right answer: a first occurrence has none.
+  const revisionId = recordBodyRevision(ctx, {
+    entityType: NOTE_TARGET_TYPE,
+    entityId: noteId,
+    contentId,
+    previousContentId: null,
+  });
   ctx.db
     .prepare(
-      `INSERT INTO knowledge_note (note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, ?, ?)`
+      `INSERT INTO knowledge_note (note_id, author_party_id, title, body_content_id, current_revision_id, format, pinned, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`
     )
     .run(
       noteId,
       actorPartyId(ctx),
       input.title,
       contentId,
+      revisionId,
       format,
       ctx.now,
       ctx.now
     );
   ctx.wrote("knowledge.note", noteId);
   setNoteRepresentation(ctx, noteId, contentId, format);
-  // The FIRST occurrence (#996, R20(a)): a note's original body is a version
-  // like any other, so the chain starts here.
-  ctx.db
-    .prepare(
-      "UPDATE knowledge_note SET current_revision_id = ? WHERE note_id = ?"
-    )
-    .run(
-      recordBodyRevision(ctx, {
-        entityType: NOTE_TARGET_TYPE,
-        entityId: noteId,
-        contentId,
-        previousContentId: null,
-      }),
-      noteId
-    );
   if (input.notebook_id) {
     placeNote(ctx, noteId, input.notebook_id);
   }
