@@ -171,12 +171,19 @@ pub const CATALOGUE: [Recipe; 6] = [
 
 /// Result commands another lane owns and that are **not on this build yet**.
 ///
-/// `core.set_extracted_text` is the Docs lane's, in the `core` schema (census
-/// §Cross-lane). It is named here rather than silently absent, because a recipe
-/// whose result command does not exist is unavailable and the honest place to
-/// say so is beside the recipe. [`pending_commands`] is what the parity
-/// manifest reads to mark those cases `pending: core`.
-pub const PENDING_COMMANDS: [&str; 1] = ["core.set_extracted_text"];
+/// **Empty, and the machinery stays.** This list carried
+/// `core.set_extracted_text` — the Docs lane's, in the `core` schema (census
+/// §Cross-lane) — because a recipe whose result command does not exist is
+/// unavailable and the honest place to say so is beside the recipe. That
+/// command landed with slot 4b's `core` schema
+/// (`crates/vault/src/commands/core.rs`), so it is no longer pending and the
+/// one place that says so is here.
+///
+/// The list is emptied rather than deleted: the next recipe whose result
+/// command belongs to a lane that has not run needs exactly this seam, and
+/// `the_catalogues_result_commands_are_registered_or_named_as_pending` in
+/// `crates/centraid` is what holds the two lists together either way.
+pub const PENDING_COMMANDS: [&str; 0] = [];
 
 /// Is this result command carried by this build's command registry?
 ///
@@ -324,9 +331,12 @@ mod tests {
             .copied()
             .collect();
         assert_eq!(owned, ["enrich.upsert_embedding", "enrich.upsert_faces"]);
-        // And the one that is WAITING on another lane is named rather than
-        // silently absent.
-        assert_eq!(pending_commands(), ["core.set_extracted_text"]);
+        // NOTHING IS WAITING ON ANOTHER LANE ANY MORE: `core.set_extracted_text`
+        // was the one, and it landed with slot 4b's `core` schema. The seam
+        // stays (see [`PENDING_COMMANDS`]), so a command that goes pending
+        // again is named here rather than silently absent.
+        assert!(pending_commands().is_empty());
+        assert!(!is_pending("core.set_extracted_text"));
         assert!(!is_pending("enrich.upsert_embedding"));
     }
 

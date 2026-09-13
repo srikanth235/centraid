@@ -43,10 +43,13 @@ export function seedSharePlane(
        VALUES ('circle-family', ?, 'Family', 'family', ?, ?)`
     )
     .run(ownerPartyId, at, at);
-  for (const [memberId, partyId] of [
+  // Tupled so the destructuring is typed: a plain array literal widens to
+  // `string[]` and every element then reads as possibly absent.
+  const members: readonly [string, string][] = [
     ["member-ana", "party-ana"],
     ["member-tom", "party-tom"],
-  ]) {
+  ];
+  for (const [memberId, partyId] of members) {
     vault
       .prepare(
         `INSERT INTO social_circle_member (member_id, circle_id, party_id, added_at)
@@ -109,10 +112,11 @@ export function seedSharePlane(
                'standing', NULL, 'granted', ?, ?, ?)`
     )
     .run(document.document_id, at, ownerPartyId, at);
-  for (const [bindingId, partyId, vaultId] of [
+  const bindings: readonly [string, string, string][] = [
     ["binding-ana", "party-ana", "vault-ana"],
     ["binding-tom", "party-tom", "vault-tom"],
-  ]) {
+  ];
+  for (const [bindingId, partyId, vaultId] of bindings) {
     vault
       .prepare(
         `INSERT INTO share_party_vault_binding

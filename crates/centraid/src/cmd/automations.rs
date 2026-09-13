@@ -371,8 +371,12 @@ mod tests {
                 recipes::is_pending(command)
             );
         }
-        // The one this lane waits on, and the lane that lands it.
-        assert_eq!(recipes::pending_commands(), ["core.set_extracted_text"]);
+        // NOTHING IS PENDING ANY MORE. `core.set_extracted_text` was, and it
+        // landed with slot 4b's `core` schema; the assertion is kept as an
+        // equality rather than dropped so a command that goes pending again has
+        // to be named here too.
+        assert!(recipes::pending_commands().is_empty());
+        assert!(registry.get("core.set_extracted_text").is_some());
         assert!(registry.get("enrich.upsert_faces").is_some());
         assert!(registry.get("enrich.upsert_embedding").is_some());
         assert!(registry.get("media.set_place_gazetteer").is_some());
