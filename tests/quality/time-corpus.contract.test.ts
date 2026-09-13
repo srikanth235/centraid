@@ -94,7 +94,7 @@ describe("contracts/time", () => {
     const refusedExpansions = corpus.dstCases.cases.filter(
       (entry) => entry.rrule === "FREQ=MONTHLY;BYSETPOS=-1"
     );
-    expect(refusedExpansions.length).toBe(6);
+    expect(refusedExpansions).toHaveLength(6);
     expect(
       refusedExpansions.every((entry) => entry.occurrences.length === 0)
     ).toBe(true);

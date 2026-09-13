@@ -73,12 +73,7 @@ export const FIXTURE_INSTANT_WINDOW_MS = 40_000 * 24 * 60 * 60 * 1000;
  * that window's order a fact about the data rather than about the machine.
  */
 export function normaliseHostClock(
-  vault: {
-    prepare: (sql: string) => {
-      all: (...args: unknown[]) => unknown[];
-      run: (...args: unknown[]) => unknown;
-    };
-  },
+  vault: FixtureVault,
   tables: readonly string[]
 ): number {
   const epoch = Date.parse(PARITY_EPOCH);
@@ -126,6 +121,25 @@ export function normaliseHostClock(
   }
   return rewritten;
 }
+
+/** The token every host-clock instant is replaced by. */
+const HOST_CLOCK = "(host-clock)";
+
+/**
+ * The open vault, as these two helpers need it.
+ *
+ * Structural and deliberately loose: `node:sqlite`'s own `all`/`run` are
+ * overloaded on named and anonymous parameters, and a narrower signature here
+ * would not accept the real handle.
+ */
+type FixtureVault = {
+  prepare: (sql: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    all: (...args: any[]) => unknown[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    run: (...args: any[]) => unknown;
+  };
+};
 
 /** One table's rows, as data. */
 export interface TableRows {
@@ -286,11 +300,7 @@ export async function loadCtxTime(): Promise<Record<string, unknown>> {
 
 /** Every row of every table, as data. */
 export function tableRows(
-  vault: {
-    prepare: (sql: string) => {
-      all: (...args: unknown[]) => unknown[];
-    };
-  },
+  vault: FixtureVault,
   tables: readonly string[]
 ): TableRows[] {
   return tables.map((table) => {

@@ -82,8 +82,8 @@ describe("contracts/apps/tasks", () => {
       (task) => task["title"] === "Water the plants"
     );
     expect(watering?.["recurrence_summary"]).toBe("Daily");
-    expect(typeof watering?.["missed"]).toBe("number");
-    expect(typeof watering?.["next_due"]).toBe("string");
+    expect(watering?.["missed"]).toBeTypeOf("number");
+    expect(watering?.["next_due"]).toBeTypeOf("string");
 
     // The declared floor and ceiling both clamp.
     const under = bundle.queries.find(

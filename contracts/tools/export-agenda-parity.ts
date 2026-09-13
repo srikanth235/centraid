@@ -31,11 +31,8 @@ import type {
   QueryCase,
   ScheduleParityBundle,
 } from "./schedule-parity-bundle.js";
-import {
-  openCorpus,
-  runEventScript,
-  runTaskScript,
-} from "./schedule-parity-corpus.js";
+import { openCorpus } from "./schedule-parity-corpus.js";
+import { runEventScript, runTaskScript } from "./schedule-parity-script.js";
 
 export {
   PARITY_EPOCH,
