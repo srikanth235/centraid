@@ -1,0 +1,49 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/restore-10gib.scale.test.ts",
+  "name": "Year-3 restore (10 GiB seeded, 90640 content rows, 5000 parties)",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "restore wall clock",
+      "value": 58856.295946,
+      "unit": "ms"
+    },
+    {
+      "name": "snapshot wall clock",
+      "value": 77365.154703,
+      "unit": "ms"
+    },
+    {
+      "name": "foreign_key_check (isolated)",
+      "value": 130.22769999998854,
+      "unit": "ms"
+    },
+    {
+      "name": "integrity_check (isolated)",
+      "value": 1848.9568600000057,
+      "unit": "ms"
+    },
+    {
+      "name": "seeded CAS bytes",
+      "value": 10737418240,
+      "unit": "bytes"
+    },
+    {
+      "name": "restored vault.db",
+      "value": 202858496,
+      "unit": "bytes"
+    },
+    {
+      "name": "rows checked by foreign_key_check",
+      "value": 95640,
+      "unit": "rows"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:10:19.161Z",
+      "value": 58856.295946
+    }
+  ]
+}
