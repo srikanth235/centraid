@@ -131,6 +131,18 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("osv", run_osv),
         step("release-build", run_release_build),
         step("ts-static", run_ts_static),
+        // THE THREE TREES NO `changes` FILTER CLAIMED (#1020, close pass,
+        // D-1020-CL7). `copy/`, `design/` and `mobile/`'s Kotlin copy table are
+        // GENERATED, and until this step existed the only thing that
+        // regenerated them was `mobile-jvm` — which D-1020-B2-3 keeps out of
+        // `pr` because it is a second toolchain with a 420 s cold cost. So an
+        // edit to a `*-copy.ts` leaf or a `packages/design` token shipped a
+        // committed artifact nobody re-derived, and `lint:path-filters` reported
+        // all three as claimed by nothing: `skipped` counts as a PASS in
+        // ci.yml's `check`, so such a change merged green and unexercised.
+        // Three bun scripts and a clean-tree assertion — the shape `mobile-jvm`
+        // already uses, on the profile that actually runs on a pull request.
+        step("emitters", run_emitters),
         // THE DESKTOP SEAT'S PURE CORES (#1020 wave 3 lane F, D-1020-F8). Every
         // `electron`-importing module has a pure twin with unit tests, which is
         // v0's own split and the reason it is testable without a display; this
@@ -437,6 +449,38 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
             "mobile",
             "contracts/screens",
         ],
+    )
+}
+
+/// `emitters` — the generated trees, regenerated and asserted clean.
+///
+/// `mobile-jvm` runs the OTHER two emitters (`contracts/screens`) and diffs the
+/// same trees; this step is the half that costs no Gradle, so it can sit on the
+/// per-PR profile. The two overlap on purpose: a drift check that only exists
+/// in a nightly profile is a drift check that reports a day late.
+fn run_emitters(ctx: &Ctx) -> Result<Outcome> {
+    for emitter in [
+        "contracts/tools/export-copy.ts",
+        "contracts/tools/export-design-corpus.ts",
+        "contracts/tools/export-native-theme.ts",
+    ] {
+        let emitted = process(ctx, "emitters", "bun", &[emitter])?;
+        if !matches!(emitted, Outcome::Ok(_)) {
+            return Ok(emitted);
+        }
+    }
+    // THEN FORMAT, for `mobile-jvm`'s reason: JSON in this repository is
+    // oxfmt-owned and the emitters do not format, so without this the clean-tree
+    // assertion reports drift that is not there.
+    let formatted = process(ctx, "emitters", "bun", &["run", "format"])?;
+    if !matches!(formatted, Outcome::Ok(_)) {
+        return Ok(formatted);
+    }
+    process(
+        ctx,
+        "emitters",
+        "git",
+        &["diff", "--exit-code", "--", "copy", "design", "mobile"],
     )
 }
 
