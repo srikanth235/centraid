@@ -155,4 +155,9 @@ fn the_root_shelf_carries_this_apps_own_route_id() {
         Some("list"),
         "Docs' drive was emitted with Tally's route id before this fix"
     );
+    assert_eq!(
+        root_of("locker").as_deref(),
+        Some("items"),
+        "Locker's shelf landed a wave after Docs' and carried the same wrong id"
+    );
 }
