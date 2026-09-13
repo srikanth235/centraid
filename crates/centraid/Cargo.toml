@@ -29,12 +29,15 @@ clap.workspace = true
 flate2.workspace = true
 prost.workspace = true
 serde = { workspace = true }
+sha2.workspace = true
+thiserror.workspace = true
 serde_json.workspace = true
 # `net` for the seat's Unix socket (and `UnixStream::peer_cred`, which is what
 # lets the peer check happen without `unsafe`); `fs` is not needed — the blob
 # door's waiting read runs on the blocking pool over `std::fs`.
 tokio = { workspace = true, features = ["signal", "net"] }
 tracing.workspace = true
+url.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]

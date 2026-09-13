@@ -43,6 +43,12 @@ pub fn catalogue() -> Vec<(&'static str, PageQuery)> {
         ("tally.settlements", tally::settlements_statement()),
         ("tally.obligations", tally::obligations_statement()),
         ("tally.receipts", tally::receipts_statement()),
+        ("companion.apps", companion_apps()),
+        ("companion.outbox", companion_outbox()),
+        ("companion.connections", companion_connections()),
+        ("companion.parked", companion_parked()),
+        ("companion.scopeRequests", companion_scope_requests()),
+        ("locker.autofillLogins", locker_autofill_logins()),
         ("photos.assets", photos_assets()),
         ("photos.content", photos_content()),
         ("photos.representations", photos_representations()),
@@ -55,6 +61,88 @@ pub fn statement(name: &str) -> Option<wire::PageQuery> {
         .into_iter()
         .find(|(known, _)| *known == name)
         .map(|(_, query)| to_wire(&query))
+}
+
+/// `companion.apps` — which apps this vault has installed (#1020 wave 4 lane
+/// extension, D-1020-X10).
+///
+/// v0's `GET /_vault/apps` answers the same question and the Companion asks it
+/// for exactly one reason: *`unavailable` means the app is not installed on the
+/// paired vault, which is the one fact still worth asking the gateway for*
+/// (`apps/extension/src/companion-api.ts:127`–`:131`). Which modules the
+/// Companion uses is its own local preference (#996 R11) and is never read
+/// from here.
+fn companion_apps() -> PageQuery {
+    PageQuery::new(
+        "companion.apps",
+        "app_id, name, display_name, label",
+        "access_app",
+        centraid_apps_kit::statement::PageOrder::asc("app_id", "app_id"),
+    )
+}
+
+/// `companion.outbox` — the queue's pending half, one of `blocking-count`'s
+/// four sources (`packages/server/src/serve/vault-plane.ts:1254`–`:1292`).
+fn companion_outbox() -> PageQuery {
+    PageQuery::new(
+        "companion.outbox",
+        "item_id, verb, target, staged_at",
+        "outbox_item",
+        centraid_apps_kit::statement::PageOrder::asc("item_id", "item_id"),
+    )
+    .filter(
+        "status = ?",
+        vec![PageBindValue::Text("pending".to_owned())],
+    )
+}
+
+/// `companion.connections` — connectors whose authorisation has lapsed.
+fn companion_connections() -> PageQuery {
+    PageQuery::new(
+        "companion.connections",
+        "connection_id, kind, label",
+        "sync_connection",
+        centraid_apps_kit::statement::PageOrder::asc("connection_id", "connection_id"),
+    )
+    .filter(
+        "status = ?",
+        vec![PageBindValue::Text("needs-auth".to_owned())],
+    )
+}
+
+/// `companion.parked` — invocations waiting on the member's decision.
+fn companion_parked() -> PageQuery {
+    PageQuery::new(
+        "companion.parked",
+        "intent_id, status",
+        "replica_intent_outcome",
+        centraid_apps_kit::statement::PageOrder::asc("intent_id", "intent_id"),
+    )
+    .filter("status = ?", vec![PageBindValue::Text("parked".to_owned())])
+}
+
+/// `companion.scopeRequests` — grants an agent has asked for and not been
+/// answered about. *A refusal is an ANSWER*, so `decided_at IS NULL` is the
+/// open set (`packages/vault/src/grant/authority-request.ts:78`–`:82`).
+fn companion_scope_requests() -> PageQuery {
+    PageQuery::new(
+        "companion.scopeRequests",
+        "request_id, principal_id, requested_at",
+        "share_authority_request",
+        centraid_apps_kit::statement::PageOrder::asc("request_id", "request_id"),
+    )
+    .filter("decided_at IS NULL", Vec::<PageBindValue>::new())
+}
+
+/// `locker.autofillLogins` — `crates/apps/locker`'s own statement, unchanged.
+///
+/// SECRET-FREE BY CONSTRUCTION: `ITEM_COLUMNS` is the Companion's projection
+/// and does not carry `password` or `otp_seed` (census §A8). The origin filter
+/// is NOT in the statement, because a catalogue statement takes no caller bind
+/// — it happens in `centraid native-host`, over the same
+/// `contracts/origin-matching-v1.json` the app crate answers (D-1020-X8).
+fn locker_autofill_logins() -> PageQuery {
+    centraid_apps_locker::queries::autofill_logins_statement()
 }
 
 /// `photos.assets` — the timeline. Newest capture first, archived and trashed
@@ -238,7 +326,9 @@ mod tests {
                 );
             }
         }
-        assert_eq!(names.len(), 14);
+        // Fourteen from lane F (eleven Tally, three Photos) plus the six the
+        // Companion's methods read (#1020 wave 4 lane extension, D-1020-X10).
+        assert_eq!(names.len(), 20);
     }
 
     #[test]

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "host": "dev.centraid.host",
+  "note": "THE EXTENSION ID IS A RELEASE ARTIFACT (#1020 wave 4 lane extension, D-1020-X5). `centraid native-host install --browser <b> --extension-id <id>` refuses an empty allowlist, so a host manifest cannot be written until an id exists — which makes this file a release register rather than a config. An id that is not yet minted is `null` with the reason, never a placeholder: a manifest carrying a made-up id is a manifest that silently does not work, and a fixture carrying one is worse because it reads as settled.",
+  "browsers": [
+    {
+      "browser": "chrome",
+      "channel": "store",
+      "id": null,
+      "pending": "store-enrolment",
+      "note": "The Chrome Web Store derives the id from the key it mints at first upload. Owner hand-off."
+    },
+    {
+      "browser": "chrome",
+      "channel": "unpacked",
+      "id": null,
+      "pending": "dev-key",
+      "note": "Chrome derives an unpacked extension's id from the manifest's `key` field (the base64 SPKI of an RSA public key), so committing a dev key pins the dev id and `--extension-id` becomes usable before any store listing exists. The key is a credential the owner generates once; `extension/README.md` carries the command. Until then a dev-loaded Companion has a per-directory id and the manifest must be re-written for it."
+    },
+    {
+      "browser": "firefox",
+      "channel": "amo",
+      "id": "centraid@centraid.dev",
+      "note": "A Firefox add-on id is chosen by the author and declared in `browser_specific_settings.gecko.id` — it is the same string before and after AMO listing, so it is the one id that is pinnable today. `extension/static/manifest.firefox.json` declares exactly this."
+    }
+  ]
+}

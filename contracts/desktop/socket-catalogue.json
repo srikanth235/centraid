@@ -2,33 +2,37 @@
   "local_protocol_version": 1,
   "statements": [
     {
-      "binds": 0,
-      "descending": false,
-      "from": "core_vault",
       "name": "tally.vault",
-      "pk_column": "vault_id",
-      "select": ["vault_id", "self_party_id", "base_currency"],
-      "sort_column": "vault_id",
       "statement": "tally.dashboard.vault",
-      "where": null
+      "select": [
+        "vault_id",
+        "self_party_id",
+        "base_currency"
+      ],
+      "from": "core_vault",
+      "where": null,
+      "binds": 0,
+      "sort_column": "vault_id",
+      "pk_column": "vault_id",
+      "descending": false
     },
     {
-      "binds": 0,
-      "descending": false,
-      "from": "tally_friend",
       "name": "tally.friends",
-      "pk_column": "friend_id",
-      "select": ["friend_id", "party_id"],
-      "sort_column": "friend_id",
       "statement": "tally.dashboard.friends",
-      "where": null
+      "select": [
+        "friend_id",
+        "party_id"
+      ],
+      "from": "tally_friend",
+      "where": null,
+      "binds": 0,
+      "sort_column": "friend_id",
+      "pk_column": "friend_id",
+      "descending": false
     },
     {
-      "binds": 0,
-      "descending": false,
-      "from": "tally_group",
       "name": "tally.groups",
-      "pk_column": "group_id",
+      "statement": "tally.dashboard.groups",
       "select": [
         "group_id",
         "circle_id",
@@ -38,38 +42,45 @@
         "archived_at",
         "currency"
       ],
+      "from": "tally_group",
+      "where": null,
+      "binds": 0,
       "sort_column": "group_id",
-      "statement": "tally.dashboard.groups",
-      "where": null
+      "pk_column": "group_id",
+      "descending": false
     },
     {
-      "binds": 0,
-      "descending": false,
-      "from": "social_circle",
       "name": "tally.circles",
-      "pk_column": "circle_id",
-      "select": ["circle_id", "name"],
-      "sort_column": "circle_id",
       "statement": "tally.dashboard.circles",
-      "where": null
+      "select": [
+        "circle_id",
+        "name"
+      ],
+      "from": "social_circle",
+      "where": null,
+      "binds": 0,
+      "sort_column": "circle_id",
+      "pk_column": "circle_id",
+      "descending": false
     },
     {
-      "binds": 0,
-      "descending": false,
-      "from": "social_circle_member",
       "name": "tally.circleMembers",
-      "pk_column": "member_id",
-      "select": ["member_id", "circle_id", "party_id"],
-      "sort_column": "member_id",
       "statement": "tally.dashboard.circleMembers",
-      "where": null
+      "select": [
+        "member_id",
+        "circle_id",
+        "party_id"
+      ],
+      "from": "social_circle_member",
+      "where": null,
+      "binds": 0,
+      "sort_column": "member_id",
+      "pk_column": "member_id",
+      "descending": false
     },
     {
-      "binds": 0,
-      "descending": true,
-      "from": "tally_expense",
       "name": "tally.expenses",
-      "pk_column": "expense_id",
+      "statement": "tally.dashboard.expenses",
       "select": [
         "expense_id",
         "group_id",
@@ -85,38 +96,46 @@
         "created_at",
         "updated_at"
       ],
+      "from": "tally_expense",
+      "where": "deleted_at IS NULL",
+      "binds": 0,
       "sort_column": "spent_on",
-      "statement": "tally.dashboard.expenses",
-      "where": "deleted_at IS NULL"
+      "pk_column": "expense_id",
+      "descending": true
     },
     {
-      "binds": 0,
-      "descending": false,
-      "from": "tally_expense_split",
       "name": "tally.splits",
-      "pk_column": "party_id",
-      "select": ["expense_id", "party_id", "share_minor"],
-      "sort_column": "expense_id",
       "statement": "tally.dashboard.splits",
-      "where": null
-    },
-    {
+      "select": [
+        "expense_id",
+        "party_id",
+        "share_minor"
+      ],
+      "from": "tally_expense_split",
+      "where": null,
       "binds": 0,
-      "descending": false,
-      "from": "tally_expense_payer",
-      "name": "tally.payers",
-      "pk_column": "party_id",
-      "select": ["expense_id", "party_id", "paid_minor"],
       "sort_column": "expense_id",
-      "statement": "tally.dashboard.payers",
-      "where": null
+      "pk_column": "party_id",
+      "descending": false
     },
     {
+      "name": "tally.payers",
+      "statement": "tally.dashboard.payers",
+      "select": [
+        "expense_id",
+        "party_id",
+        "paid_minor"
+      ],
+      "from": "tally_expense_payer",
+      "where": null,
       "binds": 0,
-      "descending": false,
-      "from": "tally_settlement",
+      "sort_column": "expense_id",
+      "pk_column": "party_id",
+      "descending": false
+    },
+    {
       "name": "tally.settlements",
-      "pk_column": "settlement_id",
+      "statement": "tally.dashboard.settlements",
       "select": [
         "settlement_id",
         "group_id",
@@ -128,16 +147,16 @@
         "txn_id",
         "created_at"
       ],
+      "from": "tally_settlement",
+      "where": "deleted_at IS NULL",
+      "binds": 0,
       "sort_column": "settlement_id",
-      "statement": "tally.dashboard.settlements",
-      "where": "deleted_at IS NULL"
+      "pk_column": "settlement_id",
+      "descending": false
     },
     {
-      "binds": 0,
-      "descending": false,
-      "from": "tally_obligation",
       "name": "tally.obligations",
-      "pk_column": "obligation_id",
+      "statement": "tally.dashboard.obligations",
       "select": [
         "obligation_id",
         "from_party",
@@ -148,16 +167,16 @@
         "incurred_on",
         "settled_at"
       ],
+      "from": "tally_obligation",
+      "where": "settled_at IS NULL AND deleted_at IS NULL",
+      "binds": 0,
       "sort_column": "obligation_id",
-      "statement": "tally.dashboard.obligations",
-      "where": "settled_at IS NULL AND deleted_at IS NULL"
+      "pk_column": "obligation_id",
+      "descending": false
     },
     {
-      "binds": 2,
-      "descending": false,
-      "from": "core_attachment",
       "name": "tally.receipts",
-      "pk_column": "attachment_id",
+      "statement": "tally.dashboard.receipts",
       "select": [
         "attachment_id",
         "target_type",
@@ -166,16 +185,127 @@
         "role",
         "is_primary"
       ],
+      "from": "core_attachment",
+      "where": "target_type = ? AND role = ?",
+      "binds": 2,
       "sort_column": "attachment_id",
-      "statement": "tally.dashboard.receipts",
-      "where": "target_type = ? AND role = ?"
+      "pk_column": "attachment_id",
+      "descending": false
     },
     {
+      "name": "companion.apps",
+      "statement": "companion.apps",
+      "select": [
+        "app_id",
+        "name",
+        "display_name",
+        "label"
+      ],
+      "from": "access_app",
+      "where": null,
       "binds": 0,
-      "descending": true,
-      "from": "media_asset",
+      "sort_column": "app_id",
+      "pk_column": "app_id",
+      "descending": false
+    },
+    {
+      "name": "companion.outbox",
+      "statement": "companion.outbox",
+      "select": [
+        "item_id",
+        "verb",
+        "target",
+        "staged_at"
+      ],
+      "from": "outbox_item",
+      "where": "status = ?",
+      "binds": 1,
+      "sort_column": "item_id",
+      "pk_column": "item_id",
+      "descending": false
+    },
+    {
+      "name": "companion.connections",
+      "statement": "companion.connections",
+      "select": [
+        "connection_id",
+        "kind",
+        "label"
+      ],
+      "from": "sync_connection",
+      "where": "status = ?",
+      "binds": 1,
+      "sort_column": "connection_id",
+      "pk_column": "connection_id",
+      "descending": false
+    },
+    {
+      "name": "companion.parked",
+      "statement": "companion.parked",
+      "select": [
+        "intent_id",
+        "status"
+      ],
+      "from": "replica_intent_outcome",
+      "where": "status = ?",
+      "binds": 1,
+      "sort_column": "intent_id",
+      "pk_column": "intent_id",
+      "descending": false
+    },
+    {
+      "name": "companion.scopeRequests",
+      "statement": "companion.scopeRequests",
+      "select": [
+        "request_id",
+        "principal_id",
+        "requested_at"
+      ],
+      "from": "share_authority_request",
+      "where": "decided_at IS NULL",
+      "binds": 0,
+      "sort_column": "request_id",
+      "pk_column": "request_id",
+      "descending": false
+    },
+    {
+      "name": "locker.autofillLogins",
+      "statement": "locker.autofill.logins",
+      "select": [
+        "item_id",
+        "type",
+        "title",
+        "username",
+        "url",
+        "url_match_policy",
+        "notes",
+        "cardholder",
+        "expiry",
+        "brand",
+        "fullname",
+        "email",
+        "phone",
+        "address",
+        "network",
+        "connection_id",
+        "compromised",
+        "password_set_at",
+        "created_at",
+        "updated_at",
+        "archived_at",
+        "deleted_at",
+        "purge_at"
+      ],
+      "from": "locker_item",
+      "where": "type = ? AND deleted_at IS NULL",
+      "binds": 1,
+      "sort_column": "updated_at",
+      "pk_column": "item_id",
+      "descending": true
+    },
+    {
       "name": "photos.assets",
-      "pk_column": "asset_id",
+      "statement": "photos.timeline.assets",
       "select": [
         "asset_id",
         "content_id",
@@ -188,27 +318,32 @@
         "duration_s",
         "created_at"
       ],
+      "from": "media_asset",
+      "where": "archived_at IS NULL AND deleted_at IS NULL",
+      "binds": 0,
       "sort_column": "captured_at",
-      "statement": "photos.timeline.assets",
-      "where": "archived_at IS NULL AND deleted_at IS NULL"
+      "pk_column": "asset_id",
+      "descending": true
     },
     {
-      "binds": 0,
-      "descending": false,
-      "from": "core_content_item",
       "name": "photos.content",
-      "pk_column": "content_id",
-      "select": ["content_id", "sha256", "byte_size", "created_at"],
-      "sort_column": "content_id",
       "statement": "photos.timeline.content",
-      "where": "deleted_at IS NULL"
+      "select": [
+        "content_id",
+        "sha256",
+        "byte_size",
+        "created_at"
+      ],
+      "from": "core_content_item",
+      "where": "deleted_at IS NULL",
+      "binds": 0,
+      "sort_column": "content_id",
+      "pk_column": "content_id",
+      "descending": false
     },
     {
-      "binds": 0,
-      "descending": false,
-      "from": "core_content_representation",
       "name": "photos.representations",
-      "pk_column": "representation_id",
+      "statement": "photos.timeline.representations",
       "select": [
         "representation_id",
         "content_id",
@@ -217,9 +352,12 @@
         "width",
         "height"
       ],
+      "from": "core_content_representation",
+      "where": null,
+      "binds": 0,
       "sort_column": "representation_id",
-      "statement": "photos.timeline.representations",
-      "where": null
+      "pk_column": "representation_id",
+      "descending": false
     }
   ]
 }
