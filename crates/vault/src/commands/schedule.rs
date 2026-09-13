@@ -210,6 +210,26 @@ fn vault_zone(connection: &Connection) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// The value `core_event.rrule_support` carries for a rule (#996 R21 / ONT-31;
+/// #1020 SCH-F1).
+///
+/// `None` is `'supported'`: a series of one is a series this engine expands
+/// perfectly. Anything the three-shape parser refuses is kept verbatim and
+/// FLAGGED, because a calendar's rule this engine cannot expand must neither be
+/// thrown away nor silently expanded to the wrong dates.
+fn rrule_support(rule: Option<&str>) -> &'static str {
+    match rule {
+        None => "supported",
+        Some(value) => {
+            if crate::time::rrule::inspect(value).is_ok() {
+                "supported"
+            } else {
+                "unsupported"
+            }
+        }
+    }
+}
+
 /// WHAT `dtstart` MEANS (#916 R2 / review 3.3).
 ///
 /// `zoned` says it is a real instant expanded in `start_tz`, so both halves
@@ -589,12 +609,19 @@ fn propose_event() -> CommandDefinition {
             );
             let canonical_rule = ctx.optional_str("rrule").map(rrule::canonicalize);
             ctx.connection().execute(
+                // `rrule_support` IS WRITTEN HERE (#1020, SCH-F1, closed in
+                // the close pass). v0's only writer was the ICS ingest
+                // publisher, so a rule typed into Agenda took the column's
+                // schema default — `'supported'` — whatever the engine could
+                // do with it. Fixed on both sides at once: v0's
+                // `schedule.propose_event` writes it now too, and the parity
+                // corpus was regenerated against the answer.
                 "INSERT INTO core_event
                    (event_id, ical_uid, summary, description, dtstart, dtend, start_tz,
-                    rrule, status, location_place_id, organizer_party_id, sequence,
-                    created_at, updated_at, end_tz, recurrence_semantics)
-                 VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, 'tentative', ?8, ?9, 0, ?10, ?10,
-                         ?11, ?12)",
+                    rrule, rrule_support, status, location_place_id, organizer_party_id,
+                    sequence, created_at, updated_at, end_tz, recurrence_semantics)
+                 VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'tentative', ?9, ?10, 0,
+                         ?11, ?11, ?12, ?13)",
                 rusqlite::params![
                     event_id,
                     summary,
@@ -603,6 +630,7 @@ fn propose_event() -> CommandDefinition {
                     dtend,
                     start_tz,
                     canonical_rule,
+                    rrule_support(canonical_rule.as_deref()),
                     ctx.optional_str("location_place_id"),
                     organizer,
                     ctx.now,
@@ -1109,8 +1137,20 @@ fn edit_event() -> CommandDefinition {
                     values.push(value.into());
                 }
             }
+            // THE FLAG MOVES WITH THE RULE (#1020, SCH-F1): an edit that
+            // replaced an expandable rule with one this engine refuses left
+            // the column saying 'supported'. Dropping the rule restores the
+            // default, because a series of one is one this engine expands.
+            let rule_support = if clear_rrule {
+                Some("supported".to_owned())
+            } else {
+                canonical_rule
+                    .as_deref()
+                    .map(|rule| rrule_support(Some(rule)).to_owned())
+            };
             for (column, cleared, set) in [
-                ("rrule", clear_rrule, canonical_rule),
+                ("rrule", clear_rrule, canonical_rule.clone()),
+                ("rrule_support", false, rule_support),
                 (
                     "description",
                     optional_bool(ctx, "clear_description"),

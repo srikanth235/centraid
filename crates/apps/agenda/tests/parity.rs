@@ -553,11 +553,17 @@ fn the_script_carries_the_refusals_a_port_has_to_reproduce() {
 /// date forever."*
 ///
 /// `core_event.rrule_support` exists to carry the other answer — store it and
-/// mark it — and **nothing in the tree ever writes `'unsupported'`**, so the
-/// column is a dead flag rather than the design it looks like. Which of the two
-/// the product wants is an owner question, so this lane refuses at the write
-/// boundary (the brief's ruling, and what Tasks already does) and records v0's
-/// answer here as a DIFFERENCE. Agreeing with it would be the bug.
+/// mark it — and when this lane ran, **only the ICS ingest publisher ever wrote
+/// it** (SCH-F1), so a rule typed into Agenda took the column's `'supported'`
+/// default whatever it was. The close pass fixed that at source in both trees:
+/// `schedule.propose_event` and `schedule.edit_event` compute the flag from the
+/// three-shape parser, and the corpus was regenerated against the new answer —
+/// five query answers and one row moved from `'supported'` to `'unsupported'`,
+/// all of them the same `FREQ=MONTHLY;BYSETPOS=-1` event.
+///
+/// The DIFFERENCE stands and is the point of this test: v0 STORES the rule with
+/// the flag, this port REFUSES it at the write boundary (the brief's ruling,
+/// and what Tasks already does). Agreeing with v0 would be the bug.
 #[test]
 fn v0_stores_an_unsupported_rule_on_an_event_and_this_port_refuses_it() {
     let commands = fixture("commands.json");
@@ -586,8 +592,10 @@ fn v0_stores_an_unsupported_rule_on_an_event_and_this_port_refuses_it() {
         json!("failed"),
         "and v0 refuses the very same rule on a task"
     );
-    // The ROW v0 wrote carries `rrule_support = 'supported'`: the column that
-    // exists to say otherwise is never written.
+    // The ROW v0 wrote now carries `rrule_support = 'unsupported'`: the column
+    // that exists to say so is written by the command path, not only by ICS
+    // ingest (#1020, SCH-F1). Exactly one event in the corpus carries an
+    // unsupported rule, so the count is the evidence rather than a threshold.
     let rows = fixture("rows.json");
     let events = rows
         .as_array()
@@ -611,5 +619,9 @@ fn v0_stores_an_unsupported_rule_on_an_event_and_this_port_refuses_it() {
         .iter()
         .filter(|row| row[support] == json!("unsupported"))
         .count();
-    assert_eq!(marked, 0, "`rrule_support` is a dead flag in v0");
+    assert_eq!(
+        marked, 1,
+        "`rrule_support` is written by the command path now, and the corpus has \
+         exactly one rule this engine refuses"
+    );
 }

@@ -524,7 +524,7 @@
         "Europe/London",
         "zoned",
         "FREQ=MONTHLY;BYSETPOS=-1",
-        "supported",
+        "unsupported",
         "tentative",
         null,
         "id-0002",

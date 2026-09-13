@@ -3,7 +3,7 @@
 // and receipted end to end. Command implementations are domain-owned; the
 // gateway hosts and checks them (§10 negative space).
 
-import { canonicalizeRrule } from "@centraid/core/time";
+import { canonicalizeRrule, rruleSupport } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -160,11 +160,16 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
   const eventId = mintedId(ctx, "event_id");
   ctx.db
     .prepare(
+      // `rrule_support` IS WRITTEN HERE TOO (#1020, SCH-F1). The ICS ingest
+      // publisher was its only writer, so a rule typed into Agenda took the
+      // column's schema default — `'supported'` — whatever the engine could
+      // actually do with it. A flag with one writer and a default that lies is
+      // worse than no flag.
       `INSERT INTO core_event
          (event_id, ical_uid, summary, description, dtstart, dtend, start_tz,
-          rrule, status, location_place_id, organizer_party_id, sequence,
-          created_at, updated_at, end_tz, recurrence_semantics)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'tentative', ?, ?, 0, ?, ?, ?, ?)`
+          rrule, rrule_support, status, location_place_id, organizer_party_id,
+          sequence, created_at, updated_at, end_tz, recurrence_semantics)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, 'tentative', ?, ?, 0, ?, ?, ?, ?)`
     )
     .run(
       eventId,
@@ -174,6 +179,7 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
       input.dtend,
       input.start_tz ?? null,
       input.rrule ? canonicalizeRrule(input.rrule) : null,
+      rruleSupport(input.rrule ? canonicalizeRrule(input.rrule) : null),
       input.location_place_id ?? null,
       ctx.identity.partyId,
       ctx.now,

@@ -305,6 +305,58 @@ describe("schedule organization commands", () => {
     });
   });
 
+  // SCH-F1 — `rrule_support` HAD ONE WRITER AND IT WAS NOT THE APP (#1020).
+  // A rule typed into Agenda took the column's schema default, `'supported'`,
+  // whatever the engine could do with it; only the ICS ingest publisher ever
+  // computed the value. `FREQ=MONTHLY;BYSETPOS=-1` is the census case: v0's
+  // `propose_event` stores it and this port refuses it (SCH-F2), so the stored
+  // row is the one place a member could ever be told.
+  test("an event's rule carries the engine's own verdict, on write and on edit", () => {
+    const supported = invoke("schedule.propose_event", {
+      summary: "Book club",
+      dtstart: "2026-09-01T18:00:00.000Z",
+      dtend: "2026-09-01T19:00:00.000Z",
+      calendar_id: calendarId,
+      rrule: "FREQ=WEEKLY;BYDAY=TU",
+    });
+    const eventId = (supported as { output: { event_id: string } }).output
+      .event_id;
+    const flagOf = (id: string): string =>
+      (
+        db.vault
+          .prepare("SELECT rrule_support FROM core_event WHERE event_id = ?")
+          .get(id) as { rrule_support: string }
+      ).rrule_support;
+    expect(flagOf(eventId)).toBe("supported");
+
+    const typed = invoke("schedule.propose_event", {
+      summary: "Rent",
+      dtstart: "2026-09-30T09:00:00.000Z",
+      dtend: "2026-09-30T09:30:00.000Z",
+      calendar_id: calendarId,
+      rrule: "FREQ=MONTHLY;BYSETPOS=-1;BYDAY=MO",
+    });
+    expect(
+      flagOf((typed as { output: { event_id: string } }).output.event_id)
+    ).toBe("unsupported");
+
+    // And an EDIT moves the flag with the rule, in both directions.
+    expect(
+      invoke("schedule.edit_event", {
+        event_id: eventId,
+        rrule: "FREQ=MONTHLY;BYSETPOS=-1;BYDAY=MO",
+      }).status
+    ).toBe("executed");
+    expect(flagOf(eventId)).toBe("unsupported");
+    expect(
+      invoke("schedule.edit_event", {
+        event_id: eventId,
+        rrule: "FREQ=WEEKLY;BYDAY=TU",
+      }).status
+    ).toBe("executed");
+    expect(flagOf(eventId)).toBe("supported");
+  });
+
   // THE WRITER HALF OF THE `recurrence_tz` RENAME (#1020, R-1020-35). Tasks'
   // `anchorWrite` spelled this key `recurrence_tz` long after the column became
   // `tz`, and `additionalProperties: false` means that write was REFUSED — so

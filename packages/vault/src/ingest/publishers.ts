@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { inspectRrule } from "@centraid/core/time";
+import { rruleSupport } from "@centraid/core/time";
 
 import { promoteStagedBlob } from "../blob/promote.js";
 import {
@@ -35,13 +35,6 @@ export interface EventPayload {
   startTz: string | null;
   rrule: string | null;
   status: string;
-}
-
-/** `'supported'` when the engine can expand the rule, `'unsupported'` when it
- *  is kept as a record of what the provider sent (#996, R21 / ONT-31). */
-function rruleSupport(rrule: string | null): "supported" | "unsupported" {
-  if (rrule === null) return "supported";
-  return inspectRrule(rrule).ok ? "supported" : "unsupported";
 }
 
 const eventPublisher: Publisher = {

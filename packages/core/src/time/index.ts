@@ -45,6 +45,7 @@ export {
   parseRrule,
   rruleLine,
   rruleRefusalMessage,
+  rruleSupport,
   UnsupportedRruleError,
   type ParsedRrule,
   type RruleRefusal,

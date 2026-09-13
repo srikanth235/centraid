@@ -210,6 +210,23 @@ export function inspectRrule(value: string): RruleSupport {
  * nothing to say about a refusal. A caller that CAN report one uses
  * `inspectRrule` or `assertSupportedRrule`.
  */
+/**
+ * The value `core_event.rrule_support` carries for a rule (#996 R21 / ONT-31;
+ * #1020 SCH-F1).
+ *
+ * ONE WRITER'S ANSWER, MADE EVERYBODY'S. Only the ICS ingest publisher computed
+ * this, so a rule TYPED INTO AGENDA was stored `'supported'` — the column's
+ * schema default — whatever it actually was, and an event the engine cannot
+ * expand came back flagged as one it can. `null` is `'supported'` because a
+ * series of one is a series this engine expands perfectly.
+ */
+export function rruleSupport(
+  value: string | null | undefined
+): "supported" | "unsupported" {
+  if (value === null || value === undefined) return "supported";
+  return inspectRrule(value).ok ? "supported" : "unsupported";
+}
+
 export function parseRrule(value: string): ParsedRrule | null {
   const support = inspectRrule(value);
   return support.ok ? support.rule : null;

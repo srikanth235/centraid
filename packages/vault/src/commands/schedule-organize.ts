@@ -2,6 +2,7 @@ import {
   canonicalizeRrule,
   expandRecurrence,
   occurrenceSearchWindow,
+  rruleSupport,
 } from "@centraid/core/time";
 import type { RecurrenceSemantics } from "@centraid/core/time";
 
@@ -243,6 +244,19 @@ function editEvent(ctx: HandlerCtx): Record<string, unknown> {
         : input.rrule === undefined
           ? undefined
           : canonicalizeRrule(input.rrule),
+    ],
+    // THE FLAG MOVES WITH THE RULE (#1020, SCH-F1). An edit that replaced an
+    // expandable rule with one this engine cannot expand used to leave the
+    // column saying 'supported' — the value the ICS publisher alone ever
+    // wrote. `undefined` here means the rule was not touched, so the flag is
+    // not touched either.
+    [
+      "rrule_support",
+      input.clear_rrule
+        ? "supported"
+        : input.rrule === undefined
+          ? undefined
+          : rruleSupport(canonicalizeRrule(input.rrule)),
     ],
     ["description", input.clear_description ? null : input.description],
     [
