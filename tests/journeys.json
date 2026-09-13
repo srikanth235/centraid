@@ -39,7 +39,9 @@
     "year3-tally": "Tally at year three: 2,000 expenses, 8,000 split rows, 40 groups, 240 pair rows. `crates/apps/kit::fixtures::year3_tally`. Distinct from `year3`, which is the whole golden vault — this volume is one app's plane at the size its own declared windows are stated for.",
     "year3-docs": "The drive at year three: 8,000 documents (7,600 live / 400 trashed), 10,000 content items, 10,000 occurrences, 12,600 tags, 400 folders four levels deep, and 2,000 standing answers half of them on folders. `crates/apps/kit::fixtures::year3_docs`.",
     "year3-notes": "The notebook at year three: 10,000 notes — 400 trashed, 200 pinned, 1,200 journal entries — with a 48 KiB body on 600 of them, the largest body the product holds. `crates/apps/kit::fixtures::year3_notes`.",
-    "year3-people": "The roster at year three: 5,000 people, 12,000 important dates, 20,000 interactions. `crates/apps/kit::fixtures::year3_people`. v0's own year-3 generator writes 5,000 `core_party` rows and no `people_profile` at all, so these reads had no artifact behind them before [#1020](https://github.com/srikanth235/centraid/issues/1020)."
+    "year3-people": "The roster at year three: 5,000 people, 12,000 important dates, 20,000 interactions. `crates/apps/kit::fixtures::year3_people`. v0's own year-3 generator writes 5,000 `core_party` rows and no `people_profile` at all, so these reads had no artifact behind them before [#1020](https://github.com/srikanth235/centraid/issues/1020).",
+    "year3-agenda": "The calendar at year three: 12,000 events, 800 recurring series, 1,200 exceptions. `crates/apps/kit::fixtures::year3_agenda`. It is the volume at which a six-month `upcoming` window genuinely reaches the 1,500-instance expansion cap, which is what makes the cap's error a real answer rather than a synthetic one.",
+    "year3-tasks": "The board at year three: 12,000 tasks — 8,250 open, 3,750 closed, 800 cancelled. `crates/apps/kit::fixtures::year3_tasks`."
   },
   "journeys": {
     "cold-open": "Process start to the first screen the owner can act on.",
@@ -75,7 +77,7 @@
     "app-read": "Not a journey — the wall clock of one bundled app's declared read, folded, at the stated volume, measured through the v1 app crate's own query path ([#1020](https://github.com/srikanth235/centraid/issues/1020)). It is the gateway-side half of a screen: what the fold costs before a shell has drawn anything. The shell's half is `warm-switch` and `scroll`, and neither is measurable on a host with no device."
   },
   "entries": {
-    "approvedDeviation": "#996 W5 retires `mountedReplicaReadWithOutbox` and `year3-household` as above. Prior: #927. #927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness. #1020's close pass ADDS five `gateway/app-read/*` entries, one `app-read` journey and four year-3 volumes. Additions only: no existing entry is re-keyed, no ceiling moves, and every number the five carry is parked under a leading underscore (`_observedMs`) with `status: \"projected\"`, so the ratchet reads none of them. They exist so the v1 app crates' year-3 numbers have an address rather than living only in a receipt; the device lane of R-1020-20 is what turns one into a ceiling.",
+    "approvedDeviation": "#996 W5 retires `mountedReplicaReadWithOutbox` and `year3-household` as above. Prior: #927. #927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness. #1020's close pass ADDS seven `gateway/app-read/*` entries, one `app-read` journey and six year-3 volumes. Additions only: no existing entry is re-keyed, no ceiling moves, and every number the five carry is parked under a leading underscore (`_observedMs`) with `status: \"projected\"`, so the ratchet reads none of them. They exist so the v1 app crates' year-3 numbers have an address rather than living only in a receipt; the device lane of R-1020-20 is what turns one into a ceiling.",
     "web/own-echo/none/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "own-echo",
@@ -2375,6 +2377,61 @@
             "at": "2026-09-13",
             "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
             "note": "The dashboard folds all 4,750. The largest number in this entry and the one that most wants a device figure beside it."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-agenda/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-agenda",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/agenda/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "dayContextRows": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture",
+          "_observedRows": 813,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "One day's `day-context` folds 813 rows at 12,000 events / 800 recurring series / 1,200 exceptions. Recorded as the ROW COUNT rather than a wall clock, because the number the fold's cost scales with is the row count and the wall clock on a contended container is the noisier of the two."
+          }
+        },
+        "upcomingSixMonthWindow": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture",
+          "_observedInstanceCap": 1500,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "A six-month `upcoming` window TRIPS the 1,500-instance cap, and tripping it is an error that names the query and the cap rather than a silently truncated calendar. v0 truncates at the same number and hands back a calendar that is quietly incomplete — the divergence is visible only at this volume, which is why this axis is the test's fixture rather than a hand-built series."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-tasks/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-tasks",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/tasks/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "boardWindowRows": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tasks --test year3 -- --ignored --nocapture",
+          "_observedRows": 175,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The board's 500-row window folds to 125 open roots and 50 logbook rows, `truncated` true — the open page's own cursor, not a count comparison. At 12,000 tasks (8,250 open, 3,750 closed, 800 cancelled)."
           }
         }
       }
