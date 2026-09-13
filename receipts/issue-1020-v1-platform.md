@@ -4806,3 +4806,128 @@ Doctrine digest stamp: law `53be88c22ab5` · [#1020](https://github.com/srikanth
 **Claim 1: the fill's material does not survive the round trip.** The risk is a test that passes because the value was never there. Checked by deleting the `clearFillMaterial(value)` line in `HostLink.fillInto` and re-running: `hands the value on and leaves nothing behind in this process` fails on `holdsFillMaterial(material) === false`. Then the other direction — moving the clear **before** `respond` — and the same test fails on `received.value`, because the receiver's structured clone is taken from an object that is already empty. Both legs fire, so the test is about the order and not about the presence.
 
 **Claim 2: every one of the eighteen is served by the host against a real seat.** The risk is a test that counts eighteen answers where seventeen are the same refusal. Checked by (a) asserting no answer is `unknown-method` *and* none is `no-capability`, which is what a silently unattached host would produce for all eighteen; (b) asserting that the five that reach the vault through the catalogue (`warm`, `modules`, `blocking-count`, `locker:candidates`, `status`) come back `ok`, which cannot happen without a round trip; and (c) separately renaming a catalogue statement in `relay::lower` — `every_named_read_is_a_statement_the_seat_serves` fails by name, so the reads are checked against the catalogue rather than hoped at.
+
+## Wave 4 — lane Notes: the FTS door that cannot carry a secret, the six queries, and a history graph the schema still permits
+
+Notes is complete in Rust. Its six queries and fifteen actions answer v0's own thirty fixtured cases over forty command steps; the `knowledge` schema's nine commands and `core`'s five link-and-attachment commands write through the vault's gate order; and text search is a new crate, `crates/search`, whose results are **secret-free by construction** — not by a filter but because Locker is not one of the seven domains and a sealed column cannot be projected by a door that refuses to open over one. Eight commits, rebased onto `4275df44` (lanes Photos, Tally-finish, assist, automations, Docs, Locker and extension landed first).
+
+### What landed
+
+**`ca6f714c` — the FTS door, with targets that cannot carry a secret**
+
+- `crates/search/{Cargo.toml,README.md,src/{lib,domains,matching,sqlite}.rs,tests/door.rs}` (new crate, `centraid-search`).
+- `Search` is a trait over `SearchRequest` → `Answer`, and `Answer::Denied` is a **value** a surface renders rather than an `Err`. The page is the kit's `PageRequest` — required `limit`, no default — so a search page and a drive page continue the same way (D-1020-N1a), keyset over `(rank, id)` with `rank` ascending because FTS5's bm25 is negated.
+- `DOMAINS` is the powerbox's seven (`notes`, `people`, `agenda`, `tasks`, `tally`, `photos`, `docs`) in v0's own order, ported out of `link-targets-table.ts` into the layer that holds the **column names** — because a table of columns in an app crate is a table nothing checks.
+
+**`cd4cf32b` — the six queries, the fifteen actions, and the journal asymmetry**
+
+- `crates/apps/notes/{Cargo.toml,manifest.json,src/{lib,manifest,commands,derive,journal,version_chain,cards,queries}.rs}`.
+- `manifest.json` is `packages/blueprints/apps/notes/app.json` byte for byte; `manifest.rs` asserts the 33 scopes (18 read, 15 `act`, one per action), the six queries, the fifteen actions and the two confirmations against the command table rather than transcribing them.
+- `version_chain.rs` walks `current_revision_id` → `parent_revision_id` with `MAX_CHAIN_STEPS = 500` and a **seen-set**: a cycle is `VersionChainError::Cycle`, a refusal, never a hang and never a truncated history that reads as complete.
+
+**`c4e445eb` — the knowledge schema's nine commands and core's link half**
+
+- `crates/vault/src/commands/{knowledge.rs,core_links.rs}` (new), `crates/vault/src/commands/{core.rs,mod.rs,media.rs}`, `crates/vault/src/bootstrap.rs`, `crates/vault/tests/{knowledge_commands.rs,commands.rs}`.
+- Nine `knowledge.*` (create/edit/delete/restore note, create/rename/delete notebook, move note, restore note version) and five `core.*` (`link_entities`, `unlink_entities`, `anchor_link`, `attach`, `detach`). `restore-note-version` is a **command**, not an app-side rewrite: it appends an occurrence naming the content that became current again, so a restore is itself reversible.
+- `seed_relation_vocabulary` in `found` seeds the seven link relations — and **`revises` is deliberately absent**, which is #996 R20(a) made structural rather than documented.
+
+**`66cc4204` — the demo corpus, the year-3 axis and the one-graph proposal**
+
+- `crates/apps/kit/src/fixtures.rs` — the Notes corpus (8 notes: a 400-day-old pin, a trashed one, a journal entry, two sharing a day), `notes_revision_cycle`, `notes_editor_note`, and `YEAR3_NOTES` (10,000 notes, 400 trashed, 200 pinned, 1,200 journal, 48 KiB bodies on 600). **In the kit**, because `sql-confinement` scans an app's tests too.
+- `crates/apps/notes/tests/{library,editor_contract,year3}.rs`, `crates/vault/tests/revisions_migration.rs`.
+- `contracts/migrations/002_revisions.sql` — a **proposal**, not on `LADDER`: four backfill checks behind a `CHECK (found = 0)` guard table and four triggers.
+
+**`1d6eb09b` — a created note's `updated_at` is the vault's clock, not the host's (R-1020-35)**
+
+- `packages/vault/src/commands/knowledge.ts`. Fixed at its v0 source; the Rust port takes the same shape.
+
+**`a4ef581a` — parity with v0 over thirty cases and forty command steps**
+
+- `contracts/tools/{export-notes-parity,notes-parity-bundle,notes-parity-script}.ts`, `tests/quality/notes-parity.contract.test.ts`, `contracts/apps/notes/{rows,queries,commands,scenarios}.json`, `crates/apps/notes/{README.md,tests/parity.rs}`.
+- `contracts/tools/export-copy.ts` — Docs' root shelf route was emitted as `balances`, a Tally-ism; it now reads each shelf's own `rootBandId`. `copy/docs.json` and `copy/notes.json` regenerated.
+- `contracts/README.md` and `docs/vault-ontology.md` updated in the same commit: the ONT-22 row now says the ruling is still **reader-enforced** and names the migration that would change that.
+
+**`b9fd148c` — the secret-free proof runs over the vault's own ciphertext**
+
+- `crates/search/tests/door.rs` planted a hand-typed `sealed:v1:` prefix, which proves only that the door does not return a string the test wrote. It now seals through `crates/vault::custody` itself — `encrypt_under_locker_key` for an `lk1:` cell, `seal_value` under `seal_aad` for a sealed one — and asserts the AAD binds each cell to its own row.
+- `contracts/tools/notes-parity-bundle.ts` gains `at`, the narrowing a seed row that was never written would otherwise ride past `noUncheckedIndexedAccess`.
+
+**`0dc84dad` — `capture:note` writes a note now that the `knowledge` schema is registered**
+
+- `crates/centraid/src/cmd/native_host/relay.rs`, `crates/apps/notes/src/cards.rs`. Lane extension's `PENDING_COMMANDS` tripwire fired the moment this lane registered `knowledge.create_note`, which is exactly what it is for. The list shrank from four to three.
+
+### Verification
+
+| Command | Result |
+| --- | --- |
+| `cargo test -p centraid-search` | **27 passed** (15 unit, 12 door) |
+| `cargo test -p centraid-apps-notes` | **72 passed** (42 unit, 16 library, 5 editor-contract, 5 year-3, 4 parity) |
+| `cargo test -p centraid-vault` | 24 of them new: `knowledge_commands` 18, `revisions_migration` 6 |
+| `cargo test --workspace` | **1,720 passed**, 0 failed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `cargo fmt --all --check` | clean |
+| `cargo xtask gate --profile local` | **PASS on every step; `rules` FAILs on the two inherited Photos reds only** (`crates/apps/photos/tests/{parity,year3}.rs`, `sql-confinement`). Warm: 171.4s against the 120s budget — `test` is 168.3s of it and the profile grew no step. Over, and named rather than fixed; the trend is lane extension's 160.4s plus this lane's suites. |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, no findings |
+| `bash .governance/run.sh` | all 10 directives pass |
+| `bun run check:push:static` | 4/4 |
+| generator idempotent | `CENTRAID_WRITE_CONTRACTS=1 bunx vitest run tests/quality/notes-parity.contract.test.ts --config vitest.quality.config.ts && bun run format && git diff --exit-code contracts/apps/notes` — clean |
+| v0 oracle | `tests/quality/notes-parity.contract.test.ts` — 4/4 |
+
+**Counts.** 6 queries; 15 actions; 9 `knowledge` commands + 5 `core` link/attachment commands; 33 declared scopes; 7 search domains; 30 parity query cases over six queries (`note` 8, `history` 8, `library` 5, `search` 4, `link-targets` 3, `journal` 2); 40 command steps — 26 executed, 13 refused, 1 `denied` and marked `pending: schedule`; 20 fixture tables; 12 sealed cells planted and none reachable.
+
+**Year-3 numbers, `ci-linux-x64-4c`, DEBUG build, projected provenance (D-1020-D3-7's pattern) and never a ceiling.** `library(limit=2000)` folds 2,200 rows + 200 trashed in 496 ms; the editor's on-open pull over the largest body the product holds (48 KiB) is **1.13 ms**; `preview + tally` over that body is 1.08 ms and a 4,000-line checklist tally is 1.78 ms; `journal(300)` folds in 41 ms.
+
+### Decisions — lane Notes
+
+- **D-1020-N1 — text search is its own crate, and Locker's absence from it is structural.** Options: (a) a `search` module inside `crates/vault` — the index is the vault's, and so is the consent; (b) a fold inside `crates/apps/notes`, where the powerbox lives; (c) **adopted**: `crates/search`, a door with a `Search` trait. (a) makes every app that searches depend on the whole vault; (b) puts a table of physical column names in a crate where nothing checks them against the sealed registry. The crate earns its existence by being **the place the check can run**: `assert_no_sealed_column` at construction, a second check of each domain's **live index columns**, and `SearchError::NotADomain` for anything outside the seven — never an empty page, because an empty page reads as "no matches", a different claim about the vault. `sql-confinement`'s allowlist gains `crates/search` for the same reason it holds `crates/vault` ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+- **D-1020-N1a — a search page is the kit's page.** `SearchRequest::page` is `PageRequest`: required `limit`, no default, keyset continuation, `probe_limit = window + 1`. One assembler for the paging law. The consequence that mattered: the label filter and the caller's `excluded_ids` are **SQL predicates**, not post-filters, because dropping rows after the probe was counted makes `next` lie in both directions — which is how the keyset test failed the first time.
+- **D-1020-N2 — the one-graph rung is proposed here and landed by the root.** [#996](https://github.com/srikanth235/centraid/issues/996) R20(a) deleted the content→content `revises` graph from every writer and drift ONT-22 is closed **in code**; the **schema still permits all of it**. Four rows nothing forbids: a self-parent; a parent belonging to another object; an `UPDATE` that re-points `parent_revision_id`; a `core_link` whose relation is `revises`. `contracts/migrations/002_revisions.sql` makes each unrepresentable and refuses the migration rather than silently dropping a row that already violates it. Options: (a) leave it reader-enforced — but **ten** call sites now carry the same defence (`crates/apps/notes::version_chain`, `crates/apps/docs::queries`, `crates/vault::revision_chain_of`, v0's `revisionChainOf`, both blueprints' `history.ts`, `notes/version-chain.ts`, mobile's `docs-versions.ts` and `notes-queries.ts`, and the gateway's `WITH RECURSIVE` in `duties.ts`), and the honest answer every one of them gives is a refusal that leaves the member with no history at all; (b) fix it in the readers — ten copies of a repair; (c) **adopted**: propose the rung with its tests, and let the root land it with the other per-slot migrations. **The cycle closes by construction, not by search**: a revision is insert-only, so a fresh row cannot close a loop (its own id is in no chain yet); A→B→A needs a second statement that moves a parent, which the immutability trigger refuses.
+- **D-1020-N3 — the library asymmetry is the contract, not an oversight.** A People-journal entry is a `knowledge.note` carrying a marker concept, **absent from the library, the trash shelf, the tag chips, `search` and the powerbox — and reachable by id** ([#834](https://github.com/srikanth235/centraid/issues/834) R-journal). Spelled as the **absence of a filter** in `load_note`: that function does no journal read at all. Re-judged rather than cited: a port that unified the two would either leak journal entries onto the notes shelf or break the People screen that opens one, so the asymmetry stays — and it is held as a test in both directions so nobody tidies it.
+- **D-1020-N4 — the inline body budget is 64 KiB, and it is a receipted precondition.** Not the 1 MiB replica ceiling. A body over it was first an `Err` from the handler, which is a crash a member cannot act on; it is now `body_text_within_budget`, a named precondition on `create_note` and `edit_note`, so the refusal carries the predicate that refused it.
+- **D-1020-N5 — the editor contract is answered by the handler, not by a second implementation.** Lane E's `contracts/screens/notes/*` fixtures describe one note; `crates/apps/kit::fixtures::notes_editor_note` seeds exactly that note and `crates/apps/notes/tests/editor_contract.rs` asserts the `note` query's own answer against the fixture. A test that restated the fixture's fields would pass while the query drifted.
+- **D-1020-N6 — the command count is a per-schema table, not a total.** Adopted lane Locker's shape on rebase: `crates/vault/tests/commands.rs` counts per schema, so two lanes landing schemas in the same wave do not fight over one number.
+- **D-1020-N7 — the link relations are seeded at found time.** `core.link_entities` refused `references` in the port because the Rust bootstrap seeded no SKOS vocabulary at all — a refusal that read as a policy decision and was an absence. `SEED_RELATIONS` is the seven v0 seeds ([#272](https://github.com/srikanth235/centraid/issues/272)); `revises` is **not** among them, and that omission is D-1020-N2's fourth guard made true today.
+- **D-1020-N8 — the year-3 axis reports what this box can prove and names what it cannot.** The typing-latency target ([#1020](https://github.com/srikanth235/centraid/issues/1020) `:167`) is a round trip through the **editor's state machine on a reference device**, and that machine is Kotlin with no Rust twin. What is measured here is the half that IS Rust — the on-open pull over the largest body the product holds, and the per-row derivation a shelf pays — printed by `tests/year3.rs` and reported above as projected provenance. The Kotlin half is hand-off 1.
+- **D-1020-N9 — the card fold is the app's and the card decision is the gateway's.** A `[[wikilink]]` compiles to a `core.link` and the shelf draws the far end; **resolvable-if-linked** is the consent rule (a LIVE link authorises rendering the far end even with no read scope, and a ref with neither is `denied` **per ref** rather than a failed screen). Options: (a) resolve cards inside `crates/apps/notes` — it would be the app deciding consent; (b) resolve them in the gateway — the gateway would be folding presentation. **Adopted**: a `CardDoor` trait, `OwnerCards` for the owner's view and `NoCards` for a caller with no door, so neither half guesses at the other. `OwnerCards` is the identity v0's fixtures are generated under, which is what makes them comparable.
+- **D-1020-N10 — a created note's `updated_at` is the vault's clock, fixed at the v0 source.** See R-1020-35 below.
+
+### Demonstrated reds
+
+1. **R-1020-35 — every created note was last-updated by the machine.** `knowledge.create_note` inserted the row and then repointed `current_revision_id`; `knowledge_note_touch_updated_at` stamps `strftime('now')` over any update carrying no new instant. Four of six fixture notes came out `(host-clock)` and **the library sorts on that column**, so a fixture's page order was a fact about the host. Red-first: `a_created_notes_updated_at_is_the_injected_clock`. Fixed in **v0** and in the port by recording the first occurrence **before** the insert — one statement, one `row_version`, one clock.
+2. **The keyset continuation answered `next: None`.** The label filter and `excluded_ids` ran after the probe, so the probe row was consumed by a filter and the page reported itself complete. Both moved into the SQL `WHERE`.
+3. **Both `BEFORE INSERT` triggers fired on a self-parent.** SQLite does not order triggers, so one bad row produced two sentences. `core_entity_revision_parent_is_same_object` now excludes `NEW.parent_revision_id <> NEW.revision_id`: one row, one sentence, and the sentence is the one that names the actual fault.
+4. **`core.link_entities` refused `references`.** Not a policy — an empty vocabulary. Found by the parity script, fixed by seeding at found time (D-1020-N7).
+5. **`preview_of("****")` was asserted wrong.** The expectation was `""`; v0 answers `**`. Verified against the v0 function itself and the test renamed `inline_markers_are_stripped_in_v0s_own_order`, with `**a**b*c*` and `*a**b*` added — the order is the behaviour, not a tidy rule.
+6. **The year-3 library assertion `notes <= 2_000` failed at 2,200.** Correct, and the assertion was wrong: the window is 2,000 **plus** every pinned note on the shelf. Now `assert_eq!(notes, 2_200)` with the doctrine written out beside it, and the same test prints that v0 would have folded **500** of those 2,200 (D-1020-D3-12, the worse half).
+7. **The year-3 fixture violated its own UNIQUE.** Two seeders minted `content-000001`; a shared counter fixed it. Then `updated_at` was non-reproducible across runs — the `UPDATE … SET current_revision_id` fired the touch trigger — fixed by bumping `row_version`, the trigger's own escape.
+8. **`the_pending_commands_are_the_ones_the_registry_lacks` failed** the moment `knowledge.create_note` was registered. Lane extension's tripwire, working. The list shrank rather than the test.
+9. **`sql-confinement` FAILs on the two inherited Photos test files.** Named, not fixed, not weakened.
+
+### Findings outside the slice
+
+- **A trashed note's reference card reads `live`.** `packages/vault/src/gateway/cards.ts:42`-`:78` hardcodes `0 AS trashed` for `core.party`, `core.place`, `core.event`, `schedule.task`, `knowledge.note`, `core.collection` and `social.thread` — so a link to a note a member deleted draws as though it were still there, even though `knowledge_note` carries the trash pair and the library's own trash shelf reads it. Reproduced for parity, filed here rather than fixed inside this lane.
+- **An uncurated entity draws titleless once linked.** `tally.expense` has no card projection, so it answers existence and status with a null title — and the powerbox **offers expenses as link targets**. The two halves disagree by construction.
+- **`crates/search` walks none of v0's four consent walls yet, and says so in its README rather than stubbing them.** v0's `searchEntity` checks the base entity's read decision, the read decision of every entity whose canonical text the index folds in (matching a note body *is* reading `core.content_item`), a grant field mask that must fail the search **closed**, and an authority receipt either way. A stub that looked like a consent check would be worse than an absence a reader can see. Hand-off 2.
+- **The note target's subtitle v0 declares has never been served.** `link-targets-table.ts` names `preview` for `knowledge.note` and the row builder falls back to the app's name. The port serves the declared preview and the parity fixture asserts **both** answers rather than picking one quietly; it is listed among the three stated divergences in `crates/apps/notes/tests/parity.rs`.
+- **`autofill-candidates` and the powerbox agree that Locker is not reachable, and `crates/search` makes that a property of the type.** No finding — recorded because it is the one place three lanes' structural claims meet.
+- **The `local` profile is 171.4s warm against a 120s budget**, 168.3s of it `cargo test --workspace`. The profile grew no step; the suite grew. Lane Locker's and lane extension's receipts say the same thing with smaller numbers, which makes it a trend rather than an incident. Root's call at close.
+
+### Owner hand-offs
+
+1. **The typing-latency number.** The reference-device round trip is Kotlin (`mobile/shared/.../NotesEditorMachine.kt`); the exact commands are in `crates/apps/notes/README.md`. This box measured the Rust half only, and the receipt reports it as that.
+2. **The consent pipeline for `crates/search`.** The door takes a `Principal` already, so wiring is an implementation of `Search`, not a change to its callers. It belongs with `crates/vault`'s paged-door work.
+3. **Landing `contracts/migrations/002_revisions.sql` on `LADDER`.** Proposed with its tests (`crates/vault/tests/revisions_migration.rs`, 6 tests: each guard refuses what it is for, and the guards accept everything the nine `knowledge.*` commands write). The root lands it with the wave's other per-slot migrations.
+4. **The two manifest confirmations, re-judged and kept — with a question.** `delete-note` is reversible (a 30-day trash) and is confirm-gated; `restore-note-version` replaces the body a member is looking at and is **not**. The recommendation is to keep both as v0 has them — the restore is itself reversible because it appends an occurrence and rewrites nothing, and `delete-notebook` is gated despite only unfiling because a member cannot see from the gesture that their notes survive. Options if the owner disagrees: gate the restore too (one more tap on a reversible act), or ungate `delete-notebook` (a gesture whose blast radius is invisible). Not a silent "deliberate" row.
+5. **The trashed-card and uncurated-title findings above** — both are gateway-side and both change what a member sees, so neither is a port decision.
+
+### The doctrine digest
+
+`53be88c22ab5` — `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5`, 10 rules, no findings. `amendment-pairing` · `commit-message-format` · `constitution-coverage` · `doc-integrity` · `doctrine-citation` · `estate-separation` · `managed-tree-integrity` · `receipt-per-issue` · `registry-completeness` · `waiver-docket`. No waiver spent; no gate, budget, test, ledger or allowlist weakened; no generated fixture hand-edited; no model identifier in any file or commit; `node_modules` removed after the bun steps needed it; this section appended last, after lane extension's.
+
+### Falsification
+
+**Claim 1: the secret-free proof is about the door, not about strings the test wrote.** Three risks, three legs. (a) *The planted cells might not be the sealed set.* `every_sealed_column_in_this_fixture_really_holds_a_secret` sorts `planted_rows()` against `sealed_physical_columns()` and asserts **equality**, so a sealed column added to the model and not planted fails rather than being skipped — twelve cells today. (b) *The plants might not be ciphertext.* Each is written by `crates/vault::custody` itself and read back through `is_sealed_value` / `is_locker_ciphertext`, and the test asserts `locker_aad("item-1", …) != locker_aad("field-1", …)` so "sealed" means bound to its own row, not merely prefixed. (c) *The search might be asking the wrong question.* `secrets_planted_in_every_sealed_column_never_reach_a_target` searches for **both** the plaintext a member would type and the ciphertext the column actually holds, across all seven domains — and `the_locker_index_is_populated_and_still_unreachable` first proves the Locker rows are there to be found, so the green is not the green of an empty table.
+
+**Claim 2: the journal asymmetry test is about the asymmetry, not about a row that does not exist.** The risk is obvious: "absent from every list" passes trivially for a note nobody seeded. The same test therefore asserts the other half in the same breath — `load_note(&door, "note-000008")` returns it with its body, and `load_journal` returns exactly one entry with a preview — so the four exclusions and the two inclusions are checked against one row. Then the other direction: deleting the journal filter from `load_search`'s statement makes `an all-journal search answers an empty list, not a filtered one` fail, and deleting it from `load_note` (which has none) is not possible, which is the point of spelling the asymmetry as an absence.
+
+**Claim 3: parity is a comparison and not a restatement.** Ids are compared, not masked, so page order is part of the comparison; the three divergences (`app_id` vs `app`, the note target's unserved subtitle, `selector: null`) are asserted in **both** directions rather than normalised away. The generator's idempotence is the guard against the other failure mode: `git diff --exit-code contracts/apps/notes` after a regeneration would catch a fixture edited to match the port.
