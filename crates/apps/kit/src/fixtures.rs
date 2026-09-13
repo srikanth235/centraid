@@ -5429,7 +5429,10 @@ pub fn content_ids_by_title_desc(
         found.push(((*title).to_owned(), row));
     }
     found.sort_by(|left, right| right.0.cmp(&left.0));
-    Ok(found.into_iter().map(|(_, content_id)| content_id).collect())
+    Ok(found
+        .into_iter()
+        .map(|(_, content_id)| content_id)
+        .collect())
 }
 
 /// Stamp a duplicate cluster onto a set of fingerprints, as a sweep would.
