@@ -37,7 +37,9 @@
 //! answered from the ledger.
 
 pub mod core;
+pub mod core_links;
 pub mod enrich;
+pub mod knowledge;
 pub mod locker;
 pub mod media;
 pub mod tally;
@@ -251,7 +253,17 @@ impl Registry {
         for definition in core::definitions() {
             registry.register(definition)?;
         }
+        // The `core` schema arrives in two files: the parties/tags/documents
+        // half (slot 4b) and the link/attachment half (slot 4c). ONE schema,
+        // registered together — the split is where a lane took it, not a second
+        // owner (#1020, D-1020-N6).
+        for definition in core_links::definitions() {
+            registry.register(definition)?;
+        }
         for definition in enrich::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in knowledge::definitions() {
             registry.register(definition)?;
         }
         for definition in locker::definitions() {

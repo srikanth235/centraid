@@ -35,9 +35,13 @@ fn the_registry_carries_every_command_this_build_has() {
     // lands a schema adds one row rather than editing a number every other
     // lane is also editing (#1020, wave 4 lane Locker).
     let by_schema = [
-        // Nineteen `core.*` — the parties plane and Docs' whole write
-        // surface, nineteen of v0's twenty-seven (#1020 slot 4b, D-1020-DC3).
-        ("core.", 19_usize),
+        // Twenty-four `core.*` — the parties plane and Docs' whole write
+        // surface (#1020 slot 4b, D-1020-DC3) plus Notes' link and attachment
+        // half (slot 4c, D-1020-N6), which is twenty-four of v0's
+        // twenty-seven. The three still absent are People's merges.
+        ("core.", 24_usize),
+        // The whole 9-command `knowledge.*` schema (wave 4 slot 4c).
+        ("knowledge.", 9),
         // The 23 `tally.*`, real since the Tally-finish lane.
         ("tally.", 23),
         // The whole 20-command `media.*` schema (wave 4 lane Photos).
@@ -66,10 +70,20 @@ fn the_registry_carries_every_command_this_build_has() {
     assert!(registry.get("core.add_party").is_some());
     assert!(registry.get("core.add_document").is_some());
     assert!(registry.get("core.set_extracted_text").is_some());
-    // Named absences, not oversights: Notes' link/attachment plane and
-    // People's merge plane take these with their own fixtures.
+    assert!(registry.get("core.attach").is_some());
+    assert!(registry.get("core.link_entities").is_some());
+    assert!(registry.get("knowledge.create_note").is_some());
+    assert!(registry.get("knowledge.restore_note_version").is_some());
+    // A NAMED ABSENCE, not an oversight: People's merge plane takes these with
+    // its own fixtures (census §A5).
     assert!(registry.get("core.merge_party").is_none());
-    assert!(registry.get("core.attach").is_none());
+    assert!(registry.get("core.merge_entity").is_none());
+    // AND `schedule.add_task` IS NOT HERE. `notes`' `send-to-tasks` invokes it
+    // and the Agenda/Tasks lane owns the `schedule` schema (slot 4d), so the
+    // name is reserved here and the Notes parity case is marked
+    // `pending: schedule` until it lands.
+    assert!(registry.get("schedule.add_task").is_none());
+    assert_eq!(count("schedule."), 0);
     assert!(registry.get("tally.add_expense").is_some());
     assert!(registry.get("locker.reveal_receipt").is_some());
     assert!(registry.get("tally.does_not_exist").is_none());

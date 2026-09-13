@@ -12,6 +12,78 @@
 use crate::error::Result;
 use crate::file::Vault;
 
+/// THE LINK RELATIONS, SEEDED AT FOUND TIME (#272; #1020, D-1020-N7).
+///
+/// **Relations are VOCABULARY, not caller text**: `core.link_entities` refuses a
+/// notation that is not already a concept in the relations scheme, which means
+/// the scheme has to exist before the first link — v0 seeds it here
+/// (`packages/vault/src/bootstrap.ts:33`-`:64`) and a create-on-demand path
+/// would turn "never caller-invented" into "invented on first use".
+///
+/// **`revises` IS DELIBERATELY ABSENT** (#996 R20(a)). Version lineage was a
+/// content→content link asserted by the document and note edit commands — a
+/// SECOND history mechanism beside `core_entity_revision`, which [#916] ruled
+/// the only one. A version is an occurrence now, the concept that named the edge
+/// has no writer, and seeding it would be dormant DDL (ONT-06).
+///
+/// **The other five seed schemes are still absent** — `activity-kinds`,
+/// `spend-categories`, `flags`, `vision` and `doctype`. Docs' folders and flags
+/// schemes are created on first use by `crates/vault/src/commands/core.rs`
+/// instead, which is a divergence from v0 this lane files as a finding rather
+/// than fixes in another slot's schema.
+const SEED_RELATIONS: &[(&str, &str)] = &[
+    ("same-as", "Same as"),
+    ("about", "About"),
+    ("works-for", "Works for"),
+    ("duplicate-of", "Duplicate of"),
+    // Cross-referencing relations (#272), which is what a `[[wikilink]]`
+    // compiles to.
+    ("references", "References"),
+    ("attachment-of", "Attachment of"),
+    // THE TWO ANSWERS TO A CROSS-SOURCE MATCH (#996 R20(c) / OQ-12). `same-as`
+    // is the acceptance; `distinct-from` is the refusal, and it has to be a
+    // relation rather than a dismissed notification because a refusal that is
+    // not written down is a proposal the member is shown again tomorrow.
+    ("distinct-from", "Distinct from"),
+];
+
+/// Seed the relations scheme and its notations. Idempotent over an existing
+/// scheme, so re-founding a restored file adds nothing.
+fn seed_relation_vocabulary(
+    connection: &rusqlite::Connection,
+    ids: &dyn crate::clock::Ids,
+    now: &str,
+) -> Result<()> {
+    let uri = crate::commands::core_links::RELATIONS_SCHEME_URI;
+    let scheme_id = match connection.query_row(
+        "SELECT scheme_id FROM core_concept_scheme WHERE uri = ?1",
+        [uri],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(scheme_id) => scheme_id,
+        Err(_) => {
+            let scheme_id = ids.next();
+            connection.execute(
+                "INSERT INTO core_concept_scheme
+                   (scheme_id, uri, title, publisher, version, created_at)
+                 VALUES (?1, ?2, 'Link relation types', NULL, '1', ?3)",
+                rusqlite::params![scheme_id, uri, now],
+            )?;
+            scheme_id
+        }
+    };
+    for (notation, label) in SEED_RELATIONS {
+        connection.execute(
+            "INSERT INTO core_concept
+               (concept_id, scheme_id, notation, pref_label, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+             ON CONFLICT (scheme_id, notation) DO NOTHING",
+            rusqlite::params![ids.next(), scheme_id, notation, label, now],
+        )?;
+    }
+    Ok(())
+}
+
 /// What founding produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Founded {
@@ -43,6 +115,7 @@ impl Vault {
                  VALUES (?1, ?2, ?3, 'active', 'USD', '{}', ?4, ?4)",
                 rusqlite::params![vault_id, owner_party_id, display_name, now],
             )?;
+            seed_relation_vocabulary(tx.connection(), self.ids(), &now)?;
             Ok(())
         })?;
         Ok(Founded {

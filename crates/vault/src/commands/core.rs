@@ -520,7 +520,7 @@ const PURGE_AFTER_DAYS: i64 = 30;
 /// Decoded-size cap for the inline `data:` door: ~256 KB of content, ~350 KB of
 /// base64 (`packages/vault/src/blob/mint.ts:19`). Anything larger takes the
 /// staging route, because the journal records every input.
-const MAX_INLINE_DATA_URI_CHARS: usize = 360_000;
+pub(crate) const MAX_INLINE_DATA_URI_CHARS: usize = 360_000;
 
 /// The inline-body budget for `text/*`: ~64 KiB of DECODED text
 /// (`packages/vault/src/commands/inline-body-guard.ts:13`).
@@ -532,14 +532,14 @@ const MAX_INLINE_DATA_URI_CHARS: usize = 360_000;
 /// command enforces is this one, and it is sixteen times tighter, because a
 /// text body cannot redirect to the CAS at all: the FTS feed decodes it
 /// in-transaction and a trigger cannot do I/O.
-const INLINE_BODY_BUDGET_BYTES: usize = 64 * 1024;
+pub(crate) const INLINE_BODY_BUDGET_BYTES: usize = 64 * 1024;
 
 /// What produced the text in `core_content_text`, so a decoder change can
 /// rebuild exactly the rows it invalidates (`schema/representation.ts:25`).
 const CONTENT_TEXT_DECODER: &str = "data-uri/v1";
 
 /// The RFC 6838 answer for bytes nothing described (`blob/promote.ts:43`).
-const DEFAULT_MEDIA_TYPE: &str = "application/octet-stream";
+pub(crate) const DEFAULT_MEDIA_TYPE: &str = "application/octet-stream";
 
 /// The wrappers that keep a body history: their table and their pointer
 /// (`packages/vault/src/commands/revisions.ts:40`). A `core.*` command in this
@@ -562,7 +562,7 @@ fn blob_uri_for(sha256: &str) -> String {
 /// and `format_iso_ms` are already public there. (`commands/media.rs` carries
 /// its own private pair — a duplication this lane files as a finding rather
 /// than editing another slot's file to remove.)
-fn purge_at(now: &str) -> Result<String> {
+pub(crate) fn purge_at(now: &str) -> Result<String> {
     let millis = crate::clock::parse_iso_ms(now).ok_or_else(|| VaultError::Invariant {
         context: format!("`{now}` is not an instant this vault can date a purge from"),
     })?;
@@ -818,7 +818,11 @@ fn content_text(media_type: &str, content_uri: &str) -> Option<String> {
 /// Written BEFORE the representation row, because the representation's own FTS
 /// trigger reads `core_content_text` — so the text has to be there when it
 /// fires (`schema/representation.ts:120`-`:124`).
-fn index_content_text(ctx: &CommandCtx<'_, '_>, content_id: &str, media_type: &str) -> Result<()> {
+pub(crate) fn index_content_text(
+    ctx: &CommandCtx<'_, '_>,
+    content_id: &str,
+    media_type: &str,
+) -> Result<()> {
     let content_uri: Option<String> = ctx
         .connection()
         .query_row(
@@ -863,7 +867,7 @@ fn index_content_text(ctx: &CommandCtx<'_, '_>, content_id: &str, media_type: &s
 /// `UNIQUE (owner_type, owner_id)`, so this is an upsert on the OWNER — the
 /// same document re-typed keeps one row, and the same sha under two documents
 /// keeps two.
-fn set_representation(
+pub(crate) fn set_representation(
     ctx: &CommandCtx<'_, '_>,
     content_id: &str,
     owner_type: &str,
@@ -910,7 +914,7 @@ fn set_representation(
 }
 
 /// A body-history wrapper's current occurrence, or `None` before its first.
-fn current_revision_of(
+pub(crate) fn current_revision_of(
     ctx: &CommandCtx<'_, '_>,
     entity_type: &str,
     entity_id: &str,
@@ -945,7 +949,7 @@ fn current_revision_of(
 /// repoints the wrapper itself, so a no-op edit — dedup landing back on the
 /// same content id — skips the call rather than recording a revision that
 /// revised nothing.
-fn record_body_revision(
+pub(crate) fn record_body_revision(
     ctx: &CommandCtx<'_, '_>,
     entity_type: &str,
     entity_id: &str,
@@ -979,7 +983,7 @@ fn record_body_revision(
 /// Over `parent_revision_id`, never over content: a chain that revisits the
 /// same bytes (A→B→A→B) is four distinct occurrences and reads as four. The
 /// step cap is the same `MAX_CHAIN_STEPS` the app-plane walk uses.
-fn revision_chain_of(
+pub(crate) fn revision_chain_of(
     ctx: &CommandCtx<'_, '_>,
     entity_type: &str,
     entity_id: &str,
@@ -1015,13 +1019,13 @@ fn revision_chain_of(
 pub const MAX_CHAIN_STEPS: usize = 500;
 
 /// A content item this command minted or claimed.
-struct Minted {
-    content_id: String,
-    media_type: String,
-    byte_size: i64,
+pub(crate) struct Minted {
+    pub(crate) content_id: String,
+    pub(crate) media_type: String,
+    pub(crate) byte_size: i64,
     /// `1` when the sha already had a content item — the bytes were known, the
     /// DOCUMENT is still new.
-    deduped: i64,
+    pub(crate) deduped: i64,
 }
 
 /// Dedupe-or-insert the canonical content item behind an inline `data:` payload.
@@ -1033,7 +1037,7 @@ struct Minted {
 ///
 /// Re-presenting known bytes RESTORES them from trash — re-upload = restore,
 /// `media.add_asset`'s rule.
-fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) -> Result<Minted> {
+pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) -> Result<Minted> {
     let (media_type, bytes) = decode_data_uri(uri)?;
     let sha = centraid_media::format::sha256_hex(&bytes);
     let existing: Option<(String, Option<String>)> = ctx
@@ -1108,7 +1112,7 @@ fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) -> Result<Min
 /// WHAT THE UPLOAD SAID, not what the deduped row once said (#996 R20(b)): the
 /// staging band sniffed THESE bytes on THIS arrival. Re-claiming known bytes
 /// with nothing staged means the CLAIMER supplies the reading.
-fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, sha256: &str) -> Result<Minted> {
+pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, sha256: &str) -> Result<Minted> {
     let staged: Option<(String, i64)> = ctx
         .connection()
         .query_row(
@@ -1183,7 +1187,10 @@ fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, sha256: &str) -> Result<Minted>
 }
 
 /// The oldest reading of these bytes, for a claim that has none of its own.
-fn media_type_for_content(ctx: &CommandCtx<'_, '_>, content_id: &str) -> Result<Option<String>> {
+pub(crate) fn media_type_for_content(
+    ctx: &CommandCtx<'_, '_>,
+    content_id: &str,
+) -> Result<Option<String>> {
     Ok(ctx
         .connection()
         .query_row(
@@ -1302,7 +1309,7 @@ fn upsert_text_derivative(
 /// Parse and DECODE a `data:` URI — **the bytes are identity now, not the
 /// text** (`packages/vault/src/blob/mint.ts:28`). Which is also what fixed the
 /// old dedup hole: the same bytes under two declared mime types were two rows.
-fn decode_data_uri(uri: &str) -> Result<(String, Vec<u8>)> {
+pub(crate) fn decode_data_uri(uri: &str) -> Result<(String, Vec<u8>)> {
     let refuse = |detail: &str| VaultError::InvalidInput {
         name: "data_uri".to_owned(),
         detail: detail.to_owned(),
@@ -1381,7 +1388,7 @@ fn percent_decode_utf8(payload: &str) -> Option<String> {
 /// this produces is the content item's own `content_uri` and therefore part of
 /// what the sha is taken over: a different escaping is different bytes and
 /// therefore a different content id.
-fn encode_uri_component(text: &str) -> String {
+pub(crate) fn encode_uri_component(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for byte in text.as_bytes() {
         let keep = byte.is_ascii_alphanumeric()
@@ -1405,7 +1412,7 @@ fn encode_uri_component(text: &str) -> String {
 /// `staged_or_owned`, in v0's order. They are preconditions in v0 rather than
 /// schema rules because JSON Schema's `oneOf` would make the error name the
 /// schema instead of the choice.
-fn pre_exactly_one_source(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+pub(crate) fn pre_exactly_one_source(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let inline = ctx.optional_str("data_uri").is_some();
     let staged = ctx.optional_str("staged_sha").is_some();
     Ok((inline == staged).then(|| {
@@ -1415,7 +1422,7 @@ fn pre_exactly_one_source(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }))
 }
 
-fn pre_is_data_uri(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+pub(crate) fn pre_is_data_uri(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(uri) = ctx.optional_str("data_uri") else {
         return Ok(None);
     };
@@ -1424,7 +1431,7 @@ fn pre_is_data_uri(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 /// The inline door is for SMALL payloads (#296): the journal records every
 /// input, so big documents take the staging route.
-fn pre_within_size_cap(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+pub(crate) fn pre_within_size_cap(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(uri) = ctx.optional_str("data_uri") else {
         return Ok(None);
     };
@@ -1439,7 +1446,7 @@ fn pre_within_size_cap(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 /// The tighter second gate, for `text/*` only: binary spills to the CAS
 /// regardless (`commands/inline-body-guard.ts:44`-`:52`).
-fn pre_text_body_within_budget(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+pub(crate) fn pre_text_body_within_budget(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(uri) = ctx.optional_str("data_uri") else {
         return Ok(None);
     };
@@ -1473,7 +1480,7 @@ fn pre_text_body_within_budget(ctx: &CommandCtx<'_, '_>) -> Result<Option<String
 /// It does NOT refuse bytes this vault already holds: the mint dedupes before
 /// it would spill, so a second wrapper over a content item that exists needs no
 /// store at all. Which is also v0's order (`blob/mint.ts:69`-`:88`).
-fn pre_inline_bytes_are_storable(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+pub(crate) fn pre_inline_bytes_are_storable(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(uri) = ctx.optional_str("data_uri") else {
         return Ok(None);
     };
@@ -1497,7 +1504,7 @@ fn pre_inline_bytes_are_storable(ctx: &CommandCtx<'_, '_>) -> Result<Option<Stri
     }))
 }
 
-fn pre_staged_or_owned(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+pub(crate) fn pre_staged_or_owned(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(sha) = ctx.optional_str("staged_sha") else {
         return Ok(None);
     };
@@ -1515,7 +1522,7 @@ fn pre_staged_or_owned(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 /// The bytes this write carries, whichever door they came through.
-fn minted_bytes(ctx: &CommandCtx<'_, '_>) -> Result<Minted> {
+pub(crate) fn minted_bytes(ctx: &CommandCtx<'_, '_>) -> Result<Minted> {
     if let Some(sha) = ctx.optional_str("staged_sha") {
         let sha = sha.to_owned();
         return promote_staged_blob(ctx, &sha);
@@ -1526,7 +1533,7 @@ fn minted_bytes(ctx: &CommandCtx<'_, '_>) -> Result<Minted> {
 
 /// The id a CREATED row takes: the seat's when it minted one, ours otherwise
 /// (#922 G2, `packages/vault/src/commands/minted-id.ts:33`).
-fn minted_id(ctx: &CommandCtx<'_, '_>, property: &str) -> String {
+pub(crate) fn minted_id(ctx: &CommandCtx<'_, '_>, property: &str) -> String {
     ctx.optional_str(property)
         .map_or_else(|| ctx.next_id(), str::to_owned)
 }
@@ -1539,6 +1546,15 @@ fn minted_id(ctx: &CommandCtx<'_, '_>, property: &str) -> String {
 /// is also the more honest order, because a document is a wrapper that then
 /// acquires bytes.
 fn created_id(ctx: &CommandCtx<'_, '_>, property: &str) -> String {
+    created_row_id(ctx, property)
+}
+
+/// The same, for a sibling schema's creating commands.
+///
+/// `knowledge.create_note` and `knowledge.create_notebook` have the same
+/// problem and the same answer, and the rule — **mint the wrapper's own id
+/// FIRST** — is one rule about `produced_ids`, not one per schema.
+pub(crate) fn created_row_id(ctx: &CommandCtx<'_, '_>, property: &str) -> String {
     ctx.optional_str(property)
         .map(str::to_owned)
         .or_else(|| ctx.produced_ids.borrow().first().cloned())
@@ -1549,7 +1565,7 @@ fn created_id(ctx: &CommandCtx<'_, '_>, property: &str) -> String {
 ///
 /// A seat-minted id the vault has seen is a REPLAY or a COLLISION, never an
 /// instruction to overwrite the row someone else is looking at.
-fn minted_id_is_free(
+pub(crate) fn minted_id_is_free(
     ctx: &CommandCtx<'_, '_>,
     property: &str,
     table: &str,
@@ -2902,7 +2918,7 @@ pub fn notation_of(label: &str) -> String {
 }
 
 /// The acting party: the caller's own, else the vault's owner.
-fn actor_party_id(ctx: &CommandCtx<'_, '_>) -> Result<String> {
+pub(crate) fn actor_party_id(ctx: &CommandCtx<'_, '_>) -> Result<String> {
     let owner: Option<String> = ctx
         .connection()
         .query_row(
@@ -2991,42 +3007,67 @@ mod tests {
         }
     }
 
-    /// THE NINETEEN, and the eight named absences.
+    /// THE TWENTY-FOUR, and the three named absences.
     ///
-    /// A schema this build carries half of is a schema whose other half has to
+    /// A schema this build carries part of is a schema whose other part has to
     /// be stated somewhere, or the next lane guesses. It is stated here.
+    ///
+    /// **The `core` schema arrives in two FILES and is one SCHEMA.** This module
+    /// is the parties/tags/documents/folders half (slot 4b, nineteen commands)
+    /// and [`super::core_links`] is the link/attachment half (slot 4c, five) —
+    /// registered together by [`super::Registry::with_system_commands`], which is
+    /// why this test counts the REGISTRY rather than `definitions()`. The three
+    /// that remain are People's (`core.merge_party` and the two merge helpers,
+    /// census §A5).
     #[test]
-    fn the_schema_carries_nineteen_of_v0s_twenty_seven() {
-        let names: Vec<&str> = definitions()
+    fn the_schema_carries_twenty_four_of_v0s_twenty_seven() {
+        let registry =
+            crate::commands::Registry::with_system_commands().expect("the registry builds");
+        let names = registry.names();
+        let core: Vec<&str> = names
             .iter()
-            .map(|definition| definition.name)
+            .copied()
+            .filter(|name: &&str| name.starts_with("core."))
             .collect();
-        assert_eq!(names.len(), 19);
-        for absent in [
+        assert_eq!(core.len(), 24, "{core:?}");
+        assert_eq!(
+            definitions().len(),
+            19,
+            "this file is still the larger half"
+        );
+        for landed in [
             "core.link_entities",
             "core.unlink_entities",
             "core.anchor_link",
             "core.attach",
             "core.detach",
+        ] {
+            assert!(
+                core.contains(&landed),
+                "{landed} is Notes' slot (#1020, slot 4c) and is not registered"
+            );
+        }
+        for absent in [
             "core.merge_party",
             "core.merge_entity",
             "core.find_duplicate_parties",
         ] {
             assert!(
-                !names.contains(&absent),
-                "{absent} is Notes' or People's slot (D-1020-DC3) and is registered here"
+                !absent.is_empty() && !core.contains(&absent),
+                "{absent} is People's slot (census §A5) and is registered here"
             );
         }
     }
 
-    /// The split off v0's own definitions, for the nineteen.
+    /// The split off v0's own definitions, for the nineteen IN THIS FILE.
     ///
-    /// v0's whole `core` schema is 17 idempotent / 8 once / 2 retry-safe; the
-    /// eight absences above take four `once` (`link_entities`, `attach`,
-    /// `merge_party`, `merge_entity`), three idempotent and one retry-safe with
-    /// them. The census reads the `once` arm as six
-    /// (`census-wave4.md:47`), and 17 + 6 + 2 is 25 rather than the 27 the same
-    /// line states.
+    /// v0's whole `core` schema is 17 idempotent / 8 once / 2 retry-safe. Slot
+    /// 4c's five take two `once` (`link_entities`, `attach`) and three
+    /// idempotent (`super::core_links`'s own split test asserts that half); the
+    /// three still absent are People's and take two `once` (`merge_party`,
+    /// `merge_entity`) and one retry-safe. The census reads the `once` arm as
+    /// six (`census-wave4.md:47`), and 17 + 6 + 2 is 25 rather than the 27 the
+    /// same line states — a census arithmetic slip, filed as a finding.
     #[test]
     fn the_idempotency_split_matches_v0() {
         let mut idempotent = 0;

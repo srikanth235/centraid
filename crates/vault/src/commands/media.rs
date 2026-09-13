@@ -346,7 +346,10 @@ fn content_unreferenced(ctx: &CommandCtx<'_, '_>, content_id: &str) -> Result<bo
 }
 
 /// Soft-delete the bytes with the standard grace window, if nothing rents them.
-fn release_content_if_unreferenced(ctx: &CommandCtx<'_, '_>, content_id: &str) -> Result<bool> {
+pub(crate) fn release_content_if_unreferenced(
+    ctx: &CommandCtx<'_, '_>,
+    content_id: &str,
+) -> Result<bool> {
     if !content_unreferenced(ctx, content_id)? {
         return Ok(false);
     }
