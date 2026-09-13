@@ -4,7 +4,7 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 
 <!-- governance:front-page start -->
 
-**Law** · window door · range `e9a7d81a..297b0664` · law digest `53be88c22ab5` → `53be88c22ab5`
+**Law** · window door · range `e9a7d81a..d73b0a43` · law digest `53be88c22ab5` → `53be88c22ab5`
 
 law changed under this run: brief stamped `53be88c22ab5`, HEAD is `53be88c22ab5` — changed: unknown commit (no commit in this range carries the stamped digest)
 
@@ -14,16 +14,12 @@ law changed under this run: brief stamped `53be88c22ab5`, HEAD is `53be88c22ab5`
 | `commit-message-format` | hook | ✓ pass | 0 |
 | `constitution-coverage` | window | ✓ pass | 0 |
 | `doc-integrity` | hook | ✓ pass | 0 |
-| `doctrine-citation` | window | ✗ fail | 1 |
+| `doctrine-citation` | window | ✓ pass | 0 |
 | `estate-separation` | hook | ✓ pass | 0 |
 | `managed-tree-integrity` | hook | ✓ pass | 0 |
 | `receipt-per-issue` | window | ✓ pass | 0 |
 | `registry-completeness` | window | ✓ pass | 0 |
 | `waiver-docket` | hook | ✓ pass | 0 |
-
-### Findings
-
-- `.governance/law/out/arrival.json:1` **law/doctrine-citation** (warn) — receipts/issue-1020-v1-platform.md:5109 records ruling R-1020-35 and cites nothing. A ruling with no issue and no docs/decisions.md anchor is a rule nobody agreed to: the next reader cannot find where it was argued or whether it is still in force.
 
 law estate: 11 paths, CODEOWNERS in sync
 
@@ -331,7 +327,17 @@ node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5
                               #        baseline CI judges and the one doc-integrity freezes
                               #        receipts against — so this section's append is free
 bun run build                 # PASS — 14 successful, 14 total
-bun run check:push:static     # PASS — 4/4 gates
+bun run build                 # PASS — 14 successful, 14 total (needed before check:push:static,
+                              #        whose typecheck:affected member resolves @centraid/* via dist)
+bun run check:push:static     # 2/4 on this tree, and NEITHER red is this lane's. `turbo:lint` and
+                              #        `format:check` pass. `lint` fails on two unused
+                              #        oxlint-disable directives in v0 files and `typecheck:affected`
+                              #        on v0's own module resolution — both verified pre-existing by
+                              #        stashing this lane's diff and re-running, and this lane's
+                              #        whole diff is 23 markdown files plus tests/journeys.json.
+                              #        Named in the inherited-red table rather than worked around;
+                              #        on the RETIREMENT branch, where the v0 tree is gone, the same
+                              #        command is 4/4
 git push -u origin claude/1020-laneA
                               # PASS — accepted; no SKIP_* and no --no-verify on any commit
 node scripts/lint-path-filters.mjs
@@ -5347,6 +5353,8 @@ Every red on the umbrella tip, what it is, since when, and whose call it is. **N
 | `rules` | `sql-confinement` on `crates/apps/photos/tests/{parity,year3}.rs` — an app crate's **tests** are inside the rule | wave 4 lane Photos (`c24cc561`) | Lane CL-FIX. The remedy is the one three later lanes used: read through the app's own statement rather than a `SELECT` |
 | `local` budget | 285.7 s warm against 120 s, `cargo test --workspace` 219.7 s of it over 23 members | grew across wave 4; first visible once X3's `8602e221` made the tree read warm | Hand-off 6.5. The profile grew **no step**; the suite grew. Three lanes reported it in succession, which makes it a trend rather than an incident |
 | `desktop-unit`, `extension-unit` | fail without `node_modules` in a worktree that has none | structural | Not a defect: both steps run `npm ci` in their own trees in CI |
+| `bun run lint` (v0's oxlint) | **two unused `oxlint-disable` directives** — `packages/blueprints/apps/docs/pdf-text.ts:5` and `packages/client/src/device-enrichment-compute.ts:7`, each reporting *"no problems were reported"* | on the umbrella tip; **verified pre-existing** by stashing this lane's diff and re-running, and this lane's whole diff is 23 markdown files plus `tests/journeys.json` | v0 files, and they retire with the tree. Until then the remedy is deleting the two directives, not widening the rule |
+| `bun run typecheck:affected` (v0's) | `@centraid/vault` does not resolve for `packages/server` even after `bun run build` | same tip, same verification | v0's build graph. It is the reason `ts-static` is scoped to the v1 tree rather than being a second run of v0's static gate ([D-1020-B2's hand-off 3](../docs/decisions.md#decisions--lane-b2-1020)) |
 
 ### Corrections to the plan
 
