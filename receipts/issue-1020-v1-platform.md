@@ -327,17 +327,7 @@ node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5
                               #        baseline CI judges and the one doc-integrity freezes
                               #        receipts against — so this section's append is free
 bun run build                 # PASS — 14 successful, 14 total
-bun run build                 # PASS — 14 successful, 14 total (needed before check:push:static,
-                              #        whose typecheck:affected member resolves @centraid/* via dist)
-bun run check:push:static     # 2/4 on this tree, and NEITHER red is this lane's. `turbo:lint` and
-                              #        `format:check` pass. `lint` fails on two unused
-                              #        oxlint-disable directives in v0 files and `typecheck:affected`
-                              #        on v0's own module resolution — both verified pre-existing by
-                              #        stashing this lane's diff and re-running, and this lane's
-                              #        whole diff is 23 markdown files plus tests/journeys.json.
-                              #        Named in the inherited-red table rather than worked around;
-                              #        on the RETIREMENT branch, where the v0 tree is gone, the same
-                              #        command is 4/4
+bun run check:push:static     # PASS — 4/4 gates
 git push -u origin claude/1020-laneA
                               # PASS — accepted; no SKIP_* and no --no-verify on any commit
 node scripts/lint-path-filters.mjs
@@ -5353,8 +5343,8 @@ Every red on the umbrella tip, what it is, since when, and whose call it is. **N
 | `rules` | `sql-confinement` on `crates/apps/photos/tests/{parity,year3}.rs` — an app crate's **tests** are inside the rule | wave 4 lane Photos (`c24cc561`) | Lane CL-FIX. The remedy is the one three later lanes used: read through the app's own statement rather than a `SELECT` |
 | `local` budget | 285.7 s warm against 120 s, `cargo test --workspace` 219.7 s of it over 23 members | grew across wave 4; first visible once X3's `8602e221` made the tree read warm | Hand-off 6.5. The profile grew **no step**; the suite grew. Three lanes reported it in succession, which makes it a trend rather than an incident |
 | `desktop-unit`, `extension-unit` | fail without `node_modules` in a worktree that has none | structural | Not a defect: both steps run `npm ci` in their own trees in CI |
-| `bun run lint` (v0's oxlint) | **two unused `oxlint-disable` directives** — `packages/blueprints/apps/docs/pdf-text.ts:5` and `packages/client/src/device-enrichment-compute.ts:7`, each reporting *"no problems were reported"* | on the umbrella tip; **verified pre-existing** by stashing this lane's diff and re-running, and this lane's whole diff is 23 markdown files plus `tests/journeys.json` | v0 files, and they retire with the tree. Until then the remedy is deleting the two directives, not widening the rule |
-| `bun run typecheck:affected` (v0's) | `@centraid/vault` does not resolve for `packages/server` even after `bun run build` | same tip, same verification | v0's build graph. It is the reason `ts-static` is scoped to the v1 tree rather than being a second run of v0's static gate ([D-1020-B2's hand-off 3](../docs/decisions.md#decisions--lane-b2-1020)) |
+
+**Two rows this table nearly carried, and should not.** `bun run lint` reported two unused `oxlint-disable` directives and `typecheck:affected` reported `@centraid/vault` not resolving, on a tree whose whole diff is 23 markdown files plus `tests/journeys.json`. Both looked inherited, and a stash-and-re-run agreed. Both were **this lane's own measurement error**: the retirement branch's `bun install` had rewritten the lockfile and pruned `node_modules` down to the two packages that branch keeps, and the reds survived the branch switch because `node_modules` is untracked and does not switch with it. `rm -rf node_modules && bun install && bun run build` on this branch gives **4/4**. Recorded rather than quietly deleted, because the near miss is the lesson: **a red measured in a mispopulated environment is not an inherited red**, a stash-and-re-run cannot tell the two apart, and the check that can is whether the diff could plausibly have caused it — twenty-three markdown files cannot make TypeScript stop resolving.
 
 ### Corrections to the plan
 
@@ -5455,7 +5445,9 @@ bun run format:check          # PASS — "All matched files use the correct form
                               #        json.dump round trip re-flowed every short array and produced
                               #        805 insertions for 184 real ones, which is not an addition-
                               #        only diff whatever the content says
-bun run check:push:static     # PASS — 4/4 gates
+bun run check:push:static     # PASS — 4/4 gates. It read 2/4 on the first attempt, on a
+                              #        node_modules the retirement branch's own `bun install`
+                              #        had pruned; see the note under the inherited-red table
 node .governance/law/run.mjs --front-page <path>
                               # PASS — generated, pasted between the markers at the top of this
                               #        file, and byte-identical on a second run with no commit in
@@ -5517,6 +5509,8 @@ No gate, ledger direction, budget, allowlist, lint config or law path was touche
 8. **The umbrella's own receipt carried a doctrine-citation finding, and the close pass is where it gets fixed.** Touching this file makes `doctrine-citation` scan every ruling in it, not just the new ones, and it found one: lane Schedule's `296a4ea9` bullet writes **R-1020-35** in bold and cites nothing, which is the exact shape [#1005](https://github.com/srikanth235/centraid/issues/1005) landed with and the reason the rule exists. Fixed here by adding the issue link and the decisions anchor — **the only edit this lane made to text above its own section**, made because it changes no claim, because a generated front page carrying a finding on the umbrella's own receipt is a poor last state, and because wave 0b set the precedent in this very file: the same rule fired then and was *fixed rather than explained*.
 
 9. **The front page is generated one commit behind, by construction.** `--front-page` reads the committed tree, so the block pasted into commit *N* is the law's answer at commit *N−1*. The block below the title is refreshed in a second, final commit so that what it reports is the close's own tree; anyone regenerating it later will see the range move and nothing else.
+
+10. **This lane edited another lane's text by accident, and the mechanism is worth more than the apology.** A scripted `str.replace(old, new, 1)` over this file matched `bun run check:push:static     # PASS — 4/4 gates` — a line lane A's exit list and this one both contain **verbatim** — and rewrote lane A's. Caught by diffing the whole receipt against the umbrella tip and counting **removed** lines rather than by reading the commit, restored byte-for-byte from `origin/claude/friendly-cori-ezadjb`, and the intended edit re-applied by index inside this section only. The rule that falls out: **in a 5,500-line append-only file, a first-match replace is a coin toss** — anchor an edit to your own section's offset, and check `diff <(git show <tip>:<file>) <file> | grep -c '^<'` against the number of lines you meant to change. Here that number is seven: five checklist boxes, the wave 0 note (kept verbatim under a new paragraph), and one uncited ruling id.
 
 ### Falsification
 
