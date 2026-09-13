@@ -5,10 +5,11 @@
 //! logic.
 //!
 //! **SEVEN OF THE ELEVEN ARE `schedule.*`** — this lane's whole schema — and
-//! four are `core.*`: the tag pair (the Docs lane's, and real) and the
-//! attachment pair (the Notes lane's, and marked [`PENDING_COMMANDS`] until it
-//! registers). A button that reported success and wrote nothing is what the
-//! pending list exists to prevent.
+//! four are `core.*`: the tag pair (the Docs lane's) and the attachment pair
+//! (the Notes lane's). All four are registered, so [`PENDING_COMMANDS`] is
+//! **empty** and [`tests::every_command_this_app_names_is_registered`] checks
+//! it against the vault's own catalogue. A button that reported success and
+//! wrote nothing is what that test exists to prevent.
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5).
 //!
@@ -136,9 +137,11 @@ pub const ACTIONS: &[ActionRow] = &[
     act("remove-tag", "core.untag_item"),
 ];
 
-/// The commands this app names that the vault does not register yet: the
-/// attachment pair, which is the Notes lane's half of `core.*`.
-pub const PENDING_COMMANDS: [&str; 2] = ["core.attach", "core.detach"];
+/// The commands this app names that the vault does not register yet.
+///
+/// **EMPTY.** It held the attachment pair — the Notes lane's half of `core.*`
+/// — and they came off when that lane registered them.
+pub const PENDING_COMMANDS: [&str; 0] = [];
 
 /// The row for an action, by name.
 #[must_use]
@@ -201,21 +204,25 @@ mod tests {
         );
     }
 
-    /// The tag pair is REAL and the attachment pair is not: `core.tag_item` and
-    /// `core.untag_item` landed with Docs, `core.attach` / `core.detach` are
-    /// Notes'.
+    /// EVERY command this app names is either in the vault's own catalogue or
+    /// on [`PENDING_COMMANDS`]. The tag pair landed with Docs, the attachment
+    /// pair with Notes, and `schedule.*` is this lane's own.
     #[test]
-    fn the_pending_commands_are_the_attachment_pair_only() {
-        assert_eq!(PENDING_COMMANDS, ["core.attach", "core.detach"]);
+    fn every_command_this_app_names_is_registered() {
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the vault's own registry");
         for row in ACTIONS {
+            let known = registry.get(row.command).is_some();
             let pending = PENDING_COMMANDS.contains(&row.command);
-            assert_eq!(
-                pending,
-                row.action == "attach" || row.action == "detach",
-                "{}",
-                row.action
+            assert!(
+                known != pending,
+                "`{}` is {}registered and {}on the pending list",
+                row.command,
+                if known { "" } else { "not " },
+                if pending { "" } else { "not " }
             );
         }
+        assert!(PENDING_COMMANDS.is_empty(), "nothing is owed to this app");
     }
 
     #[test]

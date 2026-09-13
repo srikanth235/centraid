@@ -18,12 +18,15 @@
 //! note" (`actions/send-to-tasks.ts:43`-`:48`), so an ordinal key would name a
 //! different call on two different runs of the same action.
 //!
-//! **`schedule.add_task` is not in this build** (state at spawn: the Agenda and
-//! Tasks lane holds the `schedule` schema, slot 4d). The row is in the table
-//! with [`ActionRow::pending_schema`] set, a registry test in
-//! `crates/vault/src/commands/mod.rs` keeps the name reserved, and the parity
-//! case is marked `pending: schedule` — the same pattern `crates/automations`
-//! used for the commands other lanes owed it.
+//! **`schedule.add_task` IS in this build now.** It was the one row carrying
+//! [`ActionRow::pending_schema`], because the Agenda and Tasks lane holds the
+//! `schedule` schema (slot 4d); that lane registered its sixteen commands, the
+//! registry test that kept the name reserved went red, and the mark came off
+//! here and in the parity fixture rather than staying a row nobody reads. The
+//! field survives for the next lane that owes one, and
+//! [`tests::no_command_is_owed_by_another_lane`] asserts the list is EMPTY
+//! rather than that the field is gone — the same shape `crates/automations`
+//! uses.
 //!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
 //! §A0, two gates). Notes' two manifest-confirmed actions are `delete-notebook`
@@ -158,16 +161,6 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
     }
 }
 
-const fn pending(action: &'static str, command: &'static str, schema: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-        online_only: false,
-        pending_schema: Some(schema),
-    }
-}
-
 /// THE TABLE. Fifteen actions, in the manifest's own order.
 pub const ACTIONS: [ActionRow; 15] = [
     act("create-note", "knowledge.create_note"),
@@ -182,7 +175,7 @@ pub const ACTIONS: [ActionRow; 15] = [
     act("restore-note-version", "knowledge.restore_note_version"),
     act("link", "core.link_entities"),
     // The only action that makes TWO invocations: the task, then the backlink.
-    pending("send-to-tasks", "schedule.add_task", "schedule"),
+    act("send-to-tasks", "schedule.add_task"),
     act("attach", "core.attach"),
     act("detach", "core.detach"),
     act("add-tag", "core.tag_item"),
@@ -320,10 +313,12 @@ mod tests {
         assert!(ACTIONS.iter().all(|row| !row.online_only));
     }
 
-    /// `send-to-tasks` is the ONE pending row, and it says which schema owes it.
+    /// NOTHING IS OWED ANY MORE. `send-to-tasks`' `schedule.add_task` was the
+    /// one pending row and slot 4d registered the schema; the list shrinks by
+    /// being wrong, and this is what says so.
     #[test]
-    fn send_to_tasks_is_the_only_command_another_lane_owes() {
-        assert_eq!(pending_commands(), [("schedule", "schedule.add_task")]);
+    fn no_command_is_owed_by_another_lane() {
+        assert!(pending_commands().is_empty());
     }
 
     #[test]

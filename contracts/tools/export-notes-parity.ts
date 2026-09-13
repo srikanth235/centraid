@@ -32,15 +32,20 @@
 // not reviewable; and Rust needs a schema to open anyway, which
 // `contracts/schema/vault-ddl.sql` already is.
 //
-// ONE STEP IS `pending`. `send-to-tasks` invokes `schedule.add_task` and the
-// Agenda/Tasks lane holds that schema (slot 4d); v0 answers it here and the Rust
-// replay skips it by name, so the case lands the moment 4d does.
+// NO STEP IS `pending` ANY MORE. `send-to-tasks` invokes `schedule.add_task`,
+// which the Agenda/Tasks lane registered (slot 4d), so the step is registered
+// here too and v0 EXECUTES it — which is what the mark was waiting for. The
+// `pending` field stays in the bundle's shape for the next lane that owes one;
+// `every_step_of_the_script_is_replayable_by_this_build` asserts the list is
+// empty rather than that the field is gone.
 import { bootstrapVault } from "../../packages/vault/src/bootstrap.js";
 import { registerAttachmentCommands } from "../../packages/vault/src/commands/attachments.js";
 import { registerKnowledgeCommands } from "../../packages/vault/src/commands/knowledge.js";
 import { registerLinkCommands } from "../../packages/vault/src/commands/links.js";
 import { registerPartyCommands } from "../../packages/vault/src/commands/parties.js";
+import { registerScheduleCommands } from "../../packages/vault/src/commands/schedule.js";
 import { registerTagCommands } from "../../packages/vault/src/commands/tags.js";
+import { registerTaskCommands } from "../../packages/vault/src/commands/tasks.js";
 import { openVaultDb } from "../../packages/vault/src/db.js";
 import { createGateway } from "../../packages/vault/src/gateway/gateway.js";
 import type { Credential } from "../../packages/vault/src/gateway/types.js";
@@ -94,6 +99,10 @@ export async function buildNotesParity(): Promise<NotesParityBundle> {
     const gateway = createGateway(db);
     registerPartyCommands(gateway);
     registerTagCommands(gateway);
+    // `send-to-tasks`' own command, registered so the step EXECUTES rather
+    // than being recorded as an unknown name (slot 4d).
+    registerScheduleCommands(gateway);
+    registerTaskCommands(gateway);
     registerKnowledgeCommands(gateway);
     registerLinkCommands(gateway);
     registerAttachmentCommands(gateway);

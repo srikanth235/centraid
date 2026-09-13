@@ -441,9 +441,7 @@
     "input": {
       "title": "Book the cabin"
     },
-    "output_keys": [],
-    "pending": "schedule",
-    "reason": "unknown command schedule.add_task",
-    "status": "denied"
+    "output_keys": ["task_id"],
+    "status": "executed"
   }
 ]

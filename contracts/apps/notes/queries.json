@@ -1103,6 +1103,13 @@
           "subtitle": "Notes",
           "title": "Tahoe long weekend — shortlist",
           "type": "knowledge.note"
+        },
+        {
+          "app": "Tasks",
+          "id": "id-0116",
+          "subtitle": "Tasks",
+          "title": "Book the cabin",
+          "type": "schedule.task"
         }
       ]
     },

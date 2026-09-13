@@ -80,7 +80,10 @@ export interface QueryCase {
  * resolve — asserted on the replay side, so a port that dropped an output key
  * fails loudly rather than at the reference.
  *
- * `pending` names a schema whose commands are not in the Rust build yet: the
+ * `pending` names a schema whose commands are not in the Rust build yet. **No
+ * step carries it today** — `schedule.add_task` was the only one and slot 4d
+ * registered the schema — and the field stays for the next lane that owes one:
+ * the
  * Agenda/Tasks lane holds `schedule` (slot 4d), and `send-to-tasks` invokes
  * `schedule.add_task`. The step is recorded from v0 either way and the Rust
  * replay skips it, so the case lands the moment 4d does.

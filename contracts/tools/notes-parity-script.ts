@@ -342,14 +342,9 @@ export function runNotesScript(
     "purge_at",
     "body_released",
   ]);
-  // `send-to-tasks`' command, which the Rust build does not carry yet.
-  execute(
-    "schedule.add_task",
-    { title: "Book the cabin" },
-    [],
-    "any",
-    "schedule"
-  );
+  // `send-to-tasks`' command. It used to be recorded as an unknown name and
+  // marked `pending: schedule`; slot 4d registered the schema, so it executes.
+  execute("schedule.add_task", { title: "Book the cabin" }, ["task_id"]);
   // The two ids the `$from` references resolve against are the RECORDER's, not
   // these: the locals exist so the script reads like the gestures it is.
   void note;

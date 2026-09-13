@@ -7,11 +7,12 @@
 //!
 //! **FIVE OF THE SEVEN ARE `schedule.*`** and two are `core.*` — the attachment
 //! pair every record app shares (census §A6). `schedule.*` is this lane's whole
-//! schema; `core.attach` and `core.detach` are the Notes lane's, so they are
-//! named here and marked [`PENDING_COMMANDS`] until they register, the same
-//! shape the extension's native host uses: **a host that silently mapped a
-//! gesture onto a command nobody registered would be a button that reports
-//! success and writes nothing.**
+//! schema and `core.attach`/`core.detach` are the Notes lane's; both are
+//! registered, so [`PENDING_COMMANDS`] is **empty** and
+//! [`tests::every_command_this_app_names_is_registered`] checks it against the
+//! vault's own catalogue rather than against a list. **A button that mapped a
+//! gesture onto a command nobody registered would report success and write
+//! nothing**, which is what that test exists to prevent.
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5); v0's falls back to the call's
 //! ordinal, which is stable only for a handler that makes the same call
@@ -160,13 +161,11 @@ pub const ACTIONS: &[ActionRow] = &[
 
 /// The commands this app names that the vault does not register yet.
 ///
-/// **Named rather than discovered**, exactly as the extension's native host
-/// names its own: `core.attach` and `core.detach` are the Notes lane's half of
-/// `core.*`, and an attach button that reported success and wrote nothing is
-/// what this list exists to prevent.
-/// [`tests::the_pending_commands_are_the_ones_the_catalogue_lacks`] fails when
-/// one of them lands — the list shrinks by being wrong.
-pub const PENDING_COMMANDS: [&str; 2] = ["core.attach", "core.detach"];
+/// **EMPTY.** It held `core.attach` and `core.detach` — the Notes lane's half
+/// of `core.*` — and they came off when that lane registered them, because the
+/// test below went red rather than because anybody remembered. The constant
+/// survives for the next lane that owes one; the list shrinks by being wrong.
+pub const PENDING_COMMANDS: [&str; 0] = [];
 
 /// The row for an action, by name.
 #[must_use]
@@ -213,16 +212,20 @@ mod tests {
         assert_eq!(core, 2);
     }
 
-    /// Every command this app names is either in the catalogue or on
-    /// [`PENDING_COMMANDS`]; when a lane lands one, this fails and the name
+    /// EVERY command this app names is either in the vault's own catalogue or
+    /// on [`PENDING_COMMANDS`]; when a lane lands one, this fails and the name
     /// comes off rather than staying a silent no-op.
+    ///
+    /// It reads the REAL registry, not a prefix: this crate links
+    /// `centraid-vault` for `time` anyway, so the claim can be the catalogue's
+    /// rather than a guess about it.
     #[test]
-    fn the_pending_commands_are_the_ones_the_catalogue_lacks() {
+    fn every_command_this_app_names_is_registered() {
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the vault's own registry");
         for row in ACTIONS {
+            let known = registry.get(row.command).is_some();
             let pending = PENDING_COMMANDS.contains(&row.command);
-            // The catalogue this crate can see without linking the vault's
-            // registry: `schedule.*` is this lane's own and is real.
-            let known = row.command.starts_with("schedule.");
             assert!(
                 known != pending,
                 "`{}` is {}registered and {}on the pending list",
@@ -231,6 +234,7 @@ mod tests {
                 if pending { "" } else { "not " }
             );
         }
+        assert!(PENDING_COMMANDS.is_empty(), "nothing is owed to this app");
     }
 
     #[test]

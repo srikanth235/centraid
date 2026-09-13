@@ -127,11 +127,17 @@ describe("contracts/apps/notes", () => {
     expect(
       commands.filter((entry) => entry.status !== "executed").length
     ).toBeGreaterThanOrEqual(12);
-    // EXACTLY ONE STEP IS PENDING, and it names the schema that owes it.
+    // NO STEP IS PENDING ANY MORE. `schedule.add_task` was the only one and
+    // slot 4d registered the schema, so `send-to-tasks`' own command EXECUTES
+    // here — which is what the mark was waiting for.
     const pending = commands.filter((entry) => entry.pending !== undefined);
     expect(
       pending.map((entry) => [entry.command, entry.pending])
-    ).toStrictEqual([["schedule.add_task", "schedule"]]);
+    ).toStrictEqual([]);
+    const sendToTasks = commands.find(
+      (entry) => entry.command === "schedule.add_task"
+    );
+    expect(sendToTasks?.status).toBe("executed");
 
     // Every table the six statements read is exported, and the library is not
     // empty: `knowledge_note` is the one table a seeded library cannot lack.

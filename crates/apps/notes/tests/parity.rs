@@ -384,8 +384,25 @@ fn a_note_targets_subtitle_is_the_preview_here_and_the_app_name_in_v0() {
     let (data, _) =
         load_link_targets(&door, &search, &Principal::Owner, "cabin").expect("the powerbox folds");
     assert!(!data.targets.is_empty());
-    for target in &data.targets {
-        assert_eq!(target.entity, "knowledge.note");
+    // THE POWERBOX IS NOT NOTES-ONLY, and since slot 4d it says so: the corpus
+    // now carries `send-to-tasks`' own task, so "cabin" matches a
+    // `schedule.task` as well as two notes. The subtitle divergence is about
+    // NOTE targets — v0's declared `preview` column is not on the row the note
+    // search returns — so the claim is scoped to them rather than widened into
+    // a claim about every entity the powerbox can reach.
+    assert!(
+        data.targets
+            .iter()
+            .any(|target| target.entity == "schedule.task"),
+        "the task `send-to-tasks` wrote is linkable too"
+    );
+    let notes: Vec<_> = data
+        .targets
+        .iter()
+        .filter(|target| target.entity == "knowledge.note")
+        .collect();
+    assert!(!notes.is_empty());
+    for target in notes {
         assert_ne!(
             target.subtitle, "notes",
             "the port serves the declared preview rather than falling back to the app"
@@ -399,16 +416,18 @@ fn a_note_targets_subtitle_is_the_preview_here_and_the_app_name_in_v0() {
         .map(|(_, _, output)| output)
         .expect("the fixture has the case");
     for target in v0["targets"].as_array().expect("a list") {
+        // v0 answers the APP's name for every target, whichever app it is:
+        // the declared `subtitles: ["preview"]` column is not on the row the
+        // search returns, so the fallback is all there has ever been.
         assert_eq!(
-            target["subtitle"],
-            json!("Notes"),
+            target["subtitle"], target["app"],
             "v0's declared `subtitles: [\"preview\"]` has never been served"
         );
     }
 }
 
-/// THE COMMAND SCRIPT IS REPLAYABLE, and the one step this build cannot run
-/// names the schema that owes it.
+/// THE COMMAND SCRIPT IS REPLAYABLE, end to end: no step is owed by another
+/// lane any more.
 ///
 /// The replay itself is `crates/vault/tests/knowledge_commands.rs`' business —
 /// it holds the vault and the registry. What this asserts is that the fixture's
@@ -429,13 +448,16 @@ fn every_step_of_the_script_is_replayable_by_this_build() {
         }
         if step.get("pending").is_some() {
             pending += 1;
-            assert_eq!(step["pending"], json!("schedule"));
-            assert_eq!(command, "schedule.add_task");
             continue;
         }
         assert!(
-            command.starts_with("knowledge.") || command.starts_with("core."),
-            "step {index} invokes {command}, which is no schema this lane holds"
+            command.starts_with("knowledge.")
+                || command.starts_with("core.")
+                // `send-to-tasks`' own command. It was the one `pending` step
+                // until slot 4d registered the `schedule` schema; now it
+                // executes, and this is the name that says so.
+                || command == "schedule.add_task",
+            "step {index} invokes {command}, which is no schema this build holds"
         );
         for value in step["input"].as_object().expect("an input object").values() {
             let Some(reference) = value.get("$from").and_then(Value::as_str) else {
@@ -459,7 +481,10 @@ fn every_step_of_the_script_is_replayable_by_this_build() {
             );
         }
     }
-    assert_eq!(pending, 1, "exactly one step is owed by another lane");
+    // NOTHING IS OWED. `schedule.add_task` was the one pending step; slot 4d
+    // registered the schema, so the step executes and the mark came off rather
+    // than staying a row nobody reads.
+    assert_eq!(pending, 0, "no step is owed by another lane");
     assert!(refusals >= 12, "only {refusals} refusals in the script");
 }
 

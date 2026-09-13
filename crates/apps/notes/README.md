@@ -46,7 +46,7 @@ bun run format && git diff --exit-code contracts/apps/notes   # the drift check
 cargo test -p centraid-apps-notes --test parity               # the port's side
 ```
 
-**30 cases over six queries, 40 command steps of which 14 are refusals**, and one step marked `pending: schedule` — `send-to-tasks` invokes `schedule.add_task` and the Agenda/Tasks lane holds that schema. Ids are compared, not masked, so page order is part of the comparison.
+**30 cases over six queries, 40 command steps of which 14 are refusals**, and **no step marked `pending`** — `send-to-tasks` invokes `schedule.add_task`, which the Agenda/Tasks lane registered (slot 4d), so the step executes. Ids are compared, not masked, so page order is part of the comparison.
 
 ## Owner hand-off — the typing-latency number
 

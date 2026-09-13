@@ -93,12 +93,6 @@ fn the_registry_carries_every_command_this_build_has() {
     // not exist yet (census §A5).
     assert!(registry.get("core.merge_entity").is_none());
     assert!(registry.get("core.find_duplicate_parties").is_none());
-    // AND `schedule.add_task` IS NOT HERE. `notes`' `send-to-tasks` invokes it
-    // and the Agenda/Tasks lane owns the `schedule` schema (slot 4d), so the
-    // name is reserved here and the Notes parity case is marked
-    // `pending: schedule` until it lands.
-    assert!(registry.get("schedule.add_task").is_none());
-    assert_eq!(count("schedule."), 0);
     assert!(registry.get("tally.add_expense").is_some());
     // The three `schedule.*` names other lanes and surfaces call BY NAME:
     // Notes' `send-to-tasks`, the extension's `capture:task` frame and its

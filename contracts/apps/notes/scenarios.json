@@ -4,24 +4,24 @@
     {
       "checks": [
         {
-          "actual": "id-0116",
+          "actual": "id-0117",
           "claim": "the bytes still dedupe",
-          "expected": "id-0116"
+          "expected": "id-0117"
         },
         {
-          "actual": ["id-0116", "id-0117"],
+          "actual": ["id-0117", "id-0118"],
           "claim": "A's edit is A's history",
-          "expected": ["id-0116", "id-0117"]
+          "expected": ["id-0117", "id-0118"]
         },
         {
-          "actual": ["id-0116"],
+          "actual": ["id-0117"],
           "claim": "B is untouched by A's edit",
-          "expected": ["id-0116"]
+          "expected": ["id-0117"]
         },
         {
-          "actual": ["id-0118", "id-0119", "id-0118"],
+          "actual": ["id-0119", "id-0120", "id-0119"],
           "claim": "A→B→A is three occurrences over two content ids",
-          "expected": ["id-0118", "id-0119", "id-0118"]
+          "expected": ["id-0119", "id-0120", "id-0119"]
         },
         {
           "actual": "failed",

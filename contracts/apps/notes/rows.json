@@ -1731,7 +1731,33 @@
       "tz",
       "series_id"
     ],
-    "rows": [],
+    "rows": [
+      [
+        "id-0116",
+        "id-0002",
+        "Book the cabin",
+        null,
+        "needs-action",
+        0,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "(host-clock)",
+        "(host-clock)",
+        1,
+        null,
+        null,
+        0,
+        "scheduled",
+        null,
+        null
+      ]
+    ],
     "table": "schedule_task"
   },
   {
