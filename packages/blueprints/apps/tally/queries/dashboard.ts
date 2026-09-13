@@ -29,7 +29,7 @@ import {
   tallyGroupNet,
 } from "../../../src/tally-balance.ts";
 import { DAY_MS } from "../../_shared/format-kit.ts";
-import { inList, readPages } from "../../_shared/paged-reads.ts";
+import { inList, readPages, readWindow } from "../../_shared/paged-reads.ts";
 import {
   PENDING_OVERLAY_FIELDS,
   pendingOverlayCopy,
@@ -54,11 +54,20 @@ const TRASH_ROWS = 100;
 const RECURRING_ROWS = 500;
 const EXCEPTION_ROWS = 2000;
 
-/** A split, payer or line row exists per (expense, person): 8,000 of them. */
-const LEDGER_FAN_OUT = { pageSize: 1000, fanOutPages: 8 };
+/**
+ * A split, payer or line row exists per (expense, person): 8,000 of them.
+ *
+ * Stated at the page the host will actually honour (#1020, R-1020-35). These
+ * read `{ pageSize: 1000, … }` and a page of 1,000 is clamped to 500, so the
+ * walk declared 8,000 rows, reached 4,000, and threw a refusal naming the half
+ * it never read. `reachableBound` now keeps the declared product whatever the
+ * page size says; the numbers here are that same product, spelled so the call
+ * site is honest on its face.
+ */
+const LEDGER_FAN_OUT = { pageSize: 500, fanOutPages: 16 };
 
 /** An allocation exists per (line, person), so its ceiling is four times that. */
-const ALLOCATION_FAN_OUT = { pageSize: 1000, fanOutPages: 32 };
+const ALLOCATION_FAN_OUT = { pageSize: 500, fanOutPages: 64 };
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {
@@ -197,7 +206,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     groupsRes,
     circlesRes,
     membersRes,
-    expensesRes,
+    expenseRows,
     splitsRes,
     payersRes,
     settlesRes,
@@ -264,8 +273,18 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     }),
     // Trashed expenses (#441) drop out of every balance and ledger —
     // their splits are read below but never consumed once the expense is gone.
-    ctx.vault.page<ExpenseRowRaw>({
-      query: {
+    //
+    // THE WINDOW IS WALKED, NOT ASKED FOR IN ONE BREATH (#1020, R-1020-35).
+    // This was a single `ctx.vault.page` for `LEDGER_ROWS` rows whose `.rows`
+    // was taken and whose `next` cursor was dropped. The host clamps a request
+    // to 500, so the declared 2,000-row window returned its first 500 rows and
+    // said so in a cursor nobody read — and the hero figures, every group
+    // ledger and the friend view are folds over this array. That is the wrong
+    // number the doctrine forty lines above names, for any member past 500
+    // live expenses.
+    readWindow<ExpenseRowRaw>(
+      ctx,
+      {
         name: "tally.dashboard.expenses",
         select:
           "expense_id, group_id, description, amount_minor, currency, paid_by, split_method, split_params_json, spent_on, category, txn_id, created_at, updated_at",
@@ -277,8 +296,8 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
           descending: true,
         },
       },
-      limit: LEDGER_ROWS,
-    }),
+      LEDGER_ROWS
+    ),
     // THE KEYSET IS THE TABLE'S OWN PAIR. A split is keyed on
     // (expense_id, party_id) — one expense splits across several people — so a
     // cursor on `expense_id` alone stops at the first sharer.
@@ -400,7 +419,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
   // Circle membership is current state, the ledger durable history: a member
   // who left must stay nameable wherever an expense or settlement still refers
   // to them, so query every ledger party rather than today's roster.
-  const expenseRowsRaw = expensesRes.rows;
+  const expenseRowsRaw = expenseRows;
   const activeExpenseIds = new Set(
     expenseRowsRaw.map((expense) => expense.expense_id)
   );
@@ -627,7 +646,7 @@ export async function loadTally(ctx: HandlerCtx): Promise<TallyData> {
     payersByExpense.get(payer.expense_id)![payer.party_id] = payer.paid_minor;
   }
   const expenses: ExpenseWithReceipt[] = (
-    (expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]
+    expenseRows as unknown as ExpenseRowRaw[]
   ).map((e) => ({
     ...e,
     splits: splitsByExpense.get(e.expense_id) ?? {},
@@ -970,8 +989,11 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
         },
         limit: RECURRING_ROWS,
       }),
-      ctx.vault.page<Record<string, unknown>>({
-        query: {
+      // Walked, for the same reason as the ledger above (#1020, R-1020-35):
+      // a 2,000-row window asked for in one request comes back 500 rows long.
+      readWindow<Record<string, unknown>>(
+        ctx,
+        {
           name: "tally.dashboard.recurringExceptions",
           select:
             "exception_id, target_type, target_id, original_start_local, recurrence_semantics, scope, action, override_json",
@@ -984,8 +1006,8 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
             descending: false,
           },
         },
-        limit: EXCEPTION_ROWS,
-      }),
+        EXCEPTION_ROWS
+      ),
     ]);
     const bal = pairwise(data);
     const friends = data.friends.map((f) => {
@@ -1035,7 +1057,7 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
     const now = new Date();
     const rangeFrom = now.toISOString();
     const rangeTo = new Date(now.getTime() + 180 * DAY_MS).toISOString();
-    const exceptionRows = exceptionRes.rows ?? [];
+    const exceptionRows = exceptionRes;
     const recurring = (
       (recurringRes.rows ?? []) as unknown as RecurringRow[]
     ).map((template) => {

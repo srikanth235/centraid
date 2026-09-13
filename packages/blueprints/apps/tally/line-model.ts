@@ -25,12 +25,38 @@ export interface LineItemInput {
   [key: string]: unknown;
 }
 
-let seq = 0;
+/**
+ * A LINE ID IS SEAT-SCOPED AND SORTS BY CREATION (#1020, R-1020-35).
+ *
+ * This was `line-${++seq}` off a module-level counter. Two seats composing the
+ * same receipt offline both start at `line-1`, so their drafts collide on
+ * merge: one seat's tax line and the other's tip line are the same row, and
+ * the allocation editor reconciles them into one. A counter cannot be made
+ * safe here — the point of a draft is that it exists before the vault has seen
+ * it, so there is nothing to ask for a unique number.
+ *
+ * The shape is the expense id's: a time prefix so ids sort by creation, then
+ * randomness wide enough that two seats in the same millisecond do not meet.
+ * `crypto.getRandomValues` is present on every seat this module runs on —
+ * browser, Node and Hermes — and `Date.now` is monotonic enough for an
+ * ordering that only has to be stable within one draft.
+ */
+function randomSuffix(): string {
+  const bytes = new Uint8Array(10);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    ""
+  );
+}
+
+/** A fresh line id: `line-<ms in base 36>-<80 random bits>`. */
+export function newLineId(): string {
+  return `line-${Date.now().toString(36)}-${randomSuffix()}`;
+}
 
 export function newLineDraft(): LineDraft {
-  seq += 1;
   return {
-    lineId: `line-${seq}`,
+    lineId: newLineId(),
     kind: "item",
     description: "",
     amount: "",

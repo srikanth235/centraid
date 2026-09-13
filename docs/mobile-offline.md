@@ -297,3 +297,35 @@ The honest ceiling today is therefore: **bounded reads are unbounded in library 
 - measured library: 50,000 rows; projected budget edge for a full-projection read: ~90,000 rows.
 
 Device/simulator runs remain the release evidence for 60 fps and the end-to-end time budgets; unit tests pin query behavior, provenance dedupe, cursor convergence, and outbox durability.
+
+## The per-state promise — the camera-roll backup on iOS (PROVISIONAL)
+
+What Centraid may tell a member about when their photos will be safe, per app state ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E, D-1020-E5; open question 3).
+
+**This section is provisional and marked as such deliberately.** iOS does not let an app transfer a large number of files in the background on its own schedule: `BGProcessingTask` runs when the system decides and for as long as the system decides, and `URLSession` background transfers continue outside the app but only over HTTP(S) to a URL — which iroh-blobs, a QUIC transport, is not. So the promise depends on a measurement nobody has taken.
+
+The experiment that takes it is written in full at [`mobile/maestro/ios-transfer-experiment.md`](../mobile/maestro/ios-transfer-experiment.md): five app states × two transports (iroh-blobs, and an HTTPS blob door behind the `blob-door` feature), four measurements per cell, a 2,000-asset corpus on a **named reference device** (R-1020-20 — never a simulator), and a decision table with one already-written sentence per outcome. The threshold is **500 assets per night, charging, on Wi-Fi**.
+
+Until that run happens, this is what the product may say, and the state machine in `mobile/shared` reports each row as a `BackupState.Phase` rather than as a claim:
+
+| App state | What Centraid does | What a member is told |
+| --- | --- | --- |
+| **Open, on screen** | enumerates and transfers continuously; Wi-Fi and charger rules are queried **before each item**, not once per pass | "Backing up: 38 done, 12 to go" |
+| **Open, phone locked** | continues while the app is foreground-but-obscured; the decrypted cache is cleared and the replica unmounted the moment it truly backgrounds | "Backing up" until the state changes, then the background row below |
+| **Backgrounded, recent** | one pass on a **20-second budget**, checked at stage boundaries, with the platform's expiration handler as a second independent trigger | "Backing up when your phone lets Centraid run" |
+| **Backgrounded, scheduled task** | `BGProcessingTask` with `requiresExternalPower`; **opportunistic timing, durable correctness** — progress is the sha-addressed upload ledger, not the task | _the sentence the experiment picks_ |
+| **Force-quit** | nothing until a task or a launch wakes it; **no progress is lost** — every drain resumes the same ledger from its durable cursor | "Centraid picks up where it stopped" |
+| **Out of disk** | the feed is **parked**: the retry cadence stops, the cursor and the rows stay, and nothing is evicted to manufacture space | "This device is out of space, so Centraid has paused" + "Free up space and Centraid picks up where it stopped" |
+| **Photo access denied** | the backup is idle; **the grid is unaffected**, because it reads the vault and not the camera roll | "Photo access is off. Turn it on in Settings to back up your camera roll." |
+| **Background App Refresh off** | no scheduled passes at all; registration is **observable rather than assumed** | "Background App Refresh is off, so Centraid only catches up when you open it." |
+
+### The sentence that changes, and what it changes to
+
+One row above is blank on purpose. The experiment's decision table fills it, and these are the only four things it may say:
+
+1. **iroh-blobs clears ≥ 500 assets/night** — _"Backed up overnight: plug the phone in on Wi-Fi and Centraid finishes the night's photos before morning."_ The `blob-door` feature is then deleted and `no-listening-socket` loses its exception.
+2. **iroh-blobs clears 100–499** — _"Backed up over a few nights: Centraid moves your photos while the phone is charging on Wi-Fi, oldest first, and tells you how many are left."_
+3. **iroh-blobs clears < 100 and the HTTPS door clears ≥ 500** — _"Backed up overnight… On iPhone, Centraid uses a direct connection to your gateway for photo files."_ The door ships on iOS only, behind `blob-door`.
+4. **Neither clears 100** — _"Backed up while Centraid is open: leave it on screen while the phone charges."_ The worst outcome, and it has to be sayable: the alternative is a promise the product cannot keep.
+
+**Android is not in this table.** WorkManager's periodic work with a `NetworkType.UNMETERED` + charging constraint runs long enough for a night's camera roll, and v0 already shipped that path; the open question is iOS's alone.

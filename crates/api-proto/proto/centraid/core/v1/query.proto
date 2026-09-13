@@ -1,0 +1,84 @@
+// The paged read (#1020, D-1020-C4). Consumed by `crates/apps/kit` (lane D3).
+//
+// v0's shapes: `PageOrder` / `PageQuery` (`packages/core/src/page/statement.ts:36`,
+// `:50`) and `PageCursor` / `PageRequest` / `Page`
+// (`packages/core/src/page/window.ts:37`, `:46`, `:59`).
+//
+// Three v0 rules this file carries onto the wire, because each was a shipped
+// bug: `limit` is required with NO DEFAULT ("a default is how an unbounded read
+// gets written by accident", `window.ts:46-50`); the cursor is the SORT KEY
+// ITSELF, keyset and never an offset, so nothing handed to a caller can be
+// turned back into one (`:15-18`); and the primary key is part of the cursor
+// because the sort key is not unique — keyed on a timestamp alone, a page
+// boundary silently repeats or drops a row (`:20-24`).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/value.proto";
+
+// How the page is ordered. `pk_column` is the tiebreak, and the store compares
+// `(sort_column, pk_column)` as a SQL ROW VALUE, not as the equivalent
+// disjunction — the difference is a scan from the top of the index on every page
+// (`statement.ts:93-98`).
+message PageOrder {
+  string sort_column = 1;
+  string pk_column = 2;
+  bool descending = 3;
+}
+
+// A read as DATA, never as a string or a closure. The same shape is executed by
+// three ends — the seat in process, the shell across a socket, and the gateway
+// — and a closure survives none of them while a string survives the first two
+// and cannot be checked at the third (`statement.ts:14-19`).
+message PageQuery {
+  // The shape's name, for logs and budgets.
+  string name = 1;
+  // The projected columns. Must carry BOTH order columns: there is no `key_of`
+  // callback, so the cursor is read off the row by the two columns the ORDER BY
+  // names (`statement.ts:46`).
+  repeated string select = 2;
+  string from = 3;
+  optional string where = 4;
+  // The handler's binds, in the order the `where` text uses them. v0 admits
+  // `string | number | null` only (`PageBindValue`, `statement.ts:33`); `Value`
+  // is that set plus blobs, which the door has no reason to refuse.
+  repeated Value bind = 5;
+  PageOrder order = 6;
+}
+
+// The keyset cursor. `sort_key` is TEXT even for a numeric sort column, and a
+// NULL sort key collapses to the EMPTY STRING (`statement.ts:77`) — a Rust
+// reader that skips that collapse produces cursors v0's own fixtures do not
+// reproduce.
+message PageCursor {
+  string sort_key = 1;
+  string pk = 2;
+}
+
+message PageRequest {
+  PageQuery query = 1;
+  // REQUIRED, and validated `> 0` by the reader rather than defaulted. Proto3
+  // cannot express "required", so the validation is the contract and
+  // `crates/protocol` refuses a zero with a typed error rather than serving an
+  // unbounded read. v0 clamps at `MAX_PAGE_ROWS = 500`, a ceiling that clamps
+  // and does not refuse (`window.ts:78`).
+  uint32 limit = 2;
+  optional PageCursor after = 3;
+}
+
+message Page {
+  // One entry per row, in the order the query named in `select`.
+  repeated Row rows = 1;
+  // ABSENT when the rows ended. Never a `truncated` flag and never a cursor
+  // that points past the end (`window.ts:59`).
+  optional PageCursor next = 2;
+}
+
+// One row of a page: the values of `PageQuery.select`, positionally. Positional
+// rather than a map because the caller named the columns in the request and a
+// per-row map would repeat every column name once per row.
+message Row {
+  repeated Value values = 1;
+}

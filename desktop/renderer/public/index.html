@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      The shell document is loaded from a `file://` URL, so every asset path is
+      relative. The CSP is the one the renderer runs under: `centraid:` is
+      listed for media and images because that is the only way a blob's bytes
+      reach a `<video>` or an `<img>`, and `default-src 'self'` keeps everything
+      else out. No `connect-src` for http(s): the renderer has no network at
+      all — main holds the only door.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' centraid: data:; media-src 'self' centraid:; connect-src 'self' centraid:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Centraid</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

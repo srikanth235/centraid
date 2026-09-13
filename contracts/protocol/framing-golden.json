@@ -1,0 +1,72 @@
+{
+  "alpns": {
+    "pair": {
+      "base64": "Y2VudHJhaWQvdjEvcGFpcg==",
+      "utf8": "centraid/v1/pair"
+    },
+    "peer": {
+      "base64": "Y2VudHJhaWQvdjEvcGVlcg==",
+      "utf8": "centraid/v1/peer"
+    },
+    "seat": {
+      "base64": "Y2VudHJhaWQvdjEvc2VhdA==",
+      "utf8": "centraid/v1/seat"
+    }
+  },
+  "caps": {
+    "chunkBytes": 65536,
+    "maxFrameBytes": 262144,
+    "prefixBytes": 4
+  },
+  "framing": "u32BE(len) || bytes",
+  "schema": "centraid-protocol-framing/1",
+  "vectors": [
+    {
+      "bodyBytes": 42,
+      "frameBase64": "AAAAKhIoCiYIARABGg0xLjAuMC1maXh0dXJlIgdyZXBsaWNhIghjb21tYW5kcw==",
+      "name": "helloRequest",
+      "type": "centraid.core.v1.Envelope"
+    },
+    {
+      "bodyBytes": 42,
+      "frameBase64": "AAAAKhooCiYIARABGg0xLjAuMC1maXh0dXJlIgdyZXBsaWNhIghjb21tYW5kcw==",
+      "name": "helloResponse",
+      "type": "centraid.core.v1.Envelope"
+    },
+    {
+      "bodyBytes": 14,
+      "frameBase64": "AAAADhoMEgoIBBADGAEgASgB",
+      "name": "upgradeRequiredResponse",
+      "type": "centraid.core.v1.Envelope"
+    },
+    {
+      "bodyBytes": 28,
+      "frameBase64": "AAAAHAgBEhgSFgoRCg1lcG9jaF9maXh0dXJlEAIQ6Ac=",
+      "name": "logRequest",
+      "type": "centraid.core.v1.Envelope"
+    },
+    {
+      "bodyBytes": 133,
+      "frameBase64": "AAAAhQgBGoABIn4KDXZhdWx0X2ZpeHR1cmUSDWVwb2NoX2ZpeHR1cmUYBDADOANKWAgDEAIYBCoNdGFsbHlfZXhwZW5zZTABOgkKBxIFZXhwXzFCEQoPCgV0aXRsZRIGEgRNaWxrYgdnYXRld2F5ahgyMDI2LTAxLTAxVDAwOjAwOjAwLjAwMFo=",
+      "name": "logPageResponse",
+      "type": "centraid.core.v1.Envelope"
+    },
+    {
+      "bodyBytes": 4,
+      "frameBase64": "AAAABAgBKgA=",
+      "name": "cancel",
+      "type": "centraid.core.v1.Envelope"
+    },
+    {
+      "bodyBytes": 91,
+      "frameBase64": "AAAAWwgCElc6VQoQq6urq6urq6urq6urq6urqxILdGt0X2ZpeHR1cmUaDUZpeHR1cmUgUGhvbmUiA2lvcyogzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc0=",
+      "name": "pairRequest",
+      "type": "centraid.core.v1.Envelope"
+    }
+  ],
+  "versionWindow": {
+    "minSupported": 1,
+    "schemaVersion": 1,
+    "windowMinors": 3
+  }
+}

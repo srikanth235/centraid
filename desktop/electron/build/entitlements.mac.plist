@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  RE-DERIVED, not inherited (#1020 wave 3 lane F, D-1020-F7).
+
+  v0's file grants five entitlements. Two of them are gone here and the reason
+  for each is a property of this product rather than a tidy-up:
+
+    * `com.apple.security.network.server` — REMOVED. That entitlement is what a
+      LISTENING process needs, and #1020 rules that this product has none: the
+      seat's only door is a Unix domain socket, and `cargo xtask gate`'s
+      `no-listening-socket` rule holds the claim in code. Keeping it would have
+      granted the app a capability nothing in it uses.
+    * `com.apple.security.cs.disable-library-validation` — REMOVED. That is what
+      loading an unsigned dylib into this process needs. The seat is a SEPARATE
+      BINARY spawned as a child, not a library, so nothing unsigned is ever
+      loaded here. (If a future build links the core as a dylib instead, this
+      entitlement comes back with that change and not before.)
+
+  The three that remain are Chromium's, not ours: V8 needs JIT and the
+  writable-executable pages that go with it, and `network.client` is what the
+  renderer's own fetches and iroh's UDP need.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.network.client</key>
+  <true/>
+</dict>
+</plist>

@@ -22,4 +22,6 @@ Read the matching trap before working near its area; each one was paid for once.
 | [generated-manifest-untracked-output.md](generated-manifest-untracked-output.md) | The blueprint manifest generator reads the directory, so untracked build output lands in a committed manifest |
 | [server-dist-resolution.md](server-dist-resolution.md) | `@centraid/server/*` self-imports resolve to `dist`; rebuild before trusting a `serve()`-booting test |
 | [file-uri-database-locations.md](file-uri-database-locations.md) | A SQLite directory passed to expo-sqlite as a PATH opens `Application%20Support` — a second, empty database |
+| [shared-cargo-target.md](shared-cargo-target.md) | Two worktrees on one `CARGO_TARGET_DIR`: a build script's `OUT_DIR` is keyed by package identity, and a gate verdict is then worthless |
+| [serde-json-preserve-order.md](serde-json-preserve-order.md) | A `serde_json::Value`'s printed text is not canonical — `preserve_order` unifies across a build, so one crate's feature decides another crate's sort |
 | [expression-index-spelling.md](expression-index-spelling.md) | **Superseded (#996 W5)** — the order/census expression indexes went with the shaped store; kept because frozen history cites it |

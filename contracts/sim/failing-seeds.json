@@ -1,0 +1,52 @@
+{
+  "schema": "centraid-sim-failing-seeds/1",
+  "$note": "EVERY SEED THAT EVER FAILED, with the bug it found and the change that fixed it (#1020, D-1020-D2-4). `crates/sim/tests/recorded_seeds.rs` replays each one and must pass — this is the issue's \"a recorded failing seed from wave 2 stays green\". A seed is never removed: a bug that came back would come back on the seed that found it, and deleting the entry is the one way to lose that.",
+  "$whyTheScheduleIsRecordedToo": "A seed only names a schedule through the generator, and the generator will change — a new fault kind, a different range. So each entry carries the schedule's JSON as it was when the seed failed, and the replay asserts the generator still produces it. When a generator change legitimately moves a schedule, the entry is RE-RECORDED with a note saying so, and the old one stays above it: that is a supersession, not a deletion.",
+  "$commitIds": "Named by commit SUBJECT rather than sha, because these commits are rebased onto the umbrella before they land and a sha recorded here would be the pre-rebase one. The receipt section for wave 2 lane D2 carries the post-rebase ids.",
+  "seeds": [
+    {
+      "seed": 0,
+      "foundAt": "2026-09-12",
+      "crate": "crates/api-proto + crates/seat",
+      "bug": "An `executed` answer carrying neither a commit seq nor an answered-version set parked the intent at `awaiting-change` FOREVER. `settle_at_commit_seq` could not match it (its `commit_seq` was NULL) and `settle_answered_intents` skipped it (its version set was empty), so the optimistic overlay stayed painted on every screen for the life of the seat. The root cause was that `centraid.core.v1.CommandOutcome` carried no `commit_seq` field at all, while `crates/vault`'s own Rust `CommandOutcome` had carried one all along — the wire dropped the one number a seat settles against.",
+      "howItPresented": "Invariant 2 (`outbox-drained-or-terminal`) failed on every seed with every intent reported `still awaiting-change at rest`. Convergence itself PASSED, which is what made it a liveness bug rather than a correctness one — the rows arrived and the paint never came off.",
+      "fixedIn": [
+        "fix(api-proto): CommandOutcome carries the commit its effect landed in (#1020)"
+      ],
+      "fixShape": "Added `optional uint64 commit_seq = 7` to `CommandOutcome` (a fresh field number, so not a `buf breaking` violation); `crates/core`'s `api::invoke` populates it from D1's outcome; `crates/seat`'s settlement now REFUSES an `executed` answer with neither a commit seq nor a version set, rather than parking it where nothing can reach it.",
+      "regressionTest": "crates/seat/src/settlement.rs::an_executed_answer_with_neither_a_commit_seq_nor_versions_is_refused",
+      "schedule": {
+        "seed": 0,
+        "seats": 3,
+        "passes": 8,
+        "faults": [],
+        "workloads": []
+      },
+      "$scheduleNote": "Recorded as the seed and the shape rather than the full generated body: this bug reproduced on EVERY seed, so the schedule is not what identifies it. Seed 0 is named because it is the first one the sweep runs and therefore the one a developer sees. `recorded_seeds.rs` replays the seed and asserts the invariants, which is the claim that matters here.",
+      "replay": "invariants-only"
+    },
+    {
+      "seed": 3,
+      "foundAt": "2026-09-12",
+      "crate": "crates/core",
+      "bug": "`Core::open` had no way to be given a clock, so it used the system clock — and a gateway on the real wall clock is not reproducible. Two runs of one seed produced byte-identical ROWS (same ids, same values, same counts) and different `created_at` / `updated_at` / `occurred_at` / `executed_at` stamps, and the `access_receipt.hash` that covers those stamps then differed too.",
+      "howItPresented": "`a_seed_run_twice_reaches_the_same_state` failed on seed 3 while every invariant passed on both runs. A seed that cannot be replayed byte for byte is a seed that cannot be RECORDED, so this bug was blocking this very file.",
+      "fixedIn": [
+        "fix(api-proto): CommandOutcome carries the commit its effect landed in (#1020)"
+      ],
+      "$fixedInNote": "The same commit as seed 0's: both fixes were in flight when the sweep was re-run, and splitting them afterwards would have meant a commit whose tests never ran together. The `fixShape` below is what to look for.",
+      "fixShape": "`CoreConfig` gained `clock` and `ids`, with `with_clock(..)` to set both; `Core::open` decides create-versus-open by the file's existence so the boxed clock moves exactly once (a `Box<dyn Clock>` is not clonable, and rightly — a `FixedClock` a test advances must be one clock and not two). The simulation's gateway host now opens on `FixedClock::frozen()` and `SeededIds::new(\"sim-<seed>\")`.",
+      "regressionTest": "crates/sim/tests/seeds.rs::a_seed_run_twice_reaches_the_same_state",
+      "schedule": {
+        "seed": 3,
+        "seats": 1,
+        "passes": 6,
+        "faults": [],
+        "workloads": []
+      },
+      "$scheduleNote": "As for seed 0: the determinism bug was schedule-independent, so the seed rather than the shape is what is recorded.",
+      "replay": "determinism"
+    }
+  ],
+  "$harnessFindings": "Two further findings were the HARNESS's rather than the product's, and are recorded here because each one taught the product something that is now documented in it: (1) the seats quiesced independently, so a seat gave up just before another seat's last write landed — the fix is `crates/sim`'s shared quiescence barrier, and the product lesson is that `PassReport::behind` is a DISPLAY number meaning `as of the last page fetched`, now said in those words on the field; (2) faults were repaired only after the clients finished, which made the convergence claim `converges unless partitioned`. Neither is a recorded seed, because neither is a bug a replay would catch."
+}

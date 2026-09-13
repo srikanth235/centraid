@@ -6,6 +6,8 @@ Centraid is a personal, local-first **superapp**: one shell wrapping many first-
 
 [Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md) · [Contributing](CONTRIBUTING.md)
 
+> **Two trees, one repository.** What ships today is **v0**, the TypeScript gateway described below. **v1** — one Rust core running as either a gateway or a seat, a Kotlin Multiplatform mobile shell with native views, and an Electron desktop seat over a sidecar — is being built alongside it under [#1020](https://github.com/srikanth235/centraid/issues/1020), with v0 pinned as its read-only oracle until wave 6 deletes it. [ARCHITECTURE.md](ARCHITECTURE.md#two-trees-one-repository-1020) is the map; the v1 commands are [below](#build--check-v1).
+
 ## Maintainer and support (F4)
 
 Centraid is **solo-maintained**. Coding agents do much of the implementation; review and release confidence are the scarce resources.
@@ -83,6 +85,20 @@ The PWA connects with only a pairing ticket over relay-only Iroh/WASM, so a gate
 Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault → first app → phone → always-on, in one page.
 
 ## Layout
+
+### v1 (#1020)
+
+| Path | What it is |
+| --- | --- |
+| `crates/` | The Rust core. One crate family, two roles — gateway and seat — plus one crate per app, the five-symbol C ABI, the protobuf schema workspace, the iroh endpoint, the deterministic simulation and the `xtask` gate. The table with a line per crate is in [ARCHITECTURE.md](ARCHITECTURE.md#the-crates). |
+| `contracts/` | The neutral layer both trees read: the frozen golden vault, the DDL, the v0 registries, the baseline migration, one generated parity bundle per app, the screen fixtures, the desktop socket catalogue, and the down-only ledgers. |
+| `mobile/` | The KMP shared module over the C ABI, the Jetpack Compose shell, the SwiftUI shell, and the Maestro flows. |
+| `desktop/` | The Electron seat: one window, one `centraid seat` child, one mode-0600 local socket. |
+| `extension/` | The MV3 Companion over native messaging to the `centraid` binary. No WASM, no iroh, no network of its own. |
+| `design/`, `copy/` | Emitted artifacts — the native theme and one copy leaf per app — written by one command and gated against drift. |
+| `deploy/` | The container image, the OS service units and the VPS installer. |
+
+### v0 — the pinned oracle, retiring in wave 6
 
 | Path | What it is |
 | --- | --- |
@@ -199,7 +215,51 @@ docker run --rm -p 8787:8787 \
 - **Tunnel:** the image **builds the native iroh relay** (`packages/tunnel/native`) into `centraid-tunnel-native.<platform>-<arch>.node`. Remote devices dial over QUIC; Docker sets `CENTRAID_REQUIRE_NATIVE_TUNNEL=1` so a missing cargo toolchain fails the image build.
 - **Smoke:** path-filtered CI builds the image and probes it with a mounted `/data` (`scripts/gateway-package/smoke.mjs --base-url …`). Host-side: `bun run gateway:package:smoke`.
 
-## Build / check
+## Build / check (v1)
+
+The v1 tree is gated by **one command**, and it is the only entrypoint CI runs for it:
+
+```sh
+cargo xtask gate --profile local      # the edit-run loop, warm, under 2 minutes
+cargo xtask gate --profile pr         # what every pull request satisfies
+cargo xtask gate --profile nightly    # pr + the v0 oracle suite + the device lanes
+cargo xtask gate --profile release    # nightly + the restore drill + the VPS smoke
+cargo xtask gate --profile mobile-jvm # the Kotlin JVM suites and the generated-artifact drift check
+cargo xtask rules                     # the structural rules alone
+cargo xtask repo-root                 # which tree the path-based rules will scan
+cargo xtask measure --write           # the edit-run loop, into the compile-time ledger
+```
+
+Budgets and what each profile proves: [TESTING.md](TESTING.md#the-v1-gate-profiles-1020) and [docs/toolchain.md](docs/toolchain.md#v1-cargo-xtask-gate-1020). **Give every worktree its own `CARGO_TARGET_DIR`** — sharing one silently hands generated Rust between them ([docs/traps/shared-cargo-target.md](docs/traps/shared-cargo-target.md)).
+
+The product, as one binary:
+
+```sh
+cargo run -p centraid -- gateway --data-dir ./gw-data --print-qr   # the vault's authority + a pair QR
+cargo run -p centraid -- seat pair "<ticket>"                      # enrol this device
+cargo run -p centraid -- seat --data-dir ./seat-data               # a full replica
+cargo run -p centraid -- doctor --data-dir ./gw-data --json        # read-only, lock-free, safe against a serving gateway
+cargo run -p centraid -- backup now --data-dir ./gw-data
+cargo run -p centraid -- recover --kit kit.json --password-file pw --data-dir ./restored
+cargo run -p centraid -- gateway install --dry-run                 # writes a unit; never enables it
+```
+
+The full verb table, with what each one's state is in this build, is [`crates/centraid/README.md`](crates/centraid/README.md#subcommands).
+
+The shells:
+
+```sh
+cd mobile && ./gradlew mobileJvm                    # the shared module's JVM suites + the drift check
+cd mobile && ANDROID_HOME=… ./gradlew -Pcentraid.android=true :androidApp:assembleDebug
+cd desktop && npm ci && npm run build && npm test   # the Electron seat; e2e needs a display (xvfb-run on Linux)
+cd extension && npm ci && npm run lint && npm run package
+```
+
+iOS needs an Apple toolchain and is an owner hand-off — the exact commands are in [`mobile/README.md`](mobile/README.md) and in [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md).
+
+## Build / check (v0 — retiring)
+
+These are v0's commands. Since wave 1 of [#1020](https://github.com/srikanth235/centraid/issues/1020) they no longer run on pull requests — only the `contracts/` oracle suite runs against the pinned tree, nightly — and they retire with the tree in wave 6.
 
 Turborepo + Bun. **Before every push**, run the early PR gates locally so CI does not burn minutes on format/lint/type errors:
 

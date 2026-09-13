@@ -1,0 +1,603 @@
+// Screen states and events — SHELL-INTERNAL, free to change every release
+// (#1020, D-1020-C4, D-1020-E3; the issue's *One protobuf schema workspace*).
+//
+// This package's compatibility promise is deliberately weaker than
+// `centraid.core.v1`'s: `buf breaking` checks it against the PR base only, not
+// against released tags, because the only consumers are the KMP shared module,
+// SwiftUI and Compose — all shipped in one artifact with the core that produces
+// these messages. `centraid.core.v1` is the gateway's promise to seats that
+// update on their own schedule; this is not.
+//
+// Wave 2 landed the envelope alone as a placeholder. Wave 3 lane E filled it
+// with the three screens — **Tally list, Photos grid, Notes editor** — and
+// `SeatState`. Everything is in ONE FILE (D-1020-E3a): `crates/api-proto`'s
+// `build.rs` carries a NAMED list of every `.proto` and `tests/tree.rs` asserts
+// the list and the directory agree, and both belong to lane C. One file keeps
+// this change inside the screen package's own ownership boundary, which for a
+// shell-internal package costs nothing.
+//
+// Open question 10 decides after wave 3 whether screen contracts stay protobuf
+// or become Kotlin sealed classes plus SKIE, on the exit criterion written into
+// the issue (lines per screen, fixture disagreements, p95 state delivery). If
+// that decision goes to SKIE, THIS FILE is what goes away; nothing in
+// `centraid.core.v1` moves. The line counts criterion (a) needs are in the
+// receipt, measured against hand-written Kotlin data classes for the same
+// three screens.
+//
+// ## Four laws every message here keeps
+//
+// 1. **A failed read is not an empty list.** Three states, never two:
+//    `loading`, a `ReadFailure`, or data. Kotlin's nullable and Rust's `Result`
+//    each collapse two of them, so the oneof spells all three out. v0 pins the
+//    same law from three directions — `tally-store.test.ts`, the
+//    `deniedPayload` contract, and "a refused read and a seat with no copy yet
+//    are different screens".
+// 2. **A band destination is a parameter, not a screen.** `PhotosGridState`
+//    carries a destination; there is no second message per destination. And
+//    `more` is a sheet, never a destination
+//    (`apps/mobile/src/navigation.ts:19-24`).
+// 3. **A discriminated union, not a bag of optionals.** A photo state view is a
+//    oneof, not `{mode, party_id?, person_name?}` (`navigation.ts:43-46`).
+// 4. **An OS permission is a state, not a route.** "No `PhotoPermission` route
+//    (#712): OS grant is a timeline STATE" (`navigation.ts:41-42`).
+
+syntax = "proto3";
+
+package centraid.screen.v1;
+
+// One screen's finished state, ready to render. The UI thread only ever
+// receives a finished state message (#1020 Execution model).
+message ScreenState {
+  // Which screen. `tally.list`, `photos.grid`, `notes.editor`.
+  string screen_id = 1;
+  // The state, encoded by the message this package defines for `screen_id`.
+  // Still `bytes` rather than a oneof: the shell transports a screen state
+  // without knowing which screen it is (one `SharedFlow`, one renderer entry
+  // point), and a oneof here would have to be edited by every screen lane.
+  bytes state = 2;
+  // Monotonic per screen instance, so a renderer can drop a state it has
+  // already surpassed rather than re-rendering out of order.
+  uint64 revision = 3;
+}
+
+// One event the view forwards. Swift and Compose own nothing; they render and
+// forward (#1020 Execution model).
+message ScreenEvent {
+  string screen_id = 1;
+  bytes event = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The read law
+// ---------------------------------------------------------------------------
+
+// WHY A READ PRODUCED NO ROWS, when it produced no rows for a reason.
+//
+// Absent from every screen's `data` case: data is data. This exists only for
+// the middle state, and `kind` is what keeps "refused" and "no copy yet" apart
+// — two different screens in v0's own words, and the distinction a nullable
+// would erase.
+enum ReadFailureKind {
+  READ_FAILURE_KIND_UNSPECIFIED = 0;
+  // The access plane said no. Its sentence, never its predicate.
+  READ_FAILURE_KIND_REFUSED = 1;
+  // This seat has no copy of these rows yet. A first sync, not a refusal — and
+  // the screen that says so is not the screen that says "you cannot see this".
+  READ_FAILURE_KIND_NO_COPY_YET = 2;
+  // The core answered, and could not reach what it needed: a gateway a thin
+  // seat cannot dial.
+  READ_FAILURE_KIND_UNAVAILABLE = 3;
+  // The device is out of disk and the feed is PARKED: the cursor and the rows
+  // stay, the retry cadence stops, and freeing space resumes from the durable
+  // cursor (`docs/mobile-offline.md:238`). Centraid never evicts canonical rows
+  // or queued writes to manufacture space, so this is a state and not a
+  // cleanup.
+  READ_FAILURE_KIND_LOW_DISK_PARKED = 4;
+  // The core was restarted deliberately after a panic poisoned its handle
+  // (`crates/core-ffi/CONTRACT.md` clause 9).
+  READ_FAILURE_KIND_CORE_RESTARTED = 5;
+}
+
+message ReadFailure {
+  ReadFailureKind kind = 1;
+  // AN OWNER-FACING SENTENCE. The author's words for a failed precondition,
+  // the access plane's sentence for a denial. The raw predicate reaches the
+  // audit trail and never a member.
+  string sentence = 2;
+  // Set when there is something a member can do: free space, reach the
+  // gateway, wait for a first sync. Empty when there is not.
+  string remedy = 3;
+}
+
+// The loading state. A message rather than a bare `bool`, so the oneof can hold
+// it as a present value and a decode of an unset oneof stays distinguishable
+// from "loading" — the same reason `centraid.core.v1.NullValue` is a message.
+message Loading {
+  // True on the FIRST load of this screen, false on a refresh over rows the
+  // screen is already showing. A spinner over an empty frame and a spinner over
+  // last night's rows are different screens.
+  bool first_load = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The seat's four sentences
+// ---------------------------------------------------------------------------
+
+// What this seat can say about itself, as the desktop seat says it —
+// coordinated with lane F as `centraid.screen.v1.SeatState`, one message and
+// two shells (`contracts/screens/README.md`). Four facts and no fifth, because
+// each answers a different question a member actually asks.
+message SeatState {
+  Availability availability = 1;
+  Durability durability = 2;
+  PendingWork pending = 3;
+  Connectivity connectivity = 4;
+
+  // "Can I use Centraid right now?"
+  enum Availability {
+    AVAILABILITY_UNSPECIFIED = 0;
+    AVAILABILITY_READY = 1;
+    // A mount is resolving. **Never a placeholder gateway id**: a mount waits
+    // for a real endpoint rather than naming a file after a stand-in, because
+    // the literal `"manual"` once named a file whose path moved the moment a
+    // real endpoint arrived, orphaning every write queued under it
+    // (`docs/mobile-offline.md:249`, census §E seam 2).
+    AVAILABILITY_WAITING_FOR_MOUNT = 2;
+    // The app is locked. Decrypted material is cleared and the replica is
+    // unmounted; a state, not a modal over a live screen.
+    AVAILABILITY_LOCKED = 3;
+    // The core was poisoned and is being restarted.
+    AVAILABILITY_RESTARTING = 4;
+  }
+
+  // "Is my work safe?"
+  enum Durability {
+    DURABILITY_UNSPECIFIED = 0;
+    // Written to the gateway's authority.
+    DURABILITY_AUTHORITATIVE = 1;
+    // Written to this device's outbox and not yet to the gateway.
+    DURABILITY_LOCAL_ONLY = 2;
+    // Out of disk. The feed is parked and nothing is being written.
+    DURABILITY_PARKED_LOW_DISK = 3;
+  }
+
+  // "Is anything still on its way?"
+  message PendingWork {
+    uint32 queued_writes = 1;
+    uint32 queued_uploads = 2;
+    // The oldest queued item's age in seconds, so a screen can say "since
+    // yesterday" rather than a count nobody can weigh.
+    uint64 oldest_queued_seconds = 3;
+  }
+
+  // "Why is it not moving?" — and the answer the platform gave, not one this
+  // shell assumed from a radio.
+  enum Connectivity {
+    CONNECTIVITY_UNSPECIFIED = 0;
+    CONNECTIVITY_ONLINE_UNMETERED = 1;
+    CONNECTIVITY_ONLINE_METERED = 2;
+    CONNECTIVITY_OFFLINE = 3;
+    // The platform refused to say — Background App Refresh is off, or the
+    // permission was never granted. Registration is observable rather than
+    // assumed (`docs/mobile-offline.md:214`).
+    CONNECTIVITY_UNKNOWN_PLATFORM_REFUSED = 4;
+  }
+}
+
+// A money amount, as the vault holds it: minor units and a currency
+// (`tally_expense.amount_minor` + `currency`).
+//
+// **NEVER A FLOAT AND NEVER A PRE-FORMATTED STRING.** v0's formatter divides
+// minor units by 100 unconditionally and calls
+// `new Intl.NumberFormat(undefined, …)` — the HOST's locale — so the same vault
+// renders differently on two devices (`packages/design/src/format.ts:38`,
+// `:49`; census §E8). A Kotlin or Swift port needs the minor-unit exponent for
+// the currency and an explicit locale FROM THE VAULT, which is why both travel
+// with the amount.
+message Money {
+  int64 minor = 1;
+  // ISO 4217, three characters.
+  string currency = 2;
+  // The currency's minor-unit exponent: 2 for USD, 0 for JPY, 3 for BHD. From
+  // the kit's table through the core, never guessed and never assumed to be 2.
+  uint32 exponent = 3;
+  // The locale the vault says to render in — BCP 47. Never the device's.
+  string locale = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Tally list
+// ---------------------------------------------------------------------------
+
+message TallyListState {
+  SeatState seat = 1;
+  // WHICH BAND, as a parameter (law 2).
+  Destination destination = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    TallyListData data = 5;
+  }
+  // The pending-write overlay: expense ids this device has written and the
+  // gateway has not confirmed. On the STATE and not on the rows, because an
+  // overlay over a row the screen has not loaded yet still has to be shown once
+  // it arrives.
+  repeated string pending_expense_ids = 6;
+  // The one verb a seat WITHHOLDS rather than queueing offline:
+  // `materialize-recurring-expense`, whose occurrence id is minted by the
+  // canonical engine (`docs/mobile-offline.md:257`). True when the screen
+  // should say so rather than offering it.
+  bool recurring_materialisation_withheld = 7;
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_ACTIVITY = 1;
+    DESTINATION_BALANCES = 2;
+    DESTINATION_GROUPS = 3;
+  }
+}
+
+message TallyListData {
+  repeated TallyRow rows = 1;
+  // ABSENT when the rows ended. Never a `truncated` flag and never a cursor
+  // that points past the end — the keyset rule `centraid.core.v1.Page` states.
+  optional string next_cursor = 2;
+  // The balance across the destination, when the destination has one.
+  optional Money net_balance = 3;
+}
+
+message TallyRow {
+  string expense_id = 1;
+  string description = 2;
+  Money amount = 3;
+  // Names ride along the row so an app bar and a list line need not wait a
+  // second read (`navigation.ts:63-69`).
+  string group_name = 4;
+  string payer_name = 5;
+  // RFC 3339, in the VAULT's zone and never the host's (R-1020-33).
+  string occurred_at = 6;
+  bool settled = 7;
+}
+
+message TallyListEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    NextPageRequested next_page = 3;
+    DestinationChanged destination = 4;
+    DataArrived data = 5;
+    ReadRefused refused = 6;
+    RowsChanged rows_changed = 7;
+    SeatChanged seat_changed = 8;
+  }
+
+  message Opened {}
+
+  message Refreshed {}
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DestinationChanged {
+    TallyListState.Destination destination = 1;
+  }
+
+  message DataArrived {
+    TallyListData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  // A change event touched rows this screen is showing.
+  message RowsChanged {
+    repeated string expense_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Photos grid
+// ---------------------------------------------------------------------------
+
+// THE OS GRANT, AS A STATE (law 4). No route, no modal-as-a-screen: the grid
+// renders a different thing under each of these, and every one of them is a
+// place a member can be.
+enum MediaPermission {
+  MEDIA_PERMISSION_UNSPECIFIED = 0;
+  // Not asked yet. Distinct from denied: one has a button, the other has a
+  // trip to Settings.
+  MEDIA_PERMISSION_NOT_ASKED = 1;
+  MEDIA_PERMISSION_GRANTED = 2;
+  // iOS's limited selection. The grid shows what was selected and says so — it
+  // is not an empty library and it is not a denial.
+  MEDIA_PERMISSION_LIMITED = 3;
+  MEDIA_PERMISSION_DENIED = 4;
+  // A device policy refuses, and no button in this app can change it.
+  MEDIA_PERMISSION_RESTRICTED = 5;
+}
+
+message PhotosGridState {
+  SeatState seat = 1;
+  Destination destination = 2;
+  MediaPermission permission = 3;
+  oneof content {
+    Loading loading = 4;
+    ReadFailure failure = 5;
+    PhotosGridData data = 6;
+  }
+  // The camera-roll backup's own state. On the grid because that is where a
+  // member sees it, and a message because "backing up" is several facts.
+  BackupState backup = 7;
+  // WHICH SHEET IS OPEN, if one is. `more` is a sheet and never a destination,
+  // so it cannot be a `Destination` value.
+  Sheet sheet = 8;
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_LIBRARY = 1;
+    DESTINATION_COLLECTIONS = 2;
+    DESTINATION_SEARCH = 3;
+  }
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_MORE = 2;
+    SHEET_BACKUP_DETAIL = 3;
+  }
+}
+
+message PhotosGridData {
+  repeated PhotoCell cells = 1;
+  optional string next_cursor = 2;
+  // TWO DIFFERENT EMPTY-CELL SENTENCES (`docs/mobile-offline.md:224`): no
+  // thumbnail pack at all, versus these particular thumbnails not being in one.
+  // A single "no image" would make a member who has no pack and a member whose
+  // pack has evicted these look at the same screen.
+  bool thumbnail_pack_absent = 3;
+}
+
+message PhotoCell {
+  string asset_id = 1;
+  // The thumbnail's local path, when the pack has it. Absent is a real answer,
+  // and `thumbnail_pack_absent` says which kind of absent.
+  optional string thumbnail_path = 2;
+  // RFC 3339 plus the capture-local UTC offset in minutes, both, because a
+  // photo's day is its capture day and not the reader's
+  // (`media_asset.captured_at` and its offset column).
+  string captured_at = 3;
+  int32 captured_utc_offset_minutes = 4;
+  Kind kind = 5;
+  bool favorite = 6;
+  // A Live Photo's still and its paired movie share one capture group; the grid
+  // shows one cell (`apps/mobile/NATIVE_V0.md:11-19`).
+  optional string capture_group_id = 7;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_PHOTO = 1;
+    KIND_VIDEO = 2;
+    KIND_AUDIO = 3;
+    KIND_SCAN = 4;
+  }
+}
+
+// A photo state view: a DISCRIMINATED UNION and not a bag of optionals
+// (law 3, `navigation.ts:43-46`).
+message PhotoStateView {
+  oneof view {
+    Mode mode = 1;
+    Person person = 2;
+  }
+
+  message Mode {
+    Kind kind = 1;
+
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      KIND_FAVORITES = 1;
+      KIND_ARCHIVE = 2;
+      KIND_TRASH = 3;
+      KIND_VIDEOS = 4;
+    }
+  }
+
+  message Person {
+    string party_id = 1;
+    // The name rides along, so the app bar need not wait a replica round trip.
+    string person_name = 2;
+  }
+}
+
+// The camera-roll backup, as a state.
+message BackupState {
+  Phase phase = 1;
+  uint32 assets_remaining = 2;
+  uint32 assets_transferred_this_session = 3;
+  uint64 bytes_transferred_this_session = 4;
+  // WHICH TRANSPORT carried them. The iOS background-transfer experiment
+  // (`mobile/maestro/ios-transfer-experiment.md`) decides which of these the
+  // product ships, and until it has run this field is what a diagnostics screen
+  // reports rather than a claim in a document.
+  Transport transport = 5;
+  // Why it is not running, when it is not. Never inferred from a radio: the
+  // pass asks the platform for the real answer.
+  string paused_reason = 6;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_IDLE = 1;
+    PHASE_ENUMERATING = 2;
+    PHASE_TRANSFERRING = 3;
+    // Wi-Fi and charger rules are queried BEFORE EACH background item, not
+    // once per pass (`NATIVE_V0.md:11-19`).
+    PHASE_WAITING_FOR_POWER = 4;
+    PHASE_WAITING_FOR_UNMETERED = 5;
+    PHASE_PARKED_LOW_DISK = 6;
+    PHASE_DONE = 7;
+  }
+
+  enum Transport {
+    TRANSPORT_UNSPECIFIED = 0;
+    TRANSPORT_IROH_BLOBS = 1;
+    // The HTTPS blob door, behind the `blob-door` feature — the one exception
+    // to `no-listening-socket`.
+    TRANSPORT_HTTPS_BLOB_DOOR = 2;
+  }
+}
+
+message PhotosGridEvent {
+  oneof kind {
+    Opened opened = 1;
+    DestinationChanged destination = 2;
+    NextPageRequested next_page = 3;
+    DataArrived data = 4;
+    ReadRefused refused = 5;
+    PermissionChanged permission = 6;
+    PermissionRequested permission_requested = 7;
+    StateViewOpened state_view = 8;
+    SheetChanged sheet = 9;
+    BackupChanged backup = 10;
+    SeatChanged seat_changed = 11;
+  }
+
+  message Opened {}
+
+  message DestinationChanged {
+    PhotosGridState.Destination destination = 1;
+  }
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    PhotosGridData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message PermissionChanged {
+    MediaPermission permission = 1;
+  }
+
+  message PermissionRequested {}
+
+  message StateViewOpened {
+    PhotoStateView view = 1;
+  }
+
+  message SheetChanged {
+    PhotosGridState.Sheet sheet = 1;
+  }
+
+  message BackupChanged {
+    BackupState backup = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notes editor
+// ---------------------------------------------------------------------------
+
+message NotesEditorState {
+  SeatState seat = 1;
+  string note_id = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    NoteDraft draft = 5;
+  }
+  // THE SAVE'S OWN STATE. Separate from `content`, because a save that failed
+  // over a body the member can still see is not a failed READ and must not
+  // replace the editor with an error.
+  SaveState save = 6;
+
+  enum SaveState {
+    SAVE_STATE_UNSPECIFIED = 0;
+    SAVE_STATE_CLEAN = 1;
+    SAVE_STATE_DIRTY = 2;
+    SAVE_STATE_SAVING = 3;
+    // Written to this device's outbox; the gateway has not confirmed.
+    SAVE_STATE_QUEUED = 4;
+    SAVE_STATE_REFUSED = 5;
+  }
+}
+
+message NoteDraft {
+  string title = 1;
+  string body = 2;
+  Format format = 3;
+  bool pinned = 4;
+  // The revision this draft was read from, so a save can be concurrency-checked
+  // rather than last-write-wins.
+  string base_revision_id = 5;
+  // Set when the save was refused; the sentence a member reads.
+  optional ReadFailure save_failure = 6;
+
+  enum Format {
+    FORMAT_UNSPECIFIED = 0;
+    FORMAT_MARKDOWN = 1;
+    FORMAT_HTML = 2;
+    FORMAT_PLAIN = 3;
+  }
+}
+
+message NotesEditorEvent {
+  oneof kind {
+    Opened opened = 1;
+    DataArrived data = 2;
+    ReadRefused refused = 3;
+    TitleEdited title = 4;
+    BodyEdited body = 5;
+    PinToggled pin = 6;
+    SaveRequested save = 7;
+    SaveSettled save_settled = 8;
+    SeatChanged seat_changed = 9;
+  }
+
+  message Opened {
+    string note_id = 1;
+  }
+
+  message DataArrived {
+    NoteDraft draft = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message TitleEdited {
+    string title = 1;
+  }
+
+  message BodyEdited {
+    string body = 1;
+  }
+
+  message PinToggled {}
+
+  message SaveRequested {}
+
+  message SaveSettled {
+    NotesEditorState.SaveState outcome = 1;
+    optional ReadFailure failure = 2;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+}

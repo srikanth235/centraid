@@ -1,0 +1,86 @@
+// The version window (#1020, D-1020-C6, Compatibility).
+//
+// v0 puts three numbers on the wire (`docs/protocol.md:143-161`): `version` is
+// the product semver and is DISPLAY ONLY — a client must not refuse to connect
+// on it; `protocolVersion` and `minSupportedProtocol` are the window. The rule
+// is symmetric and is copied verbatim:
+//
+//   ok iff peer.schema_version >= local.min_supported
+//        && local.schema_version >= peer.min_supported
+//
+// A gateway older than the seat is therefore allowed exactly when the seat's
+// `min_supported` admits it, which is the case #1020 names explicitly.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// The first message on every stream, both directions.
+message Hello {
+  // The wire schema version of `centraid.core.v1`. An integer, not a semver: a
+  // window is arithmetic and a semver is a comparison nobody agrees on.
+  uint32 schema_version = 1;
+  // The oldest peer this build can speak to.
+  uint32 min_supported = 2;
+  // The product version, for the diagnostics screen. DISPLAY ONLY — refusing a
+  // connection on it is the bug this comment exists to prevent.
+  string product_version = 3;
+  // Required feature flags. A peer that does not offer a capability this build
+  // requires is out of the window even when the numbers agree; v0's one
+  // absent-tolerant pair is `automations` / `connectors`
+  // (`docs/protocol.md:143-161`).
+  repeated string capabilities = 4;
+  // WHAT THIS BUILD IS ([#1020](https://github.com/srikanth235/centraid/issues/1020)
+  // Artifacts, D-1020-G2). A prebuilt core the shell did not compile cannot be
+  // checked by construction, and a stale core is the worst failure shape in the
+  // design: it starts, it answers, and it answers from a schema the shell
+  // stopped speaking. A fresh field number, which `buf breaking`'s FILE
+  // category admits because an older peer ignores it.
+  ArtifactIdentity identity = 5;
+}
+
+// The three facts every artifact carries, baked in at build time by
+// `crates/core`'s `build.rs`. `crates/core::identity` is the one definition;
+// these field names are the contract a shell asserts against.
+message ArtifactIdentity {
+  // The commit. For a human reading a crash report.
+  string git_sha = 1;
+  // `cargo xtask artifact-key`'s output for this triple. THE field a machine
+  // compares: two artifacts with the same digest are the same artifact.
+  string digest = 2;
+  // The vault `user_version` this build writes.
+  int64 schema_version = 3;
+}
+
+// Sent INSTEAD of any other message when the window does not admit the peer.
+// Before any other message, so a seat that is too old never sees a frame it
+// cannot parse (#1020, D-1020-C6).
+message UpgradeRequired {
+  // What this build is.
+  uint32 schema_version = 1;
+  uint32 min_supported = 2;
+  // What the peer said it was, echoed so a support bundle carries both ends.
+  uint32 peer_schema_version = 3;
+  uint32 peer_min_supported = 4;
+  // Which side must move. A seat renders a different sentence for "update this
+  // app" than for "update your gateway".
+  UpgradeSide side = 5;
+}
+
+enum UpgradeSide {
+  UPGRADE_SIDE_UNSPECIFIED = 0;
+  // The peer is below this build's floor: the PEER upgrades.
+  UPGRADE_SIDE_PEER = 1;
+  // This build is below the peer's floor: THIS side upgrades.
+  UPGRADE_SIDE_LOCAL = 2;
+}
+
+// An unknown message type, answered rather than dropped (#1020 Compatibility:
+// "unknown message types are answered with `Unsupported{type}`, never dropped
+// silently").
+message Unsupported {
+  // The fully-qualified proto type name the sender used, e.g.
+  // `centraid.core.v1.LogPage`. Named `type_url` for the shape `google.protobuf.Any`
+  // uses, without depending on `Any`.
+  string type_url = 1;
+}

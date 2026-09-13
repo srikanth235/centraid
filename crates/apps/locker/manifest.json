@@ -1,0 +1,1265 @@
+{
+  "manifestVersion": 1,
+  "id": "locker",
+  "name": "Locker",
+  "description": "Everything, locked up — a personal password manager as a projection of the vault. Logins, cards, secure notes, identities, Wi-Fi and standalone passwords, each an owner-only locker.item. Secrets are sealed vault columns (ciphertext at rest, issue #293): opening an item exercises the app's reveal scope and is receipted per item; secrets never ride a list payload and are never journaled. One-time codes are real RFC-6238 TOTP computed client-side after the seed is read; the password generator runs entirely in the browser. Watchtower flags weak, reused and compromised passwords — weak and reused are derived inside the vault's sealed boundary by locker.watchtower, compromised is a stored breach flag. Favorites are the canonical flags-scheme star, anchored on the locker.item itself — every app stars its OWN rows, so nothing starred elsewhere appears here; tags are free-form. Adding, editing, trashing, restoring, purging and starring all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.3.0",
+  "iconKey": "Lock",
+  "colorKey": "rose",
+  "vault": {
+    "why": "Keeps your passwords, cards and secrets locked up, revealable and restorable.",
+    "scopes": [
+      {
+        "schema": "locker",
+        "table": "item",
+        "verbs": "read"
+      },
+      {
+        "schema": "locker",
+        "table": "item",
+        "verbs": "reveal"
+      },
+      {
+        "schema": "core",
+        "table": "tag",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept_scheme",
+        "verbs": "read"
+      },
+      {
+        "schema": "locker",
+        "table": "add_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "edit_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "trash_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "restore_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "purge_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "star_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "unstar_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "watchtower",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "totp_code",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "item_alias",
+        "verbs": "read"
+      },
+      {
+        "schema": "locker",
+        "table": "item_field",
+        "verbs": "read"
+      },
+      {
+        "schema": "locker",
+        "table": "item_field",
+        "verbs": "reveal"
+      },
+      {
+        "schema": "locker",
+        "table": "item_address",
+        "verbs": "read"
+      },
+      {
+        "schema": "locker",
+        "table": "item_passkey",
+        "verbs": "read"
+      },
+      {
+        "schema": "locker",
+        "table": "item_passkey",
+        "verbs": "reveal"
+      },
+      {
+        "schema": "core",
+        "table": "entity_revision",
+        "verbs": "read",
+        "rowFilter": [
+          {
+            "column": "entity_type",
+            "op": "eq",
+            "value": "locker.item"
+          }
+        ],
+        "fieldMask": [
+          "revision_id",
+          "entity_type",
+          "entity_id",
+          "operation",
+          "snapshot_json",
+          "recorded_at",
+          "undo_until",
+          "undone_at"
+        ]
+      },
+      {
+        "schema": "core",
+        "table": "attachment",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_representation",
+        "verbs": "read"
+      },
+      {
+        "schema": "access",
+        "table": "receipt",
+        "verbs": "read",
+        "rowFilter": [
+          {
+            "column": "object_type",
+            "op": "in",
+            "value": ["locker.item", "locker.auth"]
+          }
+        ]
+      },
+      {
+        "schema": "locker",
+        "table": "archive_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "unarchive_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "duplicate_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "set_field",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "remove_field",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "set_addresses",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "set_passkey",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "clear_passkey",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "counts",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
+        "table": "export",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "attach",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "detach",
+        "verbs": "act"
+      }
+    ]
+  },
+  "actionSideEffect": "vault-write",
+  "actions": [
+    {
+      "name": "add-item",
+      "description": "Save a new item through locker.add_item — any of the fifteen item types. Secret fields not belonging to the chosen type are dropped, never stored; a type that owns no columns of its own arrives as the template fields the vault mints for it.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "login",
+              "card",
+              "note",
+              "identity",
+              "wifi",
+              "password",
+              "ssh_key",
+              "api_credential",
+              "passport",
+              "bank_account",
+              "driving_licence",
+              "software_licence",
+              "crypto_wallet",
+              "membership",
+              "document"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "url_match_policy": {
+            "type": "string",
+            "enum": ["registrable-domain", "exact-host"]
+          },
+          "otp_seed": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "cardholder": {
+            "type": "string"
+          },
+          "card_number": {
+            "type": "string"
+          },
+          "expiry": {
+            "type": "string"
+          },
+          "cvv": {
+            "type": "string"
+          },
+          "brand": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "fullname": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.tag",
+        "locker.item",
+        "locker.item_alias",
+        "locker.item_field"
+      ]
+    },
+    {
+      "name": "edit-item",
+      "description": "Rewrite an item's fields and tags through locker.edit_item. Refuses trashed items.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "url_match_policy": {
+            "type": "string",
+            "enum": ["registrable-domain", "exact-host"]
+          },
+          "otp_seed": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "cardholder": {
+            "type": "string"
+          },
+          "card_number": {
+            "type": "string"
+          },
+          "expiry": {
+            "type": "string"
+          },
+          "cvv": {
+            "type": "string"
+          },
+          "brand": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "fullname": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.tag",
+        "locker.item",
+        "locker.item_alias"
+      ]
+    },
+    {
+      "name": "trash-item",
+      "description": "Move an item to the trash through locker.trash_item; it keeps its star and auto-purges about 30 days later.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item"]
+    },
+    {
+      "name": "restore-item",
+      "description": "Bring an item back from the trash through locker.restore_item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item"]
+    },
+    {
+      "name": "purge-item",
+      "description": "Erase an item for good through locker.purge_item — permanent and irreversible, so it is confirmed.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.tag",
+        "locker.item"
+      ]
+    },
+    {
+      "name": "star-item",
+      "description": "Star an item through locker.star_item — one flags-scheme tag on the item, the same star every other surface reads. Idempotent; refuses trashed items.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
+    },
+    {
+      "name": "unstar-item",
+      "description": "Remove an item's star through locker.unstar_item. Idempotent.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
+    },
+    {
+      "name": "archive-item",
+      "description": "Archive an item through locker.archive_item — keep it forever, out of the lists. Not a trash: no purge date is set and nothing expires.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item"]
+    },
+    {
+      "name": "unarchive-item",
+      "description": "Bring an archived item back into the lists through locker.unarchive_item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item"]
+    },
+    {
+      "name": "duplicate-item",
+      "description": "Clone an item through locker.duplicate_item for a sibling account. Sealed values are copied inside the vault and never round-trip through this device; the copy is titled \"… copy\", is not starred, and does not take the original's connector alias.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.tag",
+        "locker.item",
+        "locker.item_address",
+        "locker.item_field"
+      ]
+    },
+    {
+      "name": "set-field",
+      "description": "Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); a sealed kind stores its value in a sealed vault column, so it is ciphertext at rest and a keyed hash in the journal. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the journal redaction can reach.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "field_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "section": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["text", "sealed", "url", "date", "otp"]
+          },
+          "value": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["item_id", "label", "kind"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item_field"]
+    },
+    {
+      "name": "remove-field",
+      "description": "Delete one owner-defined field from an item through locker.remove_field.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "field_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id", "field_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item_field"]
+    },
+    {
+      "name": "set-addresses",
+      "description": "Replace a login's ADDITIONAL addresses through locker.set_addresses, each with its own match policy — registrable domain or exact host. The item's primary address is unchanged.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "match_policy": {
+                  "type": "string",
+                  "enum": ["registrable-domain", "exact-host"]
+                }
+              },
+              "required": ["url"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["item_id", "addresses"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item_address"]
+    },
+    {
+      "name": "set-passkey",
+      "description": "Store or restate an item's passkey slot through locker.set_passkey: relying-party id, user handle, credential id, algorithm, and sealed private key material. Storage only — this performs no WebAuthn ceremony.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rp_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "user_handle": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "credential_id": {
+            "type": "string"
+          },
+          "algorithm": {
+            "type": "string"
+          },
+          "private_key": {
+            "type": "string"
+          }
+        },
+        "required": ["item_id", "rp_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item_passkey"]
+    },
+    {
+      "name": "clear-passkey",
+      "description": "Remove an item's passkey slot — metadata and sealed key material together — through locker.clear_passkey.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["locker.item_passkey"]
+    },
+    {
+      "name": "export",
+      "description": "Read every item out in the clear through locker.export, so this device can write a plaintext file. This is a mass reveal: it is confirmed, it is receipted as an unseal of every sealed column it touches, it is online-only, and asked for on a device that is not the owner's it parks for their confirmation. Anything that reads the file reads your secrets. With include_history it also unseals the passwords each item was rotated away from, out of the vault's own revision snapshots — the one path on which a previous password is readable at all, since no reveal reaches a revision.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "boolean"
+          },
+          "include_trashed": {
+            "type": "boolean"
+          },
+          "include_history": {
+            "type": "boolean"
+          }
+        },
+        "required": ["confirm"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    }
+  ],
+  "queries": [
+    {
+      "name": "autofill-candidates",
+      "description": "Secret-free live login metadata for Companion origin matching. OTP presence is a boolean; no password or OTP seed is returned.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "autofill-item",
+      "description": "Explicit-gesture, origin-context fill for one login. Reveals password only and returns TOTP as a derivative; the seed never crosses the vault boundary.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "page_origin": {
+            "type": "string",
+            "minLength": 8
+          }
+        },
+        "required": ["item_id", "page_origin"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "fill": {
+            "type": ["object", "null"]
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "items",
+      "description": "A bounded window of non-trashed, non-archived items (caller-sized via limit, default 300, 2,000 at most), newest-updated first, each decorated with its favorite star, free-form tags, a safe subtitle, its connector alias and derived Watchtower status (weak / reused / compromised). `total` is the live count from the vault itself, so the foot line can say \"300 of 312\" without reading the ceiling back to count it. Pass archived:true for the archive shelf. Secrets are NEVER in this payload — passwords, card numbers, CVVs, OTP seeds and note bodies stay out; open a single item to read them.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "authRequired": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "vaultDenied": {
+            "type": "object"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "byType": {
+            "type": "array"
+          },
+          "archivedCount": {
+            "type": "integer"
+          },
+          "trashedCount": {
+            "type": "integer"
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "item",
+      "description": "One item's full decrypted fields for the detail pane — the only query that returns secrets, and only for the single item the owner opened. Carries the item's connector alias, its owner-defined sections and fields, its additional addresses, its passkey slot's metadata, its attachment metadata and its revision history. A sealed custom value and a passkey's key material are reported as PRESENT and never returned. A revision names what changed and when, never what it changed from: the password an item was rotated away from stays sealed in the vault's own snapshot and leaves only through a confirmed export. A type this build does not know reads as a note that still carries its fields.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": ["object", "null"]
+          },
+          "authRequired": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Match items by title, username or url within the bounded window, returning the same secret-free row shape as items. Matching happens server-side over fields the payload never returns.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "watchtower",
+      "description": "The security review: compromised / weak / reused counts plus the needs-attention items (secret-free row shape), derived server-side from the passwords the vault holds.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "compromised": {
+            "type": "integer"
+          },
+          "weak": {
+            "type": "integer"
+          },
+          "reused": {
+            "type": "integer"
+          },
+          "items": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "trash",
+      "description": "Trashed items with their purge dates (secret-free row shape).",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "access",
+      "description": "Locker's access history: every auth, every reveal and every fill, newest first, windowed — a Companion fill carries the page origin it happened on, and a refusal is listed like an allowance. Read from the vault's append-only consent receipts under a grant pinned to Locker's own objects. Online-only: receipts live in the journal, which the browser replica does not carry, and a cached answer would be a list of what this device happened to hold. No receipt has ever carried a secret value, and this adds none.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          },
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "authRequired": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#2F63E6",
+      "options": [
+        {
+          "value": "#2F63E6",
+          "label": "Steel"
+        },
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2FA36B",
+          "label": "Green"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#3AA6B9",
+          "label": "Cyan"
+        }
+      ]
+    }
+  ],
+  "seats": {
+    "byteBearing": true,
+    "originActs": ["autofill"],
+    "disabledOn": [],
+    "northStar": "1password"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
+  }
+}

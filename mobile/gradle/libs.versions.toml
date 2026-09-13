@@ -1,0 +1,63 @@
+# One version catalogue for the mobile tree (#1020, D-1020-E1).
+#
+# Every version the KMP build resolves is here, including the ones only a
+# machine with an Android SDK or an Xcode can use, so `mobile/README.md`'s
+# owner hand-offs name a version rather than "whatever is current".
+
+[versions]
+# CURRENT STABLE, NOT WHAT THE CONTAINER HAPPENED TO HAVE (D-1020-E0-1).
+# The wrapper is Gradle 9.7.1 and the build runs with
+# `org.gradle.warning.mode=fail`, so a deprecated Gradle feature is a red
+# rather than a line in the log. `apps/mobile/android`'s wrapper (9.3.1) is a
+# prebuild output and is not a thing to reuse.
+kotlin = "2.4.20"
+coroutines = "1.11.0"
+# `com.android.kotlin.multiplatform.library` — AGP 9's KMP library plugin.
+# The newest version with no alpha/beta/rc suffix in Google's maven metadata.
+# DECLARED and resolved only when `-Pcentraid.android=true`.
+agp = "9.4.0"
+wire = "7.0.1"
+kotest = "6.2.5"
+turbine = "1.2.1"
+kover = "0.9.9"
+konsist = "0.17.3"
+jna = "5.19.1"
+# Android-only, unresolvable here.
+androidx-activity-compose = "1.12.0"
+androidx-compose-bom = "2025.10.01"
+androidx-core = "1.17.0"
+androidx-lifecycle = "2.9.4"
+androidx-work = "2.10.5"
+roborazzi = "1.53.0"
+robolectric = "4.16"
+
+[libraries]
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+wire-runtime = { module = "com.squareup.wire:wire-runtime", version.ref = "wire" }
+kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
+kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
+androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+wire = { id = "com.squareup.wire", version.ref = "wire" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
+# Gated: see the `agp` note above.
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

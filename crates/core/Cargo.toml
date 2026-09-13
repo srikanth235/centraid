@@ -1,0 +1,41 @@
+[package]
+name = "centraid-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_core"
+path = "src/lib.rs"
+
+[features]
+default = []
+# THE FAULT-INJECTION DOOR (#1020 wave 3, lane E finding 4). Makes a `Command`
+# named `debug.panic` panic inside `Handle::call`, so a shell can prove its own
+# clause-9 poison handling against the REAL library rather than a fake ABI.
+# Never on in a release profile, and it exports nothing: `abi-five-symbols`
+# still counts five.
+debug-fault = []
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-ontology = { path = "../ontology" }
+centraid-protocol = { path = "../protocol" }
+centraid-seat = { path = "../seat" }
+centraid-vault = { path = "../vault" }
+prost.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+flate2.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+
+[[test]]
+name = "call_budget"
+path = "tests/call_budget.rs"

@@ -1,0 +1,47 @@
+[package]
+name = "centraid"
+description = "The one binary: gateway, seat, pair, devices, backup, doctor, recover, export, native-host (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "centraid"
+path = "src/main.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-apps-locker = { path = "../apps/locker" }
+centraid-apps-tally = { path = "../apps/tally" }
+centraid-core = { path = "../core" }
+centraid-net = { path = "../net" }
+centraid-protocol = { path = "../protocol" }
+centraid-seat = { path = "../seat" }
+centraid-assist = { path = "../assist" }
+centraid-automations = { path = "../automations" }
+centraid-vault = { path = "../vault" }
+base64.workspace = true
+clap.workspace = true
+flate2.workspace = true
+prost.workspace = true
+serde = { workspace = true }
+sha2.workspace = true
+thiserror.workspace = true
+serde_json.workspace = true
+# `net` for the seat's Unix socket (and `UnixStream::peer_cred`, which is what
+# lets the peer check happen without `unsafe`); `fs` is not needed — the blob
+# door's waiting read runs on the blocking pool over `std::fs`.
+tokio = { workspace = true, features = ["signal", "net"] }
+tracing.workspace = true
+url.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+# The no-listener test parses the ticket the binary printed, which is the
+# ticket codec's job and not the CLI's.
+centraid-net = { path = "../net" }
+tempfile.workspace = true

@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "vectors": [
+    {
+      "name": "same registrable domain",
+      "stored": "https://login.example.com/account",
+      "page": "https://www.example.com/sign-in?next=/",
+      "policy": "registrable-domain",
+      "match": true
+    },
+    {
+      "name": "different registrable domain",
+      "stored": "https://example.com",
+      "page": "https://example.net",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "suffix confusion",
+      "stored": "https://example.com",
+      "page": "https://example.com.attacker.test",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "public suffix boundary",
+      "stored": "https://accounts.example.co.uk",
+      "page": "https://shop.example.co.uk",
+      "policy": "registrable-domain",
+      "match": true
+    },
+    {
+      "name": "public suffix peers",
+      "stored": "https://one.co.uk",
+      "page": "https://two.co.uk",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "exact host success",
+      "stored": "https://accounts.example.com",
+      "page": "https://accounts.example.com/login",
+      "policy": "exact-host",
+      "match": true
+    },
+    {
+      "name": "exact host rejects sibling",
+      "stored": "https://accounts.example.com",
+      "page": "https://www.example.com",
+      "policy": "exact-host",
+      "match": false
+    },
+    {
+      "name": "path never participates",
+      "stored": "https://example.com/one",
+      "page": "https://example.com/two",
+      "policy": "exact-host",
+      "match": true
+    },
+    {
+      "name": "query never participates",
+      "stored": "https://example.com/?tenant=one",
+      "page": "https://example.com/?tenant=two",
+      "policy": "exact-host",
+      "match": true
+    },
+    {
+      "name": "non-default port differs",
+      "stored": "https://example.com:8443",
+      "page": "https://example.com",
+      "policy": "exact-host",
+      "match": false
+    },
+    {
+      "name": "explicit default port normalizes",
+      "stored": "https://example.com:443",
+      "page": "https://example.com",
+      "policy": "exact-host",
+      "match": true
+    },
+    {
+      "name": "insecure public page",
+      "stored": "https://example.com",
+      "page": "http://example.com",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "localhost development exception",
+      "stored": "http://localhost:3000",
+      "page": "http://localhost:3000/login",
+      "policy": "registrable-domain",
+      "match": true
+    },
+    {
+      "name": "localhost port differs",
+      "stored": "http://localhost:3000",
+      "page": "http://localhost:4000",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "localhost scheme differs",
+      "stored": "https://localhost:3000",
+      "page": "http://localhost:3000",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "ipv4 is exact",
+      "stored": "http://127.0.0.1:3000",
+      "page": "http://127.0.0.1:3000/login",
+      "policy": "registrable-domain",
+      "match": true
+    },
+    {
+      "name": "ipv4 differs",
+      "stored": "https://192.0.2.1",
+      "page": "https://192.0.2.2",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "unicode normalizes",
+      "stored": "https://bücher.example",
+      "page": "https://xn--bcher-kva.example/login",
+      "policy": "exact-host",
+      "match": true
+    },
+    {
+      "name": "invalid stored URL",
+      "stored": "example.com",
+      "page": "https://example.com",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "unsupported scheme",
+      "stored": "https://example.com",
+      "page": "ftp://example.com",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "evil 127 hostname is not loopback",
+      "stored": "https://example.com",
+      "page": "http://127.0.0.1.evil.test",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "evil 127 hostname ineligible as stored",
+      "stored": "http://127.0.0.1.evil.test",
+      "page": "http://127.0.0.1.evil.test",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "127 prefix hostname is not loopback",
+      "stored": "http://127.foo.bar",
+      "page": "http://127.foo.bar",
+      "policy": "exact-host",
+      "match": false
+    },
+    {
+      "name": "real 127.0.0.0/8 loopback still matches",
+      "stored": "http://127.1.2.3:3000",
+      "page": "http://127.1.2.3:3000/login",
+      "policy": "registrable-domain",
+      "match": true
+    }
+  ]
+}

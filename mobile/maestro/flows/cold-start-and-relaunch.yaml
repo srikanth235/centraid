@@ -1,0 +1,23 @@
+# A relaunch RESUMES; it does not re-bootstrap.
+#
+# THE POINT OF THIS FLOW is that killing the app and starting it again shows the
+# same rows without a first-sync screen. The outbox and the log cursor are
+# durable, which is what lets platform timing be opportunistic
+# (`docs/mobile-offline.md:208`) — and a cold start that re-bootstrapped would
+# redownload a vault over cellular.
+appId: dev.centraid
+name: cold-start-and-relaunch
+---
+- launchApp:
+    clearState: true
+- tapOn: "Tally"
+- assertVisible:
+    id: "tally-rows"
+- stopApp
+- launchApp:
+    clearState: false
+- tapOn: "Tally"
+# NOT a first-load spinner: the rows are already there.
+- assertVisible:
+    id: "tally-rows"
+- assertNotVisible: "This device has not copied these yet."

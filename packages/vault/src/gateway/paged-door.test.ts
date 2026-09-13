@@ -250,3 +250,92 @@ describe("the door applies the caller's own decision", () => {
     expect(page.rows.map((row) => row.task_id)).toStrictEqual(["task_001"]);
   });
 });
+
+/*
+ * THE KEYSET OVER A NULLABLE SORT COLUMN (#1020, R-1020-35).
+ *
+ * `(sort, pk) < (?, ?)` is a row value, and SQLite compares a row value with a
+ * NULL operand to NULL — not true — so a row whose sort key is NULL is
+ * excluded from every page after the first. Before the refusal the walk below
+ * returned a short page and a `next` of `undefined`: the rows had "ended", and
+ * nothing said three of them had been dropped.
+ */
+describe("a continuation over a nullable sort column", () => {
+  beforeEach(() => {
+    vault = openOwnerVault();
+  });
+
+  /** `schedule_task.completed_at` is nullable; `task_id` is the primary key. */
+  const byCompletedAt = (descending: boolean) =>
+    ({
+      name: "tasks.logbook",
+      select: "task_id, completed_at",
+      from: "schedule_task",
+      order: { sortColumn: "completed_at", pkColumn: "task_id", descending },
+    }) as const;
+
+  function seedHalfCompleted(): void {
+    seedTasks(6);
+    for (const index of [0, 2, 4])
+      vault.db.vault
+        .prepare(`UPDATE schedule_task SET completed_at = ? WHERE task_id = ?`)
+        .run(
+          `2026-02-0${String(index + 1)}T00:00:00Z`,
+          `task_${String(index).padStart(3, "0")}`
+        );
+  }
+
+  it.each([
+    ["ascending", false],
+    ["descending", true],
+  ])("is refused by name, %s", (_label, descending) => {
+    seedHalfCompleted();
+    const first = vault.gateway.page(vault.owner, byCompletedAt(descending), {
+      limit: 2,
+    });
+    // The FIRST page is served: without a cursor there is no row value, the
+    // ordering is total, and refusing it would hide rows a member can see.
+    expect(first.rows).toHaveLength(2);
+    expect(first.next).toBeDefined();
+    expect(() =>
+      vault.gateway.page(vault.owner, byCompletedAt(descending), {
+        limit: 2,
+        after: first.next!,
+      })
+    ).toThrow(/completed_at, which is nullable/u);
+  });
+
+  it.each([
+    ["a NULL boundary", ""],
+    ["a value boundary", "2026-02-01T00:00:00Z"],
+  ])("is refused whatever the cursor's boundary is, %s", (_label, sortKey) => {
+    seedHalfCompleted();
+    expect(() =>
+      vault.gateway.page(vault.owner, byCompletedAt(false), {
+        limit: 2,
+        after: { sortKey, pk: "task_000" },
+      })
+    ).toThrow(/paged door refuses handler "tasks.logbook"/u);
+  });
+
+  it("accepts a nullable column the handler's own predicate proves", () => {
+    // A trash shelf sorts by `deleted_at` and reads only the rows that have
+    // one. The proof is syntactic and checked where the schema is read, so the
+    // walk below continues rather than being refused for a NULL that the
+    // predicate has already excluded.
+    seedHalfCompleted();
+    const proven = {
+      ...byCompletedAt(false),
+      where: "completed_at IS NOT NULL",
+    } as const;
+    const first = vault.gateway.page(vault.owner, proven, { limit: 2 });
+    expect(first.next).toBeDefined();
+    const second = vault.gateway.page(vault.owner, proven, {
+      limit: 2,
+      after: first.next!,
+    });
+    expect(
+      [...first.rows, ...second.rows].map((row) => row.task_id)
+    ).toStrictEqual(["task_000", "task_002", "task_004"]);
+  });
+});

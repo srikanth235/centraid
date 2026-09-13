@@ -1,0 +1,108 @@
+name: lane-release-extension
+
+# A `release.yml` lane, not an independently-triggered workflow (#557) — the
+# `lane-` prefix marks that.
+#
+# #1020 wave 4 lane extension — this lane packages `extension/` (the v1 MV3
+# Companion over native messaging), where `lane-release-companion.yml` packages
+# `apps/extension` (the v0 oracle, WASM iroh in the service worker). The two
+# coexist until v0 retires; the fan-out row that switches `release.yml` from one
+# to the other is a release-cadence decision and is handed off rather than taken
+# here (`contracts/handoff/extension/release-fanout.md`).
+#
+# ## Why the extension id is the artifact this lane is really about
+#
+# `centraid native-host install --browser chrome --extension-id <id>` REFUSES an
+# empty allowlist: a native-messaging host any extension may drive is a host that
+# can read the vault. So until an id exists there is nothing to put in a host
+# manifest, and a manifest with a placeholder id is a manifest that silently does
+# not work. `contracts/extension/ids.json` is the register, this lane publishes
+# it beside the packages, and the `ids` job fails when a manifest and the register
+# disagree — which is the only way a wrong id gets caught before a member's
+# browser silently cannot reach the app.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      # THE SAME TWO PROGRAMS THE GATE RUNS, so a release cannot ship what a pull
+      # request would have refused.
+      - run: bun run --cwd extension typecheck
+      - run: bun run --cwd extension lint
+      - name: Build the unpacked Companion
+        run: bun run --cwd extension build -- --browser ${{ matrix.browser }} --out dist/${{ matrix.browser }}
+      - name: Assert the shipped bundle carries no network and no WASM
+        # The same claim `extension/src/bundle.test.ts` makes about the sources,
+        # made again about the BUILT tree — because what ships is the build, and
+        # a bundler that inlined something is exactly the case a source-only lint
+        # cannot see. `grep -r` and nothing cleverer: the point is that it is
+        # readable in a log by whoever is asking whether this build is honest.
+        run: |
+          set -euo pipefail
+          cd extension/dist/${{ matrix.browser }}
+          for banned in WebAssembly wasm-unsafe-eval iroh XMLHttpRequest; do
+            if grep -rilF "$banned" . ; then
+              echo "the built Companion contains $banned"
+              exit 1
+            fi
+          done
+          if grep -rl 'crypto\.subtle\.\(encrypt\|decrypt\|importKey\|deriveKey\)' . ; then
+            echo "the built Companion performs a key operation"
+            exit 1
+          fi
+          test ! -e manifest.chrome.json
+          test ! -e manifest.firefox.json
+          test -e manifest.json
+      - name: Zip it
+        run: |
+          set -euo pipefail
+          mkdir -p extension/artifacts
+          cd extension/dist/${{ matrix.browser }}
+          zip -r ../../artifacts/centraid-companion-${{ matrix.browser }}.zip .
+          cd ../../artifacts
+          sha256sum ./*.zip > SHA256SUMS-${{ matrix.browser }}.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: centraid-companion-v1-${{ matrix.browser }}
+          path: extension/artifacts/
+          retention-days: 14
+
+  ids:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - name: The id register is the release artifact (D-1020-X5)
+        run: bun run --cwd extension lint
+      - name: Say which ids are still an owner hand-off
+        # A release that shipped with no id enrolled must SAY so in its own log,
+        # because the failure it causes is invisible: the Companion installs, the
+        # host manifest is written, and `connectNative` finds nothing.
+        run: |
+          set -euo pipefail
+          node -e '
+            const ids = require("./contracts/extension/ids.json");
+            for (const row of ids.browsers) {
+              const state = row.id ?? `PENDING (${row.pending})`;
+              console.log(`${row.browser}/${row.channel}: ${state}`);
+            }
+          '
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: centraid-companion-v1-ids
+          path: contracts/extension/ids.json
+          retention-days: 90

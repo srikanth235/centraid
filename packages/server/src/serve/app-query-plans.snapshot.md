@@ -65,7 +65,7 @@ SCAN core_party USING INDEX sqlite_autoindex_core_party_1
 ```sql
 SELECT task_id, status, title, due_at, project_id
       FROM schedule_task
-      WHERE status IN (?, ?) AND due_at >= ? AND due_at < ?
+      WHERE status IN (?, ?) AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?
       ORDER BY due_at ASC, task_id ASC
       LIMIT ?
 ```
@@ -121,7 +121,7 @@ SCAN core_party USING INDEX sqlite_autoindex_core_party_1
 ### _shared/taxonomy.concepts (docs/drive)
 
 ```sql
-SELECT concept_id, scheme_id, pref_label, notation
+SELECT concept_id, scheme_id, pref_label, notation, broader_concept_id
       FROM core_concept
 
       ORDER BY concept_id ASC
@@ -435,7 +435,7 @@ SEARCH people_profile USING INDEX people_profile_created_page_idx (deleted_at=?)
 ### _shared/taxonomy.concepts (people/people)
 
 ```sql
-SELECT concept_id, scheme_id, pref_label, notation
+SELECT concept_id, scheme_id, pref_label, notation, broader_concept_id
       FROM core_concept
 
       ORDER BY concept_id ASC

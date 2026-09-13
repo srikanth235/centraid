@@ -1,0 +1,6 @@
+# The core was poisoned by a caught panic and is being restarted deliberately
+# (`crates/core-ffi/CONTRACT.md` clause 9). A member sees a sentence, not a
+# frozen screen.
+availability: AVAILABILITY_RESTARTING
+durability: DURABILITY_AUTHORITATIVE
+connectivity: CONNECTIVITY_ONLINE_UNMETERED

@@ -21,6 +21,7 @@ import {
   ROOT_FOLDER_NOTATION,
 } from "../../_shared/concept-scheme-kit.ts";
 import { pagedFixture } from "../../_shared/paged-ctx.test-fixtures.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import driveHandler from "./drive.ts";
 import searchHandler from "./search.ts";
 
@@ -289,5 +290,26 @@ describe("search rows carry the same fact (#821)", () => {
 
     expect(result.vaultDenied).toBeUndefined();
     for (const row of result.documents) expect(row.shared_with).toBeNull();
+  });
+
+  // THE PROJECTION IS THE THING, AND THE FIXTURE ABOVE CANNOT SEE IT (#1020,
+  // R-1020-35). `pagedFixture` answers with whole rows whatever a statement
+  // selected, so the grandparent case above passes while the real paged door
+  // hands `drive.ts` and `_shared.ts` a concept row with NO
+  // `broader_concept_id` — which reads as `undefined`, reports every folder as
+  // top-level, and makes `folderChain` one step long so this very share stops
+  // reaching `doc-lease`. The red is the assertion below, not the case above.
+  it("selects the parent column the folder chain walks", async () => {
+    const selected: string[] = [];
+    const ctx = {
+      vault: {
+        page: async ({ query }: { query: { select: string } }) => {
+          selected.push(query.select);
+          return { rows: [] };
+        },
+      },
+    } as unknown as never;
+    await Promise.all(conceptTaxonomyReads(ctx));
+    expect(selected[0]).toContain("broader_concept_id");
   });
 });

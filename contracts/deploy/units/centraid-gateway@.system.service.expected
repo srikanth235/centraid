@@ -1,0 +1,22 @@
+[Unit]
+Description=Centraid gateway daemon (%i)
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=centraid/%i
+LoadCredentialEncrypted=centraid-keystore:/etc/centraid/credentials/centraid-gateway@%i.keystore.cred
+ExecStart=/usr/local/bin/centraid gateway --data-dir /var/lib/centraid/%i
+WorkingDirectory=/var/lib/centraid/%i
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+# TWO DIFFERENT EMPTY-CELL SENTENCES (`docs/mobile-offline.md:224`). Here there
+# is NO PACK AT ALL: `thumbnail_pack_absent` is true and the cells carry no
+# path. The other case — a pack that has evicted these particular thumbnails —
+# is `thumbnail_pack_absent: false` with absent paths, and a single "no image"
+# would show a member with no pack and a member with an evicted one the same
+# screen.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_METERED
+}
+destination: DESTINATION_LIBRARY
+permission: MEDIA_PERMISSION_GRANTED
+data {
+  cells {
+    asset_id: "ast-0003"
+    captured_at: "2026-07-04T20:00:00Z"
+    captured_utc_offset_minutes: -240
+    kind: KIND_VIDEO
+  }
+  thumbnail_pack_absent: true
+}
+backup { phase: PHASE_WAITING_FOR_UNMETERED paused_reason: "Waiting for Wi-Fi." }
+sheet: SHEET_NONE

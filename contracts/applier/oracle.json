@@ -1,0 +1,288 @@
+{
+  "schema": "centraid-applier-oracle/1",
+  "$generatedBy": "bun contracts/tools/export-applier-oracle.ts",
+  "$note": "v0's own `withReplicaCommit` decoded these statements into these rows (#1020, D-1020-D1-11). `seq`, `epoch` and `committed_at` are omitted: they are per-file facts and comparing them would compare the two RUNS rather than the two decoders. Volatile row columns (`updated_at`, `row_version`) are kept — v0's touch trigger sets them from the statement's own values here, and the Rust side runs the same trigger. NO VALUE ABOVE 2^53 IS IN THE SCRIPT: v0's decode reads the row back with a statement that never calls `setReadBigInts(true)`, so any commit writing an INTEGER above `Number.MAX_SAFE_INTEGER` into a replicated table throws ERR_OUT_OF_RANGE at capture and rolls back whole — v0 cannot produce the `{i}` form its own wire contract defines. Reported as a finding under #1020; v1 has no such limit.",
+  "script": [
+    {
+      "label": "insert",
+      "producer": "oracle.insert",
+      "statements": [
+        "INSERT INTO core_party (party_id, kind, display_name, sort_name, created_at, updated_at)\n       VALUES ('oracle-party-1', 'person', 'Ada Lovelace', 'Lovelace, Ada',\n               '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
+      ]
+    },
+    {
+      "label": "update-one-column",
+      "producer": "oracle.update",
+      "statements": [
+        "UPDATE core_party SET display_name = 'Ada King',\n              updated_at = '2026-01-02T00:00:00.000Z'\n        WHERE party_id = 'oracle-party-1'"
+      ]
+    },
+    {
+      "label": "update-two-columns",
+      "producer": "oracle.update",
+      "statements": [
+        "UPDATE core_party SET display_name = 'Augusta Ada King',\n              sort_name = 'King, Augusta Ada',\n              updated_at = '2026-01-03T00:00:00.000Z'\n        WHERE party_id = 'oracle-party-1'"
+      ]
+    },
+    {
+      "label": "two-statements-one-row",
+      "producer": "oracle.collapse",
+      "statements": [
+        "UPDATE core_party SET display_name = 'first',\n              updated_at = '2026-01-04T00:00:00.000Z'\n        WHERE party_id = 'oracle-party-1'",
+        "UPDATE core_party SET display_name = 'second',\n              updated_at = '2026-01-05T00:00:00.000Z'\n        WHERE party_id = 'oracle-party-1'"
+      ]
+    },
+    {
+      "label": "boundary-and-text",
+      "producer": "oracle.boundary",
+      "statements": [
+        "INSERT INTO core_content_item\n         (content_id, content_uri, sha256, byte_size, created_at, updated_at)\n       VALUES ('oracle-content-1', '{\"i\":\"7\"}',\n               '0000000000000000000000000000000000000000000000000000000000000abc',\n               9007199254740991,\n               '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
+      ]
+    },
+    {
+      "label": "local-lane",
+      "producer": "oracle.local",
+      "statements": [
+        "INSERT INTO replica_intent_outcome\n         (intent_id, device_id, app_id, action, payload_hash, status, created_at, updated_at)\n       VALUES ('oracle-intent-1', 'oracle-device-1', 'tally', 'tally.add_expense',\n               'deadbeef', 'queued',\n               '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
+      ]
+    },
+    {
+      "label": "delete",
+      "producer": "oracle.delete",
+      "statements": ["DELETE FROM core_party WHERE party_id = 'oracle-party-1'"]
+    }
+  ],
+  "rows": [
+    {
+      "commitIndex": 0,
+      "commitLabel": "insert",
+      "table": "core_entity",
+      "op": "insert",
+      "pk": ["oracle-party-1"],
+      "row": {
+        "entity_id": "oracle-party-1",
+        "entity_type": "core.party",
+        "created_at": "2026-01-01T00:00:00.000Z"
+      },
+      "prior": null,
+      "indirect": true,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.insert"
+    },
+    {
+      "commitIndex": 0,
+      "commitLabel": "insert",
+      "table": "core_party",
+      "op": "insert",
+      "pk": ["oracle-party-1"],
+      "row": {
+        "party_id": "oracle-party-1",
+        "kind": "person",
+        "display_name": "Ada Lovelace",
+        "sort_name": "Lovelace, Ada",
+        "birth_date": null,
+        "avatar_content_id": null,
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "row_version": 1,
+        "deleted_at": null,
+        "purge_at": null
+      },
+      "prior": null,
+      "indirect": false,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.insert"
+    },
+    {
+      "commitIndex": 1,
+      "commitLabel": "update-one-column",
+      "table": "core_party",
+      "op": "update",
+      "pk": ["oracle-party-1"],
+      "row": {
+        "party_id": "oracle-party-1",
+        "kind": "person",
+        "display_name": "Ada King",
+        "sort_name": "Lovelace, Ada",
+        "birth_date": null,
+        "avatar_content_id": null,
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "updated_at": "2026-01-02T00:00:00.000Z",
+        "row_version": 2,
+        "deleted_at": null,
+        "purge_at": null
+      },
+      "prior": {
+        "party_id": "oracle-party-1",
+        "display_name": "Ada Lovelace",
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "row_version": 1
+      },
+      "indirect": false,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.update"
+    },
+    {
+      "commitIndex": 2,
+      "commitLabel": "update-two-columns",
+      "table": "core_party",
+      "op": "update",
+      "pk": ["oracle-party-1"],
+      "row": {
+        "party_id": "oracle-party-1",
+        "kind": "person",
+        "display_name": "Augusta Ada King",
+        "sort_name": "King, Augusta Ada",
+        "birth_date": null,
+        "avatar_content_id": null,
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "updated_at": "2026-01-03T00:00:00.000Z",
+        "row_version": 3,
+        "deleted_at": null,
+        "purge_at": null
+      },
+      "prior": {
+        "party_id": "oracle-party-1",
+        "display_name": "Ada King",
+        "sort_name": "Lovelace, Ada",
+        "updated_at": "2026-01-02T00:00:00.000Z",
+        "row_version": 2
+      },
+      "indirect": false,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.update"
+    },
+    {
+      "commitIndex": 3,
+      "commitLabel": "two-statements-one-row",
+      "table": "core_party",
+      "op": "update",
+      "pk": ["oracle-party-1"],
+      "row": {
+        "party_id": "oracle-party-1",
+        "kind": "person",
+        "display_name": "second",
+        "sort_name": "King, Augusta Ada",
+        "birth_date": null,
+        "avatar_content_id": null,
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "updated_at": "2026-01-05T00:00:00.000Z",
+        "row_version": 5,
+        "deleted_at": null,
+        "purge_at": null
+      },
+      "prior": {
+        "party_id": "oracle-party-1",
+        "display_name": "Augusta Ada King",
+        "updated_at": "2026-01-03T00:00:00.000Z",
+        "row_version": 3
+      },
+      "indirect": false,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.collapse"
+    },
+    {
+      "commitIndex": 4,
+      "commitLabel": "boundary-and-text",
+      "table": "core_content_item",
+      "op": "insert",
+      "pk": ["oracle-content-1"],
+      "row": {
+        "content_id": "oracle-content-1",
+        "content_uri": "{\"i\":\"7\"}",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000abc",
+        "byte_size": 9007199254740991,
+        "language": null,
+        "creator_party_id": null,
+        "origin_device_id": null,
+        "deleted_at": null,
+        "purge_at": null,
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "row_version": 1
+      },
+      "prior": null,
+      "indirect": false,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.boundary"
+    },
+    {
+      "commitIndex": 4,
+      "commitLabel": "boundary-and-text",
+      "table": "core_entity",
+      "op": "insert",
+      "pk": ["oracle-content-1"],
+      "row": {
+        "entity_id": "oracle-content-1",
+        "entity_type": "core.content_item",
+        "created_at": "2026-01-01T00:00:00.000Z"
+      },
+      "prior": null,
+      "indirect": true,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.boundary"
+    },
+    {
+      "commitIndex": 5,
+      "commitLabel": "local-lane",
+      "table": "replica_intent_outcome",
+      "op": "insert",
+      "pk": ["oracle-intent-1"],
+      "row": null,
+      "prior": null,
+      "indirect": false,
+      "local": true,
+      "deferred": false,
+      "producer": "oracle.local"
+    },
+    {
+      "commitIndex": 6,
+      "commitLabel": "delete",
+      "table": "core_entity",
+      "op": "delete",
+      "pk": ["oracle-party-1"],
+      "row": {
+        "entity_id": "oracle-party-1",
+        "entity_type": "core.party",
+        "created_at": "2026-01-01T00:00:00.000Z"
+      },
+      "prior": null,
+      "indirect": true,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.delete"
+    },
+    {
+      "commitIndex": 6,
+      "commitLabel": "delete",
+      "table": "core_party",
+      "op": "delete",
+      "pk": ["oracle-party-1"],
+      "row": {
+        "party_id": "oracle-party-1",
+        "kind": "person",
+        "display_name": "second",
+        "sort_name": "King, Augusta Ada",
+        "birth_date": null,
+        "avatar_content_id": null,
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "updated_at": "2026-01-05T00:00:00.000Z",
+        "row_version": 5,
+        "deleted_at": null,
+        "purge_at": null
+      },
+      "prior": null,
+      "indirect": false,
+      "local": false,
+      "deferred": false,
+      "producer": "oracle.delete"
+    }
+  ]
+}

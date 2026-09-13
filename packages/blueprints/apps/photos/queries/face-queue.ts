@@ -103,7 +103,16 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
     const assetsResult = assetIds.length
       ? await readPages<RawAsset>(ctx, {
           name: "photos.faceQueue.assets",
-          select: "asset_id, content_id, kind, title, captured_at",
+          // `width`/`height` are SELECTED, not just declared: this statement's
+          // own `RawAsset` carries them and the entry below maps
+          // `asset.width ?? null`, so omitting them here made the queue card's
+          // dimensions structurally null for every photograph in every vault
+          // (#1020 R-1020-35; the red is
+          // `the_face_queue_is_what_v0_answered` in
+          // `crates/apps/photos/tests/parity.rs`, which read 270 off the same
+          // row this query answered `null` for).
+          select:
+            "asset_id, content_id, kind, title, captured_at, width, height",
           from: "media_asset",
           where: inList("asset_id", assetIds).sql,
           bind: inList("asset_id", assetIds).bind,

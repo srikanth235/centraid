@@ -1,0 +1,2405 @@
+[
+  {
+    "input": {},
+    "output": {
+      "archived_groups": [],
+      "currency": "GBP",
+      "expense_count": 6,
+      "friends": [
+        {
+          "balances": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            }
+          ],
+          "color": "<party-hue>",
+          "initials": "C",
+          "name": "Cleo",
+          "party_id": "id-0014"
+        },
+        {
+          "balances": [
+            {
+              "amount_minor": 1333,
+              "currency": "GBP"
+            },
+            {
+              "amount_minor": -2100,
+              "currency": "JPY"
+            }
+          ],
+          "color": "<party-hue>",
+          "initials": "B",
+          "name": "Bo",
+          "party_id": "id-0030"
+        },
+        {
+          "balances": [
+            {
+              "amount_minor": -8416,
+              "currency": "GBP"
+            }
+          ],
+          "color": "<party-hue>",
+          "initials": "A",
+          "name": "Ana",
+          "party_id": "id-0038"
+        }
+      ],
+      "groups": [
+        {
+          "archived_at": null,
+          "color": "#0FA678",
+          "group_id": "id-0012",
+          "icon": "🏠",
+          "member_count": 2,
+          "name": "Tokyo",
+          "owner_net": {
+            "amount_minor": -2100,
+            "currency": "JPY"
+          },
+          "simplify_opt_in": false
+        },
+        {
+          "archived_at": null,
+          "color": "#0FA678",
+          "group_id": "id-0024",
+          "icon": "🏠",
+          "member_count": 3,
+          "name": "Lisbon",
+          "owner_net": {
+            "amount_minor": 5000,
+            "currency": "EUR"
+          },
+          "simplify_opt_in": false
+        },
+        {
+          "archived_at": null,
+          "color": "#0FA678",
+          "group_id": "id-0032",
+          "icon": "🏠",
+          "member_count": 2,
+          "name": "Sitwell Road",
+          "owner_net": {
+            "amount_minor": -8333,
+            "currency": "GBP"
+          },
+          "simplify_opt_in": true
+        }
+      ],
+      "me": "id-0001",
+      "nudges": [
+        {
+          "group_id": "id-0032",
+          "note": "when you get a chance",
+          "nudge_id": "id-0043",
+          "party_id": "id-0038",
+          "prepared_at": "<host-clock>",
+          "sent": false
+        }
+      ],
+      "owe": {
+        "components": [
+          {
+            "amount_minor": 8416,
+            "currency": "GBP"
+          },
+          {
+            "amount_minor": 2100,
+            "currency": "JPY"
+          }
+        ],
+        "currencies": ["GBP", "JPY"],
+        "reason": "no-rate-source",
+        "state": "unavailable"
+      },
+      "owed": {
+        "components": [
+          {
+            "amount_minor": 5000,
+            "currency": "EUR"
+          },
+          {
+            "amount_minor": 1333,
+            "currency": "GBP"
+          }
+        ],
+        "currencies": ["EUR", "GBP"],
+        "reason": "no-rate-source",
+        "state": "unavailable"
+      },
+      "rate_suggestions": [],
+      "recurring": [
+        {
+          "anchor_start": "2099-01-01T09:00:00",
+          "category": "utilities",
+          "description": "Broadband",
+          "group_id": "id-0032",
+          "last_materialized_start": null,
+          "next_start": "<host-clock>",
+          "original_amount_minor": 3500,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "preview": "Every month",
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "rrule": "FREQ=MONTHLY",
+          "settlement_currency": "GBP",
+          "status": "active",
+          "template_id": "id-0011",
+          "tz": "Europe/London"
+        }
+      ],
+      "settlement_count": 1,
+      "trash": [
+        {
+          "amount_minor": 1500,
+          "deleted_at": "<host-clock>",
+          "description": "Cancelled order",
+          "expense_id": "id-0018",
+          "group_name": "Sitwell Road",
+          "purge_at": "<host-clock>"
+        }
+      ]
+    },
+    "query": "dashboard"
+  },
+  {
+    "input": {},
+    "output": {
+      "activity": [
+        {
+          "amount_minor": 5000,
+          "date": "2099-05-20",
+          "from_name": "Ana",
+          "from_party": "id-0038",
+          "kind": "settlement",
+          "to_name": "You",
+          "to_party": "id-0001"
+        },
+        {
+          "amount_minor": 2500,
+          "category": "groceries",
+          "date": "2099-05-04",
+          "description": "Cinema",
+          "expense_id": "id-0040",
+          "group_id": null,
+          "group_name": "",
+          "kind": "expense",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "your_amount_minor": 1250,
+          "your_role": "lent"
+        },
+        {
+          "amount_minor": 3000,
+          "category": "groceries",
+          "date": "2099-05-04",
+          "description": "Hardware shop",
+          "expense_id": "id-0037",
+          "group_id": "id-0032",
+          "group_name": "Sitwell Road",
+          "kind": "expense",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "your_amount_minor": 2000,
+          "your_role": "borrowed"
+        },
+        {
+          "amount_minor": 10001,
+          "category": "groceries",
+          "date": "2099-05-04",
+          "description": "Groceries",
+          "expense_id": "id-0031",
+          "group_id": "id-0032",
+          "group_name": "Sitwell Road",
+          "kind": "expense",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "your_amount_minor": 6667,
+          "your_role": "lent"
+        },
+        {
+          "amount_minor": 10000,
+          "category": "groceries",
+          "date": "2099-05-04",
+          "description": "Pastéis",
+          "expense_id": "id-0026",
+          "group_id": "id-0024",
+          "group_name": "Lisbon",
+          "kind": "expense",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "your_amount_minor": 5000,
+          "your_role": "lent"
+        },
+        {
+          "amount_minor": 24000,
+          "category": "groceries",
+          "date": "2099-05-04",
+          "description": "Boiler service",
+          "expense_id": "id-0020",
+          "group_id": "id-0032",
+          "group_name": "Sitwell Road",
+          "kind": "expense",
+          "paid_by": "id-0038",
+          "paid_by_name": "Ana",
+          "your_amount_minor": 8000,
+          "your_role": "borrowed"
+        },
+        {
+          "amount_minor": 4200,
+          "category": "groceries",
+          "date": "2099-05-04",
+          "description": "Ramen",
+          "expense_id": "id-0017",
+          "group_id": "id-0012",
+          "group_name": "Tokyo",
+          "kind": "expense",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "your_amount_minor": 2100,
+          "your_role": "borrowed"
+        }
+      ],
+      "currency": "GBP",
+      "me": "id-0001"
+    },
+    "query": "activity"
+  },
+  {
+    "input": {},
+    "output": {
+      "accounts": {},
+      "proposals": []
+    },
+    "query": "matches"
+  },
+  {
+    "input": {
+      "term": "bo"
+    },
+    "output": {
+      "currency": "GBP",
+      "me": "id-0001",
+      "results": [
+        {
+          "amount_minor": 24000,
+          "category": "groceries",
+          "description": "Boiler service",
+          "expense_id": "id-0020",
+          "group_id": "id-0032",
+          "group_name": "Sitwell Road",
+          "line_items": [],
+          "original_amount_minor": 24000,
+          "original_currency": "GBP",
+          "paid_by": "id-0038",
+          "paid_by_name": "Ana",
+          "payers": [
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "paid_minor": 10000,
+              "party_id": "id-0030"
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "paid_minor": 14000,
+              "party_id": "id-0038"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 8000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 8000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 8000
+            }
+          ],
+          "your_amount_minor": 8000,
+          "your_role": "borrowed"
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "ramen"
+    },
+    "output": {
+      "currency": "GBP",
+      "me": "id-0001",
+      "results": [
+        {
+          "amount_minor": 4200,
+          "category": "groceries",
+          "description": "Ramen",
+          "expense_id": "id-0017",
+          "group_id": "id-0012",
+          "group_name": "Tokyo",
+          "line_items": [],
+          "original_amount_minor": 4200,
+          "original_currency": "GBP",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "paid_minor": 4200,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2100
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 2100
+            }
+          ],
+          "your_amount_minor": 2100,
+          "your_role": "borrowed"
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "zzzz"
+    },
+    "output": {
+      "currency": "GBP",
+      "me": "id-0001",
+      "results": []
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "group_id": "id-0012"
+    },
+    "output": {
+      "currency": "GBP",
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0012",
+        "icon": "🏠",
+        "name": "Tokyo",
+        "simplify_opt_in": false
+      },
+      "ledger": [
+        {
+          "amount_minor": 4200,
+          "category": "groceries",
+          "description": "Ramen",
+          "expense_id": "id-0017",
+          "group_id": "id-0012",
+          "line_items": [],
+          "original_amount_minor": 4200,
+          "original_currency": "GBP",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "paid_minor": 4200,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2100
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 2100
+            }
+          ],
+          "your_amount_minor": 2100,
+          "your_role": "borrowed"
+        }
+      ],
+      "me": "id-0001",
+      "members": [
+        {
+          "color": "#141414",
+          "initials": "Y",
+          "is_me": true,
+          "name": "You",
+          "net": {
+            "amount_minor": -2100,
+            "currency": "JPY"
+          },
+          "party_id": "id-0001"
+        },
+        {
+          "color": "<party-hue>",
+          "initials": "B",
+          "is_me": false,
+          "name": "Bo",
+          "net": {
+            "amount_minor": 2100,
+            "currency": "JPY"
+          },
+          "party_id": "id-0030"
+        }
+      ],
+      "simplification": {
+        "debts_before": 1,
+        "opted_in": false,
+        "payments_after": 1,
+        "transfers": []
+      }
+    },
+    "query": "group"
+  },
+  {
+    "input": {
+      "group_id": "id-0012",
+      "limit": 2000
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "JPY",
+      "expenses": [
+        {
+          "amount_minor": 4200,
+          "category": "groceries",
+          "description": "Ramen",
+          "expense_id": "id-0017",
+          "has_receipt": false,
+          "line_items": [],
+          "original_amount_minor": 4200,
+          "original_currency": "JPY",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "name": "Bo",
+              "paid_minor": 4200,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "JPY",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2100
+            },
+            {
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 2100
+            }
+          ]
+        }
+      ],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0012",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          },
+          {
+            "name": "Bo",
+            "party_id": "id-0030"
+          }
+        ],
+        "name": "Tokyo"
+      },
+      "revisions": [],
+      "settlements": [],
+      "truncated": false,
+      "window": {
+        "expenses": 1,
+        "limit": 2000,
+        "settlements": 0,
+        "since": null
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "id-0012",
+      "limit": 2000,
+      "since": "2099-05-10"
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "JPY",
+      "expenses": [],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0012",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          },
+          {
+            "name": "Bo",
+            "party_id": "id-0030"
+          }
+        ],
+        "name": "Tokyo"
+      },
+      "revisions": [],
+      "settlements": [],
+      "truncated": false,
+      "window": {
+        "expenses": 0,
+        "limit": 2000,
+        "settlements": 0,
+        "since": "2099-05-10"
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "id-0012",
+      "limit": 2000,
+      "since": "not-a-date"
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "JPY",
+      "expenses": [
+        {
+          "amount_minor": 4200,
+          "category": "groceries",
+          "description": "Ramen",
+          "expense_id": "id-0017",
+          "has_receipt": false,
+          "line_items": [],
+          "original_amount_minor": 4200,
+          "original_currency": "JPY",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "name": "Bo",
+              "paid_minor": 4200,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "JPY",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2100
+            },
+            {
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 2100
+            }
+          ]
+        }
+      ],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0012",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          },
+          {
+            "name": "Bo",
+            "party_id": "id-0030"
+          }
+        ],
+        "name": "Tokyo"
+      },
+      "revisions": [],
+      "settlements": [],
+      "truncated": false,
+      "window": {
+        "expenses": 1,
+        "limit": 2000,
+        "settlements": 0,
+        "since": null
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "id-0024"
+    },
+    "output": {
+      "currency": "GBP",
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0024",
+        "icon": "🏠",
+        "name": "Lisbon",
+        "simplify_opt_in": false
+      },
+      "ledger": [
+        {
+          "amount_minor": 10000,
+          "category": "groceries",
+          "description": "Pastéis",
+          "expense_id": "id-0026",
+          "group_id": "id-0024",
+          "line_items": [],
+          "original_amount_minor": 10000,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "paid_minor": 10000,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 5000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "C",
+              "name": "Cleo",
+              "party_id": "id-0014",
+              "share_minor": 5000
+            }
+          ],
+          "your_amount_minor": 5000,
+          "your_role": "lent"
+        }
+      ],
+      "me": "id-0001",
+      "members": [
+        {
+          "color": "<party-hue>",
+          "initials": "A",
+          "is_me": false,
+          "name": "Ana",
+          "net": {
+            "amount_minor": 0,
+            "currency": "EUR"
+          },
+          "party_id": "id-0038"
+        },
+        {
+          "color": "#141414",
+          "initials": "Y",
+          "is_me": true,
+          "name": "You",
+          "net": {
+            "amount_minor": 5000,
+            "currency": "EUR"
+          },
+          "party_id": "id-0001"
+        },
+        {
+          "color": "<party-hue>",
+          "initials": "C",
+          "is_me": false,
+          "name": "Cleo",
+          "net": {
+            "amount_minor": -5000,
+            "currency": "EUR"
+          },
+          "party_id": "id-0014"
+        }
+      ],
+      "simplification": {
+        "debts_before": 1,
+        "opted_in": false,
+        "payments_after": 1,
+        "transfers": []
+      }
+    },
+    "query": "group"
+  },
+  {
+    "input": {
+      "group_id": "id-0024",
+      "limit": 2000
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "EUR",
+      "expenses": [
+        {
+          "amount_minor": 10000,
+          "category": "groceries",
+          "description": "Pastéis",
+          "expense_id": "id-0026",
+          "has_receipt": false,
+          "line_items": [],
+          "original_amount_minor": 10000,
+          "original_currency": "EUR",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "name": "You",
+              "paid_minor": 10000,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "EUR",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 5000
+            },
+            {
+              "name": "Cleo",
+              "party_id": "id-0014",
+              "share_minor": 5000
+            }
+          ]
+        }
+      ],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0024",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "Ana",
+            "party_id": "id-0038"
+          },
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          },
+          {
+            "name": "Cleo",
+            "party_id": "id-0014"
+          }
+        ],
+        "name": "Lisbon"
+      },
+      "revisions": [],
+      "settlements": [],
+      "truncated": false,
+      "window": {
+        "expenses": 1,
+        "limit": 2000,
+        "settlements": 0,
+        "since": null
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "id-0024",
+      "limit": 2000,
+      "since": "2099-05-10"
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "EUR",
+      "expenses": [],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0024",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "Ana",
+            "party_id": "id-0038"
+          },
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          },
+          {
+            "name": "Cleo",
+            "party_id": "id-0014"
+          }
+        ],
+        "name": "Lisbon"
+      },
+      "revisions": [],
+      "settlements": [],
+      "truncated": false,
+      "window": {
+        "expenses": 0,
+        "limit": 2000,
+        "settlements": 0,
+        "since": "2099-05-10"
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "id-0024",
+      "limit": 2000,
+      "since": "not-a-date"
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "EUR",
+      "expenses": [
+        {
+          "amount_minor": 10000,
+          "category": "groceries",
+          "description": "Pastéis",
+          "expense_id": "id-0026",
+          "has_receipt": false,
+          "line_items": [],
+          "original_amount_minor": 10000,
+          "original_currency": "EUR",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "name": "You",
+              "paid_minor": 10000,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "EUR",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 5000
+            },
+            {
+              "name": "Cleo",
+              "party_id": "id-0014",
+              "share_minor": 5000
+            }
+          ]
+        }
+      ],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0024",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "Ana",
+            "party_id": "id-0038"
+          },
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          },
+          {
+            "name": "Cleo",
+            "party_id": "id-0014"
+          }
+        ],
+        "name": "Lisbon"
+      },
+      "revisions": [],
+      "settlements": [],
+      "truncated": false,
+      "window": {
+        "expenses": 1,
+        "limit": 2000,
+        "settlements": 0,
+        "since": null
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "id-0032"
+    },
+    "output": {
+      "currency": "GBP",
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0032",
+        "icon": "🏠",
+        "name": "Sitwell Road",
+        "simplify_opt_in": true
+      },
+      "ledger": [
+        {
+          "amount_minor": 3000,
+          "category": "groceries",
+          "description": "Hardware shop",
+          "expense_id": "id-0037",
+          "group_id": "id-0032",
+          "line_items": [
+            {
+              "allocations": [
+                {
+                  "name": "You",
+                  "party_id": "id-0001",
+                  "share_minor": 2000
+                }
+              ],
+              "amount_minor": 2000,
+              "description": "Paint",
+              "kind": "item",
+              "line_item_id": "id-0022",
+              "sort_order": 0
+            },
+            {
+              "allocations": [
+                {
+                  "name": "Bo",
+                  "party_id": "id-0030",
+                  "share_minor": 1000
+                }
+              ],
+              "amount_minor": 1000,
+              "description": "Brushes",
+              "kind": "item",
+              "line_item_id": "id-0027",
+              "sort_order": 1
+            }
+          ],
+          "original_amount_minor": 3000,
+          "original_currency": "GBP",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "paid_minor": 3000,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "by_line",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 1000
+            }
+          ],
+          "your_amount_minor": 2000,
+          "your_role": "borrowed"
+        },
+        {
+          "amount_minor": 10001,
+          "category": "groceries",
+          "description": "Groceries",
+          "expense_id": "id-0031",
+          "group_id": "id-0032",
+          "line_items": [],
+          "original_amount_minor": 10001,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "paid_minor": 10001,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 3334
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 3333
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 3334
+            }
+          ],
+          "your_amount_minor": 6667,
+          "your_role": "lent"
+        },
+        {
+          "amount_minor": 24000,
+          "category": "groceries",
+          "description": "Boiler service",
+          "expense_id": "id-0020",
+          "group_id": "id-0032",
+          "line_items": [],
+          "original_amount_minor": 24000,
+          "original_currency": "GBP",
+          "paid_by": "id-0038",
+          "paid_by_name": "Ana",
+          "payers": [
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "paid_minor": 10000,
+              "party_id": "id-0030"
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "paid_minor": 14000,
+              "party_id": "id-0038"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 8000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 8000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 8000
+            }
+          ],
+          "your_amount_minor": 8000,
+          "your_role": "borrowed"
+        }
+      ],
+      "me": "id-0001",
+      "members": [
+        {
+          "color": "<party-hue>",
+          "initials": "A",
+          "is_me": false,
+          "name": "Ana",
+          "net": {
+            "amount_minor": 7666,
+            "currency": "GBP"
+          },
+          "party_id": "id-0038"
+        },
+        {
+          "color": "#141414",
+          "initials": "Y",
+          "is_me": true,
+          "name": "You",
+          "net": {
+            "amount_minor": -8333,
+            "currency": "GBP"
+          },
+          "party_id": "id-0001"
+        },
+        {
+          "color": "<party-hue>",
+          "departed": true,
+          "initials": "B",
+          "is_me": false,
+          "name": "Bo",
+          "net": {
+            "amount_minor": 667,
+            "currency": "GBP"
+          },
+          "party_id": "id-0030"
+        }
+      ],
+      "simplification": {
+        "debts_before": 3,
+        "opted_in": true,
+        "payments_after": 2,
+        "transfers": [
+          {
+            "amount": {
+              "amount_minor": 7666,
+              "currency": "GBP"
+            },
+            "from": "id-0001",
+            "to": "id-0038"
+          },
+          {
+            "amount": {
+              "amount_minor": 667,
+              "currency": "GBP"
+            },
+            "from": "id-0001",
+            "to": "id-0030"
+          }
+        ]
+      }
+    },
+    "query": "group"
+  },
+  {
+    "input": {
+      "group_id": "id-0032",
+      "limit": 2000
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "GBP",
+      "expenses": [
+        {
+          "amount_minor": 3000,
+          "category": "groceries",
+          "description": "Hardware shop",
+          "expense_id": "id-0037",
+          "has_receipt": false,
+          "line_items": [
+            {
+              "allocations": [
+                {
+                  "name": "You",
+                  "party_id": "id-0001",
+                  "share_minor": 2000
+                }
+              ],
+              "amount_minor": 2000,
+              "description": "Paint",
+              "kind": "item"
+            },
+            {
+              "allocations": [
+                {
+                  "name": "Bo",
+                  "party_id": "id-0030",
+                  "share_minor": 1000
+                }
+              ],
+              "amount_minor": 1000,
+              "description": "Brushes",
+              "kind": "item"
+            }
+          ],
+          "original_amount_minor": 3000,
+          "original_currency": "GBP",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "name": "Bo",
+              "paid_minor": 3000,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "by_line",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2000
+            },
+            {
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 1000
+            }
+          ]
+        },
+        {
+          "amount_minor": 10001,
+          "category": "groceries",
+          "description": "Groceries",
+          "expense_id": "id-0031",
+          "has_receipt": false,
+          "line_items": [],
+          "original_amount_minor": 10001,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "name": "You",
+              "paid_minor": 10001,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 3334
+            },
+            {
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 3333
+            },
+            {
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 3334
+            }
+          ]
+        },
+        {
+          "amount_minor": 24000,
+          "category": "groceries",
+          "description": "Boiler service",
+          "expense_id": "id-0020",
+          "has_receipt": false,
+          "line_items": [],
+          "original_amount_minor": 24000,
+          "original_currency": "GBP",
+          "paid_by": "id-0038",
+          "paid_by_name": "Ana",
+          "payers": [
+            {
+              "name": "Bo",
+              "paid_minor": 10000,
+              "party_id": "id-0030"
+            },
+            {
+              "name": "Ana",
+              "paid_minor": 14000,
+              "party_id": "id-0038"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 8000
+            },
+            {
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 8000
+            },
+            {
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 8000
+            }
+          ]
+        }
+      ],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0032",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "Ana",
+            "party_id": "id-0038"
+          },
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          }
+        ],
+        "name": "Sitwell Road"
+      },
+      "revisions": [],
+      "settlements": [
+        {
+          "amount_minor": 5000,
+          "currency": "GBP",
+          "from_name": "Ana",
+          "from_party": "id-0038",
+          "paid_on": "2099-05-20",
+          "to_name": "You",
+          "to_party": "id-0001"
+        }
+      ],
+      "truncated": false,
+      "window": {
+        "expenses": 3,
+        "limit": 2000,
+        "settlements": 1,
+        "since": null
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "id-0032",
+      "limit": 2000,
+      "since": "2099-05-10"
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "GBP",
+      "expenses": [],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0032",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "Ana",
+            "party_id": "id-0038"
+          },
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          }
+        ],
+        "name": "Sitwell Road"
+      },
+      "revisions": [],
+      "settlements": [
+        {
+          "amount_minor": 5000,
+          "currency": "GBP",
+          "from_name": "Ana",
+          "from_party": "id-0038",
+          "paid_on": "2099-05-20",
+          "to_name": "You",
+          "to_party": "id-0001"
+        }
+      ],
+      "truncated": false,
+      "window": {
+        "expenses": 0,
+        "limit": 2000,
+        "settlements": 1,
+        "since": "2099-05-10"
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "id-0032",
+      "limit": 2000,
+      "since": "not-a-date"
+    },
+    "output": {
+      "balances_excluded": true,
+      "currency": "GBP",
+      "expenses": [
+        {
+          "amount_minor": 3000,
+          "category": "groceries",
+          "description": "Hardware shop",
+          "expense_id": "id-0037",
+          "has_receipt": false,
+          "line_items": [
+            {
+              "allocations": [
+                {
+                  "name": "You",
+                  "party_id": "id-0001",
+                  "share_minor": 2000
+                }
+              ],
+              "amount_minor": 2000,
+              "description": "Paint",
+              "kind": "item"
+            },
+            {
+              "allocations": [
+                {
+                  "name": "Bo",
+                  "party_id": "id-0030",
+                  "share_minor": 1000
+                }
+              ],
+              "amount_minor": 1000,
+              "description": "Brushes",
+              "kind": "item"
+            }
+          ],
+          "original_amount_minor": 3000,
+          "original_currency": "GBP",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "name": "Bo",
+              "paid_minor": 3000,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "by_line",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2000
+            },
+            {
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 1000
+            }
+          ]
+        },
+        {
+          "amount_minor": 10001,
+          "category": "groceries",
+          "description": "Groceries",
+          "expense_id": "id-0031",
+          "has_receipt": false,
+          "line_items": [],
+          "original_amount_minor": 10001,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "name": "You",
+              "paid_minor": 10001,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 3334
+            },
+            {
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 3333
+            },
+            {
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 3334
+            }
+          ]
+        },
+        {
+          "amount_minor": 24000,
+          "category": "groceries",
+          "description": "Boiler service",
+          "expense_id": "id-0020",
+          "has_receipt": false,
+          "line_items": [],
+          "original_amount_minor": 24000,
+          "original_currency": "GBP",
+          "paid_by": "id-0038",
+          "paid_by_name": "Ana",
+          "payers": [
+            {
+              "name": "Bo",
+              "paid_minor": 10000,
+              "party_id": "id-0030"
+            },
+            {
+              "name": "Ana",
+              "paid_minor": 14000,
+              "party_id": "id-0038"
+            }
+          ],
+          "rate_date": null,
+          "rate_scale": null,
+          "rate_scaled": null,
+          "rate_source": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "splits": [
+            {
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 8000
+            },
+            {
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 8000
+            },
+            {
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 8000
+            }
+          ]
+        }
+      ],
+      "group": {
+        "archived_at": null,
+        "color": "#0FA678",
+        "group_id": "id-0032",
+        "icon": "🏠",
+        "members": [
+          {
+            "name": "Ana",
+            "party_id": "id-0038"
+          },
+          {
+            "name": "You",
+            "party_id": "id-0001"
+          }
+        ],
+        "name": "Sitwell Road"
+      },
+      "revisions": [],
+      "settlements": [
+        {
+          "amount_minor": 5000,
+          "currency": "GBP",
+          "from_name": "Ana",
+          "from_party": "id-0038",
+          "paid_on": "2099-05-20",
+          "to_name": "You",
+          "to_party": "id-0001"
+        }
+      ],
+      "truncated": false,
+      "window": {
+        "expenses": 3,
+        "limit": 2000,
+        "settlements": 1,
+        "since": null
+      }
+    },
+    "query": "export"
+  },
+  {
+    "input": {
+      "group_id": "no-such-group"
+    },
+    "output": {
+      "currency": "GBP",
+      "group": null,
+      "ledger": [],
+      "me": "id-0001",
+      "members": [],
+      "simplification": {
+        "debts_before": 0,
+        "opted_in": false,
+        "payments_after": 0,
+        "transfers": []
+      }
+    },
+    "query": "group"
+  },
+  {
+    "input": {
+      "party_id": "id-0014"
+    },
+    "output": {
+      "currency": "GBP",
+      "friend": {
+        "balances": [
+          {
+            "amount_minor": 5000,
+            "currency": "EUR"
+          }
+        ],
+        "color": "<party-hue>",
+        "initials": "C",
+        "name": "Cleo",
+        "parts": [
+          {
+            "group_id": "id-0024",
+            "group_name": "Lisbon",
+            "net": {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            }
+          }
+        ],
+        "party_id": "id-0014"
+      },
+      "ledger": [
+        {
+          "amount_minor": 10000,
+          "category": "groceries",
+          "description": "Pastéis",
+          "expense_id": "id-0026",
+          "group_id": "id-0024",
+          "line_items": [],
+          "original_amount_minor": 10000,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "paid_minor": 10000,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 5000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "C",
+              "name": "Cleo",
+              "party_id": "id-0014",
+              "share_minor": 5000
+            }
+          ],
+          "your_amount_minor": 5000,
+          "your_role": "lent"
+        }
+      ],
+      "me": "id-0001"
+    },
+    "query": "friend"
+  },
+  {
+    "input": {
+      "party_id": "id-0030"
+    },
+    "output": {
+      "currency": "GBP",
+      "friend": {
+        "balances": [
+          {
+            "amount_minor": 1333,
+            "currency": "GBP"
+          },
+          {
+            "amount_minor": -2100,
+            "currency": "JPY"
+          }
+        ],
+        "color": "<party-hue>",
+        "initials": "B",
+        "name": "Bo",
+        "parts": [
+          {
+            "group_id": "id-0032",
+            "group_name": "Sitwell Road",
+            "net": {
+              "amount_minor": 1333,
+              "currency": "GBP"
+            }
+          },
+          {
+            "group_id": "id-0012",
+            "group_name": "Tokyo",
+            "net": {
+              "amount_minor": -2100,
+              "currency": "JPY"
+            }
+          }
+        ],
+        "party_id": "id-0030"
+      },
+      "ledger": [
+        {
+          "amount_minor": 3000,
+          "category": "groceries",
+          "description": "Hardware shop",
+          "expense_id": "id-0037",
+          "group_id": "id-0032",
+          "line_items": [
+            {
+              "allocations": [
+                {
+                  "name": "You",
+                  "party_id": "id-0001",
+                  "share_minor": 2000
+                }
+              ],
+              "amount_minor": 2000,
+              "description": "Paint",
+              "kind": "item",
+              "line_item_id": "id-0022",
+              "sort_order": 0
+            },
+            {
+              "allocations": [
+                {
+                  "name": "Bo",
+                  "party_id": "id-0030",
+                  "share_minor": 1000
+                }
+              ],
+              "amount_minor": 1000,
+              "description": "Brushes",
+              "kind": "item",
+              "line_item_id": "id-0027",
+              "sort_order": 1
+            }
+          ],
+          "original_amount_minor": 3000,
+          "original_currency": "GBP",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "paid_minor": 3000,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "by_line",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 1000
+            }
+          ],
+          "your_amount_minor": 2000,
+          "your_role": "borrowed"
+        },
+        {
+          "amount_minor": 10001,
+          "category": "groceries",
+          "description": "Groceries",
+          "expense_id": "id-0031",
+          "group_id": "id-0032",
+          "line_items": [],
+          "original_amount_minor": 10001,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "paid_minor": 10001,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 3334
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 3333
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 3334
+            }
+          ],
+          "your_amount_minor": 6667,
+          "your_role": "lent"
+        },
+        {
+          "amount_minor": 4200,
+          "category": "groceries",
+          "description": "Ramen",
+          "expense_id": "id-0017",
+          "group_id": "id-0012",
+          "line_items": [],
+          "original_amount_minor": 4200,
+          "original_currency": "GBP",
+          "paid_by": "id-0030",
+          "paid_by_name": "Bo",
+          "payers": [
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "paid_minor": 4200,
+              "party_id": "id-0030"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 2100
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 2100
+            }
+          ],
+          "your_amount_minor": 2100,
+          "your_role": "borrowed"
+        }
+      ],
+      "me": "id-0001"
+    },
+    "query": "friend"
+  },
+  {
+    "input": {
+      "party_id": "id-0038"
+    },
+    "output": {
+      "currency": "GBP",
+      "friend": {
+        "balances": [
+          {
+            "amount_minor": -8416,
+            "currency": "GBP"
+          }
+        ],
+        "color": "<party-hue>",
+        "initials": "A",
+        "name": "Ana",
+        "parts": [
+          {
+            "group_id": null,
+            "group_name": "Outside any group",
+            "net": {
+              "amount_minor": 1250,
+              "currency": "GBP"
+            }
+          },
+          {
+            "group_id": "id-0032",
+            "group_name": "Sitwell Road",
+            "net": {
+              "amount_minor": -9666,
+              "currency": "GBP"
+            }
+          }
+        ],
+        "party_id": "id-0038"
+      },
+      "ledger": [
+        {
+          "amount_minor": 2500,
+          "category": "groceries",
+          "description": "Cinema",
+          "expense_id": "id-0040",
+          "group_id": null,
+          "line_items": [],
+          "original_amount_minor": 2500,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "paid_minor": 2500,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 1250
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 1250
+            }
+          ],
+          "your_amount_minor": 1250,
+          "your_role": "lent"
+        },
+        {
+          "amount_minor": 10001,
+          "category": "groceries",
+          "description": "Groceries",
+          "expense_id": "id-0031",
+          "group_id": "id-0032",
+          "line_items": [],
+          "original_amount_minor": 10001,
+          "original_currency": "GBP",
+          "paid_by": "id-0001",
+          "paid_by_name": "You",
+          "payers": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "paid_minor": 10001,
+              "party_id": "id-0001"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 3334
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 3333
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 3334
+            }
+          ],
+          "your_amount_minor": 6667,
+          "your_role": "lent"
+        },
+        {
+          "amount_minor": 24000,
+          "category": "groceries",
+          "description": "Boiler service",
+          "expense_id": "id-0020",
+          "group_id": "id-0032",
+          "line_items": [],
+          "original_amount_minor": 24000,
+          "original_currency": "GBP",
+          "paid_by": "id-0038",
+          "paid_by_name": "Ana",
+          "payers": [
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "paid_minor": 10000,
+              "party_id": "id-0030"
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "paid_minor": 14000,
+              "party_id": "id-0038"
+            }
+          ],
+          "rate_date": "2099-05-04",
+          "rate_scale": 6,
+          "rate_scaled": 1000000,
+          "rate_source": "identity",
+          "recurring_template_id": null,
+          "settlement_currency": "GBP",
+          "spent_on": "2099-05-04",
+          "split_method": "exact",
+          "split_params": null,
+          "splits": [
+            {
+              "color": "#141414",
+              "initials": "Y",
+              "name": "You",
+              "party_id": "id-0001",
+              "share_minor": 8000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "B",
+              "name": "Bo",
+              "party_id": "id-0030",
+              "share_minor": 8000
+            },
+            {
+              "color": "<party-hue>",
+              "initials": "A",
+              "name": "Ana",
+              "party_id": "id-0038",
+              "share_minor": 8000
+            }
+          ],
+          "your_amount_minor": 8000,
+          "your_role": "borrowed"
+        }
+      ],
+      "me": "id-0001"
+    },
+    "query": "friend"
+  },
+  {
+    "input": {
+      "expense_id": "id-0017"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "expense_id": "id-0018"
+    },
+    "output": {
+      "revisions": [
+        {
+          "operation": "trash",
+          "recorded_at": "<host-clock>",
+          "revision_id": "id-0013",
+          "snapshot": {
+            "expense": {
+              "amount_minor": 1500,
+              "category": "groceries",
+              "deleted_at": null,
+              "description": "Cancelled order",
+              "original_amount_minor": 1500,
+              "original_currency": "GBP",
+              "paid_by": "id-0001",
+              "purge_at": null,
+              "rate_date": "2099-05-04",
+              "rate_scale": 6,
+              "rate_scaled": 1000000,
+              "rate_source": "identity",
+              "settlement_currency": "GBP",
+              "spent_on": "2099-05-04",
+              "split_method": "exact",
+              "split_params_json": null
+            },
+            "payers": [
+              {
+                "paid_minor": 1500,
+                "party_id": "id-0001"
+              }
+            ],
+            "splits": [
+              {
+                "party_id": "id-0001",
+                "share_minor": 750
+              },
+              {
+                "party_id": "id-0038",
+                "share_minor": 750
+              }
+            ]
+          },
+          "undo_until": "<host-clock>",
+          "undone_at": null
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "expense_id": "id-0020"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "expense_id": "id-0026"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "expense_id": "id-0031"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "expense_id": "id-0037"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "expense_id": "id-0040"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  }
+]

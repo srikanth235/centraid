@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+
 import { bootstrapVault } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
@@ -557,5 +559,47 @@ describe("tally", () => {
     expect(
       invoke("tally.bind_txn", { txn_id: "missing", expense_id: xid }).status
     ).toBe("failed"); // txn precondition
+  });
+  // ONE CLOCK, NOT TWO (#1020, R-1020-35).
+  //
+  // The handler stamps `deleted_at` and `purge_at` from the injected instant;
+  // the `expense_trashed` postcondition used to ask SQLite for `'now'`, which
+  // is the HOST's wall clock. Under a frozen clock in the past the two
+  // disagreed: the row was trashed with a `purge_at` thirty days after the
+  // frozen instant, still years behind the host's real time, so the
+  // postcondition read `purge_at > now` as false and the gateway ROLLED THE
+  // WHOLE COMMAND BACK. A refused write with no error a member could act on.
+  test("a frozen clock in the past trashes an expense, and purge_at is relative to ctx.now", () => {
+    const clock = useFakeClock("2021-06-01T12:00:00.000Z");
+    const priya = addFriend();
+    const gid = out<{ group_id: string }>(
+      invoke("tally.create_group", {
+        name: "Apt",
+        icon: "\u{1F3E0}",
+        member_ids: [priya],
+      })
+    ).group_id;
+    const xid = addRentExpense(gid, priya);
+
+    // Red before the fix: `status` was "failed" with the `expense_trashed`
+    // postcondition as the predicate, and the row was still live.
+    expect(invoke("tally.delete_expense", { expense_id: xid }).status).toBe(
+      "executed"
+    );
+    const row = db.vault
+      .prepare(
+        "SELECT deleted_at, purge_at FROM tally_expense WHERE expense_id = ?"
+      )
+      .get(xid) as { deleted_at: string; purge_at: string };
+    expect(row.deleted_at.startsWith("2021-06-01")).toBe(true);
+    // Thirty days after the FROZEN instant, not thirty days after the host's.
+    expect(row.purge_at.startsWith("2021-07-01")).toBe(true);
+
+    // And the restore window is read on the same clock, so the round trip
+    // closes rather than refusing a row it just wrote.
+    expect(invoke("tally.restore_expense", { expense_id: xid }).status).toBe(
+      "executed"
+    );
+    clock.restore();
   });
 });

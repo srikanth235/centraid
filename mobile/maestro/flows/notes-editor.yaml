@@ -1,0 +1,22 @@
+# The Notes editor: a refused save keeps the words.
+#
+# THE POINT OF THIS FLOW is the last three steps. With the gateway unreachable,
+# a save must leave the body on the screen and say what happened. An editor that
+# replaced the text with an error message would have thrown away the only copy,
+# and that is a bug a member notices once and never forgives.
+appId: dev.centraid
+name: notes-editor
+---
+- launchApp:
+    clearState: true
+- tapOn: "Notes"
+- assertVisible:
+    id: "notes-body"
+- inputText: "Book the cabin."
+- assertVisible: "Not saved yet"
+- tapOn:
+    id: "notes-save"
+# Whatever the outcome, the words are still there.
+- assertVisible: "Book the cabin."
+- assertVisible:
+    id: "notes-save-state"

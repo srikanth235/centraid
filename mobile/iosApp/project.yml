@@ -1,0 +1,80 @@
+# XcodeGen (#1020, D-1020-E1; the issue's Tooling coverage).
+#
+# THE `.xcodeproj` IS NOT COMMITTED — `mobile/.gitignore` excludes it. That is
+# the same rule v0 broke by committing `apps/mobile/android` and `apps/mobile/ios`
+# as `expo prebuild` outputs, which CI then had to REGENERATE before every
+# release build "so the release builds what the inputs say rather than what the
+# index happens to carry" (`.github/workflows/lane-release-mobile.yml`). A
+# generated project that is also committed has two sources of truth and a
+# regeneration step to reconcile them; one source and one generator has neither.
+#
+#   brew install xcodegen && cd mobile/iosApp && xcodegen generate
+#
+# `mobile/README.md` carries that command and the version to install.
+
+name: Centraid
+options:
+  bundleIdPrefix: dev.centraid
+  # READ FROM THE ONE FILE. XcodeGen resolves `${…}` from the environment, and
+  # the hand-off command exports it from `mobile/ios-deployment-target` so the
+  # floor is never typed twice.
+  deploymentTarget:
+    iOS: ${CENTRAID_IOS_DEPLOYMENT_TARGET}
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # THE DIGEST THIS BUILD EXPECTS OF THE CORE (#1020 Artifacts). Stamped by
+    # `lane-prebuilt-core.yml`; `dev` in a development build, which routes
+    # `requireDigest` into its NOT-CHECKED branch and makes it say so.
+    CENTRAID_CORE_DIGEST: ${CENTRAID_CORE_DIGEST:-dev}
+
+packages:
+  SwiftProtobuf:
+    url: https://github.com/apple/swift-protobuf.git
+    from: 1.28.2
+
+targets:
+  Centraid:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Design
+    resources:
+      - path: Resources
+    dependencies:
+      - package: SwiftProtobuf
+      # THE SHARED FRAMEWORK. Dynamic in debug and static in release, which the
+      # Gradle side decides (`mobile/shared/build.gradle.kts`); from Xcode's
+      # point of view it is one XCFramework either way.
+      - framework: ../shared/build/XCFrameworks/debug/CentraidShared.xcframework
+        embed: true
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Centraid
+        # BGTaskScheduler refuses an identifier that is not declared here, and
+        # the refusal is what `BackgroundTasks.Registration` reports to a member
+        # as "Background App Refresh is off".
+        BGTaskSchedulerPermittedIdentifiers:
+          - dev.centraid.sync-pass
+        UIBackgroundModes:
+          - fetch
+          - processing
+        # WHY CENTRAID ASKS. The camera-roll backup asks; the Photos GRID does
+        # not — it reads the vault. Two planes, and the string says which one is
+        # asking.
+        NSPhotoLibraryUsageDescription: Centraid backs up your camera roll into your own vault.
+        # iCloud is EXCLUDED from the replica directory in code; this is the
+        # declaration that goes with it (`docs/mobile-offline.md:240-247`).
+        ITSAppUsesNonExemptEncryption: false
+
+  CentraidTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Centraid

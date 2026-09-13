@@ -65,14 +65,35 @@ function compare(
 }
 
 /**
+ * THE ONE RESERVED CONDITION PARAMETER (#1020, R-1020-35).
+ *
+ * A condition that needs "now" binds `:ctx_now` and gets the SAME instant the
+ * handler stamps as `ctx.now`. Before this the vault had TWO clocks: handlers
+ * took the injected instant, and every condition that needed a time wrote
+ * `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`, which is SQLite reading the host's
+ * wall clock. The instance that bit was the trash window: `tally.delete_expense`
+ * stamps `purge_at` at `ctx.now + 30 days` and its own postcondition asks
+ * whether `purge_at` is still in the future, so under a frozen clock in the
+ * past the command trashed the row and then rolled the whole thing back — a
+ * refused write, with no wrong number to see it by. Seven other commands carry
+ * the same restore-window predicate.
+ *
+ * It is reserved rather than merged with the input: a command input named
+ * `now` would otherwise decide the vault's idea of the time.
+ */
+const RESERVED_NOW_PARAM = "ctx_now";
+
+/**
  * Evaluate declarative conditions against the vault. Named params in the
- * condition SQL bind from command input; a condition that errors (bad SQL,
- * missing param) fails closed.
+ * condition SQL bind from command input, except `:ctx_now`, which binds the
+ * caller's injected instant; a condition that errors (bad SQL, missing param)
+ * fails closed.
  */
 export function evaluateConditions(
   vault: DatabaseSync,
   specs: readonly CommandCondition[],
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  now: string
 ): ConditionResult[] {
   return specs.map((spec) => {
     // A domain-operation condition (#996, R21): the same contract stage, with
@@ -111,6 +132,10 @@ export function evaluateConditions(
       const params: Record<string, string | number | null> = {};
       for (const match of spec.sql.matchAll(/:(?<param>[a-z_][a-z0-9_]*)/giu)) {
         const key = match.groups?.param as string;
+        if (key === RESERVED_NOW_PARAM) {
+          params[key] = now;
+          continue;
+        }
         const value = input[key];
         params[key] =
           typeof value === "string" || typeof value === "number"

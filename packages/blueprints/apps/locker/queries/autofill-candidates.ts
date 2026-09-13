@@ -6,6 +6,7 @@
  * this handler.
  */
 
+import { readWindow } from "../../_shared/paged-reads.ts";
 import { LOCKER_ITEM_COLUMNS } from "./items.ts";
 
 /** How many logins the picker considers. */
@@ -44,8 +45,12 @@ export default async function autofillCandidates({
     // that holds no vault has to be gated. Raised in the wave-6 receipt as an
     // open question rather than settled here.
     const [response, watchtower] = await Promise.all([
-      ctx.vault.page<LoginRow>({
-        query: {
+      // WALKED, NOT CLAMPED (#1020, R-1020-35). A 2,000-row window asked for
+      // as one page came back 500 rows long with a `next` cursor nobody read,
+      // so a member past 500 logins had suggestions silently missing.
+      readWindow<LoginRow>(
+        ctx,
+        {
           name: "locker.autofill.logins",
           select: LOCKER_ITEM_COLUMNS,
           from: "locker_item",
@@ -57,8 +62,8 @@ export default async function autofillCandidates({
             descending: true,
           },
         },
-        limit: LOGIN_ROWS,
-      }),
+        LOGIN_ROWS
+      ),
       ctx.vault.invoke({ command: "locker.watchtower", input: {} }),
     ]);
     const warned = new Set(
@@ -75,7 +80,7 @@ export default async function autofillCandidates({
             .filter(Boolean)
         : []
     );
-    const candidates = ((response.rows ?? []) as unknown as LoginRow[])
+    const candidates = (response as unknown as LoginRow[])
       .filter((row) => typeof row.url === "string" && row.url.length > 0)
       .map((row) => ({
         item_id: row.item_id,

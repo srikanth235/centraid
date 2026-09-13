@@ -655,7 +655,13 @@ export class Gateway {
     request: PageRequest
   ): Page<Record<string, unknown>> & { receiptId?: string } {
     const identity = this.identify(cred);
-    const plan = planPagedDoor(this.db.vault, identity, query, nowIso());
+    const plan = planPagedDoor(
+      this.db.vault,
+      identity,
+      query,
+      nowIso(),
+      request.after !== undefined
+    );
     const statement = pageStatement(query, request, {
       sql: plan.where,
       bind: plan.bind,

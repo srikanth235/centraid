@@ -1,0 +1,72 @@
+// Events (#1020, D-1020-C4).
+//
+// Three kinds, and they answer three different questions: what changed, whether
+// the core is keeping up, and whether the gateway is reachable. A shell that
+// renders only the first one is a shell that lies while offline, which is what
+// #1020 rules against for the desktop's thin mode.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/value.proto";
+
+// Rows changed. COALESCED PER `(table, pk)` and nothing is dropped (#1020
+// Execution model): a consumer that stops reading stalls sync once the queue
+// fills, which is the correct backpressure and is reported as a `HealthEvent`,
+// not as a lost change.
+//
+// This is a WAKE, exactly as v0's feed is (`docs/protocol.md:269`): it carries
+// no row a client may depend on. A seat pulls its own `LogPage`s and a shell
+// re-runs its own `PageQuery`. That is why there is no row image here and why
+// adding one later would be a change of meaning, not a new field.
+message ChangeEvent {
+  string table = 1;
+  // Every key that changed in this coalescing window, deduplicated.
+  repeated RecordKey pk_set = 2;
+  // The highest commit this event covers. A seat's overlay clears against a
+  // COMMIT SEQ, never against a `LogRow.seq` (census seam 5).
+  uint64 commit_seq = 3;
+}
+
+// How the core is coping. `queue_depth` and `capacity` are the backpressure the
+// ABI's `next_event` contract names; `stalled` is the state a shell must render
+// rather than spin in.
+message HealthEvent {
+  uint32 queue_depth = 1;
+  uint32 capacity = 2;
+  // The event queue filled and sync is waiting for the consumer.
+  bool stalled = 3;
+  // Log positions the seat is behind the gateway's watermark. A DISTANCE IN LOG
+  // POSITIONS, not in rows and not in time
+  // (`packages/client/src/replica/seat/watermark.ts:18-20`).
+  uint64 behind = 4;
+}
+
+// Where the seat's connection stands. `open` never blocks on the network
+// (#1020, D-1020-C10), so the FIRST thing every shell sees is
+// `CONNECTIVITY_STATE_OFFLINE` and a later event, never a spinner that is
+// secretly a synchronous connect.
+enum ConnectivityState {
+  CONNECTIVITY_STATE_UNSPECIFIED = 0;
+  // No endpoint yet, or deliberately idle (a backgrounded phone).
+  CONNECTIVITY_STATE_OFFLINE = 1;
+  CONNECTIVITY_STATE_CONNECTING = 2;
+  // A direct QUIC path to the gateway.
+  CONNECTIVITY_STATE_DIRECT = 3;
+  // Reachable, but only through a relay. A distinct state because it is the
+  // state the product depends on when hole-punching fails, and a member whose
+  // media is slow is owed the reason (#1020 Decision, relay availability).
+  CONNECTIVITY_STATE_RELAY = 4;
+  // A typed failure. `ConnectivityEvent.code` says which.
+  CONNECTIVITY_STATE_FAILED = 5;
+}
+
+message ConnectivityEvent {
+  ConnectivityState state = 1;
+  // Set when `state` is `FAILED`. An `ErrorCode` from error.proto, so a shell
+  // switches on a value and never on a sentence.
+  uint32 code = 2;
+  // The relay in use, for the diagnostics screen. Display only.
+  string relay_url = 3;
+}

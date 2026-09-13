@@ -483,9 +483,14 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       const collapsed = ctx.time.collapseMissedOccurrences({
         rrule,
         scheduledStart: start,
-        ...(typeof task.recurrence_tz === "string"
-          ? { timeZone: task.recurrence_tz }
-          : {}),
+        // THE COLUMN IS `tz` (#916, ruling R4; #1020, R-1020-35). The rename
+        // landed in the schema — `ontology-rules.test.ts:180` asserts
+        // `schedule_task` has no `recurrence_tz` — and never reached this
+        // reader, so the property was always `undefined` and the collapse fell
+        // back to UTC: a repeating task's missed count and next due date were
+        // an hour out for every member in a zone that observes DST. Drift
+        // ONT-25's shape, in a second place.
+        ...(typeof task.tz === "string" ? { timeZone: task.tz } : {}),
         ...(task.recurrence_anchor === "completion" ||
         task.recurrence_anchor === "scheduled"
           ? { anchor: task.recurrence_anchor }

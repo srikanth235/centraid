@@ -1,0 +1,42 @@
+// The snapshot HEAD — never the snapshot (#1020, D-1020-C4).
+//
+// One snapshot, three uses (#1020 Execution model): the gateway's backup
+// snapshot, a new seat's bootstrap and the pre-migration safety copy are the
+// same artifact. The bytes move over iroh-blobs by digest; this message is the
+// pointer, so the control plane never carries a 300 MB body.
+//
+// v0 identified the artifact with a strong ETag `"<epoch>-<seq>"`
+// (`packages/server/src/routes/seat-routes.ts:213`) because the artifact is a
+// pure function of the log position. Here `digest` is the content address, which
+// is strictly stronger: two gateways at the same `(epoch, seq)` that somehow
+// built different bytes are now distinguishable, and resumable verified
+// transfer comes from iroh-blobs rather than from `Range` plus `If-Range`
+// (census seam 7).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+message SnapshotHead {
+  string vault_id = 1;
+  string epoch = 2;
+  // The log position the artifact was cut at. The seat installs the file and
+  // then sets its cursor HERE — the snapshot builder deletes the log and keeps
+  // the floor (`packages/vault/src/replica/seat-snapshot.ts:228-239`).
+  uint64 seq = 3;
+  uint32 schema_epoch = 4;
+  // The iroh-blobs content address (BLAKE3), as raw bytes.
+  bytes digest = 5;
+  // Bytes of the artifact, for the progress the shell renders and for the
+  // metered-egress warning a `recover` run prints.
+  uint64 size = 6;
+}
+
+// A seat asking for the current head. `pinned_seq` is the seat resuming an
+// artifact it already measured — a HINT, never a demand
+// (`packages/server/src/routes/seat-routes.ts:443-446`): the gateway honours it
+// only for an artifact already on disk and otherwise answers with the current
+// watermark's.
+message SnapshotHeadRequest {
+  optional uint64 pinned_seq = 1;
+}

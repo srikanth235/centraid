@@ -1,0 +1,35 @@
+[package]
+name = "centraid-net"
+description = "The iroh endpoint: ALPN routing, the device allowlist, QR pairing, relay modes and typed connect errors (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_net"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-protocol = { path = "../protocol" }
+base64.workspace = true
+iroh.workspace = true
+prost.workspace = true
+qrcode = { workspace = true }
+rand.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = [
+  "rt",
+  "rt-multi-thread",
+  "macros",
+  "time",
+  "io-util",
+] }

@@ -1,0 +1,35 @@
+[package]
+name = "centraid-automations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+# THE ONE INJECTION POINT (#1020, D-1020-AU1). This dependency exists for
+# `turn::Dispatch` and the posture types, and it runs in ONE direction:
+# automations calls the trait, assist implements it, and assist depends on this
+# crate for nothing.
+centraid-assist = { path = "../assist" }
+# `models::{Lock, verify, ensure, Fetch}` — the weights half of open question 9,
+# landed by the Photos lane (D-1020-P3) and consumed here.
+centraid-media = { path = "../media" }
+centraid-ontology = { path = "../ontology" }
+# ONE ZONE SOURCE (#1020, D-1020-S8): `cron::{FireZone, ZoneUnset}` are
+# `centraid_vault::time::zone`'s and re-exported from here. Already in the
+# graph through `centraid-assist`; named directly because this crate uses it.
+centraid-vault = { path = "../vault" }
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+# Constant-time comparison for the webhook secret hash (D-1020-AU5).
+subtle.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# The weights half's tests write into a scratch runtime directory.
+tempfile.workspace = true

@@ -102,7 +102,65 @@ const EXPENSE_LIVE_SQL =
 // was told had been deleted.
 const EXPENSE_TRASHED_SQL = `SELECT count(*) AS n FROM tally_expense
    WHERE expense_id = :expense_id AND deleted_at IS NOT NULL
-     AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
+     AND (purge_at IS NULL OR purge_at > :ctx_now)`;
+/**
+ * A MEMBER'S NET POSITION IN ONE GROUP, PER CURRENCY (#1020, R-1020-35).
+ *
+ * `unsettled` is the number of currencies in which the member is not square;
+ * `worst_currency` and `worst_amount_minor` name the largest of them so a
+ * refusal can say which money is outstanding. A group is one ledger in one
+ * money (#916, R1), so in practice there is at most one row — the group by
+ * currency is kept anyway, because an expense carries its own `currency`
+ * column and a mixed group is a data state, not an impossibility.
+ *
+ * The four terms, in the order they appear:
+ *   + what the member PUT DOWN. `tally_expense_payer` is authoritative when an
+ *     expense has payer rows; a single-payer expense may have none, and then
+ *     `paid_by` is the payer for the whole amount.
+ *   - what the member was SPLIT for (`tally_expense_split`).
+ *   + what the member has since PAID OUT in settlements.
+ *   - what the member has been PAID.
+ * Trashed expenses and settlements are out of every balance (#441), which is
+ * the same rule the dashboard's fold applies.
+ */
+const MEMBER_NET_IN_GROUP_SQL = `
+  WITH ledger AS (
+    SELECT e.currency AS currency,
+           CASE
+             WHEN EXISTS (SELECT 1 FROM tally_expense_payer p
+                           WHERE p.expense_id = e.expense_id)
+               THEN COALESCE((SELECT SUM(p.paid_minor) FROM tally_expense_payer p
+                               WHERE p.expense_id = e.expense_id
+                                 AND p.party_id = :party_id), 0)
+             WHEN e.paid_by = :party_id THEN e.amount_minor
+             ELSE 0
+           END
+           - COALESCE((SELECT SUM(s.share_minor) FROM tally_expense_split s
+                        WHERE s.expense_id = e.expense_id
+                          AND s.party_id = :party_id), 0) AS net_minor
+      FROM tally_expense e
+     WHERE e.group_id = :group_id AND e.deleted_at IS NULL
+    UNION ALL
+    SELECT t.currency AS currency,
+           CASE WHEN t.from_party = :party_id THEN t.amount_minor ELSE 0 END
+           - CASE WHEN t.to_party = :party_id THEN t.amount_minor ELSE 0 END
+             AS net_minor
+      FROM tally_settlement t
+     WHERE t.group_id = :group_id AND t.deleted_at IS NULL
+       AND (t.from_party = :party_id OR t.to_party = :party_id)
+  ), byCurrency AS (
+    SELECT currency, SUM(net_minor) AS net_minor
+      FROM ledger
+     GROUP BY currency
+    HAVING SUM(net_minor) <> 0
+  )
+  SELECT (SELECT count(*) FROM byCurrency) AS unsettled,
+         (SELECT currency FROM byCurrency
+           ORDER BY abs(net_minor) DESC, currency LIMIT 1) AS worst_currency,
+         (SELECT net_minor FROM byCurrency
+           ORDER BY abs(net_minor) DESC, currency LIMIT 1)
+           AS worst_amount_minor`;
+
 const EXPENSE_ANY_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id";
 
@@ -827,16 +885,30 @@ const REMOVE_GROUP_MEMBER: CommandDefinition = {
       value: 1,
     },
     {
-      // Refuse while the party is still on the ledger (paid or owes) in-group.
+      // "OFF LEDGER" MEANS SETTLED UP, NOT ABSENT FROM HISTORY (#1020,
+      // R-1020-35, adopting option (b) of lane D3's finding 8).
+      //
+      // This used to count the expenses a member had paid for or been split
+      // into, and refuse if there were any — which is every member a group
+      // has ever had. The action was unreachable for anybody who had spent
+      // anything, while the manifest offered it beside `leave_group` with no
+      // hint that one of the two could never succeed. Counting history also
+      // asked the wrong question: a member who has paid their share and been
+      // settled up is exactly the member a group wants to remove, and the
+      // expenses they are named in are durable money history that must stay.
+      //
+      // So the predicate is the balance, per currency: what they put down,
+      // less what they were split, plus what they have since paid out, less
+      // what they have been paid. Zero in every currency is off ledger. The
+      // observed row names the currency and the amount that is not zero, so a
+      // refusal says which money is outstanding rather than "no".
       name: "member_off_ledger",
-      sql: `SELECT (
-              (SELECT count(*) FROM tally_expense e WHERE e.group_id = :group_id AND e.paid_by = :party_id)
-              + (SELECT count(*) FROM tally_expense_split s JOIN tally_expense e ON e.expense_id = s.expense_id
-                   WHERE e.group_id = :group_id AND s.party_id = :party_id)
-            ) AS n`,
-      column: "n",
+      sql: MEMBER_NET_IN_GROUP_SQL,
+      column: "unsettled",
       op: "eq",
       value: 0,
+      message:
+        "this member still has an unsettled balance in this group; settle up first, or the group keeps their history",
     },
   ],
   postconditions: [],

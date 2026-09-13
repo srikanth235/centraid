@@ -1,0 +1,128 @@
+// The replica log on the wire (#1020, D-1020-C4).
+//
+// v0's shape is `SeatLogRowWire` / `SeatLogPageWire`
+// (`packages/core/src/protocol/seat-log.ts:27-55`). The wire is deliberately not
+// the storage shape: `epoch` is carried ONCE per page, not per row, and the
+// flags that are false are simply not set.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/row.proto";
+import "centraid/core/v1/value.proto";
+
+// What a log row did.
+enum LogOp {
+  LOG_OP_UNSPECIFIED = 0;
+  LOG_OP_INSERT = 1;
+  LOG_OP_UPDATE = 2;
+  LOG_OP_DELETE = 3;
+  // A schema statement. Never deferrable, whatever the commit says
+  // (`packages/client/src/replica/seat/applier.ts:184-195`).
+  LOG_OP_DDL = 4;
+}
+
+// One row of the log.
+message LogRow {
+  // `replica_log.seq` — the SEAT CURSOR's unit. Not `commit_seq`; census seam 5
+  // names comparing the two "the R6 mistake in miniature — 432 against 2".
+  uint64 seq = 1;
+  // The transaction `seq` belongs to. An intent outcome names THIS number, and
+  // an overlay clears against it.
+  uint64 commit_seq = 2;
+  // Compatibility. A mismatch is a re-bootstrap.
+  uint32 schema_epoch = 3;
+  // Additive progress INSIDE one schema epoch. Conflating it with
+  // `schema_epoch` makes every additive column a full re-bootstrap.
+  uint32 ddl_version = 4;
+  string table = 5;
+  LogOp op = 6;
+  RecordKey pk = 7;
+  // The row image. Absent for a private/local table's key-only row and for a
+  // row whose op carries no image.
+  optional RowImage row = 8;
+  // The delta prior image, for `LOG_OP_UPDATE` only. ABSENT means "no prior is
+  // known"; PRESENT AND EMPTY means "the statement touched only the key".
+  // `optional` is what keeps those two apart on the wire.
+  optional PriorDelta prior = 9;
+  // The change was a side effect of another statement (SQLite's session
+  // `indirect` flag).
+  bool indirect = 10;
+  // The commit was over the defer threshold. The flag is a property of the
+  // COMMIT and rides on every row of it, never on the page
+  // (`packages/vault/src/replica/log-retention.test.ts:203`).
+  bool deferred = 11;
+  string producer = 12;
+  // RFC 3339, as v0 stores it.
+  string committed_at = 13;
+}
+
+// One page of the log.
+message LogPage {
+  // Which vault answered. v0 makes this optional on the wire so an older
+  // gateway that says nothing does not brick a compatible pair
+  // (`packages/core/src/protocol/seat-log.ts:126-137`); here an empty string is
+  // that same "this door did not say".
+  string vault_id = 1;
+  string epoch = 2;
+  uint32 schema_epoch = 3;
+  uint32 ddl_version = 4;
+  // The retention floor. A cursor below it is told to re-bootstrap, never
+  // served short.
+  uint64 floor = 5;
+  uint64 watermark = 6;
+  // The cursor to send next: the last SERVED seq when `has_more`, else the
+  // watermark (`packages/vault/src/replica/log.ts:848`).
+  uint64 next = 7;
+  bool has_more = 8;
+  // Whole commits only — a page never ends mid-commit, and the tail of the last
+  // row's commit is appended whatever the limit said (`log.ts:817-833`).
+  repeated LogRow rows = 9;
+}
+
+// A cursor a seat sends. v0's wire form is the string `<epoch>:<seq>`
+// (`packages/vault/src/replica/cursor.ts:21-64`); two fields need no escaping
+// rule about colons in the epoch.
+message LogCursor {
+  string epoch = 1;
+  uint64 seq = 2;
+}
+
+// Why a seat must throw its file away and start from a snapshot. v0's verdict
+// vocabulary is closed and ten values wide
+// (`packages/server/src/routes/replica-routes.ts:79-95`); anything unrecognised
+// there normalises to `invalid-cursor`, and `REBOOTSTRAP_REASON_UNSPECIFIED`
+// is that same normalisation here.
+enum RebootstrapReason {
+  REBOOTSTRAP_REASON_UNSPECIFIED = 0;
+  REBOOTSTRAP_REASON_EPOCH_MISMATCH = 1;
+  REBOOTSTRAP_REASON_RETENTION = 2;
+  REBOOTSTRAP_REASON_CURSOR_AHEAD = 3;
+  REBOOTSTRAP_REASON_INITIAL = 4;
+  REBOOTSTRAP_REASON_EPOCH_CHANGED = 5;
+  REBOOTSTRAP_REASON_SNAPSHOT_RETENTION = 6;
+  REBOOTSTRAP_REASON_SHAPE_CHANGED = 7;
+  REBOOTSTRAP_REASON_CHECKPOINT_INCOMPATIBLE = 8;
+  REBOOTSTRAP_REASON_DEVICE_ACCESS_CHANGED = 9;
+  REBOOTSTRAP_REASON_INVALID_CURSOR = 10;
+}
+
+// The answer to a cursor the gateway cannot serve from.
+message RebootstrapRequired {
+  RebootstrapReason reason = 1;
+  string epoch = 2;
+  uint64 floor = 3;
+  uint64 watermark = 4;
+  uint32 schema_epoch = 5;
+}
+
+// Ask for a page of the log.
+message LogRequest {
+  // Where the seat is. Absent means "from the floor".
+  optional LogCursor since = 1;
+  // Rows per page. Required and validated > 0 by the reader; v0 defaults 1,000
+  // and ceilings at `SEAT_LOG_MAX_PAGE = 10_000`
+  // (`packages/core/src/protocol/seat-log.ts:141`).
+  uint32 limit = 2;
+}

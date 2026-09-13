@@ -133,7 +133,9 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       const start = typeof task["due_at"] === "string" ? task["due_at"] : null;
       if (!rrule || !start) return {};
       const anchor = task["recurrence_anchor"];
-      const zone = task["recurrence_tz"];
+      // THE COLUMN IS `tz` (#916, ruling R4; #1020, R-1020-35) — see
+      // `board.ts`'s note: the rename never reached this reader either.
+      const zone = task["tz"];
       const completed = task["completed_at"];
       const collapsed = ctx.time.collapseMissedOccurrences({
         rrule,

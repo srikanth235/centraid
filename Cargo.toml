@@ -1,0 +1,277 @@
+[workspace]
+resolver = "3"
+# One crate per app, so an edit in an app rebuilds one crate (#1020, Tooling
+# coverage). `crates/apps` is a DIRECTORY of crates, so it is excluded below
+# (cargo refuses a glob match with no manifest) and each app crate is NAMED
+# here: a glob would hide the count, and an explicitly listed member overrides
+# the exclusion of its parent.
+members = [
+  "crates/*",
+  "crates/apps/agenda",
+  "crates/apps/docs",
+  "crates/apps/kit",
+  "crates/apps/locker",
+  "crates/apps/notes",
+  "crates/apps/people",
+  "crates/apps/photos",
+  "crates/apps/tasks",
+  "crates/apps/tally",
+]
+exclude = [
+  "crates/apps",
+  # The v0 byte plane stays where it is as the pinned oracle until wave 6 (#1020).
+  "packages/tunnel/data-plane",
+  "packages/tunnel/native",
+  "apps/web/iroh-wasm",
+]
+
+[workspace.package]
+version = "1.0.0-alpha.0"
+edition = "2024"
+rust-version = "1.91"
+license = "MIT"
+publish = false
+repository = "https://github.com/srikanth235/centraid"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+flate2 = "1"
+hex = "0.4"
+blake3 = "1.8"
+jsonschema = "0.30"
+proptest = "1"
+# `session` is the log plane's capture mechanism and it requires `bundled`
+# (#1020, D-1020-D1-3): the amalgamation is compiled with SQLITE_ENABLE_SESSION
+# and the preupdate hook, which a system libsqlite3 almost never carries.
+# `hooks` gives the commit/rollback hooks the commit guard needs; `functions`
+# the applier's scalar helpers.
+rusqlite = { version = "0.40", features = [
+  "bundled",
+  "session",
+  "hooks",
+  "functions",
+] }
+serde = { version = "1", features = ["derive"] }
+# `float_roundtrip` is NOT optional here (#1020, D-1020-D1-18). serde_json's
+# default float parser is fast and approximate: it can land one ULP away, and
+# `crates/vault/tests/properties.rs` found it doing exactly that on a stored
+# REAL image (1.2240809751959867e163 came back as …868e163). A log row's images
+# are parsed back on every apply, so a drifting REAL is a seat whose latitude,
+# or exchange rate, is quietly not the gateway's.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.11"
+thiserror = "2"
+tracing = "0.1"
+
+# Wave 2 lane C — the schema workspace, the transport-generic protocol, the
+# iroh endpoint and the one binary (#1020).
+base64 = "0.22"
+bytes = "1"
+iroh = "1.2"
+prost = "0.14"
+prost-build = "0.14"
+protox = "0.9"
+qrcode = { version = "0.14", default-features = false }
+rand = "0.9"
+rand_chacha = "0.9"
+turmoil = "0.7"
+tokio = { version = "1", features = [
+  "macros",
+  "rt-multi-thread",
+  "io-util",
+  "sync",
+  "time",
+] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# `proptest` is declared above, by lane D3. One entry for the workspace.
+
+# Wave 2 lane R — the byte plane, key custody, backup and recovery (#1020).
+# These are the versions `packages/tunnel/data-plane` seals the cross-language
+# golden with. The formats are normative (D-1020-R1), so a major bump on any of
+# the AEAD/KDF crates is a re-keying event to be proven against
+# `contracts/golden/format-golden.json`, never routine housekeeping.
+aes-gcm = "0.11"
+hkdf = "0.13"
+hmac = "0.13"
+ryu-js = "1.0.3"
+scrypt = "0.12"
+subtle = "2"
+tempfile = "3"
+zstd = "0.13"
+
+# Wave 4 lane assist — the client half of the Agent Client Protocol (#1020,
+# D-1020-AS5). It replaces the JSON-RPC-over-stdio plumbing v0 hand-rolled
+# behind `@agentclientprotocol/sdk`: the `Client` role the gateway speaks, the
+# `Agent` it talks to, typed `ContentBlock`s (including
+# `ImageContent { data, mime_type }` — the shape v0's `multimodal.ts` warns is
+# NOT Anthropic's `source.media_type`), and `AcpAgent`, which spawns a harness
+# and frames its stdio.
+#
+# `unstable_mcp_over_acp` EXISTS in 2.1.0 and is deliberately NOT enabled: it is
+# recorded as the future collapse of `centraid mcp` into the ACP connection
+# itself, and it stays unadopted while it is unstable and while neither
+# first-party adapter implements the `type: "acp"` MCP transport
+# (`vault-mcp-server.ts:1`-`:16`).
+agent-client-protocol = "2.1"
+# Comes with the protocol crate's own API surface (`BoxFuture`, the
+# executor-agnostic streams its connection is built on), so it is declared here
+# rather than reached through a re-export.
+futures = "0.3"
+
+# Wave 4 lane automations — civil time with a BUNDLED tzdb (#1020, D-1020-AU2).
+jiff = { version = "0.2", default-features = false, features = [
+  "std",
+  "tzdb-bundle-always",
+] }
+
+# Wave 4 lane Locker — origin matching, and the one dependency it adds
+# (#1020, D-1020-L10). `psl` is the Public Suffix List embedded and pinned: its
+# version number IS the list's date, which is the same shape `tldts` has on the
+# TypeScript side that `contracts/origin-matching-v1.json` is the spec for. A
+# bump is a list refresh and re-runs that spec in both trees. `url` is the
+# WHATWG parser the policy needs anyway (IDNA, default-port normalisation) and
+# is already in the graph.
+psl = "2.1"
+url = "2.5"
+# The seat's at-rest wrap is v0's, primitive for primitive: PBKDF2-SHA-256 at
+# 600,000 rounds around `K` (`packages/client/src/locker/locker-unlock.ts:38`).
+# Already in the graph as scrypt's own dependency; declared here because
+# `crates/seat` calls it directly.
+pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
+
+# THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
+# disk (D-1020-G7).
+#
+# Measured on `ci-linux-x64-4c` with the shared target directory three lanes of
+# wave 3 build into: **16 GB** under `debug/`, of which **7.7 GB was 144 test
+# and bin executables** (the four `centraid` test binaries alone were
+# 363–387 MB each) and **4.3 GB was rlibs**. Almost all of it is debuginfo, and
+# almost none of it was ever read: the disk allowance ran out twice during this
+# wave and the thing that ran out was type and variable tables for iroh,
+# rustls and SQLite.
+#
+# So: `debug = "line-tables-only"` for OUR crates — a backtrace still names the
+# file and the line, which is what a red test is read with — and `debug = false`
+# for dependencies, which nobody steps into. `split-debuginfo` keeps the DWARF
+# out of the executable itself, so a 380 MB test binary is a small executable
+# beside object files cargo already had.
+#
+# THE ESCAPE HATCH, because "you cannot debug this workspace" would be a real
+# cost: `CARGO_PROFILE_DEV_DEBUG=2 cargo test -p <crate>` restores full
+# debuginfo for one command, for the one crate being debugged. It is written in
+# `crates/xtask/README.md` beside the gate profiles, not only here.
+[profile.dev]
+debug = "line-tables-only"
+# "unpacked" rather than "packed" for dev: packing runs `dsymutil` (macOS) or
+# `llvm-dwp` (Linux) on every link, which is exactly the wrong trade on the
+# edit-run loop. The release profile packs, because a published symbol file has
+# to be ONE file beside the artifact.
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+# Dependencies: optimised once, and carrying no debuginfo at all. Stepping into
+# iroh or rusqlite is a `CARGO_PROFILE_DEV_DEBUG=2` session, not the default
+# every build pays for.
+opt-level = 2
+debug = false
+
+# `cargo test` uses `dev` for the crates under test but has its own profile for
+# the test harnesses, and the 7.7 GB above was mostly THOSE. Stated explicitly
+# rather than relying on inheritance, because the inheritance rules for
+# `profile.test` have changed across cargo versions and this is the number that
+# mattered.
+[profile.test]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.test.package."*"]
+opt-level = 2
+debug = false
+
+# THE RELEASE PROFILE (#1020, D-1020-G8). What ships, and what a crash report
+# can be read with.
+#
+# TWO OPTIMISED PROFILES, and the split is measured rather than stylistic.
+#
+# `release` is what a PULL REQUEST builds. `cargo xtask gate --profile pr`'s
+# `release-build` step runs `cargo build --workspace --release` and scores it
+# against the `releaseBuildSeconds` ceiling in
+# `contracts/ledgers/compile-time.json` (1400 s as wave 2 lane B2 re-based it)
+# — the one compile-time number a pull request can go red on. It is also what a developer builds when checking that
+# something is fast enough to be worth shipping.
+#
+# `dist` is what a TAG publishes. It is `release` plus `lto = "thin"` and
+# `codegen-units = 1`: cross-crate inlining across `crates/*` is the
+# optimisation a prebuilt core linked by three shells cannot get any other way,
+# and it is paid for once per triple on a CI runner rather than on every pull
+# request.
+#
+# WHY THEY ARE SEPARATE, re-judged against wave 2 lane B2's re-based ledgers
+# (D-1020-B2) rather than against the number that first prompted the split.
+# `lto = "thin"` + `codegen-units = 1` was tried inside `release` first, which
+# is the conventional single-profile answer. Measured on `ci-linux-x64-4c`,
+# cold, contended with another lane's build:
+#
+#   * `cargo build --release --bin centraid`, LTO + `codegen-units = 1`: 630 s
+#   * `cargo build --workspace --release`, LTO + `codegen-units = 1`: 1039 s
+#   * `cargo build --workspace --release`, no LTO, with split debuginfo: 747 s
+#   * `cargo build --workspace --release`, this profile: **379 s**
+#
+# Against the 600 s `releaseBuildSeconds` ceiling those numbers were measured
+# under, LTO simply did not fit. B2 has since re-based that ceiling to 1400 s,
+# so 1039 s WOULD now fit — and the split stays anyway, on the argument that
+# survives the number: LTO in `release` spends 74 % of the ceiling and about
+# 70 % of the whole 1500 s `pr` budget on an optimisation only the PUBLISHED
+# artifact needs, and `pr` has to hold with the release build inside it. A
+# feedback loop is not the place to pay for inlining nobody on a pull request
+# consumes. If that argument ever stops holding, the fix is to merge `dist`
+# back into `release`, not to widen a ledger.
+#
+# WHAT THE SPLIT COSTS, stated because it is a real cost and not a free win:
+# the binary a pull request builds is no longer bit-identical to the binary a
+# tag ships. `cargo xtask gate --profile release`'s `vps-smoke` step therefore
+# smokes the `release` binary, and the `dist` artifact is proved by
+# `.github/workflows/lane-prebuilt-core.yml` — which builds it, stamps it,
+# checks the stamp it reads back out of the binary, and publishes it with its
+# symbol file. What the two profiles share is everything that affects
+# BEHAVIOUR: the same `panic` strategy, the same debuginfo shape, the same
+# dependency graph. What differs is inlining.
+#
+# `panic = "unwind"`, NOT abort, and this is not a size oversight:
+# `crates/core-ffi` exports a C ABI, and a panic crossing a C frame with
+# `panic = "abort"` takes the host process down — the phone's app, the
+# desktop's Electron main, the browser's native host. Unwinding lets the FFI
+# boundary catch it and return an error the shell can report. The saving abort
+# would buy is a fraction of the artifact; the cost is the shell losing the
+# ability to survive a bug in the core.
+#
+# DEBUGINFO IS `dist`-ONLY, for the same reason and on the same measurement. A
+# symbol file is only needed for an artifact somebody SHIPS, and generating and
+# packing one is not free: `release` carrying
+# `debug = "line-tables-only"` + `split-debuginfo = "packed"` cost 747 s against
+# this profile's 379 s — nearly double, for symbols no pull request reads. So
+# the debuginfo settings live in `dist`, where the wall clock is bounded by a CI
+# runner rather than by a feedback-time budget, and `release` is cargo's
+# ordinary optimised build.
+#
+# `debug = "line-tables-only"` + `split-debuginfo = "packed"` + NO `strip`. A
+# stripped binary with no symbol file anywhere is a crash report nobody can
+# read, and #1020 rules a symbol file published beside every artifact — so the
+# DWARF is kept, and kept OUTSIDE the executable. "packed" is what makes it one
+# file per platform: `centraid.dwp` on Linux, `centraid.dSYM` on macOS, the
+# `.pdb` cargo already emits on Windows. That file is the published symbol
+# artifact, and the shipped binary is stripped at PACKAGING rather than here —
+# `strip = "debuginfo"` in these tables would throw the symbols away before
+# anything could keep them. Line tables rather than full debuginfo for the same
+# reason as `dev` (D-1020-G7).
+[profile.release]
+panic = "unwind"
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"
+split-debuginfo = "packed"
+strip = false

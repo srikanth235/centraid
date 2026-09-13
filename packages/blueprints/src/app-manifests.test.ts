@@ -311,4 +311,26 @@ describe("bundled blueprint manifests", () => {
     ].toSorted();
     expect(indexed).toStrictEqual(onDisk);
   });
+
+  // A QUERY ENTRY DECLARES NOTHING THE RUNTIME DOES NOT READ (#1020,
+  // R-1020-35). `reads` was the mirror of an action's `writes` and was never
+  // populated by any bundled manifest and never consulted by any call site, so
+  // it is gone from `ManifestQueryEntry` and from the manifest schema. This
+  // guard is what stops it — or any other unread key — from coming back as a
+  // declaration a reader would mistake for an enforced bound.
+  it.each([
+    ...apps.map((id) => ["apps", id] as const),
+    ...automations.map((id) => ["automations", id] as const),
+  ])("%s/%s declares only query keys the runtime reads", (kind, id) => {
+    const raw = JSON.parse(
+      readFileSync(path.join(PACKAGE_ROOT, kind, id, "app.json"), "utf8")
+    ) as { queries?: Array<Record<string, unknown>> };
+    const known = new Set(["name", "description", "input", "output"]);
+    const unread = (raw.queries ?? []).flatMap((query) =>
+      Object.keys(query)
+        .filter((key) => !known.has(key))
+        .map((key) => `${String(query.name)}.${key}`)
+    );
+    expect(unread).toStrictEqual([]);
+  });
 });

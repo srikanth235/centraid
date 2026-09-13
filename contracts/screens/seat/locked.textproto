@@ -1,0 +1,5 @@
+# LOCKED. Decrypted material is cleared and the replica is unmounted; a state,
+# not a modal over a live screen (`docs/mobile-offline.md:253`).
+availability: AVAILABILITY_LOCKED
+durability: DURABILITY_AUTHORITATIVE
+connectivity: CONNECTIVITY_ONLINE_UNMETERED

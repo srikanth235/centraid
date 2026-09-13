@@ -1,0 +1,39 @@
+{
+  "schema": "centraid-app-parity/1",
+  "app": "locker",
+  "regenerate": "bun install && bun run build && CENTRAID_WRITE_CONTRACTS=1 node node_modules/vitest/vitest.mjs run --config vitest.quality.config.ts tests/quality/locker-parity.contract.test.ts  # the emitter AND the oracle for contracts/tools/export-locker-parity.ts; then bun run format && git diff --exit-code contracts/apps/locker",
+  "why": "The bundle is generated from the v0 tree by contracts/tools/export-locker-parity.ts, whose oracle is tests/quality/locker-parity.contract.test.ts: with CENTRAID_WRITE_CONTRACTS=1 it writes these files, and without it it rebuilds them from the live v0 handlers and asserts equality — so 'the fixture passes in v0 too' is one command, not a second suite. rows.json and queries.json are canonicalised in ONE pass over ONE vault, so an id names the same row in both.",
+  "sealed_cells": "«lk1»",
+  "sealed_cells_why": "Every lk1: cell is AES-256-GCM with a fresh random nonce per value and the key id is a UUIDv7 off the clock, so two runs produce different bytes for the same secret and a fixture carrying them would fail git diff --exit-code on every regeneration. What a port must reproduce is that the cell IS ciphertext under the generation the row names — so a sealed cell is «lk1» and a key id is «key». Dropping them to null would have lost the distinction between 'a sealed cell' and 'no secret', which is what has_totp, sealed:true and has_private_key are built on.",
+  "secrets_never_written": "A sealed command input is «secret» in commands.json. sealedInput keeps a secret out of the journal; this keeps it out of the fixture, which is a file in a repository and therefore the worse place. A sealed column holding a value that is NOT ciphertext makes the generator THROW, because a plaintext in a sealed column is the bug this fixture exists to catch.",
+  "queries": [
+    "items",
+    "item",
+    "search",
+    "trash",
+    "watchtower",
+    "access",
+    "autofill-candidates",
+    "autofill-item"
+  ],
+  "queryCases": 22,
+  "commandCases": 35,
+  "outputShapesThatChange": {
+    "locker.watchtower": "v0 answers {items:[{item_id,weak,reused,last4}]} because it can unseal; the port answers the ADDRESSES and crates/apps/locker::watchtower folds the scores from plaintext a seat unwrapped (D-1020-L6).",
+    "locker.totp_code": "v0 answers {code,period,remaining}; the port answers {item_id,period,receipt_id,derived_on:\"seat\"} and the digits are computed on the seat.",
+    "locker.export": "v0 answers every secret in the clear; the port answers the plain half plus each row's key_id, writes the one receipt, and the seat produces the file (D-1020-L7).",
+    "locker.access": "v0's `locker.access` query answers NOTHING through the real gateway, and this bundle is where that surfaced. `queries/access.ts` reads `FROM access_receipt`, and `access_receipt` is not one of the vault's 96 catalog entities — so the paged door refuses it (`gateway/paged-door.ts:436`) and the query's own catch arm returns `{entries: [], vaultDenied: {…}}`. The fixture records that refusal, which is v0's real answer; the port answers the real history. See `accessFinding`."
+  },
+  "outputShapesWhy": "Four of v0's answers do not survive the port, and the fixture records V0'S — which is what makes the change visible in a diff rather than silent. Three are custody: locker.watchtower, locker.totp_code and locker.export needed plaintext to compute and the gateway holds no member key after wave 4. The fourth is a v0 bug the port does not reproduce (see accessFinding). crates/apps/locker/tests/parity.rs names each one and compares what still compares.",
+  "noSeed": "Locker is the one bundled app with NO demo seed (census §A0), which is why the corpus is a scripted command set. A lane porting 'every app's demo seed' finds seven.",
+  "canonicalisation": "THREE unreproducible classes, and the third cost a day. (1) A sealed cell: a fresh nonce per value, so «lk1» or «sealed:v1» by which key sealed it. (2) A key generation id and a receipt's chain digest: «key» and «hash». (3) core_vault.settings_json's seal_key.fingerprint — sha256 over the bootstrap's data key, TRUNCATED TO 32 HEX, which is exactly the shape of a dashless UUID. tally-parity-canonical.ts's id regex claimed it and numbered it in the ids' own sort order, so a digest that sorted first in one run and last in the next shifted the token of EVERY OTHER ID in the bundle: two runs differed in 658 lines over one cell. It is «fingerprint» now, tokenised before the id pass can see it. A JSON-valued column is walked rather than passed through for the same reason: core_entity_revision.snapshot_json is the whole written row, sealed cells and key id included, and SEALED_COLUMNS cannot see them because the column there is snapshot_json.",
+  "accessFinding": "V0 FINDING (#1020, wave 4 lane Locker), reproducible in three lines: found a vault, plant a locker.item receipt, call queries/access.ts through the real gateway — the answer is {entries: [], vaultDenied: 'FROM names access_receipt, which is not an entity of this vault'}. No v0 product path writes either object type any more either: the gateway's reveal door refuses ref.schema === 'locker' outright (#996 R13/W6-D2) and the unlock that wrote locker.auth moved to the seat, so the screen is doubly empty. v0's own suite is green because queries-reveal-access.test.ts drives a STUB ctx that never reaches the door. Recorded as a finding rather than fixed at source (R-1020-35's 'anything wider is a finding'): the fix is to register the audit band in the entity catalog, which widens the paged door's reach into a band it has never covered — an owner's security call, not a lane's. The generator plants the three receipts through v0's own writeReceipt so the hash chain stays valid, because without them all three access cases answer entries:[] and would stay green against a port that never implemented the query.",
+  "order": {
+    "items.items": "set",
+    "search.items": "set",
+    "watchtower.items": "set",
+    "autofill-candidates.candidates": "set",
+    "access.entries": "set"
+  },
+  "orderWhy": "THE ORDERING COLUMN IS NOT REPRODUCIBLE, so those five answers compare as MULTISETS and the order is asserted where it can be. Every Locker shelf orders by `updated_at DESC, item_id` and the audit window by `occurred_at DESC, receipt_id`, and both columns are stamped by a SQLite trigger reading the database's OWN clock — which `installFixtureClock` cannot hold, the same two-clocks problem PARITY_EPOCH exists for. tally-parity-canonical.ts therefore flattens all of them to <host-clock>: locker_item's twelve rows share one value and access_receipt's forty-nine share one, so a vault rebuilt from rows.json cannot reproduce v0's sequence — it falls back to the tiebreak column. What IS compared: every row, every field, and the statement's own declared order (crates/apps/locker/tests/parity.rs asserts the four shelves and the audit window name that order), plus the sequence itself over distinct instants in src/queries.rs's own tests. Making the trigger reproducible means the fixture epoch reaching SQLite's clock, which is a change to v0's schema and not this lane's (filed as an owner hand-off)."
+}

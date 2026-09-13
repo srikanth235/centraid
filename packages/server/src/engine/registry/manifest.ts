@@ -55,12 +55,26 @@ export interface ManifestActionEntry {
   readonly writes?: readonly string[];
 }
 
+/**
+ * A query entry carries NO read declaration, deliberately (#1020, R-1020-35).
+ *
+ * It used to carry `reads?: readonly string[]`, the mirror of an action's
+ * `writes`, and nothing in the tree ever set it or read it: no bundled
+ * manifest populated it (`grep -rn '"reads"' --include=app.json packages/` is
+ * empty) and no call site consulted it. A declaration nobody writes is worse
+ * than no declaration, because a reader of this type takes an absent `reads`
+ * for "this query reads nothing". What actually bounds a query's reads is the
+ * app's `vault` scope block and the paged door's own table resolution, and
+ * both are enforced.
+ *
+ * If read declarations are wanted they come back with the apps declaring them
+ * and the dispatcher enforcing them, not as an optional field.
+ */
 export interface ManifestQueryEntry {
   readonly name: string;
   readonly description?: string;
   readonly input: JsonSchema;
   readonly output?: JsonSchema;
-  readonly reads?: readonly string[];
 }
 
 export interface ManifestKnobOption {
@@ -221,7 +235,6 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
           description: { type: "string" },
           input: { type: "object" },
           output: { type: "object" },
-          reads: { type: "array", items: { type: "string" } },
         },
       },
     },

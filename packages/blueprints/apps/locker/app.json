@@ -224,14 +224,30 @@
   "actions": [
     {
       "name": "add-item",
-      "description": "Save a new item through locker.add_item — a login, card, secure note, identity, Wi-Fi or standalone password. Secret fields not belonging to the chosen type are dropped, never stored.",
+      "description": "Save a new item through locker.add_item — any of the fifteen item types. Secret fields not belonging to the chosen type are dropped, never stored; a type that owns no columns of its own arrives as the template fields the vault mints for it.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["login", "card", "note", "identity", "wifi", "password"]
+            "enum": [
+              "login",
+              "card",
+              "note",
+              "identity",
+              "wifi",
+              "password",
+              "ssh_key",
+              "api_credential",
+              "passport",
+              "bank_account",
+              "driving_licence",
+              "software_licence",
+              "crypto_wallet",
+              "membership",
+              "document"
+            ]
           },
           "title": {
             "type": "string",

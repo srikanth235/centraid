@@ -1,0 +1,321 @@
+/*
+ * GENERATED — do not edit. `bun contracts/tools/export-extension-methods.ts`.
+ *
+ * The closed Companion method table, derived from v0's own
+ * `apps/extension/src/{types,companion-api}.ts` and byte-equal in content to
+ * `contracts/extension/methods.json`, which the native host compiles in
+ * (`crates/centraid/src/cmd/native_host/methods.rs`). Two files hold this one
+ * fact because a service worker cannot resolve a JSON import without a bundler
+ * and this Companion has none; `methods.test.ts` asserts they agree.
+ */
+
+export default {
+  version: 1,
+  max_frame_bytes: 1048576,
+  source: [
+    "apps/extension/src/types.ts",
+    "apps/extension/src/companion-api.ts",
+  ],
+  methods: [
+    {
+      name: "status",
+      idempotent: true,
+      http: [],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [],
+    },
+    {
+      name: "pair",
+      idempotent: false,
+      http: ["POST"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [
+        {
+          name: "ticket",
+          type: "string",
+          optional: false,
+        },
+        {
+          name: "deviceName",
+          type: "string",
+          optional: true,
+        },
+        {
+          name: "grants",
+          type: "CompanionModule[]",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "select-vault",
+      idempotent: true,
+      http: [],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [
+        {
+          name: "vaultId",
+          type: "string",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "unpair",
+      idempotent: true,
+      http: ["DELETE"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [],
+    },
+    {
+      name: "lock",
+      idempotent: true,
+      http: [],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [],
+    },
+    {
+      name: "unlock",
+      idempotent: true,
+      http: [],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [],
+    },
+    {
+      name: "warm",
+      idempotent: true,
+      http: ["GET"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [],
+    },
+    {
+      name: "modules",
+      idempotent: true,
+      http: ["GET"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [],
+    },
+    {
+      name: "blocking-count",
+      idempotent: true,
+      http: ["GET"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: null,
+      fields: [],
+    },
+    {
+      name: "locker:candidates",
+      idempotent: false,
+      http: ["POST"],
+      reads_page: true,
+      stages_bytes: false,
+      writes: null,
+      fields: [
+        {
+          name: "pageUrl",
+          type: "string",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "locker:fill",
+      idempotent: false,
+      http: ["POST", "POST"],
+      reads_page: true,
+      stages_bytes: false,
+      writes: null,
+      fields: [
+        {
+          name: "itemId",
+          type: "string",
+          optional: false,
+        },
+        {
+          name: "pageUrl",
+          type: "string",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "locker:save",
+      idempotent: false,
+      http: ["POST"],
+      reads_page: true,
+      stages_bytes: false,
+      writes: {
+        app: "locker",
+        action: "add-item",
+      },
+      fields: [
+        {
+          name: "pageUrl",
+          type: "string",
+          optional: false,
+        },
+        {
+          name: "title",
+          type: "string",
+          optional: false,
+        },
+        {
+          name: "username",
+          type: "string",
+          optional: true,
+        },
+        {
+          name: "password",
+          type: "string",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "capture:task",
+      idempotent: false,
+      http: ["POST"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: {
+        app: "tasks",
+        action: "add",
+      },
+      fields: [
+        {
+          name: "capture",
+          type: "PageCapture",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "capture:note",
+      idempotent: false,
+      http: ["POST"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: {
+        app: "notes",
+        action: "create-note",
+      },
+      fields: [
+        {
+          name: "capture",
+          type: "PageCapture",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "capture:document",
+      idempotent: false,
+      http: ["POST", "POST"],
+      reads_page: true,
+      stages_bytes: true,
+      writes: {
+        app: "docs",
+        action: "upload",
+      },
+      fields: [
+        {
+          name: "capture",
+          type: "PageCapture",
+          optional: false,
+        },
+        {
+          name: "screenshot",
+          type: "string",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "agenda:add",
+      idempotent: false,
+      http: ["POST"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: {
+        app: "agenda",
+        action: "propose",
+      },
+      fields: [
+        {
+          name: "summary",
+          type: "string",
+          optional: false,
+        },
+        {
+          name: "start",
+          type: "string",
+          optional: false,
+        },
+        {
+          name: "end",
+          type: "string",
+          optional: false,
+        },
+        {
+          name: "calendarId",
+          type: "string",
+          optional: false,
+        },
+      ],
+    },
+    {
+      name: "people:add",
+      idempotent: false,
+      http: ["POST"],
+      reads_page: false,
+      stages_bytes: false,
+      writes: {
+        app: "people",
+        action: "add-person",
+      },
+      fields: [
+        {
+          name: "displayName",
+          type: "string",
+          optional: false,
+        },
+        {
+          name: "cadenceDays",
+          type: "number",
+          optional: false,
+        },
+        {
+          name: "role",
+          type: "string",
+          optional: true,
+        },
+      ],
+    },
+    {
+      name: "page:capture",
+      idempotent: true,
+      http: [],
+      reads_page: true,
+      stages_bytes: false,
+      writes: null,
+      fields: [],
+    },
+  ],
+} as const;

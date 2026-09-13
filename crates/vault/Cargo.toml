@@ -1,0 +1,47 @@
+[package]
+name = "centraid-vault"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_vault"
+path = "src/lib.rs"
+
+[[bin]]
+name = "export-baseline"
+path = "src/bin/export-baseline.rs"
+
+[dependencies]
+aes-gcm.workspace = true
+anyhow.workspace = true
+base64.workspace = true
+blake3.workspace = true
+centraid-media = { path = "../media" }
+centraid-ontology = { path = "../ontology" }
+flate2.workspace = true
+hex.workspace = true
+hkdf.workspace = true
+hmac.workspace = true
+jiff.workspace = true
+jsonschema.workspace = true
+rand.workspace = true
+rusqlite.workspace = true
+scrypt.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+rusqlite.workspace = true
+sha2.workspace = true
+hex.workspace = true
+centraid-ontology = { path = "../ontology" }

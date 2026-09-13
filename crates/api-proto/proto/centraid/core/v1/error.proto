@@ -1,0 +1,109 @@
+// Typed errors (#1020, D-1020-C4).
+//
+// **No free-text reason reaches a member from this message.** A member-facing
+// sentence is either the author's (a precondition's, `CommandOutcome.reason`) or
+// the shell's, rendered from `code`. `detail` here is for logs and support
+// bundles only; v0 makes the same refusal explicitly — no raw `Error.message`
+// reaches the wire (`packages/server/src/routes/replica-routes.ts:100-108`).
+//
+// The enum is closed on purpose. A shell switches on a value; a shell that
+// switches on a string is a shell that breaks when the string is reworded.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+
+  // --- transport and admission ---
+  // The remote endpoint is not an enrolled, unrevoked device. Unknown and
+  // revoked are the SAME refusal (`packages/vault/src/gateway/identity.ts:27-35`).
+  ERROR_CODE_UNAUTHORIZED = 1;
+  // The version window does not admit the peer; an `UpgradeRequired` rides
+  // with it.
+  ERROR_CODE_VERSION_WINDOW = 2;
+  // A frame's length prefix was zero or above `MAX_FRAME_BYTES`, or the body
+  // did not decode. The connection closes; a malformed frame is not a
+  // recoverable request.
+  ERROR_CODE_MALFORMED_FRAME = 3;
+  // A message type this build does not know. An `Unsupported` rides with it.
+  ERROR_CODE_UNSUPPORTED_MESSAGE = 4;
+  // No relay was reachable and no direct path was found.
+  ERROR_CODE_NO_RELAY_REACHABLE = 5;
+  // The peer id is routable in principle and did not answer.
+  ERROR_CODE_PEER_UNREACHABLE = 6;
+  // The bounded connect timeout elapsed. Never a hang (#1020, D-1020-C9).
+  ERROR_CODE_TIMEOUT = 7;
+  // The request was cancelled by a `Cancel` frame.
+  ERROR_CODE_CANCELLED = 8;
+
+  // --- the replica plane ---
+  // The cursor cannot be served from; a `RebootstrapRequired` rides with it.
+  ERROR_CODE_REBOOTSTRAP_REQUIRED = 20;
+  // A `limit` of zero, a cursor with a non-decimal seq, a page query missing an
+  // order column. The request is wrong, not the state.
+  ERROR_CODE_INVALID_REQUEST = 21;
+  // The gateway has no durable directory to build a snapshot in
+  // (v0's `503 seat_snapshot_unavailable`).
+  ERROR_CODE_SNAPSHOT_UNAVAILABLE = 22;
+
+  // --- intents and commands ---
+  // The submitted `payload_hash` does not match the input.
+  ERROR_CODE_INTENT_HASH_MISMATCH = 40;
+  // The same intent id was already admitted with a different payload.
+  ERROR_CODE_INTENT_ID_REUSED = 41;
+  // The outcome aged past the idempotency window; the remedy is to RESUBMIT AS
+  // A NEW INTENT, never a silent retry
+  // (`packages/client/src/replica/offline-chain.ts:431-448`).
+  ERROR_CODE_INTENT_OUTCOME_EXPIRED = 42;
+  // The declared read-set did not version every row the operation reads.
+  ERROR_CODE_READ_SET_INCOMPLETE = 43;
+  // The action is `online_only` and this seat has no gateway.
+  ERROR_CODE_ONLINE_ONLY = 44;
+  // The access plane returned a deny. A deny is an OUTCOME, not an exception
+  // (`packages/vault/src/gateway/access.ts:1`), so the member-facing sentence
+  // is on the outcome and this code is what the shell branches on.
+  ERROR_CODE_DENIED = 45;
+
+  // --- the vault file ---
+  // The file is newer than this binary. Refuses rather than guessing (#1020
+  // Compatibility).
+  ERROR_CODE_DOWNGRADE_REFUSED = 60;
+  // The file needs a forward migration this build does not carry.
+  ERROR_CODE_UPGRADE_REQUIRED = 61;
+  // The subcommand or capability is not built yet. Exit code 3 in the CLI —
+  // never a silent stub (#1020, D-1020-C11).
+  ERROR_CODE_NOT_YET_AVAILABLE = 62;
+  // An entry point caught a panic. The handle is poisoned and the shell
+  // restarts the core deliberately (#1020 Execution model).
+  ERROR_CODE_INTERNAL = 63;
+}
+
+message Error {
+  ErrorCode code = 1;
+  // FOR LOGS ONLY. A shell may put it in a support bundle and must not render
+  // it as the reason. It carries whatever the failing layer said, **including a
+  // database message**: `entity id is already held by another kind: core_party
+  // (#916)` is a SQLite `RAISE(ABORT)`, and it reached a member's screen
+  // through this field ([#1020](https://github.com/srikanth235/centraid/issues/1020)
+  // wave 3, lane E finding 2).
+  string detail = 2;
+  // The diagnostic id a panic or an internal error is filed under, so a crash
+  // report and a log line name the same event.
+  string diagnostic_id = 3;
+  // THE OWNER-FACING SENTENCE, derived from `code` ALONE.
+  //
+  // The header above says no free-text reason reaches a member from this
+  // message, and a shell was still left with two choices: render nothing, or
+  // render `detail`. Both are wrong — the first loses the refusal, the second
+  // ships SQL. So the sentence is a field of its own, it is built from the code
+  // with no layer's own text interpolated into it, and a shell renders THIS.
+  //
+  // It is not a second `detail` and it is not localisation: it is one English
+  // sentence a shell may show verbatim or replace by branching on `code`. The
+  // raw predicate stays in `detail` for the audit trail and never reaches a
+  // member — the rule `command.proto` states for `CommandOutcome.reason`, which
+  // this message had no way to keep.
+  string sentence = 4;
+}

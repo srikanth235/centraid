@@ -1,0 +1,23 @@
+# A REFUSED SAVE KEEPS THE EDITOR. The body is still on the screen and the
+# sentence is beside it: an editor that swapped the member's words for an error
+# message would have thrown away the only copy. Note that `content` is the
+# DRAFT and `failure` is absent — a failed save is not a failed read.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_LOCAL_ONLY
+  pending { queued_writes: 1 oldest_queued_seconds: 90 }
+  connectivity: CONNECTIVITY_OFFLINE
+}
+note_id: "note-0001"
+draft {
+  title: "Winter plans"
+  body: "Book the cabin."
+  format: FORMAT_MARKDOWN
+  base_revision_id: "rev-0007"
+  save_failure {
+    kind: READ_FAILURE_KIND_UNAVAILABLE
+    sentence: "Centraid could not reach your gateway."
+    remedy: "Centraid tries again when it can reach your gateway."
+  }
+}
+save: SAVE_STATE_REFUSED

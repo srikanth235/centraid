@@ -1,0 +1,35 @@
+// A row image (#1020, D-1020-C3).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/value.proto";
+
+// One row, column name to value.
+//
+// A key that is ABSENT from the map is an absent column; a key mapped to
+// `Value{null}` is SQL NULL. v0 states the same contract over JSON at
+// `packages/core/src/protocol/row-json.ts:25-28`, and the distinction is what
+// makes the delta prior image below expressible at all.
+message RowImage {
+  map<string, Value> columns = 1;
+}
+
+// The OLD values of ONLY the columns an UPDATE touched (v0's `prior_json`,
+// `packages/vault/src/replica/log.ts:435-461`).
+//
+// Three claims live here and a reader must keep them apart:
+//   * A column absent from `columns` was UNTOUCHED, so its old value is
+//     whatever the new image carries. The full prior image is the new image
+//     overlaid by this one (`change-log.ts:476-484`).
+//   * An EMPTY `columns` map is a real answer: the statement touched only the
+//     key columns.
+//   * "No prior is known" is not this message at all — it is the absence of the
+//     `prior` field on `LogRow`, which is the claim that forces a re-bootstrap.
+//
+// The last distinction is why `LogRow.prior` is `optional` and this message is
+// not merged into `RowImage`.
+message PriorDelta {
+  map<string, Value> columns = 1;
+}

@@ -250,8 +250,40 @@ jobs:
       platform: ${{ inputs.mobile_platform || 'all' }}
       submit: ${{ inputs.mobile_submit || false }}
     secrets:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+      # EAS IS RETIRED (#1020 wave 3 lane E). The mobile lane builds the native
+      # projects under `mobile/`; these two secrets are no longer read by
+      # anything and are dropped from the call and from the lane's declaration
+      # in the same change.
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+      APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+
+  # THE PREBUILT CORE ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-G2).
+  #
+  # Six binary triples with a symbol file each, the four Android ABIs, and the
+  # iOS XCFramework — plus one `SHA256SUMS` and one identity digest across all
+  # of them. It rides `all` rather than needing an explicit surface, because
+  # unlike `mobile` it submits nothing to anybody: it builds and publishes
+  # artifacts, and a release that shipped a desktop installer whose core was
+  # never built for one of the required triples is a partial release.
+  #
+  # `require-candidate` is upstream of `plan`, so this lane inherits the
+  # candidate precondition like every other: a release ships a build somebody
+  # promoted (docs/release.md).
+  prebuilt-core:
+    needs: plan
+    if: >
+      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'prebuilt-core')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lane-prebuilt-core.yml
+    with:
+      ref: ${{ inputs.ref || '' }}
+      binary-only: false
 
   companion:
     needs: plan
@@ -277,6 +309,7 @@ jobs:
         gateway-npm,
         gateway-image,
         mobile,
+        prebuilt-core,
         companion,
       ]
     if: always()

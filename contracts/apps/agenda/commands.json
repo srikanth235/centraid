@@ -1,0 +1,556 @@
+[
+  {
+    "command": "schedule.save_project",
+    "input": {
+      "area": "Home",
+      "color": "#2EA098",
+      "name": "House",
+      "sort_order": 1
+    },
+    "output_keys": ["project_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.save_project",
+    "input": {
+      "name": "Work",
+      "sort_order": 2
+    },
+    "output_keys": ["project_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.save_section",
+    "input": {
+      "name": "Kitchen",
+      "project_id": {
+        "$from": "0.project_id"
+      },
+      "sort_order": 1
+    },
+    "output_keys": ["section_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.save_project",
+    "input": {
+      "name": "House and garden",
+      "project_id": {
+        "$from": "0.project_id"
+      },
+      "sort_order": 1
+    },
+    "output_keys": ["project_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "description": "Long weekend at the lake.",
+      "due_at": "2099-06-08T09:00:00.000Z",
+      "priority": 6,
+      "title": "Plan the Tahoe trip"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "effort_min": 45,
+      "parent_task_id": {
+        "$from": "4.task_id"
+      },
+      "title": "Compare cabins"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2099-06-04T09:00:00.000Z",
+      "parent_task_id": {
+        "$from": "4.task_id"
+      },
+      "priority": 8,
+      "title": "Book the cabin"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "parent_task_id": {
+        "$from": "4.task_id"
+      },
+      "title": "Draft packing list"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.set_task_status",
+    "input": {
+      "status": "completed",
+      "task_id": {
+        "$from": "7.task_id"
+      }
+    },
+    "output_keys": ["task_id", "status", "series_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2099-06-02T09:00:00.000Z",
+      "priority": 5,
+      "title": "Tax return"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "parent_task_id": {
+        "$from": "9.task_id"
+      },
+      "title": "Find the receipts"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.set_task_status",
+    "input": {
+      "status": "completed",
+      "task_id": {
+        "$from": "9.task_id"
+      }
+    },
+    "output_keys": ["task_id", "status", "series_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2099-06-03T09:00:00.000Z",
+      "title": "Renew the parking permit"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.set_task_status",
+    "input": {
+      "status": "cancelled",
+      "task_id": {
+        "$from": "12.task_id"
+      }
+    },
+    "output_keys": ["task_id", "status", "series_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "priority": 1,
+      "title": "Learn to make sourdough"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2026-03-07T14:00:00.000Z",
+      "priority": 2,
+      "remind_before_min": 30,
+      "rrule": "FREQ=DAILY",
+      "title": "Water the plants"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.organize_task",
+    "input": {
+      "project_id": {
+        "$from": "0.project_id"
+      },
+      "recurrence_anchor": "scheduled",
+      "section_id": {
+        "$from": "2.section_id"
+      },
+      "sort_order": 3,
+      "task_id": {
+        "$from": "15.task_id"
+      },
+      "tz": "America/New_York"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "banana",
+      "title": "When"
+    },
+    "output_keys": [],
+    "reason": "due_at: \"banana\" is not a time this vault can read — a task's due date is an instant (2026-03-01T09:00:00Z), a floating local time (2026-03-01T09:00) or a date (2026-03-01).",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2099-07-01T09:00:00.000Z",
+      "rrule": "FREQ=MONTHLY;BYSETPOS=-1",
+      "title": "Rent"
+    },
+    "output_keys": [],
+    "reason": "rrule: \"FREQ=MONTHLY;BYSETPOS=-1\" — recurrence rule uses BYSETPOS, which this engine cannot honour: it selects the nth candidate within each period; the expander emits every candidate",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "rrule": "FREQ=MONTHLY",
+      "title": "Rent"
+    },
+    "output_keys": [],
+    "reason": "A repeating task needs a due date to repeat from.",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.organize_task",
+    "input": {
+      "project_id": {
+        "$from": "1.project_id"
+      },
+      "section_id": {
+        "$from": "2.section_id"
+      },
+      "sort_order": 0,
+      "task_id": {
+        "$from": "4.task_id"
+      }
+    },
+    "output_keys": [],
+    "reason": "That section belongs to a different project.",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "parent_task_id": {
+        "$from": "5.task_id"
+      },
+      "title": "Grandchild"
+    },
+    "output_keys": [],
+    "reason": "parent_open_and_top_level: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "core.tag_item",
+    "input": {
+      "label": "Travel",
+      "subject_id": {
+        "$from": "4.task_id"
+      },
+      "subject_type": "schedule.task"
+    },
+    "output_keys": ["tag_id", "concept_id", "notation"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.edit_task",
+    "input": {
+      "description": "Starter is in the fridge.",
+      "priority": 4,
+      "task_id": {
+        "$from": "14.task_id"
+      }
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.delete_task",
+    "input": {
+      "task_id": {
+        "$from": "12.task_id"
+      }
+    },
+    "output_keys": ["task_id", "removed"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.restore_task",
+    "input": {
+      "task_id": {
+        "$from": "12.task_id"
+      }
+    },
+    "output_keys": ["task_id", "restored"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "dtend": "2099-06-01T17:30:00.000Z",
+      "dtstart": "2099-06-01T17:00:00.000Z",
+      "start_tz": "Europe/London",
+      "summary": "Pick up the dry cleaning"
+    },
+    "output_keys": ["event_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "description": "Three nights; the drive is the long part.",
+      "dtend": "2099-06-08T10:00:00.000Z",
+      "dtstart": "2099-06-05T16:00:00.000Z",
+      "start_tz": "Europe/London",
+      "summary": "Cabin weekend"
+    },
+    "output_keys": ["event_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "description": "Loop around the reservoir.",
+      "dtend": "2099-06-02T07:15:00.000Z",
+      "dtstart": "2099-06-02T06:30:00.000Z",
+      "reminders": [
+        {
+          "minutes_before": 15
+        }
+      ],
+      "rrule": "RRULE:FREQ=WEEKLY;BYDAY=MO,TH",
+      "start_tz": "Europe/London",
+      "summary": "Morning run"
+    },
+    "output_keys": ["event_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "conferencing_uri": "https://example.invalid/standup",
+      "dtend": "2026-03-06T14:30:00.000Z",
+      "dtstart": "2026-03-06T14:00:00.000Z",
+      "rrule": "FREQ=DAILY",
+      "start_tz": "America/New_York",
+      "summary": "Standup"
+    },
+    "output_keys": ["event_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.edit_event_occurrence",
+    "input": {
+      "action": "skip",
+      "event_id": {
+        "$from": "29.event_id"
+      },
+      "original_start_local": "2026-03-10T09:00:00",
+      "scope": "occurrence"
+    },
+    "output_keys": ["event_id", "scope"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.edit_event_occurrence",
+    "input": {
+      "action": "override",
+      "dtstart": "2026-03-11T18:00:00.000Z",
+      "event_id": {
+        "$from": "29.event_id"
+      },
+      "original_start_local": "2026-03-11T09:00:00",
+      "scope": "occurrence",
+      "summary": "Standup (late)"
+    },
+    "output_keys": ["event_id", "scope"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.edit_event_occurrence",
+    "input": {
+      "action": "override",
+      "dtstart": "2026-03-13T15:00:00.000Z",
+      "event_id": {
+        "$from": "29.event_id"
+      },
+      "original_start_local": "2026-03-13T09:00:00",
+      "scope": "future"
+    },
+    "output_keys": ["event_id", "scope"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.edit_event_occurrence",
+    "input": {
+      "action": "skip",
+      "event_id": {
+        "$from": "29.event_id"
+      },
+      "original_start_local": "2026-03-10T14:00:00.000Z",
+      "scope": "occurrence"
+    },
+    "output_keys": [],
+    "reason": "original_start_local is not an occurrence of this series",
+    "status": "failed"
+  },
+  {
+    "command": "core.add_party",
+    "input": {
+      "birth_date": "06-14",
+      "display_name": "Maya Ortiz",
+      "kind": "person"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "attendee_party_ids": [
+        {
+          "$from": "34.party_id"
+        }
+      ],
+      "calendar_id": "id-0038",
+      "dtend": "2099-06-03T21:00:00.000Z",
+      "dtstart": "2099-06-03T19:00:00.000Z",
+      "start_tz": "Europe/London",
+      "summary": "Dinner with Maya"
+    },
+    "output_keys": ["event_id", "attendees"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.respond_rsvp",
+    "input": {
+      "event_id": {
+        "$from": "35.event_id"
+      },
+      "partstat": "accepted",
+      "party_id": {
+        "$from": "34.party_id"
+      }
+    },
+    "output_keys": ["attendee_id", "partstat"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "dtend": "2099-06-09T16:00:00.000Z",
+      "dtstart": "2099-06-09T15:00:00.000Z",
+      "start_tz": "Europe/London",
+      "summary": "Dentist — cleaning"
+    },
+    "output_keys": ["event_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.cancel_event",
+    "input": {
+      "event_id": {
+        "$from": "37.event_id"
+      }
+    },
+    "output_keys": ["event_id", "sequence"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "dtend": "2099-06-04T09:30:00.000Z",
+      "dtstart": "2099-06-04T09:00:00.000Z",
+      "reminders": [
+        {
+          "minutes_before": 60
+        }
+      ],
+      "start_tz": "Europe/London",
+      "summary": "Book the Tahoe cabin"
+    },
+    "output_keys": ["event_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.delete_event",
+    "input": {
+      "event_id": {
+        "$from": "39.event_id"
+      }
+    },
+    "output_keys": ["event_id", "purge_at"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.edit_event",
+    "input": {
+      "dtend": "2099-06-01T18:00:00.000Z",
+      "event_id": {
+        "$from": "26.event_id"
+      },
+      "summary": "Pick up the dry cleaning (Thursday)"
+    },
+    "output_keys": ["event_id", "sequence"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "dtend": "2099-07-31T10:00:00.000Z",
+      "dtstart": "2099-07-31T09:00:00.000Z",
+      "rrule": "FREQ=MONTHLY;BYSETPOS=-1",
+      "start_tz": "Europe/London",
+      "summary": "Rent"
+    },
+    "output_keys": [],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "dtend": "2099-06-01T17:45:00.000Z",
+      "dtstart": "2099-06-01T17:15:00.000Z",
+      "start_tz": "Europe/London",
+      "summary": "Overlap"
+    },
+    "output_keys": [],
+    "reason": "This time conflicts with another event on your calendar.",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.propose_event",
+    "input": {
+      "calendar_id": "id-0038",
+      "dtend": "2099-06-20T09:00:00.000Z",
+      "dtstart": "2099-06-20T10:00:00.000Z",
+      "start_tz": "Europe/London",
+      "summary": "Backwards"
+    },
+    "output_keys": [],
+    "reason": "An event must end after it starts.",
+    "status": "failed"
+  }
+]

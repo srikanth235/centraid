@@ -1,0 +1,568 @@
+[
+  {
+    "command": "people.create_list",
+    "input": {
+      "name": "Work"
+    },
+    "output_keys": ["list_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.create_list",
+    "input": {
+      "name": "Work"
+    },
+    "output_keys": [],
+    "reason": "name_unused: n eq 0",
+    "status": "failed"
+  },
+  {
+    "command": "people.move_person",
+    "input": {
+      "list_id": "id-0081",
+      "party_id": "id-0006"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.rename_list",
+    "input": {
+      "list_id": "id-0081",
+      "name": "Colleagues"
+    },
+    "output_keys": ["list_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.delete_list",
+    "input": {
+      "list_id": "id-0081"
+    },
+    "output_keys": [],
+    "reason": "This list still has people in it — move them out first.",
+    "status": "failed"
+  },
+  {
+    "command": "people.move_person",
+    "input": {
+      "party_id": "id-0006"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.delete_list",
+    "input": {
+      "list_id": "id-0081"
+    },
+    "output_keys": ["list_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.create_list",
+    "input": {
+      "name": "Family"
+    },
+    "output_keys": ["list_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.move_person",
+    "input": {
+      "list_id": "id-0040",
+      "party_id": "id-0005"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.move_person",
+    "input": {
+      "list_id": "no-such-list",
+      "party_id": "id-0005"
+    },
+    "output_keys": [],
+    "reason": "list_exists_if_given: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "people.star_person",
+    "input": {
+      "party_id": "id-0005"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.star_person",
+    "input": {
+      "party_id": "id-0005"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.star_person",
+    "input": {
+      "party_id": "id-0003"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.unstar_person",
+    "input": {
+      "party_id": "id-0003"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.edit_person",
+    "input": {
+      "display_name": "Chris Okafor",
+      "met": "At the studio open day",
+      "nickname": "Chris",
+      "party_id": "id-0006",
+      "role": "Design lead"
+    },
+    "output_keys": ["party_id", "revision_id", "undo_until"],
+    "status": "executed"
+  },
+  {
+    "command": "people.set_cadence",
+    "input": {
+      "cadence_days": 21,
+      "party_id": "id-0006"
+    },
+    "output_keys": ["party_id", "revision_id", "undo_until"],
+    "status": "executed"
+  },
+  {
+    "command": "people.undo_person",
+    "input": {
+      "party_id": "id-0006",
+      "revision_id": "id-0148"
+    },
+    "output_keys": ["party_id", "revision_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.undo_person",
+    "input": {
+      "party_id": "id-0006",
+      "revision_id": "id-0148"
+    },
+    "output_keys": [],
+    "reason": "revision not found, expired, or already undone",
+    "status": "failed"
+  },
+  {
+    "command": "people.add_note",
+    "input": {
+      "party_id": "id-0003",
+      "text": "Loves the Tahoe photos."
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_task",
+    "input": {
+      "party_id": "id-0003",
+      "text": "Send the Denver dates"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.complete_task",
+    "input": {
+      "task_id": "id-0062"
+    },
+    "output_keys": ["task_id", "status"],
+    "status": "executed"
+  },
+  {
+    "command": "people.reopen_task",
+    "input": {
+      "task_id": "id-0062"
+    },
+    "output_keys": ["task_id", "status"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_important_date",
+    "input": {
+      "label": "Anniversary",
+      "month_day": "03-02",
+      "party_id": "id-0003"
+    },
+    "output_keys": ["date_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.toggle_reminder",
+    "input": {
+      "date_id": "id-0107"
+    },
+    "output_keys": ["date_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_important_date",
+    "input": {
+      "label": "Odd",
+      "month_day": "02-31",
+      "party_id": "id-0003"
+    },
+    "output_keys": [],
+    "reason": "month_day: \"02-31\" is not a day of the year — an anniversary is MM-DD, and that day does not exist.",
+    "status": "failed"
+  },
+  {
+    "command": "people.add_important_date",
+    "input": {
+      "label": "Birthday",
+      "month_day": "02-29",
+      "party_id": "id-0004"
+    },
+    "output_keys": ["date_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_relationship",
+    "input": {
+      "kind": "Wife",
+      "name": "Edith",
+      "party_id": "id-0005"
+    },
+    "output_keys": ["relationship_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_relationship",
+    "input": {
+      "kind": "Pet",
+      "name": "Biscuit",
+      "party_id": "id-0005",
+      "pet": "Dog"
+    },
+    "output_keys": ["relationship_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_gift",
+    "input": {
+      "party_id": "id-0003",
+      "text": "A print of the lake"
+    },
+    "output_keys": ["gift_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.toggle_gift",
+    "input": {
+      "gift_id": "id-0060"
+    },
+    "output_keys": ["gift_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.toggle_gift",
+    "input": {
+      "gift_id": "id-0062"
+    },
+    "output_keys": [],
+    "reason": "gift_exists: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "people.add_debt",
+    "input": {
+      "amount_minor": 4250,
+      "direction": "owed",
+      "party_id": "id-0006",
+      "reason": "Print framing"
+    },
+    "output_keys": ["debt_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.settle_debt",
+    "input": {
+      "debt_id": "id-0114"
+    },
+    "output_keys": ["debt_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.settle_debt",
+    "input": {
+      "debt_id": "id-0114"
+    },
+    "output_keys": [],
+    "reason": "debt_open: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "people.log_interaction",
+    "input": {
+      "kind": "Message",
+      "party_id": "id-0004",
+      "text": "Asked about the deposit."
+    },
+    "output_keys": ["interaction_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_journal_entry",
+    "input": {
+      "entry_date": "2099-05-28",
+      "mood": "Quiet",
+      "text": "Nobody to call tonight."
+    },
+    "output_keys": ["entry_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.save_contact_channel",
+    "input": {
+      "kind": "phone",
+      "label": "mobile",
+      "party_id": "id-0003",
+      "preferred": true,
+      "value": "+1 (415) 555-0100"
+    },
+    "output_keys": ["channel_id", "normalized_value", "duplicate_party_ids"],
+    "status": "executed"
+  },
+  {
+    "command": "people.save_contact_channel",
+    "input": {
+      "kind": "phone",
+      "party_id": "id-0004",
+      "value": "415 555 0100"
+    },
+    "output_keys": ["channel_id", "normalized_value", "duplicate_party_ids"],
+    "status": "executed"
+  },
+  {
+    "command": "people.save_contact_channel",
+    "input": {
+      "kind": "phone",
+      "party_id": "id-0003",
+      "value": "+14155550100"
+    },
+    "output_keys": [],
+    "reason": "this contact channel is already saved",
+    "status": "failed"
+  },
+  {
+    "command": "people.save_contact_channel",
+    "input": {
+      "kind": "email",
+      "party_id": "id-0003",
+      "value": "maya@example"
+    },
+    "output_keys": [],
+    "reason": "enter a valid email address",
+    "status": "failed"
+  },
+  {
+    "command": "people.save_contact_channel",
+    "input": {
+      "kind": "email",
+      "party_id": "id-0003",
+      "value": "Maya@Example.com"
+    },
+    "output_keys": ["channel_id", "normalized_value", "duplicate_party_ids"],
+    "status": "executed"
+  },
+  {
+    "command": "people.delete_contact_channel",
+    "input": {
+      "channel_id": "id-0120"
+    },
+    "output_keys": ["channel_id", "revision_id", "undo_until"],
+    "status": "executed"
+  },
+  {
+    "command": "people.undo_contact_channel",
+    "input": {
+      "channel_id": "id-0120",
+      "revision_id": "id-0151"
+    },
+    "output_keys": ["channel_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.undo_contact_channel",
+    "input": {
+      "channel_id": "id-0120",
+      "revision_id": "id-0151"
+    },
+    "output_keys": [],
+    "reason": "revision not found, expired, or already undone",
+    "status": "failed"
+  },
+  {
+    "command": "social.resolve_identity",
+    "input": {
+      "party_id": "id-0004",
+      "scheme": "handle",
+      "value": "@jakeb"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "social.resolve_identity",
+    "input": {
+      "party_id": "id-0004",
+      "scheme": "email",
+      "value": "jake@example.com"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "social.resolve_identity",
+    "input": {
+      "party_id": "id-0003",
+      "scheme": "email",
+      "value": "jake@example.com"
+    },
+    "output_keys": [],
+    "reason": "handle_not_claimed_elsewhere: n eq 0",
+    "status": "failed"
+  },
+  {
+    "command": "social.draft_message",
+    "input": {
+      "body_text": "Sunday works for the cabin.",
+      "recipient_party_id": "id-0004"
+    },
+    "output_keys": ["message_id", "thread_id", "body_content_id"],
+    "status": "executed"
+  },
+  {
+    "command": "social.send_message",
+    "input": {
+      "message_id": "id-0123"
+    },
+    "output_keys": ["message_id", "delivery"],
+    "status": "executed"
+  },
+  {
+    "command": "social.send_message",
+    "input": {
+      "message_id": "id-0123"
+    },
+    "output_keys": [],
+    "reason": "message_is_draft: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "social.mark_thread_read",
+    "input": {
+      "read_at": "2099-06-02T08:00:00.000Z",
+      "thread_id": "id-0124"
+    },
+    "output_keys": ["thread_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.trash_person",
+    "input": {
+      "party_id": "id-0004"
+    },
+    "output_keys": ["party_id", "revision_id", "undo_until"],
+    "status": "executed"
+  },
+  {
+    "command": "people.edit_person",
+    "input": {
+      "party_id": "id-0004",
+      "role": "No"
+    },
+    "output_keys": [],
+    "reason": "person_exists: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "people.restore_person",
+    "input": {
+      "party_id": "id-0004"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_person",
+    "input": {
+      "cadence_days": 30,
+      "display_name": "M. Alvarez",
+      "role": "College friend"
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.add_note",
+    "input": {
+      "party_id": "id-0138",
+      "text": "Same Maya, second card."
+    },
+    "output_keys": ["party_id"],
+    "status": "executed"
+  },
+  {
+    "command": "people.save_contact_channel",
+    "input": {
+      "kind": "email",
+      "party_id": "id-0138",
+      "value": "maya.alvarez@example.com"
+    },
+    "output_keys": ["channel_id", "normalized_value", "duplicate_party_ids"],
+    "status": "executed"
+  },
+  {
+    "command": "core.merge_party",
+    "input": {
+      "merged_party_id": "id-0003",
+      "survivor_party_id": "id-0003"
+    },
+    "output_keys": [],
+    "reason": "two_distinct_live_people: n eq 2",
+    "status": "failed"
+  },
+  {
+    "command": "core.merge_party",
+    "input": {
+      "merged_party_id": "id-0138",
+      "survivor_party_id": "id-0003"
+    },
+    "output_keys": ["survivor_party_id", "repointed"],
+    "status": "executed"
+  },
+  {
+    "command": "core.merge_party",
+    "input": {
+      "merged_party_id": "id-0138",
+      "survivor_party_id": "id-0003"
+    },
+    "output_keys": [],
+    "reason": "two_distinct_live_people: n eq 2",
+    "status": "failed"
+  },
+  {
+    "command": "people.trash_person",
+    "input": {
+      "party_id": "id-0006"
+    },
+    "output_keys": ["party_id", "revision_id", "undo_until"],
+    "status": "executed"
+  }
+]

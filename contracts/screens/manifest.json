@@ -1,0 +1,139 @@
+{
+  "$generatedBy": "contracts/tools/build-screen-fixtures.ts",
+  "$note": "Screen-state fixtures: one .textproto source, one .bin beside it. Decoded by mobile/shared's jvmTest (Wire) and by mobile/iosApp/Tests (SwiftProtobuf). Regenerate with `bun contracts/tools/build-screen-fixtures.ts && bun run format`; `git diff --exit-code contracts/screens` is the drift check (#1020).",
+  "fixtures": [
+    {
+      "case": "draft-dirty",
+      "screen": "notes",
+      "type": "centraid.screen.v1.NotesEditorState",
+      "textproto": "contracts/screens/notes/draft-dirty.textproto",
+      "binary": "contracts/screens/notes/draft-dirty.bin"
+    },
+    {
+      "case": "loading",
+      "screen": "notes",
+      "type": "centraid.screen.v1.NotesEditorState",
+      "textproto": "contracts/screens/notes/loading.textproto",
+      "binary": "contracts/screens/notes/loading.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "notes",
+      "type": "centraid.screen.v1.NotesEditorState",
+      "textproto": "contracts/screens/notes/read-refused.textproto",
+      "binary": "contracts/screens/notes/read-refused.bin"
+    },
+    {
+      "case": "save-refused",
+      "screen": "notes",
+      "type": "centraid.screen.v1.NotesEditorState",
+      "textproto": "contracts/screens/notes/save-refused.textproto",
+      "binary": "contracts/screens/notes/save-refused.bin"
+    },
+    {
+      "case": "limited-selection",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/limited-selection.textproto",
+      "binary": "contracts/screens/photos/limited-selection.bin"
+    },
+    {
+      "case": "more-sheet-open",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/more-sheet-open.textproto",
+      "binary": "contracts/screens/photos/more-sheet-open.bin"
+    },
+    {
+      "case": "no-copy-yet",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/no-copy-yet.textproto",
+      "binary": "contracts/screens/photos/no-copy-yet.bin"
+    },
+    {
+      "case": "permission-denied",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/permission-denied.textproto",
+      "binary": "contracts/screens/photos/permission-denied.bin"
+    },
+    {
+      "case": "thumbnail-pack-absent",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/thumbnail-pack-absent.textproto",
+      "binary": "contracts/screens/photos/thumbnail-pack-absent.bin"
+    },
+    {
+      "case": "locked",
+      "screen": "seat",
+      "type": "centraid.screen.v1.SeatState",
+      "textproto": "contracts/screens/seat/locked.textproto",
+      "binary": "contracts/screens/seat/locked.bin"
+    },
+    {
+      "case": "platform-refused-to-say",
+      "screen": "seat",
+      "type": "centraid.screen.v1.SeatState",
+      "textproto": "contracts/screens/seat/platform-refused-to-say.textproto",
+      "binary": "contracts/screens/seat/platform-refused-to-say.bin"
+    },
+    {
+      "case": "restarting",
+      "screen": "seat",
+      "type": "centraid.screen.v1.SeatState",
+      "textproto": "contracts/screens/seat/restarting.textproto",
+      "binary": "contracts/screens/seat/restarting.bin"
+    },
+    {
+      "case": "waiting-for-mount",
+      "screen": "seat",
+      "type": "centraid.screen.v1.SeatState",
+      "textproto": "contracts/screens/seat/waiting-for-mount.textproto",
+      "binary": "contracts/screens/seat/waiting-for-mount.bin"
+    },
+    {
+      "case": "data-page",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/data-page.textproto",
+      "binary": "contracts/screens/tally/data-page.bin"
+    },
+    {
+      "case": "empty-ledger",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/empty-ledger.textproto",
+      "binary": "contracts/screens/tally/empty-ledger.bin"
+    },
+    {
+      "case": "loading-first",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/loading-first.textproto",
+      "binary": "contracts/screens/tally/loading-first.bin"
+    },
+    {
+      "case": "low-disk-parked",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/low-disk-parked.textproto",
+      "binary": "contracts/screens/tally/low-disk-parked.bin"
+    },
+    {
+      "case": "offline-withheld",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/offline-withheld.textproto",
+      "binary": "contracts/screens/tally/offline-withheld.bin"
+    },
+    {
+      "case": "refused-denied",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/refused-denied.textproto",
+      "binary": "contracts/screens/tally/refused-denied.bin"
+    }
+  ]
+}

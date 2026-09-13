@@ -1,0 +1,84 @@
+{
+  "digest": "5b50d566bf4c3fe88f5e63ce9e4610acdffe7554b796e9d5154758b13dc181cf",
+  "scenarios": [
+    {
+      "checks": [
+        {
+          "actual": "id-0134",
+          "claim": "the bytes still dedupe",
+          "expected": "id-0134"
+        },
+        {
+          "actual": ["id-0134", "id-0135"],
+          "claim": "A's edit is A's history",
+          "expected": ["id-0134", "id-0135"]
+        },
+        {
+          "actual": ["id-0134"],
+          "claim": "B is untouched by A's edit",
+          "expected": ["id-0134"]
+        },
+        {
+          "actual": ["id-0136", "id-0137", "id-0136"],
+          "claim": "A→B→A is three occurrences over two content ids",
+          "expected": ["id-0136", "id-0137", "id-0136"]
+        },
+        {
+          "actual": "failed",
+          "claim": "restoring another document's revision is refused",
+          "expected": "failed"
+        }
+      ],
+      "drift": "ONT-22",
+      "id": "ONT-22/a-revision-is-an-occurrence",
+      "surfaces": ["Docs — the version history", "Docs — restore"],
+      "title": "two documents with identical bytes keep separate histories"
+    },
+    {
+      "checks": [
+        {
+          "actual": [true, 1],
+          "claim": "one byte row under two documents",
+          "expected": [true, 1]
+        },
+        {
+          "actual": ["text/html", "text/plain"],
+          "claim": "each document reads the bytes its own way",
+          "expected": ["text/html", "text/plain"]
+        },
+        {
+          "actual": 0,
+          "claim": "the byte row has no reading of its own",
+          "expected": 0
+        }
+      ],
+      "drift": "ONT-28",
+      "id": "ONT-28/an-interpretation-is-not-a-property-of-bytes",
+      "surfaces": ["Docs — the document body", "Photos — the asset's reading"],
+      "title": "one byte row, two documents, two readings"
+    },
+    {
+      "checks": [
+        {
+          "actual": ["failed", "failed"],
+          "claim": "a task may not be its own parent, by either door",
+          "expected": ["failed", "failed"]
+        },
+        {
+          "actual": ["failed", "failed", true],
+          "claim": "`due_at: banana` is refused by either door, with one sentence",
+          "expected": ["failed", "failed", true]
+        },
+        {
+          "actual": "failed",
+          "claim": "February 31 is not a day",
+          "expected": "failed"
+        }
+      ],
+      "drift": "ONT-26",
+      "id": "ONT-26/one-invariant-boundary",
+      "surfaces": ["Tasks — the editor", "Atlas — the row editor"],
+      "title": "the same impossible task, refused by the command and by the row editor"
+    }
+  ]
+}
