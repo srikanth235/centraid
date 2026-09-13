@@ -5077,3 +5077,129 @@ Law `53be88c22ab5`. `amendment-pairing`, `commit-message-format`, `constitution-
 **Claim 1: "the merge sweep is sixty columns and zero rows name the folded-in party afterwards."** The risk is that the planting pass silently fails to reach a column — an insert that does not land makes "zero survivors" vacuously true, and a sweep that is generated is exactly the kind of thing that looks exhaustive because nobody can see what it missed. Throwaway check: `PARTY_POINTERS` was emptied, removing the **one** column the SQLite engine cannot see (`share_authority.principal_id`, polymorphic on a kind). **Four tests went red** — `the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer` on the count, `no_column_that_names_a_party_is_outside_the_sweep` on the audit in the other direction, `the_merge_leaves_no_row_naming_the_folded_in_party` on a **surviving planted row**, and `folding_a_party_with_a_standing_answer_revokes_the_duplicate_rather_than_dropping_it` on the revoke policy that hangs off the same entry. The third is the one that matters: the planted row is real, the merge really has to reach it, and the survivor check really sees it. Restored; `git diff --exit-code crates/vault/src/commands/core.rs` clean.
 
 **Claim 2: "the three readings deny independently."** The risk is that the parity fixture is doing the work and the type is decoration. Throwaway check: v0's collapse was written back into `load_person` — a denied `links` or `obligations` returns `{person: None}` with that denial as the sheet's. **Two of the seven three-state tests went red** (`a_denied_obligations_read_costs_the_debts_rail_and_nothing_else`, `a_denied_linked_plane_costs_the_relationship_rail_and_nothing_else`) and **the whole parity suite stayed green — 7 passed**. That is the honest statement: v0's corpus grants everything, so no parity case has a denied plane, and **the parity fixture cannot distinguish the port from the bug it was written to fix.** `tests/three_state.rs` is the only thing that can, which is why it runs the real queries through a real refusing door rather than asserting over a constructed value. Restored; `git diff --exit-code crates/apps/people/src/person.rs` clean.
+
+## Wave 4 — lane Schedule: one recurrence engine in three shapes, the occurrence key that is a wall clock, and a promotion rule with no ceiling over it
+
+Agenda and Tasks are the two apps that both read the same `schedule_*` tables and the same 16-command schema, so they landed together. What landed: `crates/vault/src/time` (five modules — `zone`, `rrule`, `recurrence`, `occurrence`, `temporal` — no SQL), the whole 16-command `schedule` schema with the task-write and task-lifecycle operations beside it, `crates/apps/agenda` (4 queries, 7 actions) and `crates/apps/tasks` (2 queries, 11 actions), three generated corpora under `contracts/time/`, parity bundles for both apps generated from the real v0 handlers and green on both sides, two year-3 axes, both copy leaves — and the **last** entries on the extension's pending-command list and Notes' `pending: schedule` mark, both retired.
+
+The lane also moved a thing that was not new: `FireZone` had been the automations crate's, and recurrence needs the same zone. It is now `crates/vault::time::zone`, re-exported from `crates/automations::cron` so that crate's public API is unchanged and its 10,320 cron parity cases stayed green. **There is one zone source in the tree, and it is below both callers** (D-1020-S8).
+
+### What landed, by commit
+
+**`b7fd47cd` — `feat(vault): civil time and recurrence, one engine with three call shapes`**
+
+- `crates/vault/src/time/{mod,zone,rrule,recurrence,occurrence,temporal}.rs` (new, 2,864 lines, no SQL string in any of them)
+- `crates/automations/src/cron.rs` (14 insertions, 151 deletions: the moved definitions became a `pub use`), `crates/automations/Cargo.toml`, `crates/vault/{Cargo.toml,src/lib.rs,src/clock.rs}`
+- `contracts/tools/export-time-corpus.ts` (new), `contracts/time/{rrule,dst,occurrence}-cases.json` (new, generated), `tests/quality/time-corpus.contract.test.ts` (new, the emitter's own oracle), `crates/vault/tests/time_corpus.rs` (new, 14 tests)
+
+**`75b4a49c` — `feat(vault): the sixteen schedule commands and the task-write operations`**
+
+- `crates/vault/src/commands/schedule.rs` (new, 16 commands), `crates/vault/src/commands/mod.rs`
+- `crates/vault/src/operations/{mod,task_write,task_lifecycle}.rs` (new — `crates/vault::operations` is a new module tier; D-1020-S7)
+- `crates/vault/tests/schedule_commands.rs` (new, 23 tests), `crates/vault/tests/commands.rs`
+- `crates/centraid/src/cmd/native_host/relay.rs` — `PENDING_COMMANDS` reaches `[&str; 0]` for the first time in the wave
+
+**`2e251070` — `feat(apps): Agenda and Tasks, with parity generated from v0`**
+
+- `crates/apps/agenda/{Cargo.toml,manifest.json,README.md}`, `src/{lib,manifest,queries,expansion,commands}.rs`, `tests/{parity,year3}.rs`
+- `crates/apps/tasks/{Cargo.toml,manifest.json,README.md}`, `src/{lib,manifest,board,queries,commands}.rs`, `tests/{parity,year3}.rs`
+- `contracts/tools/{export-agenda-parity,export-tasks-parity,schedule-parity-bundle,schedule-parity-corpus}.ts` (new), `contracts/apps/{agenda,tasks}/{queries,commands,rows}.json` (new, generated), `contracts/time/README.md` (new)
+- `tests/quality/{agenda-parity,tasks-parity}.contract.test.ts` (new), `crates/apps/kit/src/fixtures.rs` (+688: the two year-3 axes), `contracts/tools/export-copy.ts`, `copy/{agenda,tasks}.json` (new), `mobile/.../design/Copy.kt`, `crates/design/tests/copy_routes.rs`, `Cargo.toml`, `Cargo.lock`
+
+**`296a4ea9` — `fix(blueprints): the task zone column is tz, not recurrence_tz`** — finding **R-1020-35**, fixed at source with a demonstrated red.
+
+- `packages/blueprints/apps/tasks/queries/{board,search}.ts` — two readers asked `schedule_task` for a column it does not have and silently got `undefined`, so **every** repeating task fell back to the vault zone regardless of its own. The fixture that caught it is an `America/New_York` task whose `next_due` moved from `14:00:00.000Z` to `13:00:00.000Z` once the column was spelled right.
+
+**`a9260eb6` — `fix(apps): every pending command in this wave comes off its list`**
+
+- `crates/apps/notes/{src/commands.rs,tests/parity.rs,README.md}`, `contracts/tools/{export-notes-parity,notes-parity-bundle,notes-parity-script}.ts`, `contracts/apps/notes/{commands,queries,rows,scenarios}.json` (regenerated), `tests/quality/notes-parity.contract.test.ts` — Notes' `send-to-tasks` case is **real**: it now calls `schedule.add_task` and reads the `task_id` back.
+- `crates/apps/{agenda,tasks}/src/commands.rs`, `crates/vault/tests/commands.rs` — the named-absence assertions that existed only to hold the pending marks are gone.
+
+**`4bafc5b2` — `refactor(contracts): split the two generators under the line ceiling`**
+
+- `contracts/tools/{schedule-parity-script,time-corpus-cases,time-corpus-rrule}.ts` (new) — `export-time-corpus.ts` was 832 lines and `schedule-parity-corpus.ts` 655 against oxlint's `max-lines` 625. Split along a real seam (script replay; case tables), **not** by taking an allowlist row.
+
+### Exit list
+
+| Command | Outcome |
+|---|---|
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `cargo test -p centraid-apps-agenda` | **21 passed**, 1 ignored (the measured year-3 run, green with `--ignored`) — 12 lib, 7 `parity`, 2 `year3` |
+| `cargo test -p centraid-apps-tasks` | **25 passed**, 1 ignored (same) — 19 lib, 4 `parity`, 2 `year3` |
+| `cargo test -p centraid-vault` | **515 passed**, of which `schedule_commands` 23 and `time_corpus` 14 |
+| `cargo test --workspace` | **1,947 passed, 0 failed**, 6 ignored |
+| `cargo test -p centraid-automations` | green, 10,320 cron parity cases unchanged by the zone move |
+| `cargo test -p centraid --test native_host` | green with `PENDING_COMMANDS` empty — the extension's `agenda:add` and `capture:task` frames resolve against the real catalogue |
+| `cargo xtask gate --profile local` (warm) | FAIL — `rules` only, on the two inherited Photos findings. **159.6 s against a 120 s budget**, inherited and not touched |
+| `cargo xtask gate --profile pr` | **618.7 s of 1,500 s.** FAIL on `rules`, `ci-policy`, `secrets` ×2, `osv` — all inherited and named at spawn — plus `ts-static`, `desktop-unit`, `extension-unit`, which fail for lack of `node_modules` (exit 127) and **were re-run green with `node_modules` present** |
+| `cargo xtask rules` over `crates/apps/{agenda,tasks}` | **clean** — 0 findings in either crate, tests included |
+| `sql-confinement` over both app crates | **clean** — no SQL string literal in `crates/apps/agenda`, `crates/apps/tasks` or `crates/vault/src/time`; every statement is a `PageQuery` from the kit |
+| the three generators, each run twice | idempotent: second run byte-identical after `bun run format` |
+| `tests/quality/{time-corpus,agenda-parity,tasks-parity}.contract.test.ts` | green in both write and assert mode — the v0-side oracle |
+| `tests/quality/notes-parity.contract.test.ts` | green after regeneration, with `send-to-tasks` no longer pending |
+| `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` | 10 rules, no findings |
+| `bash .governance/run.sh` | all 10 directives pass |
+| `bun run format` / `format:check` | clean |
+| `bun run check:push:static` | 4/4 |
+
+### The numbers
+
+**The rrule corpus — 244 cases, 189 accepted / 55 refused.** The refusals split 42 `unsupported-part`, 10 `malformed`, 3 `unsupported-freq`, and each carries v0's refusal **sentence** verbatim, not just its code — the sentence is the thing a person reads, so it is the thing the corpus compares. Ten parts are refused by name (`BYSETPOS`, `BYMONTHDAY`, `BYMONTH`, `BYYEARDAY`, `BYWEEKNO`, `BYHOUR`, `BYMINUTE`, `BYSECOND`, and `WKST`/`BYWEEKNO` under `INTERVAL>1`); four `FREQ` values are supported. `FREQ=MONTHLY;BYSETPOS=-1` is carried as the named cautionary case because it is the rule that reads as obviously meaningful and expands wrong.
+
+**The DST corpus — 78 zoned expansions over 481 occurrences, in six zones chosen to break a naive check.** Not one of the six is there for coverage's sake: **Europe/Dublin** has *negative* DST, so an is-DST flag reads backwards; **Australia/Lord_Howe** shifts by **thirty minutes**, so an hour-shaped gap test misses it entirely; **Pacific/Chatham** is at `:45`, so wall minutes and UTC minutes never line up; **Asia/Kolkata** is at `:30` and never shifts; **America/New_York** is the doctrine's pinned zone; **Etc/UTC** is the control. Alongside them, **60 wall-clock resolutions — 3 gaps and 3 folds** — and 6 floating/all-day cases that must not move at all.
+
+**The DST no-skip fixture — the answer is 17, and the wrong key gives 18.** A daily 09:00 series in `Asia/Kolkata` across a range containing a US spring-forward: 18 occurrences before exceptions, and a skip on the boundary day. Keyed on the **wall clock** (`2026-03-09T09:00:00`) the skip matches and **17** remain. Keyed on the **resolved instant** (`2026-03-09T03:30:00.000Z`) it matches nothing and 18 remain — an occurrence the user deleted, back on the calendar. That is drift **ONT-25** made into a number, and it is why `OCCURRENCE_LOCAL_START_COLUMN = "original_start_local"` is spelled in exactly one place in the tree (D-1020-S3) and why the matcher keys on `wall_start`.
+
+**The occurrence corpus** — 7 stored exception rows folding to 4 exceptions, 5 `override_at` lookups, 4 search windows, 5 `next_occurrence` cases, 6 `collapse_missed` cases, 12 temporal classifications.
+
+**Agenda parity.** `queries.json` carries **16 cases** — `upcoming` 5, `search` 5, `day-context` 5, `parties` 1 — comparing **457 event rows** whole. `commands.json` is a **45-step replayable script over all 16 distinct commands** (14 `schedule.*` plus `core.add_party` and `core.tag_item`), with **8 refusals** in it. `rows.json` is **16 tables, 61 rows**.
+
+**Tasks parity.** `queries.json` carries **11 cases** — `board` 6, `search` 5 — comparing **40 task rows** (24 open, 12 logbook, 4 nested children). `commands.json` is a **26-step script over 9 distinct commands** with **5 refusals**. `rows.json` is **13 tables, 39 rows**. The two bundles between them exercise **14 of the 16** `schedule.*` commands; the two they do not, `reschedule_event` and `restore_event`, are both confirm-gated and are covered in `crates/vault/tests/schedule_commands.rs` instead, where a non-owner principal can be constructed.
+
+**The command surface — 16 commands, 4 parked, and the census undercounted.** Idempotency splits **10 `Idempotent` / 4 `Once` / 2 `RetrySafe`**. Four carry `confirm: true` — `reschedule_event`, `cancel_event`, `edit_event`, `edit_event_occurrence`. **Census A0 says three.** It is not a divergence: v0 declares them across *two* files (`commands/schedule.ts` has two, `commands/schedule-organize.ts` has two) and the census read one. The port matches v0 exactly; the census row is the thing that is wrong. Note that `delete_event` and `delete_task` are **`Once`/`Medium` and not parked** — that is v0's answer, and D-1020-S6 below is about that gap, deliberately left as a question rather than closed by code.
+
+**The expansion cap is reachable, and reaching it is an error.** `MAX_TOTAL_INSTANCES 1500` is checked **during** expansion, not after: `expand_recurring_events` returns `KitError::FanOutExceeded { query: "agenda.upcoming.expansion", cap: 1500 }` the moment the 1,501st instance would be built. v0 truncates silently at the same number and hands back a calendar that is quietly incomplete — this is the D-1020-D3-12 divergence, and `the_expansion_cap_errors_at_the_size_it_reaches` is the test, run against the **year-3 axis** over a six-month window where the bound is genuinely hit rather than against a synthetic rule contrived to hit it.
+
+**The board's promotion rule.** `nest_task_families` is a pure fold with no I/O and 19 lib tests over it, including the case the rule exists for: an **unfinished child of a completed or released parent is promoted to a root** rather than disappearing with its parent. Nullable sort columns (`due_at`, `completed_at`) take V's refusal and the wave's adopted answer — **nulls last, then priority desc, then title, then pk** (D-1020-S5) — and the undated case is fixtured. `truncated` is the **open page's own cursor**, not a count comparison. **No module-level ceiling was added**: `board.limit` is 20–500 and there is nothing above it, because v0 has nothing above it and a refusal v0 lacks is a port bug, not a hardening.
+
+**The year-3 axes, measured.** Agenda: **12,000 events, 800 recurring series, 1,200 exceptions**; one day's `day-context` = **813 rows**; a six-month `upcoming` window **trips the 1,500 cap**. Tasks: **12,000 rows — 8,250 open, 3,750 closed, 800 cancelled**; the board's 500-row window folds to **125 open roots and 50 logbook rows with `truncated` true**. One host, one run — projected provenance in D-1020-D3-7's sense, not a ledger number.
+
+### Decisions — lane Schedule
+
+- **D-1020-S1 — one rrule parser, three call shapes (#1020).** `assert_supported` at write boundaries, `inspect` for surfaces that report, `expand` returning `None` on an unsupported rule rather than a plausible-but-wrong series. v0 has three implementations of the same subset in three files; this is one, and the corpus is what proves the three shapes agree. One deliberate strengthening: `schedule.propose_event` calls `assert_supported` where v0 only prefix-checks — see the finding below.
+- **D-1020-S2 — the DST policy is shared with cron (#1020).** Nonexistent wall time is skipped; an overlapping wall time occurs **once, at the earlier instant**; exceptions key off the unmodified original occurrence. `FireZone::resolve_wall_time` is the one implementation and cron and recurrence both call it, so the three sentences in `docs/cron-timezone.md` cannot drift apart between the two halves.
+- **D-1020-S3 — ONT-recur is storage-enforced (#1020).** `original_start_local` is named once, in `crates/vault::time::occurrence::OCCURRENCE_LOCAL_START_COLUMN`, and every reader goes through `expand`. The 17-vs-18 fixture is the proof.
+- **D-1020-S4 — `upcoming` reads two windows (#1020).** Non-recurring events from before `from` for multi-day spans, plus recurring anchors capped at `RECURRING_ANCHOR_CAP 1000`; expand; re-apply the true lower bound; `MAX_TOTAL_INSTANCES 1500` mid-expansion. `EVENT_WINDOW_CAP 2000`, `MAX_RANGE_DAYS 400`, `PARTY_CAP`/`TASK_CAP 2000`, `TAG_CAP 5000`, `SHELF_CAP 8`.
+- **D-1020-S5 — the board (#1020).** Open tasks due-first, then priority desc, then title, then pk; subtasks nested; unfinished children of a finished parent promoted; 50 most recently closed as the logbook; `truncated` is the open page's cursor; `board.limit` 20–500 and **nothing else**.
+- **D-1020-S6 — the two destructive verbs stay ungated, as a question (#1020).** The brief recommended adding manifest confirmations for `cancel-event` and `delete`. **They were not added.** A manifest confirmation is a product decision with a UI consequence, and the lane's evidence for it is "v0 does not have one", which is an observation and not a finding — the honest output is the question, not the change. See the owner hand-off below.
+- **D-1020-S7 — task lifecycle is a vault operation (#1020).** `complete`, `reopen`, `cancel`, the recurrence rollover and the successor's link inheritance live in `crates/vault::operations::task_lifecycle`, not in `crates/apps/tasks`, because Notes' `send-to-tasks` and the extension's `capture:task` reach them without going through the app. This is what makes drift **ONT-27** ("completion is one operation") true structurally rather than by convention.
+- **D-1020-S8 — one zone source, and it moved down (#1020).** `FireZone` is `crates/vault::time::zone` and `crates/automations::cron` re-exports it. `FireZone::resolve(trigger_tz, vault_zone)` takes **two** tiers and no third argument: there is no host-zone parameter to pass, which is the deletion expressed in the signature. `jiff` is built without `tz-system`, so the host zone is structurally unreachable, not merely unused.
+- **D-1020-S9 — the app crates depend on `centraid-vault` for `time` (#1020).** `crates/vault::time` holds no SQL and could have lived in the kit; it lives in the vault because `task_lifecycle` needs it beside the operations, and a second copy in the kit is exactly the duplication S1 and S3 exist to prevent.
+
+### Findings
+
+- **R-1020-35 (fixed at source).** `packages/blueprints/apps/tasks/queries/{board,search}.ts` read `task.recurrence_tz`; the column is `tz`. Two readers, `undefined` both times, so every repeating task silently used the vault zone. Fixed with a demonstrated red. **The writer half is still outstanding**: `detail.ts:242`, `app-root.tsx:837`, `pending-projection.ts:22` and `detail.test.ts` all still write and assert `recurrence_tz` into a row shape that has no such column, and `types.ts:60` still declares it optional. `packages/vault/src/schema/ontology-rules.test.ts:180` asserts the column does **not** exist, so the schema is not in doubt — the writer path is dead weight that will read back as `undefined` the next time someone trusts it. Not this lane's files; filed for the owner.
+- **SCH-F1 — `core_event.rrule_support` is written by exactly one path, and it is not the app.** `packages/vault/src/ingest/publishers.ts` sets it on ICS ingest. `schedule.propose_event` and `schedule.edit_event` never write it, so a rule **typed into Agenda** is stored `'supported'` — the schema default — whatever it actually is. `crates/apps/agenda/tests/parity.rs` asserts `marked == 0` over the v0-written corpus to pin this as the current state rather than let it look like an oversight in the port.
+- **SCH-F2 — v0 refuses the same rule in one command and accepts it in another.** `schedule.add_task` refuses `FREQ=MONTHLY;BYSETPOS=-1`; `schedule.propose_event` stores it. Combined with SCH-F1 the event comes back flagged `'supported'` as well. This port refuses it in both, per D-1020-S1, and the disagreement is recorded as the named divergence test `v0_stores_an_unsupported_rule_on_an_event_and_this_port_refuses_it` rather than reproduced — reproducing a rule the engine cannot expand would mean shipping a series that is wrong on purpose.
+- **SCH-F3 — census A0's confirm count for `schedule` is three; it is four.** Cause and correction above. Worth fixing in the census because the number is used as an exit check.
+- **SCH-F4 — `queueProviderWriteback` is not ported.** v0's event writes enqueue a writeback to the originating calendar provider. The connectors plane is on the back burner for v1, so there is no queue to enqueue to; the commands are otherwise complete. Named so it is not mistaken for a missed line.
+- **SCH-F5 — the two demo seeds are host-local.** `contracts/apps/{agenda,tasks}` are generated against a fixture clock, but v0's own demo seed for both apps calls `Date.now()` outside it. The generator neutralises this (`normaliseHostClock`, below); the seed itself is still host-dependent for anyone running v0 directly.
+
+**The determinism fix worth naming.** Both bundles were non-deterministic on first generation: columns whose DDL default is `strftime(…,'now')` get a real host timestamp on insert, and `installFixtureClock` cannot reach SQLite's own clock. The discriminator is the **schema's own `PRAGMA table_info().dflt_value`** — a column is normalised if and only if its default contains `strftime`, and only when its value is more than 400 days from the fixture epoch. That is a rule the schema states about itself, not a list of column names someone has to keep up to date.
+
+### Owner hand-offs and questions
+
+1. **D-1020-S6 — should `schedule.cancel_event` and `schedule.delete_task` carry manifest confirmations?** v0 has none. They are `Once`/`Medium` and not parked, so a non-owner seat can cancel an event or delete a task with no owner-facing prompt. Options: **(a)** leave as is, matching v0, and accept that the gate is the risk tier alone; **(b)** add manifest `confirmation` to both, which changes what the UI shows before a destructive verb. **Recommendation: (b)**, but it is a product change with a visible consequence and the lane did not make it unilaterally. `delete_event` is the third candidate and the same question covers it.
+2. **R-1020-35's writer half** (five call sites listed above) needs a decision: delete `recurrence_tz` from the Tasks row shape and its writers, or add the column. The schema test says the column will not exist, so the answer is almost certainly "delete" — but it is v0 blueprint code and not this lane's to remove.
+3. **SCH-F1/F2 together** are one question: should `propose_event` validate the rule (as this port does) and should `rrule_support` be written by the command path at all, or dropped? The column has one writer and no consumer that changes behaviour on it.
+
+### Doctrine digest
+
+Brief digest `53be88c22ab5`, checked with `node .governance/law/run.mjs --door window --brief-digest 53be88c22ab5` — 10 rules, no findings — and `bash .governance/run.sh`, all 10 directives pass. No `SKIP_*`, no `--no-verify`, no test, budget, ledger or allowlist weakened: the one place where a limit was in the way (oxlint `max-lines` on two generators) was answered by splitting the files along a real seam.
+
+### Falsification
+
+**Claim 1: "the occurrence key is the wall clock, and that is what makes ONT-25 true."** The risk is that the whole ONT-25 story is narration over a corpus that would pass either way — the kind of claim that is easy to assert and expensive to check. Throwaway check: in `apply_exceptions`, `instance.wall_start` was swapped for `instance.original_start` — the resolved instant, which is the plausible wrong answer and the one v0's three readers effectively had. **Six tests went red across three layers**: two unit (`a_skip_keyed_on_the_resolved_instant_matches_nothing`, `a_skip_keyed_on_the_wall_clock_removes_its_occurrence`), two corpus (`a_skip_keyed_on_the_resolved_instant_still_matches_nothing`, `the_exception_fold_agrees_with_v0_before_and_after`), and — the ones that matter — **two Agenda parity tests** (`the_dst_window_keeps_its_wall_clock_and_honours_its_exceptions`, `every_upcoming_case_agrees_with_v0`). The parity suite *can* tell the difference here, because the corpus has a real deleted occurrence on a real DST boundary. Restored; `git diff --exit-code` clean.
+
+**Claim 2: "`MAX_TOTAL_INSTANCES` is enforced mid-expansion and the bound is reachable."** The risk is the standard one for a cap: it is asserted in a test that constructs a rule specifically to trip it, which proves the constant exists and nothing about whether real data reaches it. Throwaway check: the cap's `return Err(KitError::FanOutExceeded { … })` was replaced with `return Ok(out)` — v0's silent truncation, exactly. **`the_expansion_cap_errors_at_the_size_it_reaches` went red and the other two Agenda suites stayed green** — 12 lib, 7 parity, untouched. That is the honest statement, and it cuts both ways: the bound is genuinely reached by the year-3 axis over a six-month window, so the test is not synthetic; but **no parity case can see this**, because v0's corpus never gets near 1,500 instances and v0's answer at the boundary is the truncation, not the error. The divergence is only visible to the year-3 axis, which is why that axis is the test's fixture rather than a hand-built series.
