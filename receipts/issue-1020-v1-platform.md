@@ -5992,3 +5992,90 @@ start_endpoint` is a stub (`crates/core/src/handle.rs:190`), the C ABI answers
 admits an enrolled seat and then closes the connection because the replica plane
 lands in wave 2 lane D2. What a device holds is the same file a seat would hold
 after a download — minus the download.
+
+## The gateway's seat lane — one of the three planes was already built
+
+This supersedes the paragraph above, and the correction is worth more than the
+feature: **two of the three "unbuilt planes" were not unbuilt.** `crates/net`
+pairs and streams over real QUIC with seven passing tests. `crates/seat` has the
+applier, the outbox, the settlement chain and a convergence suite.
+`Handle::call` has answered a `LogRequest` with a correct page — floor,
+watermark, cursor, and `RebootstrapRequired` as a *response* rather than an
+error — since lane D2. What did not exist was the twenty lines between them.
+
+### What actually held it shut
+
+One comment. `crates/centraid/src/run.rs` recorded that `Vault` "carries boxed
+`Clock` and `Ids` trait objects that are not `Send`", so nothing vault-shaped
+could enter a `tokio::spawn` and the accept loop had nowhere to put a seat.
+
+Both traits are declared `Send + Sync` — `crates/vault/src/clock.rs:19` and
+`:197` — `Vault` is `Send`, and `Handle` is `Send + Sync`. A four-line compile
+probe said so in under a minute. The lane had been deferred across two waves on
+a claim nobody re-checked, which is the whole argument for
+[D-1020-D2C](../docs/decisions.md): an auto-trait claim in prose is a claim that
+rots silently, so `crates/core/tests/send.rs` now asserts it where the compiler
+checks it.
+
+### What was built
+
+`crates/centraid/src/seat_lane.rs` — handshake, then read envelope, `Handle::
+call` on the blocking pool, write response, until the seat stops asking. One
+task per seat, so a slow replica cannot hold the accept loop. The reader is a
+**second** core over the same file: the gateway stays the single writer and WAL
+serves readers beside it, which is what lets a replica catch up while the owner
+is still typing.
+
+**`LogRequest` only, and the refusal is by name.** `accept` proves the DEVICE is
+enrolled and says nothing about a member, so this lane has no principal under
+which to make a `Command` or a `Page` — those are the thin-seat plane. Anything
+else returns `UNSUPPORTED_MESSAGE` with an owner sentence rather than a silent
+close. The match is an allowlist, not a filter, so a lane that quietly served a
+write because a code path happened to reach it is not expressible here.
+
+### The bug the test found
+
+`run.rs` passed the literal string `"vault"` as the vault id in every pairing
+response. A seat keys its entire replica on that answer —
+`SeatIdentity::storage_key` is `sha256(gateway_id ‖ vault_id)` and names both
+the replica file and its outbox — so **every vault on every gateway hashed to
+one key**, and the id never matched the one the log pages carry, leaving a seat
+unable to tie what it had downloaded to where it came from.
+
+It was found because `tests/seat_lane.rs` compares the two lanes' answers to
+each other instead of checking each in isolation. Neither lane was wrong on its
+own terms; they disagreed. ([D-1020-D2B](../docs/decisions.md))
+
+### The evidence
+
+`crates/centraid/tests/seat_lane.rs` spawns the **shipped binary**, pairs with
+it over QUIC on a fresh data directory, and then, as a real seat would:
+
+1. handshakes into the version window,
+2. asks for a page with `since: None` and gets the founding commit — the
+   `core_vault` row is asserted present, because an empty page is the failure
+   this lane is about: a seat applies it cleanly and calls itself caught up,
+3. asks again on the returned cursor and gets nothing, with `has_more` false —
+   a gateway that ignored `since` would re-serve its history in a circle,
+4. asks for something else and gets the typed refusal.
+
+Two harness traps, both of which presented as "the network is broken":
+
+- **The test was killing the gateway.** The reader thread returned at the
+  `ticket` line, closing the stdout pipe; the gateway's next `println!` — the QR
+  block, which is printed *after* the ticket — failed, and a failed write to
+  stdout panics the main thread. The symptom was `Timeout(10s)` on the pair
+  lane, and a `std/src/io/stdio.rs` panic in the log that I read past twice. The
+  harness now drains stdout for the whole run.
+- **A relay-disabled seat has no discovery of its own.** `EndpointConfig::
+  loopback()` works in `crates/net`'s test because both endpoints share a
+  process. Across processes the seat needs `default()`, which is what `centraid
+  seat pair` already built and what a real seat is.
+
+### What is still missing, exactly
+
+The DEVICE half. `Handle::start_endpoint` is still a stub and the C ABI still
+answers `Request::Pair` with `NotYetAvailable`, so a phone cannot dial a gateway
+that is now ready to answer it. The `Send` finding above makes both tractable —
+the obstacle was never ownership — but the shell must decide which runtime the
+endpoint runs on, and that is a shell decision this lane did not take.

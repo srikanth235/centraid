@@ -173,7 +173,7 @@ impl Vault {
         })
     }
 
-        /// The vault's own id, if it has been founded.
+    /// The vault's own id, if it has been founded.
     pub fn vault_id(&self) -> Result<Option<String>> {
         self.read(|connection| {
             Ok(connection

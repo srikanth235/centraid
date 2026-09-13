@@ -55,7 +55,7 @@ use std::path::PathBuf;
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::{Principal, Vault};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Where the scenario's "now" is anchored.
 ///
@@ -290,7 +290,8 @@ fn main() {
     // Agenda LAST and outside the `with_vault` above, because the calendar it
     // needs is written by `found` inside it: the read that discovers the id
     // cannot run while that borrow is alive.
-    let calendar_id = calendar_id.or_else(|| first_row(&handle, "schedule_calendar", "calendar_id"));
+    let calendar_id =
+        calendar_id.or_else(|| first_row(&handle, "schedule_calendar", "calendar_id"));
     // NOT WANTED IS NOT MISSING. Folding the two together would make a vault
     // seeded without an agenda print the "this vault has no calendar" warning
     // below, which names a real defect and would then cry wolf on every run.
@@ -418,12 +419,9 @@ fn seed_people(seeder: &mut Seeder) -> u32 {
         }
     }
     let (maya, jake, grandpa, chris) = match ids.as_slice() {
-        [maya, jake, grandpa, chris] => (
-            maya.clone(),
-            jake.clone(),
-            grandpa.clone(),
-            chris.clone(),
-        ),
+        [maya, jake, grandpa, chris] => {
+            (maya.clone(), jake.clone(), grandpa.clone(), chris.clone())
+        }
         _ => return seeded,
     };
 
@@ -438,7 +436,11 @@ fn seed_people(seeder: &mut Seeder) -> u32 {
             "visit",
             "Sunday lunch. Blood pressure is under control again; he beat me at cribbage twice.",
         ),
-        (&chris, "message", "Sent the portfolio feedback he asked for."),
+        (
+            &chris,
+            "message",
+            "Sent the portfolio feedback he asked for.",
+        ),
     ] {
         if seeder
             .run(
@@ -476,7 +478,10 @@ fn seed_people(seeder: &mut Seeder) -> u32 {
         (&chris, "Fountain pen ink sampler"),
     ] {
         if seeder
-            .run("people.add_gift", json!({ "party_id": party, "text": text }))
+            .run(
+                "people.add_gift",
+                json!({ "party_id": party, "text": text }),
+            )
             .is_some()
         {
             seeded += 1;
@@ -635,10 +640,7 @@ fn seed_docs(seeder: &mut Seeder, now: i64) -> u32 {
             "core.edit_document",
             json!({ "document_id": packing, "body_text": revised }),
         );
-        seeder.run(
-            "core.star_document",
-            json!({ "document_id": packing }),
-        );
+        seeder.run("core.star_document", json!({ "document_id": packing }));
         seeder.run(
             "core.tag_item",
             json!({
@@ -1100,8 +1102,7 @@ fn frame_input(frame: &Frame, now: i64) -> Option<Value> {
 
 /// Standard base64, no line breaks — what a `data:` URI carries.
 fn base64_of(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let b = [
@@ -1111,9 +1112,7 @@ fn base64_of(bytes: &[u8]) -> String {
         ];
         let packed = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         for shift in [18, 12, 6, 0] {
-            out.push(char::from(
-                ALPHABET[((packed >> shift) & 0x3F) as usize],
-            ));
+            out.push(char::from(ALPHABET[((packed >> shift) & 0x3F) as usize]));
         }
         // The pad says how many of the last four characters are real.
         let padding = 3 - chunk.len();
@@ -1294,7 +1293,12 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) -> u32 {
             json!({ "task_id": groceries, "status": "completed" }),
         );
     }
-    if add(seeder, json!({ "title": "Learn to make sourdough", "priority": 1 })).is_some() {
+    if add(
+        seeder,
+        json!({ "title": "Learn to make sourdough", "priority": 1 }),
+    )
+    .is_some()
+    {
         seeded += 1;
     }
     seeded
@@ -1400,11 +1404,7 @@ fn seed_tally(seeder: &mut Seeder, now: i64, me: &str) -> u32 {
     if friends.len() != 3 {
         return seeded;
     }
-    let (maya, jake, chris) = (
-        friends[0].clone(),
-        friends[1].clone(),
-        friends[2].clone(),
-    );
+    let (maya, jake, chris) = (friends[0].clone(), friends[1].clone(), friends[2].clone());
 
     // The icon is rendered verbatim and must come from the emoji set, never a
     // lucide name.
@@ -1431,7 +1431,14 @@ fn seed_tally(seeder: &mut Seeder, now: i64, me: &str) -> u32 {
     let expenses: [(&str, i64, &String, &str, i64, Option<Vec<String>>); 5] = [
         ("Cabin deposit", 30_000, &everyone[0], "travel", 6, None),
         ("Gas for the drive up", 4_820, &jake, "transport", 6, None),
-        ("Groceries for the cabin", 11_267, &maya, "groceries", 5, None),
+        (
+            "Groceries for the cabin",
+            11_267,
+            &maya,
+            "groceries",
+            5,
+            None,
+        ),
         (
             "Ski rentals",
             9_200,

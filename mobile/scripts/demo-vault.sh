@@ -9,12 +9,14 @@
 # rows move with the scenario's "now", so a committed copy would churn in every
 # diff and be unreviewable in all of them. The generator is one command.
 #
-# WHY NOT OVER THE NETWORK. Because the network is not built: `Handle::
-# start_endpoint` is a stub, the C ABI answers `Request::Pair` with
-# NotYetAvailable, and `centraid gateway` admits an enrolled seat and then
-# closes the connection because the replica plane is not there. A phone cannot
-# pair with a gateway in this tree, so the vault is PLACED rather than synced —
-# which is the same file a seat would have ended up holding, minus the download.
+# WHY NOT OVER THE NETWORK. Because the DEVICE half of the network is not
+# built. The GATEWAY half now is: `centraid gateway` serves an admitted seat
+# real log pages off its own vault, and `crates/centraid/tests/seat_lane.rs`
+# pairs with the shipped binary over QUIC and reads them back. What a phone
+# still cannot do is dial it — `Handle::start_endpoint` is a stub and the C ABI
+# answers `Request::Pair` with NotYetAvailable — so the vault is PLACED rather
+# than synced, which is the same file a seat would have ended up holding, minus
+# the download.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

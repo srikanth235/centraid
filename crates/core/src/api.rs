@@ -50,9 +50,7 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 // A PATH AND NOT BYTES. See `centraid_vault::content`: the
                 // platform opens the file, so caching and range requests stay
                 // where they belong and the core never buffers a photograph.
-                path: found
-                    .path
-                    .map(|path| path.to_string_lossy().into_owned()),
+                path: found.path.map(|path| path.to_string_lossy().into_owned()),
                 media_type: found.media_type,
                 byte_size: found.byte_size,
                 embeddable: found.embeddable,

@@ -1212,7 +1212,9 @@ fn png_uri() -> String {
 fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
     let scratch = common::Scratch::founded_with_blobs("add-asset-real").expect("a vault");
     let registry = registry();
-    registry.install(&scratch.vault).expect("the record installs");
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
     let outcome = scratch
         .vault
         .execute(
@@ -1230,7 +1232,12 @@ fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
             ),
         )
         .expect("the command runs");
-    assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
 
     let (kind, title, uri, size): (String, String, String, i64) = scratch
         .vault
@@ -1269,7 +1276,9 @@ fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
 fn the_same_bytes_twice_adopt_one_asset() {
     let scratch = common::Scratch::founded_with_blobs("add-asset-dedupe").expect("a vault");
     let registry = registry();
-    registry.install(&scratch.vault).expect("the record installs");
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
     let add = || {
         scratch
             .vault
@@ -1286,7 +1295,12 @@ fn the_same_bytes_twice_adopt_one_asset() {
     let first = add();
     assert_eq!(first.status, CommandStatus::Executed, "{:?}", first.reason);
     let second = add();
-    assert_eq!(second.status, CommandStatus::Executed, "{:?}", second.reason);
+    assert_eq!(
+        second.status,
+        CommandStatus::Executed,
+        "{:?}",
+        second.reason
+    );
     assert_eq!(
         second.output.get("deduped"),
         Some(&serde_json::json!(1)),
@@ -1307,7 +1321,9 @@ fn the_same_bytes_twice_adopt_one_asset() {
 fn half_a_coordinate_is_refused() {
     let scratch = common::Scratch::founded_with_blobs("add-asset-half-coord").expect("a vault");
     let registry = registry();
-    registry.install(&scratch.vault).expect("the record installs");
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
     let outcome = scratch
         .vault
         .execute(
@@ -1386,7 +1402,9 @@ fn a_malformed_kind_is_refused_by_the_schema() {
 fn a_seeded_photograph_can_be_located_by_the_owner_that_reads_it() {
     let scratch = common::Scratch::founded_with_blobs("locate-asset").expect("a vault");
     let registry = registry();
-    registry.install(&scratch.vault).expect("the record installs");
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
     let outcome = scratch
         .vault
         .execute(
@@ -1398,7 +1416,12 @@ fn a_seeded_photograph_can_be_located_by_the_owner_that_reads_it() {
             ),
         )
         .expect("the command runs");
-    assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
     let asset_id = outcome.output["asset_id"].as_str().expect("an asset id");
     let content_id = outcome.output["content_id"].as_str().expect("a content id");
 
@@ -1424,7 +1447,9 @@ fn a_seeded_photograph_can_be_located_by_the_owner_that_reads_it() {
 fn an_unknown_owner_locates_the_bytes_and_refuses_to_call_them_embeddable() {
     let scratch = common::Scratch::founded_with_blobs("locate-unknown-owner").expect("a vault");
     let registry = registry();
-    registry.install(&scratch.vault).expect("the record installs");
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
     let outcome = scratch
         .vault
         .execute(
@@ -1458,5 +1483,9 @@ fn a_content_id_that_is_not_here_is_absent_with_a_sentence() {
     assert!(found.path.is_none());
     assert!(!found.absent_reason.is_empty());
     // NEVER A PATH, NEVER A SHA, NEVER A STACK — this sentence reaches a member.
-    assert!(!found.absent_reason.contains('/'), "{}", found.absent_reason);
+    assert!(
+        !found.absent_reason.contains('/'),
+        "{}",
+        found.absent_reason
+    );
 }

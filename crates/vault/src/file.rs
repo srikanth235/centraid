@@ -249,9 +249,10 @@ impl Vault {
     /// property a shared pool does not have.
     #[must_use]
     pub fn blobs_root_for(path: &Path) -> PathBuf {
-        let stem = path
-            .file_name()
-            .map_or_else(|| "vault".to_owned(), |name| name.to_string_lossy().into_owned());
+        let stem = path.file_name().map_or_else(
+            || "vault".to_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        );
         path.with_file_name(format!("{stem}.blobs"))
     }
 

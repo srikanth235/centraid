@@ -23,6 +23,7 @@ use clap::{Parser, Subcommand};
 
 mod cmd;
 mod run;
+mod seat_lane;
 
 /// The exit codes, stated once. A script that wraps this binary branches on
 /// these numbers, so they are as much of an interface as the subcommands.

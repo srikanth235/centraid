@@ -109,6 +109,10 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
     // needs the second one.
     let allowlist = std::sync::Arc::new(MemoryAllowlist::new());
     let mut capture = None;
+    // Remembered before `capture` is moved into the tick, because the seat lane
+    // opens its own reader over the same file.
+    let mut vault_file: Option<PathBuf> = None;
+    let mut vault_id: Option<String> = None;
     match &args.data_dir {
         Some(dir) => {
             match open_or_found_vault(dir, &args.vault_name) {
@@ -118,6 +122,8 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
                         founded.vault_id,
                         founded.file.display()
                     );
+                    vault_file = Some(founded.file.clone());
+                    vault_id = Some(founded.vault_id.clone());
                     capture = Some(founded);
                 }
                 Err(why) => {
@@ -216,21 +222,73 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
         }
     };
 
+    // THE SEAT LANE'S READER (#1020, lane D2).
+    //
+    // A SECOND core over the same file, and the second-ness is the design. The
+    // gateway is the vault's single WRITER and `_held` above is that writer;
+    // this one answers `LogRequest` and nothing else (`seat_lane`'s header says
+    // why), so it never contends for the write lock. SQLite in WAL mode serves
+    // readers alongside one writer, which is what makes a replica able to catch
+    // up while the owner is still typing.
+    //
+    // `create: false` on purpose: by here the file exists, and a gateway that
+    // silently founded a SECOND vault because a path was wrong would serve a
+    // seat an empty log that applies cleanly.
+    let core = match vault_file {
+        None => None,
+        Some(file) => {
+            let config = centraid_core::CoreConfig {
+                path: file.clone(),
+                role: centraid_core::Role::Gateway,
+                ui_thread_name: None,
+                create: false,
+                clock: None,
+                ids: None,
+                expected_digest: None,
+            };
+            match centraid_core::Core::open(config) {
+                Ok(handle) => Some(std::sync::Arc::new(handle)),
+                Err(error) => {
+                    // Not fatal. Pairing still works and the vault is still
+                    // captured; what a seat gets is the refusal in the accept
+                    // arm, which names the cause.
+                    tracing::warn!(
+                        %error,
+                        file = %file.display(),
+                        "no core for the seat lane; this gateway can pair and cannot serve changes"
+                    );
+                    None
+                }
+            }
+        }
+    };
+
     // The accept loop. A refused connection is logged and the loop continues:
     // one impostor must not take the gateway down.
     let serving = {
         let endpoint = endpoint.clone();
         let allowlist = allowlist.clone();
         let vault_name = args.vault_name.clone();
+        let vault_id = vault_id.clone();
+        let core = core.clone();
         tokio::spawn(async move {
             loop {
                 match endpoint.accept(allowlist.as_ref()).await {
                     Ok(None) => break,
                     Ok(Some(accepted)) if accepted.alpn == alpn::PAIR => {
+                        // THE VAULT'S OWN ID, not the literal "vault". A seat
+                        // keys its whole replica on what it is told here —
+                        // `SeatIdentity::storage_key` is `sha256(gateway_id ‖
+                        // vault_id)` and names the replica file — so a constant
+                        // meant every vault on every gateway hashed to one key,
+                        // AND it never matched the id the log pages carry, so
+                        // nothing a seat downloaded could be tied back to the
+                        // vault it came from. Found by `tests/seat_lane.rs`,
+                        // which compares the two.
                         let outcome = pairing::serve_redemption(
                             &accepted.connection,
                             allowlist.as_ref(),
-                            "vault",
+                            vault_id.as_deref().unwrap_or_default(),
                             &vault_name,
                             &hex(&endpoint.id()),
                             now_ms(),
@@ -264,14 +322,43 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
                         }
                     }
                     Ok(Some(accepted)) => {
-                        // The seat lane. Serving it needs crates/seat's replica
-                        // plane (lane D2); the connection is admitted — the
-                        // device IS enrolled — and then closed, which is the
-                        // honest answer while there is no log to serve.
-                        tracing::warn!(
-                            device = ?accepted.device.map(|device| device.device_id),
-                            "a seat connected; the replica plane lands in wave 2 lane D2"
-                        );
+                        // THE SEAT LANE (#1020, lane D2). `accept` has already
+                        // refused an unenrolled peer above this line, so the
+                        // device on `accepted` is enrolled by construction.
+                        let device = accepted
+                            .device
+                            .as_ref()
+                            .map(|device| device.device_id.clone())
+                            .unwrap_or_default();
+                        let Some(core) = core.clone() else {
+                            // A gateway with no `--data-dir` has no vault, so
+                            // it has no log. Saying so beats an empty page,
+                            // which a seat would apply as "nothing changed".
+                            tracing::warn!(
+                                %device,
+                                "a seat connected and this gateway holds no vault; \
+                                 start it with --data-dir"
+                            );
+                            continue;
+                        };
+                        // ONE TASK PER SEAT, so a slow replica cannot hold the
+                        // accept loop and the next device can still pair.
+                        tokio::spawn(async move {
+                            match crate::seat_lane::serve(
+                                &accepted.connection,
+                                core,
+                                env!("CARGO_PKG_VERSION"),
+                            )
+                            .await
+                            {
+                                crate::seat_lane::Ended::PeerClosed { pages, rows } => {
+                                    tracing::info!(%device, pages, rows, "a seat caught up");
+                                }
+                                crate::seat_lane::Ended::Failed(why) => {
+                                    tracing::warn!(%device, %why, "the seat lane ended");
+                                }
+                            }
+                        });
                     }
                     Err(error) => tracing::warn!(%error, "a connection was refused"),
                 }
@@ -306,9 +393,15 @@ struct FoundedVault {
     /// which is the exact gap wave 2 lane R named. Holding it open is what
     /// makes the tick have bytes.
     ///
-    /// It is not moved into the capture task: `Vault` carries boxed `Clock` and
-    /// `Ids` trait objects that are not `Send`, and the tick needs no
+    /// It is not moved into the capture task because the tick needs no
     /// connection at all — it reads the `-wal` file.
+    ///
+    /// This comment used to say `Vault` "carries boxed `Clock` and `Ids` trait
+    /// objects that are not `Send`". THAT WAS FALSE, and it cost the seat lane:
+    /// both traits are declared `Send + Sync` (`crates/vault/src/clock.rs:19`,
+    /// `:197`), `Vault` is `Send` and `Handle` is `Send + Sync`, so vault work
+    /// can live in a `tokio::spawn` after all. `crates/core/tests/send.rs`
+    /// asserts it at compile time now, so the claim cannot rot back.
     vault: centraid_vault::file::Vault,
 }
 

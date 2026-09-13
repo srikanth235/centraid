@@ -1099,11 +1099,9 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
         // means the row we are about to write would point at other bytes —
         // which is the one failure a content-addressed store exists to make
         // impossible, so it is an invariant and not a warning.
-        let spilled = blobs
-            .put(&bytes)
-            .map_err(|error| VaultError::Invariant {
-                context: format!("the content store refused {} bytes: {error}", bytes.len()),
-            })?;
+        let spilled = blobs.put(&bytes).map_err(|error| VaultError::Invariant {
+            context: format!("the content store refused {} bytes: {error}", bytes.len()),
+        })?;
         if spilled != sha {
             return Err(VaultError::Invariant {
                 context: format!(

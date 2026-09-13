@@ -41,13 +41,10 @@
 //! is a library of rows with no photographs in it.
 
 use crate::commands::core::{
-    decode_data_uri,
-    minted_bytes, pre_exactly_one_source, pre_inline_bytes_are_storable, pre_is_data_uri,
-    pre_staged_or_owned, pre_within_size_cap, set_representation,
+    decode_data_uri, minted_bytes, pre_exactly_one_source, pre_inline_bytes_are_storable,
+    pre_is_data_uri, pre_staged_or_owned, pre_within_size_cap, set_representation,
 };
-use crate::commands::{
-    CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk,
-};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 
 /// The polymorphic target type every media row uses for an asset.
@@ -488,59 +485,59 @@ fn add_asset() -> CommandDefinition {
 
 /// v0's six gates, plus the one this build adds
 /// (`packages/vault/src/commands/media.ts:344`-`:395`).
-const ADD_ASSET_PRE: &[CommandCondition] = &[
-    CommandCondition {
-        predicate: "exactly_one_source",
-        check: pre_exactly_one_source,
-    },
-    CommandCondition {
-        predicate: "coordinate_pair_complete",
-        check: |ctx| {
-            // A COORDINATE IS A PAIR. Half of one is no location at all, and
-            // dropping it silently would let a caller believe it had placed a
-            // photograph it had not.
-            let lat = ctx.input.get("latitude").is_some_and(|v| !v.is_null());
-            let lng = ctx.input.get("longitude").is_some_and(|v| !v.is_null());
-            Ok((lat != lng).then(|| {
-                "A location needs both a latitude and a longitude.".to_owned()
-            }))
+const ADD_ASSET_PRE: &[CommandCondition] =
+    &[
+        CommandCondition {
+            predicate: "exactly_one_source",
+            check: pre_exactly_one_source,
         },
-    },
-    CommandCondition {
-        predicate: "is_data_uri",
-        check: pre_is_data_uri,
-    },
-    CommandCondition {
-        predicate: "within_size_cap",
-        check: pre_within_size_cap,
-    },
-    CommandCondition {
-        predicate: "inline_bytes_are_storable",
-        check: pre_inline_bytes_are_storable,
-    },
-    CommandCondition {
-        predicate: "staged_or_owned",
-        check: pre_staged_or_owned,
-    },
-    CommandCondition {
-        predicate: "source_asset_exists",
-        check: |ctx| {
-            // A claimed source must be a real asset in THIS vault (#711). Named
-            // here rather than left to the foreign key, so a mistyped lineage
-            // names the failing gate instead of a raw constraint error landing
-            // mid-insert.
-            let Some(source) = ctx.optional_str("source_asset_id") else {
-                return Ok(None);
-            };
-            let count: i64 = ctx.connection().query_row(
-                "SELECT COUNT(*) FROM media_asset WHERE asset_id = ?1",
-                [source],
-                |row| row.get(0),
-            )?;
-            Ok((count != 1).then(|| "That photo is not in this library.".to_owned()))
+        CommandCondition {
+            predicate: "coordinate_pair_complete",
+            check: |ctx| {
+                // A COORDINATE IS A PAIR. Half of one is no location at all, and
+                // dropping it silently would let a caller believe it had placed a
+                // photograph it had not.
+                let lat = ctx.input.get("latitude").is_some_and(|v| !v.is_null());
+                let lng = ctx.input.get("longitude").is_some_and(|v| !v.is_null());
+                Ok((lat != lng)
+                    .then(|| "A location needs both a latitude and a longitude.".to_owned()))
+            },
         },
-    },
-];
+        CommandCondition {
+            predicate: "is_data_uri",
+            check: pre_is_data_uri,
+        },
+        CommandCondition {
+            predicate: "within_size_cap",
+            check: pre_within_size_cap,
+        },
+        CommandCondition {
+            predicate: "inline_bytes_are_storable",
+            check: pre_inline_bytes_are_storable,
+        },
+        CommandCondition {
+            predicate: "staged_or_owned",
+            check: pre_staged_or_owned,
+        },
+        CommandCondition {
+            predicate: "source_asset_exists",
+            check: |ctx| {
+                // A claimed source must be a real asset in THIS vault (#711). Named
+                // here rather than left to the foreign key, so a mistyped lineage
+                // names the failing gate instead of a raw constraint error landing
+                // mid-insert.
+                let Some(source) = ctx.optional_str("source_asset_id") else {
+                    return Ok(None);
+                };
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM media_asset WHERE asset_id = ?1",
+                    [source],
+                    |row| row.get(0),
+                )?;
+                Ok((count != 1).then(|| "That photo is not in this library.".to_owned()))
+            },
+        },
+    ];
 
 /// The digest of the bytes this call carries, whichever door they came through.
 ///
@@ -634,10 +631,7 @@ fn find_or_create_place(ctx: &CommandCtx<'_, '_>, lat: f64, lng: f64) -> Result<
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?
         .collect::<std::result::Result<_, _>>()?;
-    if let Some((place_id, _)) = named
-        .iter()
-        .find(|(_, name)| !is_coordinate_label(name))
-    {
+    if let Some((place_id, _)) = named.iter().find(|(_, name)| !is_coordinate_label(name)) {
         return Ok(place_id.clone());
     }
     drop(statement);
@@ -662,13 +656,7 @@ fn find_or_create_place(ctx: &CommandCtx<'_, '_>, lat: f64, lng: f64) -> Result<
            (place_id, name, kind, geo_lat, geo_lng, geohash, address_json, tz,
             parent_place_id, created_at, updated_at)
          VALUES (?1, ?2, NULL, ?3, ?4, NULL, NULL, NULL, NULL, ?5, ?5)",
-        rusqlite::params![
-            place_id,
-            format!("{lat:.4}, {lng:.4}"),
-            lat,
-            lng,
-            ctx.now
-        ],
+        rusqlite::params![place_id, format!("{lat:.4}, {lng:.4}"), lat, lng, ctx.now],
     )?;
     Ok(place_id)
 }
@@ -801,9 +789,10 @@ fn add_asset_handler(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         (Some(lat), Some(lng)) => Some(find_or_create_place(ctx, lat, lng)?),
         _ => None,
     };
-    let kind = ctx
-        .optional_str("kind")
-        .map_or_else(|| asset_kind_for(&minted.media_type).to_owned(), str::to_owned);
+    let kind = ctx.optional_str("kind").map_or_else(
+        || asset_kind_for(&minted.media_type).to_owned(),
+        str::to_owned,
+    );
     ctx.connection().execute(
         "INSERT INTO media_asset
            (asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id,
@@ -843,11 +832,7 @@ fn add_asset_handler(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             |row| row.get(0),
         )
         .ok();
-    if let Some(phash) = ctx
-        .optional_str("phash")
-        .map(str::to_owned)
-        .or(contributed)
-    {
+    if let Some(phash) = ctx.optional_str("phash").map(str::to_owned).or(contributed) {
         ctx.connection().execute(
             "INSERT INTO media_asset_phash (asset_id, phash, computed_at, updated_at)
              VALUES (?1, ?2, ?3, ?3)
