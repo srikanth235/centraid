@@ -51,6 +51,12 @@ export const COPY_LEAVES: Record<string, readonly string[]> = {
     "packages/blueprints/apps/docs/document-copy.ts",
     "packages/blueprints/apps/docs/drive-copy.ts",
   ],
+  // Locker's three: the route chrome, the shelf view, and the item pane.
+  locker: [
+    "packages/blueprints/apps/locker/route-copy.ts",
+    "packages/blueprints/apps/locker/view-copy.ts",
+    "packages/blueprints/apps/locker/item-copy.ts",
+  ],
   notes: ["packages/blueprints/apps/notes/view-copy.ts"],
   photos: ["packages/blueprints/apps/photos/shared-copy.ts"],
   shared: ["packages/blueprints/apps/_shared/shared-copy.ts"],
@@ -67,6 +73,7 @@ export const COPY_LEAVES: Record<string, readonly string[]> = {
  */
 export const SHELF_TABLES: Record<string, string> = {
   docs: "packages/blueprints/apps/docs/shelves.ts",
+  locker: "packages/blueprints/apps/locker/shelves.ts",
   tally: "packages/blueprints/apps/tally/shelves.ts",
 };
 

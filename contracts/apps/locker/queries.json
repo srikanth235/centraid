@@ -1,0 +1,971 @@
+[
+  {
+    "input": {},
+    "output": {
+      "archived": false,
+      "archivedCount": 1,
+      "byType": [
+        {
+          "n": 1,
+          "type": "card"
+        },
+        {
+          "n": 3,
+          "type": "login"
+        },
+        {
+          "n": 1,
+          "type": "note"
+        },
+        {
+          "n": 1,
+          "type": "passport"
+        }
+      ],
+      "items": [
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": "2030-01",
+          "favorite": false,
+          "item_id": "id-0165",
+          "password_set_at": null,
+          "purge_at": null,
+          "reused": false,
+          "severity": "",
+          "subtitle": "•••• 4242",
+          "tags": [],
+          "title": "The card",
+          "type": "card",
+          "updated_at": "<host-clock>",
+          "url": null,
+          "weak": false
+        },
+        {
+          "alias": "bank",
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": true,
+          "item_id": "id-0177",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0173",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank copy",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0175",
+          "password_set_at": null,
+          "purge_at": null,
+          "reused": false,
+          "severity": "",
+          "subtitle": "Password",
+          "tags": [],
+          "title": "Passport",
+          "type": "passport",
+          "updated_at": "<host-clock>",
+          "url": null,
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0164",
+          "password_set_at": null,
+          "purge_at": null,
+          "reused": false,
+          "severity": "",
+          "subtitle": "Secure note",
+          "tags": [],
+          "title": "A secure note",
+          "type": "note",
+          "updated_at": "<host-clock>",
+          "url": null,
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0161",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": false,
+          "severity": "",
+          "subtitle": "ada",
+          "tags": [],
+          "title": "The pinned login",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://accounts.example.com",
+          "weak": false
+        }
+      ],
+      "total": 6,
+      "trashedCount": 1,
+      "truncated": false,
+      "watchtower": {
+        "compromised": 0,
+        "items": [
+          {
+            "alias": "bank",
+            "archived": false,
+            "compromised": false,
+            "expiry": null,
+            "favorite": true,
+            "item_id": "id-0177",
+            "password_set_at": "<host-clock>",
+            "purge_at": null,
+            "reused": true,
+            "severity": "warn",
+            "subtitle": "ada@example.com",
+            "tags": ["joint", "money"],
+            "title": "The bank",
+            "type": "login",
+            "updated_at": "<host-clock>",
+            "url": "https://login.bank.example",
+            "weak": false
+          },
+          {
+            "alias": null,
+            "archived": false,
+            "compromised": false,
+            "expiry": null,
+            "favorite": false,
+            "item_id": "id-0173",
+            "password_set_at": "<host-clock>",
+            "purge_at": null,
+            "reused": true,
+            "severity": "warn",
+            "subtitle": "ada@example.com",
+            "tags": ["joint", "money"],
+            "title": "The bank copy",
+            "type": "login",
+            "updated_at": "<host-clock>",
+            "url": "https://login.bank.example",
+            "weak": false
+          }
+        ],
+        "reused": 2,
+        "weak": 0
+      },
+      "window": 300
+    },
+    "query": "items",
+    "why": "the default window: 300, live shelf, decorated"
+  },
+  {
+    "input": {
+      "limit": 20
+    },
+    "output": {
+      "archived": false,
+      "archivedCount": 1,
+      "byType": [
+        {
+          "n": 1,
+          "type": "card"
+        },
+        {
+          "n": 3,
+          "type": "login"
+        },
+        {
+          "n": 1,
+          "type": "note"
+        },
+        {
+          "n": 1,
+          "type": "passport"
+        }
+      ],
+      "items": [
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": "2030-01",
+          "favorite": false,
+          "item_id": "id-0165",
+          "password_set_at": null,
+          "purge_at": null,
+          "reused": false,
+          "severity": "",
+          "subtitle": "•••• 4242",
+          "tags": [],
+          "title": "The card",
+          "type": "card",
+          "updated_at": "<host-clock>",
+          "url": null,
+          "weak": false
+        },
+        {
+          "alias": "bank",
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": true,
+          "item_id": "id-0177",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0173",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank copy",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0175",
+          "password_set_at": null,
+          "purge_at": null,
+          "reused": false,
+          "severity": "",
+          "subtitle": "Password",
+          "tags": [],
+          "title": "Passport",
+          "type": "passport",
+          "updated_at": "<host-clock>",
+          "url": null,
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0164",
+          "password_set_at": null,
+          "purge_at": null,
+          "reused": false,
+          "severity": "",
+          "subtitle": "Secure note",
+          "tags": [],
+          "title": "A secure note",
+          "type": "note",
+          "updated_at": "<host-clock>",
+          "url": null,
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0161",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": false,
+          "severity": "",
+          "subtitle": "ada",
+          "tags": [],
+          "title": "The pinned login",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://accounts.example.com",
+          "weak": false
+        }
+      ],
+      "total": 6,
+      "trashedCount": 1,
+      "truncated": false,
+      "watchtower": {
+        "compromised": 0,
+        "items": [
+          {
+            "alias": "bank",
+            "archived": false,
+            "compromised": false,
+            "expiry": null,
+            "favorite": true,
+            "item_id": "id-0177",
+            "password_set_at": "<host-clock>",
+            "purge_at": null,
+            "reused": true,
+            "severity": "warn",
+            "subtitle": "ada@example.com",
+            "tags": ["joint", "money"],
+            "title": "The bank",
+            "type": "login",
+            "updated_at": "<host-clock>",
+            "url": "https://login.bank.example",
+            "weak": false
+          },
+          {
+            "alias": null,
+            "archived": false,
+            "compromised": false,
+            "expiry": null,
+            "favorite": false,
+            "item_id": "id-0173",
+            "password_set_at": "<host-clock>",
+            "purge_at": null,
+            "reused": true,
+            "severity": "warn",
+            "subtitle": "ada@example.com",
+            "tags": ["joint", "money"],
+            "title": "The bank copy",
+            "type": "login",
+            "updated_at": "<host-clock>",
+            "url": "https://login.bank.example",
+            "weak": false
+          }
+        ],
+        "reused": 2,
+        "weak": 0
+      },
+      "window": 20
+    },
+    "query": "items",
+    "why": "the window's floor clamps up from 5"
+  },
+  {
+    "input": {
+      "archived": true
+    },
+    "output": {
+      "archived": true,
+      "archivedCount": 1,
+      "byType": [
+        {
+          "n": 1,
+          "type": "card"
+        },
+        {
+          "n": 3,
+          "type": "login"
+        },
+        {
+          "n": 1,
+          "type": "note"
+        },
+        {
+          "n": 1,
+          "type": "passport"
+        }
+      ],
+      "items": [
+        {
+          "alias": null,
+          "archived": true,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0151",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": false,
+          "severity": "warn",
+          "subtitle": "ada",
+          "tags": [],
+          "title": "An old login",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://old.example",
+          "weak": true
+        }
+      ],
+      "total": 1,
+      "trashedCount": 1,
+      "truncated": false,
+      "watchtower": {
+        "compromised": 0,
+        "items": [
+          {
+            "alias": null,
+            "archived": true,
+            "compromised": false,
+            "expiry": null,
+            "favorite": false,
+            "item_id": "id-0151",
+            "password_set_at": "<host-clock>",
+            "purge_at": null,
+            "reused": false,
+            "severity": "warn",
+            "subtitle": "ada",
+            "tags": [],
+            "title": "An old login",
+            "type": "login",
+            "updated_at": "<host-clock>",
+            "url": "https://old.example",
+            "weak": true
+          }
+        ],
+        "reused": 0,
+        "weak": 1
+      },
+      "window": 300
+    },
+    "query": "items",
+    "why": "the archived shelf is asked for explicitly, not filtered client-side"
+  },
+  {
+    "input": {
+      "item_id": "id-0177"
+    },
+    "output": {
+      "item": {
+        "address": null,
+        "addresses": [
+          {
+            "address_id": "id-0170",
+            "match_policy": "registrable-domain",
+            "url": "https://m.bank.example"
+          },
+          {
+            "address_id": "id-0163",
+            "match_policy": "exact-host",
+            "url": "https://secure.bank.example"
+          }
+        ],
+        "alias": "bank",
+        "archived": false,
+        "archived_at": null,
+        "attachments": [],
+        "brand": null,
+        "card_number": null,
+        "cardholder": null,
+        "compromised": false,
+        "content": null,
+        "cvv": null,
+        "degraded_from": null,
+        "email": null,
+        "expiry": null,
+        "favorite": true,
+        "fields": [],
+        "fullname": null,
+        "history": [
+          {
+            "changed": {},
+            "operation": "update",
+            "recorded_at": "<host-clock>",
+            "revision_id": "id-0097"
+          },
+          {
+            "changed": {
+              "password": true
+            },
+            "operation": "update",
+            "recorded_at": "<host-clock>",
+            "revision_id": "id-0094"
+          }
+        ],
+        "item_id": "id-0177",
+        "network": null,
+        "notes": "the joint account",
+        "otp_seed": null,
+        "passkey": null,
+        "password": null,
+        "password_set_at": "<host-clock>",
+        "phone": null,
+        "purge_at": null,
+        "tags": ["joint", "money"],
+        "title": "The bank",
+        "trashed": false,
+        "type": "login",
+        "updated_at": "<host-clock>",
+        "url": "https://login.bank.example",
+        "url_match_policy": "registrable-domain",
+        "username": "ada@example.com"
+      }
+    },
+    "query": "item",
+    "why": "the detail pane: sealed cells at rest, sidecars, history, attachments"
+  },
+  {
+    "input": {
+      "item_id": "id-0175"
+    },
+    "output": {
+      "item": {
+        "address": null,
+        "addresses": [],
+        "alias": null,
+        "archived": false,
+        "archived_at": null,
+        "attachments": [],
+        "brand": null,
+        "card_number": null,
+        "cardholder": null,
+        "compromised": false,
+        "content": null,
+        "cvv": null,
+        "degraded_from": null,
+        "email": null,
+        "expiry": null,
+        "favorite": false,
+        "fields": [],
+        "fullname": null,
+        "history": [],
+        "item_id": "id-0175",
+        "network": null,
+        "notes": "in the drawer",
+        "otp_seed": null,
+        "passkey": null,
+        "password": null,
+        "password_set_at": null,
+        "phone": null,
+        "purge_at": null,
+        "tags": [],
+        "title": "Passport",
+        "trashed": false,
+        "type": "passport",
+        "updated_at": "<host-clock>",
+        "url": null,
+        "url_match_policy": "registrable-domain",
+        "username": null
+      }
+    },
+    "query": "item",
+    "why": "a template-backed type, whose fields are minted rows"
+  },
+  {
+    "input": {
+      "item_id": "not-an-item"
+    },
+    "output": {
+      "item": null
+    },
+    "query": "item",
+    "why": "a wrong id is item: null, never an error"
+  },
+  {
+    "input": {
+      "term": "bank"
+    },
+    "output": {
+      "items": [
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": true,
+          "item_id": "id-0177",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0173",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank copy",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        }
+      ]
+    },
+    "query": "search",
+    "why": "a title match"
+  },
+  {
+    "input": {
+      "term": "ada@"
+    },
+    "output": {
+      "items": [
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": true,
+          "item_id": "id-0177",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0173",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank copy",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        }
+      ]
+    },
+    "query": "search",
+    "why": "a USERNAME match, over a column the payload never returns"
+  },
+  {
+    "input": {
+      "term": ""
+    },
+    "output": {
+      "items": []
+    },
+    "query": "search",
+    "why": "an empty term is no search, not every row"
+  },
+  {
+    "input": {
+      "term": "combination"
+    },
+    "output": {
+      "items": []
+    },
+    "query": "search",
+    "why": "a note's body is NOT matched — notes are deliberately unsearchable"
+  },
+  {
+    "input": {},
+    "output": {
+      "items": [
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0182",
+          "password_set_at": "<host-clock>",
+          "purge_at": "<host-clock>",
+          "severity": "",
+          "subtitle": "—",
+          "tags": [],
+          "title": "A trashed login",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": null
+        }
+      ]
+    },
+    "query": "trash",
+    "why": "the trash shelf, with purge dates and its star kept"
+  },
+  {
+    "input": {},
+    "output": {
+      "compromised": 0,
+      "items": [
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": true,
+          "item_id": "id-0177",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        },
+        {
+          "alias": null,
+          "archived": true,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0151",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": false,
+          "severity": "warn",
+          "subtitle": "ada",
+          "tags": [],
+          "title": "An old login",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://old.example",
+          "weak": true
+        },
+        {
+          "alias": null,
+          "archived": false,
+          "compromised": false,
+          "expiry": null,
+          "favorite": false,
+          "item_id": "id-0173",
+          "password_set_at": "<host-clock>",
+          "purge_at": null,
+          "reused": true,
+          "severity": "warn",
+          "subtitle": "ada@example.com",
+          "tags": ["joint", "money"],
+          "title": "The bank copy",
+          "type": "login",
+          "updated_at": "<host-clock>",
+          "url": "https://login.bank.example",
+          "weak": false
+        }
+      ],
+      "reused": 2,
+      "weak": 1
+    },
+    "query": "watchtower",
+    "why": "the review shelf: weak, reused, last4, over archived items too"
+  },
+  {
+    "input": {},
+    "output": {
+      "entries": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"locker.access.receipts\": FROM names access_receipt, which is not an entity of this vault"
+      }
+    },
+    "query": "access",
+    "why": "the audit window's default 200, both object types"
+  },
+  {
+    "input": {
+      "item_id": "id-0177"
+    },
+    "output": {
+      "entries": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"locker.access.receipts\": FROM names access_receipt, which is not an entity of this vault"
+      }
+    },
+    "query": "access",
+    "why": "the window pinned to one item"
+  },
+  {
+    "input": {
+      "limit": 20
+    },
+    "output": {
+      "entries": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"locker.access.receipts\": FROM names access_receipt, which is not an entity of this vault"
+      }
+    },
+    "query": "access",
+    "why": "the window's floor"
+  },
+  {
+    "input": {},
+    "output": {
+      "candidates": [
+        {
+          "compromised": false,
+          "has_totp": false,
+          "item_id": "id-0177",
+          "title": "The bank",
+          "url": "https://login.bank.example",
+          "url_match_policy": "registrable-domain",
+          "username": "ada@example.com",
+          "warning": true
+        },
+        {
+          "compromised": false,
+          "has_totp": false,
+          "item_id": "id-0151",
+          "title": "An old login",
+          "url": "https://old.example",
+          "url_match_policy": "registrable-domain",
+          "username": "ada",
+          "warning": true
+        },
+        {
+          "compromised": false,
+          "has_totp": false,
+          "item_id": "id-0173",
+          "title": "The bank copy",
+          "url": "https://login.bank.example",
+          "url_match_policy": "registrable-domain",
+          "username": "ada@example.com",
+          "warning": true
+        },
+        {
+          "compromised": false,
+          "has_totp": false,
+          "item_id": "id-0161",
+          "title": "The pinned login",
+          "url": "https://accounts.example.com",
+          "url_match_policy": "exact-host",
+          "username": "ada",
+          "warning": false
+        }
+      ]
+    },
+    "query": "autofill-candidates",
+    "why": "secret-free live login metadata: OTP presence is a boolean"
+  },
+  {
+    "input": {
+      "item_id": "id-0177",
+      "page_origin": "https://www.bank.example"
+    },
+    "output": {
+      "fill": null,
+      "match": {
+        "item_id": "id-0177",
+        "username": "ada@example.com"
+      },
+      "reason": "Filling from the browser needs a device that holds this vault's key — open the item in Centraid to copy it."
+    },
+    "query": "autofill-item",
+    "why": "a registrable-domain match"
+  },
+  {
+    "input": {
+      "item_id": "id-0161",
+      "page_origin": "https://www.example.com"
+    },
+    "output": {
+      "fill": null,
+      "reason": "Page origin does not match this login."
+    },
+    "query": "autofill-item",
+    "why": "an exact-host login refuses a sibling host — the policy working"
+  },
+  {
+    "input": {
+      "item_id": "id-0177",
+      "page_origin": "https://bank.example.attacker.test"
+    },
+    "output": {
+      "fill": null,
+      "reason": "Page origin does not match this login."
+    },
+    "query": "autofill-item",
+    "why": "suffix confusion refused"
+  },
+  {
+    "input": {
+      "item_id": "id-0164",
+      "page_origin": "https://www.bank.example"
+    },
+    "output": {
+      "fill": null
+    },
+    "query": "autofill-item",
+    "why": "a non-login is not a fill candidate at all"
+  },
+  {
+    "input": {
+      "item_id": "id-0177",
+      "page_origin": "https://www.bank.example/login"
+    },
+    "output": {
+      "fill": null,
+      "reason": "A login id and normalized page origin are required."
+    },
+    "query": "autofill-item",
+    "why": "a URL is not an origin"
+  },
+  {
+    "input": {
+      "item_id": "not-an-item",
+      "page_origin": "https://www.bank.example"
+    },
+    "output": {
+      "fill": null
+    },
+    "query": "autofill-item",
+    "why": "a wrong id names no login"
+  }
+]
