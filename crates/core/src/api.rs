@@ -25,6 +25,52 @@ use crate::config::Role;
 use crate::convert::value_from_wire;
 use crate::error::{CoreError, Result};
 
+/// THE BYTE DOOR'S READ HALF, as the wire spells it (D-1020-DC1).
+///
+/// One answer per ref, in the order they were asked, **including the ones that
+/// resolved to nothing** — a caller zipping a short list against its own rows
+/// would silently pair a photograph with another photograph's bytes.
+///
+/// The batch is capped rather than refused-if-large: a grid asking for two
+/// screenfuls gets one screenful and asks again, which is what a cursor is for
+/// everywhere else in this API.
+pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<wire::ContentUrls> {
+    let urls = request
+        .refs
+        .iter()
+        .take(MAX_CONTENT_URLS)
+        .map(|reference| {
+            let found = vault.content_location(
+                &reference.content_id,
+                &reference.owner_type,
+                &reference.owner_id,
+            )?;
+            Ok(wire::ContentUrl {
+                content_id: found.content_id,
+                // A PATH AND NOT BYTES. See `centraid_vault::content`: the
+                // platform opens the file, so caching and range requests stay
+                // where they belong and the core never buffers a photograph.
+                path: found
+                    .path
+                    .map(|path| path.to_string_lossy().into_owned()),
+                media_type: found.media_type,
+                byte_size: found.byte_size,
+                embeddable: found.embeddable,
+                absent_reason: found.absent_reason,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(wire::ContentUrls { urls })
+}
+
+/// How many locations one request may ask for.
+///
+/// A screenful and then some. Photos' grid draws three columns and a phone
+/// shows about thirty rows before a member is scrolling rather than looking, so
+/// a hundred covers a page with room, and the cost of one over the cap is one
+/// more request rather than a refusal.
+pub const MAX_CONTENT_URLS: usize = 100;
+
 /// One page of rows, as the wire spells it.
 ///
 /// `limit` is **required and validated**, not defaulted. Proto3 cannot say

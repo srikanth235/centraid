@@ -364,6 +364,24 @@ fn open_or_found_vault(data_dir: &Path, display_name: &str) -> Result<FoundedVau
     // has to happen before anything serves from it.
     let vault =
         Vault::open(&file).map_err(|error| format!("opening {}: {error}", file.display()))?;
+    // THE SAME CONVENTION THE CORE USES, and that is the point: a vault file
+    // must hold the same bytes whichever process opened it. A gateway that
+    // derived its own location would refuse a photograph the phone had just
+    // accepted, over the same file. `cmd::blobs_dir_in` is the BACKUP plane's
+    // shared store and is a different question.
+    let blobs_root = Vault::blobs_root_for(&file);
+    let vault = match centraid_vault::backup::store::FsBlobStore::open(&blobs_root) {
+        Ok(store) => vault.with_blobs(Box::new(store)),
+        Err(error) => {
+            // Not fatal: the vault's rows still serve and every text write
+            // still lands. Binary writes refuse, naming the cause.
+            tracing::warn!(
+                "no content store at {}: {error} — this vault can hold text and nothing else",
+                blobs_root.display()
+            );
+            vault
+        }
+    };
     let vault_id = vault
         .vault_id()
         .map_err(|error| error.to_string())?

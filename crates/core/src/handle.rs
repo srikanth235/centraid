@@ -148,6 +148,27 @@ impl Core {
                 }
             }
         };
+        // THE LOCAL CONTENT STORE, opened beside the vault. Without it this
+        // core holds text and refuses every photograph: `media.add_asset` and
+        // `core.add_document` spill anything that is not `text/*`, and a
+        // `core_content_item` pointing at bytes nothing kept is worse than a
+        // refusal. See `Vault::blobs_root_for` for the convention.
+        //
+        // A store that will not open is NOT a core that will not open: the
+        // vault's rows are still readable and every text write still lands.
+        // The binary writes refuse with the sentence
+        // `pre_inline_bytes_are_storable` gives them, which names the cause.
+        let blobs_root = Vault::blobs_root_for(&path);
+        let vault = match centraid_vault::backup::store::FsBlobStore::open(&blobs_root) {
+            Ok(store) => vault.with_blobs(Box::new(store)),
+            Err(error) => {
+                tracing::warn!(
+                    "no content store at {}: {error} — this vault can hold text and nothing else",
+                    blobs_root.display()
+                );
+                vault
+            }
+        };
         Ok(Handle {
             vault: Mutex::new(vault),
             registry: Registry::with_system_commands()?,
@@ -445,6 +466,9 @@ impl Handle {
             K::Page(page_request) => Ok(response(wire::response::Kind::Page(
                 self.with_vault(|vault| crate::api::page(vault, page_request))?,
             ))),
+            K::ContentUrls(refs) => Ok(response(wire::response::Kind::ContentUrls(
+                self.with_vault(|vault| crate::api::content_urls(vault, refs))?,
+            ))),
             K::Command(command) => Ok(response(wire::response::Kind::Command(
                 self.with_vault(|vault| crate::api::invoke(vault, &self.registry, command))?,
             ))),
@@ -601,7 +625,10 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::Intent(_)
             | K::Pair(_)
             | K::DevicesList(_)
-            | K::DevicesRevoke(_),
+            | K::DevicesRevoke(_)
+            // A LOCATION LOOKUP IS BOUNDED: it is capped at
+            // `api::MAX_CONTENT_URLS` rows of index reads and moves no bytes.
+            | K::ContentUrls(_),
         )
         | None => RequestKind::Bounded,
         // A snapshot fetch and a backup are as long as the artifact is.

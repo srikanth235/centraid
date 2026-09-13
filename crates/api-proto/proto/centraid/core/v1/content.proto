@@ -1,0 +1,81 @@
+// THE BYTE DOOR'S READ HALF (#1020, D-1020-DC1; census §A3).
+//
+// v0 reaches three shell verbs — `window.centraid.blobText`, `blobUrl` and
+// `stageBlob` (`packages/blueprints/apps/docs/blob-text.ts:14`). This file
+// promotes the SECOND of them to a core request, which is the one a grid needs:
+// a surface asks "where are these bytes" and hands the answer to an `<img>`, a
+// `UIImage` or a Compose painter. The bytes themselves never cross the ABI, so
+// range requests and caching stay the platform's and the core never buffers a
+// photograph.
+//
+// `crates/apps/docs/src/bytes.rs` holds the same three shapes as an app-crate
+// trait and states the rules; this is that trait's `Url` arm on the wire. The
+// other two arms stay where they are until something needs them: a quick-look
+// of a text body is Docs', and staging is an upload.
+//
+// ## THE NEVER-INLINE RULE CROSSES WITH THE ANSWER
+//
+// Blob bytes can be attacker-authored — an imported attachment, a shared
+// document — so `text/html`, `application/xhtml+xml` and `image/svg+xml` are
+// offered and never embedded (`crates/centraid/src/cmd/seat/blob.rs:48`, from
+// v0's `blob-read-route.ts:23`-`:27`, issue #865). A shell that decided this
+// for itself would be a second place the rule lives, and on a desktop seat the
+// shell origin is the app itself, which makes a stored XSS worse rather than
+// better. So the core answers `embeddable` and a surface that renders a
+// non-embeddable answer as an image is the bug.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// WHICH BYTES, AND WHO IS READING THEM.
+//
+// The owner is not decoration: the media type of a content item belongs to the
+// REPRESENTATION and never to the byte row (#996, ruling R20(b)). The same sha
+// pinned to two rows carries two readings, and it is the reading — not the
+// bytes — that decides whether a surface may embed them.
+message ContentRef {
+  string content_id = 1;
+  // The row doing the reading: `media.asset` and an asset id, `core.document`
+  // and a document id. Empty means the caller has no reading to offer, and the
+  // answer is then never embeddable — NO TYPE IS NOT PERMISSION.
+  string owner_type = 2;
+  string owner_id = 3;
+}
+
+message ContentUrlRequest {
+  // At most `MAX_CONTENT_URLS` refs. A batch because a GRID asks for a screenful
+  // at once, and one round trip per cell through the ABI is one round trip per
+  // cell.
+  repeated ContentRef refs = 1;
+}
+
+// Where one content item's bytes are, or why they are not anywhere.
+message ContentUrl {
+  string content_id = 1;
+  // The local path, when this device holds the bytes.
+  //
+  // A PATH INSIDE THE APP'S OWN CONTAINER on mobile, which is what
+  // `centraid.screen.v1.PhotoCell.thumbnail_path` has always meant, and a
+  // `centraid://` URL on a desktop seat once that handler lands. Absent is a
+  // REAL ANSWER — a seat that has the row and not the bytes yet — and
+  // `absent_reason` says which kind of absent in a member's words.
+  optional string path = 2;
+  // What the OWNER reads these bytes as, from the representation index. Empty
+  // when there is no representation for the owner the request named.
+  string media_type = 3;
+  int64 byte_size = 4;
+  // Whether a surface may EMBED this rather than only offer it. See the file
+  // header: this is a security answer and not a hint.
+  bool embeddable = 5;
+  // A member-facing sentence, set only when `path` is absent. Never a path,
+  // never a sha, never a stack.
+  string absent_reason = 6;
+}
+
+message ContentUrls {
+  // ONE ANSWER PER REF, in the order they were asked, including the ones that
+  // resolved to nothing. A caller zipping a short list against its own rows
+  // would silently pair a photograph with another photograph's bytes.
+  repeated ContentUrl urls = 1;
+}

@@ -22,6 +22,7 @@ package centraid.core.v1;
 import "centraid/core/v1/admin.proto";
 import "centraid/core/v1/change.proto";
 import "centraid/core/v1/command.proto";
+import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
 import "centraid/core/v1/intent.proto";
@@ -56,6 +57,7 @@ message Request {
     DevicesList devices_list = 8;
     DevicesRevoke devices_revoke = 9;
     BackupNow backup_now = 10;
+    ContentUrlRequest content_urls = 11;
   }
 }
 
@@ -72,6 +74,7 @@ message Response {
     Page page = 9;
     PairResponse pair = 10;
     DevicesListResult devices_list = 11;
+    ContentUrls content_urls = 12;
   }
 }
 
