@@ -1,9 +1,0 @@
-{
-  "_comment": "Expected @expo/fingerprint hashes over the CNG inputs (app.config.ts, plugins/, modules/, the dependency set), plus the git tree id of each GENERATED tree at the commit those inputs were blessed on. Changing either must be a reviewed act — see docs/traps/mobile-native-state.md.",
-  "ios": "426f2060939f82ee2e044d56b76142e1364b301f",
-  "android": "11238f61f1aa4ba52e105cbc3665636df1f6f465",
-  "trees": {
-    "apps/mobile/ios": "02bca4b3984435d634d80f404e7fca2d91ae0a2e",
-    "apps/mobile/android": "756d3b9084b849a7ac1bc6c67ac728740f14c600"
-  }
-}

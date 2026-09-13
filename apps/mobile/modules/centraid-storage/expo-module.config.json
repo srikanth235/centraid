@@ -1,9 +1,0 @@
-{
-  "platforms": ["ios", "android"],
-  "ios": {
-    "modules": ["CentraidStorageModule"]
-  },
-  "android": {
-    "modules": ["expo.modules.centraidstorage.CentraidStorageModule"]
-  }
-}
