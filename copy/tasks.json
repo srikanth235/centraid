@@ -1,0 +1,153 @@
+{
+  "$generatedBy": "contracts/tools/export-copy.ts",
+  "app": "tasks",
+  "strings": {
+    "ANCHOR_NOTE": "The one choice that decides what a missed period means.",
+    "CANCEL": "Cancel",
+    "DATE_ONLY_REMINDER": "Date only · it reminds at 09:00, the moment set in Settings — never midnight.",
+    "DAY_ONE": "Add the first thing you must not forget.",
+    "DONE": "Done",
+    "EFFORT_NOTE_A": "Feeds the “fits in 30 minutes” lens in Today.",
+    "EFFORT_NOTE_B": "Never prompted for.",
+    "FIELD_EMPTY": "—",
+    "HOME_VAULT_NOTE_A": "A task keeps the vault it was born in.",
+    "HOME_VAULT_NOTE_B": "Completion is receipted there.",
+    "MISSED_NOTE_A": "One live occurrence.",
+    "MISSED_NOTE_B": "Four missed periods collapse into it — never four copies.",
+    "PENDING_CHIP": "Saved on this device · queued for the vault",
+    "PENDING_ROW": "not in the vault yet",
+    "PRIORITY_NOTE_A": "Optional.",
+    "PRIORITY_NOTE_B": "Most tasks never take one, and no layout reserves room for it.",
+    "PROMOTION_A": "Five children and counting.",
+    "PROMOTION_B": "This is a project with sections now.",
+    "PROMOTION_VERB": "Make it a project",
+    "REENTRY_FOOT_A": "Releasing keeps them in the Logbook as won't do.",
+    "REENTRY_FOOT_B": "It is an outcome, not a failure.",
+    "REENTRY_LEAD_A": "Nothing was deleted and nothing repeated itself into a pile.",
+    "REENTRY_LEAD_B": "Move what still matters and release the rest.",
+    "REENTRY_NONE": "Nothing came due while you were away.",
+    "REFRESH": "Refresh",
+    "REMINDER_NOTE_A": "Delivered on your phone.",
+    "REMINDER_NOTE_B": "This seat says due-ness in the pane, never a push.",
+    "REOPEN": "Reopen",
+    "RETRY": "Retry",
+    "SUBTASK_CAP": "One level only · a subtask cannot have a subtask",
+    "TAGS_NOTE_A": "House-wide vocabulary.",
+    "TAGS_NOTE_B": "Removing deletes this task's edge only.",
+    "TASK_DONE": "Task done",
+    "TODAY_DONE": "Everything due today is done.",
+    "TODAY_EMPTY": "Nothing is scheduled for today.",
+    "TODAY_EMPTY_SUB": "An undated task never lands here — Anytime holds those.",
+    "UNDO": "Undo",
+    "VAULT_MARKER": "House",
+    "WONT_DO": "Won't do"
+  },
+  "functions": [
+    "shelfCopy",
+    "nothingElseUntil",
+    "overdueMeta",
+    "reentryNotice",
+    "reentryHead",
+    "missedLabel",
+    "familyProgress",
+    "sittingSince",
+    "doneNext",
+    "reminderLead",
+    "homeVault",
+    "pendingStatus",
+    "staleNotice",
+    "partialNotice",
+    "windowEndBoard",
+    "windowEndLogbook",
+    "inboxMeta",
+    "landsInFoot",
+    "boardCount",
+    "RAIL_HEADS",
+    "GROUPS",
+    "DAY_ONE_ACTS",
+    "REENTRY_BUCKETS",
+    "FIELDS",
+    "LIFECYCLE",
+    "ANCHOR_CARDS",
+    "PRIORITY_CHIPS",
+    "EFFORT_CHIPS",
+    "RELEASE_CONFIRM",
+    "DELETE_CONFIRM",
+    "QUICK_ADD",
+    "QUICK_ADD_WHEN",
+    "LENSES",
+    "SORT_LABELS",
+    "AREAS",
+    "NEW_PROJECT",
+    "SECTIONS",
+    "SEARCH_COPY",
+    "NOTIFY_COPY",
+    "DENIED",
+    "MORE_ROWS",
+    "SHORTCUTS"
+  ],
+  "routes": [],
+  "moreRoutes": [],
+  "shelves": [
+    {
+      "id": "balances",
+      "label": "Today",
+      "segment": ""
+    },
+    {
+      "id": "upcoming",
+      "label": "Upcoming",
+      "segment": "upcoming"
+    },
+    {
+      "id": "anytime",
+      "label": "Anytime",
+      "segment": "anytime"
+    },
+    {
+      "id": "all",
+      "label": "All",
+      "segment": "all"
+    },
+    {
+      "id": "inbox",
+      "label": "Inbox",
+      "segment": "inbox"
+    },
+    {
+      "id": "projects",
+      "label": "Projects",
+      "segment": "projects"
+    },
+    {
+      "id": "project",
+      "label": "Project",
+      "segment": "project"
+    },
+    {
+      "id": "task",
+      "label": "Task",
+      "segment": "task"
+    },
+    {
+      "id": "reentry",
+      "label": "Catch up",
+      "segment": "reentry"
+    },
+    {
+      "id": "logbook",
+      "label": "Logbook",
+      "segment": "logbook"
+    },
+    {
+      "id": "search",
+      "label": "Search",
+      "segment": "search"
+    },
+    {
+      "id": "notify",
+      "label": "Reminder",
+      "segment": "notify"
+    }
+  ]
+}

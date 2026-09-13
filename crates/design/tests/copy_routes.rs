@@ -87,10 +87,18 @@ fn a_leaf_carries_sentences_and_names_what_did_not_cross() {
 }
 
 /// Every emitted leaf still reads — wave 3's mobile shell brought three and each
-/// wave 4 app lane adds its own (Docs' is the fourth).
+/// wave 4 app lane adds its own (Docs' is the fourth; Locker's and People's
+/// landed with their lanes, and Agenda's and Tasks' are slot 4d's).
+///
+/// **The list is `copy/`'s own contents, and a leaf that is emitted and never
+/// loaded is the failure this sweep exists for**: Locker's leaf was declared in
+/// `export-copy.ts` and never emitted for a whole slot because nothing read it
+/// back.
 #[test]
 fn every_emitted_leaf_loads() {
-    for app in ["docs", "notes", "photos", "shared", "tally"] {
+    for app in [
+        "agenda", "docs", "locker", "notes", "people", "photos", "shared", "tally", "tasks",
+    ] {
         let loaded = leaf(app);
         assert_eq!(loaded.app, app);
         assert!(

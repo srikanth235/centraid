@@ -4547,3 +4547,691 @@ fn seed_year3_people(
 
     Ok(counts)
 }
+
+// ---------------------------------------------------------------------------
+// THE SCHEDULE AXES — Agenda and Tasks (#1020, wave 4 slot 4d, D-1020-D3-7).
+//
+// v0's year-3 generator writes **no `core_event` and no `schedule_task` rows at
+// all**, so Agenda's five declared bounds and the board's caller-sized window
+// had no golden artifact behind them. These two are that artifact.
+// ---------------------------------------------------------------------------
+
+/// The shape of year-3 AGENDA volume.
+///
+/// **A count is not a distribution.** Every field is DECLARED, and changing one
+/// changes what year-3 Agenda volume means repo-wide.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3AgendaShape {
+    /// One-off events, spread a day apart from the anchor.
+    pub events: usize,
+    /// Recurring series, each `FREQ=DAILY` from its own anchor.
+    pub recurring: usize,
+    /// Occurrence exceptions, spread over the series.
+    pub exceptions: usize,
+    /// Guests, spread over the events.
+    pub attendees: usize,
+    /// Calendars, which are owner-curated and few.
+    pub calendars: usize,
+    /// People with a birth date, for the grid's birthday rail.
+    pub parties: usize,
+    /// How many of them are starred, which is what `inner` means.
+    pub starred: usize,
+    /// Open tasks with a due date, for the grid's due-work shelf.
+    pub due_tasks: usize,
+}
+
+/// THE YEAR-3 AGENDA PROFILE: 12,000 events over six calendars, 800 recurring
+/// series, and 4,000 dated tasks under the grid.
+///
+/// The numbers each bound is stated at, and why each one is here:
+///
+/// * **12,000 events against `EVENT_WINDOW_CAP` 2,000.** A year-3 calendar is
+///   six windows deep, so the window has to be a stated ceiling rather than
+///   "everything".
+/// * **800 series against `RECURRING_ANCHOR_CAP` 1,000.** Under the cap on
+///   purpose: the cap is about a vault whose anchors outnumber its window, and
+///   800 is close enough to it that a port which merged the two reads would
+///   show the difference.
+/// * **800 daily series over a 19-day window is ~15,000 occurrences against
+///   `MAX_TOTAL_INSTANCES` 1,500** — so the year-3 agenda TRIPS the expansion
+///   cap, which is the only way to know the cap reports the size it reaches
+///   rather than returning a short agenda that reads as a whole one.
+/// * **4,000 dated tasks against `TASK_CAP` 2,000**, and **400 parties against
+///   `PARTY_CAP` 2,000**: the grid's two decorations, one over its window and
+///   one under it.
+pub const YEAR3_AGENDA: Year3AgendaShape = Year3AgendaShape {
+    events: 12_000,
+    recurring: 800,
+    exceptions: 1_200,
+    attendees: 6_000,
+    calendars: 6,
+    parties: 400,
+    starred: 40,
+    due_tasks: 4_000,
+};
+
+/// What one year-3 Agenda seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3AgendaCounts {
+    pub events: usize,
+    pub recurring: usize,
+    pub exceptions: usize,
+    pub attendees: usize,
+    pub calendars: usize,
+    pub parties: usize,
+    pub starred: usize,
+    pub due_tasks: usize,
+}
+
+/// The zone every year-3 series is anchored in.
+///
+/// **A DST zone on purpose.** A fixture in `Etc/UTC` cannot tell a civil-time
+/// expander from an arithmetic one, and the whole of `docs/cron-timezone.md`'s
+/// policy is what happens at a transition.
+pub const YEAR3_AGENDA_ZONE: &str = "America/New_York";
+
+/// Seed the Agenda axis of year-3 volume.
+///
+/// # Errors
+///
+/// A write the model refuses — which is the point of seeding through the real
+/// schema rather than a fixture file.
+pub fn year3_agenda(
+    connection: &Connection,
+    shape: Year3AgendaShape,
+    seed: u64,
+) -> KitResult<Year3AgendaCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    connection.execute_batch("BEGIN IMMEDIATE").map_err(door)?;
+    match seed_year3_agenda(connection, shape, seed) {
+        Ok(counts) => {
+            connection.execute_batch("COMMIT").map_err(door)?;
+            Ok(counts)
+        }
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
+fn seed_year3_agenda(
+    connection: &Connection,
+    shape: Year3AgendaShape,
+    seed: u64,
+) -> KitResult<Year3AgendaCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let mut stream = Seeded::new(seed);
+    let mut counts = Year3AgendaCounts::default();
+    // The anchor sits two days before the March 2026 spring transition, so the
+    // series that matter expand ACROSS it.
+    let start = "2026-03-06";
+    let created = format!("{start}T00:00:00.000Z");
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+             VALUES (?1, 'person', 'Year Three', ?2, ?2)",
+            rusqlite::params![YEAR3_OWNER_PARTY, created],
+        )
+        .map_err(door)?;
+    // THE VAULT'S OWN ROW, because `me` is read from `core_vault.self_party_id`
+    // and a guest that IS you gets RSVP controls (#337). An axis without it
+    // would make every attendee a stranger, which is the one thing the invite
+    // directory is about.
+    connection
+        .execute(
+            "INSERT INTO core_vault
+               (vault_id, self_party_id, display_name, status, base_currency,
+                settings_json, created_at, updated_at)
+             VALUES ('y3-vault', ?1, 'Year Three', 'active', 'GBP', '{}', ?2, ?2)",
+            rusqlite::params![YEAR3_OWNER_PARTY, created],
+        )
+        .map_err(door)?;
+    for index in 0..shape.calendars {
+        connection
+            .execute(
+                "INSERT INTO schedule_calendar
+                   (calendar_id, owner_party_id, name, color, default_tz, visibility,
+                    external_uri, created_at)
+                 VALUES (?1, ?2, ?3, NULL, ?4, 'private', NULL, ?5)",
+                rusqlite::params![
+                    id("y3-calendar", index),
+                    YEAR3_OWNER_PARTY,
+                    format!("Calendar {index}"),
+                    YEAR3_AGENDA_ZONE,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.calendars += 1;
+    }
+    // The birthday rail, and the flags scheme that makes `inner` mean starred.
+    connection
+        .execute(
+            "INSERT INTO core_concept_scheme
+               (scheme_id, uri, title, publisher, version, created_at)
+             VALUES ('y3-scheme-flags', ?1, 'Flags', 'centraid', '1', ?2)",
+            rusqlite::params![DOCS_FLAGS_SCHEME_URI, created],
+        )
+        .map_err(door)?;
+    connection
+        .execute(
+            "INSERT INTO core_concept
+               (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                broader_concept_id, definition, created_at, updated_at)
+             VALUES ('y3-flag-starred', 'y3-scheme-flags', 'starred', 'Starred',
+                     NULL, NULL, NULL, ?1, ?1)",
+            [&created],
+        )
+        .map_err(door)?;
+    for index in 0..shape.parties {
+        let month = index % 12 + 1;
+        let day_of_month = index % 28 + 1;
+        connection
+            .execute(
+                "INSERT INTO core_party
+                   (party_id, kind, display_name, sort_name, birth_date, created_at, updated_at)
+                 VALUES (?1, 'person', ?2, NULL, ?3, ?4, ?4)",
+                rusqlite::params![
+                    id("y3-party", index),
+                    format!("Guest {index:06}"),
+                    format!("{month:02}-{day_of_month:02}"),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.parties += 1;
+        if index < shape.starred {
+            connection
+                .execute(
+                    "INSERT INTO core_tag
+                       (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                        confidence, derivation_id, input_revision_id, tagged_at, updated_at)
+                     VALUES (?1, 'core.party', ?2, 'y3-flag-starred', ?3, NULL, NULL, NULL,
+                             ?4, ?4)",
+                    rusqlite::params![
+                        id("y3-star", index),
+                        id("y3-party", index),
+                        YEAR3_OWNER_PARTY,
+                        created
+                    ],
+                )
+                .map_err(door)?;
+            counts.starred += 1;
+        }
+    }
+    // The events. A recurring series is `FREQ=DAILY` from its own anchor, so
+    // 800 of them over a 19-day window is ~15,000 occurrences: past
+    // `MAX_TOTAL_INSTANCES` by an order of magnitude.
+    for index in 0..shape.events {
+        let recurring = index < shape.recurring;
+        let offset = index % 900;
+        let hour = 6 + index % 12;
+        let dtstart = format!("{}T{hour:02}:00:00.000Z", day(start, offset));
+        let dtend = format!("{}T{:02}:30:00.000Z", day(start, offset), hour);
+        connection
+            .execute(
+                "INSERT INTO core_event
+                   (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, end_tz,
+                    recurrence_semantics, rrule, rrule_support, status, location_place_id,
+                    organizer_party_id, sequence, created_at, updated_at)
+                 VALUES (?1, NULL, ?2, NULL, ?3, ?4, ?5, ?5, 'zoned', ?6, 'supported',
+                         'confirmed', NULL, ?7, 0, ?8, ?8)",
+                rusqlite::params![
+                    id("y3-event", index),
+                    format!("Event {index:06}"),
+                    dtstart,
+                    dtend,
+                    YEAR3_AGENDA_ZONE,
+                    if recurring { Some("FREQ=DAILY") } else { None },
+                    YEAR3_OWNER_PARTY,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.events += 1;
+        if recurring {
+            counts.recurring += 1;
+        }
+        connection
+            .execute(
+                "INSERT INTO schedule_event_ext
+                   (event_ext_id, event_id, calendar_id, busy, conferencing_uri,
+                    reminders_json, travel_buffer_min, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 'busy', NULL, NULL, NULL, ?4, ?4)",
+                rusqlite::params![
+                    id("y3-event-ext", index),
+                    id("y3-event", index),
+                    id("y3-calendar", index % shape.calendars.max(1)),
+                    created
+                ],
+            )
+            .map_err(door)?;
+    }
+    for index in 0..shape.attendees {
+        let event = stream.upto(shape.events.max(1));
+        let party = stream.upto(shape.parties.max(1));
+        connection
+            .execute(
+                "INSERT INTO schedule_attendee
+                   (attendee_id, event_id, party_id, role, partstat, responded_at,
+                    created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 'required', 'needs-action', NULL, ?4, ?4)
+                 ON CONFLICT (event_id, party_id) DO NOTHING",
+                rusqlite::params![
+                    id("y3-attendee", index),
+                    id("y3-event", event),
+                    id("y3-party", party),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.attendees += 1;
+    }
+    // THE EXCEPTIONS ARE KEYED ON THE SERIES-LOCAL WALL CLOCK (#996 R21), and
+    // the hour is the one the anchor was written at, so every key names a real
+    // occurrence rather than a date the series never lands on.
+    for index in 0..shape.exceptions {
+        let series = index % shape.recurring.max(1);
+        let hour = 6 + series % 12;
+        let offset = series % 900 + 1 + index / shape.recurring.max(1);
+        connection
+            .execute(
+                "INSERT INTO schedule_recurrence_exception
+                   (exception_id, target_type, target_id, original_start_local,
+                    recurrence_semantics, scope, action, override_json, created_at, updated_at)
+                 VALUES (?1, 'core.event', ?2, ?3, 'zoned', 'occurrence', 'skip', NULL, ?4, ?4)
+                 ON CONFLICT (target_type, target_id, original_start_local, scope) DO NOTHING",
+                rusqlite::params![
+                    id("y3-exception", index),
+                    id("y3-event", series),
+                    format!("{}T{hour:02}:00:00", day(start, offset)),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.exceptions += 1;
+    }
+    for index in 0..shape.due_tasks {
+        connection
+            .execute(
+                "INSERT INTO schedule_task
+                   (task_id, owner_party_id, title, description, status, priority, due_at,
+                    completed_at, effort_min, parent_task_id, rrule, remind_before_min,
+                    created_at, updated_at, sort_order, recurrence_anchor)
+                 VALUES (?1, ?2, ?3, NULL, 'needs-action', ?4, ?5, NULL, NULL, NULL, NULL,
+                         NULL, ?6, ?6, 0, 'scheduled')",
+                rusqlite::params![
+                    id("y3-agenda-task", index),
+                    YEAR3_OWNER_PARTY,
+                    format!("Due {index:06}"),
+                    (index % 10) as i64,
+                    format!("{}T09:00:00.000Z", day(start, index % 380)),
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.due_tasks += 1;
+    }
+    Ok(counts)
+}
+
+/// The shape of year-3 TASKS volume.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3TasksShape {
+    /// Tasks, open and closed together.
+    pub tasks: usize,
+    /// How many of them are closed — the logbook's own set.
+    pub closed: usize,
+    /// How many of the closed ones are CANCELLED, whose `completed_at` is NULL.
+    pub cancelled: usize,
+    /// Families: a top-level task with `children` subtasks under it.
+    pub families: usize,
+    pub children: usize,
+    /// How many families have a CLOSED parent, which is the promotion rule.
+    pub released: usize,
+    /// Tasks with no due date at all, which is what "nulls last" sorts.
+    pub undated: usize,
+    pub projects: usize,
+    pub sections: usize,
+    /// Free-form tags, and how many tasks carry one.
+    pub tags: usize,
+    pub tagged: usize,
+    /// Repeating tasks, each with its own zone.
+    pub repeating: usize,
+}
+
+/// THE YEAR-3 TASKS PROFILE: 9,000 tasks over 60 projects, 600 families, and
+/// 3,000 closed.
+///
+/// The numbers the board's one bound is stated at:
+///
+/// * **9,000 tasks against a 500-row window.** `board.limit`'s maximum is 500
+///   and there is **no module-level ceiling at all** (census §A7), so a year-3
+///   board is eighteen windows deep and `truncated` has to be the page's own
+///   cursor rather than a row count.
+/// * **600 families of four, 150 of them released.** The promotion rule's cost
+///   is the missing-parent read plus the children read, and a corpus with no
+///   released family cannot tell a working fold from one that drops the child.
+/// * **800 cancelled tasks** — `completed_at` is NULL on every one of them, and
+///   the logbook sorts by that column: lane V's nullable-sort finding, at
+///   volume.
+/// * **2,000 undated tasks**, so the open board's "nulls last" is measured
+///   rather than asserted.
+pub const YEAR3_TASKS: Year3TasksShape = Year3TasksShape {
+    tasks: 9_000,
+    closed: 3_000,
+    cancelled: 800,
+    families: 600,
+    children: 4,
+    released: 150,
+    undated: 2_000,
+    projects: 60,
+    sections: 180,
+    tags: 300,
+    tagged: 3_000,
+    repeating: 400,
+};
+
+/// What one year-3 Tasks seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3TasksCounts {
+    pub tasks: usize,
+    pub open: usize,
+    pub closed: usize,
+    pub cancelled: usize,
+    pub children: usize,
+    pub released: usize,
+    pub undated: usize,
+    pub projects: usize,
+    pub sections: usize,
+    pub tags: usize,
+}
+
+/// Seed the Tasks axis of year-3 volume.
+///
+/// # Errors
+///
+/// A write the model refuses.
+pub fn year3_tasks(
+    connection: &Connection,
+    shape: Year3TasksShape,
+    seed: u64,
+) -> KitResult<Year3TasksCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    connection.execute_batch("BEGIN IMMEDIATE").map_err(door)?;
+    match seed_year3_tasks(connection, shape, seed) {
+        Ok(counts) => {
+            connection.execute_batch("COMMIT").map_err(door)?;
+            Ok(counts)
+        }
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "one generator, one reading order; see `seed_ledger`"
+)]
+fn seed_year3_tasks(
+    connection: &Connection,
+    shape: Year3TasksShape,
+    seed: u64,
+) -> KitResult<Year3TasksCounts> {
+    let door = |error: rusqlite::Error| KitError::Door(error.to_string());
+    let mut stream = Seeded::new(seed);
+    let mut counts = Year3TasksCounts::default();
+    let start = "2097-01-01";
+    let created = format!("{start}T00:00:00.000Z");
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+             VALUES (?1, 'person', 'Year Three', ?2, ?2)",
+            rusqlite::params![YEAR3_OWNER_PARTY, created],
+        )
+        .map_err(door)?;
+    for index in 0..shape.projects {
+        connection
+            .execute(
+                "INSERT INTO schedule_project
+                   (project_id, owner_party_id, name, area, color, sort_order, archived_at,
+                    created_at, updated_at)
+                 VALUES (?1, ?2, ?3, NULL, NULL, ?4, NULL, ?5, ?5)",
+                rusqlite::params![
+                    id("y3-project", index),
+                    YEAR3_OWNER_PARTY,
+                    format!("Project {index:06}"),
+                    index as i64,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.projects += 1;
+    }
+    for index in 0..shape.sections {
+        connection
+            .execute(
+                "INSERT INTO schedule_section
+                   (section_id, project_id, name, sort_order, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                rusqlite::params![
+                    id("y3-section", index),
+                    id("y3-project", index % shape.projects.max(1)),
+                    format!("Section {index:06}"),
+                    index as i64,
+                    created
+                ],
+            )
+            .map_err(door)?;
+        counts.sections += 1;
+    }
+    connection
+        .execute(
+            "INSERT INTO core_concept_scheme
+               (scheme_id, uri, title, publisher, version, created_at)
+             VALUES ('y3-scheme-tags', ?1, 'Tags', 'centraid', '1', ?2)",
+            rusqlite::params![DOCS_TAGS_SCHEME_URI, created],
+        )
+        .map_err(door)?;
+    for index in 0..shape.tags {
+        connection
+            .execute(
+                "INSERT INTO core_concept
+                   (concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                    broader_concept_id, definition, created_at, updated_at)
+                 VALUES (?1, 'y3-scheme-tags', ?1, ?2, NULL, NULL, NULL, ?3, ?3)",
+                rusqlite::params![id("y3-task-tag", index), format!("Tag {index:06}"), created],
+            )
+            .map_err(door)?;
+        counts.tags += 1;
+    }
+    // THE ROOTS. `created_at` repeats in pairs on purpose: the open window's
+    // keyset carries the pk BECAUSE the sort key is not unique (#1020 apps
+    // seam 3), and a fixture with distinct instants cannot trip the boundary
+    // the cursor exists for.
+    for index in 0..shape.tasks {
+        let closed = index < shape.closed;
+        let cancelled = closed && index < shape.cancelled;
+        let undated = index >= shape.tasks - shape.undated;
+        let repeating = !closed && index >= shape.closed && index < shape.closed + shape.repeating;
+        let status = if cancelled {
+            "cancelled"
+        } else if closed {
+            "completed"
+        } else if index % 7 == 0 {
+            "in-process"
+        } else {
+            "needs-action"
+        };
+        let due = if undated {
+            None
+        } else {
+            Some(format!("{}T09:00:00.000Z", day(start, index % 900)))
+        };
+        connection
+            .execute(
+                "INSERT INTO schedule_task
+                   (task_id, owner_party_id, title, description, status, priority, due_at,
+                    completed_at, effort_min, parent_task_id, rrule, remind_before_min,
+                    created_at, updated_at, project_id, section_id, sort_order,
+                    recurrence_anchor, tz, series_id)
+                 VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, ?7, NULL, NULL, ?8, NULL, ?9, ?9,
+                         ?10, ?11, ?12, 'scheduled', ?13, NULL)",
+                rusqlite::params![
+                    id("y3-task", index),
+                    YEAR3_OWNER_PARTY,
+                    format!("Task {index:06}"),
+                    status,
+                    (index % 10) as i64,
+                    due,
+                    // A CANCELLED task carries NO completion stamp, which is
+                    // the nullable sort column the logbook orders by.
+                    if cancelled || !closed {
+                        None
+                    } else {
+                        Some(format!("{}T18:00:00.000Z", day(start, index % 900)))
+                    },
+                    if repeating { Some("FREQ=DAILY") } else { None },
+                    format!(
+                        "{}T{:02}:00:00.000Z",
+                        day(start, index / 2 % 900),
+                        index % 24
+                    ),
+                    id("y3-project", index % shape.projects.max(1)),
+                    None::<String>,
+                    (index % 100) as i64,
+                    if repeating {
+                        Some(YEAR3_AGENDA_ZONE)
+                    } else {
+                        None
+                    },
+                ],
+            )
+            .map_err(door)?;
+        counts.tasks += 1;
+        if closed {
+            counts.closed += 1;
+        } else {
+            counts.open += 1;
+        }
+        if cancelled {
+            counts.cancelled += 1;
+        }
+        if undated {
+            counts.undated += 1;
+        }
+    }
+    // THE FAMILIES. A released family's parent is CLOSED, so every open child
+    // under it is promoted onto the open board — the rule `nest_task_families`
+    // exists for.
+    let mut child_index = 0_usize;
+    for family in 0..shape.families {
+        let released = family < shape.released;
+        let parent = id("y3-family", family);
+        connection
+            .execute(
+                "INSERT INTO schedule_task
+                   (task_id, owner_party_id, title, description, status, priority, due_at,
+                    completed_at, effort_min, parent_task_id, rrule, remind_before_min,
+                    created_at, updated_at, project_id, section_id, sort_order,
+                    recurrence_anchor, tz, series_id)
+                 VALUES (?1, ?2, ?3, NULL, ?4, 5, ?5, ?6, NULL, NULL, NULL, NULL, ?7, ?7,
+                         ?8, ?9, 0, 'scheduled', NULL, NULL)",
+                rusqlite::params![
+                    parent,
+                    YEAR3_OWNER_PARTY,
+                    format!("Family {family:06}"),
+                    if released {
+                        "completed"
+                    } else {
+                        "needs-action"
+                    },
+                    format!("{}T09:00:00.000Z", day(start, family % 900)),
+                    if released {
+                        Some(format!("{}T20:00:00.000Z", day(start, family % 900)))
+                    } else {
+                        None
+                    },
+                    // THE FAMILIES ARE THE NEWEST ROWS, so the board's window
+                    // — which is newest-`created_at`-first — reaches them. A
+                    // fixture whose families all fall outside the window
+                    // cannot exercise the promotion rule at all.
+                    format!("{}T12:00:00.000Z", day(start, 900 + family)),
+                    id("y3-project", family % shape.projects.max(1)),
+                    id("y3-section", family % shape.sections.max(1)),
+                ],
+            )
+            .map_err(door)?;
+        counts.tasks += 1;
+        if released {
+            counts.closed += 1;
+            counts.released += 1;
+        } else {
+            counts.open += 1;
+        }
+        for _ in 0..shape.children {
+            // The last child of every family is done, so `done_children`
+            // counts something.
+            let done = child_index % shape.children.max(1) == shape.children - 1;
+            connection
+                .execute(
+                    "INSERT INTO schedule_task
+                       (task_id, owner_party_id, title, description, status, priority, due_at,
+                        completed_at, effort_min, parent_task_id, rrule, remind_before_min,
+                        created_at, updated_at, project_id, section_id, sort_order,
+                        recurrence_anchor, tz, series_id)
+                     VALUES (?1, ?2, ?3, NULL, ?4, ?5, NULL, ?6, NULL, ?7, NULL, NULL, ?8, ?8,
+                             ?9, ?10, 0, 'scheduled', NULL, NULL)",
+                    rusqlite::params![
+                        id("y3-child", child_index),
+                        YEAR3_OWNER_PARTY,
+                        format!("Subtask {child_index:06}"),
+                        if done { "completed" } else { "needs-action" },
+                        (child_index % 10) as i64,
+                        if done {
+                            Some(format!("{}T21:00:00.000Z", day(start, family % 900)))
+                        } else {
+                            None
+                        },
+                        parent,
+                        format!("{}T13:00:00.000Z", day(start, 900 + family)),
+                        id("y3-project", family % shape.projects.max(1)),
+                        id("y3-section", family % shape.sections.max(1)),
+                    ],
+                )
+                .map_err(door)?;
+            counts.tasks += 1;
+            counts.children += 1;
+            if done {
+                counts.closed += 1;
+            } else {
+                counts.open += 1;
+            }
+            child_index += 1;
+        }
+    }
+    for index in 0..shape.tagged {
+        let task = stream.upto(shape.tasks.max(1));
+        connection
+            .execute(
+                "INSERT INTO core_tag
+                   (tag_id, target_type, target_id, concept_id, tagged_by_party_id,
+                    confidence, derivation_id, input_revision_id, tagged_at, updated_at)
+                 VALUES (?1, 'schedule.task', ?2, ?3, ?4, NULL, NULL, NULL, ?5, ?5)
+                 ON CONFLICT (target_type, target_id, concept_id)
+                   WHERE tagged_by_party_id IS NOT NULL DO NOTHING",
+                rusqlite::params![
+                    id("y3-task-tagged", index),
+                    id("y3-task", task),
+                    id("y3-task-tag", index % shape.tags.max(1)),
+                    YEAR3_OWNER_PARTY,
+                    created
+                ],
+            )
+            .map_err(door)?;
+    }
+    Ok(counts)
+}

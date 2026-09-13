@@ -1453,9 +1453,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 1,
-        "byDay": [
-          "FR"
-        ]
+        "byDay": ["FR"]
       }
     },
     {
@@ -1467,10 +1465,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 1,
-        "byDay": [
-          "FR",
-          "MO"
-        ]
+        "byDay": ["FR", "MO"]
       }
     },
     {
@@ -1482,9 +1477,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 1,
-        "byDay": [
-          "MO"
-        ]
+        "byDay": ["MO"]
       }
     },
     {
@@ -1505,13 +1498,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 1,
-        "byDay": [
-          "MO",
-          "TU",
-          "WE",
-          "TH",
-          "FR"
-        ]
+        "byDay": ["MO", "TU", "WE", "TH", "FR"]
       }
     },
     {
@@ -1523,11 +1510,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 1,
-        "byDay": [
-          "MO",
-          "WE",
-          "FR"
-        ]
+        "byDay": ["MO", "WE", "FR"]
       }
     },
     {
@@ -1548,9 +1531,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 1,
-        "byDay": [
-          "SU"
-        ]
+        "byDay": ["SU"]
       }
     },
     {
@@ -1562,10 +1543,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 1,
-        "byDay": [
-          "SU",
-          "SA"
-        ]
+        "byDay": ["SU", "SA"]
       }
     },
     {
@@ -1856,9 +1834,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 2,
-        "byDay": [
-          "FR"
-        ]
+        "byDay": ["FR"]
       }
     },
     {
@@ -1870,10 +1846,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 2,
-        "byDay": [
-          "FR",
-          "MO"
-        ]
+        "byDay": ["FR", "MO"]
       }
     },
     {
@@ -1885,9 +1858,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 2,
-        "byDay": [
-          "MO"
-        ]
+        "byDay": ["MO"]
       }
     },
     {
@@ -1908,13 +1879,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 2,
-        "byDay": [
-          "MO",
-          "TU",
-          "WE",
-          "TH",
-          "FR"
-        ]
+        "byDay": ["MO", "TU", "WE", "TH", "FR"]
       }
     },
     {
@@ -1926,11 +1891,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 2,
-        "byDay": [
-          "MO",
-          "WE",
-          "FR"
-        ]
+        "byDay": ["MO", "WE", "FR"]
       }
     },
     {
@@ -1961,9 +1922,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 2,
-        "byDay": [
-          "MO"
-        ]
+        "byDay": ["MO"]
       }
     },
     {
@@ -1985,9 +1944,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 2,
-        "byDay": [
-          "SU"
-        ]
+        "byDay": ["SU"]
       }
     },
     {
@@ -1999,10 +1956,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 2,
-        "byDay": [
-          "SU",
-          "SA"
-        ]
+        "byDay": ["SU", "SA"]
       }
     },
     {
@@ -2819,9 +2773,7 @@
       "rule": {
         "freq": "WEEKLY",
         "interval": 1,
-        "byDay": [
-          "MO"
-        ]
+        "byDay": ["MO"]
       }
     }
   ],
@@ -2835,12 +2787,7 @@
     "part": "BYSETPOS",
     "message": "recurrence rule uses BYSETPOS, which this engine cannot honour: it selects the nth candidate within each period; the expander emits every candidate"
   },
-  "supportedFreqs": [
-    "DAILY",
-    "WEEKLY",
-    "MONTHLY",
-    "YEARLY"
-  ],
+  "supportedFreqs": ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"],
   "refusedParts": [
     "BYSETPOS",
     "BYMONTHDAY",

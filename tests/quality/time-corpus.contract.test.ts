@@ -80,7 +80,9 @@ describe("contracts/time", () => {
     ]);
     expect(new Set(refused.map((entry) => entry.message)).size).toBe(
       new Set(
-        refused.map((entry) => `${entry.reason}:${entry.part ?? entry.freq ?? ""}`)
+        refused.map(
+          (entry) => `${entry.reason}:${entry.part ?? entry.freq ?? ""}`
+        )
       ).size
     );
     // The cautionary case, by name.

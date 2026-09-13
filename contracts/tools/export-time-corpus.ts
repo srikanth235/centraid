@@ -156,7 +156,13 @@ function rruleCorpus(): string[] {
   const rules = new Set<string>();
   // The accepted subset, walked.
   for (const freq of ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]) {
-    for (const interval of ["", ";INTERVAL=1", ";INTERVAL=2", ";INTERVAL=3", ";INTERVAL=13"]) {
+    for (const interval of [
+      "",
+      ";INTERVAL=1",
+      ";INTERVAL=2",
+      ";INTERVAL=3",
+      ";INTERVAL=13",
+    ]) {
       for (const bound of [
         "",
         ";COUNT=1",
@@ -302,19 +308,84 @@ function buildRruleCases(v0: V0Time): {
 /** Anchors chosen to land on, beside and across each zone's transitions. */
 const DST_ANCHORS = [
   // Northern spring forward / autumn back (New York, Dublin).
-  { start: "2026-03-06T14:00:00.000Z", rrule: "FREQ=DAILY", days: 8, why: "a 09:00-ish daily series across the March transition" },
-  { start: "2026-03-06T07:30:00.000Z", rrule: "FREQ=DAILY", days: 8, why: "an anchor that lands IN the New York gap on the 8th" },
-  { start: "2026-10-30T05:30:00.000Z", rrule: "FREQ=DAILY", days: 8, why: "an anchor that lands IN the November fold" },
-  { start: "2026-03-29T00:30:00.000Z", rrule: "FREQ=DAILY", days: 6, why: "the European transition weekend" },
-  { start: "2026-04-04T15:00:00.000Z", rrule: "FREQ=DAILY", days: 6, why: "the Lord Howe / southern autumn transition" },
-  { start: "2026-10-03T15:00:00.000Z", rrule: "FREQ=DAILY", days: 6, why: "the southern spring transition" },
-  { start: "2026-03-06T14:00:00.000Z", rrule: "FREQ=WEEKLY;BYDAY=MO,FR", days: 30, why: "weekly BYDAY across a transition" },
-  { start: "2026-01-31T09:00:00.000Z", rrule: "FREQ=MONTHLY", days: 400, why: "the month-end clamp" },
-  { start: "2024-02-29T09:00:00.000Z", rrule: "FREQ=YEARLY", days: 1500, why: "the leap day" },
-  { start: "2026-01-01T09:00:00.000Z", rrule: "FREQ=DAILY;COUNT=5", days: 30, why: "COUNT exhaustion" },
-  { start: "2026-01-01T09:00:00.000Z", rrule: "FREQ=DAILY;UNTIL=20260105T000000Z", days: 30, why: "UNTIL" },
-  { start: "2000-01-01T09:00:00.000Z", rrule: "FREQ=DAILY;COUNT=1", days: 30, why: "COUNT=1 on an ancient anchor must not convert twenty-six years" },
-  { start: "2026-01-01T09:00:00.000Z", rrule: "FREQ=MONTHLY;BYSETPOS=-1", days: 400, why: "a refused rule expands to NOTHING" },
+  {
+    start: "2026-03-06T14:00:00.000Z",
+    rrule: "FREQ=DAILY",
+    days: 8,
+    why: "a 09:00-ish daily series across the March transition",
+  },
+  {
+    start: "2026-03-06T07:30:00.000Z",
+    rrule: "FREQ=DAILY",
+    days: 8,
+    why: "an anchor that lands IN the New York gap on the 8th",
+  },
+  {
+    start: "2026-10-30T05:30:00.000Z",
+    rrule: "FREQ=DAILY",
+    days: 8,
+    why: "an anchor that lands IN the November fold",
+  },
+  {
+    start: "2026-03-29T00:30:00.000Z",
+    rrule: "FREQ=DAILY",
+    days: 6,
+    why: "the European transition weekend",
+  },
+  {
+    start: "2026-04-04T15:00:00.000Z",
+    rrule: "FREQ=DAILY",
+    days: 6,
+    why: "the Lord Howe / southern autumn transition",
+  },
+  {
+    start: "2026-10-03T15:00:00.000Z",
+    rrule: "FREQ=DAILY",
+    days: 6,
+    why: "the southern spring transition",
+  },
+  {
+    start: "2026-03-06T14:00:00.000Z",
+    rrule: "FREQ=WEEKLY;BYDAY=MO,FR",
+    days: 30,
+    why: "weekly BYDAY across a transition",
+  },
+  {
+    start: "2026-01-31T09:00:00.000Z",
+    rrule: "FREQ=MONTHLY",
+    days: 400,
+    why: "the month-end clamp",
+  },
+  {
+    start: "2024-02-29T09:00:00.000Z",
+    rrule: "FREQ=YEARLY",
+    days: 1500,
+    why: "the leap day",
+  },
+  {
+    start: "2026-01-01T09:00:00.000Z",
+    rrule: "FREQ=DAILY;COUNT=5",
+    days: 30,
+    why: "COUNT exhaustion",
+  },
+  {
+    start: "2026-01-01T09:00:00.000Z",
+    rrule: "FREQ=DAILY;UNTIL=20260105T000000Z",
+    days: 30,
+    why: "UNTIL",
+  },
+  {
+    start: "2000-01-01T09:00:00.000Z",
+    rrule: "FREQ=DAILY;COUNT=1",
+    days: 30,
+    why: "COUNT=1 on an ancient anchor must not convert twenty-six years",
+  },
+  {
+    start: "2026-01-01T09:00:00.000Z",
+    rrule: "FREQ=MONTHLY;BYSETPOS=-1",
+    days: 400,
+    why: "a refused rule expands to NOTHING",
+  },
 ] as const;
 
 interface DstCase {
@@ -419,9 +490,14 @@ function buildDstCases(v0: V0Time): {
   const floating: DstCase[] = [];
   for (const semantics of ["floating", "all-day"] as const) {
     const start = semantics === "all-day" ? "2026-03-06" : "2026-03-06T09:00";
-    const rangeFrom = semantics === "all-day" ? "2026-03-01" : "2026-03-01T00:00";
+    const rangeFrom =
+      semantics === "all-day" ? "2026-03-01" : "2026-03-01T00:00";
     const rangeTo = semantics === "all-day" ? "2026-03-20" : "2026-03-20T00:00";
-    for (const rrule of ["FREQ=DAILY", "FREQ=WEEKLY;BYDAY=MO,FR", "FREQ=MONTHLY"]) {
+    for (const rrule of [
+      "FREQ=DAILY",
+      "FREQ=WEEKLY;BYDAY=MO,FR",
+      "FREQ=MONTHLY",
+    ]) {
       floating.push({
         zone: "(none)",
         why: `${semantics} series: the wall clock IS the occurrence`,
@@ -627,23 +703,80 @@ function buildOccurrenceCases(v0: V0Time): Record<string, unknown> {
       window: v0.occurrenceSearchWindow(localStart),
     })),
     nextOccurrence: [
-      { rrule: "FREQ=DAILY", scheduledStart: "2026-03-01T09:00:00.000Z", after: "2026-03-01T09:00:00.000Z", anchor: "scheduled" },
-      { rrule: "FREQ=DAILY", scheduledStart: "2026-03-01T09:00:00.000Z", after: "2026-03-05T10:00:00.000Z", anchor: "scheduled" },
-      { rrule: "FREQ=WEEKLY;BYDAY=MO,FR", scheduledStart: "2026-03-02T09:00:00.000Z", after: "2026-03-03T09:00:00.000Z", anchor: "scheduled" },
-      { rrule: "FREQ=DAILY;INTERVAL=30", scheduledStart: "2026-03-01T09:00:00.000Z", after: "2026-04-15T09:00:00.000Z", anchor: "completion" },
-      { rrule: "FREQ=MONTHLY;BYSETPOS=-1", scheduledStart: "2026-03-01T09:00:00.000Z", after: "2026-03-01T09:00:00.000Z", anchor: "scheduled" },
+      {
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        after: "2026-03-01T09:00:00.000Z",
+        anchor: "scheduled",
+      },
+      {
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        after: "2026-03-05T10:00:00.000Z",
+        anchor: "scheduled",
+      },
+      {
+        rrule: "FREQ=WEEKLY;BYDAY=MO,FR",
+        scheduledStart: "2026-03-02T09:00:00.000Z",
+        after: "2026-03-03T09:00:00.000Z",
+        anchor: "scheduled",
+      },
+      {
+        rrule: "FREQ=DAILY;INTERVAL=30",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        after: "2026-04-15T09:00:00.000Z",
+        anchor: "completion",
+      },
+      {
+        rrule: "FREQ=MONTHLY;BYSETPOS=-1",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        after: "2026-03-01T09:00:00.000Z",
+        anchor: "scheduled",
+      },
     ].map((input) => ({
       ...input,
       zone: "Asia/Kolkata",
       next: v0.nextOccurrence({ ...input, timeZone: "Asia/Kolkata" }),
     })),
     collapse: [
-      { rrule: "FREQ=DAILY", scheduledStart: "2026-03-01T09:00:00.000Z", now: "2026-03-05T10:00:00.000Z", anchor: "scheduled" },
-      { rrule: "FREQ=DAILY", scheduledStart: "2026-03-01T09:00:00.000Z", now: "2026-03-05T10:00:00.000Z", anchor: "scheduled", lastCompletedAt: "2026-03-03T09:00:00.000Z" },
-      { rrule: "FREQ=WEEKLY;BYDAY=MO", scheduledStart: "2026-01-05T09:00:00.000Z", now: "2026-03-05T10:00:00.000Z", anchor: "scheduled" },
-      { rrule: "FREQ=DAILY;INTERVAL=7", scheduledStart: "2026-03-01T09:00:00.000Z", now: "2026-03-20T10:00:00.000Z", anchor: "completion" },
-      { rrule: "FREQ=DAILY;INTERVAL=7", scheduledStart: "2026-03-01T09:00:00.000Z", now: "2026-03-20T10:00:00.000Z", anchor: "completion", lastCompletedAt: "2026-03-08T09:00:00.000Z" },
-      { rrule: "FREQ=MONTHLY;BYSETPOS=-1", scheduledStart: "2026-03-01T09:00:00.000Z", now: "2026-03-20T10:00:00.000Z", anchor: "scheduled" },
+      {
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        now: "2026-03-05T10:00:00.000Z",
+        anchor: "scheduled",
+      },
+      {
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        now: "2026-03-05T10:00:00.000Z",
+        anchor: "scheduled",
+        lastCompletedAt: "2026-03-03T09:00:00.000Z",
+      },
+      {
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2026-01-05T09:00:00.000Z",
+        now: "2026-03-05T10:00:00.000Z",
+        anchor: "scheduled",
+      },
+      {
+        rrule: "FREQ=DAILY;INTERVAL=7",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        now: "2026-03-20T10:00:00.000Z",
+        anchor: "completion",
+      },
+      {
+        rrule: "FREQ=DAILY;INTERVAL=7",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        now: "2026-03-20T10:00:00.000Z",
+        anchor: "completion",
+        lastCompletedAt: "2026-03-08T09:00:00.000Z",
+      },
+      {
+        rrule: "FREQ=MONTHLY;BYSETPOS=-1",
+        scheduledStart: "2026-03-01T09:00:00.000Z",
+        now: "2026-03-20T10:00:00.000Z",
+        anchor: "scheduled",
+      },
     ].map((input) => ({
       ...input,
       zone: "Asia/Kolkata",

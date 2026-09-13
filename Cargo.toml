@@ -7,12 +7,14 @@ resolver = "3"
 # the exclusion of its parent.
 members = [
   "crates/*",
+  "crates/apps/agenda",
   "crates/apps/docs",
   "crates/apps/kit",
   "crates/apps/locker",
   "crates/apps/notes",
   "crates/apps/people",
   "crates/apps/photos",
+  "crates/apps/tasks",
   "crates/apps/tally",
 ]
 exclude = [

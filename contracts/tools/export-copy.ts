@@ -43,6 +43,12 @@ import path from "node:path";
  * An app lane adds its own entry here and nowhere else.
  */
 export const COPY_LEAVES: Record<string, readonly string[]> = {
+  // Agenda's two leaves: the shell's own chrome and the calendar grid's
+  // day-context decorations. Both ship with the screens they belong to.
+  agenda: [
+    "packages/blueprints/apps/agenda/view-copy.ts",
+    "packages/blueprints/apps/agenda/day-context-copy.ts",
+  ],
   // Docs' three leaves: the shell's own chrome, a document's detail pane, and
   // the drive. All three ship with the screens they belong to (census §A0): a
   // route id in one and not the other is a silent empty string.
@@ -71,6 +77,7 @@ export const COPY_LEAVES: Record<string, readonly string[]> = {
     "packages/blueprints/apps/tally/view-copy.ts",
     "packages/blueprints/apps/tally/compose-copy.ts",
   ],
+  tasks: ["packages/blueprints/apps/tasks/view-copy.ts"],
 };
 
 /**
@@ -79,6 +86,7 @@ export const COPY_LEAVES: Record<string, readonly string[]> = {
  */
 export const SHELF_TABLES: Record<string, string> = {
   docs: "packages/blueprints/apps/docs/shelves.ts",
+  tasks: "packages/blueprints/apps/tasks/shelves.ts",
   locker: "packages/blueprints/apps/locker/shelves.ts",
   notes: "packages/blueprints/apps/notes/shelves.ts",
   people: "packages/blueprints/apps/people/shelves.ts",
