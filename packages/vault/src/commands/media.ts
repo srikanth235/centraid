@@ -1895,13 +1895,19 @@ const FORGET_PERSON: CommandDefinition = {
 
 function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { party_id: string };
+  // THE PARTY'S OWN FACES, AND ONLY THOSE. `confirmed_by_party_id` names the
+  // member who JUDGED the region, not the person in it; in a single-member
+  // vault that is the owner on every confirmation, so deleting on both columns
+  // made "forget me" erase everyone's confirmed faces (#1020, D-1020-CL2).
+  // The judgement is erased below, by nulling the column — the member's act
+  // goes, the other person's face stays.
   const regions = ctx.db
     .prepare(
       `SELECT region_id FROM media_face_region
-        WHERE party_id = ? OR confirmed_by_party_id = ?
+        WHERE party_id = ?
         ORDER BY region_id`
     )
-    .all(input.party_id, input.party_id) as { region_id: string }[];
+    .all(input.party_id) as { region_id: string }[];
 
   const countVectors = ctx.db.prepare(
     `SELECT count(*) AS n FROM enrich_embedding
@@ -1926,8 +1932,34 @@ function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
     // destructive act is the one thing that must survive it.
     ctx.wrote("media.face_region", region.region_id);
   }
+
+  // The judgements this member made about OTHER people's faces. Read after the
+  // deletions, so a region that was both theirs and judged by them is counted
+  // once, as a deletion.
+  const judged = ctx.db
+    .prepare(
+      `SELECT region_id FROM media_face_region
+        WHERE confirmed_by_party_id = ?
+        ORDER BY region_id`
+    )
+    .all(input.party_id) as { region_id: string }[];
+  // THE STATE MOVES WITH THE COLUMN, because the schema pins them to each
+  // other: `CHECK ((review_state = 'confirmed') = (confirmed_by_party_id IS
+  // NOT NULL))` (`contracts/schema/vault-ddl.sql`, media_face_region). Nulling
+  // the judge alone would leave a 'confirmed' row nobody confirmed, so the
+  // region goes back to being a PROPOSAL — which is what it now is: the face
+  // is still there, still named, and no longer vouched for by anyone.
+  ctx.db
+    .prepare(
+      `UPDATE media_face_region
+          SET confirmed_by_party_id = NULL, review_state = 'proposed'
+        WHERE confirmed_by_party_id = ?`
+    )
+    .run(input.party_id);
+  for (const region of judged) ctx.wrote("media.face_region", region.region_id);
+
   ctx.cite({
-    claim: `every face naming party ${input.party_id} was forgotten: ${regions.length} region(s), their vectors, their derivation stamps and their grouping`,
+    claim: `every face OF party ${input.party_id} was forgotten: ${regions.length} region(s), their vectors, their derivation stamps and their grouping; ${judged.length} judgement(s) they made about other people's faces were cleared`,
     entityType: "core.party",
     entityId: input.party_id,
   });

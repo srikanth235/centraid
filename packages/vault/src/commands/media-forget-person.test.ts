@@ -245,6 +245,73 @@ describe("media.forget_person", () => {
     });
   });
 
+  // ── the one-member vault (#1020, D-1020-CL2) ──
+  test("forgetting the only member clears their judgements and erases nobody else's face", () => {
+    const seeded = seed();
+    // Every confirmation in this vault was made by the owner, because there is
+    // nobody else to make one. That is the ordinary shape of a personal vault,
+    // not an edge case.
+    const judged = db.vault
+      .prepare(
+        `SELECT count(*) AS n FROM media_face_region
+          WHERE confirmed_by_party_id = ?`
+      )
+      .get(boot.ownerPartyId) as { n: number };
+    expect(Number(judged.n)).toBe(2);
+
+    const output = invoke("media.forget_person", {
+      party_id: boot.ownerPartyId,
+    }) as { regions_forgotten: number; embeddings_forgotten: number };
+
+    // The owner is in no photograph here, so there is nothing OF them to
+    // forget — and "forget me" must not mean "erase everyone".
+    expect(output).toMatchObject({
+      regions_forgotten: 0,
+      embeddings_forgotten: 0,
+    });
+    expect(traces(db.vault, seeded.anaRegions)).toStrictEqual({
+      regions: 2,
+      vectors: 2,
+      stamps: 2,
+      clusters: 2,
+    });
+    expect(traces(db.vault, [seeded.samRegion])).toStrictEqual({
+      regions: 1,
+      vectors: 1,
+      stamps: 1,
+      clusters: 1,
+    });
+    // What DID go is the member's own act: no row records that they were the
+    // one who confirmed these faces.
+    const naming = db.vault
+      .prepare(
+        `SELECT count(*) AS n FROM media_face_region
+          WHERE party_id = ? OR confirmed_by_party_id = ?`
+      )
+      .get(boot.ownerPartyId, boot.ownerPartyId) as { n: number };
+    expect(Number(naming.n)).toBe(0);
+    // Ana is still Ana in those two regions — the person in the photograph is
+    // untouched by the erasure of the judgement about it — and the region that
+    // was confirmed is a PROPOSAL again, because the schema pins the state to
+    // the judge (`CHECK ((review_state = 'confirmed') = (confirmed_by_party_id
+    // IS NOT NULL))`) and nobody vouches for it now.
+    const ana = db.vault
+      .prepare(
+        `SELECT region_id, review_state FROM media_face_region
+          WHERE party_id = ? ORDER BY region_id`
+      )
+      .all(seeded.ana) as { region_id: string; review_state: string }[];
+    expect(
+      ana.map((row) => ({
+        region_id: row.region_id,
+        review_state: row.review_state,
+      }))
+    ).toStrictEqual([
+      { region_id: "r-ana-confirmed", review_state: "proposed" },
+      { region_id: "r-ana-proposed", review_state: "proposed" },
+    ]);
+  });
+
   test("the person themself stays in the library — this forgets faces, not people", () => {
     const seeded = seed();
     invoke("media.forget_person", { party_id: seeded.ana });
