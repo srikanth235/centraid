@@ -2572,3 +2572,83 @@ openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew …`, no config change):
 in-memory allowlist, so there was nothing there to correct; the allowlist's
 current state is stated in [enrollment.md](../docs/enrollment.md) and
 [SECURITY.md](../SECURITY.md) instead.
+
+## Live-shell lane — header / gateway sheet / empty switcher (#1025)
+
+Bugs 4–6 on `claude/1025-live-shell`. Rulings R-SHELL-1…3; cites D-1025-S7-40
+(tail), D-1025-S7-9 (roster/forget), trap
+[unreachable-vault](../docs/traps/unreachable-vault.md).
+
+### Bug 4 — header said "synced" while the gateway was down
+
+**Cause.** `Shelf.Holding.state` returned `STATE_ONLINE` whenever `tailing` was
+true, outranking a just-recorded `unreachable`. `HomeSession.openTail` marked
+`tailOpened` when the stream was *asked for*, and `tailClosed` updated the
+holding / roster without `publishLockup()`, so the header's `vault_changed`
+lockup could keep the previous ONLINE line for the whole outage.
+
+**Fix.**
+
+| Path | Change |
+| --- | --- |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/Shelf.kt` | `Holding.state`: pass-in-flight → SYNCING; last unreachable → OFFLINE (outranks a pending `tailing` mark); then receiving/asked tail over a reachable last pass → ONLINE; else bootstrap / last pass as before (R-SHELL-1). |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeSession.kt` | `syncNow` short-circuits "This vault is live" only when `tailing` and last outcome is not unreachable; `openTail` calls `publishLockup()` after `tailOpened` and after `tailClosed`. |
+| `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ShelfSpec.kt` | Red-first: unreachable + `tailing` ⇒ OFFLINE; reachable + `tailing` ⇒ ONLINE. |
+| `docs/mobile-offline.md` | Header sentences match the new order. |
+
+**Demonstrated red.** `:shared:jvmTest --tests dev.centraid.shared.ShelfSpec`
+failed on `a just-recorded unreachable outranks a marked-but-not-receiving tail`
+(`AssertionFailedError` at ShelfSpec.kt:105) before the state change; green
+after. Full `:shared:jvmTest` green
+(`JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`).
+
+Shell `stateLine` tables (`.online -> "synced"`) are unchanged — they already
+word OFFLINE as "offline"; the product half was the published lockup state.
+
+### Bug 5 — Gateway sheet named a forgotten vault
+
+**Cause.** iOS `ShellModel.gatewayStatus` was set in `pair()` to
+`"Paired with \(paired.vaultName)."` and never cleared on forget/switch
+(R-SHELL-2).
+
+**Fix.**
+
+| Path | Change |
+| --- | --- |
+| `mobile/iosApp/Sources/ShellModel.swift` | `forget` clears `gatewayStatus`; `clearStaleGatewayStatus()` for switches. |
+| `mobile/iosApp/Sources/HomeView.swift` | Vault pick of a different vault clears stale status. |
+| `mobile/androidApp/.../MainActivity.kt` | Same field + clear on forget / switch (Android had no Gateway sheet before this lane; see Bug 6). |
+
+### Bug 6 — switcher miscounted zero; no pair door
+
+**Cause.** `vaults.count <= 1` / `vaults.size <= 1` drew "This device holds one
+vault." over an empty roster. Pairing was only behind Settings (iOS); Android
+Settings gear did nothing (R-SHELL-3).
+
+**Fix.**
+
+| Path | Change |
+| --- | --- |
+| `mobile/iosApp/Sources/HomeView.swift` | Zero → "This device holds no vault." + Pair (`vault-sheet-pair`) that dismisses the switcher and opens `GatewaySheet`; one vault keeps the old sentence. |
+| `mobile/androidApp/.../HomeScreen.kt` | Same copy + Pair CTA; `onPair` / Settings open the Gateway sheet. |
+| `mobile/androidApp/.../kit/GatewaySheet.kt` | New — same door as iOS (ticket, pair, sync now, status, transfer-rules door). Not a second pairing flow: it calls `HomeSession.pair` / `syncNow`. |
+| `mobile/androidApp/.../kit/VaultHeader.kt` | `HomeTitleRow(onSettings=…)` wires the gear. |
+| `mobile/androidApp/.../MainActivity.kt` | Hosts the Gateway sheet. |
+
+Swift zero-count copy is named here; no Kotlin unit test asserts Compose/Swift
+string literals.
+
+### Finding (not fixed in this lane)
+
+After the header fix, a seat that still cannot dial a `--no-relay` gateway whose
+**direct addresses** changed is outside this lane — HEAD already landed
+allowlist + endpoint identity (D-1025-S7-80, D-1025-S7-81). No new discovery
+protocol was built. Live rediscovery after address change was not re-proved
+here (no gateway started).
+
+### Commands
+
+| Command | Result |
+| --- | --- |
+| `JAVA_HOME=…/openjdk@21/… ./gradlew :shared:jvmTest --tests dev.centraid.shared.ShelfSpec` (pre-fix) | **red** — unreachable+tailing asserted OFFLINE, got ONLINE |
+| same after fix; full `:shared:jvmTest` | green |

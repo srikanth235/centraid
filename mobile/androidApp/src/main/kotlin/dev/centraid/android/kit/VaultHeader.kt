@@ -222,7 +222,10 @@ private fun HeaderAction(iconKey: String, spoken: String) {
  * behind All apps, a sheet a member on the springboard has no reason to open.
  */
 @Composable
-public fun HomeTitleRow(modifier: Modifier = Modifier) {
+public fun HomeTitleRow(
+    modifier: Modifier = Modifier,
+    onSettings: () -> Unit = {},
+) {
     Column(modifier.fillMaxWidth()) {
         Row(
             Modifier
@@ -241,6 +244,7 @@ public fun HomeTitleRow(modifier: Modifier = Modifier) {
             Box(
                 Modifier
                     .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+                    .clickable(onClick = onSettings)
                     .testTag("home-settings")
                     .semantics { contentDescription = "Settings" },
                 contentAlignment = Alignment.Center,

@@ -227,9 +227,21 @@ final class ShellModel: ObservableObject {
     func forget(vaultID: String) {
         #if canImport(CentraidShared)
         home.forget(vaultId: vaultID) {}
+        // R-SHELL-2: pairing sentences name the FOREGROUND holding, not the
+        // last successful pair() call. Forgetting (or switching away from) a
+        // vault must not leave "Paired with Fresh Vault." over Tahoe Weekend.
+        gatewayStatus = ""
         #else
         gatewayStatus = "This build has no core."
         #endif
+    }
+
+    /// Clear member-visible gateway copy that named a vault no longer in front.
+    ///
+    /// Called when the switcher picks another vault. Sync / pair outcomes that
+    /// land afterwards rewrite the line for the vault now open.
+    func clearStaleGatewayStatus() {
+        gatewayStatus = ""
     }
 
     /// THE MEMBER ARRIVED: catch up, then hold the log open (#1025 S2,

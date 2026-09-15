@@ -22,6 +22,8 @@ import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.TallyListEvent
+import android.os.Build
+import dev.centraid.android.kit.GatewaySheet
 import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.HomeScreen
 import dev.centraid.android.screens.NotesEditorScreen
@@ -42,12 +44,15 @@ import dev.centraid.shared.apps.tally.TallyListMachine
 import dev.centraid.shared.apps.tally.TallyReads
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.CameraRoll
+import dev.centraid.shared.shell.PairOutcome
 import dev.centraid.shared.shell.TransferRuleChoice
 import dev.centraid.shared.sync.TransferRule
+import dev.centraid.shared.sync.WakeReason
 import dev.centraid.shared.shell.CameraRollRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The composition root, and the only file allowed to name screens from every
@@ -332,6 +337,13 @@ public class MainActivity : ComponentActivity() {
                         // launch is one a restore may have moved underneath.
                         var rulesOpen by remember { mutableStateOf(false) }
                         var rule by remember { mutableStateOf("") }
+                        // GATEWAY / PAIR SHEET (#1025 live-shell). Same door as
+                        // iOS Settings → Gateway; empty-roster Pair opens it.
+                        var gatewayOpen by remember { mutableStateOf(false) }
+                        var gatewayWorking by remember { mutableStateOf(false) }
+                        // R-SHELL-2: member-visible pairing sentences name the
+                        // foreground holding. Cleared on forget / switch.
+                        var gatewayStatus by remember { mutableStateOf("") }
                         HomeScreen(
                             state = state,
                             onEvent = { event ->
@@ -348,6 +360,13 @@ public class MainActivity : ComponentActivity() {
                                         else -> stack
                                     }
                                 }
+                                val vaultPick = event.vault_picked
+                                if (vaultPick != null &&
+                                    vaultPick.vault_id.isNotEmpty() &&
+                                    vaultPick.vault_id != state.vault?.vault_id
+                                ) {
+                                    gatewayStatus = ""
+                                }
                                 live?.send(event)
                             },
                             // FORGETTING IS I/O, NOT AN EVENT (#1025 S7-9).
@@ -362,17 +381,116 @@ public class MainActivity : ComponentActivity() {
                             // launched on the composition's Main-confined scope
                             // would trip that assertion rather than block.
                             onForget = { vaultId ->
-                                scope.launch(Dispatchers.IO) { live?.forget(vaultId) }
+                                scope.launch(Dispatchers.IO) {
+                                    live?.forget(vaultId)
+                                    withContext(Dispatchers.Main) { gatewayStatus = "" }
+                                }
                             },
                             onDownloadSettings = {
                                 scope.launch {
                                     rule = TransferRule.read(
                                         platformServices().secureStore,
                                     ).stored
+                                    gatewayOpen = false
                                     rulesOpen = true
                                 }
                             },
+                            onPair = { gatewayOpen = true },
                         )
+                        if (gatewayOpen) {
+                            ModalBottomSheet(onDismissRequest = { gatewayOpen = false }) {
+                                GatewaySheet(
+                                    status = gatewayStatus,
+                                    working = gatewayWorking,
+                                    onPair = { ticket, done ->
+                                        val open = live
+                                        if (open == null) {
+                                            gatewayStatus = "This build has no core."
+                                            done()
+                                            return@GatewaySheet
+                                        }
+                                        gatewayWorking = true
+                                        scope.launch(Dispatchers.IO) {
+                                            val outcome = open.pair(
+                                                ticket = ticket,
+                                                deviceName = Build.MODEL,
+                                                platform = "android",
+                                            )
+                                            withContext(Dispatchers.Main) {
+                                                gatewayStatus = when (outcome) {
+                                                    is PairOutcome.Paired ->
+                                                        "Paired with ${outcome.vaultName}."
+                                                    is PairOutcome.Copying ->
+                                                        "Paired. Your vault is being copied."
+                                                    is PairOutcome.Refused ->
+                                                        outcome.sentence
+                                                    is PairOutcome.NoCore ->
+                                                        "There is no vault open on this device yet."
+                                                }
+                                                gatewayWorking = false
+                                                done()
+                                            }
+                                            open.foreground()
+                                        }
+                                    },
+                                    onSyncNow = { done ->
+                                        val open = live
+                                        if (open == null) {
+                                            gatewayStatus = "This build has no core."
+                                            done()
+                                            return@GatewaySheet
+                                        }
+                                        gatewayWorking = true
+                                        scope.launch(Dispatchers.IO) {
+                                            val outcome = open.syncNow(WakeReason.FOREGROUND)
+                                            withContext(Dispatchers.Main) {
+                                                gatewayStatus = when {
+                                                    outcome.copying != null ->
+                                                        outcome.copying!!
+                                                    outcome.unreachable ->
+                                                        outcome.sentence.ifEmpty {
+                                                            "Centraid could not reach your gateway."
+                                                        }
+                                                    outcome.blocked != null ->
+                                                        outcome.blocked!!
+                                                    outcome.stale != null ->
+                                                        outcome.stale!!
+                                                    else -> {
+                                                        var line =
+                                                            "Synced: ${outcome.rowsApplied} changes, " +
+                                                                "${outcome.blobsCompleted} files."
+                                                        if (outcome.originalsWithheld > 0) {
+                                                            line += " ${outcome.originalsWithheld} waiting for Wi-Fi."
+                                                        }
+                                                        outcome.bytesStalled?.let {
+                                                            line += " $it"
+                                                        }
+                                                        line += " [${outcome.budget}" +
+                                                            if (outcome.metered) {
+                                                                ", metered]"
+                                                            } else {
+                                                                "]"
+                                                            }
+                                                        line
+                                                    }
+                                                }
+                                                gatewayWorking = false
+                                                done()
+                                            }
+                                        }
+                                    },
+                                    onOpenTransferRules = {
+                                        scope.launch {
+                                            rule = TransferRule.read(
+                                                platformServices().secureStore,
+                                            ).stored
+                                            gatewayOpen = false
+                                            rulesOpen = true
+                                        }
+                                    },
+                                )
+                            }
+                        }
                         if (rulesOpen) {
                             ModalBottomSheet(onDismissRequest = { rulesOpen = false }) {
                                 TransferRulesSheet(

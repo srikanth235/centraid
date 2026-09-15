@@ -94,6 +94,11 @@ public fun HomeScreen(
      * this screen without one.
      */
     onDownloadSettings: () -> Unit = {},
+    /**
+     * Open the existing Gateway / pair sheet (#1025 live-shell, R-SHELL-3).
+     * Empty-device switcher is an onboarding surface and must offer Pair.
+     */
+    onPair: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -110,7 +115,7 @@ public fun HomeScreen(
             },
             onDownloadSettings = onDownloadSettings,
         )
-        HomeTitleRow()
+        HomeTitleRow(onSettings = onPair)
         StatusRibbon(state.data_?.status, onEvent)
         val failure = state.failure
         val data = state.data_
@@ -148,6 +153,7 @@ public fun HomeScreen(
                 onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = id)))
             },
             onForget = onForget,
+            onPair = onPair,
         )
     }
 }
@@ -181,6 +187,7 @@ private fun VaultSheet(
     active: VaultLockup?,
     onPick: (String) -> Unit,
     onForget: (String) -> Unit,
+    onPair: () -> Unit = {},
 ) {
     // WHICH VAULT THE MEMBER IS BEING ASKED ABOUT, held by the sheet and not by
     // the row: a dialog owned by a row would be unmounted the instant the
@@ -200,15 +207,40 @@ private fun VaultSheet(
                 color = centraidColor("text"),
                 modifier = Modifier.padding(horizontal = PAGE_MARGIN, vertical = 8.dp),
             )
-            // ONE VAULT IS NOT A CHOICE, and the sheet says so rather than
-            // drawing a list of one a member can tap to no effect.
-            if (vaults.size <= 1) {
-                Text(
-                    text = "This device holds one vault.",
-                    style = centraidType("small"),
-                    color = centraidColor("textSoft"),
-                    modifier = Modifier.padding(horizontal = PAGE_MARGIN),
-                )
+            // ZERO IS NOT ONE (R-SHELL-3). Empty device → honest copy + Pair
+            // into the existing Gateway sheet; one vault keeps the old sentence.
+            when {
+                vaults.isEmpty() -> {
+                    Text(
+                        text = "This device holds no vault.",
+                        style = centraidType("small"),
+                        color = centraidColor("textSoft"),
+                        modifier = Modifier.padding(horizontal = PAGE_MARGIN),
+                    )
+                    Text(
+                        text = "Pair",
+                        style = centraidType("smallStrong"),
+                        color = centraidColor("link"),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onPick("")
+                                onPair()
+                            }
+                            .padding(horizontal = PAGE_MARGIN, vertical = 12.dp)
+                            .heightIn(min = 44.dp)
+                            .testTag("vault-sheet-pair")
+                            .semantics { contentDescription = "Pair with a gateway" },
+                    )
+                }
+                vaults.size == 1 -> {
+                    Text(
+                        text = "This device holds one vault.",
+                        style = centraidType("small"),
+                        color = centraidColor("textSoft"),
+                        modifier = Modifier.padding(horizontal = PAGE_MARGIN),
+                    )
+                }
             }
             for (vault in vaults) {
                 Row(
