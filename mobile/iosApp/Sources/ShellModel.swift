@@ -419,9 +419,9 @@ final class ShellModel: ObservableObject {
             event.opened = .init()
             send(screen: "tally.list", event: (try? event.serializedData()) ?? Data())
         case .photos:
-            var event = Centraid_Screen_V1_PhotosGridEvent()
-            event.opened = .init()
-            send(screen: "photos.grid", event: (try? event.serializedData()) ?? Data())
+            // Re-read the OS grant, then open (R-PHOTOS-1). Sending `Opened`
+            // alone left a post-attach grant as NOT_ASKED on first paint.
+            photos.opened()
         case let .note(identifier):
             var event = Centraid_Screen_V1_NotesEditorEvent()
             event.opened = .with { $0.noteID = identifier }

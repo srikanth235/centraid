@@ -159,7 +159,12 @@ public class FakeMediaLibrary(
 
     override suspend fun permission(): MediaPermission = grant
 
+    /** How many times the app asked the OS. A seed that asks is a prompt on attach. */
+    public var requests: Int = 0
+        private set
+
     override suspend fun requestPermission(): MediaPermission {
+        requests += 1
         grant = grantOnRequest
         return grant
     }

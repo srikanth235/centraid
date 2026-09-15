@@ -35,6 +35,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -262,6 +263,32 @@ class ScreenMachineSpec : StringSpec({
                 ),
             ),
         ).effects.shouldBeEmpty()
+    }
+
+    "photos: an existing grant clears the not-asked reason and never offers an ask" {
+        // R-PHOTOS-1: GRANTED/LIMITED on first paint — shells gate "Allow photo
+        // access" on NOT_ASKED and draw paused_reason beside the banner.
+        val granted = PhotosGridMachine.reduce(
+            PhotosGridMachine.initial(),
+            PhotosGridEvent(
+                permission = PhotosGridEvent.PermissionChanged(
+                    MediaPermission.MEDIA_PERMISSION_GRANTED,
+                ),
+            ),
+        ).state
+        granted.permission shouldBe MediaPermission.MEDIA_PERMISSION_GRANTED
+        granted.backup.shouldNotBeNull().paused_reason shouldBe ""
+
+        val limited = PhotosGridMachine.reduce(
+            PhotosGridMachine.initial(),
+            PhotosGridEvent(
+                permission = PhotosGridEvent.PermissionChanged(
+                    MediaPermission.MEDIA_PERMISSION_LIMITED,
+                ),
+            ),
+        ).state
+        limited.permission shouldBe MediaPermission.MEDIA_PERMISSION_LIMITED
+        limited.backup.shouldNotBeNull().paused_reason.shouldNotContain("needs access")
     }
 
     // --- Notes ------------------------------------------------------------
