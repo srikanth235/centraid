@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Centraid Companion</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Centraid</h1>
+      <p id="state" role="status">Asking the app on this computer…</p>
+    </header>
+    <section id="capture" hidden>
+      <h2>Capture this page</h2>
+      <button id="capture-task" type="button">Add a task</button>
+      <button id="capture-note" type="button">Clip a note</button>
+    </section>
+    <p id="error" role="alert" hidden></p>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

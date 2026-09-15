@@ -1,0 +1,166 @@
+{
+  "files": [
+    {
+      "byte_size": 9320,
+      "content_hash": "f500d868eccbb73d33032f08855c63e185096371286ccd3f6df09d5faaa1cef4",
+      "file": "ana-and-marco-table.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 6216,
+      "content_hash": "c052ac6e0190f7f6322d2e3768f987eed87144d904e21a0ccba7788b71ad2d89",
+      "file": "ana-kitchen-window.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 7406,
+      "content_hash": "6e44c8b6592cfd3994a6397c8e93c4a0e902c8307a5b6819f40d370bda08e506",
+      "file": "ana-porch-evening.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 5635,
+      "content_hash": "8823f7661fa2f6f8da567eed2fe824f860a2a58b6a79d343d87d382de5b79b33",
+      "file": "ana-profile-doorway.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 6637,
+      "content_hash": "b26120a1e9dd55c1ee431af40693d53387cea8357b4e8acc00d45efa2bd8488a",
+      "file": "ana-trailhead.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 62254,
+      "content_hash": "371ee68d6211bb3aa8a75049db785646f32592f37cc1d7a8321a8e648a4326f8",
+      "file": "backyard-last-light.png",
+      "height": 240,
+      "long_edge": 360,
+      "width": 360
+    },
+    {
+      "byte_size": 56515,
+      "content_hash": "eb221eb18b7cbf354b99f8431f02311775e587eb0b14c32401ffba593475db18",
+      "file": "cabin-window-morning.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 53817,
+      "content_hash": "a7439b3e07109e629215e5afca2220c2fea3a4ee04dc528e360ab87db0cabe4b",
+      "file": "downtown-blue-hour.png",
+      "height": 240,
+      "long_edge": 360,
+      "width": 360
+    },
+    {
+      "byte_size": 49307,
+      "content_hash": "af2ea75c2c93c51ab0efc658b20a2930e5d29d8e0e55bb9d56536247981a19e4",
+      "file": "emerald-bay-overlook.png",
+      "height": 240,
+      "long_edge": 360,
+      "width": 360
+    },
+    {
+      "byte_size": 1978,
+      "content_hash": "7b59fbf1571cee382bae60219e65a2382dcb489eb20ad620d23f14dfbc0b6191",
+      "file": "empty-hallway.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 51519,
+      "content_hash": "887e10214308712ea0257a9c8177d8d3a89bbf711ac78cb32156ca01116fe898",
+      "file": "granite-switchback.png",
+      "height": 240,
+      "long_edge": 360,
+      "width": 360
+    },
+    {
+      "byte_size": 77416,
+      "content_hash": "5e87f8707eb44dbf73b150e3f95eb6751a114528450382e446e5faa90a2756f3",
+      "file": "harbor-lights.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 6937,
+      "content_hash": "053bafba2198bb412e6fb2ec38dfd78d6fde071784582d29fb5fc0a037db03c9",
+      "file": "marco-harbor-wall.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 6978,
+      "content_hash": "b2c8fa701d6b5552a81f9056126b24e0d9d7f1cd13eff59bc25627368251ee60",
+      "file": "marco-workshop.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 58352,
+      "content_hash": "db080c0af2c850ccfcecbf3eafa55949bd0e4771408c41be3bcb77de35df0b3f",
+      "file": "sand-harbor-dawn.png",
+      "height": 240,
+      "long_edge": 360,
+      "width": 360
+    },
+    {
+      "byte_size": 48234,
+      "content_hash": "88f73830ce699d5e421de9ab82e53c2265dd5ac3775bc630baddbefb3c874f47",
+      "file": "tahoe-dusk-ridge.png",
+      "height": 240,
+      "long_edge": 360,
+      "width": 360
+    },
+    {
+      "byte_size": 24,
+      "content_hash": "7c2c4adcd021a886217b521878348aee66affef2aa429cbc708277482cebd239",
+      "file": "tahoe-pan.mp4",
+      "height": 240,
+      "inline": true,
+      "long_edge": 360,
+      "why": "A tiny deterministic video payload, inline base64 in v0's seed rather than a file beside it. The journey corpus needs media-kind diversity, not playback fidelity: the viewer's capability rows and the video badge read the vault's honest kind/duration metadata. Its bytes are `INLINE_VIDEO_BASE64` in crates/xtask/src/photos_sample.rs; nothing is copied into contracts/ for it.",
+      "width": 360
+    },
+    {
+      "byte_size": 72443,
+      "content_hash": "f3e6b21a0a925d656de9eccc28f3cd80da67f0514117078b37df64fc822f463f",
+      "file": "trailhead-sign.png",
+      "height": 360,
+      "long_edge": 360,
+      "width": 270
+    },
+    {
+      "byte_size": 70599,
+      "content_hash": "994138e3724af7883bb8027508c569d1954aed6434d7a24b250adf9e1c4fcb4b",
+      "file": "truckee-river-bend.png",
+      "height": 240,
+      "long_edge": 360,
+      "width": 360
+    }
+  ],
+  "generator": "cargo xtask photos-sample",
+  "inlineFrames": 1,
+  "pngFrames": 18,
+  "rule": "long_edge <= thumbEdge",
+  "schema": "centraid-photos-sample/1",
+  "source": "contracts/apps/photos/sample",
+  "thumbEdge": 360,
+  "why": "The Photos grid paints the ORIGINAL instead of probing a ?variant=thumb derivative when an asset's long edge is at or under THUMB_EDGE. Every sample frame is <= 360 px on its long edge ON PURPOSE, so a seeded vault renders without a preview backstop having generated anything. That coupling between a seed's PIXEL DIMENSIONS and a renderer's constant had no test on either side."
+}

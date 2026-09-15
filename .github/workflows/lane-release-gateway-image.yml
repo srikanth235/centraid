@@ -3,7 +3,9 @@ name: lane-release-gateway-image
 # A `release.yml` lane, not an independently-triggered workflow (#557).
 
 # #501 / #504 — optional GHCR image for centraid-gateway (D5: never move latest on beta).
-# Build uses monorepo-root Dockerfile (native tunnel + operator-safe defaults).
+# Build uses deploy/docker/gateway-v0.Dockerfile (native tunnel + operator-safe
+# defaults) — the same file, moved into deploy/ by #1020 wave 3. This lane keeps
+# shipping the v0 image until v0 retires; the v1 image is deploy/docker/Dockerfile.
 # Primary install path remains monorepo source + H5 service install.
 
 on:
@@ -65,7 +67,7 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          file: Dockerfile
+          file: deploy/docker/gateway-v0.Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha

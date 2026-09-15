@@ -1,0 +1,79 @@
+diff --git a/crates/xtask/src/gate.rs b/crates/xtask/src/gate.rs
+index 65f0fcb3..21af8ffd 100644
+--- a/crates/xtask/src/gate.rs
++++ b/crates/xtask/src/gate.rs
+@@ -142,6 +142,17 @@ pub fn steps(profile: Profile) -> Vec<Step> {
+         // move them rather than drop them.
+         step("advisory", run_advisory),
+         step("lockfile", run_lockfile),
++        // THE #842 PROMPT-INJECTION CORPUS (#1020 wave 4 lane assist,
++        // D-1020-AS6). It is a gate rather than one suite among many because
++        // what it guards is a SECURITY property that no other step covers: the
++        // gateway's standing answer when content inside the member's own data
++        // asks the assistant to exceed its grant. A breach is a defect, so the
++        // corpus stays and the code changes.
++        //
++        // Named separately from `test` so the count is visible in the gate
++        // output — "14 payloads, 10 proven, 4 deferred on the park gate" is the
++        // line a reviewer needs, and `cargo test --workspace` prints none of it.
++        step("prompt-injection", run_prompt_injection),
+         // THE SYNC PROOF AND THE RESPONSIVENESS PROMISE (D-1020-D2-4,
+         // D-1020-D2-6). The simulation runs 25 seeds here and 250 in
+         // `nightly`; the budget fails the gate on any bounded read over its
+@@ -1402,6 +1413,56 @@ fn run_v0_oracle(ctx: &Ctx) -> Result<Outcome> {
+     process(ctx, "v0-oracle", "bunx", &["vitest", "run", SUITE])
+ }
+ 
++/// The #842 corpus, against the Rust turn plane (D-1020-AS6).
++///
++/// The corpus itself lives in `contracts/assist/prompt-injection/` with its
++/// origin header, and it is **grow-only**: the loader reads the directory, so a
++/// new payload is picked up with no change here. The run spawns the real
++/// `fake-acp-harness` binary, which is why this is a `cargo test` invocation
++/// rather than a rule — the boundary under test needs a real subprocess, and a
++/// fake clock would wedge its I/O.
++fn run_prompt_injection(ctx: &Ctx) -> Result<Outcome> {
++    let payloads = corpus_size(&ctx.root);
++    let outcome = process(
++        ctx,
++        "prompt-injection",
++        "cargo",
++        &[
++            "test",
++            "-p",
++            "centraid-assist",
++            "--test",
++            "prompt_injection",
++        ],
++    )?;
++    // The SIZE is reported on success, because a corpus that shrank to nothing
++    // would otherwise pass in silence — which is the one failure mode a gate
++    // over a grow-only corpus has.
++    Ok(match outcome {
++        Outcome::Ok(label) => Outcome::Ok(format!("{label} ({payloads} payloads)")),
++        other => other,
++    })
++}
++
++/// How many payloads are committed. Counted from the directory rather than
++/// taken from the test, so the two cannot agree with each other while both
++/// being wrong.
++fn corpus_size(root: &Path) -> usize {
++    std::fs::read_dir(root.join("contracts/assist/prompt-injection"))
++        .map(|entries| {
++            entries
++                .flatten()
++                .filter(|entry| {
++                    entry
++                        .path()
++                        .extension()
++                        .is_some_and(|extension| extension == "json")
++                })
++                .count()
++        })
++        .unwrap_or(0)
++}
++
+ /// The advisory register (D-1020-G3). See `crate::ci::advisory`.
+ fn run_advisory(ctx: &Ctx) -> Result<Outcome> {
+     verdict(ctx, "advisory", ci::advisory(&ctx.root, &ci::today_utc())?)

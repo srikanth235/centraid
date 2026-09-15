@@ -1,0 +1,92 @@
+{
+  "digest": "5b50d566bf4c3fe88f5e63ce9e4610acdffe7554b796e9d5154758b13dc181cf",
+  "scenarios": [
+    {
+      "checks": [
+        {
+          "actual": [1, 1],
+          "claim": "each bank's statement creates its own line",
+          "expected": [1, 1]
+        },
+        {
+          "actual": ["Bank A Savings", "Bank B Current"],
+          "claim": "`ref-1` names one row per source",
+          "expected": ["Bank A Savings", "Bank B Current"]
+        },
+        {
+          "actual": [2, 2],
+          "claim": "the identity claim is per connection",
+          "expected": [2, 2]
+        },
+        {
+          "actual": 0,
+          "claim": "re-importing the same source changes nothing",
+          "expected": 0
+        }
+      ],
+      "drift": "ONT-24",
+      "id": "ONT-24/a-provider-id-is-scoped-to-its-source",
+      "surfaces": ["Tally — the ledger", "Finance — the import review"],
+      "title": "Bank A and Bank B may both import `ref-1`"
+    },
+    {
+      "checks": [
+        {
+          "actual": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            },
+            {
+              "amount_minor": 5000,
+              "currency": "USD"
+            }
+          ],
+          "claim": "the position is two balances, one per currency",
+          "expected": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            },
+            {
+              "amount_minor": 5000,
+              "currency": "USD"
+            }
+          ]
+        },
+        {
+          "actual": "unavailable",
+          "claim": "the single hero figure is unavailable, not a sum",
+          "expected": "unavailable"
+        },
+        {
+          "actual": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            },
+            {
+              "amount_minor": 5000,
+              "currency": "USD"
+            }
+          ],
+          "claim": "and it names the components rather than adding them",
+          "expected": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            },
+            {
+              "amount_minor": 5000,
+              "currency": "USD"
+            }
+          ]
+        }
+      ],
+      "drift": "ONT-23",
+      "id": "ONT-23/two-currencies-are-two-balances",
+      "surfaces": ["Tally — the dashboard hero", "Tally — the group ledger"],
+      "title": "USD 100 + EUR 100 is two balances, and nothing is 200"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "_comment": "THE PREBUILT CORE'S SIZE PER ABI (#1020). Down-only, and written only by `cargo xtask measure --write`. Four ABIs of a core carrying iroh, SQLite, FTS5 and codecs need a size budget, and the first entry lands with the first artifact (wave 3 lane G). Every number is measured from the **stripped** artifact the lane publishes, beside its symbol file — measuring an unstripped or a debug binary would make every later number a lie about the same name. A `null` IS NOT A NUMBER: it gates nothing, it ratchets nothing, and it is the honest value for a triple no machine here has built.",
+  "abis": {
+    "x86_64-unknown-linux-gnu": {
+      "strippedBytes": 23067264,
+      "_provenance": "Measured on ci-linux-x64-4c (#1020, wave 3 lane G). `cargo build --profile dist --bin centraid` (dist = release + `lto = \"thin\"` + `codegen-units = 1` + `debug = \"line-tables-only\"` + `split-debuginfo = \"packed\"`, the profile a tag publishes), then `objcopy --only-keep-debug centraid centraid.debug && objcopy --strip-debug --add-gnu-debuglink=centraid.debug centraid`. The stripped binary is 23,067,264 bytes and the symbol file beside it is 73,679,584 bytes. Recorded as the CEILING because this is the first artifact and there is nothing to have headroom over yet: the number is exactly what was measured, so the first commit that makes the core bigger goes red and has to say why. That is the point of a down-only ledger over an artifact whose whole job is to be small enough to ship to a phone.",
+      "_headroom": "NONE, on purpose. A ceiling invented above a measurement is headroom nobody argued for, and this artifact has one measurement. When the four Android ABIs and the iOS slices land (lane E's artifacts through `.github/workflows/lane-prebuilt-core.yml`) the shape of the budget can be argued across triples; until then the rule is: it may fall."
+    },
+    "aarch64-unknown-linux-gnu": { "strippedBytes": null },
+    "aarch64-apple-darwin": { "strippedBytes": null },
+    "x86_64-apple-darwin": { "strippedBytes": null },
+    "x86_64-pc-windows-msvc": { "strippedBytes": null },
+    "aarch64-pc-windows-msvc": { "strippedBytes": null },
+    "aarch64-linux-android": { "strippedBytes": null },
+    "armv7-linux-androideabi": { "strippedBytes": null },
+    "i686-linux-android": { "strippedBytes": null },
+    "x86_64-linux-android": { "strippedBytes": null },
+    "aarch64-apple-ios": { "strippedBytes": null },
+    "aarch64-apple-ios-sim": { "strippedBytes": null },
+    "x86_64-apple-ios": { "strippedBytes": null }
+  },
+  "_nulls": "The twelve nulls above are the triples `.github/workflows/lane-prebuilt-core.yml` publishes and NO machine in this wave could build: this container is Linux x64, with no macOS runner, no Xcode, no Android NDK and no Windows host. They are listed rather than omitted because the list is the contract — a triple that is published and has no row would be an artifact nobody ever weighed — and each is `null` rather than a projection from the x64 number, because an ABI's size depends on its instruction encoding and its platform libraries and an arithmetic guess would be indistinguishable from a measurement six months from now. The first run of the prebuilt-core lane on a real matrix fills them (owner hand-off, docs/release.md)."
+}

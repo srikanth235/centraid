@@ -1,0 +1,48 @@
+{
+  "reserved": [
+    "doc-text-extractor",
+    "embed-image",
+    "embed-text",
+    "faces",
+    "photo-ocr",
+    "place-names",
+    "transcript"
+  ],
+  "schemaVersion": 1,
+  "tiers": {
+    "bundled-optional": [
+      "embed-image",
+      "embed-text",
+      "transcript",
+      "place-names"
+    ],
+    "system": ["faces", "photo-ocr", "doc-text-extractor"]
+  },
+  "weights": [
+    {
+      "bytes": 607194067,
+      "capability": "embed-image",
+      "models": ["clip-vit-b-32@1"]
+    },
+    {
+      "bytes": 607194067,
+      "capability": "embed-text",
+      "models": ["clip-vit-b-32@1"]
+    },
+    {
+      "bytes": 261268977,
+      "capability": "faces",
+      "models": ["yunet-arcface@1"]
+    },
+    {
+      "bytes": 21340028,
+      "capability": "ocr",
+      "models": ["pp-ocrv5@1"]
+    },
+    {
+      "bytes": 45081321,
+      "capability": "transcript",
+      "models": ["whisper-tiny.en-q8@1"]
+    }
+  ]
+}

@@ -1,0 +1,1215 @@
+// Screen states and events — SHELL-INTERNAL, free to change every release
+// (#1020, D-1020-C4, D-1020-E3; the issue's *One protobuf schema workspace*).
+//
+// This package's compatibility promise is deliberately weaker than
+// `centraid.core.v1`'s: `buf breaking` checks it against the PR base only, not
+// against released tags, because the only consumers are the KMP shared module,
+// SwiftUI and Compose — all shipped in one artifact with the core that produces
+// these messages. `centraid.core.v1` is the gateway's promise to seats that
+// update on their own schedule; this is not.
+//
+// Wave 2 landed the envelope alone as a placeholder. Wave 3 lane E filled it
+// with the three screens — **Tally list, Photos grid, Notes editor** — and
+// `SeatState`. Everything is in ONE FILE (D-1020-E3a): `crates/api-proto`'s
+// `build.rs` carries a NAMED list of every `.proto` and `tests/tree.rs` asserts
+// the list and the directory agree, and both belong to lane C. One file keeps
+// this change inside the screen package's own ownership boundary, which for a
+// shell-internal package costs nothing.
+//
+// Open question 10 decides after wave 3 whether screen contracts stay protobuf
+// or become Kotlin sealed classes plus SKIE, on the exit criterion written into
+// the issue (lines per screen, fixture disagreements, p95 state delivery). If
+// that decision goes to SKIE, THIS FILE is what goes away; nothing in
+// `centraid.core.v1` moves. The line counts criterion (a) needs are in the
+// receipt, measured against hand-written Kotlin data classes for the same
+// three screens.
+//
+// ## Four laws every message here keeps
+//
+// 1. **A failed read is not an empty list.** Three states, never two:
+//    `loading`, a `ReadFailure`, or data. Kotlin's nullable and Rust's `Result`
+//    each collapse two of them, so the oneof spells all three out. v0 pins the
+//    same law from three directions — `tally-store.test.ts`, the
+//    `deniedPayload` contract, and "a refused read and a seat with no copy yet
+//    are different screens".
+// 2. **A band destination is a parameter, not a screen.** `PhotosGridState`
+//    carries a destination; there is no second message per destination. And
+//    `more` is a sheet, never a destination
+//    (`apps/mobile/src/navigation.ts:19-24`).
+// 3. **A discriminated union, not a bag of optionals.** A photo state view is a
+//    oneof, not `{mode, party_id?, person_name?}` (`navigation.ts:43-46`).
+// 4. **An OS permission is a state, not a route.** "No `PhotoPermission` route
+//    (#712): OS grant is a timeline STATE" (`navigation.ts:41-42`).
+
+syntax = "proto3";
+
+package centraid.screen.v1;
+
+// One screen's finished state, ready to render. The UI thread only ever
+// receives a finished state message (#1020 Execution model).
+message ScreenState {
+  // Which screen. `tally.list`, `photos.grid`, `notes.editor`.
+  string screen_id = 1;
+  // The state, encoded by the message this package defines for `screen_id`.
+  // Still `bytes` rather than a oneof: the shell transports a screen state
+  // without knowing which screen it is (one `SharedFlow`, one renderer entry
+  // point), and a oneof here would have to be edited by every screen lane.
+  bytes state = 2;
+  // Monotonic per screen instance, so a renderer can drop a state it has
+  // already surpassed rather than re-rendering out of order.
+  uint64 revision = 3;
+}
+
+// One event the view forwards. Swift and Compose own nothing; they render and
+// forward (#1020 Execution model).
+message ScreenEvent {
+  string screen_id = 1;
+  bytes event = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The read law
+// ---------------------------------------------------------------------------
+
+// WHY A READ PRODUCED NO ROWS, when it produced no rows for a reason.
+//
+// Absent from every screen's `data` case: data is data. This exists only for
+// the middle state, and `kind` is what keeps "refused" and "no copy yet" apart
+// — two different screens in v0's own words, and the distinction a nullable
+// would erase.
+enum ReadFailureKind {
+  READ_FAILURE_KIND_UNSPECIFIED = 0;
+  // The access plane said no. Its sentence, never its predicate.
+  READ_FAILURE_KIND_REFUSED = 1;
+  // This seat has no copy of these rows yet. A first sync, not a refusal — and
+  // the screen that says so is not the screen that says "you cannot see this".
+  READ_FAILURE_KIND_NO_COPY_YET = 2;
+  // The core answered, and could not reach what it needed: a gateway a thin
+  // seat cannot dial.
+  READ_FAILURE_KIND_UNAVAILABLE = 3;
+  // The device is out of disk and the feed is PARKED: the cursor and the rows
+  // stay, the retry cadence stops, and freeing space resumes from the durable
+  // cursor (`docs/mobile-offline.md:238`). Centraid never evicts canonical rows
+  // or queued writes to manufacture space, so this is a state and not a
+  // cleanup.
+  READ_FAILURE_KIND_LOW_DISK_PARKED = 4;
+  // The core was restarted deliberately after a panic poisoned its handle
+  // (`crates/core-ffi/CONTRACT.md` clause 9).
+  READ_FAILURE_KIND_CORE_RESTARTED = 5;
+}
+
+message ReadFailure {
+  ReadFailureKind kind = 1;
+  // AN OWNER-FACING SENTENCE. The author's words for a failed precondition,
+  // the access plane's sentence for a denial. The raw predicate reaches the
+  // audit trail and never a member.
+  string sentence = 2;
+  // Set when there is something a member can do: free space, reach the
+  // gateway, wait for a first sync. Empty when there is not.
+  string remedy = 3;
+}
+
+// The loading state. A message rather than a bare `bool`, so the oneof can hold
+// it as a present value and a decode of an unset oneof stays distinguishable
+// from "loading" — the same reason `centraid.core.v1.NullValue` is a message.
+message Loading {
+  // True on the FIRST load of this screen, false on a refresh over rows the
+  // screen is already showing. A spinner over an empty frame and a spinner over
+  // last night's rows are different screens.
+  bool first_load = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The seat's four sentences
+// ---------------------------------------------------------------------------
+
+// What this seat can say about itself, as the desktop seat says it —
+// coordinated with lane F as `centraid.screen.v1.SeatState`, one message and
+// two shells (`contracts/screens/README.md`). Four facts and no fifth, because
+// each answers a different question a member actually asks.
+message SeatState {
+  Availability availability = 1;
+  Durability durability = 2;
+  PendingWork pending = 3;
+  Connectivity connectivity = 4;
+
+  // "Can I use Centraid right now?"
+  enum Availability {
+    AVAILABILITY_UNSPECIFIED = 0;
+    AVAILABILITY_READY = 1;
+    // A mount is resolving. **Never a placeholder gateway id**: a mount waits
+    // for a real endpoint rather than naming a file after a stand-in, because
+    // the literal `"manual"` once named a file whose path moved the moment a
+    // real endpoint arrived, orphaning every write queued under it
+    // (`docs/mobile-offline.md:249`, census §E seam 2).
+    AVAILABILITY_WAITING_FOR_MOUNT = 2;
+    // The app is locked. Decrypted material is cleared and the replica is
+    // unmounted; a state, not a modal over a live screen.
+    AVAILABILITY_LOCKED = 3;
+    // The core was poisoned and is being restarted.
+    AVAILABILITY_RESTARTING = 4;
+  }
+
+  // "Is my work safe?"
+  enum Durability {
+    DURABILITY_UNSPECIFIED = 0;
+    // Written to the gateway's authority.
+    DURABILITY_AUTHORITATIVE = 1;
+    // Written to this device's outbox and not yet to the gateway.
+    DURABILITY_LOCAL_ONLY = 2;
+    // Out of disk. The feed is parked and nothing is being written.
+    DURABILITY_PARKED_LOW_DISK = 3;
+  }
+
+  // "Is anything still on its way?"
+  message PendingWork {
+    uint32 queued_writes = 1;
+    uint32 queued_uploads = 2;
+    // The oldest queued item's age in seconds, so a screen can say "since
+    // yesterday" rather than a count nobody can weigh.
+    uint64 oldest_queued_seconds = 3;
+  }
+
+  // "Why is it not moving?" — and the answer the platform gave, not one this
+  // shell assumed from a radio.
+  enum Connectivity {
+    CONNECTIVITY_UNSPECIFIED = 0;
+    CONNECTIVITY_ONLINE_UNMETERED = 1;
+    CONNECTIVITY_ONLINE_METERED = 2;
+    CONNECTIVITY_OFFLINE = 3;
+    // The platform refused to say — Background App Refresh is off, or the
+    // permission was never granted. Registration is observable rather than
+    // assumed (`docs/mobile-offline.md:214`).
+    CONNECTIVITY_UNKNOWN_PLATFORM_REFUSED = 4;
+  }
+}
+
+// A money amount, as the vault holds it: minor units and a currency
+// (`tally_expense.amount_minor` + `currency`).
+//
+// **NEVER A FLOAT AND NEVER A PRE-FORMATTED STRING.** v0's formatter divides
+// minor units by 100 unconditionally and calls
+// `new Intl.NumberFormat(undefined, …)` — the HOST's locale — so the same vault
+// renders differently on two devices (`packages/design/src/format.ts:38`,
+// `:49`; census §E8). A Kotlin or Swift port needs the minor-unit exponent for
+// the currency and an explicit locale FROM THE VAULT, which is why both travel
+// with the amount.
+message Money {
+  int64 minor = 1;
+  // ISO 4217, three characters.
+  string currency = 2;
+  // The currency's minor-unit exponent: 2 for USD, 0 for JPY, 3 for BHD. From
+  // the kit's table through the core, never guessed and never assumed to be 2.
+  uint32 exponent = 3;
+  // The locale the vault says to render in — BCP 47. Never the device's.
+  string locale = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Tally list
+// ---------------------------------------------------------------------------
+
+message TallyListState {
+  SeatState seat = 1;
+  // WHICH BAND, as a parameter (law 2).
+  Destination destination = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    TallyListData data = 5;
+  }
+  // The pending-write overlay: expense ids this device has written and the
+  // gateway has not confirmed. On the STATE and not on the rows, because an
+  // overlay over a row the screen has not loaded yet still has to be shown once
+  // it arrives.
+  repeated string pending_expense_ids = 6;
+  // The one verb a seat WITHHOLDS rather than queueing offline:
+  // `materialize-recurring-expense`, whose occurrence id is minted by the
+  // canonical engine (`docs/mobile-offline.md:257`). True when the screen
+  // should say so rather than offering it.
+  bool recurring_materialisation_withheld = 7;
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_ACTIVITY = 1;
+    DESTINATION_BALANCES = 2;
+    DESTINATION_GROUPS = 3;
+  }
+}
+
+message TallyListData {
+  repeated TallyRow rows = 1;
+  // ABSENT when the rows ended. Never a `truncated` flag and never a cursor
+  // that points past the end — the keyset rule `centraid.core.v1.Page` states.
+  optional string next_cursor = 2;
+  // The balance across the destination, when the destination has one.
+  optional Money net_balance = 3;
+}
+
+message TallyRow {
+  string expense_id = 1;
+  string description = 2;
+  Money amount = 3;
+  // Names ride along the row so an app bar and a list line need not wait a
+  // second read (`navigation.ts:63-69`).
+  string group_name = 4;
+  string payer_name = 5;
+  // RFC 3339, in the VAULT's zone and never the host's (R-1020-33).
+  string occurred_at = 6;
+  bool settled = 7;
+}
+
+message TallyListEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    NextPageRequested next_page = 3;
+    DestinationChanged destination = 4;
+    DataArrived data = 5;
+    ReadRefused refused = 6;
+    RowsChanged rows_changed = 7;
+    SeatChanged seat_changed = 8;
+  }
+
+  message Opened {}
+
+  message Refreshed {}
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DestinationChanged {
+    TallyListState.Destination destination = 1;
+  }
+
+  message DataArrived {
+    TallyListData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  // A change event touched rows this screen is showing.
+  message RowsChanged {
+    repeated string expense_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Photos grid
+// ---------------------------------------------------------------------------
+
+// THE OS GRANT, AS A STATE (law 4). No route, no modal-as-a-screen: the grid
+// renders a different thing under each of these, and every one of them is a
+// place a member can be.
+enum MediaPermission {
+  MEDIA_PERMISSION_UNSPECIFIED = 0;
+  // Not asked yet. Distinct from denied: one has a button, the other has a
+  // trip to Settings.
+  MEDIA_PERMISSION_NOT_ASKED = 1;
+  MEDIA_PERMISSION_GRANTED = 2;
+  // iOS's limited selection. The grid shows what was selected and says so — it
+  // is not an empty library and it is not a denial.
+  MEDIA_PERMISSION_LIMITED = 3;
+  MEDIA_PERMISSION_DENIED = 4;
+  // A device policy refuses, and no button in this app can change it.
+  MEDIA_PERMISSION_RESTRICTED = 5;
+}
+
+message PhotosGridState {
+  SeatState seat = 1;
+  Destination destination = 2;
+  MediaPermission permission = 3;
+  oneof content {
+    Loading loading = 4;
+    ReadFailure failure = 5;
+    PhotosGridData data = 6;
+  }
+  // The camera-roll backup's own state. On the grid because that is where a
+  // member sees it, and a message because "backing up" is several facts.
+  BackupState backup = 7;
+  // WHICH SHEET IS OPEN, if one is. `more` is a sheet and never a destination,
+  // so it cannot be a `Destination` value.
+  Sheet sheet = 8;
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_LIBRARY = 1;
+    DESTINATION_COLLECTIONS = 2;
+    DESTINATION_SEARCH = 3;
+  }
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_MORE = 2;
+    SHEET_BACKUP_DETAIL = 3;
+  }
+}
+
+message PhotosGridData {
+  repeated PhotoCell cells = 1;
+  optional string next_cursor = 2;
+  // TWO DIFFERENT EMPTY-CELL SENTENCES (`docs/mobile-offline.md:224`): no
+  // thumbnail pack at all, versus these particular thumbnails not being in one.
+  // A single "no image" would make a member who has no pack and a member whose
+  // pack has evicted these look at the same screen.
+  bool thumbnail_pack_absent = 3;
+}
+
+message PhotoCell {
+  string asset_id = 1;
+  // The thumbnail's local path, when the pack has it. Absent is a real answer,
+  // and `thumbnail_pack_absent` says which kind of absent.
+  optional string thumbnail_path = 2;
+  // RFC 3339 plus the capture-local UTC offset in minutes, both, because a
+  // photo's day is its capture day and not the reader's
+  // (`media_asset.captured_at` and its offset column).
+  string captured_at = 3;
+  int32 captured_utc_offset_minutes = 4;
+  Kind kind = 5;
+  bool favorite = 6;
+  // A Live Photo's still and its paired movie share one capture group; the grid
+  // shows one cell (`apps/mobile/NATIVE_V0.md:11-19`).
+  optional string capture_group_id = 7;
+  // WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH (#1025 S5, D-1025-S7-62).
+  //
+  // A CLOSED ENUM and not three booleans. The five states are mutually
+  // exclusive by construction and a cell that could be two of them at once is
+  // a cell drawing two affordances; the derivation is one function
+  // (`PhotosReads.heldOf`) over `seat_blob_held` and the member's rule, and it
+  // is the only thing allowed to produce this value.
+  Held held = 8;
+  // HOW FAR A `HELD_FETCHING` CELL HAS GOT, 0-100, and 0 when nobody can say.
+  //
+  // Zero is an honest "not known" rather than "nothing has crossed": the byte
+  // plane reports per-blob completion and not per-blob progress in this build,
+  // so a spinner with no percentage is what a member gets, and a fabricated
+  // number would be worse than none. Meaningless on any other state.
+  uint32 fetch_percent = 9;
+  // THE BYTES A DOWNLOAD ARROW WOULD ASK FOR: the ORIGINAL's content hash,
+  // lowercase hex, empty when this replica has no row naming one.
+  //
+  // It is on the cell because the tap has to name a blob and the cell is what
+  // the member taps. Not a path and not a URI: `seat.bytes.fetch` takes a
+  // hash, and a shell that had to compose `blob:blake3-<hex>` would be a shell
+  // spelling a scheme that is the core's.
+  string original_hash = 10;
+
+  // The five states a cell can be in, and no sixth.
+  enum Held {
+    HELD_UNSPECIFIED = 0;
+    // The original is on this device. Everything a member can do with the
+    // photograph, they can do offline.
+    HELD_ORIGINAL = 1;
+    // A thumbnail (or a preview) is here and the original is not, and nothing
+    // is holding the original back but a window that has not come round yet.
+    HELD_THUMBNAIL_ONLY = 2;
+    // The member tapped it and the bytes are moving.
+    HELD_FETCHING = 3;
+    // The member's own transfer rule is why the original is not here. The
+    // distinction that matters: this is a DECISION and not a failure, and it
+    // is the state that carries the download arrow.
+    HELD_WITHHELD_BY_RULE = 4;
+    // Nothing of this photograph has reached this device — not even a
+    // thumbnail. A freshly paired phone mid-first-copy is every cell in this
+    // state, and it is not an error.
+    HELD_ABSENT = 5;
+  }
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_PHOTO = 1;
+    KIND_VIDEO = 2;
+    KIND_AUDIO = 3;
+    KIND_SCAN = 4;
+  }
+}
+
+// A photo state view: a DISCRIMINATED UNION and not a bag of optionals
+// (law 3, `navigation.ts:43-46`).
+message PhotoStateView {
+  oneof view {
+    Mode mode = 1;
+    Person person = 2;
+  }
+
+  message Mode {
+    Kind kind = 1;
+
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      KIND_FAVORITES = 1;
+      KIND_ARCHIVE = 2;
+      KIND_TRASH = 3;
+      KIND_VIDEOS = 4;
+    }
+  }
+
+  message Person {
+    string party_id = 1;
+    // The name rides along, so the app bar need not wait a replica round trip.
+    string person_name = 2;
+  }
+}
+
+// The camera-roll backup, as a state.
+message BackupState {
+  Phase phase = 1;
+  uint32 assets_remaining = 2;
+  uint32 assets_transferred_this_session = 3;
+  uint64 bytes_transferred_this_session = 4;
+  // WHICH TRANSPORT carried them. The iOS background-transfer experiment
+  // (`mobile/maestro/ios-transfer-experiment.md`) decides which of these the
+  // product ships, and until it has run this field is what a diagnostics screen
+  // reports rather than a claim in a document.
+  Transport transport = 5;
+  // Why it is not running, when it is not. Never inferred from a radio: the
+  // pass asks the platform for the real answer.
+  string paused_reason = 6;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_IDLE = 1;
+    PHASE_ENUMERATING = 2;
+    PHASE_TRANSFERRING = 3;
+    // Wi-Fi and charger rules are queried BEFORE EACH background item, not
+    // once per pass (`NATIVE_V0.md:11-19`).
+    PHASE_WAITING_FOR_POWER = 4;
+    PHASE_WAITING_FOR_UNMETERED = 5;
+    PHASE_PARKED_LOW_DISK = 6;
+    PHASE_DONE = 7;
+  }
+
+  enum Transport {
+    TRANSPORT_UNSPECIFIED = 0;
+    TRANSPORT_IROH_BLOBS = 1;
+    // The HTTPS blob door, behind the `blob-door` feature — the one exception
+    // to `no-listening-socket`.
+    TRANSPORT_HTTPS_BLOB_DOOR = 2;
+  }
+}
+
+message PhotosGridEvent {
+  oneof kind {
+    Opened opened = 1;
+    DestinationChanged destination = 2;
+    NextPageRequested next_page = 3;
+    DataArrived data = 4;
+    ReadRefused refused = 5;
+    PermissionChanged permission = 6;
+    PermissionRequested permission_requested = 7;
+    StateViewOpened state_view = 8;
+    SheetChanged sheet = 9;
+    BackupChanged backup = 10;
+    SeatChanged seat_changed = 11;
+    RowsChanged rows_changed = 12;
+    OriginalRequested fetch_original = 14;
+    FetchSettled fetch_settled = 15;
+  }
+
+  // 13 WAS `BytesArrived`, DELETED BY D-1025-S7-20. A landed byte is a row:
+  // the seat keeps `seat_blob_held`, the page read joins it, and the core names
+  // the ASSET rows a window's files belong to — so a blob arriving is an
+  // ordinary `RowsChanged` over `media_asset` and this grid has one fewer event
+  // to reduce. The event only ever existed because the ids the core had were
+  // content ids, which matched nothing this screen was showing.
+  //
+  // Reserved at the MESSAGE and not in the `oneof`: a oneof's numbers are the
+  // message's, and proto3 has no `reserved` inside one.
+  reserved 13;
+
+  message Opened {}
+
+  // THE MEMBER TAPPED THE DOWNLOAD ARROW ON ONE CELL (#1025 S5,
+  // D-1025-S7-63).
+  //
+  // Both ids, because they answer two different questions: the hash is what
+  // addresses the bytes and the asset id is what the grid keys the cell by, so
+  // the reducer can put that one cell into `HELD_FETCHING` without waiting for
+  // the round trip. Deriving one from the other would mean a second read.
+  message OriginalRequested {
+    string asset_id = 1;
+    string content_hash = 2;
+  }
+
+  // The fetch came back. `fetched` true means the bytes landed — and the row
+  // change that lands WITH them is what actually redraws the cell, so this
+  // event exists for the OTHER outcomes: a gateway that was not reached, and a
+  // refusal by code. A cell stuck spinning because nobody said "it did not
+  // happen" is the state this deletes.
+  message FetchSettled {
+    string asset_id = 1;
+    bool fetched = 2;
+    // A member-facing sentence from the core's own table, empty when there is
+    // nothing worth saying. Never a detail, never a path, never a hash.
+    string sentence = 3;
+  }
+
+  // A change event named assets this grid may be showing (#1025 S5). It carries
+  // IDS and never values: the core's change stream never carries values, which
+  // is what makes its coalescing lossless, and a grid re-reads rather than
+  // patching a cell whose position in the sort may have moved.
+  message RowsChanged {
+    repeated string asset_ids = 1;
+  }
+
+  message DestinationChanged {
+    PhotosGridState.Destination destination = 1;
+  }
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    PhotosGridData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message PermissionChanged {
+    MediaPermission permission = 1;
+  }
+
+  message PermissionRequested {}
+
+  message StateViewOpened {
+    PhotoStateView view = 1;
+  }
+
+  message SheetChanged {
+    PhotosGridState.Sheet sheet = 1;
+  }
+
+  message BackupChanged {
+    BackupState backup = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notes editor
+// ---------------------------------------------------------------------------
+
+message NotesEditorState {
+  SeatState seat = 1;
+  string note_id = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    NoteDraft draft = 5;
+  }
+  // THE SAVE'S OWN STATE. Separate from `content`, because a save that failed
+  // over a body the member can still see is not a failed READ and must not
+  // replace the editor with an error.
+  SaveState save = 6;
+
+  enum SaveState {
+    SAVE_STATE_UNSPECIFIED = 0;
+    SAVE_STATE_CLEAN = 1;
+    SAVE_STATE_DIRTY = 2;
+    SAVE_STATE_SAVING = 3;
+    // Written to this device's outbox; the gateway has not confirmed.
+    SAVE_STATE_QUEUED = 4;
+    SAVE_STATE_REFUSED = 5;
+  }
+}
+
+message NoteDraft {
+  string title = 1;
+  string body = 2;
+  Format format = 3;
+  bool pinned = 4;
+  // The revision this draft was read from, so a save can be concurrency-checked
+  // rather than last-write-wins.
+  string base_revision_id = 5;
+  // Set when the save was refused; the sentence a member reads.
+  optional ReadFailure save_failure = 6;
+  // THE BODY HAS NOT ARRIVED, which is not the same as an empty note (#1025
+  // S5). A note's body is not a column: it lives in the content item
+  // `body_content_id` points at and is read through the byte door, and a seat
+  // whose reads cannot reach that door yet answers a draft with no body in it.
+  //
+  // An editor that could not tell those apart would let a member save an empty
+  // body over a real one — `knowledge.save_note` takes the whole draft, so a
+  // blank field is an instruction to blank the note. The flag exists so the
+  // save can be REFUSED rather than made destructive, and it is on the draft
+  // rather than on the state because it is a fact about the row that arrived.
+  bool body_unavailable = 7;
+
+  enum Format {
+    FORMAT_UNSPECIFIED = 0;
+    FORMAT_MARKDOWN = 1;
+    FORMAT_HTML = 2;
+    FORMAT_PLAIN = 3;
+  }
+}
+
+message NotesEditorEvent {
+  oneof kind {
+    Opened opened = 1;
+    DataArrived data = 2;
+    ReadRefused refused = 3;
+    TitleEdited title = 4;
+    BodyEdited body = 5;
+    PinToggled pin = 6;
+    SaveRequested save = 7;
+    SaveSettled save_settled = 8;
+    SeatChanged seat_changed = 9;
+    RowsChanged rows_changed = 10;
+  }
+
+  message Opened {
+    string note_id = 1;
+  }
+
+  // A change event named notes (#1025 S5). Whether this editor re-reads is the
+  // REDUCER's decision and not the sender's: a member with an unsaved draft
+  // must not have it replaced by a copy that arrived from the gateway, so the
+  // event is delivered and the machine ignores it while the draft is dirty.
+  message RowsChanged {
+    repeated string note_ids = 1;
+  }
+
+  message DataArrived {
+    NoteDraft draft = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message TitleEdited {
+    string title = 1;
+  }
+
+  message BodyEdited {
+    string body = 1;
+  }
+
+  message PinToggled {}
+
+  message SaveRequested {}
+
+  message SaveSettled {
+    NotesEditorState.SaveState outcome = 1;
+    optional ReadFailure failure = 2;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Home — the graded springboard
+// ---------------------------------------------------------------------------
+
+// HOW MUCH THIS APP HAS TO SAY, and how sure we are (#1020, wave A).
+//
+// FOUR states, not three, and the fourth is the point. v0's own words
+// (`apps/mobile/src/screens/home/tile-model.ts`): "empty != not-loaded". A
+// tile that read nothing because this seat has no copy yet is `UNKNOWN`, and
+// only a tile whose read LANDED and returned nothing is `EMPTY`. Collapsing
+// them is how a springboard tells a member their vault is empty when the truth
+// is that it has not looked.
+enum TileStatus {
+  TILE_STATUS_UNSPECIFIED = 0;
+  TILE_STATUS_LOADING = 1;
+  // No replica, no grant, or a read that failed. We do not KNOW.
+  TILE_STATUS_UNKNOWN = 2;
+  // A landed read returned nothing. The only state that may say "empty".
+  TILE_STATUS_EMPTY = 3;
+  TILE_STATUS_CONTENT = 4;
+}
+
+// `SMALL` 1x1, `MEDIUM` 2x1, `LARGE` 2x2 — which FLATTENS to 2x1 on the phone's
+// two-column grid. The class follows the app's BODY and never its importance: a
+// mosaic needs area, prose needs measure, a figure needs neither.
+enum TileSize {
+  TILE_SIZE_UNSPECIFIED = 0;
+  TILE_SIZE_SMALL = 1;
+  TILE_SIZE_MEDIUM = 2;
+  TILE_SIZE_LARGE = 3;
+}
+
+// A count a read ACTUALLY RETURNED.
+//
+// A message rather than a `uint32`, so its absence is a value: absent is the
+// withheld glyph and never a fabricated `0`. Locker withholds its count by
+// design, and a `0` there would be a lie about how many secrets a member has.
+message TileCount {
+  uint32 value = 1;
+  // The read hit its ceiling, so the true number is at least `value` — which is
+  // why the status line says "at least" when anything is capped.
+  bool capped = 2;
+}
+
+// What one app's tile renders. A discriminated union and not a bag of
+// optionals: the eight bodies share no field, and a reader of `photos` must not
+// be able to ask for `figure`.
+message TileBody {
+  oneof kind {
+    Photos photos = 1;
+    Docs docs = 2;
+    Agenda agenda = 3;
+    People people = 4;
+    Tasks tasks = 5;
+    Tally tally = 6;
+    Locker locker = 7;
+    Notes notes = 8;
+  }
+
+  message Photos {
+    repeated Cell cells = 1;
+    // The thumbnail pack is on this device. False means the mosaic's cells draw
+    // as placeholders for a reason the member can act on.
+    bool offline_pack = 2;
+
+    message Cell {
+      string asset_id = 1;
+      // Absent when the asset exists and its bytes are not addressable yet. It
+      // is STILL A CELL: dropping the row reflows ten photos as one blank under
+      // a "10".
+      optional string thumbnail_path = 2;
+    }
+  }
+
+  message Docs {
+    repeated Row rows = 1;
+
+    message Row {
+      string document_id = 1;
+      string name = 2;
+      // Already formatted by the core, which knows the vault's locale. Never
+      // formatted in a view from a byte count.
+      string size = 3;
+    }
+  }
+
+  message Agenda {
+    string title = 1;
+    // RFC 3339 in the VAULT's zone, never the host's (R-1020-33).
+    string at = 2;
+    // The relative phrase the core computed against the vault's clock.
+    string after = 3;
+  }
+
+  message People {
+    repeated Face faces = 1;
+    // How many more than the faces shown.
+    uint32 more = 2;
+
+    message Face {
+      // `party_id`, NEVER the display name: the avatar hue is derived from this
+      // so that a rename does not repaint a face the member recognises.
+      string party_id = 1;
+      string initials = 2;
+      // The stored colour, when the vault holds one. Absent falls through to
+      // derivation from `party_id`; a seeded vault leaves it empty and an empty
+      // string is not a choice.
+      optional string color = 3;
+    }
+  }
+
+  message Tasks {
+    repeated Row rows = 1;
+
+    message Row {
+      string task_id = 1;
+      string title = 2;
+      bool done = 3;
+    }
+  }
+
+  message Tally {
+    Money figure = 1;
+    string caption = 2;
+    // The rolling comparison, when there is one. Absent renders nothing rather
+    // than a zero delta.
+    optional string after = 3;
+  }
+
+  // Locker's body is a STATE and not a query result, which is why it always has
+  // something true to say and is never an invitation to fill it.
+  message Locker {
+    bool locked = 1;
+  }
+
+  message Notes {
+    string note_id = 1;
+    string title = 2;
+    string excerpt = 3;
+  }
+}
+
+message HomeTile {
+  string app_id = 1;
+  TileStatus status = 2;
+  // ABSENT is the withheld glyph. See `TileCount`.
+  TileCount count = 3;
+  // The count's own words, from the app's copy leaf.
+  string count_label = 4;
+  TileSize size = 5;
+  // `MEDIUM`, and `LARGE` flattened: full width on the two-column phone grid.
+  bool wide = 6;
+  // What to DO, never what is missing. Rendered only in the one case grading
+  // leaves: a tile that earned the grid while loading and settled with nothing.
+  string empty_copy = 7;
+  TileBody body = 8;
+  // This tile earned a place in the grid. `CONTENT` and `LOADING` earn it —
+  // a read in flight holds its slot at full geometry, because demoting and
+  // re-promoting a beat later is a relayout the member watches. Locker always
+  // earns it. `EMPTY` and `UNKNOWN` do not, and fall to first moves.
+  bool earns_grid = 9;
+}
+
+// Which of the three Homes this is.
+enum Springboard {
+  SPRINGBOARD_UNSPECIFIED = 0;
+  SPRINGBOARD_LOADING = 1;
+  // Every readable tile SETTLED and returned nothing. A claim about the vault,
+  // which an unsettled read has not earned.
+  SPRINGBOARD_FIRST_RUN = 2;
+  SPRINGBOARD_CONTENT = 3;
+}
+
+// An app that failed `earns_grid`, offered as something to do.
+message FirstMove {
+  // An app id, or `connectors` — the one move that is not an app.
+  string id = 1;
+  // Verb first, and it must land somewhere that can TAKE content.
+  string label = 2;
+  string hint = 3;
+  string icon_key = 4;
+  // Absent on the non-app move.
+  optional string color = 5;
+}
+
+// The one number describing the whole vault, assembled from numbers each true.
+message ThingCount {
+  // Sums ONLY counts a read returned. A withheld count is omitted, never
+  // treated as zero.
+  uint32 total = 1;
+  // Something contributed its ceiling, so the honest phrasing is "at least".
+  bool capped = 2;
+  // Every tile has settled. False means the total is still moving.
+  bool settled = 3;
+}
+
+// Home's health ribbon: the vault at a glance, and whether the gateway holding
+// it is answering.
+//
+// The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
+// red dot. `QUIET` is deliberately ignorable; the other two earn one rule and
+// one action, never a filled warning plate.
+message HomeStatus {
+  Tone tone = 1;
+  // The ambient sentence about the route.
+  string copy = 2;
+  // What a member can do, when there is something. Empty when there is not.
+  string action = 3;
+  Destination destination = 4;
+
+  enum Tone {
+    TONE_UNSPECIFIED = 0;
+    TONE_QUIET = 1;
+    TONE_ATTENTION = 2;
+    TONE_URGENT = 3;
+  }
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    // Not a button. A quiet signal with nowhere to go is still a true sentence.
+    DESTINATION_NONE = 1;
+    DESTINATION_PHONE = 2;
+    DESTINATION_NOTIFICATIONS = 3;
+    DESTINATION_BACKUP = 4;
+  }
+}
+
+message HomeState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    HomeData data = 4;
+  }
+  // The all-apps listing is a SHEET and never a destination — the same law the
+  // Photos grid's `more` follows.
+  bool all_apps_sheet_open = 5;
+  // The vault lockup, true on every route — see `VaultLockup`.
+  VaultLockup vault = 6;
+  // EVERY VAULT THIS DEVICE HOLDS, the active one included.
+  //
+  // A switcher that listed only the OTHERS would be a control that never shows
+  // a member where they already are, and the sheet's tick — "this is the one
+  // you are reading" — is the fact the member came to check. The order is the
+  // shell's listing order and is not re-sorted here: a roster that reordered
+  // itself as vaults were added would move the row under a thumb.
+  repeated VaultLockup vaults = 7;
+  // The vault switcher is a SHEET, exactly as the all-apps listing is: it is
+  // not a second Home, it gets no route, and it survives no navigation.
+  bool vault_sheet_open = 8;
+}
+
+message HomeData {
+  // The whole springboard's verdict, decided by the machine so that two shells
+  // cannot disagree about which Home this is.
+  Springboard springboard = 1;
+  // In `SPRINGBOARD_ORDER`, which is the hand-off's tile list and NOT the
+  // catalogue's order. Freshness decides what is IN a tile; it must never
+  // decide where the tile sits.
+  repeated HomeTile tiles = 2;
+  // At most three. A nudge as tall as its grid is no nudge.
+  repeated FirstMove first_moves = 3;
+  ThingCount things = 4;
+  HomeStatus status = 5;
+  // EVERY tile is `UNKNOWN` — no replica, no grant, or every read failed. The
+  // whole springboard's verdict and not one app's, because demoting one
+  // unreadable tile beside readable neighbours is right and demoting them ALL
+  // leaves a launcher with no tiles. The grid is shown anyway, precisely so the
+  // screen does not claim the vault is empty.
+  bool every_tile_unreadable = 6;
+  // THE PACKED GRID, DECIDED HERE SO THE TWO SHELLS CANNOT PACK IT DIFFERENTLY.
+  //
+  // Mixed sizes leave a HOLE whenever a 1x1 is followed by a full-width tile,
+  // and the fix is to pull the next small forward past the wides between them —
+  // never to resize, drop or demote a tile to make a row come out even. That is
+  // an ORDERING decision over `wide`, which is to say a decision, which is to
+  // say the machine's.
+  //
+  // The first build of wave A left it to the renderers and they disagreed
+  // immediately: Compose's `LazyVerticalGrid` honours a span and SwiftUI's
+  // `LazyVGrid` silently ignores `.gridCellColumns`, so one shell drew Photos
+  // full width and the other drew it at a half. A row here carries APP IDS and
+  // not tiles, so the tile itself is still stated exactly once.
+  repeated TileRow grid_rows = 7;
+}
+
+// One drawn row of the springboard: the app ids in it, left to right.
+message TileRow {
+  repeated string app_ids = 1;
+}
+
+// THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and how it stands with the
+// gateway behind it.
+//
+// No greeting. The springboard was the only route in v0 that drew them, and
+// inside an app the member lost both — which vault they were reading, and
+// whether it was reaching its gateway — so the lockup became chrome an app can
+// mount. It hangs off the STATE rather than off `HomeData` for the same reason
+// the sheet flag does: it is true while Home is loading and true while Home has
+// failed, and a lockup that vanished when a read failed would take the vault's
+// name away at the moment a member most needs to know which vault they are
+// looking at.
+//
+// **THE SECOND FACT IS THE VAULT'S, NEVER A GATEWAY'S NAME (#1025).** This
+// carried `gateway_name` for two waves and nothing on any layer ever wrote it:
+// `grep -rn gateway_name crates` answered nothing, so both shells drew "not
+// connected to a gateway" over a device that had paired, synced and was holding
+// its rows. It was not a missing assignment. Nothing in the pairing exchange
+// names a gateway — `PairOk` answers a vault id, a vault name and an address —
+// and #1025 settled why: a device pairs with a VAULT, one connection and one
+// replica per vault, and a gateway is not a noun the device has. Two vaults
+// behind one gateway is a coincidence a device never acts on and must never
+// surface. So the field was a name that could not exist, and [State] is the
+// fact that can: how THIS vault stands on this device.
+//
+// **AND THE SECOND FACT IS A STATE, NOT AN ACT (#1025 S7-9).** The enum that
+// replaced `gateway_name` was `Link`, and it in turn had a hole: it modelled
+// PAIRING as one of a vault's states. A device that holds a vault has already
+// paired — that is what holding one means — so `LINK_UNPAIRED` described the
+// DEVICE (zero vaults held, show the pair flow) and could never be true of a
+// row in the switcher. [State] is the three things that can be true of a
+// holding, and every one of them is derived rather than stored.
+message VaultLockup {
+  // THE VAULT'S OWN ID, which is what a switch names — never a path.
+  //
+  // Where a vault's bytes sit is the shell's business: one shell keeps them in
+  // an iOS container it is handed at launch and the other in an Android files
+  // dir, and a screen state that carried either would be a screen state with a
+  // filesystem in it. The shell resolves an id to a location; the machine only
+  // ever says WHICH vault.
+  //
+  // Empty on a lockup the shell has not yet identified — a vault whose file
+  // would not open, say — and such a vault cannot be switched to, which is
+  // correct: the switch would fail at the same door the identification did.
+  string vault_id = 5;
+  // Empty is a REAL STATE, not a missing value: a member with no vault yet gets
+  // "No vault yet" rather than a blank lockup.
+  string vault_name = 1;
+  // The vault's own identity hue as `#rrggbb`, or empty for plain ink. The
+  // shells wash it behind the mark exactly as an app chip is washed.
+  string color = 3;
+  // How this vault stands on this device. Said IN PLACE, under the vault's
+  // name, never as a banner: none of these is an incident.
+  State state = 7;
+  // ORIGINALS THIS DEVICE'S OWN TRANSFER RULE IS HOLDING BACK (#1025 S4,
+  // D-1025-S7-61).
+  //
+  // The last pass's `withheld`, carried onto the lockup so the header can say
+  // it in place. **A grid of thumbnails with no full-size files is a DECISION
+  // and not a failure**, and a line that does not say so is how a working byte
+  // plane looks broken: the member set the rule, and the number is the only
+  // thing on the screen that connects the two.
+  //
+  // A MODIFIER on the state line and not a fourth `State`. The vault is online
+  // or offline independently of it — a device can be perfectly current and
+  // still be waiting for Wi-Fi to bring the photographs.
+  uint32 originals_withheld = 8;
+
+  // `gateway_name`, which no layer could ever write; `offline`, which only
+  // meant something beside it; and `link`, whose enum made pairing a STATE of
+  // a vault. See the message header and [State].
+  reserved 2, 4, 6;
+  reserved "gateway_name", "offline", "link";
+
+  // HOW THIS VAULT STANDS ON THIS DEVICE — THREE CASES AND NO FOURTH (#1025
+  // S7-9, superseding D-1025-S7-8's `Link`).
+  //
+  // **Pairing is an ACTION, not a state.** `Link` had five cases and two of
+  // them were not states of a vault at all. `LINK_UNPAIRED` was a state of the
+  // DEVICE — a device holding zero vaults shows the pair flow, and a vault
+  // that is held was by definition admitted — so a vault could never truthfully
+  // be "unpaired" and the case only ever fired as a guess. `LINK_PAIRED` meant
+  // "admitted, nothing has reported yet", which is the same thing to a member
+  // as "the copy is still coming": both are [STATE_SYNCING].
+  //
+  // What is left is one axis with three values, each of which a member can act
+  // on differently, and every one of them DERIVED — from the last pass's
+  // outcome and whether a pass is in flight — rather than stored. A stored
+  // state is a state that can disagree with the file beside it.
+  //
+  // "Behind N" is a MODIFIER and not a case: a vault that reached its gateway
+  // and has N entries still to apply is online and busy, not a fourth state.
+  enum State {
+    // The proto zero, and NEVER EMITTED. Every holding has one of the three
+    // below the moment the shelf knows about it, and a shell that receives
+    // this is looking at a lockup nobody filled in — it draws no line rather
+    // than a claim.
+    STATE_UNSPECIFIED = 0;
+    // A pass is in flight, or the first copy has not fully landed. This
+    // absorbs what `LINK_PAIRED` used to say: between redeeming a ticket and
+    // holding a whole file, what a member is owed is "your vault is being
+    // copied", with a progress percent when the copy reports one.
+    STATE_SYNCING = 1;
+    // The last pass REACHED the gateway and finished. A PAST-TENSE FACT, and
+    // the wording must stay past tense: nothing here probes a gateway, so a
+    // header that said "connected" would promise a live link this state has
+    // not checked. "Synced" is what it may say.
+    STATE_ONLINE = 2;
+    // The last pass did not reach the gateway. A phone in a lift is not a
+    // broken phone: the copy still reads, writes still queue, and the next
+    // window continues from here.
+    STATE_OFFLINE = 3;
+  }
+}
+
+message HomeEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    TileArrived tile = 3;
+    TileRefused tile_refused = 4;
+    StatusChanged status = 5;
+    AllAppsSheetToggled all_apps = 6;
+    SeatChanged seat_changed = 7;
+    MovePicked move_picked = 8;
+    VaultChanged vault_changed = 9;
+    VaultSwitchRequested vault_switch = 10;
+    VaultPicked vault_picked = 12;
+    RosterChanged roster_changed = 13;
+  }
+
+  // `VaultsListed`, the one-shot survey. See `RosterChanged`.
+  reserved 11;
+  reserved "vaults_listed";
+
+  // THE SHELF PUBLISHED ITS HOLDINGS (#1025 S7-9).
+  //
+  // Sent whenever MEMBERSHIP changes (a vault admitted, a vault forgotten) or
+  // any holding's `State` moves — which makes the switcher's rows and the
+  // header's second line two renderings of ONE stream rather than two things
+  // updated by two mechanisms that can disagree. That disagreement is what
+  // `VaultsListed` was: a one-shot survey taken at launch and never taken
+  // again, so a vault admitted afterwards was invisible until relaunch and a
+  // vault that went offline kept whatever the survey guessed.
+  //
+  // The ACTIVE vault is in here too, exactly as it is in `HomeState.vaults`,
+  // and its row carries the same `State` the header draws. The header still
+  // gets `VaultChanged` separately, because a switch is a different event from
+  // a roster moving under it.
+  message RosterChanged {
+    repeated VaultLockup vaults = 1;
+  }
+
+  // The active vault, or the gateway behind it, changed. A vault switch
+  // re-points the whole app, so Home reloads: the tiles it is holding belong to
+  // the vault the member just left.
+  message VaultChanged {
+    VaultLockup vault = 1;
+  }
+
+  // The member pressed the lockup. THE MARK IS THE SWITCH — there is no
+  // separate control beside it, because a lockup that is not pressable and a
+  // chevron that is are two affordances for one act.
+  message VaultSwitchRequested {}
+
+  // The member chose one from the sheet. The SHEET closes here and the vault
+  // changes later — re-pointing is I/O, and `VaultChanged` is what says it
+  // landed. A reducer that swapped the lockup on the tap would name a vault
+  // that was not open yet.
+  message VaultPicked {
+    string vault_id = 1;
+  }
+
+  message Opened {}
+
+  message Refreshed {}
+
+  // ONE APP'S tile landed. Home fans out one read per app and they arrive
+  // independently, so a tile is an event and not a field of one big answer: a
+  // Home that waited for the slowest app would be a Home nobody sees.
+  message TileArrived {
+    string app_id = 1;
+    TileStatus status = 2;
+    TileCount count = 3;
+    string count_label = 4;
+    TileBody body = 5;
+  }
+
+  // One app's read failed. `UNKNOWN`, never `EMPTY`.
+  message TileRefused {
+    string app_id = 1;
+    ReadFailure failure = 2;
+  }
+
+  message StatusChanged {
+    HomeStatus status = 1;
+  }
+
+  message AllAppsSheetToggled {
+    bool open = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message MovePicked {
+    string move_id = 1;
+  }
+}

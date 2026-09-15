@@ -1,0 +1,92 @@
+# electron-builder for the desktop seat (#1020 wave 3 lane F, D-1020-F7).
+#
+# Carried from `apps/desktop/electron-builder.yml` with three deliberate
+# differences, each named:
+#
+#  1. `files:` lists every runtime asset EXPLICITLY, because a file that is not
+#     listed is simply absent in the built app with no error — v0's symptom was
+#     an empty menu-bar icon (census §F seam 6). Here the renderer's own
+#     `index.html`, `styles.css` and bundle live under `dist/renderer/`, and
+#     `dist/**/*` covers them; the tray assets v0 had to list separately do not
+#     exist yet, and when they do they go on this list and not into a comment.
+#  2. `extraResources` carries the `centraid` BINARY. The seat is a separate
+#     process, not a dylib, which is why the mac entitlements below drop
+#     `disable-library-validation` — nothing unsigned is loaded into this
+#     process.
+#  3. The protocol registration is HERE, in this file, and not in a second one.
+#     v0 keeps it in `electron-builder/app-id.json`, so a lane that rewrote one
+#     config silently lost `centraid://` (census §F seam 6). One file, one
+#     place; `electron-builder/app-id.json` beside this one is kept as a
+#     pointer at it so the old path does not read as the source of truth.
+
+appId: dev.centraid.desktop
+productName: Centraid
+copyright: Copyright © Centraid
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+  - "!dist/**/*.map"
+
+# THE `centraid://` REGISTRATION. The media door and the deep link are the same
+# scheme; a build without this is a build whose `<video>` tags never load and
+# whose OAuth return never arrives.
+protocols:
+  - name: Centraid
+    schemes:
+      - centraid
+
+# The seat sidecar, per platform. Built by `.github/workflows/lane-release-
+# desktop.yml`; when lane G's prebuilt-core artifacts land, the workflow
+# downloads them instead of compiling, and this path does not change.
+extraResources:
+  - from: resources/centraid
+    to: centraid
+
+extraMetadata:
+  main: dist/main.js
+
+# ZIP for the updater, DMG for humans — v0's split, unchanged.
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # `identity: null` = unsigned scaffolding. CI flips this on enrolment; see
+  # `docs/enrollment.md`.
+  identity: null
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+
+linux:
+  target:
+    - AppImage
+  category: Office
+  # Version-less filename so a self-update overwrites in place.
+  artifactName: Centraid-${arch}.${ext}
+
+# Metadata only — CI always runs `--publish never` and softprops is the single
+# publisher.
+publish:
+  provider: github
+  releaseType: release
+  owner: srikanth235
+  repo: centraid

@@ -1,0 +1,1399 @@
+[
+  {
+    "input": {},
+    "output": {
+      "documents": [
+        {
+          "byte_size": 53,
+          "content_id": "id-0056",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Deposit%20receipt%0A%0AThree%20hundred%20pounds%2C%20refundable.%0A",
+          "created_at": "2099-06-01T09:00:35.000Z",
+          "custody_state": null,
+          "document_id": "id-0045",
+          "folder_id": "id-0034",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "circle",
+              "circle_id": "circle-family",
+              "container_id": "id-0033",
+              "grant_id": "grant-folder",
+              "label": "Family",
+              "member_count": 2,
+              "members": [
+                {
+                  "capability": "read",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                },
+                {
+                  "capability": "read",
+                  "label": "Tom",
+                  "party_id": "party-tom",
+                  "status": "invited"
+                }
+              ],
+              "pending_count": 1,
+              "via": "folder"
+            }
+          ],
+          "starred": false,
+          "tags": [],
+          "title": "Deposit receipt",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 40,
+          "content_id": "id-0054",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20first.%0A",
+          "created_at": "2099-06-01T09:00:11.000Z",
+          "custody_state": null,
+          "document_id": "id-0047",
+          "folder_id": null,
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Lease 2099 (signed)",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:31.000Z"
+        },
+        {
+          "byte_size": 205,
+          "content_id": "id-0052",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Renters%20insurance%20policy%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20policy.%0A%0A-%20Policy%20number%3A%20SAMPLE-0000-0000%0A-%20Personal%20property%3A%20%2430%2C000%0A-%20Liability%3A%20%24100%2C000%0A-%20Deductible%3A%20%24500%0A-%20Renews%20annually%0A",
+          "created_at": "2099-06-01T09:00:07.000Z",
+          "custody_state": null,
+          "document_id": "id-0043",
+          "folder_id": "id-0030",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": "2099-06-01T09:00:37.000Z",
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Renters insurance policy (sample)",
+          "trashed": true,
+          "updated_at": "2099-06-01T09:00:39.000Z"
+        },
+        {
+          "byte_size": 268,
+          "content_id": "id-0050",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Cabin%20rental%20agreement%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20agreement.%0A%0A-%20Property%3A%203BR%20cabin%2C%20South%20Lake%20Tahoe%0A-%20Nights%3A%202099-06-04%20to%202099-06-07%0A-%20Rate%3A%20%24180%20per%20night%0A-%20Deposit%3A%20%24300%2C%20refundable%0A-%20Check-in%204pm%2C%20check-out%2010am%0A-%20No%20smoking%3B%20dogs%20welcome%0A",
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "custody_state": null,
+          "document_id": "id-0041",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Cabin rental agreement (sample)",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 222,
+          "content_id": "id-0048",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Tahoe%20packing%20list%0A%0ALeaving%202099-06-04%2C%20back%202099-06-07.%0A%0A-%20Rain%20shell%0A-%20Hiking%20boots%0A-%20Headlamp%0A-%20Swimsuit%20(the%20cabin%20has%20a%20hot%20tub)%0A-%20Board%20games%0A-%20Tire%20chains%20(I-80%20requires%20them%20after%20a%20storm)%0A-%20Cooler%20for%20the%20drive%0A",
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "custody_state": null,
+          "document_id": "id-0037",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "person",
+              "circle_id": null,
+              "container_id": "id-0037",
+              "grant_id": "grant-document",
+              "label": "Ana",
+              "member_count": 1,
+              "members": [
+                {
+                  "capability": "read+write",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                }
+              ],
+              "pending_count": 0,
+              "via": "document"
+            }
+          ],
+          "starred": true,
+          "tags": [
+            {
+              "label": "tahoe",
+              "tag_id": "id-0039"
+            }
+          ],
+          "title": "Tahoe packing list",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "byte_size": 9,
+          "content_id": "content-delivered",
+          "content_uri": "data:text/plain;charset=utf-8,delivered",
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "custody_state": null,
+          "document_id": "doc-delivered",
+          "folder_id": null,
+          "media_type": null,
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": {
+            "at": 4083987600000,
+            "name": "Ana",
+            "party_id": "party-ana",
+            "vault_id": "vault-ana"
+          },
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "A document that arrived",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:00.000Z"
+        }
+      ],
+      "folders": [
+        {
+          "folder_id": "id-0030",
+          "name": "Home",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0034",
+          "name": "Leases",
+          "parent_id": "id-0033"
+        },
+        {
+          "folder_id": "id-0033",
+          "name": "Property",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0029",
+          "name": "Travel",
+          "parent_id": null
+        }
+      ],
+      "root_folder_id": "id-0028",
+      "shared_from_known": true,
+      "truncated": false,
+      "window": 200
+    },
+    "query": "drive"
+  },
+  {
+    "input": {
+      "limit": 20
+    },
+    "output": {
+      "documents": [
+        {
+          "byte_size": 53,
+          "content_id": "id-0056",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Deposit%20receipt%0A%0AThree%20hundred%20pounds%2C%20refundable.%0A",
+          "created_at": "2099-06-01T09:00:35.000Z",
+          "custody_state": null,
+          "document_id": "id-0045",
+          "folder_id": "id-0034",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "circle",
+              "circle_id": "circle-family",
+              "container_id": "id-0033",
+              "grant_id": "grant-folder",
+              "label": "Family",
+              "member_count": 2,
+              "members": [
+                {
+                  "capability": "read",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                },
+                {
+                  "capability": "read",
+                  "label": "Tom",
+                  "party_id": "party-tom",
+                  "status": "invited"
+                }
+              ],
+              "pending_count": 1,
+              "via": "folder"
+            }
+          ],
+          "starred": false,
+          "tags": [],
+          "title": "Deposit receipt",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 40,
+          "content_id": "id-0054",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20first.%0A",
+          "created_at": "2099-06-01T09:00:11.000Z",
+          "custody_state": null,
+          "document_id": "id-0047",
+          "folder_id": null,
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Lease 2099 (signed)",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:31.000Z"
+        },
+        {
+          "byte_size": 205,
+          "content_id": "id-0052",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Renters%20insurance%20policy%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20policy.%0A%0A-%20Policy%20number%3A%20SAMPLE-0000-0000%0A-%20Personal%20property%3A%20%2430%2C000%0A-%20Liability%3A%20%24100%2C000%0A-%20Deductible%3A%20%24500%0A-%20Renews%20annually%0A",
+          "created_at": "2099-06-01T09:00:07.000Z",
+          "custody_state": null,
+          "document_id": "id-0043",
+          "folder_id": "id-0030",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": "2099-06-01T09:00:37.000Z",
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Renters insurance policy (sample)",
+          "trashed": true,
+          "updated_at": "2099-06-01T09:00:39.000Z"
+        },
+        {
+          "byte_size": 268,
+          "content_id": "id-0050",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Cabin%20rental%20agreement%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20agreement.%0A%0A-%20Property%3A%203BR%20cabin%2C%20South%20Lake%20Tahoe%0A-%20Nights%3A%202099-06-04%20to%202099-06-07%0A-%20Rate%3A%20%24180%20per%20night%0A-%20Deposit%3A%20%24300%2C%20refundable%0A-%20Check-in%204pm%2C%20check-out%2010am%0A-%20No%20smoking%3B%20dogs%20welcome%0A",
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "custody_state": null,
+          "document_id": "id-0041",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Cabin rental agreement (sample)",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 222,
+          "content_id": "id-0048",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Tahoe%20packing%20list%0A%0ALeaving%202099-06-04%2C%20back%202099-06-07.%0A%0A-%20Rain%20shell%0A-%20Hiking%20boots%0A-%20Headlamp%0A-%20Swimsuit%20(the%20cabin%20has%20a%20hot%20tub)%0A-%20Board%20games%0A-%20Tire%20chains%20(I-80%20requires%20them%20after%20a%20storm)%0A-%20Cooler%20for%20the%20drive%0A",
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "custody_state": null,
+          "document_id": "id-0037",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "person",
+              "circle_id": null,
+              "container_id": "id-0037",
+              "grant_id": "grant-document",
+              "label": "Ana",
+              "member_count": 1,
+              "members": [
+                {
+                  "capability": "read+write",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                }
+              ],
+              "pending_count": 0,
+              "via": "document"
+            }
+          ],
+          "starred": true,
+          "tags": [
+            {
+              "label": "tahoe",
+              "tag_id": "id-0039"
+            }
+          ],
+          "title": "Tahoe packing list",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "byte_size": 9,
+          "content_id": "content-delivered",
+          "content_uri": "data:text/plain;charset=utf-8,delivered",
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "custody_state": null,
+          "document_id": "doc-delivered",
+          "folder_id": null,
+          "media_type": null,
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": {
+            "at": 4083987600000,
+            "name": "Ana",
+            "party_id": "party-ana",
+            "vault_id": "vault-ana"
+          },
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "A document that arrived",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:00.000Z"
+        }
+      ],
+      "folders": [
+        {
+          "folder_id": "id-0030",
+          "name": "Home",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0034",
+          "name": "Leases",
+          "parent_id": "id-0033"
+        },
+        {
+          "folder_id": "id-0033",
+          "name": "Property",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0029",
+          "name": "Travel",
+          "parent_id": null
+        }
+      ],
+      "root_folder_id": "id-0028",
+      "shared_from_known": true,
+      "truncated": false,
+      "window": 20
+    },
+    "query": "drive"
+  },
+  {
+    "input": {
+      "limit": 2000
+    },
+    "output": {
+      "documents": [
+        {
+          "byte_size": 53,
+          "content_id": "id-0056",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Deposit%20receipt%0A%0AThree%20hundred%20pounds%2C%20refundable.%0A",
+          "created_at": "2099-06-01T09:00:35.000Z",
+          "custody_state": null,
+          "document_id": "id-0045",
+          "folder_id": "id-0034",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "circle",
+              "circle_id": "circle-family",
+              "container_id": "id-0033",
+              "grant_id": "grant-folder",
+              "label": "Family",
+              "member_count": 2,
+              "members": [
+                {
+                  "capability": "read",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                },
+                {
+                  "capability": "read",
+                  "label": "Tom",
+                  "party_id": "party-tom",
+                  "status": "invited"
+                }
+              ],
+              "pending_count": 1,
+              "via": "folder"
+            }
+          ],
+          "starred": false,
+          "tags": [],
+          "title": "Deposit receipt",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 40,
+          "content_id": "id-0054",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20first.%0A",
+          "created_at": "2099-06-01T09:00:11.000Z",
+          "custody_state": null,
+          "document_id": "id-0047",
+          "folder_id": null,
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Lease 2099 (signed)",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:31.000Z"
+        },
+        {
+          "byte_size": 205,
+          "content_id": "id-0052",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Renters%20insurance%20policy%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20policy.%0A%0A-%20Policy%20number%3A%20SAMPLE-0000-0000%0A-%20Personal%20property%3A%20%2430%2C000%0A-%20Liability%3A%20%24100%2C000%0A-%20Deductible%3A%20%24500%0A-%20Renews%20annually%0A",
+          "created_at": "2099-06-01T09:00:07.000Z",
+          "custody_state": null,
+          "document_id": "id-0043",
+          "folder_id": "id-0030",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": "2099-06-01T09:00:37.000Z",
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Renters insurance policy (sample)",
+          "trashed": true,
+          "updated_at": "2099-06-01T09:00:39.000Z"
+        },
+        {
+          "byte_size": 268,
+          "content_id": "id-0050",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Cabin%20rental%20agreement%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20agreement.%0A%0A-%20Property%3A%203BR%20cabin%2C%20South%20Lake%20Tahoe%0A-%20Nights%3A%202099-06-04%20to%202099-06-07%0A-%20Rate%3A%20%24180%20per%20night%0A-%20Deposit%3A%20%24300%2C%20refundable%0A-%20Check-in%204pm%2C%20check-out%2010am%0A-%20No%20smoking%3B%20dogs%20welcome%0A",
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "custody_state": null,
+          "document_id": "id-0041",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Cabin rental agreement (sample)",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 222,
+          "content_id": "id-0048",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Tahoe%20packing%20list%0A%0ALeaving%202099-06-04%2C%20back%202099-06-07.%0A%0A-%20Rain%20shell%0A-%20Hiking%20boots%0A-%20Headlamp%0A-%20Swimsuit%20(the%20cabin%20has%20a%20hot%20tub)%0A-%20Board%20games%0A-%20Tire%20chains%20(I-80%20requires%20them%20after%20a%20storm)%0A-%20Cooler%20for%20the%20drive%0A",
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "custody_state": null,
+          "document_id": "id-0037",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "person",
+              "circle_id": null,
+              "container_id": "id-0037",
+              "grant_id": "grant-document",
+              "label": "Ana",
+              "member_count": 1,
+              "members": [
+                {
+                  "capability": "read+write",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                }
+              ],
+              "pending_count": 0,
+              "via": "document"
+            }
+          ],
+          "starred": true,
+          "tags": [
+            {
+              "label": "tahoe",
+              "tag_id": "id-0039"
+            }
+          ],
+          "title": "Tahoe packing list",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "byte_size": 9,
+          "content_id": "content-delivered",
+          "content_uri": "data:text/plain;charset=utf-8,delivered",
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "custody_state": null,
+          "document_id": "doc-delivered",
+          "folder_id": null,
+          "media_type": null,
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": {
+            "at": 4083987600000,
+            "name": "Ana",
+            "party_id": "party-ana",
+            "vault_id": "vault-ana"
+          },
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "A document that arrived",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:00.000Z"
+        }
+      ],
+      "folders": [
+        {
+          "folder_id": "id-0030",
+          "name": "Home",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0034",
+          "name": "Leases",
+          "parent_id": "id-0033"
+        },
+        {
+          "folder_id": "id-0033",
+          "name": "Property",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0029",
+          "name": "Travel",
+          "parent_id": null
+        }
+      ],
+      "root_folder_id": "id-0028",
+      "shared_from_known": true,
+      "truncated": false,
+      "window": 2000
+    },
+    "query": "drive"
+  },
+  {
+    "input": {
+      "limit": 1
+    },
+    "output": {
+      "documents": [
+        {
+          "byte_size": 53,
+          "content_id": "id-0056",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Deposit%20receipt%0A%0AThree%20hundred%20pounds%2C%20refundable.%0A",
+          "created_at": "2099-06-01T09:00:35.000Z",
+          "custody_state": null,
+          "document_id": "id-0045",
+          "folder_id": "id-0034",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "circle",
+              "circle_id": "circle-family",
+              "container_id": "id-0033",
+              "grant_id": "grant-folder",
+              "label": "Family",
+              "member_count": 2,
+              "members": [
+                {
+                  "capability": "read",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                },
+                {
+                  "capability": "read",
+                  "label": "Tom",
+                  "party_id": "party-tom",
+                  "status": "invited"
+                }
+              ],
+              "pending_count": 1,
+              "via": "folder"
+            }
+          ],
+          "starred": false,
+          "tags": [],
+          "title": "Deposit receipt",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 40,
+          "content_id": "id-0054",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20first.%0A",
+          "created_at": "2099-06-01T09:00:11.000Z",
+          "custody_state": null,
+          "document_id": "id-0047",
+          "folder_id": null,
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Lease 2099 (signed)",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:31.000Z"
+        },
+        {
+          "byte_size": 205,
+          "content_id": "id-0052",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Renters%20insurance%20policy%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20policy.%0A%0A-%20Policy%20number%3A%20SAMPLE-0000-0000%0A-%20Personal%20property%3A%20%2430%2C000%0A-%20Liability%3A%20%24100%2C000%0A-%20Deductible%3A%20%24500%0A-%20Renews%20annually%0A",
+          "created_at": "2099-06-01T09:00:07.000Z",
+          "custody_state": null,
+          "document_id": "id-0043",
+          "folder_id": "id-0030",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": "2099-06-01T09:00:37.000Z",
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Renters insurance policy (sample)",
+          "trashed": true,
+          "updated_at": "2099-06-01T09:00:39.000Z"
+        },
+        {
+          "byte_size": 268,
+          "content_id": "id-0050",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Cabin%20rental%20agreement%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20agreement.%0A%0A-%20Property%3A%203BR%20cabin%2C%20South%20Lake%20Tahoe%0A-%20Nights%3A%202099-06-04%20to%202099-06-07%0A-%20Rate%3A%20%24180%20per%20night%0A-%20Deposit%3A%20%24300%2C%20refundable%0A-%20Check-in%204pm%2C%20check-out%2010am%0A-%20No%20smoking%3B%20dogs%20welcome%0A",
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "custody_state": null,
+          "document_id": "id-0041",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Cabin rental agreement (sample)",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 222,
+          "content_id": "id-0048",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Tahoe%20packing%20list%0A%0ALeaving%202099-06-04%2C%20back%202099-06-07.%0A%0A-%20Rain%20shell%0A-%20Hiking%20boots%0A-%20Headlamp%0A-%20Swimsuit%20(the%20cabin%20has%20a%20hot%20tub)%0A-%20Board%20games%0A-%20Tire%20chains%20(I-80%20requires%20them%20after%20a%20storm)%0A-%20Cooler%20for%20the%20drive%0A",
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "custody_state": null,
+          "document_id": "id-0037",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "person",
+              "circle_id": null,
+              "container_id": "id-0037",
+              "grant_id": "grant-document",
+              "label": "Ana",
+              "member_count": 1,
+              "members": [
+                {
+                  "capability": "read+write",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                }
+              ],
+              "pending_count": 0,
+              "via": "document"
+            }
+          ],
+          "starred": true,
+          "tags": [
+            {
+              "label": "tahoe",
+              "tag_id": "id-0039"
+            }
+          ],
+          "title": "Tahoe packing list",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "byte_size": 9,
+          "content_id": "content-delivered",
+          "content_uri": "data:text/plain;charset=utf-8,delivered",
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "custody_state": null,
+          "document_id": "doc-delivered",
+          "folder_id": null,
+          "media_type": null,
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": {
+            "at": 4083987600000,
+            "name": "Ana",
+            "party_id": "party-ana",
+            "vault_id": "vault-ana"
+          },
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "A document that arrived",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:00.000Z"
+        }
+      ],
+      "folders": [
+        {
+          "folder_id": "id-0030",
+          "name": "Home",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0034",
+          "name": "Leases",
+          "parent_id": "id-0033"
+        },
+        {
+          "folder_id": "id-0033",
+          "name": "Property",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0029",
+          "name": "Travel",
+          "parent_id": null
+        }
+      ],
+      "root_folder_id": "id-0028",
+      "shared_from_known": true,
+      "truncated": false,
+      "window": 20
+    },
+    "query": "drive"
+  },
+  {
+    "input": {
+      "limit": 9000
+    },
+    "output": {
+      "documents": [
+        {
+          "byte_size": 53,
+          "content_id": "id-0056",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Deposit%20receipt%0A%0AThree%20hundred%20pounds%2C%20refundable.%0A",
+          "created_at": "2099-06-01T09:00:35.000Z",
+          "custody_state": null,
+          "document_id": "id-0045",
+          "folder_id": "id-0034",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "circle",
+              "circle_id": "circle-family",
+              "container_id": "id-0033",
+              "grant_id": "grant-folder",
+              "label": "Family",
+              "member_count": 2,
+              "members": [
+                {
+                  "capability": "read",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                },
+                {
+                  "capability": "read",
+                  "label": "Tom",
+                  "party_id": "party-tom",
+                  "status": "invited"
+                }
+              ],
+              "pending_count": 1,
+              "via": "folder"
+            }
+          ],
+          "starred": false,
+          "tags": [],
+          "title": "Deposit receipt",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 40,
+          "content_id": "id-0054",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20first.%0A",
+          "created_at": "2099-06-01T09:00:11.000Z",
+          "custody_state": null,
+          "document_id": "id-0047",
+          "folder_id": null,
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Lease 2099 (signed)",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:31.000Z"
+        },
+        {
+          "byte_size": 205,
+          "content_id": "id-0052",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Renters%20insurance%20policy%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20policy.%0A%0A-%20Policy%20number%3A%20SAMPLE-0000-0000%0A-%20Personal%20property%3A%20%2430%2C000%0A-%20Liability%3A%20%24100%2C000%0A-%20Deductible%3A%20%24500%0A-%20Renews%20annually%0A",
+          "created_at": "2099-06-01T09:00:07.000Z",
+          "custody_state": null,
+          "document_id": "id-0043",
+          "folder_id": "id-0030",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": "2099-06-01T09:00:37.000Z",
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Renters insurance policy (sample)",
+          "trashed": true,
+          "updated_at": "2099-06-01T09:00:39.000Z"
+        },
+        {
+          "byte_size": 268,
+          "content_id": "id-0050",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Cabin%20rental%20agreement%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20agreement.%0A%0A-%20Property%3A%203BR%20cabin%2C%20South%20Lake%20Tahoe%0A-%20Nights%3A%202099-06-04%20to%202099-06-07%0A-%20Rate%3A%20%24180%20per%20night%0A-%20Deposit%3A%20%24300%2C%20refundable%0A-%20Check-in%204pm%2C%20check-out%2010am%0A-%20No%20smoking%3B%20dogs%20welcome%0A",
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "custody_state": null,
+          "document_id": "id-0041",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "Cabin rental agreement (sample)",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        },
+        {
+          "byte_size": 222,
+          "content_id": "id-0048",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Tahoe%20packing%20list%0A%0ALeaving%202099-06-04%2C%20back%202099-06-07.%0A%0A-%20Rain%20shell%0A-%20Hiking%20boots%0A-%20Headlamp%0A-%20Swimsuit%20(the%20cabin%20has%20a%20hot%20tub)%0A-%20Board%20games%0A-%20Tire%20chains%20(I-80%20requires%20them%20after%20a%20storm)%0A-%20Cooler%20for%20the%20drive%0A",
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "custody_state": null,
+          "document_id": "id-0037",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": null,
+          "shared_with": [
+            {
+              "audience": "person",
+              "circle_id": null,
+              "container_id": "id-0037",
+              "grant_id": "grant-document",
+              "label": "Ana",
+              "member_count": 1,
+              "members": [
+                {
+                  "capability": "read+write",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                }
+              ],
+              "pending_count": 0,
+              "via": "document"
+            }
+          ],
+          "starred": true,
+          "tags": [
+            {
+              "label": "tahoe",
+              "tag_id": "id-0039"
+            }
+          ],
+          "title": "Tahoe packing list",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "byte_size": 9,
+          "content_id": "content-delivered",
+          "content_uri": "data:text/plain;charset=utf-8,delivered",
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "custody_state": null,
+          "document_id": "doc-delivered",
+          "folder_id": null,
+          "media_type": null,
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_from": {
+            "at": 4083987600000,
+            "name": "Ana",
+            "party_id": "party-ana",
+            "vault_id": "vault-ana"
+          },
+          "shared_with": [],
+          "starred": false,
+          "tags": [],
+          "title": "A document that arrived",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:00.000Z"
+        }
+      ],
+      "folders": [
+        {
+          "folder_id": "id-0030",
+          "name": "Home",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0034",
+          "name": "Leases",
+          "parent_id": "id-0033"
+        },
+        {
+          "folder_id": "id-0033",
+          "name": "Property",
+          "parent_id": null
+        },
+        {
+          "folder_id": "id-0029",
+          "name": "Travel",
+          "parent_id": null
+        }
+      ],
+      "root_folder_id": "id-0028",
+      "shared_from_known": true,
+      "truncated": false,
+      "window": 2000
+    },
+    "query": "drive"
+  },
+  {
+    "input": {
+      "term": "rent"
+    },
+    "output": {
+      "documents": [
+        {
+          "byte_size": 40,
+          "content_id": "id-0054",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20first.%0A",
+          "created_at": "2099-06-01T09:00:11.000Z",
+          "custody_state": null,
+          "document_id": "id-0047",
+          "folder_id": null,
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_with": [],
+          "snippet": "⟦Rent⟧ is due on the second",
+          "starred": false,
+          "tags": [],
+          "title": "Lease 2099 (signed)",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:31.000Z"
+        },
+        {
+          "byte_size": 268,
+          "content_id": "id-0050",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Cabin%20rental%20agreement%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20agreement.%0A%0A-%20Property%3A%203BR%20cabin%2C%20South%20Lake%20Tahoe%0A-%20Nights%3A%202099-06-04%20to%202099-06-07%0A-%20Rate%3A%20%24180%20per%20night%0A-%20Deposit%3A%20%24300%2C%20refundable%0A-%20Check-in%204pm%2C%20check-out%2010am%0A-%20No%20smoking%3B%20dogs%20welcome%0A",
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "custody_state": null,
+          "document_id": "id-0041",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_with": [],
+          "snippet": "# Cabin ⟦rental⟧ agreement (sample)\n\nThis is sample demo data, not a real…",
+          "starred": false,
+          "tags": [],
+          "title": "Cabin rental agreement (sample)",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "tahoe"
+    },
+    "output": {
+      "documents": [
+        {
+          "byte_size": 222,
+          "content_id": "id-0048",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Tahoe%20packing%20list%0A%0ALeaving%202099-06-04%2C%20back%202099-06-07.%0A%0A-%20Rain%20shell%0A-%20Hiking%20boots%0A-%20Headlamp%0A-%20Swimsuit%20(the%20cabin%20has%20a%20hot%20tub)%0A-%20Board%20games%0A-%20Tire%20chains%20(I-80%20requires%20them%20after%20a%20storm)%0A-%20Cooler%20for%20the%20drive%0A",
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "custody_state": null,
+          "document_id": "id-0037",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_with": [
+            {
+              "audience": "person",
+              "circle_id": null,
+              "container_id": "id-0037",
+              "grant_id": "grant-document",
+              "label": "Ana",
+              "member_count": 1,
+              "members": [
+                {
+                  "capability": "read+write",
+                  "label": "Ana",
+                  "party_id": "party-ana",
+                  "status": "current"
+                }
+              ],
+              "pending_count": 0,
+              "via": "document"
+            }
+          ],
+          "snippet": "⟦Tahoe⟧ packing list",
+          "starred": true,
+          "tags": [
+            {
+              "label": "tahoe",
+              "tag_id": "id-0039"
+            }
+          ],
+          "title": "Tahoe packing list",
+          "trashed": false,
+          "updated_at": "2099-06-01T09:00:03.000Z"
+        },
+        {
+          "byte_size": 268,
+          "content_id": "id-0050",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Cabin%20rental%20agreement%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20agreement.%0A%0A-%20Property%3A%203BR%20cabin%2C%20South%20Lake%20Tahoe%0A-%20Nights%3A%202099-06-04%20to%202099-06-07%0A-%20Rate%3A%20%24180%20per%20night%0A-%20Deposit%3A%20%24300%2C%20refundable%0A-%20Check-in%204pm%2C%20check-out%2010am%0A-%20No%20smoking%3B%20dogs%20welcome%0A",
+          "created_at": "2099-06-01T09:00:06.000Z",
+          "custody_state": null,
+          "document_id": "id-0041",
+          "folder_id": "id-0029",
+          "media_type": "text/markdown",
+          "poster_uri": null,
+          "purge_at": null,
+          "shared_with": [],
+          "snippet": "…3BR cabin, South Lake ⟦Tahoe⟧\n- Nights: 2099-06-04 to 2099-06…",
+          "starred": false,
+          "tags": [],
+          "title": "Cabin rental agreement (sample)",
+          "trashed": false,
+          "updated_at": "(host-clock)"
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "zzzz"
+    },
+    "output": {
+      "documents": []
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": ""
+    },
+    "output": {
+      "documents": []
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "document_id": "id-0037"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:03.000Z",
+          "byte_size": 222,
+          "content_id": "id-0048",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Tahoe%20packing%20list%0A%0ALeaving%202099-06-04%2C%20back%202099-06-07.%0A%0A-%20Rain%20shell%0A-%20Hiking%20boots%0A-%20Headlamp%0A-%20Swimsuit%20(the%20cabin%20has%20a%20hot%20tub)%0A-%20Board%20games%0A-%20Tire%20chains%20(I-80%20requires%20them%20after%20a%20storm)%0A-%20Cooler%20for%20the%20drive%0A",
+          "current": true,
+          "media_type": "text/markdown",
+          "poster_uri": null
+        },
+        {
+          "asserted_at": "2099-06-01T09:00:02.000Z",
+          "byte_size": 150,
+          "content_id": "id-0058",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Tahoe%20packing%20list%0A%0ALeaving%202099-06-04%2C%20back%202099-06-07.%0A%0A-%20Rain%20shell%0A-%20Hiking%20boots%0A-%20Headlamp%0A-%20Swimsuit%20(the%20cabin%20has%20a%20hot%20tub)%0A-%20Board%20games%0A",
+          "current": false,
+          "media_type": "text/markdown",
+          "poster_uri": null
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "document_id": "id-0037"
+    },
+    "output": {
+      "events": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"docs.activity.provenance\": FROM names access_provenance, which is not an entity of this vault"
+      }
+    },
+    "query": "activity"
+  },
+  {
+    "input": {
+      "document_id": "id-0041"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:06.000Z",
+          "byte_size": 268,
+          "content_id": "id-0050",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Cabin%20rental%20agreement%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20agreement.%0A%0A-%20Property%3A%203BR%20cabin%2C%20South%20Lake%20Tahoe%0A-%20Nights%3A%202099-06-04%20to%202099-06-07%0A-%20Rate%3A%20%24180%20per%20night%0A-%20Deposit%3A%20%24300%2C%20refundable%0A-%20Check-in%204pm%2C%20check-out%2010am%0A-%20No%20smoking%3B%20dogs%20welcome%0A",
+          "current": true,
+          "media_type": "text/markdown",
+          "poster_uri": null
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "document_id": "id-0041"
+    },
+    "output": {
+      "events": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"docs.activity.provenance\": FROM names access_provenance, which is not an entity of this vault"
+      }
+    },
+    "query": "activity"
+  },
+  {
+    "input": {
+      "document_id": "id-0043"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:07.000Z",
+          "byte_size": 205,
+          "content_id": "id-0052",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Renters%20insurance%20policy%20(sample)%0A%0AThis%20is%20sample%20demo%20data%2C%20not%20a%20real%20policy.%0A%0A-%20Policy%20number%3A%20SAMPLE-0000-0000%0A-%20Personal%20property%3A%20%2430%2C000%0A-%20Liability%3A%20%24100%2C000%0A-%20Deductible%3A%20%24500%0A-%20Renews%20annually%0A",
+          "current": true,
+          "media_type": "text/markdown",
+          "poster_uri": null
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "document_id": "id-0043"
+    },
+    "output": {
+      "events": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"docs.activity.provenance\": FROM names access_provenance, which is not an entity of this vault"
+      }
+    },
+    "query": "activity"
+  },
+  {
+    "input": {
+      "document_id": "id-0047"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:16.000Z",
+          "byte_size": 40,
+          "content_id": "id-0054",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20first.%0A",
+          "current": true,
+          "media_type": "text/markdown",
+          "poster_uri": null
+        },
+        {
+          "asserted_at": "2099-06-01T09:00:14.000Z",
+          "byte_size": 41,
+          "content_id": "id-0059",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20second.%0A",
+          "current": false,
+          "media_type": "text/markdown",
+          "poster_uri": null
+        },
+        {
+          "asserted_at": "2099-06-01T09:00:16.000Z",
+          "byte_size": 40,
+          "content_id": "id-0054",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Lease%202099%0A%0ARent%20is%20due%20on%20the%20first.%0A",
+          "current": false,
+          "media_type": "text/markdown",
+          "poster_uri": null
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "document_id": "id-0047"
+    },
+    "output": {
+      "events": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"docs.activity.provenance\": FROM names access_provenance, which is not an entity of this vault"
+      }
+    },
+    "query": "activity"
+  },
+  {
+    "input": {
+      "document_id": "id-0045"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:35.000Z",
+          "byte_size": 53,
+          "content_id": "id-0056",
+          "content_uri": "data:text/markdown;charset=utf-8,%23%20Deposit%20receipt%0A%0AThree%20hundred%20pounds%2C%20refundable.%0A",
+          "current": true,
+          "media_type": "text/markdown",
+          "poster_uri": null
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "document_id": "id-0045"
+    },
+    "output": {
+      "events": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"docs.activity.provenance\": FROM names access_provenance, which is not an entity of this vault"
+      }
+    },
+    "query": "activity"
+  },
+  {
+    "input": {
+      "document_id": "doc-delivered"
+    },
+    "output": {
+      "versions": [
+        {
+          "asserted_at": "2099-06-01T09:00:00.000Z",
+          "byte_size": 9,
+          "content_id": "content-delivered",
+          "content_uri": "data:text/plain;charset=utf-8,delivered",
+          "current": true,
+          "media_type": null,
+          "poster_uri": null
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "document_id": "doc-delivered"
+    },
+    "output": {
+      "events": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"docs.activity.provenance\": FROM names access_provenance, which is not an entity of this vault"
+      }
+    },
+    "query": "activity"
+  },
+  {
+    "input": {
+      "document_id": "no-such-document"
+    },
+    "output": {
+      "versions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "document_id": "no-such-document"
+    },
+    "output": {
+      "events": [],
+      "vaultDenied": {
+        "message": "paged door refuses handler \"docs.activity.provenance\": FROM names access_provenance, which is not an entity of this vault"
+      }
+    },
+    "query": "activity"
+  },
+  {
+    "input": {},
+    "output": {
+      "versions": []
+    },
+    "query": "history"
+  }
+]

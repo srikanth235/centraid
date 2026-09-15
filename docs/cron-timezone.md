@@ -83,6 +83,22 @@ Devices sharing a vault share one cursor row, so the schedule is owned by whiche
 
 The cost is the other half of the same coin: a device far enough behind never fires at all while a leading device is present. This is characterised (not pinned — it contradicts no ruling) in `packages/server/src/automation/fire/clock-adversity-cron.test.ts`, so a future change that lets a lagging device sweep its own window turns that exact configuration into a visible double fire rather than a silent one.
 
+## v1: the vault's zone, and tier 3 deleted
+
+The three tiers above are v0's. [`crates/automations`](../crates/automations) resolves in **two**, and the third is a refusal ([#1020](https://github.com/srikanth235/centraid/issues/1020), R-1020-33, D-1020-AU2):
+
+1. **Per-trigger `tz`** — unchanged.
+2. **The vault's zone** — `core_vault.settings_json`'s zone, written from Settings and validated as IANA at write. This replaces the gateway-wide device pref: a zone is a property of the household, not of a device.
+3. **Nothing.** A typed `ZoneUnset` refuses the registration and raises a system signal, so a member is asked for their zone instead of being given a schedule in somebody else's.
+
+Tier 3 is deleted rather than ported because it is host-local wall clock and a gateway now runs on a server. On a laptop it is a promise — _your seven o'clock reminder keeps arriving at seven_ — and on a UTC VPS it silently becomes seven in UTC. **This is recorded as a finding against v0 and not fixed there**: v0 does not ship to a VPS, so the promise it makes is the right one for the machines it runs on. The evidence is a row rather than a paragraph — `contracts/automations/cron-cases.json` carries a `finding` block with what v0 answers for `0 7 * * *` at 01:30 UTC both with the vault's zone (`true`) and with none (`false`).
+
+**There is one zone source in the tree, and it is below both callers** ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-S8). `FireZone` began in `crates/automations`; recurrence needs the same zone, so it moved to `crates/vault::time::zone` and the automations crate re-exports it — its public API is unchanged and its 10,320 cron parity cases stayed green across the move. `FireZone::resolve(trigger_tz, vault_zone)` takes **two** tiers and no third argument: the deletion of tier 3 is expressed in the signature, so a caller cannot pass a host zone even by mistake. The same function resolves a wall time for **both** cron and recurrence, which is what stops the three DST sentences below from drifting apart between the scheduler's half and the calendar's.
+
+**The host's zone is unreachable from the v1 crate by construction.** `jiff` is depended on without its `tz-system` feature and with `tzdb-bundle-always`, so there is no code path that can read `TZ` or `/etc/localtime`, and the zone database is compiled into the binary — the answer does not change when a host is reinstalled without `tzdata`.
+
+The DST table, the backfill classes and the multiple-device rule above are unchanged and are held over the same pinned transition dates in `contracts/automations/cron-windows.json`, generated from v0's own `readCronCursor`.
+
 ## Code pointers
 
 | Concern | Location |
@@ -96,5 +112,9 @@ The cost is the other half of the same coin: a device far enough behind never fi
 | Manifest shape + IANA validation | `packages/server/src/automation/manifest/manifest.ts` |
 | Gateway default wiring | `packages/server/src/serve/build-gateway.ts` (`defaultCronTimeZone`) |
 | Client preview + labels | `packages/client/src/cron.ts` |
+| **v1** the zone, the rrule subset, expansion, occurrence keys | [`crates/vault/src/time/`](../crates/vault/src/time) — `zone`, `rrule`, `recurrence`, `occurrence`, `temporal`; no SQL in any of them |
+| **v1** resolution, matching, cursor and preview | [`crates/automations/src/cron.rs`](../crates/automations/src/cron.rs), [`fire/cron_cursor.rs`](../crates/automations/src/fire/cron_cursor.rs) |
+| **v1** the DST corpus | `contracts/time/{rrule,dst,occurrence}-cases.json` — 244 rrule cases, 78 zoned expansions over 481 occurrences in six zones chosen to break a naive check (negative DST, a thirty-minute shift, a `:45` offset, a `:30` no-shift zone, the pinned zone, and UTC), 60 wall-clock resolutions with 3 gaps and 3 folds |
+| **v1** cases, generated from v0 | `contracts/automations/{cron-cases,cron-windows}.json` |
 | Editor timezone control | `packages/client/src/react/screens/AutomationEditorScreen.tsx` |
 | Settings default | `packages/client/src/react/screens/SettingsLayoutScreen.tsx` |

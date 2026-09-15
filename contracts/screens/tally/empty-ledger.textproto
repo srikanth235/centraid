@@ -1,0 +1,10 @@
+# AN EMPTY LEDGER IS A REAL ANSWER: `data` is present and `rows` is empty. This
+# fixture exists to be compared with `refused-denied` — the two must not decode
+# to the same screen, which is the law `tally-store.test.ts` pins in v0.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_ACTIVITY
+data {}

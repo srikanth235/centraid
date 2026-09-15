@@ -1,0 +1,45 @@
+# buf configuration for the schema workspace (#1020, D-1020-C5).
+#
+# TWO MODULES OVER ONE DIRECTORY, because #1020 rules two packages with two
+# different compatibility promises and `breaking.use` is a per-module setting.
+# Both modules name the same `path` — the import root every file resolves
+# `centraid/...` against — and each EXCLUDES the other package's subtree, so the
+# two rule sets land on disjoint file sets. `buf ls-files` reports all fourteen
+# files exactly once, which is the check that the split covers the tree without
+# double-counting it.
+#
+# `centraid.core.v1` gets FILE: the strictest category, refusing anything a
+# generated-code consumer could notice — a renamed field, a changed type, a
+# moved message, a deleted file. It is the gateway's commitment to seats that
+# update on their own schedule.
+#
+# `centraid.screen.v1` gets WIRE_JSON: the wire and its JSON mapping must stay
+# compatible, and names may move. The shared module, SwiftUI and Compose ship in
+# ONE artifact with the core that produces those messages, so a rename costs a
+# recompile and not a field incident. Open question 10 may delete this package
+# entirely after wave 3; a FILE promise over a package that might not exist
+# would be a promise nobody asked for.
+#
+# `buf.gen.yaml` beside this file is DOCUMENTATION. The Rust codegen is
+# `crates/api-proto/build.rs` (prost-build over protox), because there is no
+# `protoc` binary on the build machines.
+version: v2
+modules:
+  - path: crates/api-proto/proto
+    excludes:
+      - crates/api-proto/proto/centraid/screen
+    lint:
+      use:
+        - STANDARD
+    breaking:
+      use:
+        - FILE
+  - path: crates/api-proto/proto
+    excludes:
+      - crates/api-proto/proto/centraid/core
+    lint:
+      use:
+        - STANDARD
+    breaking:
+      use:
+        - WIRE_JSON

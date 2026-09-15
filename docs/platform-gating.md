@@ -44,6 +44,21 @@ There is one registry and two syntax-specific consumer gates. Desktop and PWA ar
 | Minimum type and target floors hold | `lint:type-floor`; emitted pointer target is 34px | `lint:type-floor`; typed touch target is 44px |
 | Platform-only lowering stays honest | pointer media query and gallery computed-style checks | `lint:hairline` and `lint:logical-insets` check native pixel/direction semantics |
 
+### The native side, in v1 (#1020 wave 3 lane E)
+
+The Expo column above describes v0's React Native consumer. The KMP shells in [`mobile/`](../mobile) are a third consumer of the SAME registry, and the parity rows they add are these — with the honest gaps named rather than implied.
+
+| Shared invariant | Compose + SwiftUI enforcement | Status |
+| --- | --- | --- |
+| Colour comes from a semantic role | the table is **generated**, not written: `contracts/tools/export-native-theme.ts` emits `mobile/shared/.../design/Tokens.kt` and `mobile/iosApp/Design/Theme.swift` from `toNativeTheme`, and `git diff --exit-code design copy mobile` in the `mobile-jvm` gate step fails on drift | real, and it runs on Linux |
+| Registry and lowering agree | `NativeThemeSpec` re-asserts the role contract over the EMITTED table, in both schemes, and cross-checks the JSON, the Kotlin and the Swift role lists | real |
+| Type comes from the semantic ramp | the same emitted table carries `type`, and `NativeThemeSpec` asserts every style is concrete — a family, a size, a line height at least the size, a weight in range | real |
+| **An icon-only control carries a label** | `NativeAccessibilityLintSpec` scans `mobile/androidApp` for `Icon`/`Image` without a `contentDescription` and `mobile/iosApp` for `Image(systemName:)` without an `accessibilityLabel`, with a demonstrated red | **net-new**: see below |
+| Minimum type and target floors hold | **not enforced yet** — the emitted table carries `targetMin`, and nothing checks a Compose `Modifier.size` or a SwiftUI frame against it | a gap, named |
+| Snapshot parity | Roborazzi (Compose) and swift-snapshot-testing (SwiftUI) are declared and compile-gated; neither has run | an owner hand-off |
+
+**The accessibility row is net-new and has no v0 ancestor.** v0's two source-scanning accessibility gates — `scripts/lint-aria-labels.mjs` and `scripts/accessibility-contract.test.mjs` — are **both web-shaped**: neither reaches React Native, and there is no `accessibilityLabel` lint over `apps/mobile/src` at all. This section is where that asymmetry was supposed to be argued, so here is the argument: it was never argued, it was simply absent, and claiming parity by citing a web-only lint would have been the citation standing in for the check. The KMP lint is the first native accessibility gate this repository has had, it covers one rule rather than two, and the rule it covers is the one that makes a screen reader useless when it is broken.
+
 Run `bun run lint:design-consumers` for the common parity check. `check:push` keeps its CSS and native halves as separate gates only so they run in parallel; neither has an allowance ledger. Emitters and native adapters may contain renderer mechanics because they own the lowering boundary. Product consumers may not contain literal design decisions.
 
 ## Do not

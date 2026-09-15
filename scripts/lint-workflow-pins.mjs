@@ -22,14 +22,17 @@
  *      behind `install:`. 33 copies of one line is how a `--frozen-lockfile`
  *      that gets dropped in one lane goes unnoticed.
  *
- *   5. `ci.yml` is the ONLY workflow that may listen on open-PR `pull_request`
- *      events (opened/synchronize/reopened, or the bare default). This is the
- *      load-bearing one. A second PR-triggered workflow is not just untidy:
- *      because it needs path filters to be affordable, it can never be a
- *      required check (a filtered-out workflow reports nothing, and a required
- *      check that never reports blocks the PR forever). Ten such workflows is
- *      how eight lanes ended up unable to gate a merge. As jobs inside ci.yml
- *      they skip cleanly and roll up through the required `check`.
+ *   5. EXACTLY ONE workflow may listen on open-PR `pull_request` events
+ *      (opened/synchronize/reopened, or the bare default), and since #1020 that
+ *      workflow is `gate.yml` — `cargo xtask gate --profile pr`, the v1 tree's
+ *      single CI entrypoint. It was `ci.yml` until wave 1 moved the v0 tree to
+ *      a pinned oracle running on `main` pushes and nightly; the INVARIANT is
+ *      unchanged and is the load-bearing one. A second PR-triggered workflow is
+ *      not just untidy: because it needs path filters to be affordable, it can
+ *      never be a required check (a filtered-out workflow reports nothing, and
+ *      a required check that never reports blocks the PR forever). Ten such
+ *      workflows is how eight lanes ended up unable to gate a merge. As steps
+ *      inside the one gate they cannot skip at all.
  *      Exception: `pull_request: types: [closed]` only — post-merge housekeeping
  *      (e.g. cache cleanup) that never participates in open-PR required checks.
  *
@@ -60,6 +63,14 @@ const root = path.resolve(import.meta.dirname, "..");
 const workflowDir = path.join(root, ".github/workflows");
 
 const SHA_PINNED = /^[^@\s]+@[0-9a-f]{40}\s*(?:#.*)?$/u;
+
+/**
+ * The one workflow allowed to listen on open-PR events (rule 5). One name, not
+ * a list: an allowlist of two is how "exactly one entry point" quietly becomes
+ * "a few", and the whole property is that a PR's verdict has a single source.
+ * #1020 moved it from ci.yml to gate.yml.
+ */
+const PR_ENTRY_POINT = ".github/workflows/gate.yml";
 const errors = [];
 
 /** `uses:` values that are not third-party refs and so need no SHA. */
@@ -227,11 +238,11 @@ export function lintWorkflowSource(name, source) {
     // (cannot report a required status on an open PR) and are allowed.
     if (
       /^\s{2}pull_request:/u.test(line) &&
-      name !== ".github/workflows/ci.yml" &&
+      name !== PR_ENTRY_POINT &&
       !isClosedOnlyPullRequestTrigger(lines, index)
     ) {
       found.push(
-        `${name}:${lineNo} listens on \`pull_request\` — only ci.yml may (open PR events). Add a job there (gated on the \`changes\` filter) so it rolls up into the required \`check\`, or expose this workflow via \`workflow_call\` and invoke it from ci.yml. Post-merge-only listeners must use \`types: [closed]\``
+        `${name}:${lineNo} listens on \`pull_request\` — only ${PR_ENTRY_POINT} may (open PR events), because a PR's verdict has one source. Add what this workflow proves to \`cargo xtask gate\` so it becomes a step of that gate, or expose this workflow via \`workflow_call\` and invoke it from there. Post-merge-only listeners must use \`types: [closed]\``
       );
     }
 

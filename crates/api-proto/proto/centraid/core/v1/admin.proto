@@ -1,0 +1,57 @@
+// Admin verbs (#1020, D-1020-C4).
+//
+// **These are command inputs, not a second envelope.** A headless gateway has
+// no admin UI; every admin operation is a `Command` from any owner seat or from
+// the CLI, and produces the same receipts (#1020 Decision, *The CLI is a
+// client*). So these messages define the INPUT of named commands and the
+// answers come back as `CommandOutcome` — there is no privileged path here to
+// audit separately.
+//
+// The command names are stated once, here, as the enum below, so the CLI and
+// the shells cannot spell them differently.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// The registered name of each admin command.
+enum AdminCommand {
+  ADMIN_COMMAND_UNSPECIFIED = 0;
+  // `devices.list`
+  ADMIN_COMMAND_DEVICES_LIST = 1;
+  // `devices.revoke`
+  ADMIN_COMMAND_DEVICES_REVOKE = 2;
+  // `backup.now`
+  ADMIN_COMMAND_BACKUP_NOW = 3;
+}
+
+message DevicesList {}
+
+message DeviceRow {
+  string device_id = 1;
+  // The iroh EndpointId, 32 raw bytes.
+  bytes endpoint_id = 2;
+  string label = 3;
+  string platform = 4;
+  // RFC 3339.
+  string enrolled_at = 5;
+  // PRESENT means revoked. A tombstone rather than a deletion, because a
+  // revoked device that re-presents its key must be refused for the same reason
+  // twice, not treated as new (`packages/server/src/serve/enrollment-store.ts:474-483`).
+  optional string revoked_at = 6;
+}
+
+message DevicesListResult {
+  repeated DeviceRow devices = 1;
+}
+
+message DevicesRevoke {
+  // The device id or its endpoint id in hex; v0 accepts either
+  // (`EnrollmentStore.revoke(idOrEndpointId)`).
+  string device = 1;
+}
+
+message BackupNow {
+  // Take the snapshot even if the interval has not elapsed.
+  bool force = 1;
+}

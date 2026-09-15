@@ -1,0 +1,26 @@
+# DAY ONE. Every readable tile SETTLED and returned nothing.
+#
+# The one state that may claim the vault is empty, and it is reached only when
+# every tile has actually answered. `things.settled` is true and the total is a
+# real zero — not the placeholder zero of a Home that has not looked.
+data {
+  springboard: SPRINGBOARD_FIRST_RUN
+  tiles { app_id: "photos" status: TILE_STATUS_EMPTY size: TILE_SIZE_LARGE wide: true empty_copy: "Back up your first photo" }
+  tiles { app_id: "docs" status: TILE_STATUS_EMPTY size: TILE_SIZE_MEDIUM wide: true empty_copy: "Add your first document" }
+  tiles { app_id: "notes" status: TILE_STATUS_EMPTY size: TILE_SIZE_MEDIUM wide: true empty_copy: "Write your first note" }
+  tiles { app_id: "agenda" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }
+  tiles { app_id: "tasks" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Capture the next thing to do" }
+  tiles { app_id: "people" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
+  tiles { app_id: "tally" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
+  # Locker is EMPTY and still earns the grid: its body is a state.
+  tiles { app_id: "locker" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL earns_grid: true empty_copy: "Unlock to see your items" body { locker { locked: true } } }
+  first_moves { id: "connectors" label: "Connect an account" hint: "Mail, calendar and contacts arrive on their own." icon_key: "Plug" }
+  first_moves { id: "photos" label: "Bring in photos" hint: "The newest ones surface here." icon_key: "Camera" }
+  first_moves { id: "docs" label: "File a document" hint: "Versioned, restorable, yours." icon_key: "Folder" }
+  things { total: 0 settled: true }
+  status { tone: TONE_QUIET copy: "On this phone · pair a vault when ready" destination: DESTINATION_NONE }
+  # THE PACKED GRID, decided by the machine so the two shells cannot pack it
+  # differently. A wide tile takes a whole line; smalls pair. A lone small at
+  # the end is not a hole.
+  grid_rows { app_ids: "locker" }
+}

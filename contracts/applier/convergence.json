@@ -1,0 +1,77 @@
+{
+  "schema": "centraid-applier-convergence/1",
+  "$note": "A copy taken at seq S and fed rows S..N equals the gateway at the watermark — every replicated table, VALUES not bytes (#1020, D-1020-D1-11). Hand-authored rather than generated: the claim is a comparison between two FILES, which is not a row dump. `crates/vault/tests/gates.rs` runs it; `crates/seat` (lane D2) runs the same file against the seat-side applier, which is the same function.",
+  "$whyValuesNotBytes": "Two SQLite files holding the same rows are not byte-identical: page order, free pages and the WAL all differ, and a VACUUM changes the bytes without changing an answer. The claim that matters is that every replicated table answers the same, so the comparison is per-table, per-row, per-column.",
+  "script": {
+    "$note": "Phase one runs before the copy is taken; phase two runs after, and is what the copy has to catch up on. Every timestamp is explicit so the run is deterministic — the touch trigger writes the wall clock when a statement leaves `updated_at` alone.",
+    "beforeCopy": [
+      {
+        "label": "seed-two-parties",
+        "producer": "convergence.seed",
+        "statements": [
+          "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES ('conv-a', 'person', 'A', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+          "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES ('conv-b', 'person', 'B', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
+        ]
+      },
+      {
+        "label": "seed-a-concept-scheme",
+        "producer": "convergence.seed",
+        "statements": [
+          "INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version, created_at) VALUES ('conv-scheme', 'centraid:convergence:v1', 'Convergence', 'centraid', 'v1', '2026-01-01T00:00:00.000Z')"
+        ]
+      }
+    ],
+    "afterCopy": [
+      {
+        "label": "insert-a-third",
+        "producer": "convergence.write",
+        "statements": [
+          "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES ('conv-c', 'person', 'C', '2026-02-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z')"
+        ]
+      },
+      {
+        "label": "update-one",
+        "producer": "convergence.write",
+        "statements": [
+          "UPDATE core_party SET display_name = 'A renamed', updated_at = '2026-02-02T00:00:00.000Z' WHERE party_id = 'conv-a'"
+        ]
+      },
+      {
+        "label": "delete-one",
+        "producer": "convergence.write",
+        "statements": ["DELETE FROM core_party WHERE party_id = 'conv-b'"]
+      },
+      {
+        "label": "insert-a-concept-in-the-scheme",
+        "producer": "convergence.write",
+        "statements": [
+          "INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, created_at, updated_at) VALUES ('conv-concept', 'conv-scheme', 'beach', 'Beach', '2026-02-03T00:00:00.000Z', '2026-02-03T00:00:00.000Z')"
+        ]
+      },
+      {
+        "label": "a-multi-row-commit",
+        "producer": "convergence.write",
+        "statements": [
+          "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES ('conv-d', 'person', 'D', '2026-02-04T00:00:00.000Z', '2026-02-04T00:00:00.000Z')",
+          "UPDATE core_party SET display_name = 'C again', updated_at = '2026-02-05T00:00:00.000Z' WHERE party_id = 'conv-c'"
+        ]
+      }
+    ]
+  },
+  "compare": {
+    "$note": "The tables the script actually touches, plus the two the triggers touch on its behalf. `every` means the test also walks EVERY replicated table the file carries and asserts none of the others differs either, so this list is the named minimum and not the scope.",
+    "named": [
+      "core_party",
+      "core_entity",
+      "core_concept",
+      "core_concept_scheme"
+    ],
+    "every": true
+  },
+  "expect": {
+    "appliedCommits": 5,
+    "$appliedCommitsNote": "One per `afterCopy` entry: the applier runs one transaction per commit, with the cursor in it.",
+    "partiesAtWatermark": ["conv-a", "conv-c", "conv-d"],
+    "$partiesNote": "`conv-b` was deleted after the copy was taken, so a copy that only ever INSERTED would still hold it — which is the failure this line catches."
+  }
+}

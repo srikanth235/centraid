@@ -1,0 +1,111 @@
+{
+  "grid": [
+    {
+      "allowed": false,
+      "lane": "device",
+      "system": false,
+      "tier": "off"
+    },
+    {
+      "allowed": false,
+      "lane": "device",
+      "system": true,
+      "tier": "off"
+    },
+    {
+      "allowed": false,
+      "lane": "gateway",
+      "system": false,
+      "tier": "off"
+    },
+    {
+      "allowed": false,
+      "lane": "gateway",
+      "system": true,
+      "tier": "off"
+    },
+    {
+      "allowed": true,
+      "lane": "device",
+      "sealModelTurns": true,
+      "system": false,
+      "tier": "device"
+    },
+    {
+      "allowed": true,
+      "lane": "device",
+      "sealModelTurns": true,
+      "system": true,
+      "tier": "device"
+    },
+    {
+      "allowed": false,
+      "lane": "gateway",
+      "system": false,
+      "tier": "device"
+    },
+    {
+      "allowed": true,
+      "lane": "gateway",
+      "sealModelTurns": true,
+      "system": true,
+      "tier": "device"
+    },
+    {
+      "allowed": true,
+      "lane": "device",
+      "sealModelTurns": false,
+      "system": false,
+      "tier": "gateway"
+    },
+    {
+      "allowed": true,
+      "lane": "device",
+      "sealModelTurns": false,
+      "system": true,
+      "tier": "gateway"
+    },
+    {
+      "allowed": true,
+      "lane": "gateway",
+      "sealModelTurns": false,
+      "system": false,
+      "tier": "gateway"
+    },
+    {
+      "allowed": true,
+      "lane": "gateway",
+      "sealModelTurns": false,
+      "system": true,
+      "tier": "gateway"
+    },
+    {
+      "allowed": false,
+      "lane": "device",
+      "system": false,
+      "tier": null
+    },
+    {
+      "allowed": true,
+      "lane": "device",
+      "sealModelTurns": true,
+      "system": true,
+      "tier": null
+    },
+    {
+      "allowed": false,
+      "lane": "gateway",
+      "system": false,
+      "tier": null
+    },
+    {
+      "allowed": true,
+      "lane": "gateway",
+      "sealModelTurns": true,
+      "system": true,
+      "tier": null
+    }
+  ],
+  "lanes": ["device", "gateway"],
+  "tiers": ["off", "device", "gateway"]
+}

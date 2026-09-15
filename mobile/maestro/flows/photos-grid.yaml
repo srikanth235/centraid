@@ -1,0 +1,37 @@
+# The Photos grid: two planes, one screen.
+#
+# THE POINT OF THIS FLOW is that denying photo access leaves the grid full. The
+# grid reads the vault and the backup reads the camera roll; a shell that wired
+# the grant to the wrong one shows a member an empty library they own. No unit
+# test catches that, because both planes are correct in isolation.
+appId: dev.centraid
+name: photos-grid
+---
+- launchApp:
+    clearState: true
+- tapOn: "Photos"
+- assertVisible:
+    id: "photos-grid"
+# Deny the OS prompt if it appears, then assert the grid survived it.
+- runFlow:
+    when:
+      visible:
+        id: "photos-allow-access"
+    commands:
+      - tapOn:
+          id: "photos-allow-access"
+      - tapOn:
+          text: "Don.t Allow|Deny"
+          optional: true
+- assertVisible:
+    id: "photos-grid"
+- assertVisible:
+    id: "photos-backup-banner"
+# `more` is a sheet, never a destination: the band is unchanged behind it.
+- tapOn:
+    id: "photos-more-sheet"
+- assertVisible:
+    id: "photos-grid"
+- back
+- assertVisible:
+    id: "photos-band-library"

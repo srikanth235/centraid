@@ -1,0 +1,42 @@
+# The Tally list: three states, and the two that are easy to confuse.
+#
+# THE POINT OF THIS FLOW is the pair of assertions at the end. A failed read and
+# an empty ledger both produce a list with no rows, and v0's
+# `tally-store.test.ts` pins that they are different screens. A unit test can
+# assert the state; only a flow can assert that the two states RENDER
+# differently, which is where the bug actually reaches a member.
+appId: dev.centraid
+name: tally-list
+---
+- launchApp:
+    clearState: true
+- tapOn: "Tally"
+- assertVisible:
+    id: "tally-rows"
+# A band is a parameter, not a screen: after tapping Balances, BACK must leave
+# Tally rather than returning to the Activity band.
+- tapOn:
+    id: "tally-band-balances"
+- assertVisible:
+    id: "tally-rows"
+- back
+- assertVisible: "Centraid"
+- tapOn: "Tally"
+# An empty ledger says so, in its own words.
+- runFlow:
+    when:
+      visible:
+        id: "tally-empty"
+    commands:
+      - assertVisible: "Nothing here yet."
+      - assertNotVisible:
+          id: "tally-failure"
+# A refused read says something else, and never shows the empty sentence.
+- runFlow:
+    when:
+      visible:
+        id: "tally-failure"
+    commands:
+      - assertNotVisible: "Nothing here yet."
+      - assertNotVisible:
+          id: "tally-rows"

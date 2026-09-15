@@ -1,0 +1,5 @@
+# `cargo xtask …` is the only cross-cutting entrypoint for the v1 tree (#1020).
+# The alias keeps it one word at every call site — the local loop, `gate.yml`,
+# `gate-nightly.yml` and the Nix dev shell all spell it the same way.
+[alias]
+xtask = "run --quiet --package xtask --"

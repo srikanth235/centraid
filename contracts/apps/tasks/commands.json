@@ -1,0 +1,301 @@
+[
+  {
+    "command": "schedule.save_project",
+    "input": {
+      "area": "Home",
+      "color": "#2EA098",
+      "name": "House",
+      "sort_order": 1
+    },
+    "output_keys": ["project_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.save_project",
+    "input": {
+      "name": "Work",
+      "sort_order": 2
+    },
+    "output_keys": ["project_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.save_section",
+    "input": {
+      "name": "Kitchen",
+      "project_id": {
+        "$from": "0.project_id"
+      },
+      "sort_order": 1
+    },
+    "output_keys": ["section_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.save_project",
+    "input": {
+      "name": "House and garden",
+      "project_id": {
+        "$from": "0.project_id"
+      },
+      "sort_order": 1
+    },
+    "output_keys": ["project_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "description": "Long weekend at the lake.",
+      "due_at": "2099-06-08T09:00:00.000Z",
+      "priority": 6,
+      "title": "Plan the Tahoe trip"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "effort_min": 45,
+      "parent_task_id": {
+        "$from": "4.task_id"
+      },
+      "title": "Compare cabins"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2099-06-04T09:00:00.000Z",
+      "parent_task_id": {
+        "$from": "4.task_id"
+      },
+      "priority": 8,
+      "title": "Book the cabin"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "parent_task_id": {
+        "$from": "4.task_id"
+      },
+      "title": "Draft packing list"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.set_task_status",
+    "input": {
+      "status": "completed",
+      "task_id": {
+        "$from": "7.task_id"
+      }
+    },
+    "output_keys": ["task_id", "status", "series_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2099-06-02T09:00:00.000Z",
+      "priority": 5,
+      "title": "Tax return"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "parent_task_id": {
+        "$from": "9.task_id"
+      },
+      "title": "Find the receipts"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.set_task_status",
+    "input": {
+      "status": "completed",
+      "task_id": {
+        "$from": "9.task_id"
+      }
+    },
+    "output_keys": ["task_id", "status", "series_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2099-06-03T09:00:00.000Z",
+      "title": "Renew the parking permit"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.set_task_status",
+    "input": {
+      "status": "cancelled",
+      "task_id": {
+        "$from": "12.task_id"
+      }
+    },
+    "output_keys": ["task_id", "status", "series_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "priority": 1,
+      "title": "Learn to make sourdough"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2026-03-07T14:00:00.000Z",
+      "priority": 2,
+      "remind_before_min": 30,
+      "rrule": "FREQ=DAILY",
+      "title": "Water the plants"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.organize_task",
+    "input": {
+      "project_id": {
+        "$from": "0.project_id"
+      },
+      "recurrence_anchor": "scheduled",
+      "section_id": {
+        "$from": "2.section_id"
+      },
+      "sort_order": 3,
+      "task_id": {
+        "$from": "15.task_id"
+      },
+      "tz": "America/New_York"
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "banana",
+      "title": "When"
+    },
+    "output_keys": [],
+    "reason": "due_at: \"banana\" is not a time this vault can read — a task's due date is an instant (2026-03-01T09:00:00Z), a floating local time (2026-03-01T09:00) or a date (2026-03-01).",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "due_at": "2099-07-01T09:00:00.000Z",
+      "rrule": "FREQ=MONTHLY;BYSETPOS=-1",
+      "title": "Rent"
+    },
+    "output_keys": [],
+    "reason": "rrule: \"FREQ=MONTHLY;BYSETPOS=-1\" — recurrence rule uses BYSETPOS, which this engine cannot honour: it selects the nth candidate within each period; the expander emits every candidate",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "rrule": "FREQ=MONTHLY",
+      "title": "Rent"
+    },
+    "output_keys": [],
+    "reason": "A repeating task needs a due date to repeat from.",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.organize_task",
+    "input": {
+      "project_id": {
+        "$from": "1.project_id"
+      },
+      "section_id": {
+        "$from": "2.section_id"
+      },
+      "sort_order": 0,
+      "task_id": {
+        "$from": "4.task_id"
+      }
+    },
+    "output_keys": [],
+    "reason": "That section belongs to a different project.",
+    "status": "failed"
+  },
+  {
+    "command": "schedule.add_task",
+    "input": {
+      "parent_task_id": {
+        "$from": "5.task_id"
+      },
+      "title": "Grandchild"
+    },
+    "output_keys": [],
+    "reason": "parent_open_and_top_level: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "core.tag_item",
+    "input": {
+      "label": "Travel",
+      "subject_id": {
+        "$from": "4.task_id"
+      },
+      "subject_type": "schedule.task"
+    },
+    "output_keys": ["tag_id", "concept_id", "notation"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.edit_task",
+    "input": {
+      "description": "Starter is in the fridge.",
+      "priority": 4,
+      "task_id": {
+        "$from": "14.task_id"
+      }
+    },
+    "output_keys": ["task_id"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.delete_task",
+    "input": {
+      "task_id": {
+        "$from": "12.task_id"
+      }
+    },
+    "output_keys": ["task_id", "removed"],
+    "status": "executed"
+  },
+  {
+    "command": "schedule.restore_task",
+    "input": {
+      "task_id": {
+        "$from": "12.task_id"
+      }
+    },
+    "output_keys": ["task_id", "restored"],
+    "status": "executed"
+  }
+]

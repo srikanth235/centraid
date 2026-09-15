@@ -1,0 +1,60 @@
+{
+  "schema": "centraid-applier-atomicity/1",
+  "$note": "A crash mid-batch is completed by the next attempt, and a duplicate delivery lands once (#1020, D-1020-D1-11). Hand-authored: the claim is about what happens BETWEEN two applies, which no row dump states.",
+  "$whyItIsOneGateAndNotTwo": "Idempotence under duplicate delivery and recovery after a crash are the same property seen twice. An insert of a row already present is the upsert's no-op update; a delete of a row already gone deletes nothing. So a batch delivered twice lands the same state, and a batch half-delivered can simply be delivered again — which is why the applier needs no journal of its own, only a cursor that refuses to move backwards.",
+  "script": {
+    "commits": [
+      {
+        "label": "first",
+        "producer": "atomicity.write",
+        "statements": [
+          "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES ('atom-a', 'person', 'A', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
+        ]
+      },
+      {
+        "label": "second",
+        "producer": "atomicity.write",
+        "statements": [
+          "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES ('atom-b', 'person', 'B', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
+        ]
+      },
+      {
+        "label": "third",
+        "producer": "atomicity.write",
+        "statements": [
+          "UPDATE core_party SET display_name = 'A renamed', updated_at = '2026-01-02T00:00:00.000Z' WHERE party_id = 'atom-a'",
+          "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at) VALUES ('atom-c', 'person', 'C', '2026-01-02T00:00:00.000Z', '2026-01-02T00:00:00.000Z')"
+        ]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "a crash mid-batch is completed by the next attempt",
+      "$how": "Apply only the first commit's rows, then apply the WHOLE batch. The second attempt must land the rest and must not double-apply the first.",
+      "applyFirst": { "commits": 1 },
+      "thenApply": "all",
+      "expectParties": ["atom-a", "atom-b", "atom-c"],
+      "expectDisplayNameOfA": "A renamed"
+    },
+    {
+      "name": "duplicate delivery lands once",
+      "$how": "Apply the whole batch twice. The row set, every row's values and the cursor must be identical after the second apply.",
+      "applyFirst": "all",
+      "thenApply": "all",
+      "expectParties": ["atom-a", "atom-b", "atom-c"],
+      "expectDisplayNameOfA": "A renamed",
+      "expectCursorUnchanged": true
+    },
+    {
+      "name": "the applier is last-write-wins by DELIVERY order, and the cursor is what makes that safe",
+      "$how": "Apply the whole batch, then apply only the FIRST commit again. `atom-a` goes BACK to its original name, because the applier is a faithful mirror of the row image it was handed and does not second-guess it.",
+      "$why": "This is the honest statement of the property, and the temptation is to assert the opposite. An applier that compared `row_version` and refused an older image would need a version on every table — and 51 replicated tables have none (plane census seam 9), so it would silently refuse nothing on exactly those. What actually makes redelivery safe is that a SEAT NEVER ASKS FOR ROWS BELOW ITS CURSOR: the cursor refuses to move backwards (`record_seat_cursor`), the door refuses a cursor below the floor, and the log serves `seq > since`. The ordering guarantee lives in the door, not in the applier.",
+      "applyFirst": "all",
+      "thenApply": { "commits": 1 },
+      "expectParties": ["atom-a", "atom-b", "atom-c"],
+      "expectDisplayNameOfA": "A",
+      "expectCursorUnchanged": true
+    }
+  ]
+}

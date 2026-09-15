@@ -171,7 +171,7 @@
     "turbo": "node scripts/ci/turbo.mjs",
     "turbo:lint": "node scripts/ci/turbo.mjs run lint",
     "typecheck": "node scripts/ci/turbo.mjs run typecheck && tsc -p tests",
-    "typecheck:affected": "node scripts/ci/turbo.mjs run typecheck --filter='[origin/main]' && tsc -p tests",
+    "typecheck:affected": "node scripts/ci/turbo.mjs run typecheck --filter='[origin/main]'",
     "web:build": "node scripts/ci/turbo.mjs run build --filter=@centraid/web",
     "web:smoke": "node scripts/web/smoke.mjs"
   },

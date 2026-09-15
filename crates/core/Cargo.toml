@@ -1,0 +1,48 @@
+[package]
+name = "centraid-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_core"
+path = "src/lib.rs"
+
+[features]
+default = []
+# THE FAULT-INJECTION DOOR (#1020 wave 3, lane E finding 4). Makes a `Command`
+# named `debug.panic` panic inside `Handle::call`, so a shell can prove its own
+# clause-9 poison handling against the REAL library rather than a fake ABI.
+# Never on in a release profile, and it exports nothing: `abi-five-symbols`
+# still counts five.
+debug-fault = []
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+# THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
+# core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
+# door and this is the crate that has both halves in scope.
+centraid-blobs = { path = "../blobs" }
+centraid-ontology = { path = "../ontology" }
+centraid-protocol = { path = "../protocol" }
+centraid-seat = { path = "../seat" }
+centraid-vault = { path = "../vault" }
+prost.workspace = true
+# The network seam hands a connection DOWN (`link::SeatNetwork::sync`): SQLite
+# allows one writer and this crate holds it, so the type has to be nameable here.
+rusqlite.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+flate2.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+
+[[test]]
+name = "call_budget"
+path = "tests/call_budget.rs"

@@ -1,0 +1,222 @@
+name: gate
+
+# THE PULL-REQUEST GATE for the v1 tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+#
+# `cargo xtask gate --profile pr` is the only thing this workflow runs, because
+# the issue rules it the only CI entrypoint: v1 is three languages, and a gate
+# assembled out of per-language jobs would have to be kept in step by hand in
+# four places. One command, one step list, one budget
+# (contracts/ledgers/gate-budgets.json), one artifact directory.
+#
+# THIS WORKFLOW IS NOW THE SINGLE OPEN-PR ENTRY POINT, taking that role from
+# ci.yml. #557's ruling has not changed and is the reason there is exactly one:
+# a workflow that needs `paths:` filters to be affordable can never be a
+# required check, because a filtered-out workflow reports no status and a
+# required check that never reports blocks the PR forever. So there is one
+# PR-triggered workflow and everything a PR must satisfy is inside it. Two jobs,
+# not one, and neither is path-filtered so both always report:
+# `gate` runs the profile, and `dependency-review` is the one PR gate that
+# cannot be a step of a command (see its comment below).
+# `scripts/lint-workflow-pins.mjs` rule 5 enforces the single-entry-point
+# property and now names this file.
+#
+# OWNER HAND-OFF — branch protection must be repointed. The required check today
+# is `check`, ci.yml's aggregator, and ci.yml no longer listens on
+# `pull_request`, so `check` will stop reporting. The owner must make `gate` AND
+# `dependency-review` (both jobs here) the required checks; until then pull
+# requests will block. Branch protection is configured outside this repository,
+# like the code-owner review requirement — see crates/xtask/README.md and
+# docs/toolchain.md.
+#
+# Governance is NOT run here. `.governance/run.sh` is governance.yml's job and
+# its own required check; running it twice would charge the budget twice for one
+# answer and give one failure two places to be reported from.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded PR runs, exactly as ci.yml does for the same reason.
+concurrency:
+  group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # The `pr` profile's budget is 15 minutes and the runner bound is a backstop
+    # against a hung job, not a second budget: a cancelled job is red with no
+    # evidence (#557), and the profile's own timing table is the number that
+    # matters.
+    # The `pr` profile's own ceiling is `gate-budgets.json`'s 1500 s, measured
+    # on a COLD tree (a Cargo cache miss); a cache hit runs it in under two
+    # minutes. This bound has to sit above the budget plus the provisioning
+    # steps above it, or a cache-miss run would be killed by the runner before
+    # the budget it is scored against could report (#1020, D-1020-B2-3).
+    timeout-minutes: 40
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          # `audit` for the reason hygiene.yml and soak-weekly.yml use it: the
+          # allowlist for a lane that talks to crates.io, the sparse index and
+          # the Bun registry has not been learned yet, and a job that dies on an
+          # unlisted endpoint blocks every pull request. Flip to `block` once the
+          # run summaries have named the destinations.
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # `buf breaking --against .git#branch=main,...` and the released tags
+          # inside the version window are read out of the local clone, and
+          # actions/checkout fetches one commit by default. Without the full
+          # history the `buf` step would compare the schema against nothing and
+          # report a pass, which is a gate that gates nothing.
+          fetch-depth: 0
+      # Bun and Node for the profile's `ts-static` step, which runs
+      # `bun run check:push:static` over whatever TypeScript the v1 tree grows,
+      # and the v1 Cargo cache (`target/` plus `~/.cargo/bin`, so cargo-deny
+      # survives between runs).
+      - uses: ./.github/actions/setup
+        with:
+          cargo-cache: v1
+      # rust-toolchain.toml is the one version file. Reading the channel out of
+      # it here rather than repeating `1.94.1` is what keeps it the only one:
+      # dtolnay/rust-toolchain reads its toolchain from its OWN ref, and a SHA
+      # pin has no ref name to read, so the input is required (lint:workflow-pins
+      # rule 7) and must come from somewhere.
+      - id: channel
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          if [ -z "$channel" ]; then
+            echo "::error::gate: rust-toolchain.toml has no [toolchain] channel"
+            exit 1
+          fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: ${{ steps.channel.outputs.channel }}
+          components: rustfmt, clippy
+      # The `pr` profile's external tools. Each one FAILS rather than skips when
+      # its binary is absent under CI (see crates/xtask/src/gate.rs `external`),
+      # so an install that silently stopped working reds the gate instead of
+      # quietly removing a lane. Versions are pinned here and nowhere else.
+      - name: Install cargo-deny
+        run: |
+          set -euo pipefail
+          if command -v cargo-deny >/dev/null 2>&1; then
+            echo "cargo-deny already on PATH from the restored Cargo cache: $(cargo-deny --version)"
+          else
+            cargo install cargo-deny --locked
+          fi
+      - name: Install actionlint, gitleaks, osv-scanner and buf
+        env:
+          # actionlint: the version ci.yml's `static` job pins as a container
+          # action. gitleaks and osv-scanner: the same release pins ci.yml's
+          # `gitleaks` and `osv-scanner` jobs use. Those two steps are red on
+          # inherited tree state (D-1020-B1, #1020) and are here anyway: a PR
+          # gate that stops reporting because its target is red today is a
+          # weakening, and inherited red is named, never hidden.
+          #
+          # buf: the `buf` step runs `buf lint` and `buf breaking` over
+          # `crates/api-proto/proto` against the PR base AND every released tag
+          # inside the version window, which is the promise #1020's Compatibility
+          # section makes to seats that update on their own schedule
+          # (docs/decisions.md#the-pr-gate-loop-892 is why this install lives in
+          # this workflow and not in a second one). It is a release BINARY rather
+          # than a marketplace action so the version below is the only pin, the
+          # same posture as the three above; `cargo xtask gate`'s `buf` step
+          # FAILS rather than skips when it is absent under CI.
+          ACTIONLINT_VERSION: 1.7.12
+          GITLEAKS_VERSION: 8.30.1
+          OSV_VERSION: 2.4.0
+          BUF_VERSION: 1.61.0
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin actionlint
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
+            -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+          curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" \
+            -o /usr/local/bin/buf
+          chmod +x /usr/local/bin/buf
+          actionlint --version
+          gitleaks version
+          osv-scanner --version
+          buf --version
+      # The profile's `ts-static` step runs `bun run check:push:static`, which
+      # resolves `@centraid/*` through the published entry points and so needs
+      # the packages' `dist/` on disk. Provisioning the tree is the workflow's
+      # job — it already installs four binaries — and not the gate's: a build
+      # inside `cargo xtask gate` would charge the profile's own budget for an
+      # environment prerequisite. Turbo-cached, and filtered to nothing because
+      # the static gate typechecks the whole workspace (#1020).
+      - run: bun run build
+      - run: cargo xtask gate --profile pr
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: gate-pr-artifacts
+          path: target/xtask/**
+          retention-days: 7
+          if-no-files-found: warn
+
+  # The ONE pull-request gate that cannot be a step of `cargo xtask gate`: it is
+  # a GitHub Action reading the PR's dependency diff through the API, not a
+  # command over the tree. It keeps its own job so `pull-requests: write` is not
+  # handed to the job that compiles third-party crates, and it is unfiltered, so
+  # it always reports on a pull request and can be required. Moved here verbatim
+  # from ci.yml's `dependency-review` job, minus that file's evidence-writing
+  # steps, which belong to its own report pipeline on `main`.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # Start at `high`. Starting at `low` on a monorepo this size means the
+          # gate is muted within a week; tighten once the baseline is clean.
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+          # Denies the licence on NEW dependencies only — existing ones are
+          # untouched, so it cannot retroactively red an unrelated PR.
+          deny-licenses: AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later
+
+  # THE PREBUILT CORE, and deliberately NOT on a pull request.
+  #
+  # #1020 ships a prebuilt core: six binary triples, four Android ABIs and an
+  # iOS XCFramework. Building all eleven on every pull request would buy nothing
+  # a PR needs — the `gate` job above already compiles the workspace in release
+  # configuration for the host triple, which is what catches a code change that
+  # does not build. What the OTHER triples catch is a cross-compilation or a
+  # platform-conditional break, and that answer is worth having once per merge,
+  # not once per push to a branch.
+  #
+  # So this job runs on `push: main` and on `workflow_dispatch`, never on
+  # `pull_request` — which is also why it is a job here rather than a second
+  # workflow: `gate.yml` is the one workflow allowed to listen on open-PR events
+  # (lint:workflow-pins rule 5), and `release.yml` is the one allowed to listen
+  # on tags (rule 6), so a lane that wants both callers has to be
+  # `workflow_call` and be invoked from each. `release.yml` invokes the same
+  # lane on a tag, with `binary-only: false`.
+  #
+  # `binary-only: true` here: on `main` the point is to keep the cache warm and
+  # to catch a cross-compilation break, and the mobile artifacts need an Android
+  # NDK and a macOS runner per push to do it.
+  prebuilt-core:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/lane-prebuilt-core.yml
+    with:
+      binary-only: true

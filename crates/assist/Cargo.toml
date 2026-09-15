@@ -1,0 +1,26 @@
+[package]
+name = "centraid-assist"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The client half of the ACP wire, and the one dependency that replaces v0's
+# hand-rolled JSON-RPC-over-stdio plumbing (#1020, D-1020-AS5).
+agent-client-protocol.workspace = true
+centraid-vault = { path = "../vault" }
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# The #842 corpus asks the audit-band registry which produced tables are
+# EVIDENCE of a refusal rather than a breach, so the check is over life data.
+centraid-ontology = { path = "../ontology" }
+tempfile.workspace = true

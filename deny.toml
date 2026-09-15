@@ -1,10 +1,22 @@
 # cargo-deny policy for Centraid's first-party Rust crates (issue #842 W7.2).
 #
-# One shared policy at the repo root rather than a copy beside each of
-# packages/tunnel/data-plane, packages/tunnel/native and apps/web/iroh-wasm —
-# three files would drift, and a per-crate relaxation would be invisible.
-# `scripts/security/rust-supply-chain.mjs` passes this file to every crate via
-# `--config`.
+# One shared policy at the repo root rather than a copy beside each crate root —
+# copies would drift, and a per-crate relaxation would be invisible. There are
+# FOUR crate roots now: the three v0 byte-plane crates
+# (packages/tunnel/data-plane, packages/tunnel/native, apps/web/iroh-wasm) and
+# the v1 workspace at the repo root (#1020), which is all of `crates/*` behind
+# one Cargo.lock. Two consumers pass this file in:
+# `scripts/security/rust-supply-chain.mjs` walks the tree for lockfiles and
+# hands each crate `--config deny.toml`, and the v1 gate's `deny` step runs
+# `cargo deny --all-features --config deny.toml check` over the workspace.
+#
+# Nothing was relaxed to admit the new root. In particular the
+# `[sources] allow-registry` entry below is the git index URL and the v1
+# workspace resolves through cargo's sparse index
+# (`sparse+https://index.crates.io/`); those are two protocols for the same
+# registry, cargo-deny compares the registry, and the workspace passes the
+# entry unchanged — verified with `cargo deny --config deny.toml check` on the
+# wave 1 tree (`sources ok`).
 #
 # Tighten-only, like every other gate knob in this repo: an exception belongs
 # in the explicit `[licenses].exceptions` or `[bans].skip` list, where it is

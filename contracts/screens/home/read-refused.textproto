@@ -1,0 +1,11 @@
+# HOME ITSELF REFUSED — distinct from every tile being unreadable.
+#
+# The tile case is a Home that loaded and could not read its apps; this is a
+# Home that could not load at all, so there is no grid to show and no claim
+# about any app. A screen that rendered an empty springboard here would be
+# inventing eight empty apps out of one failure.
+failure {
+  kind: READ_FAILURE_KIND_NO_COPY_YET
+  sentence: "This device has not copied these yet."
+  remedy: "Stay on Wi-Fi while Centraid catches up."
+}

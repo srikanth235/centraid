@@ -1,0 +1,14 @@
+# `more` IS A SHEET, NEVER A DESTINATION (`apps/mobile/src/navigation.ts:19-24`).
+# The band is still the library; the sheet is over it. The fixture asserts both
+# at once, which is what makes "more is not a destination" checkable rather than
+# a comment.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_LIBRARY
+permission: MEDIA_PERMISSION_GRANTED
+data { cells { asset_id: "ast-0004" captured_at: "2026-09-09T12:00:00Z" kind: KIND_PHOTO } }
+backup { phase: PHASE_DONE }
+sheet: SHEET_MORE

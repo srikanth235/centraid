@@ -5,6 +5,21 @@ name: lane-release-desktop
 # other workflows watching the same tags with no shared notion of whether the
 # release as a whole succeeded.
 #
+# #1020 wave 3 lane F — this lane now packages `desktop/` (the v1 seat), not
+# `apps/desktop` (the v0 oracle). Three things changed and nothing else:
+#   * each package job builds the `centraid` binary first and stages it as the
+#     app's `extraResources`, because the seat is a SEPARATE PROCESS the shell
+#     spawns. When lane G's prebuilt-core artifacts land, the `cargo build` step
+#     is replaced by a download and nothing else moves.
+#   * `working-directory` is `desktop/electron`, and the config it packages is
+#     `desktop/electron/electron-builder.yml` — which carries the `centraid://`
+#     registration itself rather than in a second file (census §F seam 6).
+#   * the entitlements the mac job signs against are re-derived: no
+#     `network.server` (the seat listens on nothing) and no
+#     `disable-library-validation` (the seat is a binary, not a dylib).
+# The signing gates, the unsigned-scaffolding warning and the withholding of
+# installers from the GitHub Release until enrolment are UNCHANGED.
+#
 # I1–I3, I7, I11 / #501 — package desktop on version tags.
 # Signing/notarization is secret-gated. Without enrolled credentials:
 #   - jobs still build installers (unsigned scaffolding)
@@ -65,9 +80,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-      - run: bun run build --filter=@centraid/desktop...
+        with:
+          cargo-cache: v1
+      - name: Build and stage the seat binary
+        run: |
+          set -euo pipefail
+          cargo build --release -p centraid
+          mkdir -p desktop/electron/resources
+          cp target/release/centraid desktop/electron/resources/centraid
+          chmod +x desktop/electron/resources/centraid
+          ./desktop/electron/resources/centraid --version --json
+      - run: bun run --cwd desktop/electron build
       - name: Package macOS (unsigned when Apple secrets absent)
-        working-directory: apps/desktop
+        working-directory: desktop/electron
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_API_KEY != '' && 'true' || 'false' }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
@@ -81,9 +106,9 @@ jobs:
             echo "Apple secrets absent — building unsigned artifacts (scaffolding only)"
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
-          bun run dist -- --mac
+          bunx electron-builder --config electron-builder.yml --publish never --mac
       - name: Assert shippable mac artifacts
-        working-directory: apps/desktop
+        working-directory: desktop/electron
         run: |
           set -euo pipefail
           mkdir -p release
@@ -101,7 +126,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-macos
-          path: apps/desktop/release/
+          path: desktop/electron/release/
           retention-days: 14
 
   package-windows:
@@ -111,9 +136,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-      - run: bun run build --filter=@centraid/desktop...
+        with:
+          cargo-cache: v1
+      - name: Build and stage the seat binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release -p centraid
+          mkdir -p desktop/electron/resources
+          cp target/release/centraid.exe desktop/electron/resources/centraid.exe
+          ./desktop/electron/resources/centraid.exe --version --json
+      - run: bun run --cwd desktop/electron build
       - name: Package Windows (Azure Trusted Signing when secrets present — I3)
-        working-directory: apps/desktop
+        working-directory: desktop/electron
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -127,9 +162,9 @@ jobs:
           else
             echo "Azure secrets absent — unsigned NSIS scaffolding"
           fi
-          bun run dist -- --win
+          bunx electron-builder --config electron-builder.yml --publish never --win
       - name: Assert shippable Windows artifacts
-        working-directory: apps/desktop
+        working-directory: desktop/electron
         shell: bash
         run: |
           set -euo pipefail
@@ -143,7 +178,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-windows
-          path: apps/desktop/release/
+          path: desktop/electron/release/
           retention-days: 14
 
   package-linux:
@@ -153,12 +188,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-      - run: bun run build --filter=@centraid/desktop...
+        with:
+          cargo-cache: v1
+      - name: Build and stage the seat binary
+        run: |
+          set -euo pipefail
+          cargo build --release -p centraid
+          mkdir -p desktop/electron/resources
+          cp target/release/centraid desktop/electron/resources/centraid
+          chmod +x desktop/electron/resources/centraid
+          ./desktop/electron/resources/centraid --version --json
+      - run: bun run --cwd desktop/electron build
       - name: Package Linux AppImage
-        working-directory: apps/desktop
-        run: bun run dist -- --linux
+        working-directory: desktop/electron
+        run: bunx electron-builder --config electron-builder.yml --publish never --linux
       - name: Assert shippable Linux artifacts
-        working-directory: apps/desktop
+        working-directory: desktop/electron
         run: |
           set -euo pipefail
           mkdir -p release
@@ -171,7 +216,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-linux
-          path: apps/desktop/release/
+          path: desktop/electron/release/
           retention-days: 14
 
   # #842 W6.2 — a release ships a bill of materials, a provenance statement over
