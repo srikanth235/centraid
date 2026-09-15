@@ -2572,3 +2572,66 @@ openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew …`, no config change):
 in-memory allowlist, so there was nothing there to correct; the allowlist's
 current state is stated in [enrollment.md](../docs/enrollment.md) and
 [SECURITY.md](../SECURITY.md) instead.
+
+## Live-notes — editor body from `core_content_text`, save queues (#1025)
+
+Lane `claude/1025-live-notes`. Cite **D-1025-S5** (notes save / body as content
+item) and rulings **R-NOTES-1**, **R-NOTES-2**, **R-NOTES-3**.
+
+### The defect
+
+Live proof (gateway stopped): open a note, type, Save → "Not saved" and
+`seat_outbox` stayed empty. The editor showed
+"Centraid has not copied this note's text to this device yet" while the note's
+words were on screen. Replica side: every note had a `core_content_text` row;
+none needed a blob in `seat_blob_held`.
+
+Cause, in two seams:
+
+1. `/Users/srikanth/.grok/worktrees/gitspace-centraid/subagent-01a0a5e1-a8de-7ba0-82f9-0e5a2ffcc626/mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/notes/NotesReads.kt`
+   `arrived()` always set `body = ""` and `body_unavailable = true`. The page
+   select named no body column and asked for no computed one.
+2. `/Users/srikanth/.grok/worktrees/gitspace-centraid/subagent-01a0a5e1-a8de-7ba0-82f9-0e5a2ffcc626/mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/notes/NotesEditorMachine.kt`
+   refused every save while `body_unavailable`, including a member who had
+   typed a body, and dropped title/pin-only edits from the outbox.
+
+### What changed
+
+| Where | What |
+| --- | --- |
+| `crates/api-proto/proto/centraid/core/v1/query.proto` | `PageQuery.with_note_body` — append `body_text` from `core_content_text`. |
+| `crates/vault/src/page.rs` | `KeysetPage.note_body`, `NOTE_BODY_COLUMN`, correlated subquery on `body_content_id` (not a JOIN). |
+| `crates/core/src/api.rs` | Wires the flag; appends the column after select (and after thumbnail columns when both are set). |
+| `mobile/.../notes/NotesReads.kt` | `with_note_body = true`; `arrived()` fills body / sets unavailable only on SQL NULL. |
+| `mobile/.../notes/NotesEditorMachine.kt` | Body edit clears unavailable when non-empty (R-NOTES-2); title/pin dirty save queues while unavailable (omit `body_text`); pristine empty+unavailable still refuses; `onlineOnly = false` (R-NOTES-3). |
+| `mobile/.../AppReadsSpec.kt`, `WriteRunnerSpec.kt` | Red-first coverage for the three end-state cases. |
+
+### Demonstrated red
+
+Before the fix, `:shared:jvmTest` on the new assertions:
+
+```
+AppReadsSpec > a note draft whose core_content_text row arrived fills the body
+  expected:<NoteDraft{… body=milk and eggs … body_unavailable=false}>
+   but was:<NoteDraft{… body= … body_unavailable=true}>
+
+WriteRunnerSpec > a title-only save while the body is unavailable still queues
+  java.util.NoSuchElementException: List is empty.   # no SubmitWrite
+
+WriteRunnerSpec > a member who typed a body while it was marked unavailable saves their words
+  expected:<false> but was:<true>   # body_unavailable stayed set
+```
+
+### Green
+
+- `JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew :shared:jvmTest` — green.
+- `CARGO_TARGET_DIR=/tmp/centraid-1025-notes-… cargo test -p centraid-vault --lib page::keyset_tests` — green, including
+  `note_body_reads_core_content_text_and_null_when_absent`.
+- `cargo check -p centraid-core` — green (prost regenerated for `with_note_body`).
+
+### Not done
+
+Online save against a live gateway was not re-proven on a device in this lane;
+the queue path (`SubmitWrite`, `onlineOnly = false`, omit/`body_text` rules) is
+what the unit suite holds. Home tiles, photos, vault switcher, CLI, header sync
+state are out of scope.

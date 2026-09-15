@@ -110,6 +110,8 @@ class AppReadsSpec : StringSpec({
         ).shouldNotBeNull()
         query.bind.map { it.text } shouldBe listOf("note-0001")
         query.where_.shouldNotBeNull() shouldNotContain "note-0001"
+        // R-NOTES-1: the door appends `body_text` from `core_content_text`.
+        query.with_note_body shouldBe true
     }
 
     "a tally row is projected off the columns it selected" {
@@ -223,27 +225,51 @@ class AppReadsSpec : StringSpec({
         cell.capture_group_id shouldBe null
     }
 
-    "a note draft is projected off the columns it selected" {
+    "a note draft whose core_content_text row arrived fills the body" {
+        // R-NOTES-1: the editor reads the same text the replica holds. The
+        // door appends `body_text` from `core_content_text` (not `seat_blob_held`)
+        // after the named columns, the same way `thumbnail_path` rides a photos
+        // page (#1025 live-notes).
         val row = Row(
             values = listOf(
                 Value(text = "note-1"),
                 Value(text = "Groceries"),
                 Value(text = "markdown"),
-                // SQLite HAS NO BOOLEAN: `pinned` is an INTEGER column, so it
-                // arrives on the integer arm. Read as text it would come back
-                // empty and unpin every note in the vault.
                 Value(integer = 1L),
                 Value(text = "rev-7"),
                 Value(text = "2026-02-03T10:00:00Z"),
+                Value(text = "milk and eggs"),
             ),
         )
         val draft = NotesReads.arrived(listOf(row), null).data_.shouldNotBeNull().draft
         draft shouldBe NoteDraft(
             title = "Groceries",
-            // THE BODY IS NOT A COLUMN. It lives in the content item
-            // `body_content_id` points at, which this read does not fetch — and
-            // the draft SAYS so, so the editor can refuse a save that would
-            // otherwise blank the note (#1025 S5).
+            body = "milk and eggs",
+            body_unavailable = false,
+            format = NoteDraft.Format.FORMAT_MARKDOWN,
+            pinned = true,
+            base_revision_id = "rev-7",
+        )
+    }
+
+    "a note draft without a core_content_text row is unavailable, not empty" {
+        // NULL on the appended column is "not on this device". An empty string
+        // would be a real body of zero characters, and collapsing the two would
+        // let a save blank a note whose words simply have not landed yet.
+        val row = Row(
+            values = listOf(
+                Value(text = "note-1"),
+                Value(text = "Groceries"),
+                Value(text = "markdown"),
+                Value(integer = 1L),
+                Value(text = "rev-7"),
+                Value(text = "2026-02-03T10:00:00Z"),
+                Value(null_ = centraid.core.v1.NullValue()),
+            ),
+        )
+        val draft = NotesReads.arrived(listOf(row), null).data_.shouldNotBeNull().draft
+        draft shouldBe NoteDraft(
+            title = "Groceries",
             body = "",
             body_unavailable = true,
             format = NoteDraft.Format.FORMAT_MARKDOWN,

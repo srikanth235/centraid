@@ -490,6 +490,7 @@ fn first_row(handle: &centraid_core::Handle, table: &str, column: &str) -> Optio
                     descending: false,
                 }),
                 with_held_thumbnail: false,
+                with_note_body: false,
             }),
             limit: 1,
             after: None,

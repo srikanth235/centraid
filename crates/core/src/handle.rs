@@ -3763,6 +3763,7 @@ mod tests {
                         descending: false,
                     }),
                     with_held_thumbnail: false,
+                    with_note_body: false,
                 }),
                 limit: 10,
                 after: None,

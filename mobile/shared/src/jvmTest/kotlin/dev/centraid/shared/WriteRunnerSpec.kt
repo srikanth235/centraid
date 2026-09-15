@@ -116,16 +116,46 @@ class WriteRunnerSpec : StringSpec({
     }
 
     "a save that would blank the note is refused, not sent" {
-        // THE DATA-LOSS GUARD (#1025 S5). A note's body is not a column — it
-        // lives in the content item `body_content_id` names, read through the
-        // byte door, which a seat's page read does not reach yet. So the draft
-        // arrives with an empty body and `body_unavailable` set, and
-        // `knowledge.save_note` takes the WHOLE draft: sending it would replace
-        // a real body with an empty string, and the member would have no copy
-        // left anywhere.
-        //
-        // Found by pressing Save on a device and reading the queued intent's
-        // input, which carried `"body":""` over a note that has one.
+        // THE DATA-LOSS GUARD (#1025 S5, R-NOTES-2). A draft whose body is
+        // empty AND marked unavailable has no member-typed replacement: sending
+        // it as a whole-draft write would blank the note. `knowledge.edit_note`
+        // treats an absent `body_text` as leave-alone, and title/pin-only saves
+        // queue on that path — but a pristine empty+unavailable save with no
+        // typed body still refuses, so the sentence reaches the member rather
+        // than a quiet no-op that looks like success.
+        val opened = NotesEditorMachine.reduce(
+            NotesEditorMachine.initial(),
+            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
+        ).state
+        val loaded = NotesEditorMachine.reduce(
+            opened,
+            NotesEditorEvent(
+                data_ = NotesEditorEvent.DataArrived(
+                    draft = NoteDraft(
+                        title = "Groceries",
+                        body = "",
+                        body_unavailable = true,
+                        base_revision_id = "rev-7",
+                    ),
+                ),
+            ),
+        ).state
+        val saved = NotesEditorMachine.reduce(
+            loaded,
+            NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
+        )
+
+        // NO WRITE LEAVES. That is the whole assertion.
+        saved.effects.shouldBeEmpty()
+        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
+        saved.state.draft?.save_failure.shouldNotBeNull()
+            .sentence shouldBe "Centraid has not copied this note's text to this device yet."
+    }
+
+    "a title-only save while the body is unavailable still queues" {
+        // End state (#1025 live-notes): omit `body_text` (already) and still
+        // queue — must not blank the note and must not drop the edit. R-NOTES-3:
+        // a note save is never onlineOnly; queue is the product.
         val opened = NotesEditorMachine.reduce(
             NotesEditorMachine.initial(),
             NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
@@ -151,15 +181,50 @@ class WriteRunnerSpec : StringSpec({
             edited,
             NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
         )
+        val write = saved.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe NotesEditorMachine.SAVE_COMMAND
+        write.onlineOnly shouldBe false
+        write.inputJson.contains("body_text").shouldBe(false)
+        write.inputJson.contains("\"title\":\"Groceries and wine\"").shouldBe(true)
+        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
+        saved.state.draft?.save_failure shouldBe null
+    }
 
-        // NO WRITE LEAVES. That is the whole assertion.
-        saved.effects.shouldBeEmpty()
-        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
-        // And the member's words are still on the screen, with the sentence
-        // over them rather than instead of them.
-        saved.state.draft?.title shouldBe "Groceries and wine"
-        saved.state.draft?.save_failure.shouldNotBeNull()
-            .sentence shouldBe "Centraid has not copied this note's text to this device yet."
+    "a member who typed a body while it was marked unavailable saves their words" {
+        // R-NOTES-2: refusing stands ONLY when the draft body is empty AND
+        // unavailable. A member who typed a body is saving their words, not
+        // blanking the note — and `edited()` must clear the flag so
+        // `saveInput` includes `body_text`.
+        val opened = NotesEditorMachine.reduce(
+            NotesEditorMachine.initial(),
+            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
+        ).state
+        val loaded = NotesEditorMachine.reduce(
+            opened,
+            NotesEditorEvent(
+                data_ = NotesEditorEvent.DataArrived(
+                    draft = NoteDraft(
+                        title = "Groceries",
+                        body = "",
+                        body_unavailable = true,
+                        base_revision_id = "rev-7",
+                    ),
+                ),
+            ),
+        ).state
+        val typed = NotesEditorMachine.reduce(
+            loaded,
+            NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "milk")),
+        ).state
+        typed.draft?.body_unavailable shouldBe false
+        val saved = NotesEditorMachine.reduce(
+            typed,
+            NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
+        )
+        val write = saved.effects.single() as ScreenEffect.SubmitWrite
+        write.onlineOnly shouldBe false
+        write.inputJson.contains("\"body_text\":\"milk\"").shouldBe(true)
+        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
     }
 
     "a draft whose body DID arrive saves normally" {

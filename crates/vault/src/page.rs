@@ -260,6 +260,9 @@ pub struct KeysetPage {
     /// APPEND A `thumbnail_path` COLUMN, resolved from the bytes this device
     /// holds (#1025, D-1025-S7-20). See [`HELD_THUMBNAIL_COLUMN`].
     pub held_thumbnail: bool,
+    /// APPEND A `body_text` COLUMN from `core_content_text` (#1025, R-NOTES-1).
+    /// See [`NOTE_BODY_COLUMN`].
+    pub note_body: bool,
 }
 
 /// The computed column [`KeysetPage::held_thumbnail`] appends, and the whole of
@@ -313,6 +316,21 @@ pub const HELD_ORIGINAL_HASH_COLUMN: &str = "original_hash";
 /// held; what `drawable` governs is whether a PATH may be handed out, and this
 /// column hands out no path.
 pub const HELD_ORIGINAL_HELD_COLUMN: &str = "original_held";
+
+/// The computed column [`KeysetPage::note_body`] appends (#1025, R-NOTES-1).
+///
+/// **A correlated subquery and not a `LEFT JOIN`**, for the same reason as
+/// [`HELD_THUMBNAIL_COLUMN`]: a join through `core_content_text` is one-to-one
+/// today, and a subquery keeps the page's row count honest if that ever
+/// changes. One value per row, ordering untouched.
+///
+/// **Text is a row, not a blob.** `core_content_text.body_text` is what the
+/// replica holds for a note; `seat_blob_held` is the wrong door. NULL means
+/// this device has no text row for the note's `body_content_id`.
+///
+/// The `from` table must carry `body_content_id`. One that does not simply
+/// answers NULL for every row.
+pub const NOTE_BODY_COLUMN: &str = "body_text";
 
 /// One page of rows, plus the cursor to ask from next.
 #[derive(Debug, Clone)]
@@ -424,8 +442,19 @@ impl Vault {
         } else {
             String::new()
         };
+        let note_body = if page.note_body {
+            format!(
+                ", (SELECT t.body_text FROM core_content_text t
+                      WHERE t.content_id = {from}.body_content_id
+                   ) AS {column}",
+                from = crate::log::quoted(&page.from),
+                column = crate::log::quoted(NOTE_BODY_COLUMN),
+            )
+        } else {
+            String::new()
+        };
         let sql = format!(
-            "SELECT {projection}{thumbnail} FROM {from}{predicate} \
+            "SELECT {projection}{thumbnail}{note_body} FROM {from}{predicate} \
              ORDER BY {sort} {direction}, {pk} {direction} LIMIT {probe}",
             from = crate::log::quoted(&page.from),
             sort = crate::log::quoted(&page.sort_column),
@@ -493,6 +522,7 @@ mod keyset_tests {
             limit: 10,
             after: None,
             held_thumbnail: false,
+            note_body: false,
         };
         assert!(vault.keyset_page(&base).is_ok());
 
@@ -546,6 +576,7 @@ mod keyset_tests {
             limit: 2,
             after: None,
             held_thumbnail: false,
+            note_body: false,
         };
         let first = vault.keyset_page(&base).expect("a page serves");
         assert_eq!(first.rows.len(), 2);
@@ -579,6 +610,89 @@ mod keyset_tests {
         let whole = vault.keyset_page(&last).expect("a page serves");
         assert_eq!(whole.rows.len(), 6, "five parties plus the vault's owner");
         assert!(whole.next.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn note_body_reads_core_content_text_and_null_when_absent() {
+        // R-NOTES-1: text is a row. The appended column is the replica's
+        // `core_content_text.body_text`, NULL when that row is missing.
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("made");
+        let vault = Vault::create(dir.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        vault
+            .apply_replica(|connection| {
+                connection.execute_batch(
+                    "INSERT OR IGNORE INTO core_entity_kind(kind) VALUES
+                       ('knowledge.note'), ('core.content_item'), ('core.content_text');
+                     INSERT INTO core_entity(entity_id, entity_type, created_at) VALUES
+                       ('c-yes','core.content_item','2026-01-01T00:00:00Z'),
+                       ('c-no','core.content_item','2026-01-01T00:00:00Z'),
+                       ('n-yes','knowledge.note','2026-01-01T00:00:00Z'),
+                       ('n-no','knowledge.note','2026-01-01T00:00:00Z');
+                     INSERT INTO core_content_item
+                       (content_id, content_uri, content_hash, byte_size, created_at) VALUES
+                       ('c-yes','data:text/plain,milk',
+                        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                        '4','2026-01-01T00:00:00Z'),
+                       ('c-no','data:text/plain,gone',
+                        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                        '4','2026-01-01T00:00:00Z');
+                     INSERT INTO core_content_text
+                       (content_id, body_text, decoder, byte_size, created_at, updated_at)
+                       VALUES ('c-yes','milk and eggs','utf8',13,
+                               '2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+                     INSERT INTO knowledge_note
+                       (note_id, author_party_id, title, body_content_id, format, pinned,
+                        created_at, updated_at) VALUES
+                       ('n-yes', (SELECT party_id FROM core_party LIMIT 1), 'Yes', 'c-yes',
+                        'plain', 0, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'),
+                       ('n-no', (SELECT party_id FROM core_party LIMIT 1), 'No', 'c-no',
+                        'plain', 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');",
+                )?;
+                Ok(())
+            })
+            .expect("fixture");
+
+        let answer = vault
+            .keyset_page(&KeysetPage {
+                name: "notes.editor.note".to_owned(),
+                select: vec![
+                    "note_id".to_owned(),
+                    "title".to_owned(),
+                    "updated_at".to_owned(),
+                ],
+                from: "knowledge_note".to_owned(),
+                predicate: Some("deleted_at IS NULL".to_owned()),
+                binds: Vec::new(),
+                sort_column: "updated_at".to_owned(),
+                pk_column: "note_id".to_owned(),
+                descending: true,
+                limit: 10,
+                after: None,
+                held_thumbnail: false,
+                note_body: true,
+            })
+            .expect("the page serves");
+        assert_eq!(answer.rows.len(), 2);
+        let by_id: std::collections::BTreeMap<_, _> = answer
+            .rows
+            .iter()
+            .map(|row| {
+                let id = match row.get("note_id") {
+                    Some(Value::Text(text)) => text.clone(),
+                    other => panic!("note_id is text, got {other:?}"),
+                };
+                let body = row.get(NOTE_BODY_COLUMN).cloned();
+                (id, body)
+            })
+            .collect();
+        assert_eq!(
+            by_id.get("n-yes"),
+            Some(&Some(Value::Text("milk and eggs".to_owned())))
+        );
+        assert_eq!(by_id.get("n-no"), Some(&Some(Value::Null)));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

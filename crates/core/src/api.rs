@@ -112,6 +112,7 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             .as_ref()
             .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
         held_thumbnail: query.with_held_thumbnail,
+        note_body: query.with_note_body,
     })?;
 
     Ok(wire::Page {
@@ -148,6 +149,14 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                             .into_iter()
                             .flatten()
                             .map(ToOwned::to_owned),
+                    )
+                    // NOTE BODY RIDES AFTER THE THUMBNAIL COLUMNS when both
+                    // are asked, and alone after `select` when only it is
+                    // (#1025 live-notes, R-NOTES-1). Same positional contract.
+                    .chain(
+                        query
+                            .with_note_body
+                            .then(|| centraid_vault::page::NOTE_BODY_COLUMN.to_owned()),
                     )
                     .map(|column| {
                         image.get(&column).map_or_else(
@@ -390,6 +399,7 @@ mod tests {
                 descending: false,
             }),
             with_held_thumbnail: false,
+            with_note_body: false,
         }
     }
 

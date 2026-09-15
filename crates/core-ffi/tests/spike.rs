@@ -81,6 +81,7 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
                         descending: false,
                     }),
                     with_held_thumbnail: false,
+                    with_note_body: false,
                 }),
                 limit: 100,
                 after: None,

@@ -95,6 +95,7 @@ fn page(vault: &Vault) -> Vec<(String, Option<String>)> {
             limit: 50,
             after: None,
             held_thumbnail: true,
+            note_body: false,
         })
         .expect("the page serves");
     answer

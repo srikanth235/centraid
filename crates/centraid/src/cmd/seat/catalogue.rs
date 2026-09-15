@@ -247,6 +247,7 @@ pub fn to_wire(query: &PageQuery) -> wire::PageQuery {
         // THE CLI'S CATALOGUE READS PLAIN COLUMNS. The held-thumbnail column
         // is a screen's ask (D-1025-S7-20) and this surface prints rows.
         with_held_thumbnail: false,
+        with_note_body: false,
     }
 }
 

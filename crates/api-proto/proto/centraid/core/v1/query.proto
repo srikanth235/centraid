@@ -64,6 +64,18 @@ message PageQuery {
   // The `from` table must carry a `content_id` column. One does not, and the
   // page simply reports no thumbnail for every row.
   bool with_held_thumbnail = 7;
+  // RESOLVE EACH ROW'S NOTE BODY FROM `core_content_text` (#1025, R-NOTES-1).
+  //
+  // A shape, not a statement: the reader appends one computed column,
+  // `body_text`, after `select`'s columns, via a correlated subquery on
+  // `core_content_text` keyed by the row's `body_content_id`. Text is a ROW
+  // on the replica, never a blob in `seat_blob_held` — checking the byte store
+  // for a note body is the wrong door. NULL means the text is not on this
+  // device; an empty string is a real body of zero characters.
+  //
+  // The `from` table must carry a `body_content_id` column. One does not, and
+  // the page simply reports NULL for every row.
+  bool with_note_body = 8;
 }
 
 // The keyset cursor. `sort_key` is TEXT even for a numeric sort column, and a

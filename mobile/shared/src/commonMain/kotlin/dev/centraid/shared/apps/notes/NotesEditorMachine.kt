@@ -81,24 +81,29 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
             // their outbox with a hundred revisions of one note.
             event.title != null -> edited(state) { it.copy(title = event.title.title) }
 
-            event.body != null -> edited(state) { it.copy(body = event.body.body) }
+            // R-NOTES-2: a member who typed a body is saving their words. Clear
+            // the unavailable flag so `saveInput` includes `body_text`.
+            event.body != null -> edited(state) { draft ->
+                draft.copy(
+                    body = event.body.body,
+                    body_unavailable = draft.body_unavailable && event.body.body.isEmpty(),
+                )
+            }
 
             event.pin != null -> edited(state) { it.copy(pinned = !it.pinned) }
 
             event.save != null -> {
                 val draft = state.draft
-                if (draft != null && draft.body_unavailable) {
-                    // A SAVE THAT WOULD BLANK THE NOTE IS REFUSED, NOT SENT
-                    // (#1025 S5). The body is not a column — it lives in the
-                    // content item `body_content_id` names — and a seat whose
-                    // reads cannot reach the byte door yet holds a draft with
-                    // no body in it. `knowledge.save_note` takes the whole
-                    // draft, so sending this one would replace a real body with
-                    // an empty string and the member would have no copy left.
-                    //
-                    // Refusing is the honest answer and it is reversible: the
-                    // words stay on the screen, the sentence sits over them,
-                    // and the save works the moment the body arrives.
+                if (draft != null &&
+                    draft.body_unavailable &&
+                    draft.body.isEmpty() &&
+                    state.save != NotesEditorState.SaveState.SAVE_STATE_DIRTY
+                ) {
+                    // R-NOTES-2: refuse ONLY when empty AND unavailable, with
+                    // no member edit queued. A title/pin-only dirty draft still
+                    // queues (omit `body_text`); a typed body cleared the flag
+                    // above. A pristine Save on a body that is not here is the
+                    // sentence, not a quiet no-op.
                     Step(
                         state.copy(
                             save = NotesEditorState.SaveState.SAVE_STATE_REFUSED,
@@ -131,8 +136,7 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
                                 // replayed intent re-executes a command that
                                 // already committed.
                                 invokeKey = "notes.save:${state.note_id}:${draft.base_revision_id}",
-                                // A NOTE SAVE IS NOT ONLINE-ONLY. It queues,
-                                // and the outbox is the point.
+                                // R-NOTES-3: a note save is never onlineOnly.
                                 onlineOnly = false,
                             ),
                         ),
@@ -212,9 +216,9 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
      * * **An ABSENT field is "leave it alone", and that is load-bearing here.**
      *   `title` and `body_text` are `minLength: 1`, so an empty string is not a
      *   legal way to say "unchanged" — it is refused. The body is omitted
-     *   whenever this seat has not copied it, which is the same fact
-     *   [dev.centraid.shared.apps.notes.NotesReads] sets `body_unavailable` for
-     *   and the reducer refuses a save on; omitting it here is the second belt.
+     *   whenever this seat has not copied it (`body_unavailable`), which is
+     *   what lets a title/pin-only save queue without blanking the note
+     *   (R-NOTES-2/3).
      *
      * `pinned` is 0 or 1: the schema says integer, because SQLite has no
      * boolean and a `true` on the wire would invent one.

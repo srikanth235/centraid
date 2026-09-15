@@ -78,6 +78,9 @@ public object NotesReads :
                 pk_column = "note_id",
                 descending = true,
             ),
+            // R-NOTES-1: the body is `core_content_text`, appended as
+            // `body_text` after the named columns — not `seat_blob_held`.
+            with_note_body = true,
         )
     }
 
@@ -97,25 +100,17 @@ public object NotesReads :
             ?: return refused(
                 Reads.refused("Centraid could not find this note on this device."),
             )
+        val (body, bodyUnavailable) = row.noteBody()
         return NotesEditorEvent(
             data_ = NotesEditorEvent.DataArrived(
                 draft = NoteDraft(
                     title = row.text(1),
-                    // THE BODY IS NOT A COLUMN. It lives in the content item
-                    // `body_content_id` points at, and `crates/apps/notes`
-                    // reads it through `decode_note_body` over the byte door —
-                    // a trip this lane does not make. Empty rather than
-                    // invented, which is `HomeReads`'s rule for the same field
-                    // on the Notes tile, and it is the hand-off this lane
-                    // leaves open: an editor over a note whose words have not
-                    // arrived must not let a save overwrite them, which is why
-                    // it is named here and not quietly filled with "".
-                    body = "",
-                    // AND THE EDITOR IS TOLD SO, so the save can be refused
-                    // rather than made destructive: `knowledge.save_note` takes
-                    // the whole draft, so an empty body is an instruction to
-                    // blank the note.
-                    body_unavailable = true,
+                    // R-NOTES-1: `body_text` is the door's appended column from
+                    // `core_content_text`, after the six named select columns.
+                    // NULL means the text is not on this device; a present
+                    // string (including empty) is the replica's own words.
+                    body = body,
+                    body_unavailable = bodyUnavailable,
                     format = formatOf(row.text(2)),
                     // SQLite HAS NO BOOLEAN. `pinned` is `INTEGER CHECK
                     // (pinned IN (0,1))`, so it arrives on the integer arm of
@@ -154,6 +149,19 @@ public object NotesReads :
     private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
 
     private fun Row.integer(index: Int): Long = values.getOrNull(index)?.integer ?: 0L
+
+    /**
+     * The appended `body_text` column ([BODY]), or unavailable when it is SQL
+     * NULL / absent. An empty string on the text arm is a real body.
+     */
+    private fun Row.noteBody(): Pair<String, Boolean> {
+        val value = values.getOrNull(BODY) ?: return "" to true
+        if (value.null_ != null) return "" to true
+        return (value.text ?: "") to false
+    }
+
+    /** After the six named select columns; see `query`'s `with_note_body`. */
+    private const val BODY: Int = 6
 
     override val appId: String = "notes"
 
