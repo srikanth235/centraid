@@ -469,6 +469,40 @@ public class CentraidCore private constructor(
         )
 
         /**
+         * A core over a caller-supplied answer, for tests that need DISTINCT
+         * handle identities without the FFI (#1025 live-home).
+         *
+         * Two calls produce two objects: Home's vault switch is an identity
+         * change on the shelf, and a test that could not tell two cores apart
+         * could not prove the runner re-pointed.
+         */
+        public fun answering(
+            dispatcher: CoroutineDispatcher,
+            answer: (Envelope) -> Envelope,
+        ): CentraidCore {
+            val abi = object : CentraidAbi {
+                // Accounting is unused by Home's switch test; zeros keep the
+                // ABI contract without pulling atomics into this factory.
+                override val accounting: AbiAccounting = object : AbiAccounting {
+                    override val handedOver: Long get() = 0
+                    override val freed: Long get() = 0
+                    override val bytesCopied: Long get() = 0
+                }
+
+                override fun call(request: ByteArray): AbiAnswer {
+                    val bytes = answer(Envelope.ADAPTER.decode(request)).encode()
+                    return AbiAnswer(CoreStatus.OK, CoreStatus.OK.code, bytes)
+                }
+
+                override fun nextEvent(timeoutMs: Int): AbiAnswer =
+                    AbiAnswer(CoreStatus.TIMEOUT, CoreStatus.TIMEOUT.code, null)
+
+                override fun close(): CoreStatus = CoreStatus.OK
+            }
+            return overAbi(abi, dispatcher, uiThreadName = "")
+        }
+
+        /**
          * Open the core, run the handshake, and check the artifact identity.
          *
          * THE HANDSHAKE IS PART OF OPENING. `Hello` is the one request a thin

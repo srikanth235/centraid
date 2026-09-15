@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 
 /**
  * THE EFFECT RUNNER — what turns Home's `ReadPage` into a real read
- * (#1020, wave A).
+ * (#1020, wave A; #1025 live-home).
  *
  * `ScreenHost` publishes a state and then emits effects; up to now nothing on
  * either shell collected them, so `HomeMachine` asked for its tiles on every
@@ -41,9 +41,16 @@ import kotlinx.coroutines.launch
  * that its app holds nothing, and grading it `EMPTY` would put the app into
  * first moves and tell a member to start filling something that may already be
  * full.
+ *
+ * **The core is a SUPPLIER, matching [dev.centraid.shared.sync.ScreenRuntime]
+ * (R-HOME-2).** Capturing the handle at construction left Home the one screen
+ * that kept reading a vault the member had left after S7-13 kept every holding
+ * open, and cancelling-then-restarting the collector on each identity change
+ * raced `publishLockup`'s `ReadPage` against a `SharedFlow` with `replay = 0`
+ * so every tile sat LOADING forever.
  */
 public class HomeRuntime(
-    private val core: CentraidCore,
+    private val core: () -> CentraidCore?,
     private val host: ScreenHost<centraid.screen.v1.HomeState, HomeEvent>,
     private val scope: CoroutineScope,
 ) {
@@ -110,11 +117,13 @@ public class HomeRuntime(
         query: centraid.core.v1.PageQuery,
         limit: Int,
     ): Read {
+        val handle = core()
+            ?: return Read.Refused(Reads.refused("No vault is open on this device."))
         val request = Envelope(
             request_id = 0,
             request = Request(page = PageRequest(query = query, limit = limit)),
         )
-        return when (val outcome = core.call(request)) {
+        return when (val outcome = handle.call(request)) {
             is CoreOutcome.Failed -> Read.Refused(fromCore(outcome.failure))
             is CoreOutcome.Answered -> {
                 val page = outcome.value.response?.page

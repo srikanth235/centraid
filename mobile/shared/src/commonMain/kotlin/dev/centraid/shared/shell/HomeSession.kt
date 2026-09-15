@@ -55,12 +55,13 @@ import kotlinx.coroutines.sync.withLock
  * effects, a [ChangeStream] that feeds it what arrives, and the job of pointing
  * all three at whichever core the shelf has in front.
  *
- * **A switch is a REBIND and not a reopen of this session.** [rebind] cancels
- * the runtime and the change reader and starts them again against the new core.
- * The session is not torn down, the app screens stay attached — they read the
- * core through a supplier — and the roster is not re-surveyed. The core's own
- * file does close and reopen, because R-1020-24 allows exactly one open core in
- * this process; see [Shelf]'s header for why that is a law and not a knob.
+ * **A switch is a REBIND and not a reopen of this session.** [rebind]
+ * re-points the change reader and publishes the new lockup; [HomeRuntime]
+ * already reads the core through a supplier (R-HOME-2), so it keeps collecting
+ * — cancelling it raced the switch's `ReadPage` against a `SharedFlow` with
+ * `replay = 0` and left every tile LOADING forever (#1025 live-home). App
+ * screens stay attached the same way. Since D-1025-S7-13 / D-1025-S7-17 every
+ * held vault's core stays open; a switch is a pointer move on the shelf.
  *
  * **The order in [open] is load-bearing.** The runtime collects effects BEFORE
  * `Opened` is sent, because `ScreenHost` buffers only `EFFECT_BUFFER` of them
@@ -543,33 +544,27 @@ public class HomeSession private constructor(
     }
 
     /**
-     * POINT THE RUNTIME AND THE CHANGE READER AT WHATEVER IS IN FRONT.
+     * POINT THE CHANGE READER AT WHATEVER IS IN FRONT, and make sure the
+     * Home effect runner is collecting (R-HOME-1, #1025 live-home).
      *
-     * Both, every time, and in this order. A core whose effects are served but
-     * whose changes are not is the product as it was before #1025 S5 — a screen
-     * that answers a tap and never moves on its own.
+     * [HomeRuntime] takes the core as a SUPPLIER — `{ core }`, read at each
+     * page — so a switch that moves the shelf's foreground is picked up by the
+     * next tile read without tearing the collector down. Cancelling it on
+     * every identity change was the live bug: `start()` schedules `collect`
+     * asynchronously, `publishLockup` then emits `ReadPage` into a
+     * `SharedFlow` with `replay = 0`, and every tile stayed LOADING forever
+     * while Photos (already collecting through the same supplier pattern)
+     * drew.
      *
-     * The old runtime is cancelled BEFORE anything else: a read in flight
-     * against a core the shelf has just closed answers `CoreFailure.Closed`,
-     * which the runtime would faithfully render as "Centraid stopped reading"
-     * on a tile of a vault the member has already left.
+     * The change reader IS per CORE and restarts here (#1025 S7-13):
+     * `CentraidCore.startReader` is idempotent and its job lives on the
+     * core's own scope; this session's consumer must follow the foreground.
      *
-     * This is the whole of a switch on this side. Nothing is re-surveyed,
-     * nothing is re-identified, and no attached app screen is touched.
-     *
-     * **REBINDING TO THE CORE ALREADY BOUND IS NOT A REBIND, and must not be
-     * treated as one.** It is reachable on the ordinary path: `syncNow` ends
-     * with a rebind and the foreground has not moved, so the round's closing
-     * rebind is almost always onto the same core. The lockup is still published
-     * — a pass has just moved this vault's state and that is the whole reason
-     * the round rebinds at all.
-     *
-     * The reader on the other side is one per CORE and not one per binding
-     * (#1025 S7-13): `CentraidCore.startReader` is idempotent and its job lives
-     * on the core's own scope, which is what a bounded, drop-nothing event
-     * queue requires of a vault that stays open while the member reads another.
-     * It threw before, and with cores that survive a switch the first move back
-     * to a vault the member had been in crashed the app on the simulator.
+     * **REBINDING TO THE CORE ALREADY BOUND IS NOT A REBIND** (syncNow's
+     * closing rebind when the foreground has not moved). Early-return is
+     * valid only when the foreground core identity is unchanged (R-HOME-1);
+     * the lockup is still published because a pass has just moved this
+     * vault's state.
      */
     private suspend fun rebind(): Unit = rebinding.withLock {
         val open = core
@@ -577,27 +572,33 @@ public class HomeSession private constructor(
             publishLockup()
             return@withLock
         }
-        runtime?.cancelAndJoin()
-        runtime = null
         changeReader?.cancelAndJoin()
         changeReader = null
         bound = open
+        when {
+            open == null -> {
+                runtime?.cancelAndJoin()
+                runtime = null
+            }
+            runtime == null -> {
+                runtime = HomeRuntime(core = { core }, host = host, scope = scope).start()
+            }
+        }
         if (open != null) {
-            runtime = HomeRuntime(open, host, scope).start()
             changeReader = changes.start(open, scope)
         }
         publishLockup()
     }
 
     /**
-     * The core the runtime and the change reader are currently pointed at.
+     * The core the change reader is currently pointed at.
      *
-     * Compared by IDENTITY and not by vault id. Since #1025 S7-13 a switch
-     * does not replace the handle at all — every held vault's core stays open —
-     * so this is usually the same object and the rebind is a publish. It still
-     * has to be an identity comparison for the two cases where the handle DOES
-     * change under one vault id: a holding woken from [Shelf.rest], and a
-     * re-pair.
+     * Compared by IDENTITY and not by vault id. A switch moves the foreground
+     * to another holding's already-open core (D-1025-S7-13), so this changes
+     * on every real A→B move; the early-return above is the syncNow case
+     * where it does not. It still has to be identity for a holding woken
+     * from [Shelf.rest] and a re-pair, where the handle under one vault id
+     * is replaced.
      */
     private var bound: CentraidCore? = null
 
@@ -690,8 +691,9 @@ public class HomeSession private constructor(
         shelf.bringToFront(vaultId) ?: return
         // THE LOCKUP IS WHAT STARTS THE RELOAD: the machine sees a vault whose
         // id differs from the one it is holding, throws away every tile it read
-        // out of the old vault, and asks for the new one's — which the runtime
-        // `rebind` starts is already collecting.
+        // out of the old vault, and asks for the new one's — which the
+        // supplier-backed runtime already collecting serves against the
+        // foreground core (R-HOME-1).
         rebind()
     }
 

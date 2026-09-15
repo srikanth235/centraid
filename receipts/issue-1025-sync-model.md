@@ -2572,3 +2572,71 @@ openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew …`, no config change):
 in-memory allowlist, so there was nothing there to correct; the allowlist's
 current state is stated in [enrollment.md](../docs/enrollment.md) and
 [SECURITY.md](../SECURITY.md) instead.
+
+## Live-home — Home tiles LOADING forever after vault switch
+
+**Doctrine:** D-1025-S7-13 (vault granularity; cores stay open across a switch),
+D-1020-HOME8 (superseded survey-before-open / single-core reading by
+D-1025-S7-17). Mobile replica domain. Rulings R-HOME-1 / R-HOME-2 / R-HOME-3.
+
+### What was wrong
+
+Pair two vaults on an iPhone sim, switch A→B→A: Home tiles stayed grey LOADING
+for 12+ s (background/foreground, relaunch). Header said "synced". Replica
+intact; Photos on the same vault drew. Forgetting the second vault recovered
+Home instantly.
+
+After S7-13, `Shelf.bringToFront` is a pointer move — each holding keeps its
+`CentraidCore`. `HomeSession.rebind` still treated every identity change as
+"cancel `HomeRuntime`, start a new one capturing the core **by value**, then
+`publishLockup`". `HomeRuntime.start()` schedules `collect` asynchronously;
+`publishLockup` → `VaultChanged` → seeded LOADING + `ReadPage` into a
+`SharedFlow` with `replay = 0`. A collector attached after that emit never sees
+the effect, so every readable tile sat LOADING forever. Photos worked because
+`ScreenRuntime` already took `{ core }` as a supplier and kept collecting.
+Forgetting forced a real rebind onto a different handle and recovered.
+
+Hypothesis 1 (early-return on A→B via `===`) was not the live path — cores
+differ on a real switch. Hypothesis 2 (start/publish race) + hypothesis 3
+(by-value capture) were: the restart race dropped `ReadPage`, and by-value was
+why Home could not simply keep collecting like Photos.
+
+### What changed
+
+| Path | Change |
+| --- | --- |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeRuntime.kt` | Core is `() -> CentraidCore?` (supplier); null core → refused read sentence. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeSession.kt` | `rebind` keeps `HomeRuntime` collecting across identity changes; restarts only the change reader; starts the runner once when going null→open; cancels it only when going open→null. Early-return still only when `open === bound` (syncNow). |
+| `mobile/core/src/commonMain/kotlin/dev/centraid/core/CentraidCore.kt` | `CentraidCore.answering` — public stub core for distinct-identity tests without FFI. |
+| `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeSwitchSpec.kt` | A→B→A supplier test; characterisation of the pre-fix emit-before-collector race. |
+
+R-HOME-3 honored: `HomeMachine` still seeds LOADING on vault id change; the
+fix serves the read.
+
+### Demonstrated red
+
+Pre-fix shape (cancel runner → emit `VaultChanged` / `ReadPage` → start new
+collector) against the settle assertion:
+
+```
+HomeSwitchSpec[jvm] > pre-fix rebind race: ReadPage emitted before the new collector leaves tiles LOADING[jvm] FAILED
+    kotlinx.coroutines.TimeoutCancellationException at HomeSwitchSpec.kt:66
+2 tests completed, 1 failed
+```
+
+Readable tiles stayed `TILE_STATUS_LOADING`; core B was never called. Same
+assertion against the supplier keep-alive shape is green (A hits, then B, then
+A). Characterisation test in the tree asserts the LOADING outcome so a return
+to cancel-then-emit fails the fence the other way.
+
+### Gate
+
+`JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew :shared:jvmTest`
+from `mobile/` — HomeSwitchSpec + HomeMachineSpec green; full `:shared:jvmTest`
+before commit.
+
+### Not done
+
+Bugs 2–10 of the live umbrella. Photos. Notes save. Header copy. CLI.
+`HomeView.swift`. No doc state change in `docs/mobile-offline.md` (this is a
+shell wiring defect, not a sync-model state change).
