@@ -2572,3 +2572,83 @@ openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew …`, no config change):
 in-memory allowlist, so there was nothing there to correct; the allowlist's
 current state is stated in [enrollment.md](../docs/enrollment.md) and
 [SECURITY.md](../SECURITY.md) instead.
+
+## Live-device lane — Photos permission + inset (#1025, bugs 7–8)
+
+Branch `claude/1025-live-photos`. Rulings R-PHOTOS-1, R-PHOTOS-2, R-PHOTOS-3;
+cites D-1025-S6 / D-1025-S7-72..75.
+
+### Bug 7 — Photos asks for access it already has
+
+**Live proof.** Photos showed "Camera roll backup is off. Centraid needs access
+to your photos to back them up. Allow photo access" after full library access
+was already granted (still present on device at `4f75eb862` after Slice 6's
+seed).
+
+**Root cause.** `CameraRollRunner.start()` seeded permission in a *sibling*
+`launch` beside the effects collector, so the first published state could stay
+at the machine's `NOT_ASKED` seed until a later turn. And the seed ran only at
+**session** attach — a grant that landed afterwards (Settings, a launch prompt
+the seed raced) was never re-read when the Photos cover opened. Shells gate
+`canAskForPhotos` on `NOT_ASKED` and draw `paused_reason` beside the banner, so
+both the button and the not-asked sentence stayed up.
+
+**Change.**
+
+- `CameraRollRunner.syncPermission()` — read of current OS state, never an ask
+  (R-PHOTOS-1). `start()` awaits it on the same coroutine *before* collecting
+  effects.
+- `PhotosBridge.opened()` — `syncPermission` then `Opened`, so the cover's first
+  member-visible frame carries GRANTED/LIMITED when the OS already has them.
+- iOS `ShellModel.opened(.photos)` calls `photos.opened()`; Android
+  `MainActivity` calls `cameraRoll.syncPermission()` before sending `Opened`.
+
+**Demonstrated red.** `CameraRollRunnerSpec` with `syncPermission()` omitted from
+`start()`: three failures — existing GRANTED stayed `NOT_ASKED`; LIMITED still
+looked askable; late grant path had empty `paused_reason` until sync. Restored
+sync → green.
+
+**Tests.**
+
+- `/Users/srikanth/.grok/worktrees/gitspace-centraid/subagent-01a0a5e1-a8de-7ba0-82f9-0e7265cfe36a/mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/CameraRollRunnerSpec.kt`
+- `/Users/srikanth/.grok/worktrees/gitspace-centraid/subagent-01a0a5e1-a8de-7ba0-82f9-0e7265cfe36a/mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ScreenMachineSpec.kt`
+  (`photos: an existing grant clears the not-asked reason…`)
+
+`./gradlew :shared:jvmTest` green (`JAVA_HOME` OpenJDK 21).
+
+### Bug 8 — Photos grid does not inset its content
+
+**Live proof.** "Preview no longer on this device" spilled and collided with
+cells; band/backup sat under the Dynamic Island and nav bar (Slice 6 filed
+`BackupStatus`'s local `.safeAreaPadding(.top)` + `.padding(.top, 44)` as a
+temporary compensation).
+
+**Change (R-PHOTOS-2).** Inset once on
+`/Users/srikanth/.grok/worktrees/gitspace-centraid/subagent-01a0a5e1-a8de-7ba0-82f9-0e7265cfe36a/mobile/iosApp/Sources/PhotosGridView.swift`:
+`.safeAreaPadding(.top)` + `.padding(.top, CentraidGeometry.targetMinCoarse)`
+(nav bar) + horizontal `pageMargin`. Comment on that view: the screen owns
+inset. Stripped the local compensation from
+`/Users/srikanth/.grok/worktrees/gitspace-centraid/subagent-01a0a5e1-a8de-7ba0-82f9-0e7265cfe36a/mobile/iosApp/Sources/BackupStatus.swift`.
+Empty cells use the same square ground + clip as held thumbnails so the label
+cannot spill. Android already insets via `MainActivity`'s `safeDrawingPadding`
+and cell `aspectRatio` boxes — no parallel overflow found.
+
+### Files
+
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/CameraRollRunner.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/photos/PhotosBridge.kt`
+- `mobile/shared/src/jvmMain/kotlin/dev/centraid/shared/platform/PlatformServices.jvm.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/CameraRollRunnerSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ScreenMachineSpec.kt`
+- `mobile/iosApp/Sources/ShellModel.swift`
+- `mobile/iosApp/Sources/PhotosGridView.swift`
+- `mobile/iosApp/Sources/BackupStatus.swift`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/MainActivity.kt`
+
+### Not done
+
+- XCFramework rebuild (Kotlin change for Swift pickup is deferred; jvmTest covers
+  bug 7; next iOS binary build picks up `PhotosBridge.opened`).
+- Device re-proof of the Allow-button absence after grant.
+- Folding duplicated permission sentences into `dev.centraid.design.Copy`
+  (still filed from S6).

@@ -50,32 +50,37 @@ public class CameraRollRunner(
     private val passing = Mutex()
 
     /**
+     * Read the OS grant onto the screen. A read, never an ask (R-PHOTOS-1).
+     *
+     * Called on [start] and again when the Photos screen opens, because a grant
+     * that landed after the session attached (Settings, a launch prompt the
+     * seed raced) must be on state before the member-visible frame — otherwise
+     * the banner keeps "Allow photo access" over a library the app can already
+     * read (#1025 live).
+     */
+    public suspend fun syncPermission() {
+        host.send(
+            PhotosGridEvent(
+                permission = PhotosGridEvent.PermissionChanged(
+                    permission = services.mediaLibrary.permission(),
+                ),
+            ),
+        )
+    }
+
+    /**
      * Collect this screen's effects, and hear the library.
      *
      * The observer is registered here and not in [CameraRoll] because it is a
      * live subscription with a lifetime, and this object has one while a pure
      * pass does not.
+     *
+     * **Permission is synced BEFORE the effects collector runs**, on this same
+     * coroutine: a fire-and-forget launch beside the collector left the first
+     * published state at `NOT_ASKED` until a later turn, and the Photos cover's
+     * first frame offered the ask over an existing grant.
      */
     public fun start(): Job {
-        // TELL THE SCREEN WHAT THE GRANT ALREADY IS.
-        //
-        // The reducer only ever learned a permission from a `PermissionChanged`
-        // event, and the only thing that sent one was the ask — so a member who
-        // had ALREADY granted access (on a previous launch, or in Settings) came
-        // back to a screen still seeded with `NOT_ASKED`, offering "Allow photo
-        // access" over a library it could already read. The simulator is what
-        // said so: the button was there with the grant live.
-        //
-        // It is a read and not an ask: `permission()` prompts nobody.
-        scope.launch {
-            host.send(
-                PhotosGridEvent(
-                    permission = PhotosGridEvent.PermissionChanged(
-                        permission = services.mediaLibrary.permission(),
-                    ),
-                ),
-            )
-        }
         services.mediaLibrary.onLibraryChanged {
             // A NEW CAPTURE WHILE THE APP IS ON SCREEN. It is a nudge to run the
             // ordinary pass and never a second way to learn what is new: the
@@ -84,6 +89,7 @@ public class CameraRollRunner(
             scope.launch { pass() }
         }
         return scope.launch {
+            syncPermission()
             host.effects.collect { effect ->
                 when {
                     effect is ScreenEffect.RequestMediaPermission -> scope.launch { ask() }

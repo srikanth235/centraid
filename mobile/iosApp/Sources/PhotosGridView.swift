@@ -78,18 +78,32 @@ struct PhotosGridView: View {
                         } else {
                             // TWO DIFFERENT EMPTY-CELL SENTENCES. A member with
                             // no pack at all and a member whose pack has evicted
-                            // these must not read the same words.
-                            Text(
-                                packAbsent
-                                    ? "Preview not downloaded to this device"
-                                    : "Preview no longer on this device"
-                            )
+                            // these must not read the same words. Same square
+                            // ground as a held thumbnail so the label cannot
+                            // spill into a neighbour.
+                            Color.clear
+                                .aspectRatio(1, contentMode: .fit)
+                                .overlay {
+                                    Text(
+                                        packAbsent
+                                            ? "Preview not downloaded to this device"
+                                            : "Preview no longer on this device"
+                                    )
+                                    .multilineTextAlignment(.center)
+                                    .font(.caption2)
+                                    .padding(4)
+                                }
+                                .clipped()
                         }
                     }
                 }
             }
         }
-        .padding()
+        // The screen owns inset (R-PHOTOS-2): safe area + nav bar once for
+        // band, backup banner, and grid. Child views do not pad for the bar.
+        .safeAreaPadding(.top)
+        .padding(.top, CentraidGeometry.targetMinCoarse)
+        .padding(.horizontal, CentraidGeometry.pageMargin)
         .navigationTitle("Photos")
     }
 

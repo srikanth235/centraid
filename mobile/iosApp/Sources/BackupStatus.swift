@@ -58,32 +58,8 @@ struct BackupStatus: View {
                 }
             }
         }
-        // DRAWN CLEAR OF THE STATUS BAR, and this is a reachability fix rather
-        // than a cosmetic one (#1025 S6). `PhotosGridView`'s body is a plain
-        // `VStack` with no safe-area inset, so everything at the top of that
-        // screen renders UNDER the clock and the Dynamic Island — and the
-        // island does not just overlap the buttons, it EATS THEIR TOUCHES. On
-        // the simulator "Back up now" was visible and completely unpressable:
-        // three taps in a row reached nothing at all.
-        //
-        // The padding is here, on this view, and not on the screen's own stack:
-        // the rest of that screen is another slice's this wave, and its band row
-        // has the same overlap. That is filed in this umbrella's receipt rather
-        // than fixed from here.
-        .safeAreaPadding(.top)
-        // AND CLEAR OF THE NAVIGATION BAR, which is a SECOND overlap and not
-        // the same one. `PhotosGridView` is a `NavigationStack` destination
-        // whose content is never inset for the bar, so the bar's own 44 pt
-        // floats over the top of this screen — and, like the Dynamic Island
-        // above, it does not merely cover the buttons, it takes their taps.
-        // With only the safe-area inset, "Back up now" was drawn in the clear
-        // and still swallowed by the bar's hit region.
-        //
-        // A CONSTANT HERE IS A COMPENSATION, NOT A DESIGN. The screen should
-        // inset its own content once, for its band row and this alike; that
-        // file is another slice's this wave, so the defect is filed in the
-        // receipt and this is what makes this surface usable meanwhile.
-        .padding(.top, 44)
+        // Inset is owned by `PhotosGridView` (R-PHOTOS-2) — this banner does
+        // not pad for the status bar or the navigation bar.
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Camera roll backup")
     }

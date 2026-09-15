@@ -99,10 +99,28 @@ public class PhotosBridge {
             // (`docs/mobile-offline.md:175`).
             vaultId = { session.shelf.foregroundHolding()?.vaultId },
         ).also { it.start() }
+        // AFTER the runner's start job: that job syncs permission before it
+        // suspends on effects, so the first state this collect publishes past
+        // the machine's seed already carries the OS grant (R-PHOTOS-1).
         scope.launch { host.state.collect { state -> onState?.invoke(state.encode()) } }
     }
 
     private var cameraRoll: CameraRollRunner? = null
+
+    /**
+     * The Photos cover is on screen — re-read the grant, then open the grid.
+     *
+     * Session attach already seeded once; this is the read at first paint of
+     * THIS screen (R-PHOTOS-1). A grant that landed after attach (Settings, a
+     * launch prompt) must move the banner before `Opened` reloads the page, or
+     * the member sees "Allow photo access" over a library the app can read.
+     */
+    public fun opened() {
+        scope.launch {
+            cameraRoll?.syncPermission()
+            host.send(PhotosGridEvent(opened = PhotosGridEvent.Opened()))
+        }
+    }
 
     /**
      * Run one camera-roll pass now — what a foreground wake calls.

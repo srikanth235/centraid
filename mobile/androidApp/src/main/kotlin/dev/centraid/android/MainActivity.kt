@@ -283,7 +283,12 @@ public class MainActivity : ComponentActivity() {
                     }
 
                     is Destination.PhotosHome -> {
+                        // Re-read the OS grant before Opened (R-PHOTOS-1): a
+                        // grant that landed after session attach must be on
+                        // state at first paint, or the banner still offers
+                        // "Allow photo access".
                         LaunchedEffect(destination) {
+                            cameraRoll.value?.syncPermission()
                             photos.send(PhotosGridEvent(opened = PhotosGridEvent.Opened()))
                         }
                         val state by photos.state.collectAsStateWithLifecycle()
