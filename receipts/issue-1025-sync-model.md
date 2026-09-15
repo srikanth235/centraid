@@ -2449,3 +2449,126 @@ the window it paired in, and does not wait for a second one.
   is the tap's runner it wrote. **That is the one thing left to demonstrate.**
 - **The Android app was edited and not compiled.** No `ANDROID_HOME`, no SDK.
 - **The full gate loop**, by standing instruction.
+
+## The five defects the review left open (#1025)
+
+Picked up from a killed run, whose edits were on disk and uncommitted. Each
+heading says **where the state was found** before anything was changed.
+
+### 1. The gateway's allowlist did not survive the gateway
+
+**Found:** `crates/centraid/src/run.rs:115` still built a `MemoryAllowlist` and
+line 160 still printed "the device allowlist is still IN MEMORY (D-1020-C8)".
+`crates/vault/src/devices.rs` had been started — `device_by_public_key` was
+added and documented — and nothing consumed it.
+
+**Root cause, and it has TWO halves.** Enrolment was in memory, so a restarted
+gateway refused a device it had enrolled. And `run.rs` built its endpoint from
+`EndpointConfig::default()`, whose `secret_key` field is `None` — a FRESH
+identity every start — so the gateway was also unreachable at the only address
+its seats had, before admission was ever asked. Fixing the allowlist alone would
+have gone green on a gateway no seat could dial.
+
+**Change.** `crate::allowlist::GatewayAllowlist` (new, `crates/centraid/src/
+allowlist.rs`) is `Memory | Durable`; the durable arm reads and writes the
+vault's own `access_device` / `access_device_secret` rows through `Handle::
+with_vault`, so it holds no SQL and the `sql-confinement` invariant is kept by
+moving the design rather than widening the rule. `crates/vault/src/devices.rs`
+gains `live_devices_with_keys` — the member's list deliberately carries no
+credential, so the gateway asks by a different name. The warning is deleted; a
+gateway that took a `--data-dir` and could not open a core says THAT instead.
+The endpoint secret is 32 bytes under `gateway.endpoint.key` in `<data-dir>/
+keys`, through the `KeyStore` that already holds the export and backup masters.
+`EndpointSecretKey` is re-exported from `crates/net` so a caller can keep a key
+without depending on `iroh`.
+
+**Tests.** `allowlist::tests` — three, and they are the proof: an enrolment made
+through one `Handle` is admitted by a SECOND `Handle` opened over the same file
+after the first is closed; a revocation is still a refusal after that reopen;
+and a ticket burns once and does not survive the restart. `tests/seat_identity.
+rs::a_gateway_restart_keeps_the_devices_it_enrolled_and_the_one_it_revoked`
+holds the same three facts end to end over real QUIC — three gateway processes
+over one data directory — and is **red on this host for the host's own reason**
+(see below). `tests/no_listener.rs`'s durability warning test is INVERTED rather
+than deleted: it asserted the product said it forgets its pairings, which is no
+longer true.
+
+**Docs.** D-1025-S7-80 and D-1025-S7-81 in [decisions.md](../docs/decisions.md),
+superseding D-1020-C8's placeholder; [enrollment.md](../docs/enrollment.md)
+gains where a v1 gateway keeps an enrolment and the two operational
+consequences of a restart; [SECURITY.md](../SECURITY.md)'s trust-anchor rows for
+the gateway identity and the paired device key name the v1 locations.
+
+### 2. `blob_staging` — a seat could not queue an upload
+
+**Found:** already fixed on disk in `crates/vault/src/commands/core.rs`.
+`promote_staged_blob` now falls back to the bytes the vault's OWN store holds
+when no staging row names them, so a seat's `predict()` no longer earns the
+`InvalidInput` refusal that `Handle::predict` classifies as "this build cannot
+run that write" and refuses at the door. Verified by reading the seam and by
+`tests/seat_queue_write.rs` / `tests/bytes_upward.rs`. Nothing further changed.
+
+### 3. The backfill sweep never ran
+
+**Found:** already fixed. `Handle::derive_missing_tiers` guards on
+`!self.is_gateway() || !self.holds_a_replica()`; the old predicate's second
+clause was true of a gateway too, so the sweep answered `Ok(0)` at every start.
+`tests/derive_sweep.rs` drives it through the `Handle` on a gateway core with
+derivative rows deleted.
+
+### 4. The test reds
+
+**Found:** `crates/vault/tests/one_hash.rs` already carries `seat/src/held.rs`
+in its writers registry; the two command-count tests and the
+`crates/seat/src/bytes.rs` unit fixtures already declare
+`core_content_representation`. One red was left and it was NOT in the brief:
+`crates/net/tests/pair_and_stream.rs` would not compile — `LogRequest` gained
+`tail` from the slice running beside this one. Fixed with the one field the call
+already meant (`tail: false`).
+
+### 5. `Error.detail` reaching members
+
+**Found:** already fixed in `mobile/core/.../CentraidCore.kt` — the member's
+sentence is `error.sentence.ifBlank { … }` and never the detail — with
+`AbiContractSpec`'s two cases asserting it, including the literal
+`no such table: blob_staging` that reached the Photos screen. The detail is not
+logged by the binding itself; it rides `CoreFailure.Refused.detail`, which is
+where the shell's own logging reads it. Left as found.
+
+### Green, and every red named
+
+`cargo test --no-fail-fast -p centraid -p centraid-core -p centraid-core-ffi
+-p centraid-seat -p centraid-vault -p centraid-net`. The three fixes that have
+deterministic tests are green: `allowlist::tests` 3/3, `tests/seat_queue_write.
+rs` 2/2, `tests/derive_sweep.rs` 2/2, and `tests/no_listener.rs`'s inverted
+durability test. Thirteen test binaries report a failure and every one is
+accounted for:
+
+- **The QUIC dial family, and it is this HOST.** `seat_bootstrap`,
+  `seat_offline`, `seat_lane`, `seat_tail`, `seat_identity`, `bytes_upward`,
+  `walking_skeleton`, `no_listener`'s ABI loop, and `centraid-net`'s
+  `pair_and_stream` / `an_unroutable_peer_fails_typed_inside_the_timeout` all
+  fail at the pairing dial — `GatewayUnreachable`, `Timeout(10s)`, or "the
+  gateway printed no ticket within 30s". `a_seat_survives_losing_the_network…`
+  was re-run **alone on an idle machine** and fails the same way, so it is not
+  contention; the shipped binary starts, founds its vault, prints its ready line
+  and its ticket in seconds when run by hand. This is the known `--no-relay`
+  LAN-dial red of this machine, named in the brief.
+- **`tests/seat_identity.rs::a_gateway_restart_keeps_the_devices_it_enrolled…`
+  is in that family**, which is why the durability proof does not rest on it:
+  the three `allowlist::tests` hold the same three facts through two `Handle`s
+  over one file, with no network in the way.
+- **`cmd::gateway_install`** — macOS, `--system` is systemd. Known.
+- **`backup::restore::tests::a_live_gateways_data_directory_is_refused…`** and
+  **`a_full_disk_during_a_snapshot_build…`** — the vault live-data-dir and
+  disk_full reds. Known.
+
+Kotlin, on the unregistered Homebrew JDK 21 (`JAVA_HOME=/opt/homebrew/opt/
+openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew …`, no config change):
+`:core:jvmTest` green, `:shared:jvmTest` green,
+`:shared:assembleCentraidSharedDebugXCFramework` green.
+
+**Not done:** [mobile-offline.md](../docs/mobile-offline.md) describes no
+in-memory allowlist, so there was nothing there to correct; the allowlist's
+current state is stated in [enrollment.md](../docs/enrollment.md) and
+[SECURITY.md](../SECURITY.md) instead.

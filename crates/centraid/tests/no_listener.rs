@@ -419,11 +419,22 @@ fn the_host_manifest_carries_an_allowlist_and_is_never_installed_by_guessing() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-/// A vault directory that is accepted but not yet durable SAYS SO. A gateway
-/// that took `--data-dir` and kept nothing would lose every pairing on restart
-/// with no warning.
+/// A GATEWAY WITH A DATA DIRECTORY KEEPS ITS PAIRINGS, AND SAYS NOTHING ABOUT
+/// LOSING THEM (#1025 S7, D-1025-S7-80).
+///
+/// This test used to assert the opposite: that a gateway handed `--data-dir`
+/// warned it would lose every pairing on exit, naming D-1020-C8. It did lose
+/// them — the allowlist was `MemoryAllowlist` — and the warning was the honest
+/// thing to print while that was true. It is not true any more: enrolment is
+/// kept in the vault's own `access_device` rows, so the warning would now be a
+/// false statement about the product and the assertion is inverted rather than
+/// deleted.
+///
+/// `pair --mint` is still a process that exits, so its own ticket still cannot
+/// be redeemed by anything, and it still says so — that line is about THIS
+/// PROCESS and not about durability.
 #[test]
-fn a_data_dir_that_is_not_yet_durable_is_named_as_such() {
+fn a_gateway_with_a_data_dir_does_not_warn_that_it_forgets_its_pairings() {
     let dir = std::env::temp_dir().join("centraid-cli-data-dir");
     let _ = fs::create_dir_all(&dir);
     let (gateway, _ready) =
@@ -440,8 +451,12 @@ fn a_data_dir_that_is_not_yet_durable_is_named_as_such() {
         .expect("run");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("D-1020-C8"),
-        "the non-durable pairing store must be named, with its decision: {stderr}"
+        !stderr.contains("D-1020-C8"),
+        "the placeholder decision is superseded and must not be quoted: {stderr}"
+    );
+    assert!(
+        stderr.contains("nothing can \nredeem it") || stderr.contains("nothing can redeem it"),
+        "a ticket minted by a process about to exit must say so: {stderr}"
     );
 }
 
