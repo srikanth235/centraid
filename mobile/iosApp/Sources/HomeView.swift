@@ -860,12 +860,35 @@ private struct VaultSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 12)
 
-            // ONE VAULT IS NOT A CHOICE, and the sheet says so rather than
-            // drawing a list of one and letting a member tap it to no effect.
-            // It stays true now the rows carry Forget: the sentence is about
-            // switching, which is what the sheet is for, and forgetting the
-            // only vault a device holds is a thing a member may still do.
-            if vaults.count <= 1 {
+            // ZERO IS NOT ONE (R-SHELL-3). An empty device is an onboarding
+            // surface and must offer Pair; one vault keeps the existing sentence
+            // (switching is not a choice of one, but Forget still is).
+            if vaults.isEmpty {
+                Text("This device holds no vault.")
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                Button {
+                    // ONE SHEET AT A TIME: dismiss the switcher first, then open
+                    // Gateway on the next turn — iOS drops a second present over
+                    // a sheet that is still up (same rule as openTransferRules).
+                    shell.send(screen: "home", event: HomeEvents.vaultPicked(""))
+                    DispatchQueue.main.async {
+                        shell.gatewaySheetOpen = true
+                    }
+                } label: {
+                    Text("Pair")
+                        .centraidType("smallStrong")
+                        .foregroundStyle(Theme.color("link", scheme))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Pair with a gateway")
+                .accessibilityIdentifier("vault-sheet-pair")
+            } else if vaults.count == 1 {
                 Text("This device holds one vault.")
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
@@ -874,6 +897,9 @@ private struct VaultSheet: View {
 
             List(vaults, id: \.vaultID) { vault in
                 Button {
+                    if vault.vaultID != active.vaultID {
+                        shell.clearStaleGatewayStatus()
+                    }
                     shell.send(
                         screen: "home",
                         event: HomeEvents.vaultPicked(vault.vaultID)
