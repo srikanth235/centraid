@@ -66,6 +66,12 @@ struct HomeView: View {
         .sheet(isPresented: $shell.gatewaySheetOpen) {
             GatewaySheet(shell: shell)
         }
+        // THE TRANSFER RULES (#1025 S4). Reached from the header's own
+        // "N originals waiting for Wi-Fi" line, because the control a member
+        // wants next is the one that decided the line they just read.
+        .sheet(isPresented: $shell.transferRulesOpen) {
+            TransferRulesSheet(shell: shell)
+        }
         .sheet(isPresented: .constant(home.allAppsSheetOpen)) {
             AllAppsSheet(tiles: home.data.tiles, shell: shell)
         }
@@ -293,7 +299,21 @@ private struct TileCard: View {
 
     var body: some View {
         Button {
+            // TWO THINGS, AND THEY ARE DIFFERENT THINGS (#1025 S5).
+            //
+            // The machine is told a move was picked — that is Home's own state,
+            // and the springboard grades itself on it. The NAVIGATION is the
+            // shell's: a `ScreenEffect` carrying a route would put SwiftUI's
+            // navigation stack inside a reducer that has no idea one exists,
+            // and Compose's is a different stack again.
+            //
+            // Nothing pushed a route before this. Every screen in the shell was
+            // reachable only by being constructed by hand in a preview: the
+            // band drew its tabs, the tiles drew their bodies, and a tap moved
+            // nothing. It was invisible because Home is the root and Home is
+            // what every screenshot showed.
             shell.send(screen: "home", event: HomeEvents.movePicked(tile.appID))
+            if let route = TileCard.route(for: tile) { shell.path.append(route) }
         } label: {
             VStack(alignment: .leading, spacing: 16) {
                 // Invariant header — see this type's comment.
@@ -329,6 +349,26 @@ private struct TileCard: View {
         // with the vault; the id does not.
         .accessibilityIdentifier("home-tile-\(tile.appID)")
         .accessibilityLabel("Open \(name), \(spoken)".trimmingCharacters(in: .whitespaces))
+    }
+
+    /// Where this tile leads, or nowhere.
+    ///
+    /// Three apps have a screen in this shell. The other five have a tile and
+    /// no destination yet, and `nil` is the honest answer for them — pushing a
+    /// blank cover would be worse than a tap that stays put.
+    ///
+    /// Notes leads to ITS OWN NOTE, because the tile body names one
+    /// (`TileBody.Notes.note_id`) and the editor's read is parameterised by a
+    /// note id: a cover opened without one reads nothing.
+    static func route(for tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
+        switch tile.appID {
+        case "tally": return .tally
+        case "photos": return .photos
+        case "notes":
+            guard case let .notes(note) = tile.body.kind, !note.noteID.isEmpty else { return nil }
+            return .note(note.noteID)
+        default: return nil
+        }
     }
 }
 
@@ -805,6 +845,11 @@ private struct VaultSheet: View {
     let active: Centraid_Screen_V1_VaultLockup
     @ObservedObject var shell: ShellModel
     @Environment(\.colorScheme) private var scheme
+    /// THE VAULT A CONFIRMATION IS ABOUT, and not a bare `Bool`: an alert that
+    /// only knew it was open could not name what it was about to delete, and
+    /// "Forget this vault?" over a list of four is the dialogue a member taps
+    /// through and then regrets.
+    @State private var forgetting: Centraid_Screen_V1_VaultLockup?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -817,6 +862,9 @@ private struct VaultSheet: View {
 
             // ONE VAULT IS NOT A CHOICE, and the sheet says so rather than
             // drawing a list of one and letting a member tap it to no effect.
+            // It stays true now the rows carry Forget: the sentence is about
+            // switching, which is what the sheet is for, and forgetting the
+            // only vault a device holds is a thing a member may still do.
             if vaults.count <= 1 {
                 Text("This device holds one vault.")
                     .centraidType("small")
@@ -840,9 +888,22 @@ private struct VaultSheet: View {
                                 Theme.color("bgSunken", scheme),
                                 in: RoundedRectangle(cornerRadius: 7)
                             )
-                        Text(vault.vaultName.isEmpty ? "Unnamed vault" : vault.vaultName)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("text", scheme))
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(vault.vaultName.isEmpty ? "Unnamed vault" : vault.vaultName)
+                                .centraidType("smallStrong")
+                                .foregroundStyle(Theme.color("text", scheme))
+                            // THE SAME SECOND LINE THE HEADER DRAWS, from the
+                            // same `stateLine` and the same `RosterChanged`
+                            // stream (#1025 S7-9). A switcher that showed only
+                            // names made a member switch INTO a vault to find
+                            // out whether it had synced.
+                            if !vault.stateLine.isEmpty {
+                                Text(vault.stateLine)
+                                    .centraidType("mono")
+                                    .foregroundStyle(Theme.color("textFaint", scheme))
+                                    .lineLimit(1)
+                            }
+                        }
                         Spacer(minLength: 0)
                         // THE TICK IS THE WHOLE POINT of listing the open one.
                         if vault.vaultID == active.vaultID {
@@ -858,11 +919,48 @@ private struct VaultSheet: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("vault-row-\(vault.vaultID)")
+                // FORGET IS A SWIPE AND NOT A ROW CONTROL (#1025 S7-9). The
+                // row's whole width is the switch — the one thing a member
+                // opens this sheet to do — so a second tappable target inside
+                // it would sit in the way of the first. A destructive trailing
+                // swipe is where iOS puts a delete, and `allowsFullSwipe` is
+                // off because this deletes the device's copy and a full swipe
+                // is a gesture a thumb makes by accident.
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        forgetting = vault
+                    } label: {
+                        Label("Forget", systemImage: "trash")
+                    }
+                    .accessibilityIdentifier("vault-forget-\(vault.vaultID)")
+                }
             }
             .listStyle(.plain)
         }
         .background(Theme.color("bg", scheme).ignoresSafeArea())
         .accessibilityIdentifier("home-vault-sheet")
+        // THE ALERT NAMES THE VAULT, because "Forget" deletes this device's
+        // copy — the replica, its bytes, the pairing record and the endpoint
+        // key — and the only way back is to pair again with a fresh ticket.
+        // The gateway keeps this device enrolled: forgetting is local, which
+        // is why the sentence says what it removes and not that the vault is
+        // gone.
+        .alert(
+            "Forget \(forgetting?.vaultName.isEmpty == false ? forgetting!.vaultName : "this vault")?",
+            isPresented: Binding(
+                get: { forgetting != nil },
+                set: { if !$0 { forgetting = nil } }
+            ),
+            presenting: forgetting
+        ) { vault in
+            Button("Forget", role: .destructive) {
+                shell.forget(vaultID: vault.vaultID)
+                forgetting = nil
+            }
+            Button("Cancel", role: .cancel) { forgetting = nil }
+        } message: { _ in
+            Text("This device deletes its copy. Nothing on your gateway changes, and you can pair again with a new ticket.")
+        }
     }
 }
 

@@ -47,6 +47,20 @@ struct GatewaySheet: View {
                     .accessibilityIdentifier("gateway-pair-button")
                 }
 
+                // THE TRANSFER RULES, ALWAYS REACHABLE (#1025 S4).
+                //
+                // The header's "N originals waiting for Wi-Fi" line is the
+                // CONTEXTUAL door and cannot be the only one: on a device where
+                // nothing is being withheld the line is empty, so a member who
+                // wants to CHANGE the rule before it ever bites — set `manual`
+                // on a new phone, say — would have no way in. A setting whose
+                // only door appears once the setting has already cost
+                // something is a setting a member cannot choose in advance.
+                Section("Downloads") {
+                    Button("Download settings") { shell.openTransferRules() }
+                        .accessibilityIdentifier("gateway-transfer-rules")
+                }
+
                 Section("Sync") {
                     Button(working ? "Syncing…" : "Sync now") {
                         working = true

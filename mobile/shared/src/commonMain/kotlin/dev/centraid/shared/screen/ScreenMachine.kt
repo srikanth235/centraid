@@ -21,6 +21,46 @@ public interface ScreenMachine<S, E> {
 
     /** The state a screen is in before its first event. */
     public fun initial(): S
+
+    /**
+     * A ROW MOVED IN THE VAULT. What does this screen make of it?
+     * (#1025 S5, D-1025-S5-3.)
+     *
+     * The core's change stream (`next_event`) says `(table, keys, commit_seq)`
+     * and nothing else — it never carries values, which is what makes
+     * coalescing lossless in `crates/core`'s event queue. So each screen turns
+     * that into its OWN event, here, and `null` means "not mine": a table this
+     * screen does not read, or keys it is not showing.
+     *
+     * **One declaration and not two.** The first draft of this had a `tables`
+     * set beside a translator, and the two are a pair that can disagree — a
+     * screen that adds a read and forgets the set stops moving on sync, with
+     * nothing red anywhere. There is one member, so there is one thing to get
+     * right.
+     *
+     * The pk_set is `String` keys and not a typed row id because a change event
+     * is about a TABLE: the core has no idea which of a screen's ids a primary
+     * key is, and a screen that cannot recognise its own ids in a list of
+     * strings has a bigger problem than this signature.
+     */
+    public fun rowsChanged(table: String, keys: List<String>, commitSeq: ULong): E?
+
+    /**
+     * WHAT THIS SEAT CAN SAY ABOUT ITSELF, CHANGED (#1025 S5, D-1025-S5-6).
+     *
+     * Every screen's event already has a `SeatChanged` case and every machine
+     * already reduces it — and **nothing in the product ever sent one**, so
+     * `SeatState` was null on every screen for ever. That is not cosmetic:
+     * [dev.centraid.shared.sync.WriteGate] reads the seat off the screen, a
+     * null seat is not reachable, and the consequence is that an `onlineOnly`
+     * write was **refused on every device, always**, while an ordinary write
+     * queued even with a healthy gateway one hop away. A gate handed a constant
+     * is not a gate.
+     *
+     * `null` from a machine means the screen does not render the seat, which is
+     * a real answer — Home draws its own status line and needs no seat.
+     */
+    public fun seatChanged(seat: SeatState): E?
 }
 
 public data class Step<S>(val state: S, val effects: List<ScreenEffect> = emptyList())
@@ -90,6 +130,25 @@ public sealed interface ScreenEffect {
      * the other cannot.
      */
     public data class SwitchVault(public val vaultId: String) : ScreenEffect
+
+    /**
+     * FETCH ONE ORIGINAL THE MEMBER TAPPED (#1025 S5, D-1025-S7-63).
+     *
+     * WhatsApp's download arrow. An effect and not a write: it commits
+     * nothing, has no intent and no outbox entry — it is a `seat.bytes.fetch`
+     * command, which is `seat.sync` with a one-item window, and the bytes it
+     * lands redraw the cell through the ordinary `RowsChanged` every other
+     * arriving blob uses (D-1025-S7-21).
+     *
+     * **Not `SubmitWrite`.** A write gate would queue this offline, and a
+     * queued download is a promise nobody can keep: the member wants the file
+     * now or they want to be told the gateway is away.
+     */
+    public data class FetchOriginal(
+        public val screenId: String,
+        public val assetId: String,
+        public val contentHash: String,
+    ) : ScreenEffect
 }
 
 /**

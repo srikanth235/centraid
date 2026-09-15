@@ -40,6 +40,18 @@ final class ShellModel: ObservableObject {
     @Published var masked = false
     /// Whether the gateway sheet is up.
     @Published var gatewaySheetOpen = false
+    /// Whether the transfer-rules sheet is up (#1025 S4).
+    @Published var transferRulesOpen = false
+    /// THE MEMBER'S TRANSFER RULE, as the STORE's own word.
+    ///
+    /// A word and not an enum: an ordinary Kotlin enum exports as an
+    /// Objective-C class whose cases a Swift `switch` cannot be exhaustive
+    /// over, and an inexhaustive switch over a member's spending rule is the
+    /// worst place to lose that guarantee. `HomeBridge` parses the word, in
+    /// Kotlin, in one place.
+    @Published var transferRule = ""
+    /// The three choices, each a plain sentence from the shell's copy source.
+    @Published var transferRuleChoices: [(stored: String, sentence: String)] = []
     /// The last thing pairing or a sync said, in a member's words.
     ///
     /// A SENTENCE THE CORE ALREADY DECIDED WAS SHOWABLE. Nothing here composes
@@ -68,19 +80,76 @@ final class ShellModel: ObservableObject {
     /// `mobile/README.md` carries that hand-off.
     private let home = HomeBridge()
 
+    /// The three app screens' bridges (#1025 S5, lane L5).
+    ///
+    /// One each, held for the life of the shell rather than made per view: a
+    /// `ScreenHost` is routed onto the session's change stream when it is
+    /// attached and that registration has no removal, so a bridge rebuilt on
+    /// every push would leave the routed host drawing into a view that is gone.
+    ///
+    /// They live in `CentraidShared`'s app packages, not in `shell/`, because a
+    /// bridge names its screen's types and `PerAppLayoutSpec` keeps that inside
+    /// the app.
+    private let tally = TallyBridge()
+    private let photos = PhotosBridge()
+    private let notes = NotesBridge()
+
     init() {
         home.observe { [weak self] bytes in
             self?.homeState = bytes.data
         }
-        // THE VAULT IS AN ARTIFACT THAT WAS PUT HERE, never founded on the
-        // phone. `mobile/scripts/demo-vault.sh` copies a seeded one into this
-        // container; with no file there the core does not open, Home draws its
-        // loading grid and nothing lands — which is honest, and better than an
-        // app that refuses to start because a fixture is missing.
-        home.open(vaultPaths: Self.vaultPaths)
+        tally.observe { [weak self] bytes in self?.tallyState = bytes.data }
+        photos.observe { [weak self] bytes in self?.photosState = bytes.data }
+        notes.observe { [weak self] bytes in self?.notesState = bytes.data }
+        // THE SESSION OWNS THE ONE CORE (R-1020-24), so the app screens are
+        // attached TO it rather than opening one. It is opened asynchronously,
+        // so this is a callback and not a getter: there is exactly one moment
+        // the session comes into existence and a poll would either miss it or
+        // spin.
+        home.onSession { [weak self] session in
+            guard let self else { return }
+            self.tally.attach(session: session)
+            self.photos.attach(session: session)
+            self.notes.attach(session: session)
+        }
+        // THE DEVICE MAKES ITS OWN REPLICA (#1025 S5).
+        //
+        // This used to hand over every `.db` file that had been PLACED in the
+        // container by `mobile/scripts/demo-vault.sh`, because there was no way
+        // for a phone to get a vault of its own. There is now: open unpaired,
+        // pair, and the pairing takes the copy ([D-1025-S1-1]). So what crosses
+        // is the DIRECTORY replicas live in, and an empty one is the ordinary
+        // first run — Home draws, its reads are refused `Unpaired`, and the
+        // member's next move is the gateway sheet.
+        home.open(replicaDir: Self.replicaDirectory)
+        // THE OS ASKING FOR MEMORY BACK IS THE ONLY THING THAT CLOSES A
+        // BACKGROUND VAULT'S CORE (#1025 S7-13, ruling F).
+        //
+        // Every held vault's core is open, so a switch is a pointer move rather
+        // than a SQLite close-and-open. The bound on that is not a count of
+        // cores — that would make "is this vault open" depend on how recently
+        // some other vault was touched — it is this notification: under
+        // pressure, every core but the foreground's closes, and a rested vault
+        // reopens on the next tap or the next sync round.
+        memoryWarning = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.home.rest()
+        }
     }
 
-    /// EVERY `.db` IN `Documents`, sorted by name.
+    deinit {
+        if let memoryWarning {
+            NotificationCenter.default.removeObserver(memoryWarning)
+        }
+    }
+
+    /// The memory-warning observer, held so it can be removed.
+    private var memoryWarning: NSObjectProtocol?
+
+    /// WHERE THIS DEVICE'S REPLICAS LIVE.
     ///
     /// Documents and not Caches: a vault is the member's data, and the one
     /// directory iOS promises not to evict under pressure is this one.
@@ -89,23 +158,11 @@ final class ShellModel: ObservableObject {
     /// manifest would be a second place a vault's name and existence live, and
     /// the two would disagree the moment one was renamed from another device.
     /// What each file is CALLED is read out of the file itself; see
-    /// `VaultRoster`. Sorted so the same device opens the same vault twice
-    /// running, rather than whichever one the filesystem happened to enumerate
-    /// first.
-    ///
-    /// `-wal` and `-shm` are excluded by the extension filter: they are SQLite's
-    /// sidecars, not vaults, and opening one as a vault fails at the door.
-    static var vaultPaths: [String] {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let found = (try? FileManager.default.contentsOfDirectory(
-            at: documents,
-            includingPropertiesForKeys: nil
-        )) ?? []
-        return found
-            .filter { $0.pathExtension == "db" }
-            .map(\.path)
-            .sorted()
+    /// `VaultRoster`, and `Replicas` for what they are NAMED.
+    static var replicaDirectory: String {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
     }
+
     #endif
 
     /// Redeem a pairing ticket (#1020, D-1020-B7).
@@ -128,6 +185,21 @@ final class ShellModel: ObservableObject {
             switch outcome {
             case let paired as PairOutcomePaired:
                 self?.gatewayStatus = "Paired with \(paired.vaultName)."
+                // A DEVICE THAT JUST PAIRED IS A DEVICE IN THE FOREGROUND
+                // (#1025 S2, D-1025-S7-40). The scene never changed — the
+                // member has been looking at this sheet the whole time — so
+                // nothing else would open the tail until they left and came
+                // back.
+                self?.foreground()
+            // THE TICKET'S NAME IS NOT THE VAULT'S NAME (#1025 S7-9). A
+            // ticket carries the gateway CLI's `--vault-name` flag and not
+            // the vault's own `display_name`, so between redeeming one and
+            // holding a replica that can answer for itself there is nothing
+            // truthful to print — which is exactly this case, and why it
+            // carries no name to interpolate.
+            case is PairOutcomeCopying:
+                self?.gatewayStatus = "Paired. Your vault is being copied."
+                self?.foreground()
             case let refused as PairOutcomeRefused:
                 self?.gatewayStatus = refused.sentence
             default:
@@ -141,20 +213,97 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
+    /// FORGET A VAULT — the inverse of [pair] (#1025 S7-9).
+    ///
+    /// The shelf closes the core, deletes the replica and its byte store,
+    /// drops the pairing record and the endpoint key, and rebinds the session
+    /// onto whatever came forward; the roster the switcher is drawing arrives
+    /// as the ordinary `RosterChanged`, so nothing here removes a row by hand.
+    ///
+    /// **Forgetting is LOCAL.** The gateway keeps this device enrolled —
+    /// "this phone is not holding that vault any more" is not "that vault
+    /// should stop trusting this phone", which is a decision for whoever holds
+    /// the vault to take there. The confirmation in `VaultSheet` says so.
+    func forget(vaultID: String) {
+        #if canImport(CentraidShared)
+        home.forget(vaultId: vaultID) {}
+        #else
+        gatewayStatus = "This build has no core."
+        #endif
+    }
+
+    /// THE MEMBER ARRIVED: catch up, then hold the log open (#1025 S2,
+    /// D-1025-S7-40).
+    ///
+    /// Called from the scene phase and from nowhere else. **There is no timer
+    /// here.** A foreground interval is a deleted concept: the tail stays open
+    /// for as long as the app is active, and a page written on the gateway is
+    /// on this device within one round trip.
+    func foreground() {
+        #if canImport(CentraidShared)
+        home.foreground { _ in }
+        #endif
+    }
+
+    /// THE MEMBER LEFT: close the tail.
+    ///
+    /// Both halves of leaving — the app switcher and a real background — do the
+    /// same thing here, because a stream held open by a process the OS is about
+    /// to suspend is a socket nobody is reading. What resumes it is the next
+    /// `active`, from the durable cursor.
+    func leftTheForeground() {
+        #if canImport(CentraidShared)
+        home.stopTail()
+        #endif
+    }
+
     /// Run one sync pass and report what moved.
     func syncNow(done: @escaping () -> Void) {
         #if canImport(CentraidShared)
-        home.syncNow { [weak self] outcome in
+        // THE WAKE IS NAMED, and a Kotlin default does not cross this
+        // boundary — Objective-C export has no default arguments, so the shell
+        // states which window it is asking for. This one is the member holding
+        // the phone, which is a foreground window: nothing is held back and
+        // what bounds it is them closing the app.
+        home.syncNow(wake: .foreground) { [weak self] outcome in
             // AN UNREACHABLE GATEWAY IS A STATE, NOT A FAILURE. A phone in a
             // lift is not a broken phone, and the sentence the core supplies
             // says so without a red banner.
-            if outcome.unreachable {
+            // THE COPY, WHILE IT IS STILL COMING (#1025 S7, item 3). "Paired,
+            // no file yet" is a real state and it used to read "Synced: 0
+            // changes, 0 files" — the sentence that makes a working device look
+            // broken. It is first because it is what is happening: a seat that
+            // has no vault yet has nothing else to say.
+            if let copying = outcome.copying {
+                self?.gatewayStatus = copying
+            } else if outcome.unreachable {
                 self?.gatewayStatus = outcome.sentence.isEmpty
                     ? "Centraid could not reach your gateway."
                     : outcome.sentence
+            } else if let blocked = outcome.blocked {
+                // WHY A PASS MOVED NOTHING, when something stopped it (#1025
+                // S5). This drew "Synced: 0 changes, 0 files" over a queued
+                // write whose attempt count was climbing — the reason existed
+                // in the pass's report and had no field to travel in, which is
+                // the same way the `query_only` defect hid for three slices.
+                // The sentence is the core's; nothing here composes one.
+                self?.gatewayStatus = blocked
+            } else if let stale = outcome.stale {
+                self?.gatewayStatus = stale
             } else {
-                self?.gatewayStatus =
-                    "Synced: \(outcome.rowsApplied) changes, \(outcome.blobsCompleted) files."
+                // The byte plane's own two, because "0 files" alone is the
+                // sentence that made a working byte plane look broken (#1025
+                // S5). `budget`/`metered` are the window the core ACTUALLY ran
+                // under, echoed back, so which plan a pass took is answerable
+                // from the device rather than inferable.
+                var line = "Synced: \(outcome.rowsApplied) changes, "
+                    + "\(outcome.blobsCompleted) files."
+                if outcome.originalsWithheld > 0 {
+                    line += " \(outcome.originalsWithheld) waiting for Wi-Fi."
+                }
+                if let stalled = outcome.bytesStalled { line += " " + stalled }
+                line += " [\(outcome.budget)\(outcome.metered ? ", metered" : "")]"
+                self?.gatewayStatus = line
             }
             done()
         }
@@ -165,22 +314,108 @@ final class ShellModel: ObservableObject {
     }
 
     /// Forward an event. The shared module reduces; nothing here decides.
+    ///
+    /// The `screen` string is the machine's own `SCREEN_ID` — the same constant
+    /// its `ReadPage` effects carry — so the routing here and the routing in
+    /// `ScreenRuntime` are keyed on one name rather than on two spellings of
+    /// one idea.
+    ///
+    /// An unknown screen is DROPPED rather than fatal. The `fatalError` that
+    /// stood here was right while three of four screens had no bridge at all —
+    /// a half-wired build should fail on the first tap instead of looking inert
+    /// — and it is wrong now that they are wired: it would turn a typo in a
+    /// view's screen name into a crash on a member's phone, in a build where
+    /// every screen that exists is connected.
     func send(screen: String, event: Data) {
         #if canImport(CentraidShared)
-        if screen == "home" {
-            home.send(event: event.kotlin)
-            return
+        switch screen {
+        case "home": home.send(event: event.kotlin)
+        case "tally.list": tally.send(event: event.kotlin)
+        case "photos.grid": photos.send(event: event.kotlin)
+        case "notes.editor": notes.send(event: event.kotlin)
+        default: break
         }
         #endif
-        // Wired to `CentraidShared`'s `ScreenHost` on a machine with an Xcode;
-        // `mobile/README.md` names this as the first thing the iOS hand-off
-        // connects, and it is a `fatalError` rather than a silent no-op so a
-        // half-wired build fails on the first tap instead of looking inert.
-        fatalError(
-            "ShellModel.send is not wired to CentraidShared yet: see " +
-            "mobile/README.md -> \"The iOS hand-off\". A no-op here would be a " +
-            "screen that renders and never responds."
-        )
+    }
+
+    /// Open the transfer-rules sheet, reading the current rule as it opens.
+    ///
+    /// READ ON OPEN and not cached at launch: the store is the authority and a
+    /// value held since launch is a value a second device — or this device's
+    /// own restore — may have moved underneath.
+    func openTransferRules() {
+        #if canImport(CentraidShared)
+        transferRuleChoices = home.transferRuleChoices().map {
+            (stored: $0.stored, sentence: $0.sentence)
+        }
+        home.transferRule { [weak self] stored in
+            self?.transferRule = stored
+        }
+        #endif
+        // ONE SHEET AT A TIME. The gateway sheet is one of the two doors into
+        // this one, and iOS will not present a second sheet over a sheet that
+        // is still up — it drops the request silently, which reads as a button
+        // that does nothing.
+        gatewaySheetOpen = false
+        transferRulesOpen = true
+    }
+
+    /// The member picked one.
+    ///
+    /// The published value is set from what came BACK, so the sheet draws what
+    /// the store holds rather than what was tapped — an unknown word is the
+    /// conservative default, and a selection the next launch would not have is
+    /// worse than a tap that appears to do nothing.
+    func setTransferRule(_ stored: String) {
+        #if canImport(CentraidShared)
+        home.setTransferRule(stored: stored) { [weak self] settled in
+            self?.transferRule = settled
+        }
+        #endif
+    }
+
+    /// Run one camera-roll pass now (#1025 S6).
+    ///
+    /// Not a screen event, because it is not a reduction: the pass is a shell
+    /// effect with I/O in it, and the states it publishes come BACK as
+    /// `BackupChanged` events through the bridge's own runner. A view that sent
+    /// an event here would be asking the reducer to do a file read.
+    func backUpCameraRoll() {
+        #if canImport(CentraidShared)
+        photos.backUpNow()
+        #endif
+    }
+
+    /// Tell a screen it is on screen (#1025 S5, lane L5).
+    ///
+    /// **A SCREEN READS BECAUSE IT WAS OPENED, not because it was built.** The
+    /// `Opened` event is what makes the machine emit its first `ReadPage`, and
+    /// until this existed nothing on either shell sent one to the app screens —
+    /// so a screen that was pushed sat on its seeded `LOADING` state with no
+    /// read ever issued, which is indistinguishable from a vault that has not
+    /// synced.
+    ///
+    /// Notes carries its note's id because the editor's read is parameterised
+    /// by it: `NotesReads` binds it into the predicate, and an editor that
+    /// opened without one reads nothing rather than reading whichever note
+    /// sorted first.
+    func opened(_ route: Route) {
+        #if canImport(CentraidShared)
+        switch route {
+        case .tally:
+            var event = Centraid_Screen_V1_TallyListEvent()
+            event.opened = .init()
+            send(screen: "tally.list", event: (try? event.serializedData()) ?? Data())
+        case .photos:
+            var event = Centraid_Screen_V1_PhotosGridEvent()
+            event.opened = .init()
+            send(screen: "photos.grid", event: (try? event.serializedData()) ?? Data())
+        case let .note(identifier):
+            var event = Centraid_Screen_V1_NotesEditorEvent()
+            event.opened = .with { $0.noteID = identifier }
+            send(screen: "notes.editor", event: (try? event.serializedData()) ?? Data())
+        }
+        #endif
     }
 }
 

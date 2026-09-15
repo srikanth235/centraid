@@ -31,15 +31,8 @@ struct PhotosGridView: View {
                 }
             }
 
-            VStack(alignment: .leading) {
-                Text(state.backupSentence)
-                if !state.pausedReason.isEmpty { Text(state.pausedReason) }
-                if state.canAskForPhotos {
-                    Button("Allow photo access") {
-                        shell.send(screen: "photos.grid", event: state.permissionRequestEvent)
-                    }
-                }
-            }
+            // THE OTHER PLANE, IN ITS OWN VIEW (#1025 S6). See `BackupStatus`.
+            BackupStatus(shell: shell, state: state)
 
             switch state.content {
             case .loading:
@@ -52,9 +45,35 @@ struct PhotosGridView: View {
             case let .data(cells, packAbsent):
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 96))]) {
                     ForEach(cells, id: \.identifier) { cell in
-                        if let path = cell.thumbnailPath {
-                            Image(systemName: "photo")
-                                .accessibilityLabel("Photo")
+                        if let path = cell.thumbnailPath, !path.isEmpty {
+                            // THE SAME RENDERER AS HOME'S MOSAIC
+                            // (D-1025-S7-20). This drew `Image(systemName:
+                            // "photo")` — an SF Symbol — over a real path, so
+                            // a device holding nineteen photographs showed
+                            // nineteen identical glyphs, and the one place in
+                            // the product that drew a vault's own bytes was a
+                            // four-cell tile on Home. One path, one view.
+                            // A SQUARE CELL, and the ground is what holds it.
+                            // `ContentImage` fills and deliberately overflows
+                            // its frame, so an image asked for its own size
+                            // grows the row: the ground states the geometry and
+                            // the clip keeps the overflow off the neighbour,
+                            // which is what Home's mosaic does with a fixed
+                            // rectangle.
+                            Color.clear
+                                .aspectRatio(1, contentMode: .fit)
+                                .overlay { ContentImage(path: path) }
+                                // WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH, ON
+                                // TOP OF IT (#1025 S5, D-1025-S7-62). A
+                                // thumbnail is drawn under every one of these:
+                                // the grid is the product and it is full under
+                                // every rule there is, and what the overlay
+                                // says is whether the FULL-SIZE file is here,
+                                // moving, or waiting on the member's own rule.
+                                .overlay(alignment: .bottomTrailing) {
+                                    cellState(cell)
+                                }
+                                .clipped()
                                 .accessibilityIdentifier(path)
                         } else {
                             // TWO DIFFERENT EMPTY-CELL SENTENCES. A member with
@@ -72,5 +91,40 @@ struct PhotosGridView: View {
         }
         .padding()
         .navigationTitle("Photos")
+    }
+
+    /// The per-cell affordance, and nothing for the two states that need none.
+    ///
+    /// **The download arrow is drawn ONLY for `withheld_by_rule`**, which is
+    /// the distinction that matters to a member: a photograph that is simply
+    /// still on its way gets no arrow, because tapping it would ask for
+    /// something already queued, and an affordance that does nothing is worse
+    /// than none. `held` and `absent` draw nothing at all.
+    @ViewBuilder
+    private func cellState(_ cell: PhotoCellView) -> some View {
+        if cell.isFetching {
+            ProgressView()
+                .padding(4)
+                .background(.thinMaterial, in: Circle())
+                .padding(4)
+                .accessibilityIdentifier("photos.cell.fetching.\(cell.identifier)")
+                .accessibilityLabel("Downloading")
+        } else if cell.offersDownload {
+            Button {
+                shell.send(screen: "photos.grid", event: state.fetchEvent(for: cell))
+            } label: {
+                Image(systemName: "arrow.down.circle.fill")
+                    // THE BUTTON IS WHAT VOICEOVER READS, and it carries the
+                    // label below; a glyph inside it that described itself too
+                    // would be announced twice.
+                    .accessibilityHidden(true)
+                    .imageScale(.large)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.55))
+            }
+            .padding(4)
+            .accessibilityIdentifier("photos.cell.download.\(cell.identifier)")
+            .accessibilityLabel("Download full-size photo")
+        }
     }
 }

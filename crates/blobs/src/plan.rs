@@ -93,6 +93,19 @@ pub struct Want {
     /// Higher is newer. The vault's `created_at` as a sortable integer; the
     /// caller decides the unit, this only compares.
     pub recency: i64,
+    /// THESE BYTES ARE A MOVING IMAGE (#1025 S4).
+    ///
+    /// The one distinction the member's transfer rule draws inside a tier:
+    /// `WIFI_AND_CELLULAR_PHOTOS` lets a photograph's original cross a link
+    /// the member is paying for and never a video's, because the two differ by
+    /// three orders of magnitude and a member who said "photos on cellular"
+    /// did not say "a 900 MB video on cellular".
+    ///
+    /// It is a fact about the CONTENT and not about the tier, so it rides the
+    /// want: a thumbnail of a video is a thumbnail, costs kilobytes, and
+    /// crosses on any link — which is what puts the video's cell in the grid
+    /// at all.
+    pub moving: bool,
 }
 
 impl Want {
@@ -118,6 +131,80 @@ pub struct Budget {
     /// The most blobs to ask for, however small. A window that queued forty
     /// thousand thumbnails would spend itself on round trips.
     pub items: usize,
+    /// THE MEMBER IS PAYING BY THE MEGABYTE.
+    ///
+    /// Half of the answer to "may this window fetch an original"; the other
+    /// half is [`Self::originals`], the member's own rule. Kept apart because
+    /// they are separately true — a night shift on a tethered phone is a night
+    /// shift, metered — and because only one of them is a fact about the
+    /// radio.
+    pub metered: bool,
+    /// THE MEMBER'S TRANSFER RULE (#1025 S4).
+    ///
+    /// **A selector and never a byte count.** A ceiling and a ban are
+    /// different things and the difference is the member's bill. A small
+    /// `bytes` still ADMITS one original — the plan deliberately never refuses
+    /// an item for being larger than the whole budget, because that is the
+    /// only way a 900 MB video ever crosses — so a metered link bounded only
+    /// by bytes starts a video on a cellular plan and keeps resuming it every
+    /// window until it is whole.
+    ///
+    /// The rule therefore removes the tier from the plan rather than shrinking
+    /// it. Thumbnails and previews still cross on any link, because a grid a
+    /// member can look at costs kilobytes and is the product; the originals
+    /// wait for the link the member said they would wait for.
+    ///
+    /// It is a per-DEVICE setting, not a per-vault one: what it governs is a
+    /// data plan, and a phone has one data plan however many vaults it holds.
+    pub originals: OriginalsRule,
+    /// THE ONE ITEM A MEMBER ASKED FOR BY NAME (#1025 S5).
+    ///
+    /// WhatsApp's download arrow. `Some(hash)` narrows this window to that
+    /// blob and **suspends every tier rule for it**: the member overrode the
+    /// rule for one item, which is exactly what the affordance means, and a
+    /// window that then withheld it would be answering a tap with nothing.
+    ///
+    /// It is an override and not a bypass: the rule is untouched, the next
+    /// ordinary window plans by it again, and nothing else crosses in this
+    /// one.
+    pub only: Option<ContentHash>,
+}
+
+/// WHEN THIS DEVICE MAY FETCH ORIGINALS — the member's setting, as one value
+/// (#1025 S4).
+///
+/// WhatsApp's auto-download model, and the reason it is the right one: bytes
+/// are never pushed, they are PLANNED, and the plan is a member's setting. The
+/// gateway has no opinion on what a phone pays for and could not have one.
+///
+/// **Thumbnails and previews are not in this enum**, which is the shape of the
+/// ruling rather than an omission. A thumbnail crosses on any link and ahead
+/// of everything (`Tier`'s ordering, D-1025-S7-51) because it is kilobytes and
+/// it is the grid, and the grid is the product; a preview crosses on any link
+/// too and is bounded by the short-refresh budget instead. Only the originals
+/// are worth a member's decision.
+///
+/// The fixed rule **a video's original never crosses a metered link** is
+/// [`Self::WifiAndCellularPhotos`]'s own body and is not a fourth case: no
+/// member setting turns it off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OriginalsRule {
+    /// THE DEFAULT. Originals wait for a link the member is not paying for.
+    ///
+    /// Default because it is the one whose failure mode is a photograph that
+    /// arrives late, and the alternatives' failure mode is a bill.
+    #[default]
+    WifiOnly,
+    /// A photograph's original may cross a metered link; a video's may not.
+    WifiAndCellularPhotos,
+    /// NO ORIGINAL CROSSES ON ANY LINK unless the member taps it
+    /// ([`Budget::only`]).
+    ///
+    /// Not "Wi-Fi off": a member on unlimited fibre may still want a phone
+    /// that holds thumbnails and fetches a full-size photograph only when they
+    /// ask for one, because the constraint being spent is the device's disk
+    /// rather than its data plan.
+    Manual,
 }
 
 impl Budget {
@@ -129,6 +216,9 @@ impl Budget {
         Self {
             bytes: 8 * 1024 * 1024,
             items: 400,
+            metered: false,
+            originals: OriginalsRule::WifiOnly,
+            only: None,
         }
     }
 
@@ -139,6 +229,9 @@ impl Budget {
         Self {
             bytes: 4 * 1024 * 1024 * 1024,
             items: 20_000,
+            metered: false,
+            originals: OriginalsRule::WifiOnly,
+            only: None,
         }
     }
 
@@ -149,6 +242,61 @@ impl Budget {
         Self {
             bytes: u64::MAX,
             items: usize::MAX,
+            metered: false,
+            originals: OriginalsRule::WifiOnly,
+            only: None,
+        }
+    }
+
+    /// The same ceiling, over a link the MEMBER IS PAYING FOR (#1025 S5).
+    ///
+    /// A modifier rather than a fourth constructor, because "which plan" and
+    /// "who is paying for the bytes" are two facts a shell knows separately: a
+    /// night shift on a tethered phone is a night shift, metered.
+    ///
+    /// It no longer decides the originals by itself — [`Self::originals`] is
+    /// the member's rule and this is one of its two inputs (#1025 S4).
+    #[must_use]
+    pub const fn metered(self) -> Self {
+        Self {
+            metered: true,
+            ..self
+        }
+    }
+
+    /// The same window, under the member's transfer rule (#1025 S4).
+    #[must_use]
+    pub const fn under(self, rule: OriginalsRule) -> Self {
+        Self {
+            originals: rule,
+            ..self
+        }
+    }
+
+    /// THE MEMBER TAPPED THIS ONE (#1025 S5). See [`Self::only`].
+    #[must_use]
+    pub const fn just(self, hash: ContentHash) -> Self {
+        Self {
+            only: Some(hash),
+            ..self
+        }
+    }
+
+    /// May an original of these bytes cross in this window?
+    ///
+    /// THE WHOLE ARITHMETIC OF THE MEMBER'S RULE, in one place and in Rust.
+    /// No shell computes any part of it: a Kotlin or Swift copy of this table
+    /// would be a second rule to keep true, and the one that decides a
+    /// member's bill is the worst candidate for a second copy.
+    #[must_use]
+    pub const fn admits_original(&self, moving: bool) -> bool {
+        match self.originals {
+            // The member asks for each one. Nothing arrives on its own, on any
+            // link — `only` is the override and it is checked before this.
+            OriginalsRule::Manual => false,
+            OriginalsRule::WifiOnly => !self.metered,
+            // A photograph crosses; a video waits. The fixed rule.
+            OriginalsRule::WifiAndCellularPhotos => !self.metered || !moving,
         }
     }
 }
@@ -164,6 +312,15 @@ pub struct Plan {
     /// budget** — see the module header; the item that crossed the line is kept
     /// on purpose.
     pub bytes: u64,
+    /// ORIGINALS THIS WINDOW REFUSED TO ASK FOR because the link is metered
+    /// (#1025 S5). Counted in [`Self::deferred`] as well: they are still owed.
+    ///
+    /// Its own number because it is the one reason a plan can be EMPTY over a
+    /// non-empty want list, and an empty plan with no explanation is
+    /// indistinguishable from a caught-up device. That is precisely how a
+    /// metered flag set from a wrong input looks from outside: a grid of
+    /// placeholders, `blobsCompleted = 0`, and no stream ever opened.
+    pub withheld: usize,
 }
 
 impl Plan {
@@ -183,6 +340,36 @@ pub fn plan(wants: impl IntoIterator<Item = Want>, budget: Budget) -> Plan {
         .into_iter()
         .filter(|want| !want.is_satisfied())
         .collect();
+    // THE MEMBER TAPPED ONE (#1025 S5). Everything else leaves this window,
+    // and it leaves BEFORE `total` is counted: a one-item fetch is not a
+    // report that the rest of the vault was deferred, and a progress line
+    // saying "and 812 more" over a member's single tap would be describing a
+    // different window.
+    //
+    // The rule is not consulted for it at all. A member who taps the download
+    // arrow has overridden the rule for that item, which is what the
+    // affordance means; re-applying the rule here is how a tap answers with
+    // nothing.
+    if let Some(only) = budget.only {
+        outstanding.retain(|want| want.hash == only);
+        let bytes = outstanding.iter().map(Want::remaining).sum();
+        return Plan {
+            deferred: 0,
+            items: outstanding,
+            bytes,
+            withheld: 0,
+        };
+    }
+    // WHAT IS OWED, counted BEFORE the member's rule takes the originals out.
+    // An original a rule withholds is still work a later window owes, so it
+    // belongs in `deferred`; counting after the retain would report "and 0
+    // more" to a member whose videos are all waiting.
+    let total = outstanding.len();
+    // NOT ASKED FOR UNDER THE MEMBER'S TRANSFER RULE, and removed rather than
+    // squeezed out by the byte ceiling: see `Budget::originals`.
+    let before = outstanding.len();
+    outstanding.retain(|want| want.tier != Tier::Original || budget.admits_original(want.moving));
+    let withheld = before - outstanding.len();
 
     // Tier first, then newest, then the hash — the last so that two blobs made
     // in the same millisecond have a stable order and a plan is reproducible.
@@ -195,7 +382,6 @@ pub fn plan(wants: impl IntoIterator<Item = Want>, budget: Budget) -> Plan {
             .then(left.hash.cmp(&right.hash))
     });
 
-    let total = outstanding.len();
     let mut items = Vec::new();
     let mut bytes = 0u64;
     for want in outstanding {
@@ -214,6 +400,7 @@ pub fn plan(wants: impl IntoIterator<Item = Want>, budget: Budget) -> Plan {
         deferred: total - items.len(),
         items,
         bytes,
+        withheld,
     }
 }
 
@@ -228,6 +415,16 @@ mod tests {
             size,
             held,
             recency,
+            moving: false,
+        }
+    }
+
+    /// The same, of a video: the one distinction the member's rule draws
+    /// inside the originals tier.
+    fn moving(tier: Tier, size: u64, recency: i64, seed: &[u8]) -> Want {
+        Want {
+            moving: true,
+            ..want(tier, size, 0, recency, seed)
         }
     }
 
@@ -284,6 +481,7 @@ mod tests {
             Budget {
                 bytes: 4_000_000,
                 items: 100,
+                ..Budget::foreground()
             },
         );
         assert_eq!(
@@ -318,6 +516,7 @@ mod tests {
             Budget {
                 bytes: u64::MAX,
                 items: 50,
+                ..Budget::foreground()
             },
         );
         assert_eq!(planned.items.len(), 50);
@@ -337,6 +536,220 @@ mod tests {
         shuffled.reverse();
         let second = plan(shuffled, Budget::foreground());
         assert_eq!(first.items, second.items);
+    }
+
+    /// THE THREE SELECTORS ARE THREE DIFFERENT PLANS over one set of wants.
+    ///
+    /// The point of the shell choosing: before #1025 S5 every pass core-ffi
+    /// ever ran took `foreground()`, so a thirty-second cellular refresh and a
+    /// night on the charger asked for exactly the same thing.
+    #[test]
+    fn each_selector_plans_a_different_window() {
+        // Enough small blobs that the short refresh's item cap bites, and one
+        // original large enough that only an unbounded window finishes it.
+        let mut wants: Vec<Want> = (0..1_000_i64)
+            .map(|n| want(Tier::Thumbnail, 8_000, 0, n, &n.to_le_bytes()))
+            .collect();
+        wants.push(want(Tier::Original, 900_000_000, 0, 0, b"a long video"));
+
+        let short = plan(wants.clone(), Budget::short_refresh());
+        let night = plan(wants.clone(), Budget::night_shift());
+        let front = plan(wants.clone(), Budget::foreground());
+
+        assert_eq!(short.items.len(), 400, "the short refresh's item cap");
+        assert_eq!(
+            night.items.len(),
+            1_001,
+            "the night shift has room for the whole roll and the video"
+        );
+        assert_eq!(front.items.len(), 1_001);
+        // AND THEY ARE NOT THE SAME WINDOW. The short refresh never reaches the
+        // original at all, because every thumbnail is ordered in front of it.
+        assert!(
+            short.items.iter().all(|item| item.tier == Tier::Thumbnail),
+            "a thirty-second cellular window started an original"
+        );
+        assert!(night.items.iter().any(|item| item.tier == Tier::Original));
+        assert_eq!(short.deferred, 601);
+    }
+
+    /// A METERED WINDOW FETCHES NO ORIGINALS AT ALL, and the ceiling could not
+    /// have done it: the plan admits an item larger than the whole budget on
+    /// purpose, so bytes alone would start the video and resume it every window
+    /// until the member's bill arrived.
+    #[test]
+    fn a_metered_window_fetches_no_originals_and_still_fills_the_grid() {
+        let wants = vec![
+            want(Tier::Thumbnail, 40_000, 0, 3, b"cell"),
+            want(Tier::Preview, 400_000, 0, 2, b"full screen"),
+            want(Tier::Original, 900_000_000, 0, 1, b"a long video"),
+        ];
+        let metered = plan(wants.clone(), Budget::short_refresh().metered());
+        assert!(
+            metered.items.iter().all(|item| item.tier != Tier::Original),
+            "a metered window planned an original"
+        );
+        assert_eq!(metered.items.len(), 2, "the grid and the full-screen view");
+        // STILL OWED. A withheld original is work a later window on an
+        // unmetered link does, and a member is told there is more.
+        assert_eq!(metered.deferred, 1);
+        // AND NAMED AS WITHHELD, which is what lets an empty plan be told
+        // apart from a caught-up device.
+        assert_eq!(metered.withheld, 1);
+        // And the same budget unmetered does start it, so the difference is the
+        // metered flag and nothing else.
+        let unmetered = plan(wants, Budget::short_refresh());
+        assert!(
+            unmetered
+                .items
+                .iter()
+                .any(|item| item.tier == Tier::Original)
+        );
+    }
+
+    /// THE MEMBER'S RULE, EVERY CELL OF IT (#1025 S4).
+    ///
+    /// Three rules x metered/unmetered x photograph/video, asserted as a table
+    /// rather than as six tests, because the thing a reviewer has to check is
+    /// that the TABLE is right and a table split across six functions is a
+    /// table nobody reads as one.
+    ///
+    /// The two properties that hold in every cell are asserted below it: the
+    /// thumbnail and the preview always cross, and `withheld` counts exactly
+    /// what the rule took out.
+    #[test]
+    fn the_transfer_rule_decides_the_originals_and_nothing_else() {
+        // rule, metered, may a photograph cross, may a video cross
+        let table = [
+            (OriginalsRule::WifiOnly, false, true, true),
+            (OriginalsRule::WifiOnly, true, false, false),
+            (OriginalsRule::WifiAndCellularPhotos, false, true, true),
+            // THE FIXED RULE: videos never on cellular, whatever the member set.
+            (OriginalsRule::WifiAndCellularPhotos, true, true, false),
+            // MANUAL WITHHOLDS ON AN UNMETERED LINK TOO. That is the case a
+            // "metered" flag could never have expressed, and the reason the
+            // rule is a third input rather than a spelling of the flag.
+            (OriginalsRule::Manual, false, false, false),
+            (OriginalsRule::Manual, true, false, false),
+        ];
+        for (rule, metered, photo_crosses, video_crosses) in table {
+            let wants = vec![
+                want(Tier::Thumbnail, 40_000, 0, 4, b"cell"),
+                want(Tier::Preview, 400_000, 0, 3, b"full screen"),
+                want(Tier::Original, 6_000_000, 0, 2, b"a photograph"),
+                moving(Tier::Original, 900_000_000, 1, b"a long video"),
+            ];
+            let budget = if metered {
+                Budget::foreground().under(rule).metered()
+            } else {
+                Budget::foreground().under(rule)
+            };
+            let planned = plan(wants, budget);
+            let has = |seed: &[u8]| {
+                planned
+                    .items
+                    .iter()
+                    .any(|item| item.hash == ContentHash::of(seed))
+            };
+            assert_eq!(
+                has(b"a photograph"),
+                photo_crosses,
+                "{rule:?} metered={metered}: the photograph's original"
+            );
+            assert_eq!(
+                has(b"a long video"),
+                video_crosses,
+                "{rule:?} metered={metered}: the video's original"
+            );
+            // THE GRID IS THE PRODUCT, under every rule there is. A member who
+            // set `Manual` on a metered link still gets a library they can
+            // look at; what waits is the full-size file.
+            assert!(
+                has(b"cell") && has(b"full screen"),
+                "{rule:?} metered={metered}: a rule reached past the originals"
+            );
+            // AND THE NUMBER IS THE REASON. `withheld` is what lets an empty
+            // plan be told apart from a caught-up device, so it has to count
+            // exactly what the rule removed and nothing the ceiling did.
+            let expected = usize::from(!photo_crosses) + usize::from(!video_crosses);
+            assert_eq!(
+                planned.withheld, expected,
+                "{rule:?} metered={metered}: withheld"
+            );
+            // Still owed, and a member is told there is more.
+            assert_eq!(planned.deferred, expected);
+        }
+    }
+
+    /// A WITHHELD ORIGINAL IS NOT A MISSING ONE. Its thumbnail and its preview
+    /// are both there, so the cell a member taps is drawn and the affordance
+    /// has something to sit on.
+    #[test]
+    fn a_manual_rule_still_fills_the_grid_on_an_unmetered_link() {
+        let wants = vec![
+            want(Tier::Thumbnail, 40_000, 0, 3, b"cell"),
+            want(Tier::Preview, 400_000, 0, 2, b"full screen"),
+            want(Tier::Original, 6_000_000, 0, 1, b"a photograph"),
+        ];
+        let planned = plan(wants, Budget::night_shift().under(OriginalsRule::Manual));
+        assert_eq!(planned.items.len(), 2);
+        assert_eq!(planned.withheld, 1);
+        assert!(planned.items.iter().all(|item| item.tier != Tier::Original));
+    }
+
+    /// FETCH THIS ONE NOW (#1025 S5). WhatsApp's download arrow: a member
+    /// action that overrides the rule for ONE item, on the link they are on.
+    ///
+    /// The strictest possible setting on the most expensive possible link —
+    /// `Manual`, metered — which is the case where a window that re-applied
+    /// the rule would answer a tap with nothing.
+    #[test]
+    fn a_named_fetch_lands_that_one_blob_and_nothing_else() {
+        let tapped = moving(Tier::Original, 900_000_000, 1, b"a long video");
+        let wants = vec![
+            want(Tier::Thumbnail, 40_000, 0, 4, b"cell"),
+            want(Tier::Original, 6_000_000, 0, 2, b"a photograph"),
+            tapped,
+        ];
+        let planned = plan(
+            wants,
+            Budget::foreground()
+                .under(OriginalsRule::Manual)
+                .metered()
+                .just(tapped.hash),
+        );
+        assert_eq!(planned.items, vec![tapped], "the tap was answered");
+        // AND NOTHING ELSE CROSSED — not the other original, and not even the
+        // thumbnail the ordinary window would have taken first. A one-item
+        // window is one item.
+        assert_eq!(planned.deferred, 0);
+        assert_eq!(planned.withheld, 0, "a tap is not a withholding");
+    }
+
+    /// A SECOND TAP ON A BLOB THIS DEVICE ALREADY HOLDS IS NOTHING TO DO.
+    ///
+    /// The satisfied filter is what makes it a no-op, and it runs before the
+    /// `only` narrowing for exactly this reason: a held blob is not work under
+    /// any budget, an override included.
+    #[test]
+    fn a_named_fetch_of_a_held_blob_plans_nothing() {
+        let done = want(Tier::Original, 6_000_000, 6_000_000, 1, b"a photograph");
+        let planned = plan(vec![done], Budget::foreground().just(done.hash));
+        assert!(planned.is_empty());
+        assert_eq!(planned.bytes, 0);
+    }
+
+    /// A NAMED FETCH FOR A HASH NO WANT CARRIES PLANS NOTHING, rather than
+    /// planning the whole vault. The refusal a member reads is the core's, and
+    /// it is a code; what this asserts is that the planner does not quietly
+    /// widen a window whose one item it could not find.
+    #[test]
+    fn a_named_fetch_for_an_unknown_hash_plans_nothing() {
+        let planned = plan(
+            vec![want(Tier::Original, 6_000_000, 0, 1, b"a photograph")],
+            Budget::foreground().just(ContentHash::of(b"never heard of it")),
+        );
+        assert!(planned.is_empty());
     }
 
     /// A video's poster IS its thumbnail. Filing it anywhere else is what

@@ -378,6 +378,50 @@ message PhotoCell {
   // A Live Photo's still and its paired movie share one capture group; the grid
   // shows one cell (`apps/mobile/NATIVE_V0.md:11-19`).
   optional string capture_group_id = 7;
+  // WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH (#1025 S5, D-1025-S7-62).
+  //
+  // A CLOSED ENUM and not three booleans. The five states are mutually
+  // exclusive by construction and a cell that could be two of them at once is
+  // a cell drawing two affordances; the derivation is one function
+  // (`PhotosReads.heldOf`) over `seat_blob_held` and the member's rule, and it
+  // is the only thing allowed to produce this value.
+  Held held = 8;
+  // HOW FAR A `HELD_FETCHING` CELL HAS GOT, 0-100, and 0 when nobody can say.
+  //
+  // Zero is an honest "not known" rather than "nothing has crossed": the byte
+  // plane reports per-blob completion and not per-blob progress in this build,
+  // so a spinner with no percentage is what a member gets, and a fabricated
+  // number would be worse than none. Meaningless on any other state.
+  uint32 fetch_percent = 9;
+  // THE BYTES A DOWNLOAD ARROW WOULD ASK FOR: the ORIGINAL's content hash,
+  // lowercase hex, empty when this replica has no row naming one.
+  //
+  // It is on the cell because the tap has to name a blob and the cell is what
+  // the member taps. Not a path and not a URI: `seat.bytes.fetch` takes a
+  // hash, and a shell that had to compose `blob:blake3-<hex>` would be a shell
+  // spelling a scheme that is the core's.
+  string original_hash = 10;
+
+  // The five states a cell can be in, and no sixth.
+  enum Held {
+    HELD_UNSPECIFIED = 0;
+    // The original is on this device. Everything a member can do with the
+    // photograph, they can do offline.
+    HELD_ORIGINAL = 1;
+    // A thumbnail (or a preview) is here and the original is not, and nothing
+    // is holding the original back but a window that has not come round yet.
+    HELD_THUMBNAIL_ONLY = 2;
+    // The member tapped it and the bytes are moving.
+    HELD_FETCHING = 3;
+    // The member's own transfer rule is why the original is not here. The
+    // distinction that matters: this is a DECISION and not a failure, and it
+    // is the state that carries the download arrow.
+    HELD_WITHHELD_BY_RULE = 4;
+    // Nothing of this photograph has reached this device — not even a
+    // thumbnail. A freshly paired phone mid-first-copy is every cell in this
+    // state, and it is not an error.
+    HELD_ABSENT = 5;
+  }
 
   enum Kind {
     KIND_UNSPECIFIED = 0;
@@ -465,9 +509,56 @@ message PhotosGridEvent {
     SheetChanged sheet = 9;
     BackupChanged backup = 10;
     SeatChanged seat_changed = 11;
+    RowsChanged rows_changed = 12;
+    OriginalRequested fetch_original = 14;
+    FetchSettled fetch_settled = 15;
   }
 
+  // 13 WAS `BytesArrived`, DELETED BY D-1025-S7-20. A landed byte is a row:
+  // the seat keeps `seat_blob_held`, the page read joins it, and the core names
+  // the ASSET rows a window's files belong to — so a blob arriving is an
+  // ordinary `RowsChanged` over `media_asset` and this grid has one fewer event
+  // to reduce. The event only ever existed because the ids the core had were
+  // content ids, which matched nothing this screen was showing.
+  //
+  // Reserved at the MESSAGE and not in the `oneof`: a oneof's numbers are the
+  // message's, and proto3 has no `reserved` inside one.
+  reserved 13;
+
   message Opened {}
+
+  // THE MEMBER TAPPED THE DOWNLOAD ARROW ON ONE CELL (#1025 S5,
+  // D-1025-S7-63).
+  //
+  // Both ids, because they answer two different questions: the hash is what
+  // addresses the bytes and the asset id is what the grid keys the cell by, so
+  // the reducer can put that one cell into `HELD_FETCHING` without waiting for
+  // the round trip. Deriving one from the other would mean a second read.
+  message OriginalRequested {
+    string asset_id = 1;
+    string content_hash = 2;
+  }
+
+  // The fetch came back. `fetched` true means the bytes landed — and the row
+  // change that lands WITH them is what actually redraws the cell, so this
+  // event exists for the OTHER outcomes: a gateway that was not reached, and a
+  // refusal by code. A cell stuck spinning because nobody said "it did not
+  // happen" is the state this deletes.
+  message FetchSettled {
+    string asset_id = 1;
+    bool fetched = 2;
+    // A member-facing sentence from the core's own table, empty when there is
+    // nothing worth saying. Never a detail, never a path, never a hash.
+    string sentence = 3;
+  }
+
+  // A change event named assets this grid may be showing (#1025 S5). It carries
+  // IDS and never values: the core's change stream never carries values, which
+  // is what makes its coalescing lossless, and a grid re-reads rather than
+  // patching a cell whose position in the sort may have moved.
+  message RowsChanged {
+    repeated string asset_ids = 1;
+  }
 
   message DestinationChanged {
     PhotosGridState.Destination destination = 1;
@@ -546,6 +637,17 @@ message NoteDraft {
   string base_revision_id = 5;
   // Set when the save was refused; the sentence a member reads.
   optional ReadFailure save_failure = 6;
+  // THE BODY HAS NOT ARRIVED, which is not the same as an empty note (#1025
+  // S5). A note's body is not a column: it lives in the content item
+  // `body_content_id` points at and is read through the byte door, and a seat
+  // whose reads cannot reach that door yet answers a draft with no body in it.
+  //
+  // An editor that could not tell those apart would let a member save an empty
+  // body over a real one — `knowledge.save_note` takes the whole draft, so a
+  // blank field is an instruction to blank the note. The flag exists so the
+  // save can be REFUSED rather than made destructive, and it is on the draft
+  // rather than on the state because it is a fact about the row that arrived.
+  bool body_unavailable = 7;
 
   enum Format {
     FORMAT_UNSPECIFIED = 0;
@@ -566,10 +668,19 @@ message NotesEditorEvent {
     SaveRequested save = 7;
     SaveSettled save_settled = 8;
     SeatChanged seat_changed = 9;
+    RowsChanged rows_changed = 10;
   }
 
   message Opened {
     string note_id = 1;
+  }
+
+  // A change event named notes (#1025 S5). Whether this editor re-reads is the
+  // REDUCER's decision and not the sender's: a member with an unsaved draft
+  // must not have it replaced by a copy that arrived from the gateway, so the
+  // event is delivered and the machine ignores it while the draft is dirty.
+  message RowsChanged {
+    repeated string note_ids = 1;
   }
 
   message DataArrived {
@@ -893,16 +1004,37 @@ message TileRow {
   repeated string app_ids = 1;
 }
 
-// THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and which gateway.
+// THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and how it stands with the
+// gateway behind it.
 //
 // No greeting. The springboard was the only route in v0 that drew them, and
 // inside an app the member lost both — which vault they were reading, and
-// whether its gateway was reachable — so the lockup became chrome an app can
+// whether it was reaching its gateway — so the lockup became chrome an app can
 // mount. It hangs off the STATE rather than off `HomeData` for the same reason
 // the sheet flag does: it is true while Home is loading and true while Home has
 // failed, and a lockup that vanished when a read failed would take the vault's
 // name away at the moment a member most needs to know which vault they are
 // looking at.
+//
+// **THE SECOND FACT IS THE VAULT'S, NEVER A GATEWAY'S NAME (#1025).** This
+// carried `gateway_name` for two waves and nothing on any layer ever wrote it:
+// `grep -rn gateway_name crates` answered nothing, so both shells drew "not
+// connected to a gateway" over a device that had paired, synced and was holding
+// its rows. It was not a missing assignment. Nothing in the pairing exchange
+// names a gateway — `PairOk` answers a vault id, a vault name and an address —
+// and #1025 settled why: a device pairs with a VAULT, one connection and one
+// replica per vault, and a gateway is not a noun the device has. Two vaults
+// behind one gateway is a coincidence a device never acts on and must never
+// surface. So the field was a name that could not exist, and [State] is the
+// fact that can: how THIS vault stands on this device.
+//
+// **AND THE SECOND FACT IS A STATE, NOT AN ACT (#1025 S7-9).** The enum that
+// replaced `gateway_name` was `Link`, and it in turn had a hole: it modelled
+// PAIRING as one of a vault's states. A device that holds a vault has already
+// paired — that is what holding one means — so `LINK_UNPAIRED` described the
+// DEVICE (zero vaults held, show the pair flow) and could never be true of a
+// row in the switcher. [State] is the three things that can be true of a
+// holding, and every one of them is derived rather than stored.
 message VaultLockup {
   // THE VAULT'S OWN ID, which is what a switch names — never a path.
   //
@@ -919,15 +1051,71 @@ message VaultLockup {
   // Empty is a REAL STATE, not a missing value: a member with no vault yet gets
   // "No vault yet" rather than a blank lockup.
   string vault_name = 1;
-  // Empty means no gateway is connected. The line says so in place, never as a
-  // banner.
-  string gateway_name = 2;
   // The vault's own identity hue as `#rrggbb`, or empty for plain ink. The
   // shells wash it behind the mark exactly as an app chip is washed.
   string color = 3;
-  // Said IN THE GATEWAY LINE — "home-gateway · offline" — and never as a
-  // banner, because offline is not an incident.
-  bool offline = 4;
+  // How this vault stands on this device. Said IN PLACE, under the vault's
+  // name, never as a banner: none of these is an incident.
+  State state = 7;
+  // ORIGINALS THIS DEVICE'S OWN TRANSFER RULE IS HOLDING BACK (#1025 S4,
+  // D-1025-S7-61).
+  //
+  // The last pass's `withheld`, carried onto the lockup so the header can say
+  // it in place. **A grid of thumbnails with no full-size files is a DECISION
+  // and not a failure**, and a line that does not say so is how a working byte
+  // plane looks broken: the member set the rule, and the number is the only
+  // thing on the screen that connects the two.
+  //
+  // A MODIFIER on the state line and not a fourth `State`. The vault is online
+  // or offline independently of it — a device can be perfectly current and
+  // still be waiting for Wi-Fi to bring the photographs.
+  uint32 originals_withheld = 8;
+
+  // `gateway_name`, which no layer could ever write; `offline`, which only
+  // meant something beside it; and `link`, whose enum made pairing a STATE of
+  // a vault. See the message header and [State].
+  reserved 2, 4, 6;
+  reserved "gateway_name", "offline", "link";
+
+  // HOW THIS VAULT STANDS ON THIS DEVICE — THREE CASES AND NO FOURTH (#1025
+  // S7-9, superseding D-1025-S7-8's `Link`).
+  //
+  // **Pairing is an ACTION, not a state.** `Link` had five cases and two of
+  // them were not states of a vault at all. `LINK_UNPAIRED` was a state of the
+  // DEVICE — a device holding zero vaults shows the pair flow, and a vault
+  // that is held was by definition admitted — so a vault could never truthfully
+  // be "unpaired" and the case only ever fired as a guess. `LINK_PAIRED` meant
+  // "admitted, nothing has reported yet", which is the same thing to a member
+  // as "the copy is still coming": both are [STATE_SYNCING].
+  //
+  // What is left is one axis with three values, each of which a member can act
+  // on differently, and every one of them DERIVED — from the last pass's
+  // outcome and whether a pass is in flight — rather than stored. A stored
+  // state is a state that can disagree with the file beside it.
+  //
+  // "Behind N" is a MODIFIER and not a case: a vault that reached its gateway
+  // and has N entries still to apply is online and busy, not a fourth state.
+  enum State {
+    // The proto zero, and NEVER EMITTED. Every holding has one of the three
+    // below the moment the shelf knows about it, and a shell that receives
+    // this is looking at a lockup nobody filled in — it draws no line rather
+    // than a claim.
+    STATE_UNSPECIFIED = 0;
+    // A pass is in flight, or the first copy has not fully landed. This
+    // absorbs what `LINK_PAIRED` used to say: between redeeming a ticket and
+    // holding a whole file, what a member is owed is "your vault is being
+    // copied", with a progress percent when the copy reports one.
+    STATE_SYNCING = 1;
+    // The last pass REACHED the gateway and finished. A PAST-TENSE FACT, and
+    // the wording must stay past tense: nothing here probes a gateway, so a
+    // header that said "connected" would promise a live link this state has
+    // not checked. "Synced" is what it may say.
+    STATE_ONLINE = 2;
+    // The last pass did not reach the gateway. A phone in a lift is not a
+    // broken phone: the copy still reads, writes still queue, and the next
+    // window continues from here.
+    STATE_OFFLINE = 3;
+  }
 }
 
 message HomeEvent {
@@ -942,8 +1130,30 @@ message HomeEvent {
     MovePicked move_picked = 8;
     VaultChanged vault_changed = 9;
     VaultSwitchRequested vault_switch = 10;
-    VaultsListed vaults_listed = 11;
     VaultPicked vault_picked = 12;
+    RosterChanged roster_changed = 13;
+  }
+
+  // `VaultsListed`, the one-shot survey. See `RosterChanged`.
+  reserved 11;
+  reserved "vaults_listed";
+
+  // THE SHELF PUBLISHED ITS HOLDINGS (#1025 S7-9).
+  //
+  // Sent whenever MEMBERSHIP changes (a vault admitted, a vault forgotten) or
+  // any holding's `State` moves — which makes the switcher's rows and the
+  // header's second line two renderings of ONE stream rather than two things
+  // updated by two mechanisms that can disagree. That disagreement is what
+  // `VaultsListed` was: a one-shot survey taken at launch and never taken
+  // again, so a vault admitted afterwards was invisible until relaunch and a
+  // vault that went offline kept whatever the survey guessed.
+  //
+  // The ACTIVE vault is in here too, exactly as it is in `HomeState.vaults`,
+  // and its row carries the same `State` the header draws. The header still
+  // gets `VaultChanged` separately, because a switch is a different event from
+  // a roster moving under it.
+  message RosterChanged {
+    repeated VaultLockup vaults = 1;
   }
 
   // The active vault, or the gateway behind it, changed. A vault switch
@@ -957,17 +1167,6 @@ message HomeEvent {
   // separate control beside it, because a lockup that is not pressable and a
   // chevron that is are two affordances for one act.
   message VaultSwitchRequested {}
-
-  // The shell finished identifying the vaults it holds.
-  //
-  // It arrives SEPARATELY from `VaultChanged` and usually later: naming the
-  // open vault costs one read of a file that is already open, and naming the
-  // rest costs one core open apiece. A Home that waited for the roster before
-  // drawing its own lockup would hold the member's vault name hostage to every
-  // other vault's file.
-  message VaultsListed {
-    repeated VaultLockup vaults = 1;
-  }
 
   // The member chose one from the sheet. The SHEET closes here and the vault
   // changes later — re-pointing is I/O, and `VaultChanged` is what says it
