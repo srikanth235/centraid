@@ -110,6 +110,10 @@ const code = await new Promise((resolve) => {
 if (code !== 0) throw new Error(`ffmpeg exited ${code}`);
 
 const bytes = fs.readFileSync(OUT);
+// SHA-256, deliberately (#1025 S4, D-1025-S4-5). Everything Centraid NAMES is
+// BLAKE3; this names nothing — it is a local integrity check between a file this
+// script just produced and the manifest it writes beside it, in a Node harness
+// with no BLAKE3 available. Nothing in a vault is addressed by this value.
 const digest = createHash("sha256").update(bytes).digest("hex");
 fs.writeFileSync(
   path.join(HERE, "arriving.json"),

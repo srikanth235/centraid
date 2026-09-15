@@ -269,14 +269,14 @@ fn parse_target(value: &Value, index: usize) -> Result<RecoveryKitTarget> {
     })
 }
 
-fn sha256_of_base64(value: &str) -> String {
-    centraid_media::format::sha256_hex(&STANDARD.decode(value).unwrap_or_default())
+fn hash_of_base64(value: &str) -> String {
+    centraid_media::format::content_hash_hex(&STANDARD.decode(value).unwrap_or_default())
 }
 
 /// The stable **capability** fingerprint over canonical JSON.
 ///
 /// Epochs sorted by number, targets by `vaultId` then `targetId`, every key
-/// present as a sha256 of its material. Labels and `createdAt` are excluded
+/// present as a hash of its material. Labels and `createdAt` are excluded
 /// because cosmetic changes do not alter recovery ability.
 #[must_use]
 pub fn recovery_kit_fingerprint(document: &RecoveryKitDocument) -> String {
@@ -297,7 +297,7 @@ pub fn recovery_kit_fingerprint(document: &RecoveryKitDocument) -> String {
         "version": 1,
         "keyring": epochs.iter().map(|epoch| json!({
             "epoch": epoch.epoch,
-            "keyHash": sha256_of_base64(&epoch.key),
+            "keyHash": hash_of_base64(&epoch.key),
         })).collect::<Vec<_>>(),
         "targets": targets.iter().map(|target| {
             let mut locker_keys = target.locker_keys.clone();
@@ -306,16 +306,18 @@ pub fn recovery_kit_fingerprint(document: &RecoveryKitDocument) -> String {
                 "provider": target.provider,
                 "targetId": target.target_id,
                 "vaultId": target.vault_id,
-                "sealkeyHash": target.seal_key.as_deref().map(sha256_of_base64),
-                "identitySeedHash": target.identity_seed.as_deref().map(sha256_of_base64),
+                "sealkeyHash": target.seal_key.as_deref().map(hash_of_base64),
+                "identitySeedHash": target.identity_seed.as_deref().map(hash_of_base64),
                 "lockerKeyHashes": locker_keys.iter().map(|entry| json!({
                     "keyId": entry.key_id,
-                    "keyHash": sha256_of_base64(&entry.key),
+                    "keyHash": hash_of_base64(&entry.key),
                 })).collect::<Vec<_>>(),
             })
         }).collect::<Vec<_>>(),
     });
-    centraid_media::format::sha256_hex(centraid_media::format::canonical_json(&preimage).as_bytes())
+    centraid_media::format::content_hash_hex(
+        centraid_media::format::canonical_json(&preimage).as_bytes(),
+    )
 }
 
 /// The passphrase floor, checked when a kit is **sealed**.
@@ -496,21 +498,64 @@ pub fn parse_recovery_kit(value: &Value, passphrase: &str) -> Result<RecoveryKit
 mod tests {
     use super::*;
 
-    /// The fixture v0 produced. Reading it here is the D-1020-R3 proof: the v1
-    /// parser opens bytes v1 did not make.
-    const V0_FIXTURE: &str = include_str!("../../../../contracts/custody/recovery-kit.json");
+    fn fixture_path() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/custody/recovery-kit.json")
+    }
 
+    /// The committed kit fixture.
+    ///
+    /// **It was v0's own bytes, and #1025 S4 re-sealed it.** D-1020-R3's proof
+    /// was that the v1 parser opens a kit v1 did not make; the capability
+    /// fingerprint is BLAKE3 now (D-1025-S4-1) and the wrapped header carries
+    /// it, so a v0-made kit is refused as a fingerprint mismatch — which is
+    /// v0-no-legacy working as ruled, since v1 has no released predecessor and
+    /// no member holds a v0 kit. What the fixture still proves is everything
+    /// about the FORMAT that does not depend on who sealed it: the scrypt
+    /// parameters, the wrap AAD, the one answer for a wrong password, the
+    /// passphrase floor's asymmetry, and a document that survives a seal and an
+    /// open unchanged. `the_fixture_opens_and_carries_its_own_fingerprint`
+    /// re-seals it under `CENTRAID_UPDATE_FIXTURES=1`, which is the only way to
+    /// move it — the wrap uses a random salt and nonce, so it is a fixture that
+    /// can be REPRODUCED behaviourally and never byte for byte.
     fn fixture() -> Value {
-        serde_json::from_str(V0_FIXTURE).unwrap()
+        serde_json::from_str(
+            &std::fs::read_to_string(fixture_path()).expect("the kit fixture reads"),
+        )
+        .unwrap()
     }
 
     fn document() -> RecoveryKitDocument {
         RecoveryKitDocument::from_json(&fixture()["document"]).unwrap()
     }
 
-    /// **D-1020-R3.** A recovery kit in a member's drawer must stay openable.
+    /// **D-1020-R3.** A kit in a member's drawer must stay openable.
+    ///
+    /// `CENTRAID_UPDATE_FIXTURES=1` re-seals the committed `wrapped` blob and
+    /// restates its `fingerprint`, and the assertions still run afterwards — so
+    /// the variable is a generator and never a way to go green.
     #[test]
-    fn a_v0_made_wrapped_kit_opens_in_rust() {
+    fn a_wrapped_kit_opens_and_is_the_document_that_was_sealed() {
+        if std::env::var_os("CENTRAID_UPDATE_FIXTURES").is_some() {
+            let mut committed = fixture();
+            let password = committed["password"]
+                .as_str()
+                .expect("a password")
+                .to_owned();
+            let document = RecoveryKitDocument::from_json(&committed["document"]).expect("parses");
+            committed["fingerprint"] = Value::String(recovery_kit_fingerprint(&document));
+            committed["wrapped"] = wrap_recovery_kit(&document, &password).expect("the kit seals");
+            std::fs::write(
+                fixture_path(),
+                format!(
+                    "{}\n",
+                    serde_json::to_string_pretty(&committed).expect("serialise")
+                ),
+            )
+            .expect("write the kit fixture");
+            eprintln!("re-sealed the recovery kit fixture — run `bun run format`");
+        }
+
         let fixture = fixture();
         let password = fixture["password"].as_str().unwrap();
         let opened = parse_recovery_kit(&fixture["wrapped"], password).unwrap();
@@ -529,10 +574,11 @@ mod tests {
         assert!(opened.targets[1].seal_key.is_none());
     }
 
-    /// The fingerprint is a cross-language agreement too: v0 computed the one
-    /// in the fixture header.
+    /// The fingerprint in the fixture's header IS the fingerprint of the
+    /// document it wraps — in both places it appears, which is what a wrapped
+    /// kit's own header check reads.
     #[test]
-    fn the_capability_fingerprint_matches_the_one_v0_computed() {
+    fn the_capability_fingerprint_matches_the_one_in_the_header() {
         let fixture = fixture();
         assert_eq!(
             recovery_kit_fingerprint(&document()),

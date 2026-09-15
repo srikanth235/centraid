@@ -267,19 +267,19 @@ pub fn segment_payload(vault: &Vault, range: &Range) -> Result<serde_json::Value
 pub fn record_segment(
     vault: &Vault,
     range: &Range,
-    segment_sha256: &str,
+    segment_hash: &str,
     segment_bytes: i64,
     plaintext_bytes: i64,
     item_count: i64,
     attachment_hashes: &[String],
 ) -> Result<String> {
-    if segment_sha256.len() != 64 {
+    if segment_hash.len() != 64 {
         // The table's own CHECK says the same thing; saying it here too means
         // the error names the caller's mistake rather than a constraint code.
         return Err(VaultError::Invariant {
             context: format!(
                 "a segment digest is 64 hex characters; this one is {}",
-                segment_sha256.len()
+                segment_hash.len()
             ),
         });
     }
@@ -295,7 +295,7 @@ pub fn record_segment(
             .execute(
                 "INSERT INTO conversation_archive \
                  (id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count, \
-                  item_count, segment_sha256, segment_bytes, plaintext_bytes, \
+                  item_count, segment_hash, segment_bytes, plaintext_bytes, \
                   attachment_hashes_json, created_at) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 params![
@@ -307,7 +307,7 @@ pub fn record_segment(
                     range.to_time,
                     i64::try_from(range.turn_ids.len()).unwrap_or(i64::MAX),
                     item_count,
-                    segment_sha256,
+                    segment_hash,
                     segment_bytes,
                     plaintext_bytes,
                     hashes,

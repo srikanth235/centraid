@@ -76,7 +76,7 @@ impl World {
                 tx.set_producer("test.fixture");
                 tx.connection().execute(
                     "INSERT INTO core_content_item
-                       (content_id, content_uri, sha256, byte_size, created_at)
+                       (content_id, content_uri, content_hash, byte_size, created_at)
                      VALUES (?1, ?2, ?3, 1024, ?4)",
                     rusqlite::params![
                         content_id,
@@ -1239,14 +1239,30 @@ fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
         outcome.reason
     );
 
-    let (kind, title, uri, size): (String, String, String, i64) = scratch
+    let (kind, title, uri, size, content_id, asset_id): (
+        String,
+        String,
+        String,
+        i64,
+        String,
+        String,
+    ) = scratch
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT a.kind, a.title, c.content_uri, c.byte_size
+                "SELECT a.kind, a.title, c.content_uri, c.byte_size, c.content_id, a.asset_id
                    FROM media_asset a JOIN core_content_item c USING (content_id)",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
             )?)
         })
         .expect("the row reads");
@@ -1260,14 +1276,28 @@ fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
     // And the bytes are ACTUALLY THERE. A `content_uri` naming bytes nothing
     // kept is the failure the refusal used to prevent, so this is the assertion
     // that has to replace it.
+    // READ BACK THROUGH THE VAULT'S OWN DOOR, which since #1025 S3 is the byte
+    // plane's one store. Opening a second store beside the file — which this
+    // assertion used to do — is the arrangement that slice deleted, and it is
+    // what let the flat CAS go a year without any other reader.
     let sha = uri.trim_start_matches("blob:blake3-");
-    let store = centraid_vault::backup::store::FsBlobStore::open_content(
-        centraid_vault::file::Vault::blobs_root_for(&scratch.join("vault.db")),
-    )
-    .expect("the store opens");
-    let bytes = centraid_vault::backup::store::BlobStore::get(&store, sha).expect("the bytes read");
+    let store = scratch
+        .vault
+        .blobs()
+        .expect("the vault has a content store");
+    let bytes = store.get(sha).expect("the bytes read");
     assert_eq!(i64::try_from(bytes.len()).unwrap_or_default(), size);
     assert_eq!(&bytes[1..4], b"PNG");
+
+    // AND THE GRID'S ANSWER IS A FILE. `content_location` returns iroh's data
+    // file for a complete blob (D-1025-S3-2: nothing is inlined, so a one-pixel
+    // PNG has one), and it reads byte-identical.
+    let located = scratch
+        .vault
+        .content_location(&content_id, "media.asset", &asset_id)
+        .expect("the location reads");
+    let path = located.path.expect("the bytes are on this device");
+    assert_eq!(std::fs::read(&path).expect("the file reads"), bytes);
 }
 
 /// THE SAME BYTES TWICE ARE ONE PHOTOGRAPH. `media_asset.content_id` is unique

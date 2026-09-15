@@ -35,8 +35,8 @@ pub enum KeyringError {
     Invalid(String),
     #[error("keyring has no epoch {0}")]
     NoSuchEpoch(u32),
-    #[error("HKDF output length is invalid")]
-    Hkdf,
+    #[error("a derived key length is invalid")]
+    Derive,
 }
 
 type Result<T> = std::result::Result<T, KeyringError>;
@@ -153,57 +153,71 @@ impl Keyring {
     }
 }
 
-/// HKDF-SHA256 with an **empty salt** and `info` as the uniqueness argument.
-pub fn hkdf_bytes(key: &[u8], info: &str, length: usize) -> Result<Vec<u8>> {
-    let hk = hkdf::Hkdf::<sha2::Sha256>::new(Some(&[]), key);
+/// `blake3::derive_key` with `info` as the context — the uniqueness argument.
+///
+/// **Superseding HKDF-SHA256 with an empty salt** (#1025 S4, D-1025-S4-3). The
+/// empty salt is why the substitution is exact rather than approximate: HKDF's
+/// extract step over a zero salt was doing nothing this key needed, and BLAKE3's
+/// KDF mode carries the context as its own domain separation instead. The
+/// `info` strings are unchanged, so what separated two derived keys before
+/// separates them now.
+pub fn derive_bytes(key: &[u8], info: &str, length: usize) -> Result<Vec<u8>> {
+    if length == 0 {
+        return Err(KeyringError::Derive);
+    }
     let mut out = vec![0_u8; length];
-    hk.expand(info.as_bytes(), &mut out)
-        .map_err(|_| KeyringError::Hkdf)?;
+    blake3::Hasher::new_derive_key(info)
+        .update(key)
+        .finalize_xof()
+        .fill(&mut out);
     Ok(out)
 }
 
 /// `dataKey` — what every object for this vault is sealed under.
 pub fn derive_data_key(master: &[u8], vault_id: &str) -> Result<[u8; KEY_BYTES]> {
-    hkdf_bytes(
+    derive_bytes(
         master,
         &format!("centraid-backup:data:{vault_id}"),
         KEY_BYTES,
     )?
     .try_into()
-    .map_err(|_| KeyringError::Hkdf)
+    .map_err(|_| KeyringError::Derive)
 }
 
 /// `dedupKey` — a **separate** key, so a chunk id reveals nothing that helps
 /// open a chunk.
 pub fn derive_dedup_key(master: &[u8], vault_id: &str) -> Result<[u8; KEY_BYTES]> {
-    hkdf_bytes(
+    derive_bytes(
         master,
         &format!("centraid-backup:dedup:{vault_id}"),
         KEY_BYTES,
     )?
     .try_into()
-    .map_err(|_| KeyringError::Hkdf)
+    .map_err(|_| KeyringError::Derive)
 }
 
-/// `chunkId = hex(HMAC-SHA256(dedupKey, plain))`. Keyed, so identical bytes in
+/// `chunkId = hex(BLAKE3-keyed(dedupKey, plain))`. Keyed, so identical bytes in
 /// two different vaults do not have the same address.
-#[must_use]
-pub fn chunk_id(dedup_key: &[u8], plain: &[u8]) -> String {
-    use hmac::Mac as _;
-    use sha2::digest::KeyInit as _;
-    let mut mac =
-        <hmac::Hmac<sha2::Sha256>>::new_from_slice(dedup_key).expect("HMAC accepts any key length");
-    mac.update(plain);
-    hex::encode(mac.finalize().into_bytes())
+///
+/// **Superseding HMAC-SHA256** (#1025 S4, D-1025-S4-2). BLAKE3 keys its own
+/// compression function, so the dedup key must be exactly 32 bytes rather than
+/// any length HMAC would have padded or pre-hashed — which is what
+/// [`derive_dedup_key`] already produces, and a shorter key is now a refusal
+/// instead of a silently weaker MAC.
+pub fn chunk_id(dedup_key: &[u8], plain: &[u8]) -> Result<String> {
+    let key: [u8; KEY_BYTES] = dedup_key
+        .try_into()
+        .map_err(|_| KeyringError::Invalid("a dedup key is 32 bytes".into()))?;
+    Ok(hex::encode(blake3::keyed_hash(&key, plain).as_bytes()))
 }
 
 /// A 12-byte nonce derived from `info`. Deterministic by design (#408): the
 /// same address always gets the same nonce, and a *different* address never
 /// gets the same one.
 pub fn derive_nonce(key: &[u8], info: &str) -> Result<[u8; 12]> {
-    hkdf_bytes(key, info, 12)?
+    derive_bytes(key, info, 12)?
         .try_into()
-        .map_err(|_| KeyringError::Hkdf)
+        .map_err(|_| KeyringError::Derive)
 }
 
 #[cfg(test)]
@@ -281,14 +295,17 @@ mod tests {
             "the info string carries the vault id"
         );
         assert_ne!(
-            chunk_id(&dedup, b"the same bytes"),
+            chunk_id(&dedup, b"the same bytes").unwrap(),
             chunk_id(
                 &derive_dedup_key(&master, "vault-b").unwrap(),
                 b"the same bytes"
-            ),
+            )
+            .unwrap(),
             "identical bytes in two vaults are not one address"
         );
-        assert_eq!(chunk_id(&dedup, b"x").len(), 64);
+        assert_eq!(chunk_id(&dedup, b"x").unwrap().len(), 64);
+        // A key BLAKE3 cannot take is refused, never padded (#1025 S4).
+        assert!(chunk_id(b"short", b"x").is_err());
     }
 
     #[test]

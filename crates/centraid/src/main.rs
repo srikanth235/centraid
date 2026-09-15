@@ -21,9 +21,12 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+mod allowlist;
 mod cmd;
 mod run;
 mod seat_lane;
+mod tails;
+mod snapshots;
 
 /// The exit codes, stated once. A script that wraps this binary branches on
 /// these numbers, so they are as much of an interface as the subcommands.
@@ -68,9 +71,13 @@ enum Command {
         /// entirely in memory and says so: every pairing is lost on exit.
         #[arg(long)]
         data_dir: Option<PathBuf>,
-        /// Mint a pair ticket at startup and print its QR.
-        #[arg(long)]
-        print_qr: bool,
+        /// Mint pair tickets at startup and print their QR codes.
+        ///
+        /// A COUNT, defaulting to one when the flag is given with no value
+        /// (#1025 S3). A ticket is one-shot — redemption burns it — so a member
+        /// pairing a phone and a tablet from one startup needs two.
+        #[arg(long, num_args = 0..=1, default_missing_value = "1", default_value = "0")]
+        print_qr: u8,
         /// The name a pairing member sees on the confirm screen.
         #[arg(long, default_value = "Centraid")]
         vault_name: String,

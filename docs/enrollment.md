@@ -107,6 +107,15 @@ Routine device pairing is identity-preserving: a bare `centraid-gateway pair --d
 
 **Pairing a phone to the desktop enrols it too** ([#1015](https://github.com/srikanth235/centraid/issues/1015), ruling R-NY-18). The QR gesture admits the phone at two layers, and both are the same gesture: the desktop's `devices.json` is the iroh transport allowlist, and `POST /centraid/_gateway/phone-link` — host custody only — is where that EndpointId becomes a device row under the host's own owner in the gateway's enrolment store. A tunnelled request reaches the gateway as the phone, never as the host, so that row is what every vault door resolves. Revoking the phone in Settings drops the live connections **and** revokes the row; re-pairing the same phone clears the tombstone, because scanning the code again is the same admission gesture made at the same desk.
 
+**Where a v1 gateway keeps an enrolment** (#1025, [D-1025-S7-80](decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). `centraid gateway` stores it in the vault's own `access_device` rows and their private `access_device_secret` sibling — the same rows `centraid devices list` renders and `centraid devices revoke` deletes. It is therefore durable across a restart, and revoking a device in the member's list is the same act as refusing it at the transport door: the gateway looks a proved iroh EndpointId up by `access_device_secret.public_key`, and a revoked device has no such row. **Unknown and revoked are one refusal**, deliberately.
+
+Two operational consequences worth knowing before restarting a gateway:
+
+- **An unredeemed pairing code does not survive the restart.** Tickets are held in the running process; mint another with `centraid gateway --print-qr`.
+- **The gateway's own endpoint identity does survive it**, as `gateway.endpoint.key` in `<data-dir>/keys` ([D-1025-S7-81](decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). That directory is the one export, backup and copy gestures do not move — a copied vault does not carry the authority to answer as its gateway — so restoring a gateway onto a new machine means moving `keys/` deliberately, or re-pairing every device.
+
+A gateway started with **no `--data-dir`** has no vault, keeps its enrolments in memory, and says so at start. Nothing it enrols outlives the process.
+
 ## After enrollment
 
 Point packaging work at the secret **names** above. Repo docs stay at: "secrets live in GH Actions / store consoles." First signed desktop tag attaches installers to the GitHub Release; until then tag builds stay workflow artifacts + prerelease note.

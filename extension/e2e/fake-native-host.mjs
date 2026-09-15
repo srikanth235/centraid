@@ -18,6 +18,7 @@
  * line, which is how the test asserts what the extension actually sent.
  */
 
+import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import os from "node:os";
 
@@ -140,7 +141,10 @@ function answer(frame) {
     case "stage:begin": {
       minted += 1;
       const id = `stage-${minted}`;
-      staging.set(id, { size: frame.byte_size, got: 0, seq: 0 });
+      // The real host HASHES what arrives and answers the handle (#1025 S4), so
+      // the stand-in assembles too — a fake that returned a constant would let a
+      // chunker that dropped a window pass.
+      staging.set(id, { size: frame.byte_size, got: 0, seq: 0, bytes: [] });
       return ok({
         staging_id: id,
         chunk_bytes: 512 * 1024,
@@ -155,7 +159,9 @@ function answer(frame) {
         return { t: "error", code: "stage-refused", message: "out of order" };
       }
       session.seq += 1;
-      session.got += Buffer.from(frame.bytes_b64, "base64").length;
+      const chunk = Buffer.from(frame.bytes_b64, "base64");
+      session.bytes.push(chunk);
+      session.got += chunk.length;
       return ok({ received: session.got });
     }
     case "stage:end": {
@@ -164,7 +170,13 @@ function answer(frame) {
       if (!session)
         return { t: "error", code: "stage-refused", message: "no session" };
       return ok({
-        sha256: "0".repeat(64),
+        // SHA-256 because this is Node and the stand-in only has to be
+        // DETERMINISTIC over the assembled bytes; the real host answers the
+        // vault's BLAKE3. What the e2e asserts is that the handle is a function
+        // of every byte that arrived, in order.
+        content_hash: createHash("sha256")
+          .update(Buffer.concat(session.bytes))
+          .digest("hex"),
         byte_size: session.got,
         claimed: false,
         pending: "bytes-door",

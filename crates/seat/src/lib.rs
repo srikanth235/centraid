@@ -47,29 +47,42 @@
 
 #![forbid(unsafe_code)]
 
+pub mod adopt;
 pub mod applier;
 pub mod bytes;
 pub mod chain;
 pub mod error;
+pub mod gateway;
+pub mod held;
 pub mod identity;
 pub mod intent;
 pub mod locker;
 pub mod occ;
 pub mod outbox;
 pub mod payload;
+pub mod pending;
+pub mod schema;
 pub mod settlement;
 pub mod state;
 pub mod sync;
+pub mod testdoor;
+pub mod write;
 
+pub use adopt::{Adopted, adopt_replica};
 pub use applier::{ApplyReport, apply_page};
-pub use bytes::{BlobNeed, needed_blobs};
+pub use bytes::{BlobNeed, asset_rows_for, needed_blobs};
 pub use error::{Result, SeatError};
-pub use identity::{SeatIdentity, replica_storage_key};
+pub use gateway::{PairedGateway, paired_gateway, remember_gateway};
+pub use held::HeldBlob;
+pub use identity::SeatIdentity;
 pub use intent::{
     GatewayStatus, IntentRecord, IntentState, OVERLAY_STATES, OutcomeStatus, intent_verdict,
 };
 pub use occ::{Conflict, occ_check};
 pub use outbox::Outbox;
 pub use payload::{PayloadHash, cmp_utf16};
+pub use pending::{Predicted, PredictedRow};
+pub use schema::{SEAT_OWN_TABLES, lay_seat_tables, seat_own_ddl};
 pub use state::{SeatPosition, SeatState, Watermark, init_seat_state, seat_state, watermark};
 pub use sync::{FetchOutcome, FetchedPage, IntentSink, LogSource, PassReport, SubmitOutcome};
+pub use write::{Queueing, queue_write};

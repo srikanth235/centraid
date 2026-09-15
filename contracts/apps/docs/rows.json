@@ -736,7 +736,7 @@
     "columns": [
       "content_id",
       "content_uri",
-      "sha256",
+      "content_hash",
       "byte_size",
       "language",
       "creator_party_id",
@@ -1022,7 +1022,7 @@
       "derivative_id",
       "content_id",
       "variant",
-      "sha256",
+      "content_hash",
       "media_type",
       "byte_size",
       "text_content",
@@ -1405,7 +1405,7 @@
         "core.content_derivative",
         "id-0106",
         "delete",
-        "{\"derivative_id\":\"id-0106\",\"content_id\":\"id-0054\",\"variant\":\"text\",\"sha256\":null,\"media_type\":\"text/plain\",\"byte_size\":24,\"text_content\":\"Rent is due on the first\",\"created_at\":\"2099-06-01T09:00:11.000Z\",\"updated_at\":\"(host-clock)\",\"row_version\":1}",
+        "{\"derivative_id\":\"id-0106\",\"content_id\":\"id-0054\",\"variant\":\"text\",\"content_hash\":null,\"media_type\":\"text/plain\",\"byte_size\":24,\"text_content\":\"Rent is due on the first\",\"created_at\":\"2099-06-01T09:00:11.000Z\",\"updated_at\":\"(host-clock)\",\"row_version\":1}",
         "2099-06-01T09:00:26.000Z",
         "2099-06-01T09:00:36.000Z",
         null,
@@ -2385,7 +2385,7 @@
     "table": "access_provenance"
   },
   {
-    "columns": ["content_id", "sha256", "custody_state", "checked_at"],
+    "columns": ["content_id", "content_hash", "custody_state", "checked_at"],
     "rows": [],
     "table": "blob_custody_state"
   },

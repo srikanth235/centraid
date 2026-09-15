@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.shared.screen.BandPolicy
+import dev.centraid.shared.shell.BandPolicy
 
 /**
  * THE BAND — invariant 1 (#1020, wave A; v0 `screens/home/HomeBand.tsx`).

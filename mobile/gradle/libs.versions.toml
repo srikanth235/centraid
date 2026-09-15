@@ -27,6 +27,7 @@ androidx-activity-compose = "1.12.0"
 androidx-compose-bom = "2025.10.01"
 androidx-core = "1.17.0"
 androidx-lifecycle = "2.9.4"
+androidx-security-crypto = "1.1.0"
 androidx-work = "2.10.5"
 roborazzi = "1.53.0"
 robolectric = "4.16"
@@ -56,6 +57,10 @@ androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+# The Keystore-backed `EncryptedSharedPreferences` behind `AndroidSecureStore`.
+# 1.1.0 is the first STABLE release of the line; 1.0.0 is the one that pins
+# Tink 1.5 and the alphas in between were never a thing to ship a credential on.
+androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "androidx-security-crypto" }
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }

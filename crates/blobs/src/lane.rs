@@ -36,16 +36,31 @@
 //! seat DIALS — it is the side that knows when it is awake, and it is the side
 //! behind the worse NAT — and the gateway serves what it is asked for.
 //!
+//! ## ONE STREAM PER BLOB REQUEST, ON THE ONE ALPN (#1025 S2)
+//!
+//! There is no byte lane any more, and no `centraid/v1/byte` to dial. A blob
+//! moves on a bidirectional stream of the vault's single connection whose FIRST
+//! FRAME is a `Request{blob}` envelope; everything after that frame is
+//! iroh-blobs' own get/provide protocol, verbatim. [`serve_stream`] hands the
+//! remainder to `iroh_blobs::provider::handle_stream` and [`fetch`] drives
+//! `execute_get` over a `get::StreamPair` built from the stream it opened and
+//! tagged — so neither side reimplements bao, and neither side needs a second
+//! dial, a second admission rule, or a second accept arm.
+//!
+//! The connection-level `serve` this replaces drove `ProtocolHandler::accept`,
+//! which owns the whole connection and loops on `accept_bi` itself. That is
+//! correct for an endpoint whose only business is blobs and wrong for ours:
+//! it would swallow the log and intent streams riding the same connection.
+//!
 //! ## Admission happened before this module was reached
 //!
-//! [`serve`] takes a connection that `centraid_net::Endpoint::accept` has
-//! already matched against the allowlist on the `centraid/v1/byte` ALPN. There
-//! is no second check here and there must not be one: two admission rules is
-//! how two admission rules disagree. What this module adds on top is the
-//! provider's own refusal of anything that is not a plain blob request, which
-//! is a FRAMING rule rather than an authority one.
+//! Both functions take streams of a connection that
+//! `centraid_net::Endpoint::accept` has already matched against the allowlist
+//! on `centraid/v1/seat`. There is no second check here and there must not be
+//! one: two admission rules is how two admission rules disagree. What this
+//! module adds on top is the provider's own refusal of anything that is not a
+//! plain blob request, which is a FRAMING rule rather than an authority one.
 
-use iroh_blobs::BlobsProtocol;
 use iroh_blobs::provider::events::{
     AbortReason, EventMask, EventSender, ProviderMessage, RequestMode,
 };
@@ -85,23 +100,41 @@ pub struct FetchReport {
     pub complete: bool,
 }
 
-/// Serve the byte lane to one admitted seat, for the length of the connection.
+/// Serve ONE `blob` stream, whose first frame has already been read.
 ///
-/// Returns when the peer closes or the connection fails. The caller spawns one
-/// of these per accepted connection.
+/// `connection_id` is the connection's stable id; it only ever reaches a log
+/// line and iroh-blobs' own progress events, and passing it keeps two streams
+/// of one connection attributable to that connection.
 ///
-/// The `events` gate refuses anything that is not a request for a single blob.
-/// A hash sequence would let one request pull a whole collection the seat never
-/// named, and this lane's contract is that the seat asks for a blob at a time
-/// so the GATEWAY never decides how much of a member's vault crosses a metered
-/// link in one go.
-pub async fn serve(store: &ByteStore, connection: iroh::endpoint::Connection) {
-    let protocol = BlobsProtocol::new(store.inner(), Some(single_blobs_only()));
-    // `ProtocolHandler::accept` drives the whole connection. Its `Err` is a
-    // connection-level fault and never an authority one — admission was decided
-    // before this function was called — so it is logged and not returned.
-    if let Err(error) = iroh::protocol::ProtocolHandler::accept(&protocol, connection).await {
-        tracing::debug!("the byte lane ended: {error}");
+/// Returns when the transfer ends, one way or the other. A failure here is a
+/// STREAM-level fault and never an authority one — admission was decided
+/// before this function was called — so it is logged and the connection lives
+/// on, which is the point of serving per stream rather than per connection.
+pub async fn serve_stream(
+    store: &ByteStore,
+    connection_id: u64,
+    send: iroh::endpoint::SendStream,
+    recv: iroh::endpoint::RecvStream,
+) {
+    // THE READER GOES FIRST in `StreamPair::new`'s argument list, and the one
+    // that follows the one-frame handover is the reader. Swapping them compiles
+    // and deadlocks.
+    let pair =
+        iroh_blobs::provider::StreamPair::new(connection_id, recv, send, single_blobs_only());
+    if let Err(error) =
+        iroh_blobs::provider::handle_stream(pair, store.inner().clone().into()).await
+    {
+        // WARN, NOT DEBUG (#1025 S5). This was `debug!`, and it is the ONLY
+        // place the serving side says why it refused a blob — so a gateway that
+        // reset every photograph's stream with `ERR_INTERNAL` (iroh-blobs'
+        // code 3: a `HandleGetError`, usually the store failing to export a
+        // blob's bao) said nothing at all, and the seat's own report could only
+        // repeat the QUIC error it saw. A device spent a scenario run on that.
+        //
+        // A serving failure is a STREAM-level fault and the connection lives;
+        // what it is not is unremarkable, because every one of these is a blob
+        // a member asked for and did not get.
+        tracing::warn!(connection = connection_id, %error, "a blob stream ended early");
     }
 }
 
@@ -132,13 +165,18 @@ fn single_blobs_only() -> EventSender {
     sender
 }
 
-/// Fetch as much of `hash` as this window allows, from a peer already dialled
-/// on the byte lane.
+/// Fetch as much of `hash` as this window allows, over a stream of the vault's
+/// one connection.
 ///
 /// Never re-fetches a byte this device already holds, and never fails because
 /// an earlier attempt was interrupted. A window that ends mid-blob returns
 /// `Ok` with `complete: false`; the chunks it landed are durable and verified,
 /// and the next call continues from them.
+///
+/// **The stream is opened here, tagged here, and handed to iroh-blobs here**
+/// (#1025 S2). One `blob` stream per call, so a fetch cut mid-transfer costs
+/// that stream and nothing else on the connection — the log page in flight
+/// beside it is untouched.
 pub async fn fetch(
     store: &ByteStore,
     connection: &iroh::endpoint::Connection,
@@ -172,9 +210,13 @@ pub async fn fetch(
     // gap.
     let missing = local.missing();
 
-    // STEP 3 — ask for the difference and nothing else.
+    // STEP 3 — ask for the difference and nothing else, on a stream that says
+    // what it is before it says anything else.
+    let pair = open_blob_stream(connection)
+        .await
+        .map_err(|detail| LaneError::Transfer { hash, detail })?;
     let stats = remote
-        .execute_get(connection.clone(), missing)
+        .execute_get(pair, missing)
         .complete()
         .await
         .map_err(|error| LaneError::Transfer {
@@ -196,3 +238,47 @@ pub async fn fetch(
         complete,
     })
 }
+
+/// Open a stream and tag it `blob`, leaving it positioned for iroh-blobs.
+///
+/// The envelope is FLUSHED before the pair is handed over. iroh-blobs writes
+/// its own request next and reads the answer; a tag still sitting in a buffer
+/// behind that request would reach the provider after it — which is to say,
+/// never, because the provider is blocked reading the tag.
+async fn open_blob_stream(
+    connection: &iroh::endpoint::Connection,
+) -> std::result::Result<iroh_blobs::get::StreamPair, String> {
+    use tokio::io::AsyncWriteExt as _;
+
+    let (mut send, recv) = connection
+        .open_bi()
+        .await
+        .map_err(|error| format!("a blob stream would not open: {error}"))?;
+    let envelope = centraid_protocol::wire::request(
+        BLOB_REQUEST_ID,
+        centraid_api_proto::core_v1::Request {
+            kind: Some(centraid_api_proto::core_v1::request::Kind::Blob(
+                centraid_api_proto::core_v1::BlobRequest {},
+            )),
+        },
+    );
+    centraid_protocol::wire::write_envelope(&mut send, &envelope)
+        .await
+        .map_err(|error| format!("a blob stream would not be tagged: {error}"))?;
+    send.flush()
+        .await
+        .map_err(|error| format!("a blob stream's tag would not flush: {error}"))?;
+    Ok(iroh_blobs::get::StreamPair::new(
+        connection.stable_id() as u64,
+        recv,
+        send,
+    ))
+}
+
+/// The request id a `blob` stream's one envelope carries.
+///
+/// ONE, NOT ZERO. Zero is the handshake's reserved id and an envelope reader
+/// refuses it anywhere else; any other value would do, and a constant is what
+/// stops it being a counter nobody reads — the tag is answered by the transfer
+/// itself, so there is no response to correlate.
+const BLOB_REQUEST_ID: u64 = 1;

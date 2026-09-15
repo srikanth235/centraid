@@ -24,7 +24,7 @@ centraid-vault = { path = "../vault" }
 jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
+blake3.workspace = true
 # Constant-time comparison for the webhook secret hash (D-1020-AU5).
 subtle.workspace = true
 hex.workspace = true

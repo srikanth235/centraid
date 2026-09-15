@@ -245,6 +245,21 @@ fn apply_one_row(target: &Connection, row: &LogRow, report: &mut ApplyReport) ->
     report.deferred |= row.deferred;
     let key = primary_key_of(target, &row.table)?;
 
+    // TRUTH WINS, AND IT WINS HERE (#1025 S7, item 4, R24).
+    //
+    // A canonical row landing over a row this device is holding a PREDICTION
+    // for drops the prediction's journal entry, in this transaction, whether or
+    // not the commit is the one that answers it. Both cases are the same
+    // answer: the gateway has spoken about this row, so the prior image from
+    // before it is not a state this device may return to — restoring it later
+    // would put back a value the gateway has already overwritten.
+    //
+    // The ROW is not touched by this: the canonical write immediately below is
+    // what replaces the prediction, and it does so in the same transaction, so
+    // there is no instant at which the prediction and the truth are both
+    // visible and none at which neither is.
+    crate::pending::forget_rows(target, &row.table, &row.primary_key)?;
+
     if row.op == LogOp::Delete {
         let sql = delete_row_sql(&row.table, &key)?;
         let binds: Vec<&dyn rusqlite::ToSql> = row

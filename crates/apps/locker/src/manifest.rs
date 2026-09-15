@@ -44,15 +44,6 @@ mod tests {
     use crate::commands::{ACTIONS, Confirm};
     use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
 
-    fn v0_app_json() -> serde_json::Value {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .join("packages/blueprints/apps/locker/app.json");
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("reading the v0 oracle at {}: {error}", path.display()));
-        serde_json::from_str(&text).expect("v0's app.json is JSON")
-    }
-
     fn ours() -> serde_json::Value {
         serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON")
     }
@@ -65,48 +56,40 @@ mod tests {
         assert_eq!(manifest.version, "0.3.0");
     }
 
-    /// THE WHOLE OF D-1020-L7, AS A DIFF.
-    ///
-    /// The port removes `auth_session` from the `items` query's input and
-    /// empties `seats.disabledOn`. This test applies those two edits to v0's
-    /// own file and asserts the result is byte-identical to ours — so a third
-    /// change, in either direction, is a red rather than a note somebody
-    /// forgot to write.
+    // DELETED WITH ITS ORACLE (#1025 S4).
+    // `the_manifest_differs_from_v0_by_exactly_the_two_dead_fields` applied
+    // D-1020-L7's two edits to `packages/blueprints/apps/locker/app.json` and
+    // asserted the result was byte-identical to ours. That file went with
+    // `chore(retire): delete the v0 tree`, and freezing a copy of it under
+    // `contracts/` to keep the diff alive would be re-importing the tree that
+    // retirement deleted (v0-no-legacy). What D-1020-L7 RULED is asserted
+    // directly instead, below and in `commands.rs`: the `items` query declares
+    // no `auth_session`, and `seats.disabledOn` is empty. Those are facts about
+    // this manifest, which is the only manifest there is now.
+
+    /// D-1020-L7's TWO DELETIONS, asserted as properties of this manifest.
     #[test]
-    fn the_manifest_differs_from_v0_by_exactly_the_two_dead_fields() {
-        let mut v0 = v0_app_json();
-
-        // 1. `auth_session` is a permit-era parameter on a live query
-        //    (#996 R13, `docs/decisions.md:92`, `:879`; OQ-10). It must EXIST
-        //    in the oracle, or the deletion is no longer the deletion.
-        let items = v0["queries"]
-            .as_array_mut()
-            .expect("v0 declares queries")
-            .iter_mut()
+    fn the_permit_era_parameter_is_gone_and_locker_is_on_every_seat() {
+        let manifest = ours();
+        let items = manifest["queries"]
+            .as_array()
+            .expect("queries")
+            .iter()
             .find(|query| query["name"] == "items")
-            .expect("v0 declares the items query");
-        let properties = items["input"]["properties"]
-            .as_object_mut()
-            .expect("the items input is an object schema");
+            .expect("the items query");
         assert!(
-            properties.remove("auth_session").is_some(),
-            "v0's items query no longer declares auth_session: D-1020-L7's first \
-             deletion has already happened upstream and this port should carry the \
-             field's absence rather than delete it"
+            items["input"]["properties"]
+                .as_object()
+                .expect("an object schema")
+                .get("auth_session")
+                .is_none(),
+            "`auth_session` is a permit-era parameter (#996 R13) and this port \
+             carries its absence"
         );
-
-        // 2. Locker is ruled onto every seat including the PWA (#996 R13).
         assert_eq!(
-            v0["seats"]["disabledOn"],
-            serde_json::json!(["viewer"]),
-            "v0's disabledOn moved; re-judge D-1020-L7's second deletion against it"
-        );
-        v0["seats"]["disabledOn"] = serde_json::json!([]);
-
-        assert_eq!(
-            v0,
-            ours(),
-            "the port's manifest differs from v0's by more than the two dead fields"
+            manifest["seats"]["disabledOn"],
+            serde_json::json!([]),
+            "Locker is ruled onto every seat including the PWA (#996 R13)"
         );
     }
 

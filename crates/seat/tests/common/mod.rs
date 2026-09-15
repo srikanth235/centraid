@@ -6,12 +6,16 @@
 //! next.
 #![allow(dead_code)]
 
-use std::io::Read as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use centraid_vault::clock::{FixedClock, SeededIds};
 use centraid_vault::{Vault, log};
+
+/// The seat's own DDL, leaked once so the snapshot builder can take a
+/// `&'static str`. One leak per test binary, of a string that lives as long as
+/// the process would have kept it anyway.
+static SEAT_DDL: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
 /// A gateway and, once [`Harness::bootstrap_seat`] has run, a seat beside it.
 pub struct Harness {
@@ -41,48 +45,50 @@ impl Harness {
         self.dir.join(name)
     }
 
-    /// Cut a snapshot and open it as a seat, `seat_state` and all.
+    /// Cut a REPLICA-SHAPED snapshot and adopt it as a seat (#1025 S7, item 3).
     ///
-    /// The snapshot BUILDER is what makes the copy, not a file copy: a
-    /// hand-rolled copy would prove convergence for a file no seat ever holds.
+    /// The snapshot BUILDER is what makes the copy and `adopt_replica` is what
+    /// turns it into a replica — not a file copy and not a hand-rolled
+    /// `init_seat_state`: a harness that built its seat by other means would
+    /// prove convergence for a file no phone ever holds.
     pub fn bootstrap_seat(&self, name: &str) -> Seat {
         let snapshot_dir = self.join(&format!("{name}-snap"));
-        let head = centraid_vault::build_snapshot(&self.vault, &snapshot_dir)
-            .expect("the snapshot builds");
+        let head = centraid_vault::build_replica_snapshot(
+            &self.vault,
+            &snapshot_dir,
+            SEAT_DDL.get_or_init(|| centraid_seat::seat_own_ddl().leak()),
+        )
+        .expect("the snapshot builds");
         let path = self.join(&format!("{name}.db"));
-        inflate_gz(&snapshot_dir.join(&head.name), &path);
+        // ADOPTED, which on a phone is a hard link out of the byte store. A
+        // copy here, because the artifact is also what the next test cuts.
+        std::fs::copy(snapshot_dir.join(&head.name), &path).expect("the artifact lands");
+        let adopted = centraid_seat::adopt_replica(
+            &path,
+            None,
+            &head.vault_id,
+            head.seq,
+            log::constants().ddl_version,
+            None,
+            "2026-01-01T00:00:00.000Z",
+        )
+        .expect("the artifact is adopted");
         let connection = rusqlite::Connection::open(&path).expect("the copy opens");
-        let (epoch, floor): (String, i64) = connection
+        let floor: i64 = connection
             .query_row(
-                "SELECT epoch, floor_seq FROM replica_meta WHERE singleton = 1",
+                "SELECT floor_seq FROM replica_meta WHERE singleton = 1",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| row.get(0),
             )
             .expect("the copy carries its position");
         assert_eq!(floor, head.seq, "the log went, the cursor stayed");
-        let state = centraid_seat::init_seat_state(
-            &connection,
-            &centraid_seat::SeatPosition {
-                vault_id: head.vault_id.clone(),
-                epoch: epoch.clone(),
-                schema_epoch: head.schema_epoch,
-                ddl_version: log::constants().ddl_version,
-                applied_seq: floor,
-                // A bootstrapped seat knows its seq and not the commit that
-                // seq belonged to: the snapshot deleted the log it could read
-                // that from. Zero is the honest answer, and an overlay that
-                // clears against it clears against nothing.
-                applied_commit_seq: 0,
-            },
-            "2026-01-01T00:00:00.000Z",
-        )
-        .expect("the seat state initialises");
+        let epoch = adopted.epoch.clone();
         Seat {
             path,
             connection,
             epoch,
             floor,
-            schema_epoch: state.schema_epoch,
+            schema_epoch: head.schema_epoch,
         }
     }
 
@@ -237,14 +243,6 @@ pub fn fixture(name: &str) -> serde_json::Value {
         .unwrap_or_else(|error| panic!("{} is committed: {error}", path.display()));
     serde_json::from_str(&text)
         .unwrap_or_else(|error| panic!("{} is JSON: {error}", path.display()))
-}
-
-fn inflate_gz(source: &Path, target: &Path) {
-    let bytes = std::fs::read(source).expect("the artifact reads");
-    let mut decoder = flate2::read::GzDecoder::new(&bytes[..]);
-    let mut out = Vec::new();
-    decoder.read_to_end(&mut out).expect("it inflates");
-    std::fs::write(target, out).expect("the copy writes");
 }
 
 /// One scripted commit, for a test that writes its own statements.

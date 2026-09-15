@@ -15,10 +15,22 @@
 //! * **Connect is bounded** (D-1020-C9). [`CONNECT_TIMEOUT`] is ten seconds and
 //!   every dial goes through it, so an unroutable peer is a typed `Timeout` and
 //!   never a hang.
-//! * **A connection on the seat lane is admitted before a frame is read.** The
-//!   remote EndpointId is checked against the allowlist and an unenrolled or
-//!   revoked peer is closed with `Unauthorized` — no stream is accepted, so no
-//!   byte an unauthorised peer sent is ever parsed.
+//! * **Admission is decided before a frame is read, once, for the whole
+//!   connection** (#1025 S3, D-1025-S3-4). The remote EndpointId is checked
+//!   against the allowlist and the answer is a STATE rather than a refusal: an
+//!   enrolled, unrevoked peer's connection is **promoted** and every other
+//!   peer's is **provisional**. A provisional connection may carry exactly one
+//!   stream, under a small frame cap and a short deadline, and the only request
+//!   kind it may carry is `pair` — which is enforced one layer up, by the lane,
+//!   because "which kinds may this connection carry" is a lane question and
+//!   "who is this peer" is this one.
+//!
+//!   It used to CLOSE an unenrolled peer here, and a second ALPN existed so
+//!   that a redeeming device — unenrolled by definition — had somewhere to
+//!   knock. The check has not moved and has not weakened: it is still one
+//!   lookup, still before any stream is accepted, still for the connection's
+//!   whole life. What went is the second ALPN and the reconnect between
+//!   pairing and bootstrapping.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,6 +40,11 @@ use centraid_api_proto::core_v1::{ConnectivityEvent, ConnectivityState, ErrorCod
 use centraid_protocol::alpn;
 use iroh::endpoint::VarInt;
 use iroh::{EndpointAddr, EndpointId, RelayMode as IrohRelayMode, RelayUrl, SecretKey};
+
+/// The endpoint identity type, RE-EXPORTED so that a caller keeping a gateway's
+/// long-term key can build one without depending on `iroh` itself (#1025 S7).
+/// The crate that owns the endpoint owns the spelling of its identity.
+pub use iroh::SecretKey as EndpointSecretKey;
 use tokio::sync::{RwLock, broadcast};
 
 use crate::allowlist::{AllowlistStore, Device};
@@ -85,9 +102,13 @@ impl RelayMode {
 pub struct EndpointConfig {
     pub relay: RelayMode,
     pub connect_timeout: Duration,
-    /// The ALPNs this endpoint ACCEPTS. Dialling is unaffected. The peer plane
-    /// is not here (`alpn::ADVERTISED`), because "no link policy ⇒ never
-    /// negotiate the plane" (`packages/tunnel/src/gateway-endpoint.ts:149-154`).
+    /// The ALPNs this endpoint ACCEPTS. Dialling is unaffected.
+    ///
+    /// TWO, AND THEY ARE THE WHOLE LIST (#1025 S2): the one data plane and the
+    /// pairing exception. v0's rule — "no link policy ⇒ never negotiate the
+    /// plane" (`packages/tunnel/src/gateway-endpoint.ts:149-154`) — is kept by
+    /// there being no third plane to declare rather than by a declared plane
+    /// nothing advertises.
     pub alpns: Vec<Vec<u8>>,
     /// The endpoint's long-term identity. `None` mints a fresh one, which is
     /// what a test wants and what a gateway must never do twice — an identity
@@ -100,7 +121,7 @@ impl Default for EndpointConfig {
         Self {
             relay: RelayMode::Default,
             connect_timeout: CONNECT_TIMEOUT,
-            alpns: alpn::ADVERTISED.iter().map(|a| a.to_vec()).collect(),
+            alpns: alpn::ADVERTISED.iter().map(|one| one.to_vec()).collect(),
             secret_key: None,
         }
     }
@@ -129,11 +150,22 @@ pub struct Endpoint {
 
 /// iroh's own connection type, re-exported.
 ///
-/// The byte lane hands one to `iroh-blobs`, and `crates/seat-link` takes one as
+/// A `blob` stream's connection is handed to `iroh-blobs`, and `crates/seat-link` takes one as
 /// a parameter. Naming it here rather than making every caller depend on `iroh`
 /// directly keeps the "this crate is where iroh lives and nowhere else" rule
 /// true of the dependency graph and not only of the code.
 pub type RawConnection = iroh::endpoint::Connection;
+
+/// The two halves of one bidirectional stream, named so a caller can hold them
+/// without naming iroh.
+///
+/// #1025 S2 made a stream the unit of a request, so the streams themselves are
+/// now values that get passed around — a `blob` stream is handed to iroh-blobs
+/// whole, and a serving loop spawns a task per stream. `crates/centraid` should
+/// not have to declare an `iroh` dependency to write that function's signature,
+/// and these aliases are what keeps the iroh version in one Cargo.toml.
+pub type RawSend = iroh::endpoint::SendStream;
+pub type RawRecv = iroh::endpoint::RecvStream;
 
 /// An accepted connection, with what the admission check decided.
 pub struct Accepted {
@@ -141,9 +173,25 @@ pub struct Accepted {
     /// anything the caller says (`iroh_relay.rs:486`).
     pub alpn: Vec<u8>,
     pub connection: IrohConnection,
-    /// The enrolled device, on the seat lane. `None` on the pair lane, where
-    /// the peer is by definition not yet enrolled.
+    /// The enrolled device this peer is — and therefore whether this connection
+    /// is PROMOTED (#1025 S3, D-1025-S3-4).
+    ///
+    /// `None` is PROVISIONAL: a peer this gateway has never enrolled, or one it
+    /// has revoked. Provisional is not an error and not a refusal; it is the
+    /// state every device is in the first time it knocks, and the only thing it
+    /// may do is redeem a pairing code.
     pub device: Option<Device>,
+}
+
+impl Accepted {
+    /// Whether this connection may carry every request kind.
+    ///
+    /// The one question a lane asks. `false` means provisional: one stream, a
+    /// small frame, a short deadline, `pair` and nothing else.
+    #[must_use]
+    pub const fn is_promoted(&self) -> bool {
+        self.device.is_some()
+    }
 }
 
 impl Endpoint {
@@ -356,49 +404,34 @@ impl Endpoint {
         let negotiated = connection.alpn().to_vec();
         let peer = *connection.remote_id().as_bytes();
 
-        // Routing by ALPN alone.
+        // Routing by ALPN alone — and there is one (#1025 S3, D-1025-S3-4).
         //
-        // ONE ADMISSION RULE, TWO LANES (#1020, D-1020-B1). `SEAT` and `BYTE`
-        // share this arm because they share an answer: a live enrolled device,
-        // or the connection closes before a stream is accepted. They are
-        // separate ALPNs because the PROTOCOL differs — envelopes on one,
-        // iroh-blobs' get/provide on the other — and that is a framing fact,
-        // not an authority one. Writing the check twice is how the two drift.
-        if negotiated == alpn::SEAT || negotiated == alpn::BYTE {
+        // ONE ADMISSION SITE. The lookup happens here, once, before a stream is
+        // accepted, and its answer is carried on `Accepted` for the connection's
+        // whole life. A peer that is not an enrolled, unrevoked device is
+        // PROVISIONAL rather than closed: it is a device knocking for the first
+        // time, and closing it here is what forced a second ALPN to exist.
+        if negotiated == alpn::PLANE {
             let device = allowlist.device(&peer).await.filter(Device::is_live);
-            let Some(device) = device else {
-                connection.close(
-                    VarInt::from_u32(CLOSE_UNAUTHORIZED),
-                    b"centraid: not an enrolled, unrevoked device",
-                );
-                self.emit(
-                    ConnectivityState::Failed,
-                    ErrorCode::Unauthorized as u32,
-                    String::new(),
-                );
-                return Err(ConnectError::Unauthorized);
-            };
             return Ok(Some(Accepted {
                 alpn: negotiated,
                 connection: IrohConnection { inner: connection },
-                device: Some(device),
-            }));
-        }
-        if negotiated == alpn::PAIR {
-            // The pair lane MUST accept an unenrolled peer: that is what it is
-            // for. Its admission is the ticket, checked one layer up.
-            return Ok(Some(Accepted {
-                alpn: negotiated,
-                connection: IrohConnection { inner: connection },
-                device: None,
+                device,
             }));
         }
         // An ALPN this endpoint advertised and this function does not handle.
-        // Refused loudly rather than served: the peer plane arrives in wave 4
-        // and a silently-accepted connection on it would be an unpoliced plane.
+        // Unreachable while the advertised list is the one above, and kept
+        // because the way it becomes reachable is somebody adding a second
+        // entry to that list — a silently-accepted connection on a plane with
+        // no admission rule is exactly what this refusal is for.
         connection.close(
             VarInt::from_u32(CLOSE_UNAUTHORIZED),
             b"centraid: that plane is not served by this build",
+        );
+        self.emit(
+            ConnectivityState::Failed,
+            ErrorCode::Unauthorized as u32,
+            String::new(),
         );
         Err(ConnectError::Unauthorized)
     }
@@ -418,6 +451,25 @@ impl Endpoint {
 /// reader wants are who and which plane.
 pub struct IrohConnection {
     inner: iroh::endpoint::Connection,
+}
+
+/// A HANDLE, AND CLONING ONE IS NOT A SECOND CONNECTION.
+///
+/// `iroh::endpoint::Connection` is itself a handle over one QUIC connection, so
+/// clones share it: two clones open streams on the same connection and the
+/// connection closes when the LAST one is dropped. #1025 S2 needs that, because
+/// a pass runs its request loop and its accept loop over one connection at
+/// once, on two tasks.
+///
+/// The late-close direction is the safe one. D-1020-G10's bug was closing too
+/// EARLY — QUIC discards stream data the peer has not read — and a clone
+/// outliving its sibling by a moment costs nothing.
+impl Clone for IrohConnection {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl std::fmt::Debug for IrohConnection {
@@ -464,11 +516,12 @@ impl IrohConnection {
 
     /// The connection itself, for a lane that speaks somebody else's protocol.
     ///
-    /// The byte lane hands this to `iroh-blobs`, whose provider and whose
-    /// `execute_get` both take an `iroh::endpoint::Connection` directly. That is
-    /// the whole reason this accessor exists, and it is why the byte lane can
-    /// reuse a transfer implementation rather than reimplement bao: the
-    /// ADMISSION is ours and happens in `accept` above, the BYTES are iroh's.
+    /// A `blob` stream is handed to `iroh-blobs`, whose provider and whose
+    /// `execute_get` both need the connection (for its stable id, and to open a
+    /// stream on it). That is the whole reason this accessor exists, and it is
+    /// why the byte plane can reuse a transfer implementation rather than
+    /// reimplement bao: the ADMISSION is ours and happens in `accept` above,
+    /// the BYTES are iroh's.
     ///
     /// Not a general escape hatch. Everything that speaks `centraid_protocol`
     /// goes through the `Connection` trait implementation below.
@@ -476,6 +529,23 @@ impl IrohConnection {
         &self.inner
     }
 
+    /// Close this connection with `Unauthorized`, after answering.
+    ///
+    /// FOR A PROVISIONAL PEER THAT DID NOT REDEEM A TICKET (#1025 S3,
+    /// D-1025-S3-4). `accept` no longer closes an unenrolled peer — it marks it
+    /// provisional, so that the one thing such a peer legitimately wants to do
+    /// has somewhere to happen — and this is what closes it when it turns out
+    /// to want something else. A stranger must not be left holding a connection
+    /// to a gateway it has no business on.
+    ///
+    /// It must not be called so promptly that the refusal just written is
+    /// discarded: QUIC drops stream data the peer has not read. The caller
+    /// waits on [`Self::closed`] with its own short budget first, and this is
+    /// what happens when the peer does not close on its own.
+    ///
+    /// The code is [`CLOSE_UNAUTHORIZED`], the same `401` v0 uses
+    /// (`packages/tunnel/src/protocol.ts:80`), so a packet capture reads the
+    /// same across the two trees.
     pub fn close_unauthorized(&self) {
         self.inner.close(
             VarInt::from_u32(CLOSE_UNAUTHORIZED),
@@ -512,14 +582,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_default_config_advertises_the_two_live_lanes_and_not_the_peer_plane() {
+    fn the_default_config_advertises_the_one_plane_and_the_pairing_exception() {
         let config = EndpointConfig::default();
         assert_eq!(config.connect_timeout, CONNECT_TIMEOUT);
-        assert!(config.alpns.contains(&alpn::SEAT.to_vec()));
-        assert!(config.alpns.contains(&alpn::PAIR.to_vec()));
-        assert!(
-            !config.alpns.contains(&alpn::PEER.to_vec()),
-            "the peer plane needs a link policy first (wave 4)"
+        // EXACTLY TWO. A third entry is a third plane, and a third plane is a
+        // second place admission can be decided (#1025 S2).
+        assert_eq!(
+            config.alpns,
+            vec![alpn::PLANE.to_vec()],
+            "an endpoint advertised a plane the accept loop does not serve"
         );
     }
 

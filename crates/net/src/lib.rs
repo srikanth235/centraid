@@ -33,6 +33,7 @@ pub mod ticket;
 
 pub use allowlist::{AllowlistStore, Device, MemoryAllowlist, RedeemRefusal, Ticket};
 pub use endpoint::{
-    Accepted, CONNECT_TIMEOUT, Endpoint, EndpointConfig, IrohConnection, RelayMode,
+    Accepted, CONNECT_TIMEOUT, Endpoint, EndpointConfig, IrohConnection, RawRecv, RawSend,
+    RelayMode,
 };
 pub use error::ConnectError;

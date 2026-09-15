@@ -156,7 +156,10 @@ describe("the store", () => {
           ["asset_id", "content_id", "kind"],
           [["a-1", "c-1", "photo"]]
         ),
-        "photos.content": page(["content_id", "sha256"], [["c-1", digest]]),
+        "photos.content": page(
+          ["content_id", "content_hash"],
+          [["c-1", digest]]
+        ),
         "photos.representations": page(
           ["representation_id", "content_id", "media_type"],
           [["r-1", "c-1", "image/jpeg"]]

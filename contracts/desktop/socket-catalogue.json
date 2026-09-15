@@ -294,7 +294,7 @@
     {
       "name": "photos.content",
       "statement": "photos.timeline.content",
-      "select": ["content_id", "sha256", "byte_size", "created_at"],
+      "select": ["content_id", "content_hash", "byte_size", "created_at"],
       "from": "core_content_item",
       "where": "deleted_at IS NULL",
       "binds": 0,

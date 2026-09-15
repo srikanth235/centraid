@@ -586,23 +586,44 @@ fn the_cutover_carries_every_queued_intent_into_the_new_file() {
             .expect("transitions");
     }
 
-    // STEP 2, before any swap. The order is the contract.
-    let carried = centraid_seat::sync::carry_over(&old.connection).expect("the carry-over reads");
-    assert_eq!(carried.len(), 3);
-
-    // A restore, then steps 3 and 4.
+    // THE NEW ARTIFACT, ADOPTED WITH THE OLD FILE BESIDE IT (#1025 S7, item 3).
+    //
+    // The carry-over is one `INSERT … SELECT` per seat-own table, inside the
+    // one transaction that also writes the cursor — so there is no step 2 to
+    // get wrong any more, and the old file is only ever READ. The rename that
+    // publishes the new one is the caller's and is the last thing that happens.
     centraid_vault::log::door::bump_epoch(&harness.vault, "backup-restore")
         .expect("the epoch bumps");
     let new = harness.bootstrap_seat("new");
+    drop(new.connection);
+    // NOTHING MAY HOLD THE OLD FILE OPEN. `centraid_core::Handle::bootstrap`
+    // closes the vault before it calls this for exactly this reason, and a test
+    // that left a connection on it would be testing a shape no device has.
+    let old_epoch = old.epoch.clone();
+    let old_path = old.path.clone();
+    drop(old);
+    let adopted = centraid_seat::adopt_replica(
+        &new.path,
+        Some(&old_path),
+        &harness
+            .vault
+            .vault_id()
+            .expect("reads")
+            .expect("a founded vault has an id"),
+        new.floor,
+        centraid_vault::log::constants().ddl_version,
+        None,
+        "t2",
+    )
+    .expect("the artifact is adopted");
     assert_eq!(
-        centraid_seat::sync::restore_carried_over(&new.connection, &carried, "t2")
-            .expect("the restore runs"),
-        3,
+        adopted.carried_intents, 3,
         "every queued intent reached the new file; a queued intent is the ONLY copy \
          of what the member did offline"
     );
+    let new_connection = rusqlite::Connection::open(&new.path).expect("the new replica opens");
 
-    let restored = Outbox::open(&new.connection).expect("opens");
+    let restored = Outbox::open(&new_connection).expect("opens");
     assert_eq!(restored.all().expect("reads").len(), 3);
     // The refusal survived as a refusal.
     let denied = restored.get("i-2").expect("reads").expect("there");
@@ -610,8 +631,8 @@ fn the_cutover_carries_every_queued_intent_into_the_new_file() {
     assert_eq!(denied.reason.as_deref(), Some("you may not"));
     // And the new file is in the NEW epoch, so the cutover actually cut over.
     assert_ne!(
-        seat_state(&new.connection).expect("reads").epoch,
-        old.epoch,
+        seat_state(&new_connection).expect("reads").epoch,
+        old_epoch,
         "the new seat is in the gateway's new epoch"
     );
 

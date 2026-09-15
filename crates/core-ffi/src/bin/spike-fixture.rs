@@ -69,6 +69,7 @@ fn main() {
                         pk_column: "party_id".to_owned(),
                         descending: false,
                     }),
+                    with_held_thumbnail: false,
                 }),
                 limit: 100,
                 after: None,

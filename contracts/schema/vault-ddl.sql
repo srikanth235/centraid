@@ -196,10 +196,10 @@ CREATE INDEX idx_blob_staging_held_by_intent
 
 -- index idx_blob_staging_original_sha on blob_staging
 CREATE UNIQUE INDEX idx_blob_staging_original_sha
-  ON blob_staging(sha256) WHERE variant IS NULL;
+  ON blob_staging(content_hash) WHERE variant IS NULL;
 
 -- index idx_blob_staging_sha on blob_staging
-CREATE INDEX idx_blob_staging_sha ON blob_staging(sha256);
+CREATE INDEX idx_blob_staging_sha ON blob_staging(content_hash);
 
 -- index idx_calendar_owner_party on schedule_calendar
 CREATE INDEX idx_calendar_owner_party ON schedule_calendar(owner_party_id);
@@ -248,7 +248,7 @@ CREATE INDEX idx_conversation_archive_conv
 
 -- index idx_conversation_archive_sha on conversation_archive
 CREATE INDEX idx_conversation_archive_sha
-  ON conversation_archive(segment_sha256);
+  ON conversation_archive(segment_hash);
 
 -- index idx_conversation_archive_unpruned on conversation_archive
 CREATE INDEX idx_conversation_archive_unpruned
@@ -1126,7 +1126,7 @@ CREATE TABLE audit_archive_manifest (
   from_time        TEXT NOT NULL,
   to_time          TEXT NOT NULL,
   row_count        INTEGER NOT NULL CHECK (row_count > 0),
-  segment_sha256   TEXT NOT NULL CHECK (length(segment_sha256) = 64),
+  segment_hash   TEXT NOT NULL CHECK (length(segment_hash) = 64),
   segment_bytes    INTEGER NOT NULL CHECK (segment_bytes >= 0),
   prev_manifest_id TEXT REFERENCES audit_archive_manifest(manifest_id),
   chain_hash       TEXT NOT NULL,
@@ -1164,14 +1164,14 @@ CREATE TABLE automation_trigger_cursor (
 
 -- table blob_access on blob_access
 CREATE TABLE blob_access (
-  sha256         TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  content_hash         TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
   last_access_at TEXT NOT NULL,
   byte_size      INTEGER
 ) STRICT;
 
 -- table blob_content_key on blob_content_key
 CREATE TABLE blob_content_key (
-  sha256       TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  content_hash       TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
   wrapped_key  BLOB NOT NULL,
   wrap_nonce   BLOB NOT NULL CHECK (length(wrap_nonce) = 12),
   key_epoch    INTEGER NOT NULL DEFAULT 1 CHECK (key_epoch > 0),
@@ -1191,20 +1191,20 @@ CREATE TABLE blob_custody_rollup (
 -- table blob_custody_state on blob_custody_state
 CREATE TABLE blob_custody_state (
   content_id    TEXT PRIMARY KEY REFERENCES core_content_item(content_id) ON DELETE CASCADE,
-  sha256        TEXT NOT NULL CHECK (length(sha256) = 64),
+  content_hash        TEXT NOT NULL CHECK (length(content_hash) = 64),
   custody_state TEXT NOT NULL CHECK (custody_state IN ('pending-offsite','local-only','replicated','remote-only','missing')),
   checked_at    TEXT NOT NULL
 ) STRICT;
 
 -- table blob_device_content_key on blob_device_content_key
 CREATE TABLE blob_device_content_key (
-  sha256       TEXT NOT NULL REFERENCES blob_content_key(sha256) ON DELETE CASCADE,
+  content_hash       TEXT NOT NULL REFERENCES blob_content_key(content_hash) ON DELETE CASCADE,
   device_id    TEXT NOT NULL REFERENCES access_device(device_id) ON DELETE CASCADE,
   wrapped_key  BLOB NOT NULL,
   wrap_nonce   BLOB NOT NULL CHECK (length(wrap_nonce) = 12),
   device_key_epoch INTEGER NOT NULL CHECK (device_key_epoch > 0),
   granted_at   TEXT NOT NULL,
-  PRIMARY KEY (sha256, device_id)
+  PRIMARY KEY (content_hash, device_id)
 ) STRICT;
 
 -- table blob_device_wrap_key on blob_device_wrap_key
@@ -1229,7 +1229,7 @@ CREATE TABLE blob_ingress_session (
   kind             TEXT NOT NULL CHECK (kind IN ('fallback','stream-through','direct')),
   state            TEXT NOT NULL DEFAULT 'open'
                      CHECK (state IN ('open','committing','complete','aborted')),
-  expected_sha256  TEXT CHECK (expected_sha256 IS NULL OR length(expected_sha256) = 64),
+  expected_hash  TEXT CHECK (expected_hash IS NULL OR length(expected_hash) = 64),
   expected_size    INTEGER CHECK (expected_size IS NULL OR expected_size >= 0),
   received_bytes   INTEGER NOT NULL DEFAULT 0 CHECK (received_bytes >= 0),
   hash_state_json  TEXT CHECK (hash_state_json IS NULL OR json_valid(hash_state_json)),
@@ -1252,13 +1252,13 @@ CREATE TABLE blob_ingress_session (
 
 -- table blob_orphan on blob_orphan
 CREATE TABLE blob_orphan (
-  sha256            TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  content_hash            TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
   first_orphaned_at INTEGER NOT NULL CHECK (first_orphaned_at >= 0)
 ) STRICT;
 
 -- table blob_outbox on blob_outbox
 CREATE TABLE blob_outbox (
-  sha256          TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  content_hash          TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
   byte_size       INTEGER NOT NULL CHECK (byte_size >= 0),
   state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','uploading')),
   temp_id         TEXT,
@@ -1277,7 +1277,7 @@ CREATE TABLE blob_outbox (
 
 -- table blob_replica on blob_replica
 CREATE TABLE blob_replica (
-  sha256        TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  content_hash        TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
   replicated_at TEXT NOT NULL,
   byte_size     INTEGER NOT NULL CHECK (byte_size >= 0),
   store         TEXT NOT NULL DEFAULT 'cas' CHECK (store IN ('cas','derived'))
@@ -1286,7 +1286,7 @@ CREATE TABLE blob_replica (
 -- table blob_staging on blob_staging
 CREATE TABLE blob_staging (
   staging_id    TEXT PRIMARY KEY,
-  sha256        TEXT NOT NULL CHECK (length(sha256) = 64),
+  content_hash        TEXT NOT NULL CHECK (length(content_hash) = 64),
   media_type    TEXT NOT NULL,
   byte_size     INTEGER NOT NULL CHECK (byte_size >= 0),
   original_name TEXT,
@@ -1317,7 +1317,7 @@ CREATE TABLE conversation_archive (
   to_time                INTEGER NOT NULL,
   turn_count             INTEGER NOT NULL,
   item_count             INTEGER NOT NULL,
-  segment_sha256         TEXT NOT NULL CHECK (length(segment_sha256) = 64),
+  segment_hash         TEXT NOT NULL CHECK (length(segment_hash) = 64),
   segment_bytes          INTEGER NOT NULL CHECK (segment_bytes >= 0),
   plaintext_bytes        INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
   attachment_hashes_json TEXT NOT NULL DEFAULT '[]',
@@ -1541,7 +1541,7 @@ CREATE TABLE core_content_derivative (
   content_id    TEXT NOT NULL
     REFERENCES core_content_item(content_id) ON DELETE CASCADE,
   variant       TEXT NOT NULL CHECK (variant IN ('thumb','preview','poster','text','transcript','embedding','phash','thumbhash')),
-  sha256        TEXT CHECK (sha256 IS NULL OR length(sha256) = 64),
+  content_hash        TEXT CHECK (content_hash IS NULL OR length(content_hash) = 64),
   media_type    TEXT NOT NULL,
   byte_size     INTEGER NOT NULL CHECK (byte_size >= 0),
   text_content  TEXT,
@@ -1549,7 +1549,7 @@ CREATE TABLE core_content_derivative (
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   UNIQUE (content_id, variant),
-  CHECK ((variant IN ('thumb','preview','poster')) = (sha256 IS NOT NULL)),
+  CHECK ((variant IN ('thumb','preview','poster')) = (content_hash IS NOT NULL)),
   CHECK ((variant IN ('text','transcript','embedding','phash','thumbhash')) = (text_content IS NOT NULL)),
   FOREIGN KEY (derivative_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
@@ -1563,8 +1563,8 @@ CREATE TABLE core_content_item (
   -- IS the dedupe key for every owner of those bytes. The "unchanged bytes"
   -- half is the `core_content_item_hash_follows_bytes` trigger below: a
   -- summary cannot change while what it summarises stays where it is.
-  sha256           TEXT NOT NULL UNIQUE
-    CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
+  content_hash           TEXT NOT NULL UNIQUE
+    CHECK (length(content_hash) = 64 AND content_hash NOT GLOB '*[^0-9a-f]*'),
   byte_size        INTEGER NOT NULL CHECK (byte_size >= 0),
   language         TEXT,
   creator_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
@@ -4075,7 +4075,7 @@ BEGIN
                            THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
-   WHERE sha256 = NEW.sha256;
+   WHERE content_hash = NEW.content_hash;
 END;
 
 -- trigger blob_device_wrap_key_touch_updated_at on blob_device_wrap_key
@@ -4114,7 +4114,7 @@ BEGIN
                            THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
-   WHERE sha256 = NEW.sha256;
+   WHERE content_hash = NEW.content_hash;
 END;
 
 -- trigger conversation_item_count_ad on items
@@ -4345,8 +4345,8 @@ END;
 
 -- trigger core_content_item_hash_follows_bytes on core_content_item
 CREATE TRIGGER core_content_item_hash_follows_bytes
-BEFORE UPDATE OF sha256 ON core_content_item
-WHEN NEW.sha256 <> OLD.sha256
+BEFORE UPDATE OF content_hash ON core_content_item
+WHEN NEW.content_hash <> OLD.content_hash
  AND NEW.content_uri = OLD.content_uri
  AND NEW.byte_size = OLD.byte_size
 BEGIN

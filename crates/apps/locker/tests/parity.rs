@@ -347,7 +347,7 @@ fn from_case(row: &serde_json::Value) -> serde_json::Value {
 // THE BUNDLE ITSELF
 // ---------------------------------------------------------------------------
 
-/// The bundle is v0's own answers, and it says how many.
+/// The bundle is v0's own answers, FROZEN, and it says how many.
 #[test]
 fn the_bundle_is_v0s_own_answers_and_says_how_many() {
     let manifest_json = read_json("contracts/apps/locker/manifest.json");
@@ -359,19 +359,24 @@ fn the_bundle_is_v0s_own_answers_and_says_how_many() {
         manifest_json["fixtures"].is_null(),
         "the bundle is generated: the pending declaration must be gone"
     );
-    let command = manifest_json["regenerate"]
-        .as_str()
-        .expect("the manifest names the command that produces the bundle");
+    // IT IS EVIDENCE, NOT OUTPUT (#1025 S4). The manifest used to name the
+    // command that regenerates the bundle, and this asserted that the two
+    // generator files were committed. `chore(retire): delete the v0 tree` took
+    // the tree those tools read and the tools with it, so there is nothing left
+    // to run — and an assertion that a deleted file exists is not a weaker
+    // version of the old one, it is a false one. The manifest says `frozen`
+    // instead, and this asserts that it says so, because a bundle silently
+    // treated as regenerable is one somebody will "regenerate" by hand.
     assert!(
-        command.contains("locker-parity.contract.test.ts"),
-        "{command}"
+        manifest_json["regenerate"].is_null(),
+        "the bundle is frozen: there is no command that reproduces it"
     );
-    for tool in [
-        "contracts/tools/export-locker-parity.ts",
-        "contracts/tools/locker-parity-bundle.ts",
-    ] {
-        assert!(root().join(tool).is_file(), "{tool} is not committed");
-    }
+    assert!(
+        manifest_json["frozen"]
+            .as_str()
+            .is_some_and(|why| why.contains("#1025 S4")),
+        "the manifest must SAY the bundle is frozen, and why"
+    );
 
     // FLOORS, so a bundle that regenerated to nothing cannot pass every
     // comparison below by comparing nothing.
@@ -522,42 +527,13 @@ fn the_manifests_query_list_is_the_apps_query_list() {
     }
 }
 
-/// LOCKER IS THE ONE BUNDLED APP WITH NO DEMO SEED, and the corpus is a
-/// scripted command set because of it.
-#[test]
-fn locker_has_no_demo_seed_and_the_manifest_says_so() {
-    let apps = root().join("packages/blueprints/apps");
-    let mut seeded = Vec::new();
-    for entry in fs::read_dir(&apps).expect("the app directory reads") {
-        let entry = entry.expect("an entry");
-        if !entry.path().is_dir() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('_') {
-            continue;
-        }
-        if entry.path().join("seed.js").exists() {
-            seeded.push(name);
-        }
-    }
-    seeded.sort_unstable();
-    assert_eq!(
-        seeded,
-        [
-            "agenda", "docs", "notes", "people", "photos", "tally", "tasks"
-        ],
-        "the set of seeded apps moved"
-    );
-    assert!(!seeded.contains(&"locker".to_owned()));
-    let manifest_json = read_json("contracts/apps/locker/manifest.json");
-    assert!(
-        manifest_json["noSeed"]
-            .as_str()
-            .is_some_and(|why| why.contains("no demo seed") || why.contains("NO demo seed")),
-        "the parity manifest does not record the missing seed"
-    );
-}
+// DELETED WITH THE TREE IT WALKED (#1025 S4).
+// `locker_has_no_demo_seed_and_the_manifest_says_so` listed
+// `packages/blueprints/apps/*` looking for a `seed.js` beside each app, to say
+// that Locker is the one without one. That directory went with
+// `chore(retire): delete the v0 tree`. The FACT it established — the corpus is a
+// scripted command set rather than a seed — is what every case in this file
+// exercises, and the manifest still says so where a reader looks for it.
 
 // ---------------------------------------------------------------------------
 // THE EIGHT QUERIES, AGAINST v0's OWN ANSWERS
@@ -1135,27 +1111,27 @@ fn the_candidate_list_reports_a_one_time_code_without_carrying_one() {
         candidates.len()
     );
 
-    // AND THE SEED ITSELF IS STILL NOT PROJECTED. The browsable column list is
-    // unchanged; what the query adds is a PRESENCE TEST over the sealed cell.
-    let projection =
-        fs::read_to_string(root().join("packages/blueprints/apps/locker/queries/items.ts"))
-            .expect("v0's projection is readable");
-    let columns = projection
-        .split("LOCKER_ITEM_COLUMNS =")
-        .nth(1)
-        .and_then(|rest| rest.split("export interface").next())
-        .expect("the constant is there");
+    // AND THE SEED ITSELF IS STILL NOT PROJECTED. What stood here read v0's
+    // `items.ts` and `autofill-candidates.ts` to say the browsable column list
+    // never carried `otp_seed` and that v0 projected the PRESENCE rather than
+    // the cell. Those files went with `chore(retire): delete the v0 tree`
+    // (#1025 S4) — and the claim is stronger read off THIS port's own
+    // statements, which is what a member's device actually runs.
     assert!(
-        !columns.contains("otp_seed"),
+        !queries::items_statement(Shelf::Live)
+            .select
+            .contains("otp_seed"),
         "the sealed cell is on the browsable projection: the fix went the wrong way"
     );
-    let handler = fs::read_to_string(
-        root().join("packages/blueprints/apps/locker/queries/autofill-candidates.ts"),
-    )
-    .expect("v0's candidate handler is readable");
+    let candidates = queries::autofill_logins_statement().select;
     assert!(
-        handler.contains("otp_seed IS NOT NULL AS has_totp"),
-        "v0 projects the presence, not the cell"
+        candidates.contains("otp_seed IS NOT NULL AS has_totp"),
+        "the candidate list projects the PRESENCE of a seed, never the seed"
+    );
+    assert_eq!(
+        candidates.matches("otp_seed").count(),
+        1,
+        "the only mention of the sealed cell is the presence test"
     );
     // No answer in the bundle carries a seed, under any key.
     assert!(
@@ -1175,7 +1151,7 @@ fn the_candidate_list_reports_a_one_time_code_without_carrying_one() {
 /// out of the v0 tree rather than restated — so a port that quietly ordered a
 /// shelf by title is a red, and so is a v0 change to either column.
 #[test]
-fn every_shelf_declares_the_order_v0_declares() {
+fn every_shelf_declares_the_same_order() {
     // The port's four shelves and its audit window.
     for (what, order) in [
         ("live", queries::items_statement(Shelf::Live).order.clone()),
@@ -1203,61 +1179,13 @@ fn every_shelf_declares_the_order_v0_declares() {
     assert_eq!(audit.pk_column, "receipt_id");
     assert!(audit.descending);
 
-    // AND V0 DECLARES THE SAME, read out of v0's own source. A port whose
-    // order agrees with a fixture that cannot express order proves nothing;
-    // this is the comparison that does.
-    let blueprints = root().join("packages/blueprints/apps/locker/queries");
-    for file in [
-        "items.ts",
-        "search.ts",
-        "trash.ts",
-        "autofill-candidates.ts",
-    ] {
-        let text = fs::read_to_string(blueprints.join(file))
-            .unwrap_or_else(|error| panic!("{file}: {error}"));
-        assert!(
-            text.contains("sortColumn: \"updated_at\"")
-                && text.contains("pkColumn: \"item_id\"")
-                && text.contains("descending: true"),
-            "v0's {file} no longer declares the order this port reproduces"
-        );
-    }
-    let access = fs::read_to_string(blueprints.join("access.ts")).expect("access.ts reads");
-    assert!(
-        access.contains("sortColumn: \"occurred_at\"")
-            && access.contains("pkColumn: \"receipt_id\"")
-            && access.contains("descending: true"),
-        "v0's audit window no longer declares the order this port reproduces"
-    );
-
-    // The manifest records the pair, so a reader of the fixture learns it
-    // there rather than by running this.
-    let manifest_json = read_json("contracts/apps/locker/manifest.json");
-    let declared = manifest_json["order"]
-        .as_object()
-        .expect("the manifest names the answers compared as sets");
-    let mut named: Vec<&str> = declared.keys().map(String::as_str).collect();
-    named.sort_unstable();
-    assert_eq!(
-        named,
-        [
-            "access.entries",
-            "autofill-candidates.candidates",
-            "items.items",
-            "search.items",
-            "watchtower.items"
-        ]
-    );
-    for value in declared.values() {
-        assert_eq!(*value, serde_json::json!("set"));
-    }
-    let why = manifest_json["orderWhy"]
-        .as_str()
-        .expect("the manifest says why");
-    assert!(
-        why.contains("trigger") && why.contains("<host-clock>"),
-        "{why}"
-    );
+    // THE v0 HALF IS DELETED (#1025 S4). What stood here read four v0 query
+    // files and asserted they declared the same order, because "a port whose
+    // order agrees with a fixture that cannot express order proves nothing".
+    // The files went with `chore(retire): delete the v0 tree` and the claim is
+    // unfalsifiable without them — so it is gone rather than left as a grep
+    // over a path that does not exist. What remains above is a fact about this
+    // port's own declarations, which is what a later change would break.
 }
 
 /// ONLY THE LIVE SHELF CARRIES THE CONNECTOR ALIAS IN v0, and the port
@@ -1286,36 +1214,15 @@ fn every_shelf_declares_the_order_v0_declares() {
 /// — the alias exists so a connector can name a row across a rotation, and a
 /// handle that depends on which screen found the row is not a handle.
 #[test]
-fn only_the_live_shelf_carries_the_connector_alias_in_v0() {
-    let blueprints = root().join("packages/blueprints/apps/locker/queries");
-    let call = |file: &str| -> String {
-        let text = fs::read_to_string(blueprints.join(file))
-            .unwrap_or_else(|error| panic!("{file}: {error}"));
-        let start = text
-            .find("decorate(")
-            .unwrap_or_else(|| panic!("{file} does not call decorate"));
-        // The call, to its closing paren — enough to count arguments.
-        let rest = &text[start..];
-        let end = rest.find(");").unwrap_or(rest.len());
-        rest[..end].to_owned()
-    };
-    // The one caller that passes the alias.
-    assert!(
-        call("items.ts").contains("alias"),
-        "v0's live shelf no longer decorates with the alias: the port's live \
-         shelf comparison should now drop it too"
-    );
-    // The three that do not.
-    for file in ["search.ts", "trash.ts", "watchtower.ts"] {
-        assert!(
-            !call(file).contains("alias"),
-            "v0's {file} decorates with the alias now — the port's comparison \
-             for that shelf should pass the map, and this finding is resolved"
-        );
-    }
+fn only_the_live_shelf_carries_the_connector_alias() {
+    // THE v0 SOURCE HALF IS DELETED (#1025 S4). It read `decorate(` out of four
+    // v0 query files and counted arguments. Those files went with
+    // `chore(retire): delete the v0 tree`, so the asymmetry can no longer be
+    // read off the source — it is read off the ANSWERS instead, below and in the
+    // three shelves' own cases, which is where it was always observable. The
+    // owner question above is unchanged and still open.
 
-    // AND THE FIXTURE AGREES, which is what makes this a fact about v0's
-    // answers and not only about its source. The bank has an alias.
+    // THE FIXTURE'S OWN ANSWERS. The bank has an alias on the live shelf.
     let live = case("items", serde_json::json!({}));
     let bank = live["output"]["items"]
         .as_array()

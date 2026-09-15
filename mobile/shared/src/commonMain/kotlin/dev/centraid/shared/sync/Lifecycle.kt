@@ -37,10 +37,18 @@ public sealed interface LifecycleState {
      * out stops at a boundary and reports what it managed. A coroutine
      * cancelled mid-stage is a different failure — it leaves a stage half done
      * with no report, and the next pass cannot tell whether to redo it.
+     *
+     * **[budgetMs] IS THE PLATFORM'S NUMBER AND HAS NO DEFAULT** (#1025 S5).
+     * It stood at a `BUDGET_MS = 20_000` constant, which is the same mistake
+     * `SyncWindow`'s own comment records on the core's side: a constant in the
+     * middle is wrong in both directions — it outlives an iOS refresh window
+     * and it cuts a night shift that had hours. The number now arrives on
+     * [LifecycleEvent.PassRequested], from
+     * [dev.centraid.shared.platform.BackgroundTasks.window].
      */
     public data class BackgroundPass(
         public val startedAtMs: Long,
-        public val budgetMs: Long = BUDGET_MS,
+        public val budgetMs: Long,
         public val wake: WakeReason,
         /** Stages not yet attempted, in order. */
         public val remaining: List<Stage>,
@@ -68,11 +76,6 @@ public sealed interface LifecycleState {
     public data object Suspended : LifecycleState
 
     public data object Relaunched : LifecycleState
-
-    public companion object {
-        /** 20 seconds (`docs/mobile-offline.md:212`). */
-        public const val BUDGET_MS: Long = 20_000
-    }
 }
 
 /**
@@ -167,9 +170,20 @@ public sealed interface LifecycleEvent {
 
     public data object Backgrounded : LifecycleEvent
 
+    /**
+     * Start a pass, on the deadline THE PLATFORM GAVE THIS ONE.
+     *
+     * [deadlineMs] is carried on the event rather than read from a constant
+     * for the reason the clock is: a number the scheduler made up is not a
+     * number the OS will honour. Its source is
+     * [dev.centraid.shared.platform.BackgroundTasks.window], which asks the
+     * platform class that owns the wake — so a foreground pass carries a
+     * foreground window and a `BGAppRefreshTask` carries its own.
+     */
     public data class PassRequested(
         public val wake: WakeReason,
         public val nowMs: Long,
+        public val deadlineMs: Long,
         public val stages: List<Stage> = Stage.entries,
     ) : LifecycleEvent
 
@@ -193,7 +207,16 @@ public sealed interface LifecycleEvent {
         }
     }
 
-    /** The platform's own expiration handler fired. */
+    /**
+     * The platform's own expiration handler fired.
+     *
+     * THE AUTHORITY, and independent of [PassRequested.deadlineMs]. iOS
+     * publishes no API for the time remaining on a `BGAppRefreshTask` — the
+     * deadline is the platform class's best statement and this signal is the
+     * OS actually speaking — so the two are kept as two triggers and the
+     * scheduler honours whichever arrives first. The seam that raises it is
+     * [dev.centraid.shared.platform.BackgroundTasks.platformExpired].
+     */
     public data class PlatformExpirationWarning(public val nowMs: Long) : LifecycleEvent
 
     public data object Locked : LifecycleEvent
@@ -254,6 +277,11 @@ public class SyncScheduler(
             } else {
                 val pass = LifecycleState.BackgroundPass(
                     startedAtMs = event.nowMs,
+                    // THE PLATFORM'S NUMBER, CARRIED THROUGH UNTOUCHED. The
+                    // scheduler does not shrink it for teardown headroom or
+                    // round it: it is the only statement of the window there
+                    // is, and the OS's expiry signal is the authority over it.
+                    budgetMs = event.deadlineMs,
                     wake = event.wake,
                     remaining = event.stages.drop(1),
                 )

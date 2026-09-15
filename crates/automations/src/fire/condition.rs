@@ -37,8 +37,6 @@
 
 use std::collections::BTreeSet;
 
-use sha2::{Digest, Sha256};
-
 use super::cursor::{CursorElement, CursorRead, StoredCursor};
 
 /// Cap on remembered hashes. Beyond it the oldest matches re-fire, which is
@@ -52,8 +50,9 @@ pub type Row = serde_json::Map<String, serde_json::Value>;
 /// The content hash one row dedupes on.
 ///
 /// Canonical by SORTED KEY, because a gateway that returned columns in another
-/// order must not look like a changed row. 32 hex characters of SHA-256, as
-/// v0 takes.
+/// order must not look like a changed row. 32 hex characters of BLAKE3 (#1025
+/// S4, D-1025-S4-1); v0 took 32 characters of SHA-256, and the width is what a
+/// stored cursor depends on, not the function.
 ///
 /// **AT EVERY DEPTH, AND NOT BY `Value::to_string`** (#1020, close pass,
 /// D-1020-CL8). The column sort below is v0's own (`condition.ts:28`), but the
@@ -86,9 +85,8 @@ pub fn row_hash(row: &Row) -> String {
             })
             .collect(),
     );
-    let mut hasher = Sha256::new();
-    hasher.update(centraid_media::format::canonical_json(&canonical).as_bytes());
-    hex::encode(hasher.finalize())[..32].to_owned()
+    let digest = blake3::hash(centraid_media::format::canonical_json(&canonical).as_bytes());
+    hex::encode(digest.as_bytes())[..32].to_owned()
 }
 
 fn hash_set_position(position_json: Option<&str>) -> Vec<String> {

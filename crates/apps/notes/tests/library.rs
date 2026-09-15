@@ -497,11 +497,16 @@ fn the_shelves_are_read_at_v0s_own_two_hundred() {
 /// THE FIXTURE'S SHA IS THE VAULT'S SHA.
 ///
 /// `crates/vault`'s `knowledge.create_note` dedupes a body on
-/// `centraid_media::format::sha256_hex` over the TEXT; the kit's fixture has no
-/// hashing dependency and carries a reference SHA-256 of its own. If the two ever
-/// disagreed, a note seeded by the fixture and a note written by the command
-/// would be two content items for one body — and every dedupe assertion in this
-/// lane would be vacuous.
+/// `centraid_media::format::content_hash_hex` over the TEXT, and the kit's
+/// fixture hashes it too. If the two ever disagreed, a note seeded by the
+/// fixture and a note written by the command would be two content items for one
+/// body — and every dedupe assertion in this lane would be vacuous.
+///
+/// It used to be the load-bearing check on a SECOND implementation: the kit
+/// carried a hand-rolled FIPS 180-4 SHA-256 so it would depend on no hashing
+/// crate. #1025 S4 deleted that — one hash, one implementation — so this now
+/// asserts that the two callers agree about which function they call, which is
+/// a smaller claim and the only one left to make.
 #[test]
 fn the_fixtures_sha_is_the_one_the_command_deduplicates_on() {
     for text in [
@@ -510,15 +515,16 @@ fn the_fixtures_sha_is_the_one_the_command_deduplicates_on() {
         // A multi-byte character, because the hash is over BYTES and a port that
         // hashed UTF-16 code units would agree on ASCII and nothing else.
         "Rent — due on the first",
-        // Longer than one 64-byte block, so the compression function runs twice.
+        // Longer than one BLAKE3 chunk (1 KiB), so the tree has more than one
+        // leaf and a caller that only ever hashed short inputs is not what this
+        // agrees about.
         &"lorem ipsum dolor sit amet ".repeat(40),
-        // Exactly the length that needs a second block for the padding alone.
-        &"a".repeat(56),
-        &"a".repeat(64),
+        &"a".repeat(1024),
+        &"a".repeat(1025),
     ] {
         assert_eq!(
-            centraid_apps_kit::fixtures::fixture_text_sha256(text),
-            centraid_media::format::sha256_hex(text.as_bytes()),
+            centraid_apps_kit::fixtures::fixture_text_content_hash(text),
+            centraid_media::format::content_hash_hex(text.as_bytes()),
             "the fixture and the vault disagree about {:?}",
             &text[..text.len().min(24)]
         );

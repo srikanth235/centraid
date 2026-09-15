@@ -46,8 +46,11 @@ fn the_registry_carries_every_command_this_build_has() {
         ("knowledge.", 9),
         // The 23 `tally.*`, real since the Tally-finish lane.
         ("tally.", 23),
-        // The whole 20-command `media.*` schema (wave 4 lane Photos).
-        ("media.", 20),
+        // The whole 20-command `media.*` schema (wave 4 lane Photos), plus
+        // `media.derive_missing` — this build's own backfill sweep, which is
+        // not one of v0's and which the gateway runs at start (#1025 S3,
+        // D-1025-S7-53).
+        ("media.", 21),
         // The whole 9-command `enrich.*` schema: `request_enrichment` came
         // from lane Photos and the other eight from lane automations.
         ("enrich.", 9),
@@ -896,6 +899,6 @@ fn a_secret_input_is_tokenised_before_the_journal_and_the_token_is_stable() {
     let redacted = centraid_vault::audit::redact_command_input(&input, &["access_token"]);
     let text = serde_json::to_string(&redacted).expect("it serialises");
     assert!(!text.contains("ya29.SECRET"));
-    assert!(text.contains("sealed:sha256:"));
+    assert!(text.contains("sealed:blake3:"));
     assert!(text.contains("Google"), "the non-secret keys survive");
 }

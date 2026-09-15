@@ -46,6 +46,24 @@ message PageQuery {
   // is that set plus blobs, which the door has no reason to refuse.
   repeated Value bind = 5;
   PageOrder order = 6;
+  // RESOLVE EACH ROW'S THUMBNAIL FROM THE BYTES THIS DEVICE HOLDS (#1025,
+  // D-1025-S7-20).
+  //
+  // A shape, not a statement: the reader appends one computed column,
+  // `thumbnail_path`, after `select`'s columns, joining the seat's own
+  // `seat_blob_held` table for the thumbnail-tier derivative of the row's
+  // `content_id` — falling back to the original's bytes when no derivative row
+  // exists, which is every vault seeded from originals. The SQL is the vault's
+  // and the security rule that decides whether a path may be handed out at all
+  // is the seat's; a caller asks for the ANSWER and cannot spell either.
+  //
+  // It replaces a per-screenful `ContentUrlRequest` round trip that only Home
+  // ever made, which is why a photo grid drew a hundred and twenty placeholders
+  // over a device holding nineteen photographs.
+  //
+  // The `from` table must carry a `content_id` column. One does not, and the
+  // page simply reports no thumbnail for every row.
+  bool with_held_thumbnail = 7;
 }
 
 // The keyset cursor. `sort_key` is TEXT even for a numeric sort column, and a

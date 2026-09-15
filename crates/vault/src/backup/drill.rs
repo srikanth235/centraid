@@ -189,7 +189,7 @@ pub fn run_restore_drill(root: &Path, recover: Recover<'_>) -> Result<DrillOutco
             // recovering rows, not about the ontology's dependency order.
             tx.connection().execute(
                 "INSERT INTO core_content_item \
-                   (content_id, content_uri, sha256, byte_size, created_at) \
+                   (content_id, content_uri, content_hash, byte_size, created_at) \
                  VALUES (?1, ?2, ?3, ?4, '2026-01-01T00:00:00.000Z')",
                 rusqlite::params![
                     format!("content-{index}"),
@@ -390,7 +390,7 @@ pub fn run_restore_drill(root: &Path, recover: Recover<'_>) -> Result<DrillOutco
         tx.set_producer("drill.after-restore");
         tx.connection().execute(
             "INSERT INTO core_content_item \
-               (content_id, content_uri, sha256, byte_size, created_at) \
+               (content_id, content_uri, content_hash, byte_size, created_at) \
              VALUES ('content-after', 'cas:content-after', \
                'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', 7, \
                '2026-02-01T00:00:00.000Z')",
@@ -554,7 +554,7 @@ pub fn run_upgrade_failure_drill(root: &Path, failing_sql: &str) -> Result<Upgra
         tx.set_producer("drill.pre-upgrade");
         tx.connection().execute(
             "INSERT INTO core_content_item \
-               (content_id, content_uri, sha256, byte_size, created_at) \
+               (content_id, content_uri, content_hash, byte_size, created_at) \
              VALUES ('content-pre', 'cas:content-pre', \
                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 11, \
                '2026-01-01T00:00:00.000Z')",

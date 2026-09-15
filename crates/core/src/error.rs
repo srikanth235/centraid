@@ -22,6 +22,51 @@ pub enum CoreError {
     #[error("this core is poisoned by a caught panic ({diagnostic_id}); restart it")]
     Poisoned { diagnostic_id: String },
 
+    /// THIS SEAT HOLDS NO COPY OF THE VAULT YET (#1025 S1).
+    ///
+    /// A state and not a fault: it is where every phone starts, and where a
+    /// seat sits for the length of a re-bootstrap. The remedy is the one
+    /// `ErrorCode::REBOOTSTRAP_REQUIRED` already names — take a fresh copy —
+    /// which is why it carries that code rather than a new one nothing on any
+    /// shell would branch on differently.
+    #[error("this seat holds no copy of the vault yet; pair it, or let it bootstrap")]
+    Unpaired,
+
+    /// THIS REPLICA ALREADY HOLDS A VAULT, AND A PAIRING WOULD REPLACE IT
+    /// (#1025 S7-9).
+    ///
+    /// `Handle::pair` bootstraps the first copy into the file this core is open
+    /// on. Run against a core that is already holding a vault — which is what a
+    /// phone pairing a SECOND gateway onto a live session did — the bootstrap
+    /// publishes over the replica the member is reading, and the first vault is
+    /// gone. The guard is `seed-demo-vault`'s, which refuses an existing vault
+    /// rather than seeding over it; the difference is that there is no `--force`
+    /// here, because a shell has a fresh file available and no reason to want
+    /// this one.
+    ///
+    /// Refused BEFORE the ticket is redeemed, so a refusal burns nothing.
+    #[error("this core already holds vault {vault_id}; pair from a fresh replica")]
+    VaultAlreadyHeld { vault_id: String },
+
+    /// THE ENDPOINT THIS DEVICE SPAWNED IS NOT THE ONE ITS GATEWAY ENROLLED
+    /// (#1025 S7-13).
+    ///
+    /// The enrolment record the shell handed back names the public key the
+    /// gateway put in its allowlist when this device paired — the gateway's own
+    /// statement, derived from the connection iroh's TLS proved. If the
+    /// endpoint that came up at open has a different key, the secret half is
+    /// gone: a lost Keychain item, a store whose write silently failed, a
+    /// record settled under one vault and a key under another.
+    ///
+    /// **Refused at open, and the network is NOT attached.** Dialling with an
+    /// unenrolled identity is not a smaller failure — it is the SAME failure
+    /// one round trip later, reported by the gateway as "an unenrolled peer"
+    /// and rendered on the phone as a version-window sentence, which sends a
+    /// member to update an app that is not the problem. Both keys are in
+    /// `detail` for the log; the member reads a sentence about re-pairing.
+    #[error("this device's endpoint is {found}, and its gateway enrolled {enrolled}")]
+    IdentityMismatch { enrolled: String, found: String },
+
     /// A thin seat could not reach its gateway.
     #[error("the gateway is unreachable: {reason}")]
     Unavailable { reason: String },
@@ -99,6 +144,9 @@ impl CoreError {
             // which cannot fix it (#1020 wave 3).
             Self::StaleCore { .. } => ErrorCode::VersionWindow,
             Self::Unavailable { .. } => ErrorCode::PeerUnreachable,
+            Self::Unpaired => ErrorCode::RebootstrapRequired,
+            Self::VaultAlreadyHeld { .. } => ErrorCode::VaultAlreadyHeld,
+            Self::IdentityMismatch { .. } => ErrorCode::IdentityMismatch,
             Self::InvalidRequest { .. } | Self::NotCancellable { .. } | Self::Decode(_) => {
                 ErrorCode::InvalidRequest
             }
@@ -160,6 +208,74 @@ impl CoreError {
 /// shell may render it verbatim or branch on the code and use its own words;
 /// what it must not do is render `Error.detail`, which is where the raw
 /// predicate lives (#1020 wave 3, lane E finding 2).
+/// WHAT A PARKED SEAT IS TOLD (#1025 S2, D-1025-S2-4).
+///
+/// Not an error code, because parking is not a failure of the request that
+/// discovered it — the pass ran and reported honestly. It is a STATE, carried
+/// on `SyncOutcome::sentence`, and it is here rather than in a shell so that
+/// every shell says the same thing.
+///
+/// It names what happened and what is safe, in that order, and it never
+/// suggests a remedy the member cannot perform. "Delete and re-pair" would be a
+/// remedy, and it would be the wrong one: the queue is what re-pairing costs.
+pub const PARKED_SENTENCE: &str = "This device keeps falling too far behind to catch up, so Centraid has stopped \
+     re-downloading. Everything already here — including anything you have written \
+     but not yet sent — is safe.";
+
+/// WHAT A MEMBER READS WHEN A STAGE OF A PASS DID NOT RUN (#1025 S7).
+///
+/// A TABLE KEYED BY CODE, like every other sentence this core produces: the
+/// reason is one of `SkipReason`'s closed set, and no database text, no path
+/// and no peer's words can reach a member through it. The transport's own
+/// words go to a `tracing` line where they arise, which is where a developer
+/// wanted them anyway.
+///
+/// `None` for the ORDINARY reasons — a seat that already holds its copy, an
+/// empty queue, a device that wants no files. Those are the shape of a healthy
+/// pass, and a status line that narrated them would be noise a member learns
+/// to ignore. The sentence is for the three that are worth saying.
+#[must_use]
+pub fn skip_sentence(reason: centraid_seat::sync::SkipReason) -> Option<&'static str> {
+    use centraid_seat::sync::SkipReason as R;
+    match reason {
+        R::NotRun | R::AlreadyHeld | R::NothingQueued | R::NothingWanted => None,
+        R::NotPaired => Some("This device is not paired with a gateway yet."),
+        R::Unreachable => Some(
+            "Centraid could not reach your gateway, so this device is showing what it already \
+             has.",
+        ),
+        // THE WINDOW RAN OUT BEFORE THE GATEWAY ANSWERED, which is the
+        // ordinary shape of a thirty-second background refresh on a slow link.
+        // Nothing is wrong and the next window continues, so there is nothing
+        // a member needs to do — but it is not silence either, because a pass
+        // that moved nothing and said nothing is what this report deletes.
+        R::CutBeforeReaching => Some("Centraid ran out of time this round and will try again."),
+        R::HandshakeRefused => Some(
+            "This app and that gateway are too far apart in version to talk. Update the one the \
+             diagnostics screen names.",
+        ),
+        R::NoRoom => Some(
+            "There is not enough free space on this device for a copy of your vault. Free some \
+             space and Centraid will try again.",
+        ),
+        R::BootstrapRefused => {
+            Some("Centraid could not finish copying your vault. It will try again.")
+        }
+        R::RebootstrapRequired => {
+            Some("This device has to take a fresh copy of the vault before it can catch up.")
+        }
+        R::LogUnreadable => Some(
+            "Centraid could not get this device's updates from your gateway. It will try again.",
+        ),
+        R::WritesUnreachable => {
+            Some("Your changes are saved on this device and are waiting to reach your gateway.")
+        }
+        R::BytesUnreachable | R::StoreUnreadable => {
+            Some("Some photos have not finished downloading yet. Centraid will keep trying.")
+        }
+    }
+}
+
 #[must_use]
 pub fn sentence_for_code(code: ErrorCode) -> &'static str {
     use ErrorCode as C;
@@ -189,6 +305,23 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
             "That request does not make sense to this build, and nothing was changed."
         }
         C::SnapshotUnavailable => "The gateway has nowhere to build a copy of the vault right now.",
+        // THE VAULT ALREADY HERE IS THE ONE THIS PROTECTS, and the sentence
+        // says so rather than naming a file: the member's copy is intact, which
+        // is the fact they need. Mobile never renders this — `Shelf.admit`
+        // pairs from a fresh file and refuses a duplicate before the core sees
+        // it — so this is the sentence for the caller that got there another
+        // way (#1025 S7-9).
+        C::VaultAlreadyHeld => {
+            "That copy already holds a vault, so it was left alone. Pair into a new one."
+        }
+        // WHAT IS WRONG IS THE CREDENTIAL, AND THE REMEDY IS PAIRING AGAIN
+        // (#1025 S7-13). It names neither key — they are 64 hex characters
+        // apiece and mean nothing to a member — and it does not blame the
+        // gateway, which is behaving correctly by not knowing this device.
+        C::IdentityMismatch => {
+            "This device's key for that vault is gone, so the gateway no longer recognises it. \
+             Pair it again."
+        }
         C::IntentHashMismatch => {
             "That request does not match what was submitted with it, so it was not run."
         }
@@ -204,6 +337,10 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         }
         C::OnlineOnly => "That one needs the gateway, and this device cannot reach it.",
         C::Denied => "That is not allowed for this app.",
+        // RETRYABLE, and the sentence says the device is still working rather
+        // than that anything went wrong: the write is in the queue, its bytes
+        // are on this phone, and the next window carries them (#1025 S3).
+        C::BytesNotYetHeld => "That file has not finished sending yet.",
         C::DowngradeRefused => {
             "This vault was written by a newer version of Centraid. Update this one rather than \
              risk the file."
@@ -253,9 +390,16 @@ fn intent_refusal_code(refusal: centraid_vault::IntentRefusal) -> ErrorCode {
 fn seat_code(error: &centraid_seat::SeatError) -> ErrorCode {
     use centraid_seat::SeatError as S;
     match error {
-        S::Drift { .. } | S::EpochGate { .. } | S::RebootstrapRequired { .. } => {
-            ErrorCode::RebootstrapRequired
-        }
+        // AN ARTIFACT FOR ANOTHER VAULT IS A FRESH COPY OWED, not an internal
+        // fault: the seat still has no copy it may use, and the remedy — ask
+        // the gateway for one again — is the same remedy this code names. It
+        // is deliberately NOT its own wire code, because that would be a
+        // proto/enum change this slice does not need and a shell would branch
+        // on it exactly as it branches on this one (#1025 S1).
+        S::Drift { .. }
+        | S::EpochGate { .. }
+        | S::RebootstrapRequired { .. }
+        | S::WrongVault { .. } => ErrorCode::RebootstrapRequired,
         S::OnlineOnly { .. } => ErrorCode::OnlineOnly,
         S::OutcomeExpired { .. } => ErrorCode::IntentOutcomeExpired,
         S::IntentIdReused { .. } => ErrorCode::IntentIdReused,

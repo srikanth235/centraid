@@ -28,7 +28,9 @@ use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig};
-use centraid_seat::sync::{FetchOutcome, FetchedPage, IntentSink, LogSource, SubmitOutcome};
+use centraid_seat::sync::{
+    FetchOutcome, FetchedPage, IntentSink, LogSource, SkipReason, SubmitOutcome,
+};
 
 use crate::protocol;
 use crate::schedule::{Fault, Schedule};
@@ -276,6 +278,7 @@ async fn serve_gateway(path: &Path, seed_label: String) -> turmoil::Result {
     // what recording a failing seed requires.
     let handle = Core::open(
         CoreConfig {
+            pairing: None,
             path: path.to_path_buf(),
             role: centraid_core::Role::Gateway,
             ui_thread_name: None,
@@ -287,8 +290,8 @@ async fn serve_gateway(path: &Path, seed_label: String) -> turmoil::Result {
             expected_digest: None,
         }
         .with_clock(
-            Box::new(centraid_vault::clock::FixedClock::frozen()),
-            Box::new(centraid_vault::clock::SeededIds::new(seed_label)),
+            std::sync::Arc::new(centraid_vault::clock::FixedClock::frozen()),
+            std::sync::Arc::new(centraid_vault::clock::SeededIds::new(seed_label)),
         ),
     )
     .map_err(|error| format!("the gateway's core did not open: {error}"))?;
@@ -476,6 +479,10 @@ fn decode_page(envelope: wire::Envelope) -> FetchOutcome {
         Some(wire::envelope::Body::Response(wire::Response {
             kind: Some(wire::response::Kind::RebootstrapRequired(required)),
         })) => FetchOutcome::RebootstrapRequired {
+            // A SIMULATED GATEWAY OFFERS NO BLOB. The simulation has no byte
+            // store and no snapshot builder; what it exercises is the pass's
+            // reaction to being refused a cursor, which is to stop.
+            snapshot: None,
             reason: rebootstrap_from_wire(required.reason),
             epoch: required.epoch,
             floor: i64::try_from(required.floor).unwrap_or(0),
@@ -618,7 +625,7 @@ async fn drive_seat(
         for (order, (command, title)) in workload.writes.iter().enumerate() {
             let input = serde_json::json!({ "display_name": title, "kind": "person" });
             let intent_id = format!("sim-{}-s{index}-w{order}", schedule.seed);
-            let hash = centraid_seat::PayloadHash::of(command, command, &input, &[], &[])
+            let hash = centraid_seat::PayloadHash::of(command, command, &input, &[], &[], &[])
                 .map(|hash| hash.as_str().to_owned())
                 .unwrap_or_else(|_| "0".repeat(64));
             let record = centraid_seat::IntentRecord {
@@ -684,7 +691,7 @@ async fn drive_seat(
     // the product was correct.
     for pass in 0..schedule.passes {
         let outcome = pass_outcome(&connection, &mut pages, &mut intents, pass).await;
-        submissions.set(submissions.get() + outcome.intents_submitted as u64);
+        submissions.set(submissions.get() + outcome.intents_submitted() as u64);
         reports.push(describe(pass, &outcome));
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -705,7 +712,7 @@ async fn drive_seat(
     let mut announced = false;
     for pass in schedule.passes..(schedule.passes + CATCH_UP_PASSES) {
         let outcome = pass_outcome(&connection, &mut pages, &mut intents, pass).await;
-        submissions.set(submissions.get() + outcome.intents_submitted as u64);
+        submissions.set(submissions.get() + outcome.intents_submitted() as u64);
 
         // ANNOUNCE, once, that this seat has nothing left to send. Until every
         // seat has, nobody may stop: the gateway may still be about to gain a
@@ -714,11 +721,14 @@ async fn drive_seat(
             announced = true;
             finished.set(finished.get() + 1);
         }
-        let idle = outcome.rows_applied == 0
-            && outcome.intents_submitted == 0
-            && outcome.reached_the_end
-            && outcome.stale.is_none()
-            && outcome.blocked.is_none();
+        let idle = outcome.rows_applied() == 0
+            && outcome.intents_submitted() == 0
+            && outcome.reached_the_end()
+            // A PASS THAT DID NOT RUN A PLANE IS NOT AN IDLE ONE. The
+            // ordinary reasons — nothing queued, nothing wanted — are the
+            // shape of a quiet seat; the rest are why it is not.
+            && outcome.rows.skipped().is_none_or(SkipReason::is_ordinary)
+            && outcome.intents.skipped().is_none_or(SkipReason::is_ordinary);
         reports.push(describe(pass, &outcome));
 
         // ANY seat's submission resets every seat's quiet count: the commit it
@@ -760,38 +770,55 @@ async fn pass_outcome(
     pass: usize,
 ) -> centraid_seat::sync::PassReport {
     let now = format!("2026-01-01T00:{:02}:{:02}.000Z", pass / 60, pass % 60);
-    centraid_seat::sync::pass(connection, pages, intents, &now)
-        .await
-        .unwrap_or_else(|error| centraid_seat::sync::PassReport {
-            // A FAILED PASS IS NOT AN IDLE ONE. `stale` carries the error so
-            // the quiescence test cannot mistake a broken pass for a finished
-            // one, which would end the run early and pass the invariants for
-            // the wrong reason.
-            stale: Some(format!("the pass failed: {error}")),
-            ..centraid_seat::sync::PassReport::default()
-        })
+    // NO DEADLINE. The simulation's windows are turmoil's, not a wall clock's,
+    // and a real deadline here would make a seed's outcome depend on how fast
+    // the machine running it is — which is the one thing a deterministic
+    // simulation may not do (#1025 S2).
+    // NO CHANGE SINK. A simulated seat has no shell to wake: the
+    // invariants read the replica's own rows, which is a stronger
+    // check than a notification that they changed.
+    // NO BYTE PLANE. A simulated seat has no store and no files; the
+    // invariants are about rows and the queue.
+    centraid_seat::sync::sync(
+        connection,
+        pages,
+        intents,
+        &mut centraid_seat::sync::NoBytes,
+        &now,
+        centraid_seat::sync::Window::unbounded(),
+        &centraid_seat::sync::NoChanges,
+    )
+    .await
+    .unwrap_or_else(|error| {
+        // A FAILED PASS IS NOT AN IDLE ONE. The row plane's typed reason is
+        // what stops the quiescence test mistaking a broken pass for a
+        // finished one, which would end the run early and pass the invariants
+        // for the wrong reason.
+        eprintln!("the simulated pass failed: {error}");
+        centraid_seat::sync::PassReport::stopped(centraid_seat::sync::SkipReason::LogUnreadable)
+    })
 }
 
 /// One pass as a report line.
 fn describe(pass: usize, report: &centraid_seat::sync::PassReport) -> String {
     format!(
         "pass {pass}: applied {} dup {} commits {} submitted {} settled {} behind {} end {}{}{}",
-        report.rows_applied,
-        report.rows_duplicate,
-        report.commits_applied,
-        report.intents_submitted,
-        report.intents_settled,
+        report.rows_applied(),
+        report.rows_duplicate(),
+        report.commits_applied(),
+        report.intents_submitted(),
+        report.intents_settled(),
         report.behind,
-        report.reached_the_end,
+        report.reached_the_end(),
         report
-            .stale
-            .as_ref()
-            .map(|reason| format!(" stale({reason})"))
+            .rows
+            .skipped()
+            .map(|reason| format!(" rows({})", reason.code()))
             .unwrap_or_default(),
         report
-            .blocked
-            .as_ref()
-            .map(|reason| format!(" blocked({reason})"))
+            .intents
+            .skipped()
+            .map(|reason| format!(" intents({})", reason.code()))
             .unwrap_or_default(),
     )
 }

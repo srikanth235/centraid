@@ -82,11 +82,11 @@ proptest! {
         versions.sort_by(|a, b| cmp_utf16(&a.sort_key(), &b.sort_key()));
         versions.dedup_by(|a, b| a.sort_key() == b.sort_key());
         let input = serde_json::json!({ "title": title });
-        let forward = PayloadHash::of("notes", "edit", &input, &versions, &[])
+        let forward = PayloadHash::of("notes", "edit", &input, &versions, &[], &[])
             .expect("it hashes");
         let mut shuffled = versions.clone();
         shuffled.reverse();
-        let backward = PayloadHash::of("notes", "edit", &input, &shuffled, &[])
+        let backward = PayloadHash::of("notes", "edit", &input, &shuffled, &[], &[])
             .expect("it hashes");
         prop_assert_eq!(forward, backward);
     }
@@ -108,9 +108,9 @@ proptest! {
             backward.insert(key.clone(), serde_json::json!(index));
         }
         prop_assert_eq!(
-            PayloadHash::of("a", "b", &serde_json::Value::Object(forward), &[], &[])
+            PayloadHash::of("a", "b", &serde_json::Value::Object(forward), &[], &[], &[])
                 .expect("hashes"),
-            PayloadHash::of("a", "b", &serde_json::Value::Object(backward), &[], &[])
+            PayloadHash::of("a", "b", &serde_json::Value::Object(backward), &[], &[], &[])
                 .expect("hashes")
         );
     }
@@ -126,9 +126,9 @@ proptest! {
         other in interesting_string(),
     ) {
         prop_assume!(title != other);
-        let one = PayloadHash::of(&app_id, &action, &serde_json::json!({ "t": title }), &[], &[])
+        let one = PayloadHash::of(&app_id, &action, &serde_json::json!({ "t": title }), &[], &[], &[])
             .expect("hashes");
-        let two = PayloadHash::of(&app_id, &action, &serde_json::json!({ "t": other }), &[], &[])
+        let two = PayloadHash::of(&app_id, &action, &serde_json::json!({ "t": other }), &[], &[], &[])
             .expect("hashes");
         prop_assert_ne!(&one, &two);
         // And a changed action, with the same input.
@@ -138,13 +138,14 @@ proptest! {
             &serde_json::json!({ "t": title }),
             &[],
             &[],
+            &[],
         )
         .expect("hashes");
         prop_assert_ne!(&one, &three);
         // And the same intent hashed twice is the same hash.
         prop_assert_eq!(
             &one,
-            &PayloadHash::of(&app_id, &action, &serde_json::json!({ "t": title }), &[], &[])
+            &PayloadHash::of(&app_id, &action, &serde_json::json!({ "t": title }), &[], &[], &[])
                 .expect("hashes")
         );
     }

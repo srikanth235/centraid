@@ -1,9 +1,23 @@
 //! THE WRAP AT REST, AND THE REVEAL WINDOW.
 //!
-//! `wrapVaultKey` / `unwrapVaultKey` from `locker-unlock.ts`, ported: PBKDF2-
-//! SHA-256 at [`WRAP_ITERATIONS`] over the member's passphrase, AES-256-GCM
-//! around `K`, and a random salt and nonce per wrap. The blob is a value with
-//! no key in it, which is the only thing this seat writes down.
+//! `wrapVaultKey` / `unwrapVaultKey` from `locker-unlock.ts`: **Argon2id** at
+//! [`WRAP_PARAMETERS`] over the member's passphrase, AES-256-GCM around `K`, and
+//! a random salt and nonce per wrap. The blob is a value with no key in it,
+//! which is the only thing this seat writes down.
+//!
+//! ## THE ONE JOB A FAST HASH MUST NOT DO (#1025 S4, D-1025-S4-4)
+//!
+//! Everywhere else in Centraid the hash is BLAKE3, and BLAKE3 is fast on
+//! purpose. This is the one place where fast is the attacker's property: a
+//! passphrase is low-entropy by definition, so the only thing standing between a
+//! stolen blob and `K` is how much a single guess costs. `blake3::derive_key`
+//! would make a guess cost a microsecond.
+//!
+//! Argon2id is memory-hard, so a guess costs [`WRAP_MEMORY_KIB`] of RAM as well
+//! as time, and the GPU and ASIC parallelism that makes PBKDF2-SHA-256 cheap to
+//! attack buys much less. v0's PBKDF2-SHA-256 at 600,000 rounds is superseded
+//! whole: v0-no-legacy, and a blob that names any other function is refused
+//! rather than read.
 //!
 //! **A wrong passphrase is an AEAD authentication failure, and that is the
 //! whole verifier.** Nothing at rest can be checked against a guess without
@@ -17,10 +31,40 @@ use base64::engine::general_purpose::STANDARD;
 
 use super::session::{PASSPHRASE_MINIMUM, Session, WrappedKey};
 
-/// PBKDF2 rounds. High enough to cost a guesser real time, low enough that an
-/// unlock on a phone-class CPU stays under a second — the same trade the
-/// recovery kit's scrypt makes, in the primitive every platform gives us.
-pub const WRAP_ITERATIONS: u32 = 600_000;
+/// The name the blob carries for its derivation. A blob naming anything else
+/// is refused — there is no second function to fall back to.
+pub const WRAP_KDF: &str = "argon2id";
+
+/// Argon2id memory cost, in KiB: 64 MiB.
+///
+/// The parameter that does the work. OWASP's floor for Argon2id is 19 MiB at
+/// t = 2; this sits above it with room, and 64 MiB is an allocation a
+/// phone-class device makes once per unlock without the OS noticing.
+pub const WRAP_MEMORY_KIB: u32 = 64 * 1024;
+
+/// Argon2id time cost: three passes over that memory.
+pub const WRAP_TIME_COST: u32 = 3;
+
+/// Argon2id lanes. ONE, deliberately: parallelism helps the attacker, who has
+/// cores to spare, more than it helps a member unlocking once.
+pub const WRAP_PARALLELISM: u32 = 1;
+
+/// The parameter set a fresh wrap is written under.
+#[must_use]
+pub fn wrap_parameters() -> argon2::Params {
+    argon2::Params::new(
+        WRAP_MEMORY_KIB,
+        WRAP_TIME_COST,
+        WRAP_PARALLELISM,
+        Some(MEMBER_KEY_BYTES),
+    )
+    .expect("the pinned Argon2id parameters are valid")
+}
+
+/// `WRAP_PARAMETERS` as the doc comments above name it, for the module header.
+///
+/// Argon2id, m = 64 MiB, t = 3, p = 1, 32-byte output.
+pub const WRAP_PARAMETERS: &str = "Argon2id m=65536 t=3 p=1";
 
 /// One reveal's window, used or not (`reveal.ts:21`).
 ///
@@ -62,14 +106,34 @@ pub enum UnlockError {
     Corrupt(&'static str),
     #[error("a member key is {0} bytes, expected {MEMBER_KEY_BYTES}")]
     KeyLength(usize),
+    /// NOT a wrong passphrase. Argon2id allocates, so a device with no memory
+    /// to spare fails here, and a member told "wrong passphrase" would reset a
+    /// vault over it.
+    #[error("this device could not derive the unlock key — try again, or on another device")]
+    DerivationFailed,
 }
 
-fn wrapping_key(passphrase: &str, salt: &[u8], iterations: u32) -> Aes256Gcm {
-    let mut derived = [0_u8; 32];
-    // `pbkdf2_hmac` cannot fail for a non-zero iteration count and a 32-byte
-    // output, which is why there is no error arm here.
-    pbkdf2::pbkdf2_hmac::<sha2::Sha256>(passphrase.as_bytes(), salt, iterations, &mut derived);
-    Aes256Gcm::new_from_slice(&derived).expect("a 32-byte AES-256 key")
+/// Derive the wrapping key under the parameters the blob names.
+///
+/// Argon2id ALLOCATES, so unlike PBKDF2 this can fail — on a salt the algorithm
+/// refuses, or on a device that cannot spare the memory. Both are
+/// [`UnlockError::Corrupt`]'s neighbours and neither is a wrong passphrase, so
+/// they are reported separately: telling a member their passphrase is wrong when
+/// the phone was out of memory is a lie they would act on by resetting a vault.
+fn wrapping_key(
+    passphrase: &str,
+    salt: &[u8],
+    parameters: argon2::Params,
+) -> Result<Aes256Gcm, UnlockError> {
+    let mut derived = [0_u8; MEMBER_KEY_BYTES];
+    argon2::Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        parameters,
+    )
+    .hash_password_into(passphrase.as_bytes(), salt, &mut derived)
+    .map_err(|_| UnlockError::DerivationFailed)?;
+    Ok(Aes256Gcm::new_from_slice(&derived).expect("a 32-byte AES-256 key"))
 }
 
 /// Wrap `K` under a passphrase. The result is the only thing written down.
@@ -88,7 +152,7 @@ pub fn wrap_member_key(
     let salt = random_bytes::<SALT_BYTES>();
     let nonce = random_bytes::<NONCE_BYTES>();
     let aad = wrap_aad(vault_id, key_id);
-    let sealed = wrapping_key(passphrase, &salt, WRAP_ITERATIONS)
+    let sealed = wrapping_key(passphrase, &salt, wrap_parameters())?
         .encrypt(
             (&nonce).into(),
             Payload {
@@ -101,8 +165,10 @@ pub fn wrap_member_key(
         version: 1,
         vault_id: vault_id.to_owned(),
         key_id: key_id.to_owned(),
-        kdf: "pbkdf2-sha256".to_owned(),
-        iterations: WRAP_ITERATIONS,
+        kdf: WRAP_KDF.to_owned(),
+        memory_kib: WRAP_MEMORY_KIB,
+        iterations: WRAP_TIME_COST,
+        parallelism: WRAP_PARALLELISM,
         salt: STANDARD.encode(salt),
         nonce: STANDARD.encode(nonce),
         ciphertext: STANDARD.encode(sealed),
@@ -114,14 +180,22 @@ pub fn unwrap_member_key(passphrase: &str, wrapped: &WrappedKey) -> Result<Vec<u
     if wrapped.version != 1 {
         return Err(UnlockError::Corrupt("an unknown wrap version"));
     }
-    if wrapped.kdf != "pbkdf2-sha256" {
+    if wrapped.kdf != WRAP_KDF {
         return Err(UnlockError::Corrupt("an unknown key-derivation function"));
     }
-    if wrapped.iterations == 0 {
-        // A ZERO ITERATION COUNT IS A DOWNGRADE, not a fast unlock: the blob
-        // says how it was derived, so a blob that says "no work" would let an
-        // attacker who can rewrite it make the derivation free.
-        return Err(UnlockError::Corrupt("a zero iteration count"));
+    // A WEAKER PARAMETER SET IS A DOWNGRADE, not a fast unlock: the blob says
+    // how it was derived, so an attacker who can rewrite it would otherwise make
+    // the derivation free by asking for one pass over one KiB. The blob stays
+    // self-describing — a future slice may raise these — but never below the
+    // floor this build was written under. `parallelism` is pinned rather than
+    // floored because more lanes is not more work.
+    if wrapped.memory_kib < WRAP_MEMORY_KIB
+        || wrapped.iterations < WRAP_TIME_COST
+        || wrapped.parallelism != WRAP_PARALLELISM
+    {
+        return Err(UnlockError::Corrupt(
+            "a weaker key-derivation cost than this build writes",
+        ));
     }
     let salt = STANDARD
         .decode(&wrapped.salt)
@@ -137,7 +211,14 @@ pub fn unwrap_member_key(passphrase: &str, wrapped: &WrappedKey) -> Result<Vec<u
     }
     let nonce: [u8; NONCE_BYTES] = nonce.try_into().expect("checked length");
     let aad = wrap_aad(&wrapped.vault_id, &wrapped.key_id);
-    let key = wrapping_key(passphrase, &salt, wrapped.iterations)
+    let parameters = argon2::Params::new(
+        wrapped.memory_kib,
+        wrapped.iterations,
+        wrapped.parallelism,
+        Some(MEMBER_KEY_BYTES),
+    )
+    .map_err(|_| UnlockError::Corrupt("the wrap names invalid Argon2id parameters"))?;
+    let key = wrapping_key(passphrase, &salt, parameters)?
         .decrypt(
             (&nonce).into(),
             Payload {
@@ -459,8 +540,10 @@ mod tests {
     fn a_wrap_round_trips_and_a_wrong_passphrase_is_one_answer() {
         let wrapped = wrap_member_key("a passphrase long enough", "vault-1", "key-1", &key())
             .expect("wrapped");
-        assert_eq!(wrapped.iterations, WRAP_ITERATIONS);
-        assert_eq!(wrapped.kdf, "pbkdf2-sha256");
+        assert_eq!(wrapped.kdf, WRAP_KDF);
+        assert_eq!(wrapped.memory_kib, WRAP_MEMORY_KIB);
+        assert_eq!(wrapped.iterations, WRAP_TIME_COST);
+        assert_eq!(wrapped.parallelism, WRAP_PARALLELISM);
         // THE BLOB CARRIES NO KEY AND NO VERIFIER.
         let json = serde_json::to_string(&wrapped).expect("serialises");
         assert!(!json.contains("verifier"));
@@ -513,27 +596,49 @@ mod tests {
         );
     }
 
-    /// A ZERO ITERATION COUNT IS A DOWNGRADE, not a fast unlock.
+    /// A CHEAPER PARAMETER SET IS A DOWNGRADE, not a fast unlock — and the old
+    /// `kdf` tag is not a second answer (#1025 S4).
     #[test]
     fn a_rewritten_blob_cannot_make_the_derivation_free() {
         let wrapped = wrap_member_key("a passphrase long enough", "vault-1", "key-1", &key())
             .expect("wrapped");
-        let free = WrappedKey {
-            iterations: 0,
-            ..wrapped.clone()
-        };
-        assert!(matches!(
-            unwrap_member_key("a passphrase long enough", &free),
-            Err(UnlockError::Corrupt(_))
-        ));
-        let unknown_kdf = WrappedKey {
-            kdf: "md5".to_owned(),
-            ..wrapped
-        };
-        assert!(matches!(
-            unwrap_member_key("a passphrase long enough", &unknown_kdf),
-            Err(UnlockError::Corrupt(_))
-        ));
+        for free in [
+            WrappedKey {
+                iterations: 0,
+                ..wrapped.clone()
+            },
+            WrappedKey {
+                memory_kib: 8,
+                ..wrapped.clone()
+            },
+            WrappedKey {
+                parallelism: 64,
+                ..wrapped.clone()
+            },
+        ] {
+            assert!(
+                matches!(
+                    unwrap_member_key("a passphrase long enough", &free),
+                    Err(UnlockError::Corrupt(_))
+                ),
+                "a cheaper cost than this build writes is refused"
+            );
+        }
+        // v0-no-legacy: the superseded tag is refused like any other unknown
+        // one, so a PBKDF2 blob is not readable by asking nicely.
+        for kdf in ["md5", "pbkdf2-content_hash"] {
+            let other = WrappedKey {
+                kdf: kdf.to_owned(),
+                ..wrapped.clone()
+            };
+            assert!(
+                matches!(
+                    unwrap_member_key("a passphrase long enough", &other),
+                    Err(UnlockError::Corrupt(_))
+                ),
+                "{kdf} is not a key-derivation function this seat reads"
+            );
+        }
     }
 
     /// THE WHOLE REVEAL, and the receipt that comes first.

@@ -2,6 +2,7 @@
 //!
 //! **Append-only by trigger, not by convention.** The baseline carries
 //! `access_receipt_append_only_u` and `_d`, which refuse UPDATE and DELETE
+
 //! unless `audit_archive_pass` holds a row. So this module does not need to be
 //! careful — the file is.
 //!
@@ -19,10 +20,24 @@
 //! the journal is append-only, so a secret written into it is permanent.
 
 use rusqlite::Connection;
-use sha2::{Digest as _, Sha256};
 
 use crate::clock::{Clock, Ids};
 use crate::error::Result;
+
+/// THE TABLES THIS MODULE WRITES: the gateway's account of an execution.
+///
+/// Replicated, all three — a seat holds its vault's audit trail — and the
+/// gateway's to WRITE. A seat predicting its own write leaves them out
+/// ([`crate::Vault::predict`]): a prediction is a handler's output, and these
+/// are the record that a command RAN, which on a seat it has not. A predicted
+/// receipt would carry an invocation id the gateway never minted, and the
+/// answering commit inserts its OWN row rather than replacing it — so the
+/// fabricated one would simply stay, for ever.
+pub const TRAIL_TABLES: [&str; 3] = [
+    "agent_command_invocation",
+    "agent_invocation_check",
+    "access_receipt",
+];
 
 /// Replace the values of declared-secret keys with keyed tokens.
 ///
@@ -39,8 +54,8 @@ pub fn redact_command_input(input: &serde_json::Value, sealed_keys: &[&str]) -> 
         if let Some(value) = out.get_mut(*key) {
             let rendered = serde_json::to_string(value).unwrap_or_default();
             *value = serde_json::Value::String(format!(
-                "sealed:sha256:{}",
-                &hex::encode(Sha256::digest(rendered.as_bytes()))[..16]
+                "sealed:blake3:{}",
+                &hex::encode(blake3::hash(rendered.as_bytes()).as_bytes())[..16]
             ));
         }
     }
@@ -240,7 +255,7 @@ pub struct Receipt<'a> {
 /// Append a receipt to the chain, returning its id.
 ///
 /// The chain: `seq` is the position and `hash` is
-/// `sha256(prev_hash ‖ seq ‖ canonical(receipt))`, unique by constraint. So a
+/// `blake3(prev_hash ‖ seq ‖ canonical(receipt))`, unique by constraint. So a
 /// removed row breaks every hash after it, and a rewritten one breaks its own.
 pub fn write_receipt(
     connection: &Connection,
@@ -270,7 +285,7 @@ pub fn write_receipt(
         receipt.object_type,
         receipt.decision,
     );
-    let hash = hex::encode(Sha256::digest(body.as_bytes()));
+    let hash = hex::encode(blake3::hash(body.as_bytes()).as_bytes());
     connection.execute(
         "INSERT INTO access_receipt
            (receipt_id, authority_id, invocation_id, action, object_type, object_id,
@@ -355,7 +370,7 @@ pub fn verify_receipt_chain(connection: &Connection) -> Result<Vec<String>> {
             row.occurred_at,
             row.detail.as_deref().unwrap_or(""),
         );
-        let hash = hex::encode(Sha256::digest(body.as_bytes()));
+        let hash = hex::encode(blake3::hash(body.as_bytes()).as_bytes());
         if hash != row.hash {
             findings.push(format!("receipt {} does not hash to its own body", row.seq));
         }
@@ -375,7 +390,7 @@ mod tests {
         let redacted = redact_command_input(&input, &["access_token"]);
         let text = serde_json::to_string(&redacted).expect("serialises");
         assert!(!text.contains("hunter2"));
-        assert!(text.contains("sealed:sha256:"));
+        assert!(text.contains("sealed:blake3:"));
         // The KEY survives: a reviewer has to see that a secret was supplied.
         assert!(text.contains("access_token"));
         assert!(text.contains("email"));

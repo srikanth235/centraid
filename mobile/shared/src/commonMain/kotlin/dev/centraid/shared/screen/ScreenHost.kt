@@ -24,7 +24,7 @@ import kotlinx.coroutines.sync.withLock
  * already surpassed rather than re-rendering out of order — the field
  * `centraid.screen.v1.ScreenState` carries for the same reason.
  */
-public class ScreenHost<S, E>(private val machine: ScreenMachine<S, E>) {
+public class ScreenHost<S, E>(public val machine: ScreenMachine<S, E>) {
     private val _state = MutableStateFlow(machine.initial())
     private val _effects = MutableSharedFlow<ScreenEffect>(
         replay = 0,

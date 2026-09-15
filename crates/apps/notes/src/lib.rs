@@ -6,7 +6,7 @@
 //! description (`manifest.json`, copied verbatim from v0's `app.json`):
 //!
 //! - **NOTHING IS STORED HERE.** A note is a `knowledge.note` wrapper over a
-//!   canonical, sha256-deduped `core.content_item` body. Revoke the grant and
+//!   canonical, hash-deduped `core.content_item` body. Revoke the grant and
 //!   the app goes dark while the notes and the receipts remain the owner's.
 //! - **THE LIBRARY IS A BOUNDED RECENT WINDOW PLUS *EVERY* PINNED NOTE.** A pin
 //!   survives the note ageing out of the window, so the pinned shelf is read

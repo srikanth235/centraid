@@ -452,11 +452,11 @@ fn content_references(connection: &rusqlite::Connection, limit: usize) -> Result
         return Ok(Vec::new());
     }
     let mut statement = connection.prepare(
-        "SELECT sha256 FROM core_content_item WHERE sha256 IS NOT NULL \
-         ORDER BY sha256 LIMIT ?1",
+        "SELECT content_hash FROM core_content_item WHERE content_hash IS NOT NULL \
+         ORDER BY content_hash LIMIT ?1",
     );
     let Ok(statement) = &mut statement else {
-        // A generation whose schema has no `sha256` column: nothing to sample,
+        // A generation whose schema has no `content_hash` column: nothing to sample,
         // not a failure.
         return Ok(Vec::new());
     };
@@ -718,7 +718,7 @@ mod tests {
             connection
                 .execute(
                     "INSERT INTO core_content_item \
-                     (content_id, content_uri, sha256, byte_size, created_at) \
+                     (content_id, content_uri, content_hash, byte_size, created_at) \
                      VALUES ('c-1', 'cas:c-1', ?1, 29, '2026-01-01T00:00:00.000Z')",
                     [&absent],
                 )

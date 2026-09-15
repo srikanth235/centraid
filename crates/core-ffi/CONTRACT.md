@@ -56,6 +56,47 @@ A `Cancel` body cancels the **unbounded** operation its `request_id` names. A `C
 
 Test: `every_request_carries_a_request_id_and_cancel_names_one`
 
+## 4a. The open configuration is JSON, and one of its keys is a secret
+
+`centraid_open` reads `config`/`len` as UTF-8 JSON:
+
+```json
+{
+  "path": "/…/vault.db",
+  "role": "gateway" | "seat-replicated" | "seat-thin",
+  "create": false,
+  "uiThreadName": "main",
+  "expectedIdentity": "<artifact digest>",
+  "pairing": {
+    "secret": "<64 lowercase hex characters>",
+    "gatewayAddress": "<64 lowercase hex characters>",
+    "vaultId": "…",
+    "vaultName": "…",
+    "relayUrl": "",
+    "directAddrs": ["10.0.0.2:41234"],
+    "enrolledPublicKey": "<64 lowercase hex characters>"
+  }
+}
+```
+
+`path` is the only required key. `expectedIdentity` is clause 9's stale-core refusal, made before a handle exists.
+
+**`pairing` is THE ENROLMENT RECORD the shell kept for this vault** ([#1025](https://github.com/srikanth235/centraid/issues/1025) S7-13, D-1025-S7-14). One object, because it is one fact: this device's relationship with one vault. It was three keys and three secure-store entries — `endpointSecretKey`, `endpointSecretKeyPath` and a `pairing` without a secret in it — settled one at a time under three names, which is three chances to settle by halves. **Those spellings are deleted** (v0, no legacy).
+
+**`secret` is this device's endpoint identity FOR THIS VAULT**: 32 bytes as 64 lowercase hex characters, the private half of the key the gateway enrolled when this seat paired.
+
+_Why the shell holds it and this library does not:_ a secret key belongs in the platform's secure store — the iOS Keychain, the Android Keystore — and a core that invented a file would put the one unrecoverable secret on the device next to the vault it protects, in a place no shell asked for and no backup excludes.
+
+**`enrolledPublicKey` is what the GATEWAY said it enrolled**, off the `PairOk` and derived there from the connection iroh's TLS proved. At open, the endpoint that comes up is compared against it, and a mismatch is refused (`BAD_ARGUMENT`, and `ERROR_CODE_IDENTITY_MISMATCH` wherever the condition reaches a `call`): the network is not attached and nothing is dialled. A seat whose secret is gone would otherwise dial as a stranger, be closed by its own gateway as an unenrolled peer, and render a version-window sentence over a lost credential.
+
+**`relayUrl` decides the relay mode, and it has three states.** A url is a relayed deployment; `""` is a deployment that STATED it has none, and the endpoint comes up in `RelayMode::Disabled`; the key being ABSENT is "not told", and relays stay on. The third is the transient record a device holds while it is redeeming a ticket — a device that read absent as "no relay" could not pair over the internet at all. There is no `relays` flag (D-1025-S7-16).
+
+**The pairing's ADDRESS half is also durable in the replica** (`seat_gateway`, `crates/seat/src/gateway.rs`) and is re-adopted by `centraid_open` the moment the network is attached; the replica is asked first. What is never in the file is the SECRET, which is why the record exists at all — and why a device that paired and could not take its copy still has something to dial.
+
+**Absent (or empty) `secret` is not an error**: the endpoint mints a fresh keypair, which is every first launch. **Present and unreadable IS an error** (`BAD_ARGUMENT`), because carrying on with a fresh key would silently un-enrol a device whose shell believed it had persisted one. Per vault: a device holding two vaults is two cores, two endpoints and two records (D-1025-S7-13).
+
+Tests: `the_endpoint_secret_crosses_the_abi_inside_the_enrolment_record`, `the_enrolment_record_carries_the_address_the_relay_and_the_enrolled_key`, `a_malformed_endpoint_secret_key_is_refused_rather_than_replaced`, and `crates/centraid/tests/seat_identity.rs`
+
 ## 5. `next_event` surfaces bounded-queue backpressure as a health event
 
 The event queue is bounded at 1024 and **drops nothing**. When it fills, sync stalls and a `HealthEvent { stalled: true, queue_depth, capacity, behind }` reaches the shell — later, on the first slot a drain frees, if the queue is full of change events, because a change event may not be dropped to make room for the report.
@@ -64,7 +105,11 @@ _Why:_ a dropped change event is a screen that stays wrong until something else 
 
 `behind` is a distance in **log positions**, not rows and not seconds.
 
-Test: `next_event_surfaces_bounded_queue_backpressure_as_a_health_event`
+**What pushes.** A sync pass that applies a page of rows to this replica pushes one `ChangeEvent { table, pk_set, commit_seq }` per table it wrote, as it writes it — `crates/core`'s `ChangeFeed` over the seam `centraid_seat::sync::ChangeSink` declares. Until [#1025](https://github.com/srikanth235/centraid/issues/1025) S5 **nothing in the repository pushed one at all**: the queue was built, bounded, coalescing and tested to its cap, and a shell that waited for a row to arrive waited forever. `commit_seq` is a COMMIT position and never a `LogRow.seq`, because a seat's overlay clears against a commit. A page that applied nothing — a duplicate delivery — pushes nothing, because a change event with an empty key set is a redraw of nothing.
+
+When the queue is full the producer WAITS and retries rather than dropping, which is the stall this clause names; a closed handle ends the wait, because a core being closed under a running pass is what `centraid_close` does.
+
+Test: `next_event_surfaces_bounded_queue_backpressure_as_a_health_event`, and `crates/centraid/tests/seat_bootstrap.rs`'s `a_row_applied_by_a_pass_comes_out_of_next_event_naming_its_key` over real QUIC against the shipped gateway
 
 ## 6. A timeout allocates nothing
 

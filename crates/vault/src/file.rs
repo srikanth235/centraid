@@ -216,9 +216,13 @@ impl Vault {
     /// it now asks THIS.
     ///
     /// It is the OPENER's decision where the store lives, because only the
-    /// opener knows the layout it is opening into: the CLI has a data
-    /// directory with a `blobs/` beside the vaults, and a phone has one file
-    /// in a container. Neither convention belongs in here.
+    /// opener knows the layout it is opening into. Since #1025 S3 every opener
+    /// hands over the SAME store the byte plane moves bytes on — `<vault>.bytes`,
+    /// iroh's, behind `centraid_core::bytes::ContentBytes` — so a photograph
+    /// this door spills is a photograph a seat can fetch, and one a seat
+    /// fetched is a photograph this vault can locate. The flat
+    /// `<vault>.blobs/` CAS and `Vault::blobs_root_for` that named it are gone
+    /// (D-1025-S3-1).
     #[must_use]
     pub fn with_blobs(
         mut self,
@@ -232,28 +236,6 @@ impl Vault {
     #[must_use]
     pub fn blobs(&self) -> Option<&(dyn crate::backup::store::BlobStore + Send + Sync)> {
         self.blobs.as_deref()
-    }
-
-    /// WHERE A VAULT'S OWN BYTES LIVE: `<stem>.blobs/` beside the file.
-    ///
-    /// One convention, stated once, because the alternative is what the tree
-    /// nearly shipped — the core deriving one location and the CLI passing
-    /// another, so the same vault file would hold a photograph when the phone
-    /// opened it and refuse one when the gateway did.
-    ///
-    /// **Per vault, not per data directory.** `cmd::blobs_dir_in` is the BACKUP
-    /// plane's shared store and stays what it is; this is custody of a
-    /// member's live bytes, and a vault handed to someone else has to be
-    /// handed over whole. A sibling directory is a thing you can copy, move
-    /// and delete alongside the file it belongs to, which is exactly the
-    /// property a shared pool does not have.
-    #[must_use]
-    pub fn blobs_root_for(path: &Path) -> PathBuf {
-        let stem = path.file_name().map_or_else(
-            || "vault".to_owned(),
-            |name| name.to_string_lossy().into_owned(),
-        );
-        path.with_file_name(format!("{stem}.blobs"))
     }
 
     #[must_use]
@@ -301,6 +283,38 @@ impl Vault {
             self.connection.pragma_update(None, "query_only", "OFF")?;
         }
         outcome
+    }
+
+    /// THE CONNECTION A REPLICA'S APPLIER WRITES THROUGH (#1025 S5).
+    ///
+    /// A seat's sync pass is not a read and it is not a command: it applies the
+    /// gateway's log to the mirror, one transaction per commit, with its own
+    /// rules (`centraid_seat::applier`) — so it needs the file's ONE connection
+    /// and it needs it writable.
+    ///
+    /// **The defect this closes.** `centraid_core::Handle::sync_now` handed the
+    /// pass `Vault::read`'s connection, which sets `PRAGMA query_only = ON` for
+    /// the duration. Every apply therefore failed, the failure landed in
+    /// `PassReport::stale`, and `SyncOutcome` has no field for it — so a pass
+    /// through the core reported a reached gateway, zero rows and no error, on
+    /// every window, forever. Every test that ever saw a row arrive drove
+    /// `SeatLink` over a connection of its own.
+    ///
+    /// Why the one connection rather than a second: SQLite allows one writer
+    /// and this object holds it. A connection opened alongside would contend
+    /// with its owner and the loser would be whichever asked second.
+    ///
+    /// **Refused inside a read or a commit**, which is the whole of its safety:
+    /// a write under an outer `read` would be the escape hatch `query_only`
+    /// exists to prevent, and one inside a commit guard would put a mirror's
+    /// rows in an author's transaction.
+    pub fn apply_replica<T>(&self, body: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        if self.depth.get() > 0 || self.read_depth.get() > 0 {
+            return Err(VaultError::Invariant {
+                context: "a replica apply was attempted inside a read or a commit".to_owned(),
+            });
+        }
+        body(&self.connection)
     }
 
     /// The connection, for this crate's own internals only.

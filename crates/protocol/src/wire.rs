@@ -6,7 +6,7 @@ use prost::Message as _;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::error::{ProtocolError, Result};
-use crate::framing::{read_frame, write_frame};
+use crate::framing::{read_frame, read_frame_capped, write_frame};
 
 /// Write one `Envelope` as one frame.
 pub async fn write_envelope<W>(writer: &mut W, envelope: &Envelope) -> Result<()>
@@ -22,6 +22,25 @@ where
     R: AsyncRead + Unpin,
 {
     let Some(body) = read_frame(reader).await? else {
+        return Ok(None);
+    };
+    let envelope = Envelope::decode(body.as_slice())?;
+    if envelope.body.is_none() {
+        return Err(ProtocolError::EmptyEnvelope);
+    }
+    Ok(Some(envelope))
+}
+
+/// Read one `Envelope` under a tighter ceiling than the framing's own.
+///
+/// For the first frame of a connection whose peer is not yet enrolled — see
+/// [`crate::framing::read_frame_capped`]. Identical in every other respect,
+/// including that an empty body is an error rather than an empty message.
+pub async fn read_envelope_capped<R>(reader: &mut R, max: usize) -> Result<Option<Envelope>>
+where
+    R: AsyncRead + Unpin,
+{
+    let Some(body) = read_frame_capped(reader, max).await? else {
         return Ok(None);
     };
     let envelope = Envelope::decode(body.as_slice())?;

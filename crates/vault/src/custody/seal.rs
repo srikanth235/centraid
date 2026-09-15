@@ -33,7 +33,6 @@ use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{Aes256Gcm, KeyInit};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use sha2::{Digest as _, Sha256};
 
 /// Wire prefix of a sealed value.
 pub const SEALED_PREFIX: &str = "sealed:v1:";
@@ -155,12 +154,17 @@ pub fn open_value(key: &[u8], aad: &str, value: &str) -> Result<String, SealErro
     String::from_utf8(plain).map_err(|_| SealError::NotUtf8)
 }
 
-/// Non-secret identity of a DEK: a truncated SHA-256, safe to stamp into
+/// Non-secret identity of a DEK: a truncated BLAKE3, safe to stamp into
 /// `core_vault.settings_json` and to print in a receipt.
+///
+/// **The NAME of the function is in the value** (#1025 S4, D-1025-S4-1), the
+/// same rule `blob:blake3-` follows, and it is what makes a fingerprint stamped
+/// by an older build readable as a different function rather than as a
+/// mismatch. The prefix moved with the function: `content_hash:` → `blake3:`.
 #[must_use]
 pub fn seal_key_fingerprint(key: &[u8]) -> String {
-    let digest = hex::encode(Sha256::digest(key));
-    format!("sha256:{}", &digest[..32])
+    let digest = hex::encode(blake3::hash(key).as_bytes());
+    format!("blake3:{}", &digest[..32])
 }
 
 /// The fingerprint stamped at first seal, or `None` on a vault that never
@@ -374,7 +378,7 @@ mod tests {
     #[test]
     fn the_fingerprint_reveals_nothing_and_is_stable() {
         let fingerprint = seal_key_fingerprint(&KEY);
-        assert_eq!(fingerprint.len(), "sha256:".len() + 32);
+        assert_eq!(fingerprint.len(), "blake3:".len() + 32);
         assert_eq!(fingerprint, seal_key_fingerprint(&KEY));
         assert_ne!(fingerprint, seal_key_fingerprint(&[12_u8; 32]));
         assert!(!fingerprint.contains(&hex::encode(KEY)));

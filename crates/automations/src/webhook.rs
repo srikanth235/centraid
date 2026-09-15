@@ -32,14 +32,13 @@
 //! ## What is kept from v0, verbatim
 //!
 //! The pending/minted states ([`crate::manifest::WebhookState`]), the **hash
-//! only** rule — `automation.json` is member-visible, so only the SHA-256 of a
+//! only** rule — `automation.json` is member-visible, so only the hash of a
 //! secret shown once is stored — the constant-time comparison, the 64 KiB body
 //! cap, the 60-per-minute limiter, and a **durable ingress row written after
 //! auth and before the fire**, so a restarted gateway can never drop a
 //! delivery.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 /// 64 KiB, v0's.
@@ -53,12 +52,18 @@ pub const RATE_LIMIT_WINDOW_MS: i64 = 60_000;
 /// Long enough that a gateway down for a working day still delivers.
 pub const INGRESS_TTL_MS: i64 = 24 * 60 * 60 * 1_000;
 
-/// What the manifest persists: the SHA-256 of a secret, lowercase hex.
+/// What the manifest persists: the BLAKE3 of a secret, lowercase hex.
+///
+/// **Ours, not theirs** (#1025 S4, D-1025-S4-5). Nothing in this module verifies
+/// an external sender's `X-Hub-Signature-256`-style HMAC — a webhook here is
+/// authenticated by the secret the MEMBER was shown once, against the hash this
+/// vault wrote — so there is no foreign protocol pinning the function and it
+/// moves with every other name Centraid gives something. The secret is 32 bytes
+/// of CSPRNG output at mint, so a fast hash is the right one; the constant-time
+/// comparison below is unchanged.
 #[must_use]
 pub fn hash_secret(secret: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(secret.as_bytes());
-    hex::encode(hasher.finalize())
+    hex::encode(blake3::hash(secret.as_bytes()).as_bytes())
 }
 
 /// Compare a presented secret against a stored hash, in constant time.

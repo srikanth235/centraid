@@ -76,11 +76,11 @@ pub const CENTRAID_TIMEOUT: i32 = -5;
 /// Open a core over a vault file.
 ///
 /// `config` is `len` bytes of UTF-8 JSON: `{"path": "...", "role":
-/// "gateway"|"seat-replicated"|"seat-thin", "gateway": "<hex>"?, "create":
-/// bool?, "uiThreadName": "..."?, "expectedIdentity": "<digest>"?}`. JSON and
-/// not protobuf, because a configuration is read once at startup by a
-/// human-written call site and being able to log it verbatim is worth more than
-/// the encoding.
+/// "gateway"|"seat-replicated"|"seat-thin", "create": bool?, "uiThreadName":
+/// "..."?, "expectedIdentity": "<digest>"?, "pairing": {…}?}`. JSON and not
+/// protobuf, because a
+/// configuration is read once at startup by a human-written call site and being
+/// able to log it verbatim is worth more than the encoding.
 ///
 /// `expectedIdentity` is the artifact digest the SHELL's build recorded for the
 /// core it intends to load. A mismatch is refused here, before a handle exists
@@ -90,6 +90,22 @@ pub const CENTRAID_TIMEOUT: i32 = -5;
 /// that says so. `mobile/core`'s `CentraidCore.open(dataDir, expectedIdentity)`
 /// already takes it, and the handshake's `Hello.identity` is what a shell
 /// compares after the fact.
+///
+/// `pairing` is THE ENROLMENT RECORD THE SHELL KEPT FOR THIS VAULT (#1025
+/// S7-13): `{"secret": "<64 hex>"?, "gatewayAddress": "<64 hex>", "vaultId":
+/// "…", "vaultName": "…", "relayUrl": "…", "directAddrs": ["…"],
+/// "enrolledPublicKey": "<64 hex>"}`. One record and not three keys, because a
+/// key filed under one name and an address under another is a pair that can
+/// settle by halves — and did.
+///
+/// `secret` is this device's endpoint identity, 32 bytes as 64 lowercase hex,
+/// out of the shell's secure store. Absent means a fresh keypair per open,
+/// which is a seat its gateway has not enrolled; `enrolledPublicKey` is what
+/// catches that, and an open whose endpoint does not match it is refused with
+/// `ERROR_CODE_IDENTITY_MISMATCH` rather than dialled as a stranger.
+///
+/// `relayUrl` decides the relay mode: empty on a SETTLED record is a LAN-only
+/// deployment. There is no `relays` flag — see `CoreConfig::pairing`.
 ///
 /// On success writes an owned handle to `out` and returns [`CENTRAID_OK`]. The
 /// handle is released **only** by [`centraid_close`].
@@ -121,14 +137,21 @@ pub unsafe extern "C" fn centraid_open(
         let config = marshal::config_from_json(bytes)?;
         let vault_path = config.path.clone();
         let handle = Core::open(config)?;
-        // EVERY ROLE, because the network belongs to the DEVICE and not to the
-        // vault's authority. A phone holding a local vault it is the authority
-        // for is still a phone that can pair with a gateway; refusing to bind a
-        // socket because of what a FILE is would be deciding a device question
-        // from a file fact. What a gateway-role core may not do is apply pages
-        // into its own authority — and that is refused in `Handle::sync_now`,
-        // where the role actually means something.
-        attach_network(&handle, &vault_path);
+        // SEAT ROLES ONLY (#1025 S1). The previous rule — "every role, because
+        // the network belongs to the device" — read correctly and attached the
+        // wrong thing: a `SeatLink` is now built PER REPLICA and its whole job
+        // is to replace that file with a copy from a gateway. Handing one to a
+        // gateway-role core means an endpoint, a key and a byte store standing
+        // by to overwrite the vault this device is the authority for, which is
+        // the one operation that cannot be undone.
+        //
+        // A phone that holds a local vault AND pairs with a gateway is still
+        // served: that is two vaults on one device, each with its own core and
+        // its own endpoint, which is exactly what "the vault is the unit on a
+        // device" means.
+        if !handle.is_gateway() {
+            attach_network(&handle, &vault_path)?;
+        }
         Ok::<_, CoreError>(handle)
     }));
     match outcome {
@@ -149,26 +172,90 @@ pub unsafe extern "C" fn centraid_open(
 
 /// Give a seat its network (#1020, D-1020-B7).
 ///
-/// **Non-fatal on purpose.** A core with no network is exactly a local-first
-/// vault: every screen still reads, every write still queues, and the shell
-/// draws "not connected to a gateway" — which is a true state and the one every
-/// phone is in before it scans a code. Failing `centraid_open` because a UDP
-/// socket would not bind would be refusing to show a member their own vault
-/// over a network they were not using.
+/// **Non-fatal on purpose, with ONE exception.** A core with no network is
+/// exactly a local-first vault: every screen still reads, every write still
+/// queues, and the shell draws "not connected to a gateway" — which is a true
+/// state and the one every phone is in before it scans a code. Failing
+/// `centraid_open` because a UDP socket would not bind would be refusing to
+/// show a member their own vault over a network they were not using.
 ///
-/// The byte store goes beside the vault file, `<stem>.bytes`, matching the
-/// gateway's layout and the content CAS's: a vault handed to someone else is
-/// handed over whole, and a sibling directory travels with the file it belongs
-/// to.
-fn attach_network(handle: &Handle, vault_path: &std::path::Path) {
-    let bytes_dir = vault_path.with_extension("bytes");
-    match centraid_seat_link::SeatLink::start(&bytes_dir, env!("CARGO_PKG_VERSION")) {
-        Ok(link) => handle.attach_network(Box::new(link)),
-        Err(error) => tracing::warn!(
-            %error,
-            "this seat has no network; it will read what it already holds"
-        ),
+/// The exception is [`CoreError::IdentityMismatch`], which IS fatal: see below.
+///
+/// The link is built from the REPLICA PATH and derives its own
+/// `<stem>.bytes` store beside it, matching the gateway's layout and the
+/// content CAS's: a vault handed to someone else is handed over whole, and a
+/// sibling directory travels with the file it belongs to. One endpoint, one
+/// key, one store per open replica (#1025 S1) — and since #1025 S7-13, one
+/// tokio runtime for all of them.
+///
+/// ## Everything comes off the ENROLMENT RECORD (#1025 S7-13)
+///
+/// The secret to bind with, the relay decision, and the public key to check the
+/// result against are three properties of one enrolment with one gateway, and
+/// the shell hands them over as one record. There used to be a `relays: bool`
+/// beside the secret that no shell ever set.
+///
+/// ## THE IDENTITY IS CHECKED BEFORE THE FIRST DIAL
+///
+/// If the record names an `enrolled_public_key` and the endpoint that came up
+/// has a different one, the secret half is gone — a Keychain item that was
+/// never written, a record settled under one name and a key under another — and
+/// **the open is refused**. The network is not attached and nothing is dialled.
+///
+/// This is the defect #1025 S7-9 reproduced and could not place: a seat whose
+/// secret did not reach here minted a fresh keypair, dialled its own gateway,
+/// and was closed as an unenrolled peer — which the seat then rendered as "this
+/// app and that gateway are too far apart in version to talk". A member was
+/// sent to update an app that was working correctly. A device that cannot be
+/// itself says so, at the door, in its own words.
+fn attach_network(handle: &Handle, vault_path: &std::path::Path) -> Result<(), CoreError> {
+    let enrolment = handle.enrolment();
+    let link = match centraid_seat_link::SeatLink::start_with_key(
+        vault_path,
+        env!("CARGO_PKG_VERSION"),
+        handle.endpoint_secret(),
+        handle.relay_hint(),
+    ) {
+        Ok(link) => link,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "this seat has no network; it will read what it already holds"
+            );
+            return Ok(());
+        }
+    };
+    // THE ENDPOINT THAT CAME UP, AGAINST THE ROW THE GATEWAY WROTE.
+    let enrolled = enrolment
+        .map(|record| record.enrolled_public_key.as_str())
+        .filter(|key| !key.is_empty());
+    if let Some(enrolled) = enrolled {
+        let found = centraid_core::link::hex_lower(&link.endpoint_id());
+        if !found.eq_ignore_ascii_case(enrolled) {
+            // DROPPED BEFORE THE REFUSAL TRAVELS. The socket is bound by now;
+            // leaving it up while the open fails would leave an endpoint on the
+            // device with no handle to close it.
+            drop(link);
+            tracing::error!(
+                %enrolled,
+                %found,
+                "this device's endpoint is not the one its gateway enrolled; not dialling"
+            );
+            return Err(CoreError::IdentityMismatch {
+                enrolled: enrolled.to_owned(),
+                found,
+            });
+        }
     }
+    // THE ONE CONTENT STORE, ON THE VAULT'S BYTE DOOR (#1025 S3,
+    // D-1025-S3-1). `SeatLink` opened `<replica>.bytes` beside the
+    // endpoint; the same handle now backs `media.add_asset`'s spill and
+    // `content_location`'s answer. Before this the core opened a flat
+    // CAS of its own and a photograph this phone fetched could not be
+    // displayed on it.
+    handle.attach_bytes(link.content_door());
+    handle.attach_network(Box::new(link));
+    Ok(())
 }
 
 /// Answer one request.
@@ -371,6 +458,18 @@ fn code_for(error: &CoreError) -> i32 {
         CoreError::Poisoned { .. } => CENTRAID_PANICKED,
         CoreError::Decode(_) => CENTRAID_MALFORMED,
         CoreError::InvalidRequest { .. } => CENTRAID_BAD_ARGUMENT,
+        // THE CONFIGURATION NAMED AN IDENTITY THIS VAULT'S GATEWAY DOES NOT
+        // KNOW (#1025 S7-13), which is the one refusal `centraid_open` can
+        // produce that is neither a decode nor a stale core.
+        //
+        // `BAD_ARGUMENT` and not a seventh status code: the ABI has six, the
+        // xtask rule counts the symbols and `CONTRACT.md` governs the table, and
+        // a status code is deliberately NOT an error vocabulary — the reason
+        // lives in the response bytes' closed `ErrorCode`, which is
+        // `ERROR_CODE_IDENTITY_MISMATCH` wherever this surfaces through a
+        // `call`. What `open` gives a shell is a negative code and a log line
+        // naming both keys; what it must never give it is `OK` and no handle.
+        CoreError::IdentityMismatch { .. } => CENTRAID_BAD_ARGUMENT,
         // EVERYTHING ELSE IS A SUCCESSFUL CALL WITH A REFUSING ANSWER. The
         // reason is in the response bytes' closed `ErrorCode`, which is what a
         // shell branches on; collapsing them into status codes here would be a

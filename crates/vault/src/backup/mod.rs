@@ -71,7 +71,7 @@ pub use restore::{
     RecoverPhase, RestoreDrillReport, RestoredPairReport, SealKeyVerdict, restore_check,
     restore_drill,
 };
-pub use store::{BlobError, BlobStore, FsBlobStore, Naming, digest};
+pub use store::{BlobError, BlobStore, FsBlobStore, digest};
 pub use wal::{WalAddress, WalError, WalSegment};
 
 use crate::file::Vault;
@@ -98,7 +98,7 @@ pub struct BackupOutcome {
     /// The complete base copy this generation is built from.
     pub head: BaseHead,
     pub generation: u64,
-    /// The generation's own address: the sha256 of its stored manifest.
+    /// The generation's own address: the hash of its stored manifest.
     pub manifest_hash: String,
     /// The blob the stored manifest lives at.
     pub manifest_blob: String,
@@ -163,7 +163,7 @@ pub fn take_generation(
             "kind": "base",
             "size": artefact.len(),
             "chunks": [snapshot_blob],
-            "sha256": store::digest(&artefact),
+            "content_hash": store::digest(&artefact),
         }],
         "wal": sealed_segments.iter().map(|segment| serde_json::json!({
             "db": segment.db,

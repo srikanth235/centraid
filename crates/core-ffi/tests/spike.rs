@@ -80,6 +80,7 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
                         pk_column: "party_id".to_owned(),
                         descending: false,
                     }),
+                    with_held_thumbnail: false,
                 }),
                 limit: 100,
                 after: None,

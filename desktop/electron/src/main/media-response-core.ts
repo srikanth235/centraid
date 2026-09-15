@@ -49,7 +49,7 @@ export interface ParsedMediaUrl {
  * Parse a `centraid://blob/<digest>` URL.
  *
  * The digest is checked HERE, before anything is asked of the seat, and the
- * check is the same sixty-four-hex-characters rule the vault's `sha256` column
+ * check is the same sixty-four-hex-characters rule the vault's `content_hash` column
  * carries (`vault-ddl.sql:1566`). v0's equivalent lesson is `parseRevealableAppId`
  * being applied *before any path join* because an appId reached `shell.openPath`
  * (census §F4); the same discipline, one layer earlier.

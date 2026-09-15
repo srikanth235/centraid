@@ -1,6 +1,8 @@
 // Moved from `packages/tunnel/data-plane/src/cbsf.rs` (first-party MIT code) when the
-// byte plane became a v1 crate (#1020, D-1020-R1). The v0 crate stays in place as the
-// pinned oracle until wave 6; these formats are normative and were ported byte-for-byte.
+// byte plane became a v1 crate (#1020, D-1020-R1). The v0 crate is retired and the
+// format is this file's; the content address and the nonce MAC are BLAKE3
+// (#1025 S4, D-1025-S4-1/-2). The header still carries 32 bytes and the frame
+// layout is untouched — what changed is which function produced those bytes.
 
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
@@ -10,10 +12,6 @@ use aes_gcm::{
 };
 use anyhow::{Context, Result, bail};
 use flate2::read::DeflateDecoder;
-use hmac::{Hmac, Mac};
-use sha2::{Digest, Sha256};
-
-type HmacSha256 = Hmac<Sha256>;
 
 pub const MAGIC: &[u8; 4] = b"CBSF";
 pub const VERSION: u8 = 2;
@@ -39,16 +37,23 @@ fn directory_aad(sha: &str, count: usize) -> String {
     format!("blobdir:{sha}:v{VERSION}:n{count}")
 }
 
+/// The synthetic nonce: a keyed MAC over the AAD and the body's own keyed MAC.
+///
+/// **`blake3::keyed_hash`, superseding HMAC-SHA-256** (#1025 S4, D-1025-S4-2).
+/// BLAKE3 is a keyed MAC natively — keying is a mode of the compression
+/// function, not a construction layered on a hash — so HMAC's inner/outer pad
+/// buys nothing here. The two-stage shape is kept exactly: the body is MAC'd
+/// first and only its 32-byte tag enters the second MAC, which is what lets a
+/// streaming caller derive a nonce without holding the plaintext twice. A key
+/// is 32 bytes by the type, so the "fixed HMAC key" expect is gone with it.
 fn nonce_for(key: &[u8; 32], aad: &[u8], plain: &[u8]) -> [u8; 12] {
-    let mut body_mac = <HmacSha256 as KeyInit>::new_from_slice(key).expect("fixed HMAC key");
-    body_mac.update(plain);
-    let body_hash = body_mac.finalize().into_bytes();
-    let mut mac = <HmacSha256 as KeyInit>::new_from_slice(key).expect("fixed HMAC key");
+    let body_tag = blake3::keyed_hash(key, plain);
+    let mut mac = blake3::Hasher::new_keyed(key);
     mac.update(b"cbsf-nonce\0");
     mac.update(aad);
     mac.update(b"\0");
-    mac.update(&body_hash);
-    mac.finalize().into_bytes()[..NONCE_BYTES]
+    mac.update(body_tag.as_bytes());
+    mac.finalize().as_bytes()[..NONCE_BYTES]
         .try_into()
         .expect("nonce length")
 }
@@ -163,7 +168,7 @@ pub fn seal_stored_object_io<R: Read + Seek, W: Write>(
     }
 
     input.seek(SeekFrom::Start(0))?;
-    let mut digest = Sha256::new();
+    let mut digest = blake3::Hasher::new();
     let mut total_size = 0_u64;
     let mut hash_buffer = vec![0_u8; 1024 * 1024];
     loop {
@@ -176,7 +181,7 @@ pub fn seal_stored_object_io<R: Read + Seek, W: Write>(
             .context("CBSF input size overflow")?;
         digest.update(&hash_buffer[..read]);
     }
-    let sha_bytes: [u8; 32] = digest.finalize().into();
+    let sha_bytes: [u8; 32] = *digest.finalize().as_bytes();
     let sha = hex::encode(sha_bytes);
     let frame_count_u64 = total_size.div_ceil(frame_size as u64);
     let frame_count = usize::try_from(frame_count_u64).context("too many CBSF frames")?;
@@ -279,7 +284,7 @@ pub fn open_object_io<R: Read + Seek, W: Write>(
 
     input.seek(SeekFrom::Start(HEADER_BYTES as u64))?;
     let mut cursor = HEADER_BYTES as u64;
-    let mut digest = Sha256::new();
+    let mut digest = blake3::Hasher::new();
     let mut plain_total = 0_u64;
     for (index, len) in directory.sealed_lens.iter().enumerate() {
         let end = cursor
@@ -308,8 +313,8 @@ pub fn open_object_io<R: Read + Seek, W: Write>(
     if cursor != directory_start || plain_total != directory.total_size {
         bail!("CBSF layout or plaintext size mismatch");
     }
-    if hex::encode(digest.finalize()) != sha {
-        bail!("CBSF plaintext SHA mismatch");
+    if hex::encode(digest.finalize().as_bytes()) != sha {
+        bail!("CBSF plaintext hash mismatch");
     }
     Ok(directory)
 }
@@ -318,6 +323,96 @@ pub fn seal_stored_object(key: &[u8; 32], plain: &[u8], frame_size: usize) -> Re
     let mut input = Cursor::new(plain);
     let mut output = Vec::new();
     seal_stored_object_io(key, &mut input, &mut output, frame_size)?;
+    Ok(output)
+}
+
+/// A CBSF frame's compression algorithm — the body's first byte.
+///
+/// [`decode_frame_body`] has always read all three; only `Store` could be
+/// WRITTEN until #1025 S4, because v0's Node sealer produced the compressed
+/// vectors in `contracts/golden/format-golden.json` and the port only needed to
+/// open them. Retiring v0 took that sealer with it, so a golden nothing can
+/// produce is a golden nobody may change — and S4 had to change every byte of
+/// it. The seal half is the same format, written down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Algorithm {
+    Store,
+    Zstd,
+    Deflate,
+}
+
+impl Algorithm {
+    const fn byte(self) -> u8 {
+        match self {
+            Self::Store => 0,
+            Self::Zstd => 1,
+            Self::Deflate => 2,
+        }
+    }
+
+    fn encode(self, plain: &[u8]) -> Result<Vec<u8>> {
+        match self {
+            Self::Store => Ok(plain.to_vec()),
+            Self::Zstd => zstd::stream::encode_all(plain, 3).context("CBSF zstd seal failed"),
+            Self::Deflate => {
+                let mut encoder =
+                    flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+                encoder.write_all(plain)?;
+                encoder.finish().context("CBSF deflate seal failed")
+            }
+        }
+    }
+}
+
+/// Seal one whole object under `algorithm`, in memory.
+///
+/// The content address and the directory are over the PLAINTEXT — compression
+/// is a per-frame encoding and never part of what names the object — so an
+/// object sealed three ways has one name and opens to one set of bytes.
+pub fn seal_object(
+    key: &[u8; 32],
+    plain: &[u8],
+    frame_size: usize,
+    algorithm: Algorithm,
+) -> Result<Vec<u8>> {
+    if algorithm == Algorithm::Store {
+        return seal_stored_object(key, plain, frame_size);
+    }
+    if frame_size == 0 || frame_size > MAX_FRAME_BYTES {
+        bail!("invalid CBSF frame size");
+    }
+    let sha_bytes: [u8; 32] = *blake3::hash(plain).as_bytes();
+    let sha = hex::encode(sha_bytes);
+    let total_size = plain.len() as u64;
+    let frame_count = usize::try_from(total_size.div_ceil(frame_size as u64))?;
+
+    let mut output = Vec::new();
+    output.write_all(MAGIC)?;
+    output.write_all(&[VERSION])?;
+    output.write_all(&sha_bytes)?;
+    let mut sealed_lens = Vec::with_capacity(frame_count);
+    for (index, window) in plain.chunks(frame_size).enumerate() {
+        let mut body = vec![algorithm.byte()];
+        body.extend_from_slice(&algorithm.encode(window)?);
+        let sealed = seal(key, frame_aad(&sha, index, frame_count).as_bytes(), &body)?;
+        sealed_lens.push(u32::try_from(sealed.len())?);
+        output.write_all(&sealed)?;
+    }
+    let directory = Directory {
+        frame_size: u32::try_from(frame_size)?,
+        total_size,
+        sealed_lens,
+    };
+    let sealed_directory = seal(
+        key,
+        directory_aad(&sha, frame_count).as_bytes(),
+        &encode_directory(&directory)?,
+    )?;
+    output.write_all(&sealed_directory)?;
+    output.write_all(MAGIC)?;
+    output.write_all(&[VERSION])?;
+    output.write_all(&u32::try_from(sealed_directory.len())?.to_be_bytes())?;
+    output.write_all(&u32::try_from(frame_count)?.to_be_bytes())?;
     Ok(output)
 }
 

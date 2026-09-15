@@ -13,7 +13,11 @@
 //!
 //! ## THE EXACT RULE, because a fuzzy cache key is a stale artifact
 //!
-//! The key is `sha256` over, in this order:
+//! The key is `sha256` over, in this order — **the one hash function that stays
+//! SHA-256** (#1025 S4, D-1025-S4-5): this value is a GitHub Actions cache key
+//! and names nothing inside a vault, so it is tooling and not the product's own
+//! naming. Nothing a member holds is addressed by it.
+//!
 //!
 //! 1. every file under `crates/` (path and bytes), excluding `target/`;
 //! 2. every file under `contracts/`, **excluding `contracts/ledgers/`**;

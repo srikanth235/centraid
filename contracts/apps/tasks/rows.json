@@ -449,7 +449,7 @@
     "columns": [
       "content_id",
       "content_uri",
-      "sha256",
+      "content_hash",
       "byte_size",
       "language",
       "creator_party_id",

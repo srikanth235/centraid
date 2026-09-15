@@ -299,6 +299,7 @@ fn every_request_carries_a_request_id_and_cancel_names_one() {
         wire::request::Kind::Log(wire::LogRequest {
             since: None,
             limit: 10,
+            tail: false,
         }),
     );
     let (code, _) = call(opened.handle, &bounded);

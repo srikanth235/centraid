@@ -19,10 +19,18 @@ path = "src/main.rs"
 # (see src/rules.rs — tree-sitter arrives when a rule needs a parse tree).
 [dependencies]
 anyhow = { workspace = true }
+# `photos-sample` regenerates the fixtures that name the Photos roll by its one
+# hash (#1025 S4), so this tool computes the same digest the vault does.
+base64 = { workspace = true }
+blake3 = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
-# `artifact-key` hashes the tree. sha2 is already in this workspace's graph
-# (crates/vault), so it costs a link here and no extra compile.
+# THE ONLY sha2 LEFT UNDER `crates/` (#1025 S4, D-1025-S4-5). `artifact-key`
+# feeds GitHub Actions' cache key and `ci.rs` reads Subresource Integrity
+# attributes; both are somebody else's protocol, and neither names anything
+# inside a vault. Since #1025 S4 this is the only crate in the graph that pulls
+# sha2 at all — `crates/vault` no longer does — so it is now an extra compile
+# for the gate tool, and that is the correct place to pay it.
 sha2 = { workspace = true }
 
 [dev-dependencies]

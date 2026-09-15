@@ -172,7 +172,7 @@ pub enum WebhookState {
     /// Declared by a builder that cannot mint credentials; round-trips until
     /// the gateway provisions it.
     Pending,
-    /// Provisioned: a route slug and the SHA-256 of a secret shown once.
+    /// Provisioned: a route slug and the BLAKE3 of a secret shown once.
     /// **The plaintext is never in the manifest** — `automation.json` is
     /// member-visible (`scaffold/webhook.ts:1`–`:6`).
     Minted { id: String, secret_hash: String },
@@ -1157,14 +1157,14 @@ fn parse_webhook(
             ManifestError::new(
                 ManifestErrorCode::InvalidTrigger,
                 format!("{field}.secretHash"),
-                "a provisioned webhook carries the SHA-256 of its secret, never the secret",
+                "a provisioned webhook carries the HASH of its secret, never the secret",
             )
         })?;
     if secret_hash.len() != 64 || !secret_hash.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(ManifestError::new(
             ManifestErrorCode::InvalidTrigger,
             format!("{field}.secretHash"),
-            "secretHash is 64 hex characters — the SHA-256 of a secret shown once",
+            "secretHash is 64 hex characters — the BLAKE3 of a secret shown once",
         ));
     }
     Ok(Trigger::Webhook(WebhookState::Minted {

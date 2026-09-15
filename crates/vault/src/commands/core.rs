@@ -42,7 +42,7 @@
 //!
 //! ### Identity is the wrapper, never the bytes (D-1020-DC1)
 //!
-//! `core_document` wraps a sha256-deduped `core_content_item`. **Two documents
+//! `core_document` wraps a hash-deduped `core_content_item`. **Two documents
 //! may legitimately share identical bytes** — dedup is on the bytes and never
 //! on document identity (#352) — so `add_document` always mints a fresh
 //! wrapper and reports `deduped: 1` when the bytes were already known. Version
@@ -1048,14 +1048,16 @@ pub(crate) struct Minted {
 /// `media.add_asset`'s rule.
 pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) -> Result<Minted> {
     let (media_type, bytes) = decode_data_uri(uri)?;
-    // THE CONTENT DIGEST, not `sha256_hex`: this value goes in the UNIQUE
-    // `core_content_item.sha256` column and in the URI beside it, so it must be
-    // the one function every other content-minting site uses (D-1020-B2).
+    // THE CONTENT DIGEST: this value goes in the UNIQUE
+    // `core_content_item.content_hash` column and in the URI beside it, so it
+    // must be the one function every other content-minting site uses. Since
+    // #1025 S4 there IS only one — `content_hash_hex` is the same hash — and the
+    // sweep test in `crates/vault/tests/one_hash.rs` is what keeps it that way.
     let sha = crate::content::content_digest(&bytes);
     let existing: Option<(String, Option<String>)> = ctx
         .connection()
         .query_row(
-            "SELECT content_id, deleted_at FROM core_content_item WHERE sha256 = ?1",
+            "SELECT content_id, deleted_at FROM core_content_item WHERE content_hash = ?1",
             [&sha],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -1122,7 +1124,7 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
     let content_id = ctx.next_id();
     ctx.connection().execute(
         "INSERT INTO core_content_item
-           (content_id, content_uri, sha256, byte_size, language, creator_party_id,
+           (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
             origin_device_id, deleted_at, purge_at, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
         rusqlite::params![
@@ -1153,29 +1155,63 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
 /// WHAT THE UPLOAD SAID, not what the deduped row once said (#996 R20(b)): the
 /// staging band sniffed THESE bytes on THIS arrival. Re-claiming known bytes
 /// with nothing staged means the CLAIMER supplies the reading.
-pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, sha256: &str) -> Result<Minted> {
+pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, content_hash: &str) -> Result<Minted> {
     let staged: Option<(String, i64)> = ctx
         .connection()
         .query_row(
             "SELECT media_type, byte_size FROM blob_staging
-              WHERE sha256 = ?1 AND variant IS NULL",
-            [sha256],
+              WHERE content_hash = ?1 AND variant IS NULL",
+            [content_hash],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .ok();
     let existing: Option<(String, i64, Option<String>)> = ctx
         .connection()
         .query_row(
-            "SELECT content_id, byte_size, deleted_at FROM core_content_item WHERE sha256 = ?1",
-            [sha256],
+            "SELECT content_id, byte_size, deleted_at FROM core_content_item WHERE content_hash = ?1",
+            [content_hash],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .ok();
+    // THE BYTES THIS VAULT ALREADY HOLDS, when no staging row names them
+    // (#1025 S3). A gateway that PULLED a seat's blob before executing the
+    // intent has the bytes and no staging row: the upload door writes those and
+    // a pull is not an upload. The size is read from the store rather than from
+    // the request, because the store is the thing that has the bytes.
+    let owned: Option<i64> = match (&staged, &existing) {
+        (None, None) => ctx
+            .blobs()
+            .filter(|blobs| blobs.has(content_hash).unwrap_or(false))
+            .and_then(|blobs| blobs.size(content_hash).ok())
+            .map(|size| i64::try_from(size).unwrap_or(i64::MAX)),
+        _ => None,
+    };
     let (content_id, byte_size, deduped) = match (&staged, &existing) {
+        (None, None) if owned.is_some() => {
+            let byte_size = owned.unwrap_or_default();
+            let content_id = ctx.next_id();
+            ctx.connection().execute(
+                "INSERT INTO core_content_item
+                   (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
+                    origin_device_id, deleted_at, purge_at, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+                rusqlite::params![
+                    content_id,
+                    blob_uri_for(content_hash),
+                    content_hash,
+                    byte_size,
+                    actor_party_id(ctx).ok(),
+                    ctx.now
+                ],
+            )?;
+            (content_id, byte_size, 0)
+        }
         (None, None) => {
             return Err(VaultError::InvalidInput {
                 name: "staged_sha".to_owned(),
-                detail: format!("no staged blob {sha256} — upload it first (POST /_vault/blobs)"),
+                detail: format!(
+                    "no staged blob {content_hash} — upload it first (POST /_vault/blobs)"
+                ),
             });
         }
         (_, Some((content_id, byte_size, deleted_at))) => {
@@ -1192,13 +1228,13 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, sha256: &str) -> Res
             let content_id = ctx.next_id();
             ctx.connection().execute(
                 "INSERT INTO core_content_item
-                   (content_id, content_uri, sha256, byte_size, language, creator_party_id,
+                   (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
                     origin_device_id, deleted_at, purge_at, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
                 rusqlite::params![
                     content_id,
-                    blob_uri_for(sha256),
-                    sha256,
+                    blob_uri_for(content_hash),
+                    content_hash,
                     byte_size,
                     actor_party_id(ctx).ok(),
                     ctx.now
@@ -1207,7 +1243,7 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, sha256: &str) -> Res
             (content_id, *byte_size, 0)
         }
     };
-    promote_staged_variants(ctx, sha256, &content_id)?;
+    promote_staged_variants(ctx, content_hash, &content_id)?;
     let media_type = staged
         .map(|(media_type, _)| media_type)
         .or(media_type_for_content(ctx, &content_id)?)
@@ -1215,10 +1251,15 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, sha256: &str) -> Res
     // D-1020-DC9: v0 also queues `enrich_request` rows here for a device that
     // has contributed no derivative. `enrich.*` is the automations lane's
     // schema this slot; the hand-off is in the receipt.
-    ctx.connection().execute(
-        "DELETE FROM blob_staging WHERE sha256 = ?1 AND variant IS NULL",
-        [sha256],
-    )?;
+    // THE BURN, ON A COPY THAT HAS A BAND TO BURN (#1025 S7, D-1025-S7-81).
+    // A seat predicting this write has no staging band at all; there is nothing
+    // to delete and asking would be `no such table`.
+    if has_a_staging_band(ctx) {
+        ctx.connection().execute(
+            "DELETE FROM blob_staging WHERE content_hash = ?1 AND variant IS NULL",
+            [content_hash],
+        )?;
+    }
     Ok(Minted {
         content_id,
         media_type,
@@ -1257,13 +1298,21 @@ fn promote_staged_variants(
     parent_sha: &str,
     content_id: &str,
 ) -> Result<()> {
+    // NO BAND, NOTHING TO PROMOTE (#1025 S7, D-1025-S7-81). Every row this
+    // function reads, writes or burns lives in `blob_staging`, so on a copy
+    // without one the whole pass is a no-op — and saying so once here is what
+    // keeps the two statements below able to use `?` honestly.
+    if !has_a_staging_band(ctx) {
+        return Ok(());
+    }
+
     // THE CHEAP INGEST EXTRACTOR IS THE BACKSTOP, and it goes FIRST so any
     // device-contributed pdf.js/OCR text below wins deterministically
     // (`blob/promote.ts`'s `promoteVariants`).
     let meta: Option<String> = ctx
         .connection()
         .query_row(
-            "SELECT meta_json FROM blob_staging WHERE sha256 = ?1 AND variant IS NULL",
+            "SELECT meta_json FROM blob_staging WHERE content_hash = ?1 AND variant IS NULL",
             [parent_sha],
             |row| row.get(0),
         )
@@ -1302,7 +1351,7 @@ fn promote_staged_variants(
 /// One inline derivative row, replaced rather than merged.
 ///
 /// `UNIQUE (content_id, variant)` and the table's paired CHECKs mean an inline
-/// variant carries `text_content` and no `sha256`; the delete-then-insert is
+/// variant carries `text_content` and no `content_hash`; the delete-then-insert is
 /// v0's (`commands/enrich.ts`'s `writeExtractedText`), and it is what makes
 /// the command retry-safe.
 fn upsert_text_derivative(
@@ -1331,7 +1380,7 @@ fn upsert_text_derivative(
     let derivative_id = ctx.next_id();
     ctx.connection().execute(
         "INSERT INTO core_content_derivative
-           (derivative_id, content_id, variant, sha256, media_type, byte_size,
+           (derivative_id, content_id, variant, content_hash, media_type, byte_size,
             text_content, created_at, updated_at)
          VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, ?7, ?7)",
         rusqlite::params![
@@ -1538,7 +1587,7 @@ pub(crate) fn pre_inline_bytes_are_storable(ctx: &CommandCtx<'_, '_>) -> Result<
         return Ok(None);
     }
     let held: i64 = ctx.connection().query_row(
-        "SELECT COUNT(*) FROM core_content_item WHERE sha256 = ?1",
+        "SELECT COUNT(*) FROM core_content_item WHERE content_hash = ?1",
         [crate::content::content_digest(&bytes)],
         |row| row.get(0),
     )?;
@@ -1550,31 +1599,290 @@ pub(crate) fn pre_inline_bytes_are_storable(ctx: &CommandCtx<'_, '_>) -> Result<
     }))
 }
 
+/// DOES THIS COPY CARRY THE GATEWAY'S PRIVATE STAGING BAND? (#1025 S7,
+/// D-1025-S7-81.)
+///
+/// `blob_staging` is a declared PRIVATE table (`contracts/schema/
+/// v0-registries.json`): the gateway's own record of an upload door it ran, and
+/// by design absent from every replica. A gateway answers `true` and a seat
+/// answers `false`, and asking the SCHEMA rather than the role is deliberate —
+/// this layer has no role to consult, and the honest question is whether the
+/// table these statements name is there.
+///
+/// **A seat runs these handlers.** `Handle::queue_write` executes the REAL
+/// handler against the seat's own copy to build the optimistic overlay, which
+/// is exactly what makes that overlay trustworthy: one description of a write,
+/// produced by the code that will commit it. Before this guard, a phone
+/// queueing `media.add_asset` for a photograph it had just taken was answered
+/// `no such table: blob_staging` and the write never reached the outbox — the
+/// camera roll complete on the phone and dead one layer below it (Slice 6's
+/// blocker).
+///
+/// The seat is carried instead by the third question
+/// [`pre_staged_or_owned`] asks: the bytes are in this device's own content
+/// store, because the shell put them there before it queued the write.
+fn has_a_staging_band(ctx: &CommandCtx<'_, '_>) -> bool {
+    ctx.connection()
+        .query_row(
+            "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'blob_staging'",
+            [],
+            |_| Ok(()),
+        )
+        .is_ok()
+}
+
+/// ARE THESE BYTES ACTUALLY HERE? Three places they can be, and the third is
+/// new (#1025 S3).
+///
+/// Staged, already minted into a content row — or **in this vault's own content
+/// store**. The third is what a gateway holds after it has PULLED a seat's
+/// blob: the bytes are on this disk and verified against their own name, and
+/// `blob_staging` is a row the upload door writes, which a pull is not. Asking
+/// the store directly is the honest question, and it is the same store
+/// `promote_staged_blob` then mints from.
 pub(crate) fn pre_staged_or_owned(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(sha) = ctx.optional_str("staged_sha") else {
         return Ok(None);
     };
-    let held: i64 = ctx.connection().query_row(
-        "SELECT (EXISTS(SELECT 1 FROM blob_staging WHERE sha256 = ?1 AND variant IS NULL)
-                 OR EXISTS(SELECT 1 FROM core_content_item WHERE sha256 = ?1))",
+    // THE STAGING BAND IS THE GATEWAY'S, AND A SEAT RUNS THIS TOO (#1025 S7,
+    // D-1025-S7-81 — Slice 6's blocker).
+    //
+    // `blob_staging` is a declared PRIVATE table (`contracts/schema/
+    // v0-registries.json`): the gateway's own record of an upload door it ran,
+    // and by design not in any replica. A seat runs this very precondition —
+    // `Handle::queue_write` executes the REAL handler against its own copy to
+    // build the optimistic overlay — so on a phone this read was
+    // `no such table: blob_staging`, and the refusal landed on the member's
+    // Photos screen before the write ever reached the outbox. The camera roll
+    // was complete on the phone's side and dead one layer below it.
+    //
+    // ONE QUERY BECAME TWO, SO THAT ONLY THE PRIVATE HALF IS GUARDED. The
+    // `core_content_item` half keeps its `?`, because that table is in every
+    // copy and its absence is a real fault; the staging half is asked only of a
+    // copy that HAS a staging band, and answers "no staging row" for one that
+    // does not — which is the truth. On a gateway the band is there and the
+    // answer is bit-identical to the single `EXISTS … OR EXISTS` this replaced.
+    //
+    // The guard is [`has_a_staging_band`] and it is asked in every one of the
+    // three places on this path that touch the band, rather than an `.ok()`
+    // sprinkled on each read: a fourth reader added later inherits the rule by
+    // calling the same function, where a fourth bare `?` would simply bring
+    // this defect back.
+    //
+    // **The seat is then carried by the THIRD question, which is the honest
+    // one** (see this function's own header): the bytes are in the seat's own
+    // content store, because the shell put them there before it queued the
+    // write. Nothing about the gateway's handler changed, and there is no
+    // second, seat-only description of what `media.add_asset` does — which is
+    // the whole property that makes the prediction overlay trustworthy.
+    let staged: i64 = if has_a_staging_band(ctx) {
+        ctx.connection().query_row(
+            "SELECT EXISTS(SELECT 1 FROM blob_staging
+                            WHERE content_hash = ?1 AND variant IS NULL)",
+            [sha],
+            |row| row.get(0),
+        )?
+    } else {
+        0
+    };
+    let minted: i64 = ctx.connection().query_row(
+        "SELECT EXISTS(SELECT 1 FROM core_content_item WHERE content_hash = ?1)",
         [sha],
         |row| row.get(0),
     )?;
-    Ok((held != 1).then(|| {
+    if staged == 1
+        || minted == 1
+        || ctx
+            .blobs()
+            .is_some_and(|blobs| blobs.has(sha).unwrap_or(false))
+    {
+        return Ok(None);
+    }
+    Ok(Some(
         "those bytes are not staged and this vault does not already hold them — \
          upload them first (POST /_vault/blobs)"
-            .to_owned()
-    }))
+            .to_owned(),
+    ))
 }
 
 /// The bytes this write carries, whichever door they came through.
+///
+/// **AND THE DERIVATIVES THAT COME WITH THEM** (#1025 S3, D-1025-S7-50). This
+/// is the one choke point every door reaches — `media.add_asset`,
+/// `core.add_document`, the link doors, the demo seeder — which is why the
+/// derive hangs here and not on one handler: a tier ladder that only fills for
+/// the door somebody remembered is the defect it was written to fix.
 pub(crate) fn minted_bytes(ctx: &CommandCtx<'_, '_>) -> Result<Minted> {
-    if let Some(sha) = ctx.optional_str("staged_sha") {
+    let minted = if let Some(sha) = ctx.optional_str("staged_sha") {
         let sha = sha.to_owned();
-        return promote_staged_blob(ctx, &sha);
+        promote_staged_blob(ctx, &sha)?
+    } else {
+        let uri = ctx.required_str("data_uri")?.to_owned();
+        mint_content_from_data_uri(ctx, &uri)?
+    };
+    derive_image_tiers(ctx, &minted.content_id, &minted.media_type)?;
+    Ok(minted)
+}
+
+/// Write the `thumb` and `preview` rows for an image content item, and the
+/// blobs behind them (#1025 S3, D-1025-S7-50).
+///
+/// **The gateway derives; a seat never does.** A derivative is a
+/// gateway-derived fact and travels to every replica as ordinary log rows over
+/// `core_content_derivative`, exactly like a title or a favourite. That is the
+/// whole reason this sits in a command handler's transaction rather than in a
+/// background worker: the rows a seat tails are the rows this write commits.
+///
+/// **A failed thumbnail never costs the member the original.** Every branch
+/// that cannot produce one returns `Ok(0)` with a `warn` — an unreadable
+/// format, a vault opened with no byte store, a blob the store will not hand
+/// back. `PageQuery::with_held_thumbnail` falls back through `thumb` →
+/// `poster` → the original's own hash (D-1025-S7-20), so a missing derivative
+/// is a slower first paint and never a blank cell forever.
+///
+/// **Idempotent, by the table's own `UNIQUE (content_id, variant)`.** Running
+/// it twice over the same item re-derives nothing: the existing rows are
+/// detected first and the decode — the expensive half — never starts. That is
+/// what makes [`derive_missing`]'s sweep safe to run at every gateway start,
+/// and it is also correct for a deduped mint, where the bytes already had their
+/// tiers the first time somebody uploaded them.
+///
+/// **No dimensions are stored.** `core_content_derivative` has no `width` or
+/// `height` column, and this slice adds none: nothing reads them, the planner
+/// budgets in bytes, and the grid draws whatever the file decodes to. A DDL
+/// change to hold a number no consumer asks for would be the invented column
+/// that later gets trusted.
+pub(crate) fn derive_image_tiers(
+    ctx: &CommandCtx<'_, '_>,
+    content_id: &str,
+    media_type: &str,
+) -> Result<usize> {
+    if !centraid_media::renditions::is_derivable(media_type) {
+        return Ok(0);
     }
-    let uri = ctx.required_str("data_uri")?.to_owned();
-    mint_content_from_data_uri(ctx, &uri)
+    // THE CHEAP QUESTION FIRST. A decode of a 12 MP original costs tens of
+    // milliseconds inside a write transaction; asking the index whether the row
+    // is already there costs nothing.
+    let already: i64 = ctx.connection().query_row(
+        "SELECT COUNT(*) FROM core_content_derivative
+          WHERE content_id = ?1 AND variant IN ('thumb','preview')",
+        [content_id],
+        |row| row.get(0),
+    )?;
+    if already > 0 {
+        return Ok(0);
+    }
+    let Some(blobs) = ctx.blobs() else {
+        // A vault opened with no content store holds rows and refuses bytes,
+        // by name (D-1025-S3-1). There is nothing to derive FROM.
+        return Ok(0);
+    };
+    let content_hash: String = ctx.connection().query_row(
+        "SELECT content_hash FROM core_content_item WHERE content_id = ?1",
+        [content_id],
+        |row| row.get(0),
+    )?;
+    let bytes = match blobs.get(&content_hash) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            // A row whose bytes this device does not hold. On a gateway that
+            // is a store that lost a file; it is not this commit's failure.
+            tracing::warn!(
+                %content_id, %content_hash, %error,
+                "no bytes behind this content item; deriving no thumbnail"
+            );
+            return Ok(0);
+        }
+    };
+    let renditions = centraid_media::renditions::renditions_of(&bytes, media_type);
+    if renditions.is_empty() {
+        tracing::warn!(
+            %content_id, %content_hash, %media_type,
+            "these bytes did not decode as an image; this item gets no derivatives and \
+             the read falls back to the original"
+        );
+        return Ok(0);
+    }
+    let mut written = 0;
+    for rendition in renditions {
+        // THE BLOB FIRST, THE ROW SECOND, and the row names what the store
+        // actually wrote. A derivative row pointing at bytes nothing holds is
+        // the failure D-1020-DC8 refuses, and the store is the only thing that
+        // can say what it stored.
+        let stored = match blobs.put(&rendition.bytes) {
+            Ok(stored) => stored,
+            Err(error) => {
+                tracing::warn!(
+                    %content_id, variant = rendition.variant, %error,
+                    "the content store refused a derivative; skipping this tier"
+                );
+                continue;
+            }
+        };
+        ctx.connection().execute(
+            "INSERT INTO core_content_derivative
+               (derivative_id, content_id, variant, content_hash, media_type, byte_size,
+                text_content, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?7)
+             ON CONFLICT (content_id, variant) DO NOTHING",
+            rusqlite::params![
+                ctx.next_id(),
+                content_id,
+                rendition.variant,
+                stored,
+                centraid_media::renditions::DERIVATIVE_MEDIA_TYPE,
+                i64::try_from(rendition.bytes.len()).unwrap_or(i64::MAX),
+                ctx.now
+            ],
+        )?;
+        written += 1;
+    }
+    Ok(written)
+}
+
+/// The BACKFILL: content items founded before this slice, which have originals
+/// and no tiers (#1025 S3, D-1025-S7-53).
+///
+/// Not a migration — v0 carries none, and this is not a schema change. It is
+/// **missing derived data**, and the only honest way to get it is to derive it.
+/// The sweep is bounded per run (`limit` items), resumable (an item that gained
+/// its rows is no longer selected, so the next run starts where this one
+/// stopped) and idempotent (a second run over a swept vault selects nothing and
+/// writes nothing).
+///
+/// The selection is the same reading every other surface takes: the item's
+/// OWN representation says what these bytes are (`#996` R20(b)), and an item
+/// nothing has ever declared a type for is not an image as far as this vault is
+/// concerned.
+pub(crate) fn derive_missing(ctx: &CommandCtx<'_, '_>, limit: usize) -> Result<(usize, usize)> {
+    let mut statement = ctx.connection().prepare(
+        "SELECT i.content_id FROM core_content_item i
+          WHERE i.deleted_at IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM core_content_derivative d
+               WHERE d.content_id = i.content_id AND d.variant IN ('thumb','preview'))
+            AND EXISTS (
+              SELECT 1 FROM core_content_representation r
+               WHERE r.content_id = i.content_id
+                 AND lower(r.media_type) LIKE 'image/%')
+          ORDER BY i.created_at DESC, i.content_id
+          LIMIT ?1",
+    )?;
+    let candidates: Vec<String> = statement
+        .query_map([i64::try_from(limit).unwrap_or(i64::MAX)], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(statement);
+    let considered = candidates.len();
+    let mut derived = 0;
+    for content_id in candidates {
+        let Some(media_type) = media_type_for_content(ctx, &content_id)? else {
+            continue;
+        };
+        if derive_image_tiers(ctx, &content_id, &media_type)? > 0 {
+            derived += 1;
+        }
+    }
+    Ok((considered, derived))
 }
 
 /// The id a CREATED row takes: the seat's when it minted one, ours otherwise
@@ -3961,22 +4269,28 @@ mod tests {
             uri.strip_prefix(crate::content::BLOB_URI_PREFIX),
             Some(hash.as_str())
         );
-        assert!(
-            !uri.starts_with(crate::content::SUPERSEDED_URI_PREFIX),
-            "a fresh row must never be written under the superseded scheme"
-        );
+        // ONE FORM (#1025 S3). The URI names its own hash function, and
+        // `blob:blake3-` is the only spelling anything writes or reads.
+        assert!(uri.starts_with("blob:blake3-"), "{uri}");
     }
 
-    /// The digest that names a member's bytes is NOT the backup plane's.
-    /// `format-golden.json` seals the backup format across two languages, so
-    /// the day these two collapse into one function is the day an artefact's
-    /// identity silently changes (D-1020-B2, D-1020-R1).
+    /// THE DIGEST THAT NAMES A MEMBER'S BYTES **IS** THE BACKUP PLANE'S
+    /// (#1025 S4, D-1025-S4-1).
+    ///
+    /// This test used to assert the opposite, and the assertion was the point:
+    /// while the two were different functions, the day they collapsed was the
+    /// day an artefact's identity silently changed (D-1020-B2, D-1020-R1). S4
+    /// collapsed them deliberately, regenerating `format-golden.json` through
+    /// its own generator in the same change — so what needs guarding now is the
+    /// inverse. Two hash functions in one repository is two answers to "what is
+    /// this?", and this is the test that says there is one.
     #[test]
-    fn the_content_digest_is_not_the_backup_digest() {
+    fn the_content_digest_is_the_backup_digest() {
         let bytes = b"a photograph";
-        assert_ne!(
+        assert_eq!(
             crate::content::content_digest(bytes),
-            crate::backup::store::digest(bytes)
+            crate::backup::store::digest(bytes),
+            "one hash names a member's bytes and the artefact that backs them up"
         );
         assert_eq!(crate::content::content_digest(bytes).len(), 64);
     }

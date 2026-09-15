@@ -34,8 +34,6 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::sync::Mutex;
 
-use sha2::{Digest as _, Sha256};
-
 /// An enrolled device.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Device {
@@ -68,7 +66,7 @@ impl Device {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ticket {
     pub ticket_id: String,
-    /// `sha256(secret)`. The secret itself is never stored.
+    /// `blake3(secret)`. The secret itself is never stored.
     pub secret_hash: [u8; 32],
     pub expires_at_ms: u64,
     /// `Some` means burnt. Kept rather than deleted so a replayed QR is
@@ -77,11 +75,16 @@ pub struct Ticket {
     pub redeemed_at_ms: Option<u64>,
 }
 
-/// `sha256` of a ticket secret.
+/// The hash of a ticket secret at rest.
+///
+/// **BLAKE3, superseding content_hash** (#1025 S4, D-1025-S4-1). A ticket secret is
+/// 32 bytes of CSPRNG output, never a passphrase, so there is nothing here for
+/// a slow hash to protect — which is the one case where the fast function is
+/// simply the right one. The comparison that reads this is still constant-time
+/// over fixed-length digests.
+#[must_use]
 pub fn secret_hash(secret: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(secret);
-    hasher.finalize().into()
+    *blake3::hash(secret).as_bytes()
 }
 
 /// Why a redemption was refused. Deliberately coarse, matching

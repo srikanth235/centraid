@@ -465,7 +465,7 @@ fn content_item_for(ctx: &CommandCtx<'_, '_>, body_text: &str) -> Result<String>
     let existing: Option<String> = ctx
         .connection()
         .query_row(
-            "SELECT content_id FROM core_content_item WHERE sha256 = ?1",
+            "SELECT content_id FROM core_content_item WHERE content_hash = ?1",
             [&sha],
             |row| row.get(0),
         )
@@ -476,7 +476,7 @@ fn content_item_for(ctx: &CommandCtx<'_, '_>, body_text: &str) -> Result<String>
     let content_id = ctx.next_id();
     ctx.connection().execute(
         "INSERT INTO core_content_item
-           (content_id, content_uri, sha256, byte_size, language, creator_party_id,
+           (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
             origin_device_id, deleted_at, purge_at, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
         rusqlite::params![

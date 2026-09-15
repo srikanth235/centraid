@@ -36,7 +36,7 @@
       "label": "boundary-and-text",
       "producer": "oracle.boundary",
       "statements": [
-        "INSERT INTO core_content_item\n         (content_id, content_uri, sha256, byte_size, created_at, updated_at)\n       VALUES ('oracle-content-1', '{\"i\":\"7\"}',\n               '0000000000000000000000000000000000000000000000000000000000000abc',\n               9007199254740991,\n               '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
+        "INSERT INTO core_content_item\n         (content_id, content_uri, content_hash, byte_size, created_at, updated_at)\n       VALUES ('oracle-content-1', '{\"i\":\"7\"}',\n               '0000000000000000000000000000000000000000000000000000000000000abc',\n               9007199254740991,\n               '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
       ]
     },
     {
@@ -195,7 +195,7 @@
       "row": {
         "content_id": "oracle-content-1",
         "content_uri": "{\"i\":\"7\"}",
-        "sha256": "0000000000000000000000000000000000000000000000000000000000000abc",
+        "content_hash": "0000000000000000000000000000000000000000000000000000000000000abc",
         "byte_size": 9007199254740991,
         "language": null,
         "creator_party_id": null,

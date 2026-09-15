@@ -35,7 +35,8 @@ pub const PASSPHRASE_MINIMUM: usize = 12;
 ///
 /// A verifier field would be a cheap oracle: a guesser could test a passphrase
 /// without doing the derivation. The AEAD tag is the verifier, and doing the
-/// 600,000 rounds is the price of one guess.
+/// Argon2id work — 64 MiB, three passes — is the price of one guess (#1025 S4,
+/// D-1025-S4-4).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WrappedKey {
     #[serde(rename = "v")]
@@ -44,8 +45,18 @@ pub struct WrappedKey {
     pub vault_id: String,
     #[serde(rename = "keyId")]
     pub key_id: String,
+    /// `argon2id`, and nothing else is read. See
+    /// [`crate::locker::unlock::WRAP_KDF`].
     pub kdf: String,
+    /// Argon2id memory cost in KiB. AT REST because the blob says how it was
+    /// derived; floored at the unwrap so it cannot say "cheaply".
+    #[serde(rename = "memoryKib")]
+    pub memory_kib: u32,
+    /// Argon2id time cost — passes over that memory. Named `iterations` at rest
+    /// because that is what it is and what v0's field held.
     pub iterations: u32,
+    /// Argon2id lanes.
+    pub parallelism: u32,
     /// base64.
     pub salt: String,
     /// base64.
@@ -275,24 +286,29 @@ mod tests {
 
     /// The blob at rest round-trips through the shape the shells store.
     #[test]
-    fn the_wrapped_blob_serialises_with_v0s_field_names() {
+    fn the_wrapped_blob_serialises_with_the_shells_field_names() {
         let wrapped = WrappedKey {
             version: 1,
             vault_id: "vault-1".to_owned(),
             key_id: "key-1".to_owned(),
-            kdf: "pbkdf2-sha256".to_owned(),
-            iterations: 600_000,
+            kdf: "argon2id".to_owned(),
+            memory_kib: 65_536,
+            iterations: 3,
+            parallelism: 1,
             salt: "c2FsdA==".to_owned(),
             nonce: "bm9uY2U=".to_owned(),
             ciphertext: "Y2lwaGVy".to_owned(),
         };
         let json = serde_json::to_value(&wrapped).expect("serialises");
-        // v0's own key names, so a blob written by a v0 seat is readable and a
-        // blob written here is readable by one.
+        // The shape the shells store. v0's key names for the fields that
+        // survived; the KDF's own three parameters where `iterations` alone
+        // used to describe PBKDF2 (#1025 S4).
         assert_eq!(json["v"], serde_json::json!(1));
         assert_eq!(json["vaultId"], serde_json::json!("vault-1"));
         assert_eq!(json["keyId"], serde_json::json!("key-1"));
-        assert_eq!(json["kdf"], serde_json::json!("pbkdf2-sha256"));
+        assert_eq!(json["kdf"], serde_json::json!("argon2id"));
+        assert_eq!(json["memoryKib"], serde_json::json!(65_536));
+        assert_eq!(json["parallelism"], serde_json::json!(1));
         let back: WrappedKey = serde_json::from_value(json).expect("round trips");
         assert_eq!(back, wrapped);
     }

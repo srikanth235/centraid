@@ -257,7 +257,62 @@ pub struct KeysetPage {
     pub limit: i64,
     /// `(sort_key, pk)` — the cursor a caller hands back.
     pub after: Option<(String, String)>,
+    /// APPEND A `thumbnail_path` COLUMN, resolved from the bytes this device
+    /// holds (#1025, D-1025-S7-20). See [`HELD_THUMBNAIL_COLUMN`].
+    pub held_thumbnail: bool,
 }
+
+/// The computed column [`KeysetPage::held_thumbnail`] appends, and the whole of
+/// the join behind it.
+///
+/// **A correlated subquery and not a `LEFT JOIN`**, which is the same answer
+/// and is the only one that cannot change the page: a join through
+/// `core_content_derivative` multiplies a row by its derivatives, and a grid
+/// whose page silently held two of one photograph would break its own keyset
+/// cursor. One value per row, ordering and row count untouched.
+///
+/// **The tier, and the fallback that makes v0 work.** `thumb` first, then
+/// `poster` — a video's frame is a `poster` and a photograph's is a `thumb` —
+/// and when no derivative row exists at all the ORIGINAL's hash is used. Every
+/// vault seeded from originals is that case; without the fallback the whole
+/// feature draws nothing on the only libraries that exist today.
+///
+/// **`drawable = 1` IS THE BYTE DOOR'S REFUSAL**, decided once where the path
+/// was produced (`centraid_seat::held`) and applied here as a plain column
+/// comparison. A media-type predicate written by a caller would be a security
+/// rule spelled out in a shell's statement; this way the read cannot express
+/// the unsafe question.
+///
+/// `seat_blob_held` is a SEAT-OWNED table and a gateway's vault does not have
+/// it, which is why this is opt-in per query: only a replica's screens ask.
+pub const HELD_THUMBNAIL_COLUMN: &str = "thumbnail_path";
+
+/// THE ORIGINAL'S OWN HASH, appended beside [`HELD_THUMBNAIL_COLUMN`]
+/// (#1025 S5, D-1025-S7-62).
+///
+/// `core_content_item.content_hash` for the row's content — NOT the derivative
+/// the thumbnail resolved to. It is what a download arrow names when a member
+/// taps it, and a cell that offered to fetch the thumbnail it is already
+/// drawing would be an affordance that does nothing.
+///
+/// NULL when this replica has no live content row for the asset, which is a
+/// real state and not an error: a cell with no original to ask for draws no
+/// arrow.
+pub const HELD_ORIGINAL_HASH_COLUMN: &str = "original_hash";
+
+/// WHETHER THE ORIGINAL ITSELF IS ON THIS DEVICE, 1 or 0.
+///
+/// The one fact that separates "held" from "thumbnail only", and it cannot be
+/// inferred from [`HELD_THUMBNAIL_COLUMN`]: the thumbnail column falls back to
+/// the ORIGINAL's hash on a vault with no derivative rows, so a path there
+/// means the original on some libraries and a `thumb` on others. A cell that
+/// guessed would tell a member their full-size photograph is on the device
+/// whenever a thumbnail was.
+///
+/// **`drawable` is deliberately NOT part of this predicate.** A held video is
+/// held; what `drawable` governs is whether a PATH may be handed out, and this
+/// column hands out no path.
+pub const HELD_ORIGINAL_HELD_COLUMN: &str = "original_held";
 
 /// One page of rows, plus the cursor to ask from next.
 #[derive(Debug, Clone)]
@@ -333,8 +388,44 @@ impl Vault {
             .map(|column| crate::log::quoted(column))
             .collect::<Vec<_>>()
             .join(", ");
+        let thumbnail = if page.held_thumbnail {
+            format!(
+                ", (SELECT h.path FROM seat_blob_held h
+                      WHERE h.drawable = 1
+                        AND h.content_hash = COALESCE(
+                              (SELECT d.content_hash
+                                 FROM core_content_derivative d
+                                WHERE d.content_id = {from}.content_id
+                                  AND d.variant IN ('thumb', 'poster')
+                                  AND d.content_hash IS NOT NULL
+                                ORDER BY CASE d.variant WHEN 'thumb' THEN 0 ELSE 1 END
+                                LIMIT 1),
+                              (SELECT i.content_hash
+                                 FROM core_content_item i
+                                WHERE i.content_id = {from}.content_id
+                                  AND i.deleted_at IS NULL))
+                   ) AS {column}
+                 , (SELECT i.content_hash
+                      FROM core_content_item i
+                     WHERE i.content_id = {from}.content_id
+                       AND i.deleted_at IS NULL) AS {hash_column}
+                 , (SELECT COUNT(*) FROM seat_blob_held h
+                     WHERE h.content_hash = (
+                             SELECT i.content_hash
+                               FROM core_content_item i
+                              WHERE i.content_id = {from}.content_id
+                                AND i.deleted_at IS NULL)
+                   ) AS {held_column}",
+                from = crate::log::quoted(&page.from),
+                column = crate::log::quoted(HELD_THUMBNAIL_COLUMN),
+                hash_column = crate::log::quoted(HELD_ORIGINAL_HASH_COLUMN),
+                held_column = crate::log::quoted(HELD_ORIGINAL_HELD_COLUMN),
+            )
+        } else {
+            String::new()
+        };
         let sql = format!(
-            "SELECT {projection} FROM {from}{predicate} \
+            "SELECT {projection}{thumbnail} FROM {from}{predicate} \
              ORDER BY {sort} {direction}, {pk} {direction} LIMIT {probe}",
             from = crate::log::quoted(&page.from),
             sort = crate::log::quoted(&page.sort_column),
@@ -401,6 +492,7 @@ mod keyset_tests {
             descending: false,
             limit: 10,
             after: None,
+            held_thumbnail: false,
         };
         assert!(vault.keyset_page(&base).is_ok());
 
@@ -453,6 +545,7 @@ mod keyset_tests {
             descending: false,
             limit: 2,
             after: None,
+            held_thumbnail: false,
         };
         let first = vault.keyset_page(&base).expect("a page serves");
         assert_eq!(first.rows.len(), 2);

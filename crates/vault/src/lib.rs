@@ -60,6 +60,7 @@ pub mod migrations;
 pub mod operations;
 pub mod page;
 pub mod snapshot;
+pub mod testdoor;
 pub mod time;
 pub mod value;
 
@@ -69,11 +70,12 @@ pub use access::{
 };
 pub use clock::{Clock, ClockIds, FixedClock, Ids, SeededIds, SystemClock};
 pub use commands::{
-    Command, CommandDefinition, CommandOutcome, CommandStatus, Idempotency, Registry, Risk,
+    Command, CommandDefinition, CommandOutcome, CommandStatus, Idempotency, Prediction, Registry,
+    Risk,
 };
 pub use error::{IntentRefusal, RebootstrapReason, Result, VaultError};
 pub use file::Vault;
 pub use log::{CommitResult, CommitTx, Cursor, LogOp, LogPage, LogRow, LogState};
 pub use migrations::{APPLICATION_ID, head_version};
-pub use snapshot::{Fault, SnapshotHead, Step, build_snapshot};
+pub use snapshot::{Fault, Shape, SnapshotHead, Step, build_replica_snapshot, build_snapshot};
 pub use value::{RowImage, Value};

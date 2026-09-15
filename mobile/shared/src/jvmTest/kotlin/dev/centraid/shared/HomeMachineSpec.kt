@@ -10,11 +10,11 @@ import centraid.screen.v1.TileCount
 import centraid.screen.v1.TileSize
 import centraid.screen.v1.TileStatus
 import centraid.screen.v1.VaultLockup
-import dev.centraid.shared.screen.FirstMoves
-import dev.centraid.shared.screen.HomeMachine
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
-import dev.centraid.shared.screen.SpringboardPolicy
+import dev.centraid.shared.shell.FirstMoves
+import dev.centraid.shared.shell.HomeMachine
+import dev.centraid.shared.shell.SpringboardPolicy
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -235,7 +235,10 @@ class HomeMachineSpec : StringSpec({
             opened(),
             HomeEvent(
                 vault_changed = HomeEvent.VaultChanged(
-                    vault = VaultLockup(vault_name = "Demo vault", gateway_name = "home"),
+                    vault = VaultLockup(
+                        vault_name = "Demo vault",
+                        state = VaultLockup.State.STATE_ONLINE,
+                    ),
                 ),
             ),
         ).state
@@ -246,8 +249,7 @@ class HomeMachineSpec : StringSpec({
                 vault_changed = HomeEvent.VaultChanged(
                     vault = VaultLockup(
                         vault_name = "Demo vault",
-                        gateway_name = "home",
-                        offline = true,
+                        state = VaultLockup.State.STATE_OFFLINE,
                     ),
                 ),
             ),
@@ -257,7 +259,7 @@ class HomeMachineSpec : StringSpec({
         // took away every destination the member was reaching for.
         offline.data_!!.tiles.first { it.app_id == "docs" }.status shouldBe
             TileStatus.TILE_STATUS_CONTENT
-        offline.vault!!.offline.shouldBeTrue()
+        offline.vault!!.state shouldBe VaultLockup.State.STATE_OFFLINE
     }
 
     // --- the packed grid --------------------------------------------------
@@ -446,7 +448,7 @@ class HomeMachineSpec : StringSpec({
         step.effects.shouldBeEmpty()
     }
 
-    "a roster already read SURVIVES the open that follows it" {
+    "a roster already published SURVIVES the open that follows it" {
         // The same defect the lockup had, one field over: `firstLoad` builds a
         // fresh state, and an `Opened` landing after the roster left the
         // switcher saying "this device holds one vault" over a device holding
@@ -454,7 +456,7 @@ class HomeMachineSpec : StringSpec({
         val listed = HomeMachine.reduce(
             HomeMachine.initial(),
             HomeEvent(
-                vaults_listed = HomeEvent.VaultsListed(
+                roster_changed = HomeEvent.RosterChanged(
                     vaults = listOf(
                         VaultLockup(vault_id = "v1", vault_name = "Demo vault"),
                         VaultLockup(vault_id = "v2", vault_name = "Work"),
@@ -478,7 +480,7 @@ class HomeMachineSpec : StringSpec({
         var state = HomeMachine.reduce(
             named("v1", "Demo vault"),
             HomeEvent(
-                vaults_listed = HomeEvent.VaultsListed(
+                roster_changed = HomeEvent.RosterChanged(
                     vaults = listOf(
                         VaultLockup(vault_id = "v1", vault_name = "Demo vault"),
                         VaultLockup(vault_id = "v2", vault_name = "Work"),
@@ -508,7 +510,7 @@ class HomeMachineSpec : StringSpec({
         val state = HomeMachine.reduce(
             opened(),
             HomeEvent(
-                vaults_listed = HomeEvent.VaultsListed(
+                roster_changed = HomeEvent.RosterChanged(
                     vaults = listOf(
                         VaultLockup(vault_id = "v1", vault_name = "Demo vault"),
                         VaultLockup(vault_id = "v2", vault_name = "Work"),
@@ -517,6 +519,74 @@ class HomeMachineSpec : StringSpec({
             ),
         ).state
         state.vaults.map { it.vault_name } shouldContainExactly listOf("Demo vault", "Work")
+    }
+
+    "a roster REPUBLISHED replaces the one Home holds, membership and all" {
+        // THE DEFECT THIS EVENT EXISTS FOR (#1025 S7-9). `VaultsListed` was sent
+        // ONCE, from a survey taken before the active core opened, so a vault
+        // admitted a minute later did not exist to the switcher until the app
+        // was relaunched — and a vault whose state moved kept whatever the
+        // survey had guessed about it. The shelf publishes on every membership
+        // or state change now, and the reducer simply takes the newest list.
+        var state = HomeMachine.reduce(
+            named("v1", "Tahoe Demo"),
+            HomeEvent(
+                roster_changed = HomeEvent.RosterChanged(
+                    vaults = listOf(
+                        VaultLockup(
+                            vault_id = "v1",
+                            vault_name = "Tahoe Demo",
+                            state = VaultLockup.State.STATE_ONLINE,
+                        ),
+                    ),
+                ),
+            ),
+        ).state
+        state.vaults.map { it.vault_id } shouldContainExactly listOf("v1")
+        // A SECOND VAULT ADMITTED, with no relaunch and no survey.
+        state = HomeMachine.reduce(
+            state,
+            HomeEvent(
+                roster_changed = HomeEvent.RosterChanged(
+                    vaults = listOf(
+                        VaultLockup(
+                            vault_id = "v1",
+                            vault_name = "Tahoe Demo",
+                            state = VaultLockup.State.STATE_ONLINE,
+                        ),
+                        VaultLockup(
+                            vault_id = "v2",
+                            vault_name = "Second Vault",
+                            state = VaultLockup.State.STATE_SYNCING,
+                        ),
+                    ),
+                ),
+            ),
+        ).state
+        state.vaults.map { it.vault_name } shouldContainExactly
+            listOf("Tahoe Demo", "Second Vault")
+        state.vaults.last().state shouldBe VaultLockup.State.STATE_SYNCING
+        // AND ONE FORGOTTEN, which is the inverse and the same mechanism.
+        state = HomeMachine.reduce(
+            state,
+            HomeEvent(
+                roster_changed = HomeEvent.RosterChanged(
+                    vaults = listOf(
+                        VaultLockup(
+                            vault_id = "v2",
+                            vault_name = "Second Vault",
+                            state = VaultLockup.State.STATE_ONLINE,
+                        ),
+                    ),
+                ),
+            ),
+        ).state
+        state.vaults.map { it.vault_id } shouldContainExactly listOf("v2")
+        // THE TILES ARE NOT THROWN AWAY. A roster moving is not a vault
+        // switch: the member is still reading the vault they were reading, and
+        // a reload here would blank the springboard every time a background
+        // vault's pass reported.
+        state.data_!!.tiles.all { it.status == TileStatus.TILE_STATUS_LOADING }.shouldBeTrue()
     }
 
     "picking ANOTHER vault shuts the sheet and asks the shell to re-point" {
@@ -607,14 +677,14 @@ class HomeMachineSpec : StringSpec({
                     vault = VaultLockup(
                         vault_id = "v1",
                         vault_name = "Demo vault",
-                        gateway_name = "home",
+                        state = VaultLockup.State.STATE_ONLINE,
                     ),
                 ),
             ),
         ).state
         again.data_!!.tiles.first { it.app_id == "docs" }.status shouldBe
             TileStatus.TILE_STATUS_CONTENT
-        again.vault!!.gateway_name shouldBe "home"
+        again.vault!!.state shouldBe VaultLockup.State.STATE_ONLINE
     }
 })
 

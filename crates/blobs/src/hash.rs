@@ -2,7 +2,7 @@
 //!
 //! ## BLAKE3, and why the byte plane could not keep SHA-256
 //!
-//! `core_content_item.sha256` is SHA-256 over the whole file, and SHA-256 is
+//! v0 named a member's bytes with SHA-256 over the whole file, and SHA-256 is
 //! **all-or-nothing**: the only way to know a stream of bytes is the file it
 //! claims to be is to receive every one of them and hash the lot. On a desktop
 //! that is a detail. On a phone it is the whole problem — a 30-second window
@@ -21,22 +21,29 @@
 //! reachable from SHA-256 by any amount of careful engineering — it is a
 //! property of the hash's shape.
 //!
-//! ## The column shape does not move
+//! ## The column's shape does not move, and its NAME did (#1025 S4, D-1025-S4-7)
 //!
 //! A BLAKE3 hash is 32 bytes, and so is a SHA-256 hash. Both render as 64
 //! lowercase hex characters, so
-//! `CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*')` on
+//! `CHECK (length(content_hash) = 64 AND content_hash NOT GLOB '*[^0-9a-f]*')` on
 //! `core_content_item` and the matching check on `core_content_derivative` hold
-//! over BLAKE3 unchanged. What changes is the **meaning** of the column and the
-//! URI prefix beside it, which is exactly why the prefix is spelled out in the
-//! value rather than assumed: `blob:sha256-…` and `blob:blake3-…` are
-//! distinguishable by eye and by [`ContentHash::parse_uri`], and a vault
-//! carrying the old prefix is a vault this plane refuses rather than
-//! misreads.
+//! over BLAKE3 unchanged. What changed with the meaning is the column's name:
+//! it was `sha256`, and a column named after a function it does not use is a
+//! comment that lies and cannot be linted. The hash's name is still spelled out
+//! in the URI beside it, so the VALUE says which function named these bytes
+//! rather than leaving a reader to assume.
 //!
-//! v0-no-legacy applies: there is no dual-hashing path and no migration that
-//! keeps both. The supersession is recorded, and a pre-existing `blob:sha256-`
-//! row is a row whose bytes this plane will not move.
+//! ## THERE IS ONE URI FORM (#1025 S3, D-1025-S3-3)
+//!
+//! `blob:blake3-<hex>` is the only value this plane addresses. The
+//! `blob:sha256-` prefix, `HashError::SupersededHash` and every branch that
+//! told a member their vault "was stored by an older version of Centraid" are
+//! GONE. v0-no-legacy: v1 has no released predecessor, so the vaults those
+//! branches described were never minted by anything a member ran, and a
+//! refusal path with no producer is a path no test can reach honestly — the
+//! one that existed was a unit test constructing the string it then refused.
+//! A value that is not this form is [`HashError::NotABlobUri`], which is the
+//! same answer with one fewer thing to keep true.
 
 use std::fmt;
 
@@ -46,19 +53,10 @@ use std::fmt;
 /// v0 row refusable instead of silently mis-verified.
 pub const BLOB_URI_PREFIX: &str = "blob:blake3-";
 
-/// The superseded prefix. Present for ONE purpose — so
-/// [`ContentHash::parse_uri`] can tell "this is an older hash" from "this is
-/// not a blob URI at all", which are different answers to a member.
-pub const SUPERSEDED_URI_PREFIX: &str = "blob:sha256-";
-
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum HashError {
     #[error("{0:?} is not a blob URI")]
     NotABlobUri(String),
-    /// A `blob:sha256-` row. Named apart from a malformed one because the
-    /// remedy differs: this vault predates the byte plane.
-    #[error("{0:?} is a superseded sha256 blob URI; this plane addresses bytes by blake3")]
-    SupersededHash(String),
     #[error("{0:?} is not 64 lowercase hex characters")]
     NotAHash(String),
 }
@@ -124,9 +122,6 @@ impl ContentHash {
         if let Some(rest) = uri.strip_prefix(BLOB_URI_PREFIX) {
             return Self::parse_hex(rest);
         }
-        if uri.starts_with(SUPERSEDED_URI_PREFIX) {
-            return Err(HashError::SupersededHash(uri.to_owned()));
-        }
         Err(HashError::NotABlobUri(uri.to_owned()))
     }
 }
@@ -168,7 +163,7 @@ mod tests {
     /// other width, `core_content_item`'s CHECK would have had to move and this
     /// lane would be a migration rather than a rewrite of one column's meaning.
     #[test]
-    fn a_hash_is_sixty_four_lowercase_hex_characters_exactly_like_sha256() {
+    fn a_hash_is_sixty_four_lowercase_hex_characters() {
         let hex_text = ContentHash::of(b"a photograph").to_hex();
         assert_eq!(hex_text.len(), 64);
         assert!(
@@ -186,20 +181,24 @@ mod tests {
         assert!(hash.to_uri().starts_with("blob:blake3-"));
     }
 
-    /// THE POINT OF PUTTING THE HASH NAME IN THE URI. A v0 row is refused with
-    /// its own reason, so a reader can tell "older vault" from "corrupt value"
-    /// — and neither is ever verified against the wrong function.
+    /// ONE URI FORM (#1025 S3). Anything else — a URL, and the `blob:sha256-`
+    /// spelling this plane used to name apart — is NOT A BLOB URI, with no
+    /// second remedy and no second sentence to keep true.
     #[test]
-    fn a_sha256_uri_is_refused_as_superseded_not_as_garbage() {
-        let old = format!("blob:sha256-{}", "ab".repeat(32));
-        assert!(matches!(
-            ContentHash::parse_uri(&old),
-            Err(HashError::SupersededHash(_))
-        ));
-        assert!(matches!(
-            ContentHash::parse_uri("https://example.invalid/x"),
-            Err(HashError::NotABlobUri(_))
-        ));
+    fn every_value_that_is_not_this_form_is_simply_not_a_blob_uri() {
+        for other in [
+            format!("blob:sha256-{}", "ab".repeat(32)),
+            "https://example.invalid/x".to_owned(),
+            "blob:blake3-nothex".to_owned(),
+        ] {
+            assert!(
+                matches!(
+                    ContentHash::parse_uri(&other),
+                    Err(HashError::NotABlobUri(_) | HashError::NotAHash(_))
+                ),
+                "{other}"
+            );
+        }
     }
 
     /// Uppercase hex is a value the column itself would refuse, so accepting it

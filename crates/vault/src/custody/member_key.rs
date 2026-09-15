@@ -86,12 +86,15 @@ use super::locker_key::{LOCKER_KEY_BYTES, LockerKeyError, LockerKeyErrorCode};
 /// Wire prefix of a member-key envelope.
 pub const MEMBER_KEY_ENVELOPE_PREFIX: &str = "mk1:";
 
-/// The HKDF info string. Domain separation: the same transfer secret must not
+/// The KDF context string. Domain separation: the same transfer secret must not
 /// derive a key that opens anything else.
-pub const ENVELOPE_INFO: &[u8] = b"centraid-member-key-envelope-v1";
+///
+/// A `&str` since #1025 S4: `blake3::derive_key` takes its context as text, and
+/// HKDF's `info` was the only reason this was bytes.
+pub const ENVELOPE_INFO: &str = "centraid-member-key-envelope-v1";
 
-/// A transfer secret is 32 bytes of full entropy, which is why the KDF is HKDF
-/// and not scrypt: there is no password here to make expensive.
+/// A transfer secret is 32 bytes of full entropy, which is why the KDF derives
+/// rather than stretches: there is no password here to make expensive.
 pub const TRANSFER_SECRET_BYTES: usize = 32;
 
 const NONCE_BYTES: usize = 12;
@@ -359,14 +362,19 @@ fn envelope_cipher(transfer_secret: &[u8], vault_id: &str) -> Result<Aes256Gcm, 
     if transfer_secret.len() != TRANSFER_SECRET_BYTES {
         return Err(LockerKeyError::KeyLength(transfer_secret.len()));
     }
-    // HKDF, not scrypt: a transfer secret is 32 bytes of CSPRNG output, and
+    // A KDF, not scrypt: a transfer secret is 32 bytes of CSPRNG output, and
     // making a full-entropy secret expensive to derive from buys nothing. The
     // recovery kit's scrypt is for the other case — a passphrase a person
     // chose.
-    let hkdf = hkdf::Hkdf::<sha2::Sha256>::new(Some(vault_id.as_bytes()), transfer_secret);
-    let mut key = [0_u8; 32];
-    hkdf.expand(ENVELOPE_INFO, &mut key)
-        .map_err(|_| LockerKeyError::KeyLength(transfer_secret.len()))?;
+    //
+    // `blake3::derive_key`, superseding HKDF-SHA256 (#1025 S4, D-1025-S4-3).
+    // HKDF's SALT carried the vault id here, and BLAKE3's KDF mode has no salt
+    // argument — so the vault id moves INTO the context string, which is the
+    // same separation stated in the one place BLAKE3 offers. It is spelled with
+    // a separator that cannot appear in either half, so no two (vault, info)
+    // pairs can collide into one context.
+    let context = format!("{ENVELOPE_INFO}‖{vault_id}");
+    let key = blake3::derive_key(&context, transfer_secret);
     Aes256Gcm::new_from_slice(&key).map_err(|_| LockerKeyError::KeyLength(key.len()))
 }
 

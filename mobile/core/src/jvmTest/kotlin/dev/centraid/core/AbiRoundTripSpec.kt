@@ -143,7 +143,7 @@ class AbiRoundTripSpec : StringSpec({
             core.close()
         }
 
-        // --- one core per device process (R-1020-24) ------------------------
+        // --- one handle per REPLICA PATH (R-1020-24, re-keyed #1025 S7-13) --
         //
         // In v0 this was a `<seat>.lease.json` sidecar PLUS
         // `useNewConnection: true`, and both halves were needed and neither was
@@ -152,22 +152,50 @@ class AbiRoundTripSpec : StringSpec({
         // second opener would ask, including an app extension sharing the
         // process.
         //
+        // **THE KEY IS THE PATH AND NOT THE PROCESS.** R-1020-24 is that app
+        // extensions never open the vault, and its hazard is two handles on ONE
+        // FILE: two writers and two iroh endpoints for one vault. A
+        // process-keyed guard also refused two handles on two DIFFERENT vaults,
+        // which share no file, no outbox and no endpoint — and that reading
+        // cost the shelf a close-and-reopen on every vault switch.
+        //
         // IN THE SAME TEST BLOCK as the round trip, deliberately: a
         // process-wide guard cannot be asserted from two test bodies that
         // Kotest may interleave, and a test that passed or failed on the
         // scheduler is not a test of the guard.
         val first = openRealCore()
         try {
+            // TWO ON ONE PATH: refused, which is the rule.
             CentraidCore.open(
                 configuration(),
                 Dispatchers.IO,
                 AbiContractSpec.UI_THREAD,
             ) shouldBe CoreOutcome.Failed(
                 CoreFailure.BadArgument(
-                    "a core is already open in this process. ONE CORE PER DEVICE PROCESS " +
-                        "(R-1020-24): app extensions never open the vault.",
+                    "a core is already open on that replica in this process. ONE HANDLE PER " +
+                        "REPLICA (R-1020-24): app extensions never open the vault.",
                 ),
             )
+            // TWO ON TWO PATHS: they coexist. The second file is a copy of the
+            // fixture, because "a different path" has to be a different VAULT
+            // to prove anything — the guard is about the file, not the string.
+            val second = File(
+                System.getProperty("centraid.core.fixtureDir"),
+                "spike-vault-second.db",
+            )
+            File(configuration().databasePath).copyTo(second, overwrite = true)
+            val other = CentraidCore.open(
+                configuration().copy(databasePath = second.path),
+                Dispatchers.IO,
+                AbiContractSpec.UI_THREAD,
+            )
+            when (other) {
+                is CoreOutcome.Answered -> other.value.close()
+                is CoreOutcome.Failed -> error(
+                    "two vaults on two paths were refused: ${other.failure}",
+                )
+            }
+            second.delete()
         } finally {
             first.close()
         }

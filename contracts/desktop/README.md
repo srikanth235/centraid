@@ -6,7 +6,7 @@ Files the desktop seat's tests read, committed so the claim does not depend on t
 | --- | --- | --- |
 | `socket-catalogue.json` | every **named statement** the seat socket will answer, with its projection, predicate and keyset | `crates/centraid/tests/no_listener.rs` (against `centraid seat --print-catalogue`), `desktop/renderer/src/apps/tally/fold.test.ts` |
 | `fixtures/arriving.webm` | a 20-second VP8/WebM video, 227,977 bytes | `desktop/e2e/media-seek.e2e.ts` |
-| `fixtures/arriving.json` | that file's `sha256`, byte size, media type and duration | the same, which refuses to run if the two disagree |
+| `fixtures/arriving.json` | that file's `sha256`, byte size, media type and duration | the same, which refuses to run if the two disagree. **The one SHA-256 left outside `crates/xtask`** (#1025 S4, D-1025-S4-5): this is a Node e2e harness checking a file it generated locally against the manifest it wrote beside it, Node has no BLAKE3, and nothing in a vault is named by it. |
 | `fixtures/make-video.mjs` | how to regenerate it | a person, by hand. Nothing in CI runs it |
 
 ## Why the catalogue is a fixture

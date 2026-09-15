@@ -1352,225 +1352,152 @@
     {
       "name": "You",
       "initials": "Y",
-      "units": [
-        89
-      ]
+      "units": [89]
     },
     {
       "name": "Someone",
       "initials": "S",
-      "units": [
-        83
-      ]
+      "units": [83]
     },
     {
       "name": "Friend",
       "initials": "F",
-      "units": [
-        70
-      ]
+      "units": [70]
     },
     {
       "name": "Ana",
       "initials": "A",
-      "units": [
-        65
-      ]
+      "units": [65]
     },
     {
       "name": "Ana Díaz",
       "initials": "AD",
-      "units": [
-        65,
-        68
-      ]
+      "units": [65, 68]
     },
     {
       "name": "ana díaz",
       "initials": "AD",
-      "units": [
-        65,
-        68
-      ]
+      "units": [65, 68]
     },
     {
       "name": "Bo",
       "initials": "B",
-      "units": [
-        66
-      ]
+      "units": [66]
     },
     {
       "name": "Cleo",
       "initials": "C",
-      "units": [
-        67
-      ]
+      "units": [67]
     },
     {
       "name": "Priya Raman",
       "initials": "PR",
-      "units": [
-        80,
-        82
-      ]
+      "units": [80, 82]
     },
     {
       "name": "  Priya   Raman  ",
       "initials": "PR",
-      "units": [
-        80,
-        82
-      ]
+      "units": [80, 82]
     },
     {
       "name": "María-José de la Cruz",
       "initials": "MC",
-      "units": [
-        77,
-        67
-      ]
+      "units": [77, 67]
     },
     {
       "name": "Jean-Luc",
       "initials": "J",
-      "units": [
-        74
-      ]
+      "units": [74]
     },
     {
       "name": "李 明",
       "initials": "李明",
-      "units": [
-        26446,
-        26126
-      ]
+      "units": [26446, 26126]
     },
     {
       "name": "李明",
       "initials": "李",
-      "units": [
-        26446
-      ]
+      "units": [26446]
     },
     {
       "name": "Ω Ψ",
       "initials": "ΩΨ",
-      "units": [
-        937,
-        936
-      ]
+      "units": [937, 936]
     },
     {
       "name": "🙂 Smith",
       "initials": null,
-      "units": [
-        55357,
-        83
-      ]
+      "units": [55357, 83]
     },
     {
       "name": "🙂",
       "initials": null,
-      "units": [
-        55357
-      ]
+      "units": [55357]
     },
     {
       "name": "Smith 🙂",
       "initials": null,
-      "units": [
-        83,
-        55357
-      ]
+      "units": [83, 55357]
     },
     {
       "name": "",
       "initials": "·",
-      "units": [
-        183
-      ]
+      "units": [183]
     },
     {
       "name": " ",
       "initials": "·",
-      "units": [
-        183
-      ]
+      "units": [183]
     },
     {
       "name": "   ",
       "initials": "·",
-      "units": [
-        183
-      ]
+      "units": [183]
     },
     {
       "name": "\t\n",
       "initials": "·",
-      "units": [
-        183
-      ]
+      "units": [183]
     },
     {
       "name": " Ana ",
       "initials": "A",
-      "units": [
-        65
-      ]
+      "units": [65]
     },
     {
       "name": "d'Angelo",
       "initials": "D",
-      "units": [
-        68
-      ]
+      "units": [68]
     },
     {
       "name": "van der Berg",
       "initials": "VB",
-      "units": [
-        86,
-        66
-      ]
+      "units": [86, 66]
     },
     {
       "name": "O'Neill McTavish",
       "initials": "OM",
-      "units": [
-        79,
-        77
-      ]
+      "units": [79, 77]
     },
     {
       "name": "x",
       "initials": "X",
-      "units": [
-        88
-      ]
+      "units": [88]
     },
     {
       "name": "X y",
       "initials": "XY",
-      "units": [
-        88,
-        89
-      ]
+      "units": [88, 89]
     },
     {
       "name": "a b c d",
       "initials": "AD",
-      "units": [
-        65,
-        68
-      ]
+      "units": [65, 68]
     },
     {
       "name": "ANA",
       "initials": "A",
-      "units": [
-        65
-      ]
+      "units": [65]
     }
   ],
   "tones": [

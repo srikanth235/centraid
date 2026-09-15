@@ -163,13 +163,13 @@ fn photos_assets() -> PageQuery {
     )
 }
 
-/// `photos.content` — the bytes each asset points at. `sha256` IS the
+/// `photos.content` — the bytes each asset points at. `content_hash` IS the
 /// `centraid://` path, and `byte_size` is what a range is parsed against when
 /// the blob is complete.
 fn photos_content() -> PageQuery {
     PageQuery::new(
         "photos.timeline.content",
-        "content_id, sha256, byte_size, created_at",
+        "content_id, content_hash, byte_size, created_at",
         "core_content_item",
         centraid_apps_kit::statement::PageOrder::asc("content_id", "content_id"),
     )
@@ -198,11 +198,11 @@ pub fn content_by_digest(digest: &str) -> wire::PageQuery {
     to_wire(
         &PageQuery::new(
             "seat.blob.contentByDigest",
-            "content_id, sha256, byte_size",
+            "content_id, content_hash, byte_size",
             "core_content_item",
             centraid_apps_kit::statement::PageOrder::asc("content_id", "content_id"),
         )
-        .filter("sha256 = ?", vec![PageBindValue::from(digest)]),
+        .filter("content_hash = ?", vec![PageBindValue::from(digest)]),
     )
 }
 
@@ -244,6 +244,9 @@ pub fn to_wire(query: &PageQuery) -> wire::PageQuery {
             pk_column: query.order.pk_column.clone(),
             descending: query.order.descending,
         }),
+        // THE CLI'S CATALOGUE READS PLAIN COLUMNS. The held-thumbnail column
+        // is a screen's ask (D-1025-S7-20) and this surface prints rows.
+        with_held_thumbnail: false,
     }
 }
 
@@ -383,7 +386,7 @@ mod tests {
     #[test]
     fn the_blob_doors_own_reads_carry_the_digest_as_a_bind_and_not_as_text() {
         let query = content_by_digest("abc");
-        assert_eq!(query.r#where.as_deref(), Some("sha256 = ?"));
+        assert_eq!(query.r#where.as_deref(), Some("content_hash = ?"));
         assert_eq!(
             query.bind[0].kind,
             Some(wire::value::Kind::Text("abc".to_owned()))
@@ -391,7 +394,7 @@ mod tests {
         // The digest never reaches the statement text, so a digest carrying a
         // quote cannot reach the vault as syntax.
         let query = content_by_digest("'; DROP TABLE core_party; --");
-        assert_eq!(query.r#where.as_deref(), Some("sha256 = ?"));
+        assert_eq!(query.r#where.as_deref(), Some("content_hash = ?"));
         assert_eq!(query.bind.len(), 1);
         let query = representations_of("id-1");
         assert_eq!(query.r#where.as_deref(), Some("content_id = ?"));

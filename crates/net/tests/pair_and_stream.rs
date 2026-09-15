@@ -1,5 +1,6 @@
-//! The lane's exit criterion: **two processes pair and stream a commit**, plus
-//! the relay cases #1020 requires to have tests (D-1020-C9).
+//! The lane's exit criterion: **two processes pair and stream a commit on ONE
+//! connection**, plus the relay cases #1020 requires to have tests
+//! (D-1020-C9).
 //!
 //! "Two processes" is two independent iroh endpoints with their own sockets and
 //! their own identities, in one test binary. The test is honest about what that
@@ -8,6 +9,12 @@
 //! over real UDP on the loopback interface; what it does not exercise is NAT
 //! traversal, which needs two networks and is `cross_network_relay`'s job in
 //! `tests/agent-e2e-pairing` for v0 and the wave 3 lane G VPS smoke for v1.
+//!
+//! **ONE CONNECTION** is new in #1025 S3 (D-1025-S3-4) and it is the assertion
+//! that matters most here: the gateway accepts ONCE. The pairing used to be a
+//! second ALPN and therefore a second dial, so a phone paid two QUIC setups and
+//! two hole-punches across the two things it does on its first screen. The
+//! redemption now promotes the connection it arrived on.
 
 use std::time::Duration;
 
@@ -77,10 +84,11 @@ fn a_commit() -> LogPage {
 }
 
 /// THE EXIT CRITERION. A seat redeems a QR ticket against a gateway and then
-/// streams one commit off it, on two different ALPNs, over real UDP.
+/// streams one commit off it — **on one connection, on one ALPN**, over real
+/// UDP.
 ///
-/// Every number the report quotes comes from here: the frame count, the bytes,
-/// and the wall clock.
+/// Every number the report quotes comes from here: the accept count, the frame
+/// count, the bytes, and the wall clock.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_endpoints_pair_and_stream_a_commit() {
     let started = std::time::Instant::now();
@@ -103,57 +111,90 @@ async fn two_endpoints_pair_and_stream_a_commit() {
         "a relay-less gateway must put its addresses in the ticket (D-1020-C15)"
     );
 
-    // The gateway's accept loop: two connections, one per lane.
+    // The gateway's accept loop. ONE accept, and the connection it yields is
+    // PROVISIONAL: the seat has not paired yet, so `accept` found no device for
+    // its key. The redemption promotes it in place and the same connection
+    // serves the log.
     let serving = {
         let gateway = gateway.clone();
         let allowlist = allowlist.clone();
         let page = a_commit();
         tokio::spawn(async move {
-            let mut lanes: Vec<Vec<u8>> = Vec::new();
-            // The accepted connections are HELD for the length of the task.
-            // Dropping one closes it, and a QUIC close discards whatever the
+            let mut accepts = 0usize;
+            // The accepted connection is HELD for the length of the task.
+            // Dropping it closes it, and a QUIC close discards whatever the
             // peer has not read yet — so a gateway that answered and moved on
             // would close the connection under the seat's own read. That is a
             // real ordering rule and not a test artefact: the answer is not
             // delivered until the peer has read it.
-            let mut held = Vec::new();
             let mut sent_frames = 0usize;
             let mut sent_bytes = 0usize;
-            while lanes.len() < 2 {
-                let accepted = gateway
-                    .accept(allowlist.as_ref())
-                    .await
-                    .expect("accepted")
-                    .expect("the endpoint is open");
-                if accepted.alpn == alpn::PAIR {
-                    let redeemed = pairing::serve_redemption(
-                        &accepted.connection,
-                        allowlist.as_ref(),
-                        VAULT_ID,
-                        VAULT_NAME,
-                        GATEWAY_ID,
-                        1_000,
-                    )
-                    .await
-                    .expect("served");
-                    assert!(redeemed.device.is_some(), "the ticket enrolled the seat");
-                    lanes.push(accepted.alpn.clone());
-                    held.push(accepted.connection);
-                    continue;
-                }
+            let accepted = gateway
+                .accept(allowlist.as_ref())
+                .await
+                .expect("accepted")
+                .expect("the endpoint is open");
+            accepts += 1;
+            assert_eq!(accepted.alpn, alpn::PLANE, "there is one ALPN");
+            assert!(
+                !accepted.is_promoted(),
+                "a device that has never paired is PROVISIONAL, not enrolled"
+            );
 
-                // The seat lane. The device is already known — `accept` refused
-                // an unenrolled peer before this line.
-                assert_eq!(accepted.alpn, alpn::SEAT);
-                assert!(
-                    accepted.device.as_ref().expect("admitted").is_live(),
-                    "`accept` refused an unenrolled peer above this line"
-                );
+            // THE PROVISIONAL STREAM. One, and the only kind it may carry is
+            // `pair` — which is what the gateway's own lane enforces; here the
+            // shape is asserted directly.
+            {
                 let (mut send, mut recv) = accepted
                     .connection
                     .accept_bi()
                     .await
-                    .expect("the seat opened a stream");
+                    .expect("the seat opened its pair stream");
+                let asked = read_envelope(&mut recv)
+                    .await
+                    .expect("read")
+                    .expect("a request");
+                let request_id = asked.request_id;
+                let pair = match asked.body {
+                    Some(envelope::Body::Request(core::Request {
+                        kind: Some(request::Kind::Pair(pair)),
+                    })) => pair,
+                    other => {
+                        panic!("a provisional connection may carry `pair` only, got {other:?}")
+                    }
+                };
+                let redeemed = pairing::answer_redemption(
+                    &mut send,
+                    request_id,
+                    &pair,
+                    accepted.connection.peer_id(),
+                    allowlist.as_ref(),
+                    &pairing::VaultIdentity {
+                        relay_url: "",
+                        direct_addrs: Vec::new(),
+                        snapshot: None,
+                        vault_id: VAULT_ID,
+                        vault_name: VAULT_NAME,
+                        gateway_address: GATEWAY_ID,
+                    },
+                    1_000,
+                )
+                .await
+                .expect("served");
+                assert!(redeemed.device.is_some(), "the ticket enrolled the seat");
+                sent_frames += 1;
+                let _ = send.finish();
+            }
+
+            // PROMOTED IN PLACE. The very next stream on this same connection
+            // is the seat's handshake — no reconnect, no second dial, no second
+            // accept.
+            {
+                let (mut send, mut recv) = accepted
+                    .connection
+                    .accept_bi()
+                    .await
+                    .expect("the promoted connection carries the seat's next stream");
 
                 // 1. the handshake, at request id 0
                 centraid_protocol::handshake::accept(
@@ -205,23 +246,21 @@ async fn two_endpoints_pair_and_stream_a_commit() {
                     }
                     other => panic!("expected the seat's cursor, got {other:?}"),
                 }
-                lanes.push(accepted.alpn.clone());
-                held.push(accepted.connection);
             }
-            (lanes, sent_frames, sent_bytes, held.len())
+            (accepts, sent_frames, sent_bytes, accepted)
         })
     };
 
     // ---- the seat's half ----
 
-    let paired = pairing::redeem(&seat, &scanned, "Test Phone", "linux")
+    let (promoted, paired) = pairing::redeem(&seat, &scanned, "Test Phone", "linux")
         .await
-        .expect("the pair lane answered");
+        .expect("the gateway answered the pair stream");
     match paired.result.expect("a result") {
         pair_response::Result::Ok(ok) => {
             assert_eq!(ok.vault_id, VAULT_ID);
             assert_eq!(ok.vault_name, VAULT_NAME);
-            assert_eq!(ok.gateway_id, GATEWAY_ID);
+            assert_eq!(ok.gateway_address, GATEWAY_ID);
         }
         pair_response::Result::Error(error) => panic!("refused: {error:?}"),
     }
@@ -234,10 +273,10 @@ async fn two_endpoints_pair_and_stream_a_commit() {
             .is_live()
     );
 
-    let connection = seat
-        .connect(gateway.id(), None, &scanned.direct_addrs, alpn::SEAT)
-        .await
-        .expect("the seat lane admits an enrolled device");
+    // THE SAME CONNECTION (#1025 S3, D-1025-S3-4). Not a second dial: the
+    // redemption promoted this one, and the gateway's accept count below is
+    // what proves there was no other.
+    let connection = promoted;
     let (mut send, mut recv) = connection.open_bi().await.expect("open");
 
     let mut frames = 0usize;
@@ -259,6 +298,8 @@ async fn two_endpoints_pair_and_stream_a_commit() {
             kind: Some(request::Kind::Log(core::LogRequest {
                 since: None,
                 limit: 1_000,
+                // A ONE-SHOT PAGE, not a tail (#1025 S2, D-1025-S7-40).
+                tail: false,
             })),
         },
     );
@@ -311,6 +352,11 @@ async fn two_endpoints_pair_and_stream_a_commit() {
                     seq: page.next,
                 }),
                 limit: 1_000,
+                // A PAGE AND NOT A TAIL: this test asks for the next page and
+                // reads the answer, which is the request shape it has always
+                // made (#1025 S4 added the flag; `false` is what this call
+                // meant before it existed).
+                tail: false,
             })),
         },
     );
@@ -319,15 +365,24 @@ async fn two_endpoints_pair_and_stream_a_commit() {
     send.flush().await.expect("flush");
     frames += 1;
 
-    let (lanes, gateway_frames, gateway_bytes, connections) =
+    let (accepts, gateway_frames, gateway_bytes, held) =
         tokio::time::timeout(Duration::from_secs(20), serving)
             .await
             .expect("the gateway finished inside the budget")
             .expect("the task joined");
-    assert_eq!(connections, 2, "one connection per lane, both held open");
-    assert_eq!(lanes.len(), 2, "both lanes were used");
-    assert!(lanes.contains(&alpn::PAIR.to_vec()));
-    assert!(lanes.contains(&alpn::SEAT.to_vec()));
+    // THE ASSERTION THE SLICE IS ABOUT. Pairing and streaming a commit cost the
+    // gateway ONE accept, which is one QUIC setup and one hole-punch on the
+    // phone's first screen. Two would mean the second ALPN is back.
+    assert_eq!(
+        accepts, 1,
+        "pairing and streaming took more than one connection"
+    );
+    assert_eq!(held.alpn, alpn::PLANE);
+    assert!(
+        !held.is_promoted(),
+        "`Accepted` records the state at ACCEPT; the promotion is the lane's, \
+         and rewriting this field would make the two disagree"
+    );
 
     let elapsed = started.elapsed();
     // Printed rather than asserted: they are the report's numbers, and an
@@ -335,9 +390,9 @@ async fn two_endpoints_pair_and_stream_a_commit() {
     // bound that IS asserted is the 20-second timeout above, which is a
     // liveness check and not a performance claim.
     println!(
-        "pair-and-stream: seat sent/read {frames} frames ({bytes} body bytes), gateway wrote \
-         {gateway_frames} frames ({gateway_bytes} body bytes), 3 rows in 1 commit, wall clock \
-         {:.3}s",
+        "pair-and-stream: {accepts} accept, seat sent/read {frames} frames ({bytes} body \
+         bytes), gateway wrote {gateway_frames} frames ({gateway_bytes} body bytes), 3 rows in \
+         1 commit, wall clock {:.3}s",
         elapsed.as_secs_f64()
     );
 
@@ -361,7 +416,7 @@ async fn an_unroutable_peer_fails_typed_inside_the_timeout() {
 
     let started = std::time::Instant::now();
     let error = seat
-        .connect(nobody, None, &[], alpn::SEAT)
+        .connect(nobody, None, &[], alpn::PLANE)
         .await
         .expect_err("nothing is there");
     let elapsed = started.elapsed();
@@ -388,12 +443,24 @@ async fn an_unroutable_peer_fails_typed_inside_the_timeout() {
     seat.close().await;
 }
 
-/// An unenrolled peer on the seat lane is closed with `Unauthorized` **before
-/// any frame is read** (#1020, D-1020-C8). The assertion that makes it mean
-/// something is the second one: the gateway never accepted a stream, so the
-/// bytes the impostor wrote were never parsed.
+/// An unenrolled peer is accepted **PROVISIONAL**, and provisional is the whole
+/// of what it gets (#1020, D-1020-C8; #1025 S3, D-1025-S3-4).
+///
+/// This used to close the connection here, and a second ALPN existed so a
+/// device redeeming a ticket — unenrolled by definition — had somewhere to
+/// knock. The admission decision has not moved and has not weakened: it is the
+/// same lookup, in the same place, before any stream is accepted, and its
+/// answer is carried on the connection for the connection's whole life. What
+/// changed is that the answer is a STATE rather than a close, so the one thing
+/// an unenrolled peer legitimately wants to do has somewhere to happen.
+///
+/// The assertions that make it mean something are the last two: `accept`
+/// reports the connection as NOT promoted, and nothing was enrolled by the
+/// attempt. What a provisional connection may then carry is the LANE's rule —
+/// one `pair` stream — and `crates/centraid/tests/seat_lane.rs` proves it
+/// against the shipped gateway, because that is where the lane is.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn an_unenrolled_peer_is_closed_before_a_frame_is_read() {
+async fn an_unenrolled_peer_is_accepted_provisional_and_enrols_nothing() {
     let gateway = Endpoint::spawn(EndpointConfig::loopback())
         .await
         .expect("bind");
@@ -412,14 +479,15 @@ async fn an_unenrolled_peer_is_closed_before_a_frame_is_read() {
     let serving = {
         let gateway = gateway.clone();
         let allowlist = allowlist.clone();
-        tokio::spawn(async move { gateway.accept(allowlist.as_ref()).await.err() })
+        tokio::spawn(async move { gateway.accept(allowlist.as_ref()).await })
     };
 
     let connection = seat
-        .connect(gateway.id(), None, &hints, alpn::SEAT)
+        .connect(gateway.id(), None, &hints, alpn::PLANE)
         .await
         .expect("the QUIC handshake itself succeeds; admission is above it");
-    // Write a frame the gateway must never parse.
+    // A frame this peer has no business sending. Whether it is ever read is the
+    // lane's business; what is under test here is the state it was accepted in.
     if let Ok((mut send, _recv)) = connection.open_bi().await {
         let _ = write_envelope(
             &mut send,
@@ -434,20 +502,23 @@ async fn an_unenrolled_peer_is_closed_before_a_frame_is_read() {
         let _ = send.flush().await;
     }
 
-    let refusal = tokio::time::timeout(Duration::from_secs(20), serving)
+    let accepted = tokio::time::timeout(Duration::from_secs(20), serving)
         .await
         .expect("the gateway answered inside the budget")
         .expect("the task joined")
-        .expect("a refusal");
+        .expect("accept did not fail")
+        .expect("the endpoint is open");
+    assert_eq!(accepted.alpn, alpn::PLANE);
     assert!(
-        matches!(refusal, ConnectError::Unauthorized),
-        "expected Unauthorized, got {refusal:?}"
+        !accepted.is_promoted(),
+        "a peer this gateway has never enrolled was admitted as a device"
     );
     assert!(
-        !refusal.is_worth_retrying(),
-        "an unenrolled device must be told to pair, not left retrying"
+        accepted.device.is_none(),
+        "there is no device, so there is nothing an intent could be run under"
     );
-    // Nothing was enrolled by the attempt.
+    // NOTHING WAS ENROLLED BY THE ATTEMPT. Provisional is a state, never a
+    // credential: reaching the gateway does not put a key in the allowlist.
     assert!(allowlist.device(&seat.id()).await.is_none());
 
     gateway.close().await;
@@ -558,7 +629,7 @@ async fn idle_and_resume_keep_the_endpoint_id() {
     // to prevent.
     assert!(matches!(
         endpoint
-            .connect([7u8; 32], None, &[], alpn::SEAT)
+            .connect([7u8; 32], None, &[], alpn::PLANE)
             .await
             .expect_err("idle"),
         ConnectError::PeerUnreachable
@@ -622,12 +693,36 @@ async fn a_relay_only_pair_and_stream() {
                 .await
                 .expect("accepted")
                 .expect("open");
-            pairing::serve_redemption(
-                &accepted.connection,
+            let (mut send, mut recv) = accepted
+                .connection
+                .accept_bi()
+                .await
+                .expect("the seat opened its pair stream");
+            let asked = read_envelope(&mut recv)
+                .await
+                .expect("read")
+                .expect("a request");
+            let request_id = asked.request_id;
+            let pair = match asked.body {
+                Some(envelope::Body::Request(core::Request {
+                    kind: Some(request::Kind::Pair(pair)),
+                })) => pair,
+                other => panic!("a provisional connection may carry `pair` only, got {other:?}"),
+            };
+            pairing::answer_redemption(
+                &mut send,
+                request_id,
+                &pair,
+                accepted.connection.peer_id(),
                 allowlist.as_ref(),
-                VAULT_ID,
-                VAULT_NAME,
-                GATEWAY_ID,
+                &pairing::VaultIdentity {
+                    relay_url: "",
+                    direct_addrs: Vec::new(),
+                    snapshot: None,
+                    vault_id: VAULT_ID,
+                    vault_name: VAULT_NAME,
+                    gateway_address: GATEWAY_ID,
+                },
                 1_000,
             )
             .await
@@ -643,9 +738,9 @@ async fn a_relay_only_pair_and_stream() {
         direct_addrs: Vec::new(),
         ..scanned
     };
-    let paired = pairing::redeem(&seat, &relay_only, "Relayed Phone", "linux")
+    let (_promoted, paired) = pairing::redeem(&seat, &relay_only, "Relayed Phone", "linux")
         .await
-        .expect("the relay carried the pair lane");
+        .expect("the relay carried the pair stream");
     assert!(matches!(
         paired.result.expect("a result"),
         pair_response::Result::Ok(_)

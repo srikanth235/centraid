@@ -74,6 +74,21 @@ impl<'conn> Outbox<'conn> {
         Ok(Self { connection })
     }
 
+    /// The order this intent was queued in, or `None` when it has left.
+    ///
+    /// The member's own order, and what decides which of two pending writes to
+    /// one row is the later one.
+    pub fn created_order(&self, intent_id: &str) -> Result<Option<i64>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT created_order FROM seat_outbox WHERE intent_id = ?1",
+                [intent_id],
+                |row| row.get(0),
+            )
+            .ok())
+    }
+
     /// Queue one intent.
     ///
     /// `created_order` is allocated here rather than taken from the caller, so
@@ -121,7 +136,7 @@ impl<'conn> Outbox<'conn> {
                         .transpose()?,
                     record.commit_seq,
                     waiting_on_json(&record.waiting_on)?,
-                    json_or_null(&record.needs_blobs)?,
+                    needs_blobs_json(&record.needs_blobs)?,
                     now,
                     record_json(record)?,
                 ],
@@ -229,6 +244,20 @@ impl<'conn> Outbox<'conn> {
         )?;
         self.connection
             .execute("DELETE FROM seat_outbox WHERE intent_id = ?1", [intent_id])?;
+        // AND THE PENDING JOURNAL GOES WITH IT (#1025 S7, item 4).
+        //
+        // HERE, and not in the three callers, because this is the one place a
+        // write leaves the queue — `settle_at_commit_seq`, the answer applier
+        // and the version-set twin all end up on this line. `settle` is called
+        // from inside the applier's own transaction, which is the whole point:
+        // the gateway's canonical rows land and the prediction's journal goes
+        // in one transaction (R24).
+        //
+        // The entries for the rows the answering commit CARRIED are already
+        // gone — the applier drops them as it writes each canonical row — and
+        // this clears the rest: rows the prediction touched that the gateway's
+        // commit did not.
+        crate::pending::forget(self.connection, intent_id)?;
         self.trim_journal()?;
         Ok(true)
     }
@@ -313,7 +342,11 @@ fn record_json(record: &IntentRecord) -> Result<String> {
             .iter()
             .map(|wait| serde_json::json!({ "seat": wait.seat.as_str(), "label": wait.label }))
             .collect::<Vec<_>>(),
-        "needsBlobs": record.needs_blobs,
+        "needsBlobs": record
+            .needs_blobs
+            .iter()
+            .map(needed_bytes_value)
+            .collect::<Vec<_>>(),
         "enqueuedAt": record.enqueued_at,
         "updatedAt": record.updated_at,
         "reason": record.reason,
@@ -330,6 +363,22 @@ fn record_json(record: &IntentRecord) -> Result<String> {
             .collect::<Vec<_>>(),
         "onlineOnly": record.online_only,
     }))?)
+}
+
+fn needed_bytes_value(need: &centraid_vault::intents::NeededBytes) -> serde_json::Value {
+    serde_json::json!({
+        "hash": need.hash,
+        "byteSize": need.byte_size,
+        "mediaType": need.media_type,
+    })
+}
+
+fn read_needed_bytes(value: &serde_json::Value) -> Option<centraid_vault::intents::NeededBytes> {
+    Some(centraid_vault::intents::NeededBytes {
+        hash: value.get("hash")?.as_str()?.to_owned(),
+        byte_size: value.get("byteSize").and_then(serde_json::Value::as_i64)?,
+        media_type: value.get("mediaType")?.as_str()?.to_owned(),
+    })
 }
 
 fn base_version_value(version: &centraid_vault::intents::BaseVersion) -> serde_json::Value {
@@ -400,7 +449,11 @@ pub fn read_record(text: &str) -> Result<IntentRecord> {
             .and_then(serde_json::Value::as_array)
             .map(|items| items.iter().filter_map(read_waiting_on).collect())
             .unwrap_or_default(),
-        needs_blobs: strings("needsBlobs"),
+        needs_blobs: value
+            .get("needsBlobs")
+            .and_then(serde_json::Value::as_array)
+            .map(|items| items.iter().filter_map(read_needed_bytes).collect())
+            .unwrap_or_default(),
         enqueued_at: string("enqueuedAt")?,
         updated_at: string("updatedAt")?,
         reason: value
@@ -479,6 +532,49 @@ fn json_or_null(items: &[String]) -> Result<Option<String>> {
         return Ok(None);
     }
     Ok(Some(serde_json::to_string(items)?))
+}
+
+fn needs_blobs_json(needs: &[centraid_vault::intents::NeededBytes]) -> Result<Option<String>> {
+    if needs.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::to_string(
+        &needs.iter().map(needed_bytes_value).collect::<Vec<_>>(),
+    )?))
+}
+
+/// EVERY HASH AN UNSETTLED INTENT NAMES (#1025 S3, R25).
+///
+/// The pin the byte store's sweep honours. "Unsettled" is the whole queue
+/// except the terminal states: a write still queued, sending, or parked waiting
+/// on a predecessor is a write whose bytes have not reached the gateway, and
+/// they are the only copy. An EXECUTED intent's bytes are the gateway's now and
+/// may be evicted like any other cache; a denied or failed one is not going to
+/// be retried.
+///
+/// Read from the durable column rather than from the in-flight report: a phone
+/// that was killed mid-pass comes back with a queue and no report, and the
+/// sweep that runs at next launch must still know what not to take.
+pub fn pinned_blobs(connection: &Connection) -> Result<Vec<String>> {
+    let mut statement = connection.prepare(
+        "SELECT needs_blobs_json FROM seat_outbox
+          WHERE needs_blobs_json IS NOT NULL
+            AND state NOT IN ('executed','denied','failed','conflict',
+                              'conflict-base-missing','expired')",
+    )?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+    let mut pinned = Vec::new();
+    for row in rows {
+        let Ok(items) = serde_json::from_str::<serde_json::Value>(&row?) else {
+            continue;
+        };
+        for need in items.as_array().into_iter().flatten() {
+            if let Some(hash) = need.get("hash").and_then(serde_json::Value::as_str) {
+                pinned.push(hash.to_owned());
+            }
+        }
+    }
+    Ok(pinned)
 }
 
 fn base_versions_json(versions: &[centraid_vault::intents::BaseVersion]) -> Result<Option<String>> {

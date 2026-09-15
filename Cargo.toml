@@ -37,7 +37,29 @@ repository = "https://github.com/srikanth235/centraid"
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 flate2 = "1"
+# The free-space probe the bootstrap room check needs (#1025 S7, item 3).
+# A safe wrapper over `statvfs`/`GetDiskFreeSpaceEx`; the alternative was an
+# `unsafe` block in `crates/seat-link`, which is `#![forbid(unsafe_code)]` and
+# stays that way — the only crate in this workspace with an unsafe surface is
+# `crates/core-ffi`, where the C ABI is.
+fs4 = { version = "0.13", default-features = false }
 hex = "0.4"
+# THE ONE IMAGE CODEC (#1025 S3, D-1025-S7-50). Derivatives are generated at
+# the gateway, so the workspace needs a decoder and a JPEG encoder and nothing
+# else. `default-features = false` drops every format this product does not
+# commit at a door and, with it, the rayon thread pool: a command handler runs
+# inside a SQLite transaction and must not fan out. `jpeg`/`png`/`gif`/`webp`
+# are the decode set (`webp` in 0.25 is DECODE ONLY — there is no WebP encoder
+# behind this feature, which is why `thumb` is JPEG); `jpeg` also carries the
+# encoder every derivative is written with. MIT OR Apache-2.0, pure Rust, no
+# C dependency and no system library — which is the property that kept ffmpeg
+# and libheif out (D-1025-S7-52).
+image = { version = "0.25.10", default-features = false, features = [
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+] }
 blake3 = "1.8"
 jsonschema = "0.30"
 proptest = "1"
@@ -60,6 +82,10 @@ serde = { version = "1", features = ["derive"] }
 # are parsed back on every apply, so a drifting REAL is a seat whose latitude,
 # or exchange rate, is quietly not the gateway's.
 serde_json = { version = "1", features = ["float_roundtrip"] }
+# SHA-256 SURVIVES IN EXACTLY ONE PLACE (#1025 S4, D-1025-S4-5): `crates/xtask`,
+# whose artifact key feeds GitHub Actions' cache and whose CI lint reads
+# Subresource Integrity attributes. Both are somebody else's protocol. No crate
+# under `crates/` other than `xtask` may depend on this.
 sha2 = "0.11"
 thiserror = "2"
 tracing = "0.1"
@@ -97,13 +123,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # `proptest` is declared above, by lane D3. One entry for the workspace.
 
 # Wave 2 lane R — the byte plane, key custody, backup and recovery (#1020).
-# These are the versions `packages/tunnel/data-plane` seals the cross-language
-# golden with. The formats are normative (D-1020-R1), so a major bump on any of
-# the AEAD/KDF crates is a re-keying event to be proven against
-# `contracts/golden/format-golden.json`, never routine housekeeping.
+# The formats are normative (D-1020-R1), so a major bump on the AEAD crate is a
+# re-keying event to be proven against `contracts/golden/format-golden.json`,
+# never routine housekeeping. The KDF and MAC crates that used to sit here —
+# `hkdf` and `hmac`, both over SHA-256 — are gone: ONE HASH (#1025 S4,
+# D-1025-S4-1), and `blake3` carries `derive_key` and `keyed_hash` itself.
 aes-gcm = "0.11"
-hkdf = "0.13"
-hmac = "0.13"
 ryu-js = "1.0.3"
 scrypt = "0.12"
 subtle = "2"
@@ -144,11 +169,12 @@ jiff = { version = "0.2", default-features = false, features = [
 # is already in the graph.
 psl = "2.1"
 url = "2.5"
-# The seat's at-rest wrap is v0's, primitive for primitive: PBKDF2-SHA-256 at
-# 600,000 rounds around `K` (`packages/client/src/locker/locker-unlock.ts:38`).
-# Already in the graph as scrypt's own dependency; declared here because
-# `crates/seat` calls it directly.
-pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
+# THE ONE JOB A FAST HASH MUST NOT DO (#1025 S4, D-1025-S4-4). Stretching a
+# member's passphrase is memory-hardness work, and BLAKE3 is deliberately fast,
+# so the seat's at-rest wrap is Argon2id — not `blake3::derive_key`, which would
+# be the one place "one hash" bought an attacker throughput. v0's
+# PBKDF2-SHA-256 at 600,000 rounds is superseded; `pbkdf2` leaves the graph.
+argon2 = "0.6"
 
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).

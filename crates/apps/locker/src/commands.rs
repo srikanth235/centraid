@@ -284,10 +284,9 @@ pub fn invocation_for(
 mod tests {
     use super::*;
 
-    /// EXACTLY V0'S FIVE. The exit criterion names this list, so the list is
-    /// asserted against v0's own file rather than against a copy of it.
+    /// EXACTLY FIVE ACTIONS ARE ONLINE-ONLY, and they are named.
     #[test]
-    fn online_only_is_exactly_v0s_five() {
+    fn online_only_is_exactly_the_five() {
         assert_eq!(
             online_only_actions(),
             [
@@ -299,31 +298,13 @@ mod tests {
             ]
         );
 
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .join("packages/blueprints/apps/locker/writes.ts");
-        let source = std::fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("reading {}: {error}", path.display()));
-        let declared = source
-            .split("export const ONLINE_ONLY_ACTIONS: readonly string[] = [")
-            .nth(1)
-            .expect("v0 declares ONLINE_ONLY_ACTIONS")
-            .split(']')
-            .next()
-            .expect("the list closes");
-        let v0: Vec<String> = declared
-            .split(',')
-            .map(|entry| entry.trim().trim_matches('"').to_owned())
-            .filter(|entry| !entry.is_empty())
-            .collect();
-        assert_eq!(
-            v0,
-            online_only_actions()
-                .iter()
-                .map(|action| (*action).to_owned())
-                .collect::<Vec<String>>(),
-            "the port's online_only set is not v0's ONLINE_ONLY_ACTIONS"
-        );
+        // THE v0 HALF IS DELETED, NOT PORTED (#1025 S4). The assertion that followed
+        // compared this against the v0 source file, which `chore(retire): delete the v0
+        // tree` removed from the repository. Reviving it under `contracts/` to keep a
+        // parity grep alive would be re-importing the tree that retirement deleted —
+        // v0-no-legacy — and what it protected is the LIST, which is asserted above
+        // against this port's own declaration and is what every behaviour test below
+        // then exercises. A frozen copy of a deleted file proves the copy, not the port.
     }
 
     /// The eleven that DO queue, named, because their absence from the list is

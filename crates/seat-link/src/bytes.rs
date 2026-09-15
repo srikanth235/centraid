@@ -39,25 +39,93 @@ pub struct BytePassReport {
     /// Blobs that are now whole. **Not the same as `planned`** — a window that
     /// ends mid-blob completes fewer than it started, and that is a success.
     pub completed: usize,
+    /// THE BLOBS BEHIND [`Self::completed`], each with the file the store gave
+    /// it (#1025 S5, widened by D-1025-S7-20).
+    ///
+    /// Kept because a completed blob has to WAKE A SCREEN, and the only way
+    /// back from a hash to the row a grid draws is a lookup in the replica
+    /// (`centraid_seat::bytes::asset_rows_for`). A count cannot do it: 19
+    /// photographs landed on a device, no row changed, no event fired, and the
+    /// member read "not on this device yet" over a device that had them.
+    ///
+    /// **And the PATH travels with the hash**, because the row the seat writes
+    /// for a landed blob carries it: the store is the one thing that knows
+    /// where its own bytes are, and a pass that reported hashes alone would
+    /// make the seat ask an actor, per blob, for something this loop already
+    /// had in hand.
+    pub landed: Vec<centraid_seat::HeldBlob>,
     /// Payload bytes that crossed in this window.
     pub moved: u64,
     /// Blobs left for a later window, after the budget.
     pub deferred: usize,
     /// The link went away partway through. The blobs already landed are kept;
     /// this is why the rest did not.
+    ///
+    /// **A SENTENCE THE CORE CHOSE, NEVER THE TRANSPORT'S WORDS** (#1025 S5).
+    /// This used to be `LaneError`'s `Display`, which travels into
+    /// `SyncOutcome::bytes_stalled` and onto a screen — so a member read
+    /// "the byte lane could not fetch 053bafba2198bb…: io: stream reset by
+    /// peer: error 3". That is a content hash and a QUIC error code on a
+    /// member's phone, and it is the same rule D-1020-B7 closes with: no
+    /// database text, no path and no peer's words reach a member. The hash and
+    /// the transport's own message go to a log line, which is where a
+    /// developer wanted them anyway.
     pub stalled: Option<String>,
-    /// Rows naming bytes this plane cannot address — a `blob:sha256-` URI from
-    /// a vault that predates the byte plane. Counted rather than logged per
-    /// row, because on such a vault it is every row.
+    /// BLOBS THIS GATEWAY WOULD NOT SERVE, on a connection that stayed up
+    /// (#1025 S7).
+    ///
+    /// Its own number rather than a spelling of [`Self::stalled`], because the
+    /// two have different remedies and only one of them is about the network. A
+    /// non-zero count here is a row whose bytes the gateway committed without
+    /// holding — this product's law in the other direction — and it is the
+    /// number that tells a STUCK plane apart from a slow one. Without it the
+    /// symptom was `blobsCompleted: 0` for ever with nothing to look at.
+    pub refused: usize,
+    /// THE DEADLINE ENDED THIS PASS (#1025 S2). A normal end: every verified
+    /// chunk group is durable and the next window resumes from it. Separate
+    /// from [`Self::stalled`], which is the link going away.
+    pub cut_by_the_deadline: bool,
+    /// Rows whose `content_uri` is not `blob:blake3-<hex>` — the one form this
+    /// plane addresses (#1025 S3, D-1025-S3-3). Counted rather than logged per
+    /// row, because a vault that has one such row usually has nothing but.
     pub unaddressable: usize,
+    /// ORIGINALS THIS WINDOW REFUSED TO ASK FOR because the link is metered
+    /// (#1025 S5).
+    ///
+    /// The one reason a pass can plan NOTHING over a replica full of
+    /// photographs, and therefore the one number that tells an empty byte pass
+    /// apart from a caught-up device. Without it a metered flag set from a
+    /// wrong input looks exactly like a working, idle byte plane.
+    pub withheld: usize,
+    /// What the eviction sweep did at the end of this pass (#1025 S3, R25).
+    ///
+    /// `None` means it did not run or could not read the store — which is NOT
+    /// "nothing needed evicting". A surface that showed the two the same way
+    /// would tell a member their storage is fine on the one occasion nobody
+    /// could measure it.
+    pub swept: Option<centraid_blobs::Sweep>,
 }
 
+/// WHAT A MEMBER READS WHEN THE BYTE PLANE STOPS.
+///
+/// One sentence for every transport failure, because they are one thing to a
+/// member: the photographs have not arrived yet and the device will try again.
+/// Which blob, and what the transport said about it, are a developer's
+/// questions and are answered in the log beside this.
+pub const BYTES_STALLED_SENTENCE: &str =
+    "Some photos have not finished downloading yet. Centraid will keep trying.";
+
 /// Turn the replica's rows into wants, ask the store what is held, plan, fetch.
+/// `deadline` is the CALLER'S, and `None` means "as long as it takes". It is
+/// checked BEFORE each blob is asked for and never against one in flight: a
+/// transfer cut mid-blob is the ordinary case and costs nothing, but deciding
+/// to start one is a decision this loop can make honestly.
 pub async fn byte_pass(
     store: &ByteStore,
     connection: &centraid_net::endpoint::RawConnection,
     needs: &[BlobNeed],
     budget: Budget,
+    deadline: Option<std::time::Instant>,
 ) -> BytePassReport {
     let mut report = BytePassReport::default();
 
@@ -81,26 +149,94 @@ pub async fn byte_pass(
     }
     let planned = centraid_blobs::plan(exact, budget);
     report.planned = planned.items.len();
+    // FROM THE FIRST PLAN, which saw the whole vault. The second only ever saw
+    // the first's candidates, so its own count would be however many originals
+    // happened to survive the budget rather than how many this window refused.
+    report.withheld = rough.withheld;
     // Deferred is the FIRST plan's, plus anything the second dropped: the first
     // saw the whole vault and the second only saw its own candidates.
     report.deferred = rough.deferred + (report.planned.saturating_sub(planned.items.len()));
 
     for want in &planned.items {
+        if deadline.is_some_and(|at| std::time::Instant::now() >= at) {
+            report.cut_by_the_deadline = true;
+            // WHAT IS LEFT IS DEFERRED, not lost. The number a progress line
+            // shows as "and 812 more" must count them, or a member watching it
+            // would see the queue shrink without anything arriving.
+            report.deferred += planned
+                .items
+                .len()
+                .saturating_sub(report.completed + report.deferred);
+            break;
+        }
         match centraid_blobs::fetch(store, connection, want.hash).await {
             Ok(fetched) => {
                 report.moved += fetched.moved;
                 if fetched.complete {
                     report.completed += 1;
+                    // THE PATH, ASKED FOR ONCE, HERE. `data_path` answers
+                    // `None` for a partial blob, and this branch is the one
+                    // place that already knows the blob is whole. A blob whose
+                    // file the store cannot name is counted as completed and
+                    // is NOT reported as landed: a row is a promise a surface
+                    // can open the path.
+                    if let Ok(Some(path)) = store.data_path(want.hash).await {
+                        // THE FILE'S OWN LENGTH AND NOT `fetched.moved`, which
+                        // is what crossed in THIS window — a resumed blob
+                        // moved only its remainder, and a size taken from it
+                        // would be a number a storage screen could quote back.
+                        let byte_size = std::fs::metadata(&path)
+                            .map(|metadata| i64::try_from(metadata.len()).unwrap_or(i64::MAX))
+                            .unwrap_or_default();
+                        report.landed.push(centraid_seat::HeldBlob {
+                            hash: want.hash.to_hex(),
+                            path: path.to_string_lossy().into_owned(),
+                            byte_size,
+                        });
+                    }
                 }
             }
             Err(error) => {
-                // THE WINDOW ENDED, which is the ordinary way a pass stops.
-                // Everything already fetched is durable and verified; the rest
-                // is the next window's. Breaking rather than continuing is the
-                // point: one dead connection means the rest would each pay a
-                // timeout.
-                report.stalled = Some(error.to_string());
-                break;
+                // ONE BLOB THE PEER WOULD NOT SERVE IS NOT THE END OF THE
+                // WINDOW (#1025 S7).
+                //
+                // The loop used to break on every error, and the reason given
+                // was "one dead connection means the rest would each pay a
+                // timeout" — true of a dead connection and false of everything
+                // else. A gateway that resets ONE stream (a blob its store
+                // cannot serve, a row committed over bytes it never held) then
+                // ended the window; the plan is ordered deterministically, so
+                // the same blob came first in the next window, and the next.
+                // **The byte plane stopped for ever and every photograph after
+                // that one stayed a placeholder**, with `blobsCompleted: 0` and
+                // a member-facing sentence promising it would keep trying.
+                //
+                // So the connection is the test, and it is the honest one: a
+                // connection with a close reason is a window that is over, and
+                // a live one is one blob that did not work. The refused blob is
+                // counted, the window carries on, and the plane makes durable
+                // progress over everything else — which is the law
+                // ("every window makes durable, verified progress").
+                //
+                // THE DETAIL GOES HERE AND ONLY HERE. It names the blob and
+                // repeats the transport's own words, which is exactly what a
+                // developer needs and exactly what a member must never read
+                // (`Error.detail` is logs-only).
+                if connection.close_reason().is_some() {
+                    tracing::warn!(
+                        hash = %want.hash,
+                        detail = %error,
+                        "the byte plane's connection went away"
+                    );
+                    report.stalled = Some(BYTES_STALLED_SENTENCE.to_owned());
+                    break;
+                }
+                tracing::warn!(
+                    hash = %want.hash,
+                    detail = %error,
+                    "the gateway would not serve this blob; the window carries on"
+                );
+                report.refused += 1;
             }
         }
     }
@@ -114,10 +250,9 @@ fn wants_from(needs: &[BlobNeed], complete: &HashSet<ContentHash>) -> (Vec<Want>
     let mut unaddressable = 0usize;
     for need in needs {
         // A DERIVATIVE CARRIES A BARE HASH, an original carries a URI, and the
-        // difference is deliberate: only the original's column can say WHICH
-        // hash function, so only the original can be refused as superseded. A
-        // derivative's hash is trusted to be this vault's scheme because the
-        // row that owns it was checked.
+        // difference is deliberate: only the original's column names the hash
+        // FUNCTION, so only the original's form can be checked. A derivative's
+        // hash is this vault's scheme because the row that owns it was.
         let hash = match &need.variant {
             None => match ContentHash::parse_uri(&need.locator) {
                 Ok(hash) => hash,
@@ -141,6 +276,11 @@ fn wants_from(needs: &[BlobNeed], complete: &HashSet<ContentHash>) -> (Vec<Want>
             size,
             held: if complete.contains(&hash) { size } else { 0 },
             recency: recency_of(&need.created_at),
+            // THE ONE FACT THE PLANNER CANNOT SEE FOR ITSELF (#1025 S4). The
+            // replica's own `media_type` says it and `needed_blobs` carries
+            // it; a `video/*` original is the one thing a cellular rule still
+            // withholds from a member who asked for photographs on cellular.
+            moving: need.moving,
         });
     }
     (wants, unaddressable)
@@ -183,14 +323,19 @@ mod tests {
             variant: variant.map(ToOwned::to_owned),
             byte_size: size,
             created_at: at.to_owned(),
+            moving: false,
         }
     }
 
-    /// A vault written before the byte plane names its bytes by sha256. Those
-    /// rows are COUNTED and skipped, never verified against blake3 — which
-    /// would be asking a peer for a hash that names different bytes.
+    /// A `content_uri` that is not `blob:blake3-<hex>` names nothing this plane
+    /// can ask a peer for. Those rows are COUNTED and skipped — asking for a
+    /// hash under another function's name would be asking for different bytes.
     #[test]
-    fn a_superseded_uri_is_counted_and_never_fetched() {
+    fn a_uri_this_plane_cannot_address_is_counted_and_never_fetched() {
+        // A URI under ANOTHER FUNCTION'S NAME. v0 wrote `blob:sha256-` and
+        // #1025 S3 made `blob:blake3-` the only form this plane addresses; the
+        // string is constructed here rather than cited from anywhere, because
+        // nothing produces it (#1025 S4).
         let old = format!("blob:sha256-{}", "ab".repeat(32));
         let new = ContentHash::of(b"a photograph").to_uri();
         let (wants, unaddressable) = wants_from(
@@ -237,5 +382,62 @@ mod tests {
             &complete,
         );
         assert!(wants[0].is_satisfied());
+    }
+}
+
+#[cfg(test)]
+mod sentences {
+    use super::*;
+
+    /// WHAT A MEMBER READS WHEN THE BYTE PLANE STOPS CARRIES NO HASH, NO
+    /// TRANSPORT WORDS AND NO CODE (#1025 S5, D-1020-B7).
+    ///
+    /// The device produced this, on screen:
+    ///
+    /// > "Synced: 0 changes, 0 files. the byte lane could not fetch
+    /// > 053bafba2198bb412e6fb2ec38dfd78d6fde071784582d29fb5fc0a037db03c9:
+    /// > io: stream reset by peer: error 3"
+    ///
+    /// A content hash and a QUIC application error code, on a phone. The rule
+    /// is the one D-1020-B7 closes with — no database text, no path and no
+    /// peer's words reach a member — and this is the assertion that keeps it
+    /// true of the field `SyncOutcome::bytes_stalled` renders.
+    #[test]
+    fn the_stalled_sentence_is_the_cores_own_words() {
+        let sentence = BYTES_STALLED_SENTENCE;
+        assert!(
+            !sentence.contains(':'),
+            "a colon is where a detail gets appended: {sentence}"
+        );
+        // No hex run long enough to be a hash, and no digits at all: the two
+        // things the device's sentence leaked were a hash and an error number.
+        assert!(
+            !sentence.chars().any(|c| c.is_ascii_digit()),
+            "the sentence carries a number a member cannot act on: {sentence}"
+        );
+        assert!(
+            !sentence.contains("error") && !sentence.contains("io"),
+            "the sentence reads as a transport failure: {sentence}"
+        );
+        // It is a SENTENCE: it says what happened and what happens next.
+        assert!(sentence.ends_with('.'));
+        assert!(sentence.starts_with(char::is_uppercase));
+    }
+
+    /// AND `LaneError` STILL CARRIES THE DETAIL, because a developer needs it.
+    /// The fix is about where it goes, not about losing it: the hash and the
+    /// transport's own words go to the log line beside the sentence.
+    #[test]
+    fn the_lane_error_still_names_the_blob_and_the_cause() {
+        let error = centraid_blobs::LaneError::Transfer {
+            hash: centraid_blobs::ContentHash::of(b"a photograph"),
+            detail: "io: stream reset by peer: error 3".to_owned(),
+        };
+        let text = error.to_string();
+        assert!(text.contains("stream reset by peer"));
+        assert_ne!(
+            text, BYTES_STALLED_SENTENCE,
+            "the detail and the sentence became the same string again"
+        );
     }
 }

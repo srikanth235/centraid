@@ -13,6 +13,7 @@ import dev.centraid.shared.sync.SyncEffect
 import dev.centraid.shared.sync.SyncScheduler
 import dev.centraid.shared.sync.WakeReason
 import dev.centraid.shared.sync.WriteGate
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -58,7 +59,7 @@ class SyncSchedulerSpec : StringSpec({
     "a pass runs its stages in order, one effect at a time" {
         var scheduler = SyncScheduler()
         val started = scheduler.reduce(
-            LifecycleEvent.PassRequested(WakeReason.SCHEDULED, nowMs = 0),
+            LifecycleEvent.PassRequested(WakeReason.SCHEDULED, nowMs = 0, deadlineMs = PLATFORM_DEADLINE_MS),
         )
         started.effects shouldContainExactly listOf(SyncEffect.RunStage(Stage.PULL_LOG))
         val pass = started.state as LifecycleState.BackgroundPass
@@ -79,17 +80,17 @@ class SyncSchedulerSpec : StringSpec({
         second.effects shouldContainExactly listOf(SyncEffect.RunStage(Stage.SUBMIT_INTENTS))
     }
 
-    "the 20 s budget stops the pass AT A STAGE BOUNDARY, with a report" {
+    "the platform's deadline stops the pass AT A STAGE BOUNDARY, with a report" {
         // `docs/mobile-offline.md:212`. A coroutine cancelled mid-stage leaves
         // no report, and the next pass cannot tell whether to redo the stage.
         val started = SyncScheduler().reduce(
-            LifecycleEvent.PassRequested(WakeReason.SCHEDULED, nowMs = 0),
+            LifecycleEvent.PassRequested(WakeReason.SCHEDULED, nowMs = 0, deadlineMs = PLATFORM_DEADLINE_MS),
         )
         val overrun = SyncScheduler(started.state).reduce(
             LifecycleEvent.StageSettled(
                 Stage.PULL_LOG,
                 // One millisecond past the budget, at the boundary.
-                nowMs = LifecycleState.BUDGET_MS + 1,
+                nowMs = PLATFORM_DEADLINE_MS + 1,
                 outcome = LifecycleEvent.StageSettled.Outcome.Completed,
             ),
         )
@@ -105,7 +106,7 @@ class SyncSchedulerSpec : StringSpec({
         // things the timer does not. And it does not cancel the stage in
         // flight — the pass still stops at the next boundary, with a report.
         val started = SyncScheduler().reduce(
-            LifecycleEvent.PassRequested(WakeReason.SCHEDULED, nowMs = 0),
+            LifecycleEvent.PassRequested(WakeReason.SCHEDULED, nowMs = 0, deadlineMs = PLATFORM_DEADLINE_MS),
         )
         val warned = SyncScheduler(started.state).reduce(
             LifecycleEvent.PlatformExpirationWarning(nowMs = 1_000),
@@ -114,7 +115,7 @@ class SyncSchedulerSpec : StringSpec({
         warned.effects.shouldBeEmpty()
         (warned.state as LifecycleState.BackgroundPass).platformWarned.shouldBeTrue()
 
-        // Well inside the 20 s budget, and the pass still stops.
+        // Well inside the platform's deadline, and the pass still stops.
         val stopped = SyncScheduler(warned.state).reduce(
             LifecycleEvent.StageSettled(
                 Stage.PULL_LOG,
@@ -132,7 +133,7 @@ class SyncSchedulerSpec : StringSpec({
         // `skippedLive` rather than a failure: a member using the app is not a
         // broken background pass.
         val started = SyncScheduler().reduce(
-            LifecycleEvent.PassRequested(WakeReason.PUSH, nowMs = 0),
+            LifecycleEvent.PassRequested(WakeReason.PUSH, nowMs = 0, deadlineMs = PLATFORM_DEADLINE_MS),
         )
         val afterFailure = SyncScheduler(started.state).reduce(
             LifecycleEvent.StageSettled(
@@ -164,7 +165,7 @@ class SyncSchedulerSpec : StringSpec({
         parked.effects shouldContainExactly listOf(SyncEffect.ParkFeed)
 
         val woken = SyncScheduler(parked.state, parked = true).reduce(
-            LifecycleEvent.PassRequested(WakeReason.SCHEDULED, nowMs = 0),
+            LifecycleEvent.PassRequested(WakeReason.SCHEDULED, nowMs = 0, deadlineMs = PLATFORM_DEADLINE_MS),
         )
         // NOT a pass. The wake is answered with the park, not with a retry.
         woken.effects shouldContainExactly listOf(SyncEffect.ParkFeed)
@@ -194,6 +195,38 @@ class SyncSchedulerSpec : StringSpec({
         }
         WakeReason.entries.size shouldBe 5
         WakeReason.valueOf("PUSH") shouldBe WakeReason.PUSH
+    }
+
+    "a pass's budget is the PLATFORM'S number, carried through untouched" {
+        // #1025 S5. `budgetMs` defaulted to a `BUDGET_MS = 20_000` constant,
+        // which is a number only the OS knows: it outlives an iOS refresh
+        // window and cuts a night shift that had hours. The scheduler neither
+        // invents it nor trims it for teardown headroom.
+        val started = SyncScheduler().reduce(
+            LifecycleEvent.PassRequested(
+                WakeReason.SCHEDULED,
+                nowMs = 0,
+                deadlineMs = 7_531,
+            ),
+        )
+        (started.state as LifecycleState.BackgroundPass).budgetMs shouldBe 7_531L
+    }
+
+    "LifecycleState HOLDS NO BUDGET CONSTANT" {
+        // Asserted reflectively, the way `NavigationAndMountSpec` asserts an
+        // absent gateway field, so that re-adding one is red here rather than
+        // a review catch. The constant was `BUDGET_MS = 20_000`; the deadline
+        // now arrives on `PassRequested` from `BackgroundTasks.window`.
+        // Both halves: a constant on the interface itself, and the companion
+        // object a re-adding hand would reach for.
+        // The interface's OWN members, and the companion object a re-adding
+        // hand would reach for. `BackgroundPass.budgetMs` is not in scope: that
+        // field is the platform's number and is meant to be there.
+        val names = LifecycleState::class.java.declaredFields.map { it.name } +
+            LifecycleState::class.java.declaredClasses.map { it.simpleName }
+        withClue(names) {
+            names.none { it.contains("budget", true) || it == "Companion" }.shouldBeTrue()
+        }
     }
 
     // --- The write gate ---------------------------------------------------
@@ -279,11 +312,10 @@ class SyncSchedulerSpec : StringSpec({
         store.keys shouldContainExactly setOf("${SecureStore.PREFIX}device.key")
     }
 
-    "camera-roll enumeration is keyset, and exact SHA-256 is the identity" {
+    "camera-roll enumeration is keyset, and carries no digest of its own" {
         val assets = (1..5).map { index ->
             MediaLibrary.Asset(
                 localId = "local-$index",
-                sha256 = "sha-$index",
                 bytes = 1_000L * index,
                 capturedAtIso = "2026-09-0${index}T00:00:00Z",
                 capturedUtcOffsetMinutes = 0,
@@ -305,7 +337,28 @@ class SyncSchedulerSpec : StringSpec({
         // The dHash is shared across all five and is not an identity: nothing
         // in this interface lets a caller merge on it.
         assets.map { it.perceptualHash }.distinct().size shouldBe 1
-        assets.map { it.sha256 }.distinct().size shouldBe 5
+        // AND NO DIGEST CROSSES THIS SEAM (#1025 S4, and #1025 S5 made it run).
+        // The core names bytes; a field here would be a second name for them
+        // that the platform cannot even compute — WebCrypto, CryptoKit and
+        // MessageDigest have no BLAKE3.
+        //
+        // TWO NAMES ARE EXEMPT AND BOTH ARE NAMED, because a rule that read
+        // "no member whose name contains `hash`" was RED against this very
+        // interface the day it was written: `hashCode` is Kotlin's, and
+        // `perceptualHash` is the dHash — a duplicates HINT that never
+        // auto-merges, which is the whole reason it is not called an id.
+        // Excluding them by name keeps the rule's actual subject — a content
+        // digest — catchable, where deleting the rule would not.
+        val notDigests = setOf("hashCode", "perceptualHash")
+        val fields = MediaLibrary.Asset::class.members.map { it.name }
+            .filterNot { it in notDigests }
+        fields.none { it.contains("sha", ignoreCase = true) }.shouldBeTrue()
+        fields.none { it.contains("hash", ignoreCase = true) }.shouldBeTrue()
+        fields.none { it.contains("digest", ignoreCase = true) }.shouldBeTrue()
+        // And the exempt names are still THERE — an exemption for a member that
+        // has gone is an exemption nobody is looking at.
+        MediaLibrary.Asset::class.members.map { it.name }
+            .containsAll(notDigests).shouldBeTrue()
     }
 
     "there is no way to delete a photo through MediaLibrary, and that is the enforcement" {
@@ -330,3 +383,9 @@ class SyncSchedulerSpec : StringSpec({
         tasks.registrations shouldBe 1
     }
 })
+
+/**
+ * A platform's number, for the tests that need one. Deliberately NOT a
+ * constant the production tree holds: that is the whole point of #1025 S5.
+ */
+private const val PLATFORM_DEADLINE_MS: Long = 30_000

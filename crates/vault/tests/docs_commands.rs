@@ -23,7 +23,7 @@
 
 mod common;
 
-use centraid_media::format::sha256_hex;
+use centraid_media::format::content_hash_hex;
 use centraid_vault::access::Principal;
 use centraid_vault::backup::store::{BlobStore, FsBlobStore, digest};
 use centraid_vault::commands::Registry;
@@ -113,7 +113,11 @@ impl Drive {
     /// and the bytes in a real content-addressed store beside it.
     fn stage(&self, store: &FsBlobStore, bytes: &[u8], media_type: &str, name: &str) -> String {
         let sha = digest(bytes);
-        assert_eq!(sha, sha256_hex(bytes), "the store's digest is the sha");
+        assert_eq!(
+            sha,
+            content_hash_hex(bytes),
+            "the store's digest is the sha"
+        );
         store.put(bytes).expect("the bytes land in the store");
         let staging_id = self.vault().ids().next();
         let now = self.vault().clock().now_text();
@@ -126,7 +130,7 @@ impl Drive {
                 tx.set_producer("test.stage");
                 tx.connection().execute(
                     "INSERT INTO blob_staging
-                       (staging_id, sha256, media_type, byte_size, original_name,
+                       (staging_id, content_hash, media_type, byte_size, original_name,
                         meta_json, staged_by, held_by_batch, variant, variant_of,
                         inline_content, staged_at, held_by_intent)
                      VALUES (?1, ?2, ?3, ?4, ?5, '{}', NULL, NULL, NULL, NULL, NULL, ?6, NULL)",
@@ -325,7 +329,7 @@ fn a_text_document_files_edits_and_versions() {
 #[test]
 fn a_staged_pdf_files_and_an_inline_one_is_refused_by_name() {
     let drive = Drive::open("docs-staged");
-    let store = FsBlobStore::open_content(drive.scratch.join("blobs")).expect("a store opens");
+    let store = FsBlobStore::open(drive.scratch.join("blobs")).expect("a store opens");
     let bytes = pdf_bytes("a scanned lease");
     let sha = drive.stage(&store, &bytes, "application/pdf", "lease.pdf");
 
@@ -369,7 +373,7 @@ fn a_staged_pdf_files_and_an_inline_one_is_refused_by_name() {
     // THE STAGING ROW IS CONSUMED.
     assert_eq!(
         drive.count(
-            "SELECT COUNT(*) FROM blob_staging WHERE sha256 = ?1",
+            "SELECT COUNT(*) FROM blob_staging WHERE content_hash = ?1",
             &[&sha]
         ),
         0
@@ -378,7 +382,7 @@ fn a_staged_pdf_files_and_an_inline_one_is_refused_by_name() {
     // row names — the round trip, end to end.
     let fetched = store.get(&sha).expect("the bytes are there");
     assert_eq!(fetched, bytes);
-    assert_eq!(sha256_hex(&fetched), sha);
+    assert_eq!(content_hash_hex(&fetched), sha);
 
     // BYTES THIS VAULT DOES NOT ALREADY HOLD, pasted INLINE, refuse — and the
     // sentence says what to do instead.
@@ -389,7 +393,7 @@ fn a_staged_pdf_files_and_an_inline_one_is_refused_by_name() {
     // point a second wrapper at a content item that exists. v0's mint has the
     // same order (`blob/mint.ts:69`-`:88`), so this is parity and not a gap.
     let unseen = pdf_bytes("a lease nothing staged");
-    assert_ne!(sha256_hex(&unseen), sha);
+    assert_ne!(content_hash_hex(&unseen), sha);
     let inline = format!("data:application/pdf;base64,{}", base64_of(&unseen));
     let refused = drive.try_run(
         "core.add_document",
@@ -419,7 +423,7 @@ fn a_staged_pdf_files_and_an_inline_one_is_refused_by_name() {
 #[test]
 fn extracted_text_lands_from_the_claim_and_from_the_command() {
     let drive = Drive::open("docs-ocr");
-    let store = FsBlobStore::open_content(drive.scratch.join("blobs")).expect("a store opens");
+    let store = FsBlobStore::open(drive.scratch.join("blobs")).expect("a store opens");
     let sha = drive.stage(&store, &pdf_bytes("receipts"), "application/pdf", "r.pdf");
 
     let added = drive.run(
@@ -865,7 +869,7 @@ fn the_star_and_a_label_are_two_edges_and_untag_removes_one() {
 #[test]
 fn the_byte_source_gates_each_refuse_by_name() {
     let drive = Drive::open("docs-gates");
-    let store = FsBlobStore::open_content(drive.scratch.join("blobs")).expect("a store opens");
+    let store = FsBlobStore::open(drive.scratch.join("blobs")).expect("a store opens");
 
     // NEITHER SOURCE, and BOTH, are the same refusal: send the bytes one way.
     for input in [

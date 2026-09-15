@@ -118,6 +118,8 @@ pub fn command_request(
             name: name.to_owned(),
             input: serde_json::to_vec(input).unwrap_or_default(),
             invoke_key: invoke_key.to_owned(),
+            // NOT A `seat.sync`, so there is no window to carry (#1025 S2).
+            sync_window: None,
             principal: Some(wire::Principal {
                 kind: wire::PrincipalKind::OwnerDevice as i32,
                 caller_id: device_id.to_owned(),

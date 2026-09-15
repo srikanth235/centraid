@@ -23,6 +23,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+// `var x by mutableStateOf(...)` needs BOTH operators in scope; importing
+// only `getValue` compiles the read and fails the write (#1020, wave A).
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +57,7 @@ import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.HomeBand
 import dev.centraid.android.kit.HomeTitleRow
 import dev.centraid.android.kit.VaultHeader
+import dev.centraid.android.kit.stateLine
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.theme.formatMoney
@@ -83,6 +88,12 @@ import dev.centraid.design.CentraidGeometry
 public fun HomeScreen(
     state: HomeState,
     onEvent: (HomeEvent) -> Unit,
+    onForget: (String) -> Unit,
+    /**
+     * Open the transfer-rules sheet (#1025 S4). Defaulted so a preview renders
+     * this screen without one.
+     */
+    onDownloadSettings: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -97,6 +108,7 @@ public fun HomeScreen(
             onSwitchVault = {
                 onEvent(HomeEvent(vault_switch = HomeEvent.VaultSwitchRequested()))
             },
+            onDownloadSettings = onDownloadSettings,
         )
         HomeTitleRow()
         StatusRibbon(state.data_?.status, onEvent)
@@ -135,6 +147,7 @@ public fun HomeScreen(
             onPick = { id ->
                 onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = id)))
             },
+            onForget = onForget,
         )
     }
 }
@@ -149,6 +162,17 @@ public fun HomeScreen(
  * Dismissing sends a pick with NO ID, which the machine reads as exactly what
  * it is: shut the sheet, change no vault. The swipe and the tap therefore go
  * through one door rather than two.
+ *
+ * **EVERY ROW SAYS WHERE ITS VAULT STANDS (#1025 S7-9).** The caption is
+ * [stateLine] — the header's own table, called and not restated — so the lockup
+ * and the row a member compares it against cannot word one `State` two ways.
+ *
+ * **AND EVERY ROW CAN BE FORGOTTEN.** Forgetting DELETES the local copy: the
+ * replica, its byte store, its sidecars and this device's endpoint key for that
+ * vault. That is why it is one tap behind a dialog that NAMES the vault rather
+ * than a bare icon — a destructive act that a mis-hit thumb can complete is a
+ * destructive act that will be completed by mis-hit thumbs. The gateway keeps
+ * this device enrolled, so this is a local removal and not a departure.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -156,7 +180,15 @@ private fun VaultSheet(
     vaults: List<VaultLockup>,
     active: VaultLockup?,
     onPick: (String) -> Unit,
+    onForget: (String) -> Unit,
 ) {
+    // WHICH VAULT THE MEMBER IS BEING ASKED ABOUT, held by the sheet and not by
+    // the row: a dialog owned by a row would be unmounted the instant the
+    // roster changed under it, and the roster changes on its own now that
+    // `RosterChanged` streams.
+    var pendingForget by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<VaultLockup?>(null)
+    }
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = { onPick("") },
         containerColor = centraidColor("bg"),
@@ -199,12 +231,29 @@ private fun VaultSheet(
                             .background(centraidColor("bgSunken"))
                             .padding(top = 6.dp),
                     )
-                    Text(
-                        text = vault.vault_name.ifEmpty { "Unnamed vault" },
-                        style = centraidType("smallStrong"),
-                        color = centraidColor("text"),
-                        modifier = Modifier.weight(1f),
-                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = vault.vault_name.ifEmpty { "Unnamed vault" },
+                            style = centraidType("smallStrong"),
+                            color = centraidColor("text"),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        // The same sentence the lockup draws, from the same
+                        // function. `STATE_UNSPECIFIED` is never emitted and
+                        // draws nothing, so the row is a name alone rather
+                        // than a name over a blank caption.
+                        val line = stateLine(vault.state)
+                        if (line.isNotEmpty()) {
+                            Text(
+                                text = line,
+                                style = centraidType("mono"),
+                                color = centraidColor("textFaint"),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                     // THE TICK IS THE WHOLE POINT of listing the open one.
                     if (vault.vault_id == active?.vault_id) {
                         CentraidIcon(
@@ -213,9 +262,69 @@ private fun VaultSheet(
                             size = 18.dp,
                         )
                     }
+                    // OUTSIDE the row's own `clickable`, with its own 44dp
+                    // target: a forget that shared the row's tap area would be
+                    // a switch and a deletion behind one gesture.
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .clickable { pendingForget = vault }
+                            .testTag("vault-forget-${vault.vault_id}")
+                            .semantics {
+                                contentDescription =
+                                    "Forget ${vault.vault_name.ifEmpty { "this vault" }}"
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CentraidIcon(
+                            iconKey = "Trash",
+                            tint = centraidColor("textSoft"),
+                            size = 18.dp,
+                        )
+                    }
                 }
             }
         }
+    }
+    val pending = pendingForget
+    if (pending != null) {
+        val spoken = pending.vault_name.ifEmpty { "this vault" }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingForget = null },
+            // IT NAMES THE VAULT. A confirmation that says "this vault" in a
+            // sheet listing several is a confirmation that confirms nothing.
+            title = { Text("Forget $spoken?") },
+            text = {
+                Text(
+                    "This deletes this device's copy of $spoken — the replica, " +
+                        "its files and its pairing key. The vault itself is not " +
+                        "deleted, and you can pair this device again.",
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        // The sheet shuts FIRST and with no pick, so the
+                        // machine changes no vault: the shelf brings the next
+                        // holding forward by itself, and a sheet still open
+                        // over a roster being rebuilt is a sheet drawing a
+                        // vault that no longer exists.
+                        pendingForget = null
+                        onPick("")
+                        onForget(pending.vault_id)
+                    },
+                    modifier = Modifier.testTag("vault-forget-confirm"),
+                ) {
+                    Text("Forget", color = centraidColor("danger"))
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingForget = null }) {
+                    Text("Keep")
+                }
+            },
+            containerColor = centraidColor("bg"),
+        )
     }
 }
 

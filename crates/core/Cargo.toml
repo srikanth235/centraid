@@ -22,6 +22,10 @@ debug-fault = []
 
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
+# THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
+# core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
+# door and this is the crate that has both halves in scope.
+centraid-blobs = { path = "../blobs" }
 centraid-ontology = { path = "../ontology" }
 centraid-protocol = { path = "../protocol" }
 centraid-seat = { path = "../seat" }

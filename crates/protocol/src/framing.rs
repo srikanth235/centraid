@@ -77,6 +77,25 @@ pub async fn read_frame<R>(reader: &mut R) -> Result<Option<Vec<u8>>>
 where
     R: AsyncRead + Unpin,
 {
+    read_frame_capped(reader, MAX_FRAME_BYTES).await
+}
+
+/// The same, under a TIGHTER ceiling than [`MAX_FRAME_BYTES`].
+///
+/// For a frame read before the peer has been trusted with anything (#1025 S3):
+/// a PROVISIONAL connection's one `pair` frame is a ticket id, a secret and two
+/// short strings, and there is no reason for an unenrolled peer to be able to
+/// make this process allocate a megabyte. The general ceiling is right for a
+/// log page and wrong for a stranger.
+///
+/// `max` is a ceiling and never a floor: a caller may not raise it above
+/// [`MAX_FRAME_BYTES`], because that is the framing's own bound and the reason
+/// the length prefix is checked before anything is allocated.
+pub async fn read_frame_capped<R>(reader: &mut R, max: usize) -> Result<Option<Vec<u8>>>
+where
+    R: AsyncRead + Unpin,
+{
+    let max = max.min(MAX_FRAME_BYTES);
     let mut prefix = [0u8; PREFIX_BYTES];
     let mut filled = 0usize;
     while filled < PREFIX_BYTES {
@@ -93,11 +112,8 @@ where
     if len == 0 {
         return Err(ProtocolError::EmptyFrame);
     }
-    if len > MAX_FRAME_BYTES {
-        return Err(ProtocolError::FrameTooLarge {
-            len,
-            max: MAX_FRAME_BYTES,
-        });
+    if len > max {
+        return Err(ProtocolError::FrameTooLarge { len, max });
     }
     // Allocated only after the bound has been checked.
     let mut body = vec![0u8; len];

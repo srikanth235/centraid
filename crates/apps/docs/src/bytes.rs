@@ -192,7 +192,7 @@ pub struct StagedBlob {
     /// 64 lowercase hex characters. The sha of the RAW DECODED bytes — never of
     /// a `data:` URI — which is also what fixed v0's old dedup hole (the same
     /// bytes under two declared mime types were two rows).
-    pub sha256: String,
+    pub content_hash: String,
     pub byte_size: usize,
     pub media_type: String,
 }
@@ -201,14 +201,14 @@ impl StagedBlob {
     /// Whether this sha has the shape a claim will accept.
     ///
     /// `core.add_document`'s input schema pins `minLength: 64, maxLength: 64`
-    /// and `core_content_item.sha256`'s own CHECK pins the alphabet; a surface
+    /// and `core_content_item.content_hash`'s own CHECK pins the alphabet; a surface
     /// that hands the command a truncated sha gets a schema refusal, and this
     /// is how it can say so first.
     #[must_use]
     pub fn sha_is_well_formed(&self) -> bool {
-        self.sha256.len() == 64
+        self.content_hash.len() == 64
             && self
-                .sha256
+                .content_hash
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     }
@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn a_staged_sha_has_the_shape_a_claim_accepts() {
         let good = StagedBlob {
-            sha256: "ab".repeat(32),
+            content_hash: "ab".repeat(32),
             byte_size: 12,
             media_type: "application/pdf".to_owned(),
         };
@@ -307,7 +307,7 @@ mod tests {
             "zz".repeat(32).as_str(),
         ] {
             let blob = StagedBlob {
-                sha256: bad.to_owned(),
+                content_hash: bad.to_owned(),
                 ..good.clone()
             };
             assert!(!blob.sha_is_well_formed(), "{bad} should not pass");

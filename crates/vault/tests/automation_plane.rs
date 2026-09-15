@@ -92,7 +92,7 @@ impl World {
                 tx.set_producer("test.fixture");
                 tx.connection().execute(
                     "INSERT INTO core_content_item
-                       (content_id, content_uri, sha256, byte_size, created_at)
+                       (content_id, content_uri, content_hash, byte_size, created_at)
                      VALUES (?1, ?2, ?3, 1024, '2026-01-01T00:00:00.000Z')",
                     rusqlite::params![content_id, format!("blob:{sha}"), sha],
                 )?;

@@ -2,7 +2,7 @@
 //! (#1020 open question 9, `docs/recognition-automations.md:81`).
 //!
 //! Weights are release assets, not repository content. `models.lock.json` pins
-//! every file by sha256, byte length and an immutable upstream URL — a
+//! every file by a BLAKE3 digest, byte length and an immutable upstream URL — a
 //! commit-addressed `resolve/<sha>` link, never a moving `main`. This module is
 //! the one implementation of *"is this file the file we pinned, and if not, get
 //! it"*, which is exactly the half of open question 9 that already exists in v0
@@ -42,7 +42,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 
 /// One pinned file.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -51,7 +50,16 @@ pub struct LockFile {
     pub model: String,
     /// Path under `<runtime_dir>/models`, POSIX-separated.
     pub path: String,
-    pub sha256: String,
+    /// Lowercase hex BLAKE3 over the whole file.
+    ///
+    /// **Ours, not the upstream host's** (#1025 S4, D-1025-S4-1). This lock is a
+    /// format Centraid defines and this digest is checked by Centraid's own code
+    /// against a file on a Centraid host, so it moves with every other name this
+    /// product gives something. The cost is stated plainly: whoever authors a
+    /// lock entry can no longer copy a SHA-256 off the model host's file listing
+    /// and must hash the downloaded file once. The URL is still the upstream's
+    /// own commit-addressed link, which is the part that IS their protocol.
+    pub hash: String,
     /// Exact byte length of the pinned file.
     pub bytes: u64,
     pub license: String,
@@ -81,7 +89,7 @@ pub enum LockError {
     Malformed(#[from] serde_json::Error),
     #[error("the model lock is schema version {found}; this build reads {SCHEMA_VERSION}")]
     Version { found: u32 },
-    #[error("`{path}` pins a sha256 that is not 64 hex characters")]
+    #[error("`{path}` pins a digest that is not 64 hex characters")]
     Digest { path: String },
     #[error("`{path}` escapes the models directory")]
     Escape { path: String },
@@ -92,7 +100,7 @@ impl Lock {
     ///
     /// - a schema version this build does not read;
     /// - a digest that is not 64 hex characters, because a pin that cannot be
-    ///   compared is not a pin (the same shape rule `core_content_item.sha256`
+    ///   compared is not a pin (the same shape rule `core_content_item.content_hash`
     ///   carries as a CHECK, #996 R21);
     /// - **a path that escapes the models directory.** `path` is joined onto a
     ///   host directory and then written to; `../../.ssh/authorized_keys` is a
@@ -105,8 +113,7 @@ impl Lock {
             });
         }
         for file in &lock.files {
-            if file.sha256.len() != 64 || !file.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
-            {
+            if file.hash.len() != 64 || !file.hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
                 return Err(LockError::Digest {
                     path: file.path.clone(),
                 });
@@ -226,15 +233,9 @@ pub fn matches_pin(destination: &Path, file: &LockFile) -> bool {
         Ok(info) if info.is_file() && info.len() == file.bytes => {}
         _ => return false,
     }
-    fs::read(destination).is_ok_and(|bytes| sha256_hex(&bytes) == file.sha256.to_ascii_lowercase())
-}
-
-/// Lowercase hex SHA-256.
-#[must_use]
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
+    fs::read(destination).is_ok_and(|bytes| {
+        crate::format::content_hash_hex(&bytes) == file.hash.to_ascii_lowercase()
+    })
 }
 
 /// Verify what is on disk under `<runtime_dir>/models` and report, **opening
@@ -331,12 +332,12 @@ fn download(destination: &Path, file: &LockFile, fetcher: &dyn Fetch) -> Result<
         // THE DIGEST IS CHECKED ON WHAT LANDED, not on what was handed over: a
         // short write is a different file and this is where it is caught.
         let actual = fs::read(&temporary)
-            .map(|written| sha256_hex(&written))
+            .map(|written| crate::format::content_hash_hex(&written))
             .map_err(|error| error.to_string())?;
-        if actual != file.sha256.to_ascii_lowercase() {
+        if actual != file.hash.to_ascii_lowercase() {
             return Err(format!(
-                "sha256 mismatch for {}: {actual} != {}",
-                file.path, file.sha256
+                "digest mismatch for {}: {actual} != {}",
+                file.path, file.hash
             ));
         }
         fs::rename(&temporary, destination).map_err(|error| error.to_string())
@@ -356,8 +357,8 @@ mod tests {
             .iter()
             .map(|(model, path, bytes, capabilities)| {
                 format!(
-                    r#"{{"model":"{model}","path":"{path}","sha256":"{}","bytes":{},"license":"MIT","url":"https://example.invalid/{path}","capabilities":[{}]}}"#,
-                    sha256_hex(bytes),
+                    r#"{{"model":"{model}","path":"{path}","hash":"{}","bytes":{},"license":"MIT","url":"https://example.invalid/{path}","capabilities":[{}]}}"#,
+                    crate::format::content_hash_hex(bytes),
                     bytes.len(),
                     capabilities
                         .iter()
@@ -405,27 +406,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn the_committed_v0_manifest_parses_and_names_its_capabilities() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../packages/model-runtime/models.lock.json");
-        let lock = Lock::read(&path).expect("the pinned manifest parses");
-        assert_eq!(lock.schema_version, SCHEMA_VERSION);
-        assert!(!lock.files.is_empty());
-        for capability in ["embed-image", "embed-text"] {
-            assert!(
-                lock.capabilities().contains(&capability),
-                "{capability} is not in the manifest"
-            );
-        }
-        // Every pin is a comparable digest and a contained path — the two
-        // shapes `Lock::parse` refuses, asserted against the real file.
-        for file in &lock.files {
-            assert_eq!(file.sha256.len(), 64, "{} has no comparable pin", file.path);
-            assert!(is_contained(&file.path), "{} escapes", file.path);
-            assert!(file.bytes > 0, "{} pins no length", file.path);
-        }
-    }
+    // DELETED WITH ITS ORACLE (#1025 S4). The test that stood here parsed
+    // `packages/model-runtime/models.lock.json`, which the v0 retirement removed
+    // from the repository. There is no lock file under `contracts/` to promote it
+    // to — v1 ships none, because a lock pins release assets and that release has
+    // not been cut — so it had no oracle and could not be made honest. What it
+    // asserted about SHAPE is covered without a file by the two refusal tests
+    // below; what it asserted about the v0 manifest's CONTENTS was a fact about a
+    // file that no longer exists.
 
     #[test]
     fn a_schema_version_this_build_does_not_read_is_refused() {
@@ -450,7 +438,7 @@ mod tests {
 
     #[test]
     fn a_pin_that_cannot_be_compared_is_refused() {
-        let text = r#"{"schemaVersion":1,"files":[{"model":"m@1","path":"a","sha256":"abc",
+        let text = r#"{"schemaVersion":1,"files":[{"model":"m@1","path":"a","hash":"abc",
           "bytes":1,"license":"MIT","url":"u","capabilities":["faces"]}]}"#;
         assert!(matches!(Lock::parse(text), Err(LockError::Digest { .. })));
     }
@@ -508,7 +496,7 @@ mod tests {
         assert!(provision.ready.is_empty());
         assert_eq!(provision.failed.len(), 1);
         assert!(
-            provision.failed[0].reason.contains("sha256 mismatch"),
+            provision.failed[0].reason.contains("digest mismatch"),
             "{}",
             provision.failed[0].reason
         );

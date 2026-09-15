@@ -2,9 +2,9 @@ package dev.centraid.shared
 
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.shared.screen.BandPolicy
-import dev.centraid.shared.screen.FirstMoves
-import dev.centraid.shared.screen.SpringboardPolicy
+import dev.centraid.shared.shell.BandPolicy
+import dev.centraid.shared.shell.FirstMoves
+import dev.centraid.shared.shell.SpringboardPolicy
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeTrue

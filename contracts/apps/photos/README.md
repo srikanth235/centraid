@@ -12,7 +12,7 @@ Photos' parity bundle: what v0's own handlers answer, generated from the v0 tree
 | `commands.json` | `{command, input, status, output}` for 32 `media.*`/`enrich.*` cases, **seven of them refusals**. |
 | `scenarios.json` | The three ontology scenarios a photograph is subject to: ONT-22, ONT-26, ONT-28. |
 | `sample/*.png` | Copied **byte for byte** from `packages/blueprints/apps/photos/sample`. Asserted identical by `crates/apps/photos/tests/parity.rs`. |
-| `sample/manifest.json` | Generated from those files: width, height, long edge, byte size, sha256, plus the one inline video payload v0's seed carries as base64 rather than as a file. |
+| `sample/manifest.json` | Generated from those files by `cargo xtask photos-sample` (#1025 S4): width, height, long edge, byte size and the BLAKE3 `content_hash`, plus the one inline video payload v0's seed carried as base64 rather than as a file — whose bytes are now `INLINE_VIDEO_BASE64` in that generator, because a frame whose bytes nothing holds is a digest nobody can check. |
 | `recognition-placement.md` | Open question 9's third execution site, designed and **not built** — a proposal for the root to integrate. |
 
 ## One generator, one oracle, one command

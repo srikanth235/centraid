@@ -101,6 +101,80 @@ impl Vault {
         })
     }
 
+    /// THE LIVE DEVICE THIS PUBLIC KEY IS, or `None` (#1025 S7, D-1025-S7-80).
+    ///
+    /// The gateway's admission question, and the reason the durable allowlist
+    /// needs nothing new in the schema: `access_device_secret.public_key` is
+    /// `UNIQUE`, so it is already the index a proved iroh EndpointId is looked
+    /// up by. The JOIN is what makes "live" mean live — revoking deletes the
+    /// private sibling, so a revoked device has a replicated row and no key and
+    /// is not found here, which is the same refusal an unknown key gets.
+    ///
+    /// **Unknown and revoked are ONE answer** and that is the whole design
+    /// (see this module's header): there is no "revoked" state to remember to
+    /// check for, so there is no way to forget to check for it.
+    pub fn device_by_public_key(&self, public_key: &str) -> Result<Option<Device>> {
+        self.read(|connection| {
+            let found = connection
+                .query_row(
+                    "SELECT d.device_id, d.owner_party_id, d.name, d.platform, d.enrolled_at,
+                            CAST(s.sync_cursor AS INTEGER)
+                       FROM access_device d
+                       JOIN access_device_secret s ON s.device_id = d.device_id
+                      WHERE s.public_key = ?1",
+                    [public_key],
+                    |row| {
+                        Ok(Device {
+                            device_id: row.get(0)?,
+                            owner_party_id: row.get(1)?,
+                            name: row.get(2)?,
+                            platform: row.get(3)?,
+                            enrolled_at: row.get(4)?,
+                            sync_cursor: row.get(5)?,
+                        })
+                    },
+                )
+                .ok();
+            Ok(found)
+        })
+    }
+
+    /// Every live device WITH THE PUBLIC KEY IT IS KNOWN BY (#1025 S7,
+    /// D-1025-S7-8x).
+    ///
+    /// The gateway's durable allowlist needs both halves: the member-facing
+    /// device and the key a dialling peer proves. [`Self::live_devices`] is the
+    /// member's list and deliberately does not carry the key — a device list on
+    /// a screen has no business holding credentials — so the gateway asks for
+    /// it by a different name rather than widening the row every screen reads.
+    pub fn live_devices_with_keys(&self) -> Result<Vec<(Device, String)>> {
+        self.read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT d.device_id, d.owner_party_id, d.name, d.platform, d.enrolled_at,
+                        CAST(s.sync_cursor AS INTEGER), s.public_key
+                   FROM access_device d
+                   JOIN access_device_secret s ON s.device_id = d.device_id
+                  ORDER BY d.enrolled_at, d.device_id",
+            )?;
+            let devices = statement
+                .query_map([], |row| {
+                    Ok((
+                        Device {
+                            device_id: row.get(0)?,
+                            owner_party_id: row.get(1)?,
+                            name: row.get(2)?,
+                            platform: row.get(3)?,
+                            enrolled_at: row.get(4)?,
+                            sync_cursor: row.get(5)?,
+                        },
+                        row.get(6)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(devices)
+        })
+    }
+
     /// Every live device, newest enrolment last.
     pub fn live_devices(&self) -> Result<Vec<Device>> {
         self.read(|connection| {

@@ -1,0 +1,48 @@
+{
+  "cbsfFrameNonce": {
+    "bodyTagHex": "011ce170ca46733185edc966e9f0697c4872a977df2eb5b9cbca89c54969449b",
+    "nonceHex": "97f88c91462028a6aabab70a"
+  },
+  "deriveKey": [
+    {
+      "context": "centraid-backup:data:00000000-0000-7000-8000-000000000456",
+      "length": 32,
+      "outHex": "e9447dccb128519b7450b4ce8e1c10edb0be6c018d98379a34290e6ed03e48d8"
+    },
+    {
+      "context": "centraid-backup:dedup:00000000-0000-7000-8000-000000000456",
+      "length": 32,
+      "outHex": "c3dce70fb4fb4f744b893299e5de02918f0873433930cadfe5aa38b207af9242"
+    },
+    {
+      "context": "centraid-member-key-envelope-v1‖00000000-0000-7000-8000-000000000456",
+      "length": 32,
+      "outHex": "d182df8a09c0c500821b0bbea251517a5b67c461dfb53afd8725e539ebed71e3"
+    },
+    {
+      "context": "centraid-backup:wal-nonce:vault:0123456789abcdef0123456789abcdef:7:32:67:1721280000456",
+      "length": 12,
+      "outHex": "7f4ccdf0de34a9db508e1369"
+    }
+  ],
+  "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "keyedHash": [
+    {
+      "messageLen": 46,
+      "name": "chunkId",
+      "tagHex": "6b4a6d198a9e57413afd8191cb609731fd3524a869b9f01a6faeaafcf58877d9"
+    },
+    {
+      "messageLen": 0,
+      "name": "empty",
+      "tagHex": "73492b19995d71cdb1e9d74decc09809eb732f1b00bc95c27cb15f9dd4d6478f"
+    },
+    {
+      "messageLen": 1025,
+      "name": "pastOneChunk",
+      "tagHex": "c7a3926db10e3652f623faaea3308f227b37feba07b4cfcc45da2c187e7bb4e8"
+    }
+  ],
+  "schema": "centraid-blake3-vectors/1",
+  "why": "The keyed MAC and the KDF are format decisions (#1025 S4, D-1025-S4-2/-3). A round trip cannot see a changed derivation; these bytes can."
+}

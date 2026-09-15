@@ -315,9 +315,9 @@ impl SeededIds {
 
 impl Ids for SeededIds {
     fn next(&self) -> String {
-        use sha2::{Digest as _, Sha256};
         let count = self.counter.fetch_add(1, Ordering::Relaxed) + 1;
-        let digest = hex::encode(Sha256::digest(format!("{}:{count}", self.seed).as_bytes()));
+        let digest =
+            hex::encode(blake3::hash(format!("{}:{count}", self.seed).as_bytes()).as_bytes());
         format!(
             "{}-{}-7{}-8{}-{}",
             &digest[0..8],

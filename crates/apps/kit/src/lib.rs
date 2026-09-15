@@ -53,7 +53,8 @@ pub use canonical::{canonical_json, compare_utf16};
 pub use error::{KitError, KitResult};
 pub use page::{MAX_PAGE_ROWS, Page, PageCursor, PageRequest, page_of, probe_limit};
 pub use reads::{
-    FanOutBound, JOIN_FAN_OUT, PageDoor, Window, in_list, read_by_id, read_pages, read_window,
+    FanOutBound, JOIN_FAN_OUT, PageDoor, Window, in_list, read_by_id, read_page, read_pages,
+    read_window,
 };
 pub use representations::{RepresentationIndex, read_representations};
 pub use row::{Cell, Row};

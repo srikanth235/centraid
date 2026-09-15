@@ -306,7 +306,18 @@ pub struct IntentRecord {
     /// The commit the gateway says the effect landed in.
     pub commit_seq: Option<i64>,
     pub waiting_on: Vec<WaitingOn>,
-    pub needs_blobs: Vec<String>,
+    /// BYTES THIS WRITE CANNOT BE EXECUTED WITHOUT (#1025 S3, R25).
+    ///
+    /// A photograph minted on this seat lives in this seat's own byte store
+    /// until the gateway pulls it. The declaration travels with the intent —
+    /// it is inside the payload hash, see
+    /// [`centraid_vault::intents::NeededBytes`] — and it is also what keeps
+    /// those bytes non-evictable here: `crate::outbox::pinned_blobs` reads it
+    /// off every unsettled row, and the store's sweep takes nothing it names.
+    ///
+    /// The column has held this field since #1020 with no producer and no
+    /// consumer. It has both now.
+    pub needs_blobs: Vec<centraid_vault::intents::NeededBytes>,
     pub enqueued_at: String,
     pub updated_at: String,
     /// The owner-facing sentence, on a refusal.

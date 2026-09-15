@@ -475,7 +475,180 @@ pub struct CommandOutcome {
     pub replayed: bool,
 }
 
+/// WHAT A SEAT PREDICTS ITS OWN WRITE WILL DO (#1025 S7, item 4).
+///
+/// The row images the handler produced, in the shape `replica_log` carries
+/// them, plus whatever the handler answered. A seat stores this as the pending
+/// page for its intent and composes it over the mirrored rows; the applier
+/// drops it in the transaction that lands the gateway's real page.
+#[derive(Debug, Clone)]
+pub struct Prediction {
+    /// One per changed row, exactly as the log would have carried it.
+    pub rows: Vec<crate::log::capture::DecodedRow>,
+    pub output: serde_json::Value,
+}
+
 impl Vault {
+    /// RUN A COMMAND AGAINST THIS COPY AND THROW THE WRITE AWAY (#1025 S7,
+    /// item 4).
+    ///
+    /// A seat holds a copy and has no authority over any row, so this never
+    /// commits: [`Vault::dry_run`] rolls back and hands back the page the
+    /// handler would have logged. That page is the overlay — the only
+    /// description of a pending write that cannot disagree with the gateway's,
+    /// because it is produced by the same handler.
+    ///
+    /// ## WHAT IT DOES AND DOES NOT RUN
+    ///
+    /// **Gate 3 (the registry) and gate 2 (the schema) run, and a failure is a
+    /// REFUSAL.** An unknown command is never queued: `knowledge.save_note` was
+    /// named by the notes editor for a whole wave, the registry has never had
+    /// it, and a member read *"That request does not make sense to this build"*
+    /// on every window for ever because the seat retried a write that could
+    /// never succeed. Refusing at the door is what makes that a sentence at the
+    /// moment of the gesture instead.
+    ///
+    /// **Gates 4, 6 and 7 (preconditions, handler, postconditions) run**,
+    /// because they are what produces the rows.
+    ///
+    /// **The audit trail does not.** No invocation, no checks, no receipt: the
+    /// tables they are written to are PRIVATE and a replica does not have them
+    /// — that is what a replica IS. A prediction is not an execution and must
+    /// not leave evidence that one happened; the gateway writes the real trail
+    /// when it runs the real command.
+    ///
+    /// **Authority does not.** `evaluate_access` reads private tables too, and
+    /// the decision is not a seat's to make: the gateway refuses what it
+    /// refuses, and the seat's answer then replaces the prediction. A seat that
+    /// guessed at authority would be a seat that could grant it.
+    ///
+    /// **The ledger does not.** Replay idempotency is the gateway's identity
+    /// for an execution, and a prediction has not been submitted to anything.
+    pub fn predict(
+        &self,
+        registry: &Registry,
+        principal: &Principal,
+        command: &Command,
+    ) -> Result<Prediction> {
+        // GATE 3, AND ITS FAILURE IS A REFUSAL. `UnknownCommand` is what the
+        // seat turns into "this build cannot do that", at the gesture rather
+        // than after a week of retries.
+        let entry = registry
+            .get(&command.name)
+            .ok_or_else(|| VaultError::UnknownCommand {
+                name: command.name.clone(),
+            })?;
+        let definition = &entry.definition;
+
+        // GATE 2, with the same scrub the real execution uses: a validation
+        // message must not echo a sealed input back at anybody.
+        let invalid: Vec<String> = entry
+            .validator
+            .iter_errors(&command.input)
+            .map(|error| {
+                audit::scrub_sealed(
+                    &format!("{}: {error}", error.instance_path),
+                    definition.sealed_input,
+                    &command.input,
+                )
+            })
+            .collect();
+        if !invalid.is_empty() {
+            return Err(VaultError::InvalidInput {
+                name: command.name.clone(),
+                detail: invalid.join("; "),
+            });
+        }
+
+        let invocation_id = self.ids().next();
+        // FOREIGN KEYS OFF FOR THE DURATION, AND FOR THE APPLIER'S OWN REASON.
+        //
+        // A prediction does not write the audit trail (see above), and handlers
+        // reference it: a revision names the invocation that made it. With the
+        // invocation absent the constraint fails, and the failure is about
+        // BOOKKEEPING a seat has no business doing rather than about the write.
+        //
+        // This is rule 4 of the seat applier, one step earlier: "a mirror does
+        // not re-decide what the writer committed". The gateway enforces every
+        // constraint when it runs the command for real, and a prediction that
+        // enforced them against a copy missing the rows it is not allowed to
+        // write would refuse writes the gateway accepts.
+        //
+        // OUTSIDE THE TRANSACTION, because SQLite ignores the pragma inside
+        // one — which is exactly the kind of silently-inert statement this
+        // would otherwise become.
+        let restore_foreign_keys: bool = self
+            .connection()
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap_or(true);
+        self.connection()
+            .pragma_update(None, "foreign_keys", "OFF")?;
+        let ran = self.dry_run(|tx| {
+            tx.set_producer(&command.name);
+            let ctx = CommandCtx {
+                tx,
+                command: definition.name,
+                input: command.input.clone(),
+                principal: principal.clone(),
+                now: self.clock().now_text(),
+                // A PREDICTED INVOCATION ID, and it is one of the fields the
+                // property test enumerates as gateway-minted: the gateway mints
+                // its own and the two will differ. It exists because the
+                // handler's context wants one, not because anything reads it.
+                invocation_id: invocation_id.clone(),
+                ids: self.ids(),
+                clock: self.clock(),
+                produced_ids: std::cell::RefCell::new(Vec::new()),
+                blobs: self.blobs(),
+            };
+            // GATE 4. The checks are RUN and not written: a failing
+            // precondition means the gateway would refuse this, and predicting
+            // a row it will not write is worse than predicting nothing.
+            for condition in definition.preconditions {
+                if let Some(sentence) = (condition.check)(&ctx)? {
+                    return Err(VaultError::Invariant {
+                        context: format!(
+                            "`{}` would be refused by `{}`: {sentence}",
+                            definition.name, condition.predicate
+                        ),
+                    });
+                }
+            }
+            // GATE 6.
+            let output = (definition.handler)(&ctx)?;
+            // GATE 7. A handler that broke its own postcondition on this copy
+            // is one whose prediction is not worth showing.
+            for condition in definition.postconditions {
+                if let Some(sentence) = (condition.check)(&ctx)? {
+                    return Err(VaultError::Invariant {
+                        context: format!(
+                            "`{}` broke its own postcondition `{}`: {sentence}",
+                            definition.name, condition.predicate
+                        ),
+                    });
+                }
+            }
+            Ok(output)
+        });
+        if restore_foreign_keys {
+            self.connection()
+                .pragma_update(None, "foreign_keys", "ON")
+                .ok();
+        }
+        let (output, rows) = ran?;
+        Ok(Prediction {
+            // THE AUDIT TRAIL IS NOT PREDICTED, even when a handler writes into
+            // it itself — `locker.watchtower` files a receipt of its own. See
+            // `audit::TRAIL_TABLES`: these rows are the record that a command
+            // RAN, and on a seat it has not.
+            rows: rows
+                .into_iter()
+                .filter(|row| !audit::TRAIL_TABLES.contains(&row.table.as_str()))
+                .collect(),
+            output,
+        })
+    }
+
     /// Run a command through the gate order.
     pub fn execute(
         &self,
@@ -522,6 +695,11 @@ impl Vault {
             input: command.input.clone(),
             base_versions: Vec::new(),
             depends_on: Vec::new(),
+            // THE VAULT'S OWN SPELLING carries no declared bytes, and must not:
+            // this hash is the LEDGER's identity for an execution, and the
+            // seat's payload hash is a different value over a different
+            // preimage (`centraid_core::intent`'s module header).
+            needs: Vec::new(),
         };
         let payload_hash = claim.hash()?;
         if let Some(intent_id) = command.intent_id.as_deref() {

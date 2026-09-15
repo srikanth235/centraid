@@ -1,59 +1,55 @@
-//! `(gateway_id, vault_id)` — the pair a seat file belongs to.
+//! `vault_id` — the one thing a seat file belongs to (#1025 S1, D-1025-S1-1).
 //!
-//! One device can hold seats for more than one gateway, and one gateway can
-//! serve more than one vault. Neither half alone names a file: two gateways
-//! restored from the same backup share a `vault_id`, and one gateway serves
-//! several vaults. So the storage key is a digest of the *pair*, and the
-//! separator is a space because neither half may contain one — a concatenation
-//! without a separator would let `("ab", "c")` and `("a", "bc")` collide.
+//! ## THE VAULT IS THE UNIT ON A DEVICE, AND NOTHING IS NAMED BY A GATEWAY
+//!
+//! Each vault a device holds has its own pairing, address, replica file,
+//! cursor, outbox, byte store and endpoint key. "Gateway" is not a noun the
+//! device has: a gateway's endpoint id is *where to reach this vault right
+//! now*, a property of the pairing record that changes when the owner moves the
+//! vault to another machine, and two tickets carrying the same endpoint id are
+//! a coincidence this device never acts on.
+//!
+//! Until #1025 the key was `content_hash(gateway_id ‖ " " ‖ vault_id)`, and that was
+//! a workaround for a loopback port re-picked on every launch rather than a
+//! model: it made a vault RESTORED onto a second machine a different file, so
+//! every replica on every phone was orphaned along with the outbox inside it —
+//! the member's queued writes, in a file nothing would ever open again. That is
+//! the [seat-identity trap](../../../docs/traps/seat-identity.md)'s first
+//! footgun with the hash making it invisible instead of the literal `"manual"`.
+//!
+//! So the key IS the vault id. It is already the identifier the log pages
+//! carry, the one `core_vault` states inside a bootstrap artifact, and the one
+//! a restore preserves.
 
-use sha2::{Digest as _, Sha256};
-
-/// Which gateway, which vault.
+/// Which vault. The whole of a seat file's identity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SeatIdentity {
-    pub gateway_id: String,
     pub vault_id: String,
 }
 
 impl SeatIdentity {
-    pub fn new(gateway_id: impl Into<String>, vault_id: impl Into<String>) -> Self {
+    pub fn new(vault_id: impl Into<String>) -> Self {
         Self {
-            gateway_id: gateway_id.into(),
             vault_id: vault_id.into(),
         }
     }
 
-    /// The digest this pair's files are named after.
+    /// The name this vault's files are keyed on.
+    ///
+    /// Not a digest. A vault id is already an opaque, collision-free
+    /// identifier the gateway minted; hashing it would buy nothing and cost the
+    /// one property that matters here — that the name on disk can be compared
+    /// by eye against the `core_vault` row inside the file.
     #[must_use]
-    pub fn storage_key(&self) -> String {
-        replica_storage_key(&self.gateway_id, &self.vault_id)
+    pub fn storage_key(&self) -> &str {
+        &self.vault_id
     }
 
     /// The seat file's name inside the device's private directory.
     #[must_use]
     pub fn database_name(&self) -> String {
-        format!("centraid-replica-{}.sqlite3", self.storage_key())
+        format!("centraid-replica-{}.sqlite3", self.vault_id)
     }
-
-    /// The outbox's name. v0 kept intents in a second database on the web seat;
-    /// v1 keeps them in the SAME file as the rows, which is what makes the
-    /// atomic overlay clear expressible at all (`applier`'s in-transaction
-    /// hook). The name is retained for a migration to recognise.
-    #[must_use]
-    pub fn intents_database_name(&self) -> String {
-        format!("centraid-replica-intents-{}", self.storage_key())
-    }
-}
-
-/// `sha256(gateway_id ‖ " " ‖ vault_id)`, lowercase hex.
-#[must_use]
-pub fn replica_storage_key(gateway_id: &str, vault_id: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(gateway_id.as_bytes());
-    hasher.update(b" ");
-    hasher.update(vault_id.as_bytes());
-    hex::encode(hasher.finalize())
 }
 
 #[cfg(test)]
@@ -61,53 +57,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_key_is_a_function_of_both_halves() {
-        let one = replica_storage_key("gw-a", "vault-1");
-        assert_ne!(one, replica_storage_key("gw-a", "vault-2"));
-        assert_ne!(one, replica_storage_key("gw-b", "vault-1"));
-        assert_eq!(one, replica_storage_key("gw-a", "vault-1"));
-        assert_eq!(one.len(), 64);
-    }
-
-    /// The separator is the point. Without it these two would be one file.
-    #[test]
-    fn a_shifted_boundary_is_a_different_key() {
+    fn the_key_is_the_vault_id_and_nothing_else() {
+        let one = SeatIdentity::new("vault-1");
+        assert_eq!(one.storage_key(), "vault-1");
         assert_ne!(
-            replica_storage_key("ab", "c"),
-            replica_storage_key("a", "bc")
+            one.storage_key(),
+            SeatIdentity::new("vault-2").storage_key()
         );
     }
 
-    /// The method and the function are the same answer.
-    ///
-    /// Killed two mutants that made `SeatIdentity::storage_key` return `""` and
-    /// `"xyzzy"`: the other tests called the free function, so the method — the
-    /// one every caller actually uses — was unasserted.
+    /// THE ONE THAT WOULD HURT, restated for this model. A vault restored onto
+    /// a second gateway keeps its id, so the phone keeps its file — and the
+    /// outbox inside it. Under the old `(gateway_id, vault_id)` digest this
+    /// was a different name and the queued writes were stranded.
     #[test]
-    fn the_method_and_the_free_function_agree() {
-        let identity = SeatIdentity::new("gw-a", "vault-1");
+    fn a_vault_reached_at_a_new_address_is_the_same_seat_file() {
         assert_eq!(
-            identity.storage_key(),
-            replica_storage_key("gw-a", "vault-1")
-        );
-        assert_eq!(identity.storage_key().len(), 64);
-        // And two identities do not share a key, which a constant return would
-        // make them do — every gateway's seat in one file.
-        assert_ne!(
-            identity.storage_key(),
-            SeatIdentity::new("gw-b", "vault-1").storage_key()
+            SeatIdentity::new("vault-1").database_name(),
+            SeatIdentity::new("vault-1").database_name()
         );
     }
 
     #[test]
-    fn the_file_names_are_derived_and_not_stored() {
-        let identity = SeatIdentity::new("gw-a", "vault-1");
+    fn the_file_name_is_derived_and_not_stored() {
+        let identity = SeatIdentity::new("vault-1");
         assert!(identity.database_name().starts_with("centraid-replica-"));
         assert!(identity.database_name().ends_with(".sqlite3"));
-        assert!(
-            identity
-                .intents_database_name()
-                .contains(&identity.storage_key())
-        );
+        assert!(identity.database_name().contains("vault-1"));
     }
 }

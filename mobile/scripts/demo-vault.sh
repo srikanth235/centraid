@@ -9,17 +9,26 @@
 # rows move with the scenario's "now", so a committed copy would churn in every
 # diff and be unreviewable in all of them. The generator is one command.
 #
-# WHY NOT OVER THE NETWORK. A phone can now DIAL a gateway — it pairs from the
-# Settings sheet and the gateway logs the enrolment (#1020, D-1020-B7) — but it
-# cannot yet receive a vault that way: the file it opens is a gateway-role
-# artifact it is the authority for, and a seat REPLICA has no creation path
-# through the core yet. So the vault is still PLACED, which is the same file a
-# seat would end up holding, minus the download.
+# THIS SEEDS A GATEWAY-ROLE VAULT, AND THAT IS ALL IT IS FOR (#1025 S1/S2).
 #
-# RE-SEED AFTER PULLING. `content_uri` is `blob:blake3-…` since D-1020-B2 and a
-# vault seeded before that reads `blob:sha256-…`, which this build refuses as
-# superseded — a grid of cells saying the file needs re-importing. The generator
-# is the fix; there is no migration, by design.
+# A seat no longer needs it. Pairing creates the replica: the gateway keeps a
+# content-addressed snapshot of the replicated tables, the phone fetches it as a
+# blob and tails from the seq it stands at, and falling under the floor is the
+# same path again. Nothing about a seat is placed by hand any more, and the
+# paragraph that used to stand here — "a seat REPLICA has no creation path
+# through the core yet" — described the gap that #1025 S1 closed.
+#
+# What is left is a vault this device is the AUTHORITY for: the local-first case
+# a phone is in when it holds its own vault rather than a copy of someone
+# else's, and the case the springboard and the switcher are developed against
+# without a gateway running. To exercise a SEAT, run `centraid gateway
+# --data-dir <dir> --print-qr` and scan the code from the Settings sheet.
+#
+# RE-SEED AFTER PULLING. `content_uri` is `blob:blake3-…` since D-1020-B2 and it
+# is the ONE form this build addresses (#1025 S3, D-1025-S3-3); the bytes live in
+# `<stem>.bytes`, iroh's store, which is also the one form (D-1025-S3-1). A vault
+# seeded before either reads as a grid of cells with no file behind them. The
+# generator is the fix; there is no migration, by design.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -56,13 +65,17 @@ place_android() {
     "$adb" push "$vault" "/data/local/tmp/$name" >/dev/null
     "$adb" shell "run-as dev.centraid sh -c 'cat /data/local/tmp/$name > files/$name'" \
       2>/dev/null || echo "   (the app is not installed yet; the asset copy will seed it on first run)"
-    # THE BYTES TRAVEL WITH THE ROWS. `<vault>.blobs/` holds every photograph;
-    # a vault copied without it is a library of rows pointing at nothing.
-    # Android assets are flat files, so the CAS goes over adb only — a fresh
-    # install gets its rows from the asset and its bytes on the next re-seed.
-    if [ -d "$vault.blobs" ]; then
-      "$adb" push "$vault.blobs" "/data/local/tmp/$name.blobs" >/dev/null 2>&1 || true
-      "$adb" shell "run-as dev.centraid sh -c 'mkdir -p files/$name.blobs && cp /data/local/tmp/$name.blobs/* files/$name.blobs/'" \
+    # THE BYTES TRAVEL WITH THE ROWS. `<stem>.bytes/` is the vault's one content
+    # store (#1025 S3); a vault copied without it is a library of rows pointing
+    # at nothing. Android assets are flat files, so the store goes over adb only
+    # — a fresh install gets its rows from the asset and its bytes on the next
+    # re-seed. Copied RECURSIVELY: it is iroh's store, an index and a `data/`
+    # directory, not the one-file-per-hash CAS it replaced.
+    local bytes="${vault%.*}.bytes"
+    local bytes_name="${name%.*}.bytes"
+    if [ -d "$bytes" ]; then
+      "$adb" push "$bytes" "/data/local/tmp/$bytes_name" >/dev/null 2>&1 || true
+      "$adb" shell "run-as dev.centraid sh -c 'rm -rf files/$bytes_name && cp -R /data/local/tmp/$bytes_name files/$bytes_name'" \
         2>/dev/null || true
     fi
   done
@@ -82,12 +95,15 @@ place_ios() {
     cp "$vault" "$container/Documents/$name"
     # The WAL and the shared-memory file belong to the copy, not to this one.
     rm -f "$container/Documents/$name-wal" "$container/Documents/$name-shm"
-    # THE BYTES TRAVEL WITH THE ROWS. `<vault>.blobs/` holds every photograph
-    # (`Vault::blobs_root_for`); a vault copied without it is a library of rows
-    # pointing at bytes the device does not have.
-    rm -rf "$container/Documents/$name.blobs"
-    if [ -d "$vault.blobs" ]; then
-      cp -R "$vault.blobs" "$container/Documents/$name.blobs"
+    # THE BYTES TRAVEL WITH THE ROWS. `<stem>.bytes/` is the vault's one content
+    # store (#1025 S3, D-1025-S3-1) — the same directory `SeatLink` opens and
+    # the byte plane fetches into; a vault copied without it is a library of
+    # rows pointing at bytes the device does not have.
+    local bytes="${vault%.*}.bytes"
+    local bytes_name="${name%.*}.bytes"
+    rm -rf "$container/Documents/$bytes_name"
+    if [ -d "$bytes" ]; then
+      cp -R "$bytes" "$container/Documents/$bytes_name"
     fi
   done
 }

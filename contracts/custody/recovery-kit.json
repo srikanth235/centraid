@@ -1,79 +1,79 @@
 {
-  "schema": "centraid-recovery-kit-fixture/1",
-  "note": "v0-made wrapped recovery kit, for the v1 parser. Regenerate with contracts/tools/export-recovery-kit-fixture.ts.",
-  "scrypt": {
-    "kdf": "scrypt",
-    "N": 131072,
-    "r": 8,
-    "p": 1
+  "document": {
+    "createdAt": "2026-07-18T00:00:00.000Z",
+    "keyring": {
+      "active": 2,
+      "epochs": [
+        {
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "epoch": 1,
+          "key": "ERERERERERERERERERERERERERERERERERERERERERE="
+        },
+        {
+          "createdAt": "2026-06-01T00:00:00.000Z",
+          "epoch": 2,
+          "key": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI="
+        }
+      ],
+      "version": 1
+    },
+    "kind": "centraid-recovery-kit",
+    "targets": [
+      {
+        "identitySeed": "REREREREREREREREREREREREREREREREREREREREREQ=",
+        "label": "the household vault",
+        "lockerKeys": [
+          {
+            "key": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=",
+            "keyId": "k-1"
+          },
+          {
+            "key": "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=",
+            "keyId": "k-2"
+          }
+        ],
+        "provider": "local",
+        "sealKey": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM=",
+        "targetId": "local:/srv/centraid/backup",
+        "vaultId": "00000000-0000-7000-8000-000000000456"
+      },
+      {
+        "label": "the workshop vault",
+        "provider": "local",
+        "targetId": "local:/srv/centraid/backup-2",
+        "vaultId": "00000000-0000-7000-8000-000000000789"
+      }
+    ],
+    "version": 1
   },
-  "wrapAad": "centraid-recovery-kit-wrap-v1",
+  "fingerprint": "addc1a06c83319e886a6870c84ec641c7d9b5bc9bcdb454aeb4938e17ab3b644",
   "label": "recovery kit",
+  "note": "v0-made wrapped recovery kit, for the v1 parser. Regenerate with contracts/tools/export-recovery-kit-fixture.ts.",
   "passphraseFloor": {
     "minChars": 12,
     "minWords": 4
   },
   "password": "correct horse battery staple",
-  "fingerprint": "825e82dd375913d3cd2da6cd0089798c646f257699bdec899485c1359269f907",
-  "document": {
-    "version": 1,
-    "kind": "centraid-recovery-kit",
-    "createdAt": "2026-07-18T00:00:00.000Z",
-    "keyring": {
-      "version": 1,
-      "active": 2,
-      "epochs": [
-        {
-          "epoch": 1,
-          "key": "ERERERERERERERERERERERERERERERERERERERERERE=",
-          "createdAt": "2026-01-01T00:00:00.000Z"
-        },
-        {
-          "epoch": 2,
-          "key": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
-          "createdAt": "2026-06-01T00:00:00.000Z"
-        }
-      ]
-    },
-    "targets": [
-      {
-        "provider": "local",
-        "targetId": "local:/srv/centraid/backup",
-        "vaultId": "00000000-0000-7000-8000-000000000456",
-        "label": "the household vault",
-        "sealKey": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM=",
-        "identitySeed": "REREREREREREREREREREREREREREREREREREREREREQ=",
-        "lockerKeys": [
-          {
-            "keyId": "k-1",
-            "key": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU="
-          },
-          {
-            "keyId": "k-2",
-            "key": "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
-          }
-        ]
-      },
-      {
-        "provider": "local",
-        "targetId": "local:/srv/centraid/backup-2",
-        "vaultId": "00000000-0000-7000-8000-000000000789",
-        "label": "the workshop vault"
-      }
-    ]
-  },
-  "wrapped": {
-    "version": 1,
-    "kind": "centraid-recovery-kit-wrapped",
-    "createdAt": "2026-07-18T00:00:00.000Z",
-    "fingerprint": "825e82dd375913d3cd2da6cd0089798c646f257699bdec899485c1359269f907",
-    "kdf": "scrypt",
+  "schema": "centraid-recovery-kit-fixture/1",
+  "scrypt": {
     "N": 131072,
-    "r": 8,
+    "kdf": "scrypt",
     "p": 1,
-    "salt": "GLtwvaI3kR8WddcgUm9SEA==",
-    "nonce": "KcC8wt39wNQAHl7K",
-    "tag": "GyMgtPr9iaMthYf3dC83Bg==",
-    "ciphertext": "eWQVVvYDGzkpuuDsnGcZPIHHQfJ/MY7rZ0w+sOSQ8ydkoBQssBhFrXKtSPZK8Dr9a9DPx+O7r4Hgyk//XJ5A2KC5awEbxJkGi6HVUgVPDKlj8ri//QnjYmYpTqj/i4r7H6jsaY4BxU9879RqblhwmWm9mdmL9LKgkQ9f7rS20tEm06ukQxiZbZx8uKFTB+03QczXCztMwSwy4cBykmOz1Ilusck53IgCeaidkdx1b+y9mX3w5gGfXmvjKCJxNni2O0L8+UpBYZFR8CucPA65gM+cAULDiuFnBF7ZwZhIapGx//VtJuiL8f93JbDbC8WwSna4nlLQRfMTrPm98PYerinzd9mkuX8lXZsRZVzBLG6n/mac2VkC6EhUr8zMF3fl3DC1xEEgJjeT4IWxoPfqjd7BOqNov81nSlNVrfSevA7ZYMniMsVJVpYFw8SH56ycoIpiD1DY38dnLg/DALKX1RkSQ45/4wy1J4F+ijVVKf9TUo0RbtVgbpzdje/+Tj1gIsR+pHYfRkdLAvhG/7L7Jl0tz/gdK9VJpO4+aqvesXVj9h918T8RJT4CQRXUaOSnfzLrKrrVd9r1sqh/vhgmS2OgfiP3UnyOHpKspGqzVsTMvBtrz8G81IHOk/8xfKs/JZ7v34SDTHiL7kHbUicRjll6bqaE7FsqT9DHy1D9MzKe3IFuFdb4cVJUA58sZPgDkNKvjy7aZHglvLagp5DedDfVySPnrxoICHqcJrUUrjofNnoAddKYoDkfaO1rlI9hY4mrs6nUVM+5A5sTOMXY3YJKNWhixSSQe3p9r/ivQqBPl6R7LOcxa7GBiFO4G9q6ZTk01nLvCmafyiZ8j2ANYf3aIb/258wKRgzp/OILYbIW1wNaWyCn3zUO6zpImu4NPO5UM8ixhUcriTmUusono5IZHjTQR01O2BUJKry3EEw516VewHPe39a+G/YhnBa7pKJx0eSvY/jH1Q7sHIzgAoEDyp7Y8IdqAWsGPsWdtqm/tEn40Q/PHB89DN07a1kEhZGdCcuWOwPxDPv06hDzK9OmpNI+LN++LJYPebkUAMwANykZ7bC42q8/cCTsCyypScB9wr0nO/2oaVU9c5wYTLwnhMNqGJV7UfHz/awd8STqe0IATk0a7aS+lmH41p9/mkL8cATc7zpXB4rKVDARy6cMVENP33Zv6zYMm7Vy0YRdrgCTE6k="
+    "r": 8
+  },
+  "wrapAad": "centraid-recovery-kit-wrap-v1",
+  "wrapped": {
+    "N": 131072,
+    "ciphertext": "6G3QMujsgfBGFuGyfn4t9d/0prJiJQb8Kb5NcZlNo5LQeOz6JZxbZUa+Mx+chKp7a7Q2lKlwuSnuqYvNPAI7/ymQtEcOZxq61Bs7ehPu3IgxnHTQIrHhOe0Bwj6xss4BpbqfkRNBwXqqAcYVuSowA2R7FMRuxiHNzi2eYS8mcw6UIt5zLRa9quPiSPxVZrgf7ZfxFSiS0TsyYJZogtNIvDkoen8L9wHX+/S5WV07PhWopig3S85MCI11e8OLcHltvIKmMWS5WXrrrX54NDodHHpGS/9Q8o1JIqAj5lQr1R/BebQhsxedeJ9QEIcdnZaDKkMJXhECUGsb4owXHlvWdQgf1WT4Z9RtS5Y8jyuveGKpugAdBNUbuFfm5tJ+kgi3p1UmnyruzeeAJCJ+MJroY9FKFaq/chCCv5JjlyLNtLi/shhQ/1Ly08HvlARhOWtHnKRqWOEX1lUPpDVQubl6U/PhFQsDXnEVa40BjVSs8zeN5Hq+sWXwcqxJ8D3444kyd6+IMrz9UiRu/LOeNKQZBmWa4+hcxzjCKo2bxv21yX9XMzgX+EMsd1y5gtGnZjkfwb50dBCniwVKs/t3f86xYJopX6mG3rtUa0RTXFJqhhaMXcvWGbw5svXmwx30uLDAe0SVm4dUhCix2cj7XIxNmDB9bdEkrPgnRFngAtSq5U8X2mqUYgYKEvkwSpJygK1bnegPUy7GGAsaEKyuZy3TSdX65HqvDt6Os4PhClVgPAxxRSe3qiS8iJkryAVBnaR3wEqUVmm7Q+qfanPZMokZwQQt7pjQwm9TRKK/3KWuj7nzc0JFlD03daIb32eHjrmcSVbbfu8PgHdBznIXEkNEtMOYsOl7JoxH2EjH4OUXvCHz9+P8qhK5cEjdc60caL4hzEyIFW3vMObFKEwAb6cKyxauPTqxqPERY284rC6yniKhwcrYhSt/WK8kGRj5MBNT0pTqzhS/dw/feKWkOzknBm3Dd55vvGCkPMKeUnm4nzBX9tR7DcDqwdugoWygHHARhazIsaCD9W8WBgc6kDngXnLR+QnYNB+1817Ywc5DumF6dfnYoheDntI16xYmqDdoxq0DY6+WaenOirlUQv1v+amLHyNEBfK7YdjFYUYQrglp2nbLswAvYrbMIMT2KMVk61LctNmSRHYDnhc+AirTDpYU7RjVk4It+Czj4eIwE1/Q2zpYaXs=",
+    "createdAt": "2026-07-18T00:00:00.000Z",
+    "fingerprint": "addc1a06c83319e886a6870c84ec641c7d9b5bc9bcdb454aeb4938e17ab3b644",
+    "kdf": "scrypt",
+    "kind": "centraid-recovery-kit-wrapped",
+    "nonce": "D+OhUsfhwau7DDIC",
+    "p": 1,
+    "r": 8,
+    "salt": "Bpox+p0gBg5RNvOnrFFAvg==",
+    "tag": "87R39XQXIdtfPVbbxMLbgA==",
+    "version": 1
   }
 }

@@ -21,3 +21,5 @@ pub mod duplicates;
 pub mod format;
 pub mod models;
 pub mod phash;
+
+pub mod renditions;

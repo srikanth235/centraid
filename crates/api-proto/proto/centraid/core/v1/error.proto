@@ -47,6 +47,27 @@ enum ErrorCode {
   // The gateway has no durable directory to build a snapshot in
   // (v0's `503 seat_snapshot_unavailable`).
   ERROR_CODE_SNAPSHOT_UNAVAILABLE = 22;
+  // THIS REPLICA ALREADY HOLDS A VAULT (#1025 S7-9).
+  //
+  // A pairing bootstraps a first copy INTO the file the core is open on, so a
+  // pair run against a core that is already holding someone's rows would lay a
+  // second vault over the first and destroy it. It is refused before the ticket
+  // is redeemed, so nothing is burned: the caller pairs from a fresh file.
+  //
+  // A CODE and not a sentence, like every refusal here — the shell's own table
+  // says what a member reads.
+  ERROR_CODE_VAULT_ALREADY_HELD = 23;
+
+  // THE ENDPOINT THIS DEVICE SPAWNED IS NOT THE ONE ITS GATEWAY ENROLLED
+  // (#1025 S7-13).
+  //
+  // Refused at open, before one frame is sent. The enrolment record names the
+  // public key the gateway put in its allowlist; if the endpoint that came up
+  // has a different one, the secret half is gone and every dial from here
+  // would arrive as an unenrolled stranger. Dialling anyway spends the
+  // member's battery to earn a refusal that names the wrong cause, so the
+  // device says the true thing instead: this identity is not the enrolled one.
+  ERROR_CODE_IDENTITY_MISMATCH = 24;
 
   // --- intents and commands ---
   // The submitted `payload_hash` does not match the input.
@@ -65,6 +86,19 @@ enum ErrorCode {
   // (`packages/vault/src/gateway/access.ts:1`), so the member-facing sentence
   // is on the outcome and this code is what the shell branches on.
   ERROR_CODE_DENIED = 45;
+  // THE GATEWAY DOES NOT YET HOLD THE BYTES THIS INTENT NAMES (#1025 S3).
+  //
+  // A RETRYABLE refusal, and the distinction is the whole point: the intent was
+  // NOT executed and did NOT fail. The gateway tried to pull the declared blobs
+  // over the connection this seat opened and the transfer did not finish — the
+  // phone went out of range mid-pull, or the window closed. The write stays in
+  // the seat's outbox and the next pass submits it again, which is what an
+  // `Error` envelope on the `intent` stream already means to the seat
+  // (`decode_outcome`: a refusal is not a verdict).
+  //
+  // Bytes commit after rows, and never only on a phone: the alternative to this
+  // code is a content row on the gateway naming bytes nobody has.
+  ERROR_CODE_BYTES_NOT_YET_HELD = 46;
 
   // --- the vault file ---
   // The file is newer than this binary. Refuses rather than guessing (#1020

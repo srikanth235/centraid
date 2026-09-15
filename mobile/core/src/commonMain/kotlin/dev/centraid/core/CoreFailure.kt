@@ -43,7 +43,14 @@ public sealed interface CoreFailure {
         override val sentence: String = "Centraid could not read the answer."
     }
 
-    /** The core answered with an `Error` body. `detail` is the core's own. */
+    /**
+     * The core answered with an `Error` body.
+     *
+     * **`detail` is LOGS-ONLY** (#1025 S7, D-1025-S7-82). It is the core's own
+     * sentence about the build — table names, SQLite's vocabulary, untranslated
+     * — and no screen may render it. [sentence] is the member's, and it comes
+     * from the error's CODE, never from here.
+     */
     public data class Refused(
         val code: Int,
         val detail: String,

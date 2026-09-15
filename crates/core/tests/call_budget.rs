@@ -67,6 +67,7 @@ fn page_request() -> wire::Request {
                     pk_column: "party_id".to_owned(),
                     descending: false,
                 }),
+                with_held_thumbnail: false,
             }),
             limit: PAGE_ROWS,
             after: None,

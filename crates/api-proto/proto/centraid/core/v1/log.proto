@@ -1,4 +1,19 @@
-// The replica log on the wire (#1020, D-1020-C4).
+// The replica log on the wire (#1020, D-1020-C4; the tail is #1025 S2,
+// D-1025-S7-40).
+//
+// ## ONE LOG PER VAULT, AND A SEAT NEVER SUBSCRIBES TO A TABLE
+//
+// There is exactly one log per vault. Every table's changes are ROWS IN IT,
+// named by `LogRow.table`; there is no per-table stream, no filter on the
+// request and no subscription vocabulary anywhere on this wire. A seat holds a
+// COPY of the vault, not a view of some of it, so a request that could ask for
+// less would be a request that could produce a copy which is silently not one.
+//
+// A seat becomes current by exactly one mechanism: connect, ask for the log
+// from its durable cursor with `LogRequest.tail` set, and stay on that stream
+// as long as the OS allows. Polling and foreground timers are deleted
+// concepts — "up to date" means current within one round trip whenever this
+// device is connected.
 //
 // v0's shape is `SeatLogRowWire` / `SeatLogPageWire`
 // (`packages/core/src/protocol/seat-log.ts:27-55`). The wire is deliberately not
@@ -115,6 +130,15 @@ message RebootstrapRequired {
   uint64 floor = 3;
   uint64 watermark = 4;
   uint32 schema_epoch = 5;
+  // THE BLOB TO TAKE, NAMED IN THE ANSWER THAT ASKS FOR IT (#1025 S7, item 5).
+  //
+  // The same three values `PairOk` carries, and for the same reason: these two
+  // messages are the only two occasions on which a device is told to take a
+  // copy, so a separate `snapshot_head` request could only ever be a second
+  // round trip for an answer this one already had.
+  string snapshot_hash = 6;
+  uint64 snapshot_seq = 7;
+  uint64 snapshot_bytes = 8;
 }
 
 // Ask for a page of the log.
@@ -125,4 +149,21 @@ message LogRequest {
   // and ceilings at `SEAT_LOG_MAX_PAGE = 10_000`
   // (`packages/core/src/protocol/seat-log.ts:141`).
   uint32 limit = 2;
+  // STAY OPEN (#1025 S2, D-1025-S7-40).
+  //
+  // A gateway answering a tail serves the catch-up pages from `since` exactly
+  // as it does without this flag — following `has_more` — and then KEEPS THE
+  // STREAM OPEN, writing a further `LogPage` every time this vault's watermark
+  // moves past what it last sent. One page per COMMIT BATCH and never one per
+  // row: a batch of four hundred rows is one wake and one page.
+  //
+  // `RebootstrapRequired` ends the stream exactly as it ends a one-shot
+  // request. There are no other new messages, and none are needed: a tail is
+  // the same answer, more than once.
+  //
+  // A seat may hold at most ONE tail per vault. A second tail from the same
+  // device replaces the first, because the second is what that device believes
+  // and a gateway writing pages into a stream nobody reads is a task held by a
+  // phone that has moved on.
+  bool tail = 3;
 }

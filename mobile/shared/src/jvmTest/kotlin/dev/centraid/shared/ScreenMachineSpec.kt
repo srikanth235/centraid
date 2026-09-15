@@ -1,17 +1,8 @@
 package dev.centraid.shared
 
-import centraid.screen.v1.HomeEvent
-import centraid.screen.v1.TileCount
-import centraid.screen.v1.TileStatus
-import dev.centraid.shared.screen.HomeMachine
-import dev.centraid.shared.screen.SpringboardPolicy
-import io.kotest.assertions.withClue
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.withContext
 import app.cash.turbine.test
 import centraid.screen.v1.BackupState
+import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.Loading
 import centraid.screen.v1.MediaPermission
 import centraid.screen.v1.NoteDraft
@@ -23,15 +14,20 @@ import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.SeatState
 import centraid.screen.v1.TallyListData
-import centraid.screen.v1.TallyListState
 import centraid.screen.v1.TallyListEvent
+import centraid.screen.v1.TallyListState
 import centraid.screen.v1.TallyRow
-import dev.centraid.shared.screen.NotesEditorMachine
-import dev.centraid.shared.screen.PhotosGridMachine
+import centraid.screen.v1.TileCount
+import centraid.screen.v1.TileStatus
+import dev.centraid.shared.apps.notes.NotesEditorMachine
+import dev.centraid.shared.apps.photos.PhotosGridMachine
+import dev.centraid.shared.apps.tally.TallyListMachine
+import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
-import dev.centraid.shared.screen.Reads
-import dev.centraid.shared.screen.TallyListMachine
+import dev.centraid.shared.shell.HomeMachine
+import dev.centraid.shared.shell.SpringboardPolicy
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -39,6 +35,10 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 
 /**
  * The three screens, as state machines (#1020, D-1020-E3).
@@ -288,7 +288,18 @@ class ScreenMachineSpec : StringSpec({
         write.command shouldBe NotesEditorMachine.SAVE_COMMAND
         write.invokeKey shouldBe "notes.save:note-0001:rev-0007"
         write.onlineOnly.shouldBeFalse()
-        write.inputJson.contains("\"base_revision_id\":\"rev-0007\"").shouldBeTrue()
+        // THE BASE REVISION IS THE INVOKE KEY'S SECOND HALF AND NOT AN INPUT
+        // (#1025 S5). `knowledge.edit_note`'s schema is
+        // `additionalProperties: false`, so sending it would be refused — and
+        // the invoke key is where concurrency control actually lives for a
+        // queued write: a save over a new base revision is a different id.
+        write.inputJson.contains("base_revision_id").shouldBeFalse()
+        // The column is `body_text`, not `body`. The wrong spelling is an
+        // additional property and the whole write is refused.
+        write.inputJson.contains("\"body_text\":\"Book the cabin.\"").shouldBeTrue()
+        // And `pinned` is an INTEGER: SQLite has no boolean, so a `true` on the
+        // wire would invent one.
+        write.inputJson.contains("\"pinned\":0").shouldBeTrue()
 
         // A SECOND SAVE WHILE ONE IS IN FLIGHT IS NOT A SECOND COMMAND. Two
         // `invoke_key`s for one edit is two revisions of one note.

@@ -79,3 +79,101 @@ message ContentUrls {
   // would silently pair a photograph with another photograph's bytes.
   repeated ContentUrl urls = 1;
 }
+
+// A `blob` stream (#1025 S2).
+//
+// THE LAST ENVELOPE ON THE STREAM, and that is the whole message. Every stream
+// on the one ALPN opens with a `Request`; this kind says "the rest of these
+// bytes are iroh-blobs' own get/provide protocol, verbatim". The serving side
+// hands the remainder to `iroh_blobs::provider::handle_stream` and the fetching
+// side drives `execute_get` over the same pair, so neither reimplements bao.
+//
+// It carries NO HASH. The hash is in iroh-blobs' own request, which follows on
+// this stream and which the provider parses; naming it twice would be two
+// places for a fetcher and a provider to disagree about what was asked for —
+// and the second one would be the one nobody checks. What this frame decides is
+// the FRAMING of everything after it, which is the one thing the envelope
+// reader cannot work out for itself.
+//
+// Admission is not decided here. `centraid_net::Endpoint::accept` proved the
+// peer is an enrolled, unrevoked device before this stream existed; the
+// provider's own event gate then refuses anything that is not a request for one
+// blob, which is a framing rule rather than an authority one.
+message BlobRequest {}
+
+// THE WRITE HALF'S DOOR: A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM
+// (#1025 S4, D-1025-S4-6).
+//
+// A camera roll is the shell's; the NAME of what is in it is the core's.
+// `core_content_item.content_hash` is BLAKE3 and is UNIQUE, so a shell that
+// computed its own identity would be a second implementation of the vault's
+// dedupe key — and on iOS and Android the only hash the platform offers is
+// SHA-256, so the second implementation could not even be the same function.
+// `MediaLibrary.Asset.sha256` is therefore gone from the mobile shell entirely.
+//
+// The shape is the native-messaging stage door's, for the same reason it has
+// that shape there: a ceiling on one message, no streaming, so the bytes arrive
+// in frames the receiver bounds. `begin` declares a size and a media type — the
+// ALLOCATION, so a sender does not decide how much memory this process uses —
+// `chunk` carries ordered payload, and `end` answers the handle.
+//
+// **A digest is never DECLARED, only ANSWERED.** There is nothing a sender could
+// assert that the core would not then compute for itself, and a declaration that
+// is checked is a second name for the same bytes that has to agree.
+message StageRequest {
+  oneof kind {
+    StageBegin begin = 1;
+    StageChunk chunk = 2;
+    StageEnd end = 3;
+  }
+}
+
+message StageBegin {
+  // What the shell reads these bytes as. The core has no sniffer, and a
+  // photograph promoted as `application/octet-stream` is one a grid will not
+  // embed.
+  string media_type = 1;
+  // The declared length, which is the allocation and the bound.
+  uint64 byte_size = 2;
+}
+
+message StageChunk {
+  string staging_id = 1;
+  // Zero-based and checked against the next expected one: transposed frames
+  // name the frame rather than producing bytes nobody asked for.
+  uint64 seq = 2;
+  bytes payload = 3;
+}
+
+message StageEnd {
+  string staging_id = 1;
+}
+
+message StageResponse {
+  oneof kind {
+    StageBegun begun = 1;
+    StageChunked chunked = 2;
+    StageHandle handle = 3;
+  }
+}
+
+message StageBegun {
+  string staging_id = 1;
+  // The chunk ceiling this core accepts, so the sender's split and the
+  // assembler's agree before the first frame rather than at the first refusal.
+  uint64 chunk_bytes = 2;
+}
+
+message StageChunked {
+  uint64 received = 1;
+}
+
+// THE HANDLE IS THE BYTES. `content_hash` is `content_digest` over exactly what
+// arrived — the value a `media.add_asset` or `core.add_document` then names.
+message StageHandle {
+  string content_hash = 1;
+  uint64 byte_size = 2;
+  // Whether this core ALREADY held these bytes. A camera roll re-scanned is the
+  // ordinary case, and a shell that could not tell would re-upload the roll.
+  bool already_held = 3;
+}

@@ -264,25 +264,15 @@ mod tests {
         );
     }
 
-    /// The promoted file is the extension's, byte for byte.
-    ///
-    /// While `apps/extension/spec/origin-matching-v1.json` exists it is the
-    /// oracle, and a fixture nobody may edit is a fixture whose two copies must
-    /// be one file's worth of bytes (census §Cross-lane: *both lanes read it;
-    /// neither edits it without a red*).
-    #[test]
-    fn the_promoted_spec_is_byte_identical_to_the_extensions() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let promoted =
-            std::fs::read(root.join("contracts/origin-matching-v1.json")).expect("the promotion");
-        let v0 = std::fs::read(root.join("apps/extension/spec/origin-matching-v1.json"))
-            .expect("the extension's spec");
-        assert_eq!(
-            promoted, v0,
-            "contracts/origin-matching-v1.json is not byte-identical to the \
-             extension's spec; the promotion is a move, not an edit"
-        );
-    }
+    // DELETED WITH ITS SECOND COPY (#1025 S4).
+    // `the_promoted_spec_is_byte_identical_to_the_extensions` compared
+    // `contracts/origin-matching-v1.json` against `apps/extension/spec/` —
+    // "a fixture nobody may edit is a fixture whose two copies must be one
+    // file's worth of bytes". There is one copy now: `chore(retire): delete the
+    // v0 tree` removed the other, and the promotion under `contracts/` is the
+    // artefact. A test that asserts a file equals itself is not the assertion
+    // that was written here, so it is gone rather than relaxed. What the spec
+    // MEANS is still tested, by every case below reading the promoted file.
 
     #[test]
     fn only_real_loopback_is_loopback() {

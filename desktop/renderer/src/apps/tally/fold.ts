@@ -199,7 +199,9 @@ export function foldPhotos(pages: {
   return byColumn(pages.assets).map((asset) => {
     const contentId = asText(asset["content_id"]) ?? "";
     const bytes = content.get(contentId);
-    const sha = asText(bytes?.["sha256"]);
+    // `content_hash` since #1025 S4: the column is named after what it holds
+    // rather than after a function it no longer uses.
+    const sha = asText(bytes?.["content_hash"]);
     return {
       assetId: asText(asset["asset_id"]) ?? "",
       contentId,

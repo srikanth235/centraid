@@ -1,6 +1,6 @@
 // Moved from `packages/tunnel/data-plane/src/format.rs` (first-party MIT code) when the
-// byte plane became a v1 crate (#1020, D-1020-R1). The v0 crate stays in place as the
-// pinned oracle until wave 6; these formats are normative and were ported byte-for-byte.
+// byte plane became a v1 crate (#1020, D-1020-R1). The v0 crate is retired and the
+// formats are this file's; the hash and the KDF are BLAKE3 (#1025 S4, D-1025-S4-1/-3).
 
 use aes_gcm::{
     Aes256Gcm, KeyInit,
@@ -8,9 +8,7 @@ use aes_gcm::{
 };
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use hkdf::Hkdf;
 use serde_json::{Map, Value};
-use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone)]
 pub struct WalAddress<'a> {
@@ -22,8 +20,17 @@ pub struct WalAddress<'a> {
     pub tick_ms: u64,
 }
 
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    hex::encode(Sha256::digest(bytes))
+/// The digest that names bytes on this plane.
+///
+/// **BLAKE3, and it used to be SHA-256** (#1025 S4, D-1025-S4-1). This file was
+/// moved byte-for-byte from v0 and its formats are normative (D-1020-R1), so
+/// changing the function here IS a re-keying event — which is exactly what this
+/// slice spends, once, while v1 has no released predecessor and no artefact a
+/// member holds is restorable. Every golden under `contracts/` regenerates
+/// through its generator in the same change.
+#[must_use]
+pub fn content_hash_hex(bytes: &[u8]) -> String {
+    hex::encode(blake3::hash(bytes).as_bytes())
 }
 
 pub fn canonical_json(value: &Value) -> String {
@@ -64,22 +71,34 @@ pub fn canonical_json(value: &Value) -> String {
     }
 }
 
-pub fn hkdf_bytes(key: &[u8], info: &str, length: usize) -> Result<Vec<u8>> {
-    let hk = Hkdf::<Sha256>::new(Some(&[]), key);
+/// Derive `length` bytes from a key under a context string.
+///
+/// **`blake3::derive_key`, superseding HKDF-SHA-256** (#1025 S4, D-1025-S4-3).
+/// BLAKE3's KDF mode is a keyed hash over the context with its own domain
+/// separation, and it is an XOF, so any output length comes off one derivation
+/// rather than out of HKDF's counter loop. The `info` string becomes the
+/// context verbatim, so every existing info string is still what separates one
+/// derived key from another — the derivation changed, the domain did not.
+pub fn derive_bytes(key: &[u8], info: &str, length: usize) -> Result<Vec<u8>> {
+    if length == 0 {
+        bail!("a derived key is at least one byte");
+    }
     let mut out = vec![0; length];
-    hk.expand(info.as_bytes(), &mut out)
-        .map_err(|_| anyhow::anyhow!("HKDF output length is invalid"))?;
+    blake3::Hasher::new_derive_key(info)
+        .update(key)
+        .finalize_xof()
+        .fill(&mut out);
     Ok(out)
 }
 
 pub fn derive_data_key(master: &[u8], vault_id: &str) -> Result<[u8; 32]> {
-    hkdf_bytes(master, &format!("centraid-backup:data:{vault_id}"), 32)?
+    derive_bytes(master, &format!("centraid-backup:data:{vault_id}"), 32)?
         .try_into()
         .map_err(|_| anyhow::anyhow!("data key length"))
 }
 
 pub fn derive_nonce(key: &[u8], info: &str) -> Result<[u8; 12]> {
-    hkdf_bytes(key, info, 12)?
+    derive_bytes(key, info, 12)?
         .try_into()
         .map_err(|_| anyhow::anyhow!("nonce length"))
 }
@@ -197,10 +216,10 @@ pub fn seal_snapshot_manifest(
         .context("snapshot public envelope must be an object")?;
     let data_key = derive_data_key(master_key, vault_id)?;
     let payload_bytes = canonical_json(payload).into_bytes();
-    let nonce_identity = sha256_hex(
+    let nonce_identity = content_hash_hex(
         canonical_json(&serde_json::json!({
             "publicEnvelope": public_envelope,
-            "payloadHash": sha256_hex(&payload_bytes),
+            "payloadHash": content_hash_hex(&payload_bytes),
         }))
         .as_bytes(),
     );
@@ -216,7 +235,7 @@ pub fn seal_snapshot_manifest(
         Value::String(STANDARD.encode(sealed)),
     );
     let bytes = canonical_json(&Value::Object(stored)).into_bytes();
-    let hash = sha256_hex(&bytes);
+    let hash = content_hash_hex(&bytes);
     Ok((bytes, hash))
 }
 

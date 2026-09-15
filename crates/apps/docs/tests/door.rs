@@ -36,7 +36,7 @@ use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::row::{Cell, Row};
 use centraid_apps_kit::statement::PageQuery;
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_media::format::sha256_hex;
+use centraid_media::format::content_hash_hex;
 use centraid_vault::access::Principal;
 use centraid_vault::backup::store::{BlobStore, FsBlobStore};
 use centraid_vault::clock::{FixedClock, SeededIds};
@@ -629,8 +629,8 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
                 return Reading::Denied(door_unavailable("that is not a staging request"));
             };
             match self.store.put(bytes) {
-                Ok(sha256) => Reading::Data(StagedBlob {
-                    sha256,
+                Ok(content_hash) => Reading::Data(StagedBlob {
+                    content_hash,
                     byte_size: bytes.len(),
                     media_type: media_type.clone(),
                 }),
@@ -640,7 +640,7 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
     }
 
     let drive = Drive::founded("docs-bytes");
-    let store = FsBlobStore::open_content(drive.dir.join("blobs")).expect("a store opens");
+    let store = FsBlobStore::open(drive.dir.join("blobs")).expect("a store opens");
     let door = StoreDoor { store };
     let pdf = b"%PDF-1.7\n% a scanned lease\ntrailer<</Root 1 0 R>>\n%%EOF\n".to_vec();
 
@@ -654,12 +654,16 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
         &pdf,
     );
     let staged = staged.data().expect("the bytes landed").clone();
-    assert_eq!(staged.sha256, sha256_hex(&pdf), "the sha is the bytes' own");
+    assert_eq!(
+        staged.content_hash,
+        content_hash_hex(&pdf),
+        "the sha is the bytes' own"
+    );
     assert!(staged.sha_is_well_formed(), "a claim will accept this sha");
     assert_eq!(staged.byte_size, pdf.len());
 
     // THE CLAIM: the same sha, through the real command.
-    let sha = staged.sha256.clone();
+    let sha = staged.content_hash.clone();
     let media_type = staged.media_type.clone();
     let byte_size = i64::try_from(staged.byte_size).expect("a size");
     let now = EPOCH.to_owned();
@@ -677,7 +681,7 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
     });
     let added = drive.run(
         "core.add_document",
-        json!({ "title": "Scanned lease", "staged_sha": staged.sha256 }),
+        json!({ "title": "Scanned lease", "staged_sha": staged.content_hash }),
     );
     let content_id = added["content_id"].as_str().expect("an id").to_owned();
 
@@ -701,7 +705,10 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
     );
 
     // THE BYTES THEMSELVES COME BACK, verified against the digest the row names.
-    let fetched = door.store.get(&staged.sha256).expect("the bytes are there");
+    let fetched = door
+        .store
+        .get(&staged.content_hash)
+        .expect("the bytes are there");
     assert_eq!(fetched, pdf);
 
     // F's NEVER-INLINE RULE, applied to a document Docs would otherwise
@@ -725,7 +732,7 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
         .data()
         .expect("the text landed")
         .clone();
-    let request = ByteRequest::read_text(&staged_text.sha256, "text/plain", text.len())
+    let request = ByteRequest::read_text(&staged_text.content_hash, "text/plain", text.len())
         .expect("a small text body");
     assert_eq!(
         door.read_text(&request).data().map(String::as_str),

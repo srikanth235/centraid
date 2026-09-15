@@ -61,11 +61,11 @@ extern "C" {
  * Open a core over a vault file.
  *
  * `config` is `len` bytes of UTF-8 JSON: `{"path": "...", "role":
- * "gateway"|"seat-replicated"|"seat-thin", "gateway": "<hex>"?, "create":
- * bool?, "uiThreadName": "..."?, "expectedIdentity": "<digest>"?}`. JSON and
- * not protobuf, because a configuration is read once at startup by a
- * human-written call site and being able to log it verbatim is worth more than
- * the encoding.
+ * "gateway"|"seat-replicated"|"seat-thin", "create": bool?, "uiThreadName":
+ * "..."?, "expectedIdentity": "<digest>"?, "pairing": {…}?}`. JSON and not
+ * protobuf, because a
+ * configuration is read once at startup by a human-written call site and being
+ * able to log it verbatim is worth more than the encoding.
  *
  * `expectedIdentity` is the artifact digest the SHELL's build recorded for the
  * core it intends to load. A mismatch is refused here, before a handle exists
@@ -75,6 +75,22 @@ extern "C" {
  * that says so. `mobile/core`'s `CentraidCore.open(dataDir, expectedIdentity)`
  * already takes it, and the handshake's `Hello.identity` is what a shell
  * compares after the fact.
+ *
+ * `pairing` is THE ENROLMENT RECORD THE SHELL KEPT FOR THIS VAULT (#1025
+ * S7-13): `{"secret": "<64 hex>"?, "gatewayAddress": "<64 hex>", "vaultId":
+ * "…", "vaultName": "…", "relayUrl": "…", "directAddrs": ["…"],
+ * "enrolledPublicKey": "<64 hex>"}`. One record and not three keys, because a
+ * key filed under one name and an address under another is a pair that can
+ * settle by halves — and did.
+ *
+ * `secret` is this device's endpoint identity, 32 bytes as 64 lowercase hex,
+ * out of the shell's secure store. Absent means a fresh keypair per open,
+ * which is a seat its gateway has not enrolled; `enrolledPublicKey` is what
+ * catches that, and an open whose endpoint does not match it is refused with
+ * `ERROR_CODE_IDENTITY_MISMATCH` rather than dialled as a stranger.
+ *
+ * `relayUrl` decides the relay mode: empty on a SETTLED record is a LAN-only
+ * deployment. There is no `relays` flag — see `CoreConfig::pairing`.
  *
  * On success writes an owned handle to `out` and returns [`CENTRAID_OK`]. The
  * handle is released **only** by [`centraid_close`].

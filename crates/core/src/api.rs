@@ -111,6 +111,7 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             .after
             .as_ref()
             .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
+        held_thumbnail: query.with_held_thumbnail,
     })?;
 
     Ok(wire::Page {
@@ -121,8 +122,35 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                 values: query
                     .select
                     .iter()
+                    .map(|column| output_name(column).to_owned())
+                    // THE THUMBNAIL RIDES AFTER THE NAMED COLUMNS, always in
+                    // the same position (#1025, D-1025-S7-20). Positional rows
+                    // are the door's contract, so a computed column has to have
+                    // ONE place — appended — rather than being spliced in
+                    // wherever a caller happened to put it in `select`, which
+                    // is a list of REAL columns and must stay one.
+                    .chain(
+                        query
+                            .with_held_thumbnail
+                            .then(|| {
+                                // THREE COMPUTED COLUMNS, IN THIS ORDER, and
+                                // the order is the contract (#1025 S5): a
+                                // positional row is the door's shape, so a
+                                // shell counts past its own `select` list to
+                                // reach them. `PhotosReads`' index constants
+                                // are the other half of this sentence.
+                                [
+                                    centraid_vault::page::HELD_THUMBNAIL_COLUMN,
+                                    centraid_vault::page::HELD_ORIGINAL_HASH_COLUMN,
+                                    centraid_vault::page::HELD_ORIGINAL_HELD_COLUMN,
+                                ]
+                            })
+                            .into_iter()
+                            .flatten()
+                            .map(ToOwned::to_owned),
+                    )
                     .map(|column| {
-                        image.get(output_name(column)).map_or_else(
+                        image.get(&column).map_or_else(
                             || wire::Value {
                                 kind: Some(wire::value::Kind::Null(wire::NullValue {})),
                             },
@@ -361,6 +389,7 @@ mod tests {
                 pk_column: pk.to_owned(),
                 descending: false,
             }),
+            with_held_thumbnail: false,
         }
     }
 
@@ -483,7 +512,6 @@ mod tests {
     fn a_seat_unwraps_a_locker_cell_and_forwards_a_sealed_column() {
         let seat = Role::Seat {
             kind: crate::config::SeatKind::Replicated,
-            gateway: Vec::new(),
         };
         assert_eq!(
             reveal(&seat, "locker", "item", "locker", "reveal").expect("routed"),

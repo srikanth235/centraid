@@ -142,8 +142,21 @@ kotlin {
         // block, which is what makes "the app happens to bring it" stop working.
         if (androidEnabled) {
             androidMain.dependencies {
+                implementation(libs.androidx.security.crypto)
                 implementation(libs.androidx.work.runtime)
             }
+        }
+        // THE ONE TEST SOURCE SET THAT NEEDS AN APPLE TOOLCHAIN (#1025 S6).
+        //
+        // `IosMediaLibrary`'s cursor is the durable thing a relaunch resumes
+        // from and it is spelled in `iosMain`, where no `jvmTest` can reach it.
+        // `kotlin.test` is Kotlin/Native's own, so this brings NO new
+        // dependency and NO toolchain: it runs on the same simulator target
+        // that already compiles, and on a machine with no Xcode it is simply
+        // not a task that exists — which is the same shape `iosMain` already
+        // has.
+        iosTest.dependencies {
+            implementation(kotlin("test"))
         }
         jvmTest.dependencies {
             implementation(libs.kotest.runner.junit5)

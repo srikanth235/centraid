@@ -18,20 +18,39 @@ import SwiftUI
 @main
 struct CentraidApp: App {
     @StateObject private var shell = ShellModel()
+    /// THE ONLY THING THAT OPENS AND CLOSES A TAIL ON THIS PLATFORM
+    /// (#1025 S2, D-1025-S7-40).
+    ///
+    /// `active` opens it, `inactive` and `background` close it. There is no
+    /// timer beside this and none anywhere in the shell: a seat becomes current
+    /// by connecting and staying on the log stream, so "the member is looking
+    /// at the app" is the whole of the schedule.
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $shell.path) {
                 HomeView(shell: shell)
                     .navigationDestination(for: ShellModel.Route.self) { route in
-                        switch route {
-                        case .tally:
-                            TallyListView(shell: shell)
-                        case .photos:
-                            PhotosGridView(shell: shell)
-                        case let .note(identifier):
-                            NotesEditorView(shell: shell, noteIdentifier: identifier)
+                        Group {
+                            switch route {
+                            case .tally:
+                                TallyListView(shell: shell)
+                            case .photos:
+                                PhotosGridView(shell: shell)
+                            case let .note(identifier):
+                                NotesEditorView(shell: shell, noteIdentifier: identifier)
+                            }
                         }
+                        // A SCREEN READS BECAUSE IT WAS OPENED. The machine
+                        // emits its first `ReadPage` from `Opened` and from
+                        // nothing else, so a cover that was pushed and never
+                        // told would sit loading for ever (#1025 S5, lane L5).
+                        // `.task` and not `.onAppear`: a pop back onto this
+                        // cover re-runs it, and a screen a member returned to
+                        // should re-read rather than show the page it had when
+                        // they left.
+                        .task { shell.opened(route) }
                     }
             }
             // THE SWITCHER MASK. Leaving the foreground clears the decrypted
@@ -39,6 +58,25 @@ struct CentraidApp: App {
             // (`docs/mobile-offline.md:253`) — the mask is not cosmetic, it is
             // the visible half of a lock that has already happened.
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
+            // THE FIRST ACTIVATION IS NOT A CHANGE (#1025 S2, D-1025-S7-40).
+            // `onChange` fires on transitions and a cold launch arrives already
+            // `active`, so the first foreground would open no tail at all —
+            // which is the one launch a member is most likely to be watching.
+            .task { shell.foreground() }
+            // THE TAIL FOLLOWS THE MEMBER (#1025 S2, D-1025-S7-40).
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active:
+                    shell.foreground()
+                // `inactive` IS ALREADY LEAVING. The switcher mask is painted
+                // here for the same reason the tail closes here: a phone in the
+                // app switcher is not a phone the member is looking at.
+                case .inactive, .background:
+                    shell.leftTheForeground()
+                @unknown default:
+                    shell.leftTheForeground()
+                }
+            }
         }
     }
 }

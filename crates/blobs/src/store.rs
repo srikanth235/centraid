@@ -6,19 +6,33 @@
 //! place a caller could learn that the bytes are BLAKE3-addressed, and the
 //! point of [`crate::hash::ContentHash`] is that they need not.
 //!
-//! ## Why this is not `centraid_vault::backup::store::BlobStore`
+//! ## ONE CONTENT STORE PER VAULT, AND THIS IS IT (#1025 S3, D-1025-S3-1)
 //!
-//! That trait is `put(&[u8]) -> String` and `get(&str) -> Vec<u8>`, which is
-//! right for what it was built for: a backup manifest is small and a generation
-//! is moved whole, so holding one in memory costs nothing and the all-or-nothing
-//! shape is a feature. Applying the same shape to a camera roll would mean
-//! buffering an 800 MB video in a phone's address space to store it and again
-//! to read it, and it has no way to express the state this whole plane exists
-//! to make routine: **a blob this device holds PART of**.
+//! A device used to hold two: this one, and a plain one-file-per-hash CAS at
+//! `<vault>.blobs` that `Vault::with_blobs` wrote and `content_location` read.
+//! The read path knew the second and the transfer path knew the first, so a
+//! photograph a seat FETCHED could never be displayed and a photograph a
+//! window MINTED could never be served. Both are gone into this one, which the
+//! grid reads and the window writes alike.
 //!
-//! So the two stores coexist and address different things. The backup store
-//! keeps SHA-256 over whole artefacts; this one keeps BLAKE3 over member bytes.
-//! Neither is a migration of the other.
+//! The sibling `centraid_vault::backup::store::FsBlobStore` stays, and it is a
+//! different question: it keeps one digest over whole BACKUP ARTEFACTS, which are
+//! small, moved whole and sealed by `contracts/golden/format-golden.json`.
+//! Applying ITS shape — `put(&[u8])`, `get(&str) -> Vec<u8>` — to a camera roll
+//! would mean buffering an 800 MB video in a phone's address space to store it
+//! and again to read it, and it has no way to express the state this plane
+//! exists to make routine: **a blob this device holds PART of**.
+//!
+//! ## NOTHING IS INLINED, EVER (#1025 S3, D-1025-S3-2)
+//!
+//! iroh-blobs inlines a blob under 16 KiB into its own redb index instead of
+//! writing a file. That is a sensible default for a transfer cache and a wrong
+//! one for a content store a platform reads FROM: `content_location` answers a
+//! PATH — `UIImage(contentsOfFile:)`, a Compose painter, an `<img>` — and a
+//! thumbnail small enough to be inlined is a thumbnail with no path, which is
+//! most of a photo grid. [`ByteStore::open`] therefore sets the inline
+//! threshold to zero, so every complete blob is a file at a name
+//! [`ByteStore::data_path`] can compute without asking the store anything.
 //!
 //! ## Holding is three states, not two
 //!
@@ -138,19 +152,73 @@ pub struct ByteStore {
 
 impl ByteStore {
     /// Open, creating the directory if it is not there.
+    ///
+    /// **The inline threshold is zero** (D-1025-S3-2). See the module header:
+    /// a blob small enough to be inlined is a blob with no file, and this
+    /// store's readers are platforms that open files.
     pub async fn open(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref().to_path_buf();
         std::fs::create_dir_all(&root).map_err(|error| StoreError::Open {
             path: root.clone(),
             detail: error.to_string(),
         })?;
-        let store = FsStore::load(&root)
+        let mut options = iroh_blobs::store::fs::options::Options::new(&root);
+        options.inline = iroh_blobs::store::fs::options::InlineOptions::NO_INLINE;
+        let store = FsStore::load_with_opts(root.join("blobs.db"), options)
             .await
             .map_err(|error| StoreError::Open {
                 path: root.clone(),
                 detail: error.to_string(),
             })?;
         Ok(Self { store, root })
+    }
+
+    /// The file a complete blob's bytes are in, or `None` when this device does
+    /// not hold the whole thing.
+    ///
+    /// THE ANSWER `content_location` GIVES A GRID. It is iroh-blobs' own data
+    /// file, read in place and never exported to a second copy: a phone that
+    /// exported every cell of a camera roll would hold the roll twice.
+    ///
+    /// The name is computable — `<root>/data/<hex>.data`, which is
+    /// `PathOptions::data_path` — but completeness is not, so this asks the
+    /// store first. A path to a PARTIAL blob would be half a photograph
+    /// rendered as a photograph, which is worse than a cell that says the file
+    /// has not arrived.
+    pub async fn data_path(&self, hash: ContentHash) -> Result<Option<PathBuf>> {
+        if !self.is_complete(hash).await? {
+            return Ok(None);
+        }
+        Ok(Some(self.data_file(hash)))
+    }
+
+    /// EVERY WHOLE BLOB THIS STORE HOLDS, with its file and its size.
+    ///
+    /// One store round trip ([`Self::complete_hashes`]) and then a `stat` per
+    /// blob, which is what [`Self::sweep`] already does for the same set: the
+    /// file name is computable, so asking the actor per blob would be a
+    /// round trip to learn something the path already says.
+    ///
+    /// The one caller is the seat's held-blob table, which is rebuilt from this
+    /// at every core open (#1025, D-1025-S7-20). A hash the index calls
+    /// complete whose file cannot be stated is **left out**: a row is a promise
+    /// that a surface can open the path, and a path that does not resolve is
+    /// worse than a cell that says the photograph has not arrived.
+    pub async fn held_files(&self) -> Result<Vec<(ContentHash, PathBuf, u64)>> {
+        let mut held = Vec::new();
+        for hash in self.complete_hashes().await? {
+            let path = self.data_file(hash);
+            let Ok(metadata) = std::fs::metadata(&path) else {
+                continue;
+            };
+            held.push((hash, path, metadata.len()));
+        }
+        Ok(held)
+    }
+
+    /// Where a blob's bytes WOULD be. Says nothing about whether they are.
+    fn data_file(&self, hash: ContentHash) -> PathBuf {
+        self.root.join("data").join(format!("{hash}.data"))
     }
 
     #[must_use]
@@ -305,59 +373,6 @@ impl ByteStore {
             })
     }
 
-    /// Take a vault's content CAS into the byte store, in place.
-    ///
-    /// `Vault::blobs_root_for` is one file per blob named by its hash, and
-    /// since D-1020-B2 that hash is BLAKE3 — **the same hash this store uses**.
-    /// So an import is not a translation: each file's own name is what it must
-    /// hash to, and a mismatch is corruption reported rather than a blob filed
-    /// under the wrong name.
-    ///
-    /// `TryReference`, so a gateway holding forty thousand photographs does not
-    /// hold them twice. iroh-blobs may still copy — it is free to, and does for
-    /// very small files — so this is a request and not a guarantee.
-    ///
-    /// Idempotent and cheap to repeat: a file already in the store is
-    /// re-hashed and lands on the same name. Returns how many blobs the store
-    /// holds from this directory, and how many files did not hash to their own
-    /// name.
-    pub async fn import_content_cas(&self, root: impl AsRef<Path>) -> Result<(usize, usize)> {
-        let root = root.as_ref();
-        let Ok(entries) = std::fs::read_dir(root) else {
-            // NO CAS IS NOT AN ERROR. A vault with no photographs has no
-            // directory, and a gateway that refused to start over it would
-            // refuse to start over a brand-new vault.
-            return Ok((0, 0));
-        };
-        let mut imported = 0usize;
-        let mut mismatched = 0usize;
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            // The filename IS the expected hash. A temp file from an
-            // interrupted put (`<hash>.<pid>.tmp`) does not parse as one and is
-            // skipped rather than imported under a name it did not claim.
-            let Some(expected) = path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .and_then(|name| ContentHash::parse_hex(name).ok())
-            else {
-                continue;
-            };
-            match self.add_path(&path).await {
-                Ok(actual) if actual == expected => imported += 1,
-                Ok(_) => mismatched += 1,
-                Err(error) => {
-                    tracing::warn!(path = %path.display(), %error, "a content blob would not import");
-                    mismatched += 1;
-                }
-            }
-        }
-        Ok((imported, mismatched))
-    }
-
     /// Every blob this device holds WHOLE, in one call.
     ///
     /// A planner over a camera roll needs to know which of forty thousand
@@ -377,10 +392,128 @@ impl ByteStore {
             })
     }
 
+    /// Drop this device's claim on a blob.
+    ///
+    /// Deletes the TAG, which is the only thing keeping the blob from
+    /// iroh-blobs' collector; the bytes go when it next runs. Named `forget`
+    /// and not `delete` because that is exactly what it promises — a blob
+    /// another tag still names, or one a transfer is holding, stays.
+    ///
+    /// What it is for: the bootstrap artifact. It is the size of the vault, it
+    /// has already been expanded into the replica, and a seat that kept it
+    /// would hold its own vault twice on a phone.
+    pub async fn forget(&self, hash: ContentHash) -> Result<()> {
+        self.store
+            .tags()
+            .delete(hash.to_hex())
+            .await
+            .map(|_| ())
+            .map_err(|error| StoreError::Query {
+                hash,
+                detail: error.to_string(),
+            })
+    }
+
+    /// Free space down to `budget_bytes`, and NEVER take a pinned blob.
+    ///
+    /// ## The pin is structural, not a filter at the end (#1025 S3, R25)
+    ///
+    /// Bytes an unsettled outbox intent names are the ONE copy of a write a
+    /// member has already made. Deleting them to make room for a cache turns a
+    /// queued photograph into a queued photograph with nothing behind it, and
+    /// no later window can recover it — the gateway never had the bytes, which
+    /// is the whole reason the intent is still queued.
+    ///
+    /// So `pinned` is subtracted BEFORE anything is ordered, and a store whose
+    /// pins alone exceed the budget reports [`Sweep::over_budget_by`] rather
+    /// than breaking the promise. A sweep that filtered pins out at the end
+    /// would evict them whenever the arithmetic came out that way, which is
+    /// exactly when it matters.
+    ///
+    /// ## Oldest first, by the data file's own mtime
+    ///
+    /// There is no access time to read — iroh-blobs keeps none, and a phone's
+    /// filesystem is usually mounted `noatime` — so the order is by when the
+    /// bytes landed. That is the right order for a cache filled newest-first by
+    /// [`crate::plan`]: the tail of the store is what a member scrolled past
+    /// longest ago. A blob whose file cannot be stated sorts OLDEST, so a store
+    /// that has lost track of a file frees it rather than keeping it forever.
+    ///
+    /// What is deleted is the TAG (see [`Self::forget`]); the bytes go when
+    /// iroh-blobs' collector next runs.
+    /// **It answers WHICH blobs it took, not only how many** (#1025,
+    /// D-1025-S7-20): the seat keeps a row per held blob so a page read can
+    /// join it, and a count cannot tell that table which rows to drop.
+    pub async fn sweep(
+        &self,
+        pinned: &std::collections::HashSet<ContentHash>,
+        budget_bytes: u64,
+    ) -> Result<(Sweep, Vec<ContentHash>)> {
+        let mut report = Sweep::default();
+        let mut candidates: Vec<(std::time::SystemTime, ContentHash, u64)> = Vec::new();
+        for hash in self.complete_hashes().await? {
+            // The data file's own length and mtime in ONE stat. With nothing
+            // inlined (see the module header) the file is the blob, so its
+            // length is the size the budget is counted in.
+            let Ok(metadata) = std::fs::metadata(self.data_file(hash)) else {
+                // No file for a hash the index calls complete. Oldest, so it is
+                // the first thing released.
+                candidates.push((std::time::SystemTime::UNIX_EPOCH, hash, 0));
+                continue;
+            };
+            let bytes = metadata.len();
+            report.held += bytes;
+            if pinned.contains(&hash) {
+                report.pinned += bytes;
+                continue;
+            }
+            candidates.push((
+                metadata
+                    .modified()
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
+                hash,
+                bytes,
+            ));
+        }
+        report.over_budget_by = report.pinned.saturating_sub(budget_bytes);
+        candidates.sort_by_key(|(at, hash, _)| (*at, *hash));
+
+        let mut standing = report.held;
+        let mut taken = Vec::new();
+        for (_, hash, bytes) in candidates {
+            if standing <= budget_bytes {
+                break;
+            }
+            self.forget(hash).await?;
+            standing = standing.saturating_sub(bytes);
+            report.freed += bytes;
+            report.evicted += 1;
+            taken.push(hash);
+        }
+        Ok((report, taken))
+    }
+
     /// Close the store cleanly, flushing its index.
     pub async fn close(self) {
         self.store.shutdown().await.ok();
     }
+}
+
+/// What one eviction sweep did.
+///
+/// Every number is bytes except [`Self::evicted`], which is blobs. `held` is
+/// what the store held when the sweep opened, pins included; `pinned` is the
+/// part of it nothing may take.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Sweep {
+    pub held: u64,
+    pub pinned: u64,
+    pub evicted: usize,
+    pub freed: u64,
+    /// How far the PINS alone exceed the budget. Non-zero is an honest report
+    /// and never a licence: the sweep has already stopped, and what a surface
+    /// says is that a queued write is holding the space.
+    pub over_budget_by: u64,
 }
 
 /// `ContentHash` is accepted wherever iroh-blobs wants a `Hash`, so the store's

@@ -71,7 +71,7 @@ fn seed(connection: &Connection) {
         connection
             .execute(
                 "INSERT INTO core_content_item
-                   (content_id, content_uri, sha256, byte_size, created_at)
+                   (content_id, content_uri, content_hash, byte_size, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
                 rusqlite::params![
                     id,
@@ -187,7 +187,7 @@ fn seed(connection: &Connection) {
     // carries the owning asset's, so the asset has to exist for the label.
     connection
         .execute(
-            "INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+            "INSERT INTO core_content_item (content_id, content_uri, content_hash, byte_size, created_at)
              VALUES ('content-6', 'blob:blake3/f', ?1, 1024, ?2)",
             rusqlite::params!["f".repeat(64), NOW],
         )

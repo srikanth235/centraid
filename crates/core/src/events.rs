@@ -220,6 +220,143 @@ impl EventQueue {
     }
 }
 
+/// THE QUEUE'S PRODUCER (#1025 S5).
+///
+/// `EventQueue` was built, bounded, coalescing and fully tested — and until
+/// this type existed **nothing in the repository ever pushed a change event**.
+/// `Handle::next_event` drained a queue only the tests ever filled, so a shell
+/// that waited for a row to arrive waited forever.
+///
+/// It implements the seam `crates/seat` declares, because that is where the
+/// applied rows are: the applier knows exactly which `(table, primary key)`
+/// moved and in which commit, and this crate already depends on that one.
+/// The other direction was never available — `crates/seat` must not depend on
+/// `crates/core`.
+pub struct ChangeFeed {
+    queue: std::sync::Arc<EventQueue>,
+}
+
+/// The table a grid re-reads when a photograph's bytes land (#1025,
+/// D-1025-S7-20).
+///
+/// `media_asset` and not `core_content_item`, and that is the whole reason
+/// `BytesArrived` is gone: a grid is keyed by ASSET id, so an event carrying
+/// content ids matched nothing it was showing and the shell had to answer it
+/// with "re-read everything" in an event kind of its own.
+/// `centraid_seat::bytes::asset_rows_for` does the join, so what arrives here
+/// are ids the screens already compare against.
+const ASSET_TABLE: &str = "media_asset";
+
+/// How long a stalled producer waits before offering the same page again.
+///
+/// Small, because the stall ends the moment the shell drains one slot and the
+/// pass is holding a window it does not own. Not zero: a spin would burn the
+/// very phone battery the bounded queue exists to protect.
+const STALL_RETRY: Duration = Duration::from_millis(20);
+
+impl ChangeFeed {
+    #[must_use]
+    pub const fn new(queue: std::sync::Arc<EventQueue>) -> Self {
+        Self { queue }
+    }
+
+    /// Offer an event until the queue takes it, or until the queue is closed.
+    ///
+    /// **THIS IS THE STALL, and it is the whole point of the bound.** A refused
+    /// push means the shell is not draining; the producer waits rather than
+    /// dropping, because a dropped change event is a screen that stays wrong
+    /// until something else happens to touch the same row, which may be never.
+    /// The queue has already told the shell why, with `stalled: true`.
+    ///
+    /// A CLOSED QUEUE ENDS IT rather than blocking forever: a core being closed
+    /// under a running pass is ordinary — it is what `centraid_close` does —
+    /// and the rows are durable either way.
+    fn offer(&self, event: Event) {
+        while !self.queue.push(event.clone()) {
+            if self.queue.is_closed() {
+                return;
+            }
+            std::thread::sleep(STALL_RETRY);
+        }
+    }
+}
+
+impl centraid_seat::sync::ChangeSink for ChangeFeed {
+    fn rows_applied(
+        &self,
+        touched: &[(String, Vec<centraid_vault::value::Value>)],
+        commit_seq: i64,
+    ) {
+        // ONE EVENT PER TABLE, in the order the tables were first touched. The
+        // queue coalesces per table anyway, so a push per row would be correct
+        // and would also be a thousand lock acquisitions for one page — and the
+        // grouping is free here, where the page is already in hand.
+        let mut tables: Vec<(&str, Vec<RecordKey>)> = Vec::new();
+        for (table, key) in touched {
+            let wire = crate::convert::key_to_wire(key);
+            match tables.iter_mut().find(|(seen, _)| *seen == table) {
+                Some((_, keys)) => keys.push(wire),
+                None => tables.push((table, vec![wire])),
+            }
+        }
+        for (table, pk_set) in tables {
+            self.offer(Event {
+                kind: Some(event::Kind::Change(ChangeEvent {
+                    table: table.to_owned(),
+                    pk_set,
+                    // A COMMIT SEQ AND NEVER A ROW SEQ: a seat's overlay clears
+                    // against the commit, and the two are different numbers.
+                    commit_seq: u64::try_from(commit_seq).unwrap_or(0),
+                })),
+            });
+        }
+    }
+
+    fn blobs_arrived(&self, asset_ids: &[String]) {
+        // THE SAME `ChangeEvent`, AND ONE OF THEM (#1025 S5/S7). A screen's
+        // question is "do I need to re-read?", and for a thumbnail that has
+        // just landed the answer is the same as for a row that has just
+        // changed — so this is not a new event kind for a shell to learn, and
+        // the queue's per-table coalescing makes a window that completed
+        // nineteen files ONE redraw rather than nineteen.
+        //
+        // `commit_seq: 0` AND THAT IS THE HONEST NUMBER. No commit happened:
+        // bytes arriving is not a commit, it settles no intent and clears no
+        // overlay. A real commit seq here would be a number a settlement could
+        // later be compared against, which is why this is its own method on
+        // the sink rather than a `rows_applied` with an invented one. The
+        // coalescing takes the MAXIMUM, so a zero never lowers a waiting
+        // event's position.
+        if asset_ids.is_empty() {
+            return;
+        }
+        self.offer(Event {
+            kind: Some(event::Kind::Change(ChangeEvent {
+                table: ASSET_TABLE.to_owned(),
+                pk_set: asset_ids
+                    .iter()
+                    .map(|asset_id| RecordKey {
+                        values: vec![centraid_api_proto::core_v1::Value {
+                            kind: Some(centraid_api_proto::core_v1::value::Kind::Text(
+                                asset_id.clone(),
+                            )),
+                        }],
+                    })
+                    .collect(),
+                commit_seq: 0,
+            })),
+        });
+    }
+
+    fn behind(&self, behind: i64) {
+        // RECORDED, NOT PUSHED. A health event is a SAMPLE, and the queue emits
+        // one when it has something to say — a stall beginning or ending. A
+        // pass that pushed one per window would spend the bounded queue on
+        // saying "still fine" to a shell that can already see its own rows.
+        self.queue.set_behind(u64::try_from(behind).unwrap_or(0));
+    }
+}
+
 /// One health sample off the queue's current state.
 ///
 /// A function so the four places that report health cannot disagree about what

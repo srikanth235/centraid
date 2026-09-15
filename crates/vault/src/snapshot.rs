@@ -132,12 +132,52 @@ pub fn pre_migration_dir(vault_path: &Path) -> PathBuf {
         .join("snapshots")
 }
 
+/// WHAT SHAPE AN ARTIFACT IS BUILT IN (#1025 S7, item 3).
+///
+/// The two uses were one artifact and are now two, because what a phone does
+/// with one changed. A backup is a file somebody stores; a bootstrap is a file
+/// a phone **adopts** — renamed into place as its replica, with no table copy
+/// and no second full-size write on a device that may not have room for one.
+///
+/// Adoption forces both differences. It cannot be gzipped, because a rename is
+/// not a decompression; and it has to already carry the seat's own tables,
+/// because a phone that had to create them would be editing the file it just
+/// linked, before it has a cursor in it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    /// Gzipped, replicated tables only. The backup and the pre-migration copy.
+    Archive,
+    /// Uncompressed, and already carrying the seat's own empty tables. What a
+    /// phone adopts.
+    ///
+    /// The DDL is handed in rather than reached for: `crates/seat` sits ABOVE
+    /// this crate, so a vault that knew the seat's schema would be a
+    /// dependency the wrong way round. The gateway links `crates/seat` and
+    /// passes `centraid_seat::seat_own_ddl()` down.
+    Replica { seat_ddl: &'static str },
+}
+
 /// Build a snapshot into `dir`, returning its head.
 ///
 /// `dir` is created if it does not exist. The artifact's name is derived, not
 /// given: a caller that chose the name could produce two different files under
 /// one identity, which is the whole thing content-addressing prevents.
 pub fn build_snapshot(vault: &Vault, dir: &Path) -> Result<SnapshotHead> {
+    build_shaped(vault, dir, Shape::Archive)
+}
+
+/// Build the artifact a seat ADOPTS: uncompressed, replica-shaped.
+///
+/// `seat_ddl` is `centraid_seat::seat_own_ddl()`, handed down by the gateway.
+pub fn build_replica_snapshot(
+    vault: &Vault,
+    dir: &Path,
+    seat_ddl: &'static str,
+) -> Result<SnapshotHead> {
+    build_shaped(vault, dir, Shape::Replica { seat_ddl })
+}
+
+fn build_shaped(vault: &Vault, dir: &Path, shape: Shape) -> Result<SnapshotHead> {
     std::fs::create_dir_all(dir)?;
     let working = dir.join("snapshot.building");
     let working_gz = dir.join("snapshot.building.gz");
@@ -147,7 +187,7 @@ pub fn build_snapshot(vault: &Vault, dir: &Path) -> Result<SnapshotHead> {
     let _ = std::fs::remove_file(&working);
     let _ = std::fs::remove_file(&working_gz);
 
-    let outcome = build_into(vault, &working, &working_gz);
+    let outcome = build_into(vault, &working, &working_gz, shape);
     if outcome.is_err() {
         // NO PARTIAL ARTIFACT. Both scratch files go; the only thing that ever
         // appears under the final name is a complete file.
@@ -155,17 +195,23 @@ pub fn build_snapshot(vault: &Vault, dir: &Path) -> Result<SnapshotHead> {
         let _ = std::fs::remove_file(&working_gz);
         return outcome.map(|(head, _)| head);
     }
-    let (mut head, _) = outcome?;
+    let (mut head, built) = outcome?;
     let final_path = dir.join(&head.name);
     // THE RENAME IS THE PUBLICATION. Atomic within a filesystem, so a reader
     // sees either nothing or a complete file.
-    std::fs::rename(&working_gz, &final_path)?;
+    std::fs::rename(&built, &final_path)?;
     let _ = std::fs::remove_file(&working);
+    let _ = std::fs::remove_file(&working_gz);
     head.size = std::fs::metadata(&final_path)?.len();
     Ok(head)
 }
 
-fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(SnapshotHead, PathBuf)> {
+fn build_into(
+    vault: &Vault,
+    working: &Path,
+    working_gz: &Path,
+    shape: Shape,
+) -> Result<(SnapshotHead, PathBuf)> {
     // 1. VACUUM INTO. Not a transaction, and it cannot be in one.
     let target = vault
         .copy_target()
@@ -204,6 +250,20 @@ fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(Snaps
     .map_err(|error| VaultError::from_sqlite("keeping the snapshot's cursor", error))?;
     vault.fault_at(Step::LogTruncated)?;
 
+    // 6b. THE SEAT'S OWN TABLES, BEFORE THE COMPACTION (#1025 S7, item 3).
+    //
+    // Empty, and every statement `IF NOT EXISTS`. The artifact is then already
+    // a replica, so a phone adopts it by renaming it into place — no table
+    // copy, no second full-size write, and no window in which a file at the
+    // replica's name is not one.
+    //
+    // Before the `VACUUM`, because creating four tables allocates pages and the
+    // compaction is what gives them back.
+    if let Shape::Replica { seat_ddl } = shape {
+        copy.execute_batch(seat_ddl)
+            .map_err(|error| VaultError::from_sqlite("shaping the snapshot for a seat", error))?;
+    }
+
     // 7. The step that reclaims the pages.
     copy.execute_batch("VACUUM")
         .map_err(|error| VaultError::from_sqlite("compacting the snapshot", error))?;
@@ -211,13 +271,29 @@ fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(Snaps
         .map_err(|(_, error)| VaultError::Sqlite(error))?;
     vault.fault_at(Step::Compacted)?;
 
-    gzip_file(working, working_gz)?;
-    vault.fault_at(Step::Gzipped)?;
+    // 8. GZIP, FOR AN ARCHIVE AND NEVER FOR A BOOTSTRAP. A phone adopts the
+    // artifact by renaming it, and a rename is not a decompression.
+    let (built, name) = match shape {
+        Shape::Archive => {
+            gzip_file(working, working_gz)?;
+            vault.fault_at(Step::Gzipped)?;
+            let name_digest = blake3::hash(format!("{epoch}:{seq}").as_bytes()).to_hex();
+            (
+                working_gz.to_path_buf(),
+                format!("snapshot-{}-{seq}.db.gz", &name_digest[..16]),
+            )
+        }
+        Shape::Replica { .. } => {
+            let name_digest = blake3::hash(format!("replica:{epoch}:{seq}").as_bytes()).to_hex();
+            (
+                working.to_path_buf(),
+                format!("replica-{}-{seq}.db", &name_digest[..16]),
+            )
+        }
+    };
 
-    let bytes = std::fs::read(working_gz)?;
+    let bytes = std::fs::read(&built)?;
     let digest = blake3::hash(&bytes).to_hex().to_string();
-    let name_digest = blake3::hash(format!("{epoch}:{seq}").as_bytes()).to_hex();
-    let name = format!("snapshot-{}-{seq}.db.gz", &name_digest[..16]);
     Ok((
         SnapshotHead {
             vault_id,
@@ -228,7 +304,7 @@ fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(Snaps
             size: bytes.len() as u64,
             name,
         },
-        working_gz.to_path_buf(),
+        built,
     ))
 }
 

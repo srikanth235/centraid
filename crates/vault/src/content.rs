@@ -6,6 +6,16 @@
 //! row keeps `blob:blake3-<hex>`. This is the read half, and it exists because
 //! a row naming bytes is not a photograph a member can see.
 //!
+//! ## ONE STORE, AND THE PATH IS THE STORE'S TO GIVE (#1025 S3, D-1025-S3-1)
+//!
+//! This used to compose the answer itself — `Vault::blobs_root_for(path).join(sha)`
+//! — which was correct for the flat CAS it was written against and wrong the
+//! moment a device had a second store. A seat FETCHED bytes into iroh's store
+//! and this reader looked for them in a directory nothing wrote, so a synced
+//! photograph could not be displayed. The path now comes from
+//! [`crate::backup::store::BlobStore::path_of`], so there is one store and it
+//! is the one that answers where its own bytes are.
+//!
 //! ## It answers a LOCATION, never the bytes
 //!
 //! A grid asks for a screenful and every cell is a file the platform can open
@@ -30,41 +40,44 @@ use crate::file::Vault;
 
 /// `content_uri` scheme for CAS-backed bytes.
 ///
-/// **BLAKE3, superseding v0's sha256 (#1020, D-1020-B2).** The hash function is
-/// IN the value, so a vault written before the byte plane is refusable rather
-/// than silently verified against the wrong function — see
-/// [`SUPERSEDED_URI_PREFIX`].
+/// **BLAKE3, superseding v0's SHA-256 (#1020, D-1020-B2).** The hash function is
+/// IN the value, so the value says which function named these bytes rather than
+/// leaving a reader to assume.
+///
+/// **It is the ONLY form** (#1025 S3, D-1025-S3-3). `blob:sha256-` and the
+/// "stored by an older version of Centraid" sentence beside it are gone: v1 has
+/// no released predecessor, so no vault a member holds was ever written that
+/// way, and a refusal branch with no producer is a sentence nobody can reach.
 pub const BLOB_URI_PREFIX: &str = "blob:blake3-";
-
-/// v0's prefix. Present so a reader can tell "an older vault" from "not a blob
-/// URI at all", which are different answers to a member and different actions
-/// for an owner.
-pub const SUPERSEDED_URI_PREFIX: &str = "blob:sha256-";
 
 /// THE HASH THAT NAMES A MEMBER'S BYTES (#1020, D-1020-B2).
 ///
-/// One function, because `core_content_item.sha256` is UNIQUE and is the dedupe
+/// One function, because `core_content_item.content_hash` is UNIQUE and is the dedupe
 /// key for every owner of those bytes: a mint that hashed one way and a media
 /// import that hashed another would file the same photograph as two items, and
 /// the column's own constraint would not catch it.
 ///
-/// **Why not sha256.** sha256 is all-or-nothing — the only way to know a stream
+/// **Why not SHA-256.** SHA-256 is all-or-nothing — the only way to know a stream
 /// of bytes is the file it claims to be is to receive every one of them. On a
 /// phone that means a thirty-second window which moved 60% of a video produces
 /// nothing that may be kept, and a large file never crosses at all. BLAKE3 is a
 /// Merkle tree, so with bao every 16 KiB chunk group is verified as it arrives
 /// and an interrupted transfer leaves proven bytes behind. That property is
-/// what `crates/blobs` is built on and it is not reachable from sha256.
+/// what `crates/blobs` is built on and it is not reachable from SHA-256.
 ///
-/// **The column does not move.** Both hashes are 32 bytes and render as 64
-/// lowercase hex, so `CHECK (length(sha256) = 64 AND sha256 NOT GLOB
-/// '*[^0-9a-f]*')` holds unchanged. The column's NAME is now historical; its
-/// meaning is this function.
+/// **The column's SHAPE does not move, and its NAME did** (#1025 S4,
+/// D-1025-S4-7). Both hashes are 32 bytes and render as 64 lowercase hex, so
+/// `CHECK (length(content_hash) = 64 AND content_hash NOT GLOB '*[^0-9a-f]*')`
+/// holds unchanged over either — but the column was called `sha256`, which is a
+/// comment that lies and cannot be linted, so it is `content_hash`.
 ///
-/// **Not the BACKUP plane's digest.** `backup::store::digest` stays sha256:
-/// `contracts/golden/format-golden.json` seals the backup format across two
-/// languages, and changing an artefact's identity is a re-keying event and not
-/// housekeeping (D-1020-R1).
+/// **It IS the backup plane's digest too** (#1025 S4, D-1025-S4-1).
+/// `backup::store::digest` used to be SHA-256, on the reasoning that an
+/// artefact's identity is sealed across two languages and re-keying is not
+/// housekeeping (D-1020-R1). There is one language now and no released
+/// predecessor whose artefacts v1 can restore, so that clause was protecting
+/// nothing. Two names for one hash is how a store ends up verifying a member's
+/// bytes with the wrong one.
 #[must_use]
 pub fn content_digest(bytes: &[u8]) -> String {
     hex::encode(blake3::hash(bytes).as_bytes())
@@ -114,6 +127,73 @@ pub fn may_serve_inline(media_type: &str) -> bool {
 }
 
 impl Vault {
+    /// Record bytes this device now HOLDS, so the command that names them can
+    /// promote them (#1025 S3).
+    ///
+    /// THE THIRD PRODUCER OF `blob_staging`, and the first one in v1. The other
+    /// two are v0's upload door and the extension's capture; this is a gateway
+    /// that has just PULLED a seat's blob over the connection the seat opened,
+    /// before executing the intent that names it. The bytes are already in this
+    /// vault's content store and verified against their own name by bao; what
+    /// the staging row adds is the two facts the store cannot answer — the
+    /// media type the seat read, and the size it declared.
+    ///
+    /// The media type is why this exists at all. `promote_staged_blob` falls
+    /// back to `application/octet-stream` without a row, and a photograph
+    /// promoted as `application/octet-stream` is a photograph the grid will not
+    /// embed. There is no sniffer on the gateway and inventing one would be a
+    /// second opinion about bytes the seat already read.
+    ///
+    /// Idempotent: a hash already staged, or already minted into a content
+    /// item, is left exactly as it is. A pull that is retried after a window
+    /// closed must not stage the same bytes twice, and a `blob_staging` row
+    /// over bytes a content row already owns would be promoted a second time.
+    pub fn stage_bytes(&self, staged: &[crate::intents::NeededBytes]) -> Result<usize> {
+        if staged.is_empty() {
+            return Ok(0);
+        }
+        let now = self.clock().now_text();
+        let mut ids = Vec::with_capacity(staged.len());
+        for _ in staged {
+            ids.push(self.ids().next());
+        }
+        let mut written = 0usize;
+        self.commit(|tx| {
+            // A PRODUCER NAME, because every commit has one and "the gateway
+            // pulled these" is the honest answer to who wrote the row.
+            tx.set_producer("seat.blob_pull");
+            for (need, staging_id) in staged.iter().zip(&ids) {
+                let held: i64 = tx.connection().query_row(
+                    "SELECT (EXISTS(SELECT 1 FROM blob_staging
+                                     WHERE content_hash = ?1 AND variant IS NULL)
+                             OR EXISTS(SELECT 1 FROM core_content_item WHERE content_hash = ?1))",
+                    [&need.hash],
+                    |row| row.get(0),
+                )?;
+                if held == 1 {
+                    continue;
+                }
+                tx.connection().execute(
+                    "INSERT INTO blob_staging
+                       (staging_id, content_hash, media_type, byte_size, original_name,
+                        meta_json, staged_by, held_by_batch, variant, variant_of,
+                        inline_content, staged_at, held_by_intent)
+                     VALUES (?1, ?2, ?3, ?4, NULL, '{}', NULL, NULL, NULL, NULL, NULL, ?5, NULL)",
+                    rusqlite::params![
+                        staging_id,
+                        need.hash,
+                        need.media_type,
+                        need.byte_size.max(0),
+                        now
+                    ],
+                )?;
+                written += 1;
+            }
+            Ok(())
+        })?;
+        Ok(written)
+    }
+
     /// Locate one content item's bytes for the owner that is reading them.
     ///
     /// Never an `Err` for "the bytes are not here" — that is a state a grid
@@ -172,15 +252,6 @@ impl Vault {
         };
         let byte_size = byte_size.unwrap_or_default();
 
-        if uri.starts_with(SUPERSEDED_URI_PREFIX) {
-            // A VAULT FROM BEFORE THE BYTE PLANE. Named apart from "not a blob
-            // URI" because the remedy is an owner's, not a member's, and
-            // because verifying a sha256 name against blake3 bytes would be a
-            // silent mismatch on every file.
-            return Ok(absent(
-                "This file was stored by an older version of Centraid and needs to be re-imported.",
-            ));
-        }
         let Some(sha) = uri.strip_prefix(BLOB_URI_PREFIX) else {
             // TEXT LIVES IN THE ROW, by design: the search index decodes it
             // in-transaction and cannot do I/O. There is no file, and there
@@ -193,19 +264,21 @@ impl Vault {
         let Some(blobs) = self.blobs() else {
             return Ok(absent("This copy of Centraid has no file store."));
         };
-        match blobs.has(sha) {
-            Ok(true) => Ok(ContentLocation {
+        match blobs.path_of(sha) {
+            Ok(Some(path)) => Ok(ContentLocation {
                 content_id: content_id.to_owned(),
-                path: Some(Vault::blobs_root_for(self.path()).join(sha)),
+                path: Some(path),
                 media_type,
                 byte_size,
                 embeddable,
                 absent_reason: String::new(),
             }),
             // A ROW WITHOUT ITS BYTES IS THE NORMAL SEAT STATE, not a fault:
-            // rows replicate first and bytes follow. The sentence is the one a
-            // member can act on, and it never names the sha.
-            Ok(false) => Ok(absent("This file has not reached this device yet.")),
+            // rows replicate first and bytes follow. It is also the answer for
+            // a blob this device holds PART of, which is the same thing to a
+            // member. The sentence is the one they can act on and it never
+            // names the sha.
+            Ok(None) => Ok(absent("This file has not reached this device yet.")),
             Err(error) => {
                 // The store itself is unhappy — a corrupt blob, a permission.
                 // Logged with its detail and reported without it, because a

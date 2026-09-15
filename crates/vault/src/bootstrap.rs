@@ -174,6 +174,26 @@ impl Vault {
     }
 
     /// The vault's own id, if it has been founded.
+    /// WHAT THIS VAULT IS CALLED, ASKED OF THE VAULT (#1025 S7-9).
+    ///
+    /// `core_vault.display_name`, which is the ONE place a vault's name lives.
+    /// A gateway used to answer a pairing with its own `--vault-name` flag — the
+    /// string it would have FOUNDED a vault under — so a seeded demo vault
+    /// called "Tahoe Demo" paired as "Centraid", and the phone's sheet said
+    /// "Paired with Centraid." The flag names a vault at founding and is a
+    /// stale guess at every moment after it.
+    pub fn display_name(&self) -> Result<Option<String>> {
+        self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT display_name FROM core_vault ORDER BY vault_id LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok())
+        })
+    }
+
     pub fn vault_id(&self) -> Result<Option<String>> {
         self.read(|connection| {
             Ok(connection

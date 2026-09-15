@@ -13,28 +13,44 @@
 //!
 //! | Frame | What it carries | What the host answers |
 //! |---|---|---|
-//! | `stage:begin` | `media_type`, `byte_size`, `sha256` | a `staging_id` |
+//! | `stage:begin` | `media_type`, `byte_size` | a `staging_id` |
 //! | `stage:chunk` | `staging_id`, `seq`, `bytes_b64` | the bytes received so far |
-//! | `stage:end` | `staging_id` | `{sha256, byte_size}` — the handle |
+//! | `stage:end` | `staging_id` | `{content_hash, byte_size}` — the handle |
 //!
-//! ## Four things the assembler refuses, and why each is a real failure mode
+//! ## THE SENDER DOES NOT DECLARE A DIGEST (#1025 S4, D-1025-S4-6)
 //!
-//! 1. **A chunk out of order.** `seq` is checked against the next expected one.
-//!    Base64 chunks that arrive transposed produce a digest mismatch at the
-//!    end, which is a correct but useless error — this one names the chunk.
+//! `stage:begin` used to carry a `sha256` the sender computed and `stage:end`
+//! refused a mismatch. That shape is gone, and the reason is the one-hash law
+//! rather than tidiness: the handle's value must be the value
+//! `core_content_item.content_hash` is UNIQUE on, which is BLAKE3, and **an
+//! extension cannot compute BLAKE3** — `crypto.subtle.digest` offers SHA-1,
+//! SHA-256, SHA-384 and SHA-512 and nothing else. A sender that declared a
+//! SHA-256 the host then checked against a BLAKE3 would refuse every capture;
+//! a sender that shipped a WASM BLAKE3 would be a second implementation of the
+//! vault's dedupe key living in a browser.
+//!
+//! So the host hashes, exactly as the mobile shell streams bytes into the core
+//! and lets the core name them. The digest was never a security property here
+//! anyway: the bytes come from a Companion the member installed, over a port
+//! this process already authenticated, and the handle is answered — not
+//! accepted — so there is nothing a sender could have asserted that the host
+//! did not then compute for itself.
+//!
+//! ## Three things the assembler refuses, and why each is a real failure mode
+//!
+//! 1. **A chunk out of order.** `seq` is checked against the next expected one,
+//!    so transposed base64 chunks name the chunk instead of producing bytes
+//!    nobody asked for.
 //! 2. **More bytes than were declared.** The declared size is the allocation,
 //!    so a sender that kept chunking would otherwise be a sender that decides
 //!    how much memory this process uses.
-//! 3. **A digest that is not the bytes.** The whole point of answering with a
-//!    handle is that the handle IS the bytes; a sha the sender asserted and
-//!    nobody checked is a sha that means nothing.
-//! 4. **A second `stage:end`.** The session is consumed, so a replayed close
+//! 3. **A second `stage:end`.** The session is consumed, so a replayed close
 //!    cannot hand out a second handle for bytes that are gone.
 //!
 //! ## Where the bytes go, and where they stop
 //!
-//! The assembled bytes stop at a **content-addressed handle** — a sha256 and a
-//! size, which is exactly the shape `crates/apps/docs::bytes::StagedBlob` has
+//! The assembled bytes stop at a **content-addressed handle** — a `content_hash`
+//! and a size, exactly the shape `crates/apps/docs::bytes::StagedBlob` has
 //! and exactly what `core.add_document`'s `staged_sha` takes. Promoting that
 //! handle into `blob_staging` is the **byte door**, which lane Docs landed as an
 //! app-crate trait with its implementation named as a hand-off
@@ -76,7 +92,6 @@ pub const MAX_STAGED_BYTES: u64 = super::MAX_TO_EXTENSION as u64;
 struct Session {
     media_type: String,
     declared_size: u64,
-    declared_sha: String,
     next_seq: u64,
     bytes: Vec<u8>,
 }
@@ -99,12 +114,15 @@ pub enum Staged {
     /// A chunk landed; this many bytes are held.
     Chunked { received: u64 },
     /// The session closed and the bytes are addressed by this digest.
-    Handle { sha256: String, byte_size: u64 },
+    Handle {
+        content_hash: String,
+        byte_size: u64,
+    },
 }
 
 /// Why a staging frame was refused. One code per reason, because the sender's
-/// next move differs: a bad `seq` is retryable from that chunk and a digest
-/// mismatch is not retryable at all.
+/// next move differs: a bad `seq` is retryable from that chunk and a short
+/// session is not retryable at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum StageRefusal {
     #[error("`{0}` is not an open staging session")]
@@ -117,12 +135,8 @@ pub enum StageRefusal {
     Overrun { declared: u64 },
     #[error("the session declared {declared} bytes and {got} arrived")]
     Short { declared: u64, got: u64 },
-    #[error("the assembled bytes are not the digest the sender declared")]
-    DigestMismatch,
     #[error("{0} is over the {MAX_STAGED_BYTES}-byte staging ceiling")]
     TooLarge(u64),
-    #[error("a staged capture declares a sha256 as 64 hex characters")]
-    MalformedDigest,
     #[error("a chunk that is not base64")]
     MalformedChunk,
     #[error("{MAX_OPEN_SESSIONS} staging sessions are already open on this port")]
@@ -130,21 +144,14 @@ pub enum StageRefusal {
 }
 
 impl Staging {
-    /// Open a session for a declared size and digest.
-    pub fn begin(
-        &mut self,
-        media_type: &str,
-        byte_size: u64,
-        sha256: &str,
-    ) -> Result<Staged, StageRefusal> {
+    /// Open a session for a declared size. The digest is the HOST's to compute
+    /// — see the module header.
+    pub fn begin(&mut self, media_type: &str, byte_size: u64) -> Result<Staged, StageRefusal> {
         if byte_size > MAX_STAGED_BYTES {
             return Err(StageRefusal::TooLarge(byte_size));
         }
         if self.open() >= MAX_OPEN_SESSIONS {
             return Err(StageRefusal::TooManySessions);
-        }
-        if sha256.len() != 64 || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(StageRefusal::MalformedDigest);
         }
         self.minted += 1;
         let staging_id = format!("stage-{}", self.minted);
@@ -153,7 +160,6 @@ impl Staging {
             Session {
                 media_type: media_type.to_owned(),
                 declared_size: byte_size,
-                declared_sha: sha256.to_ascii_lowercase(),
                 next_seq: 0,
                 // THE DECLARED SIZE IS THE ALLOCATION. Reserving it here and
                 // refusing anything past it is what makes the overrun check a
@@ -202,7 +208,7 @@ impl Staging {
 
     /// Close the session and answer the handle.
     ///
-    /// The session is **removed before the digest is checked**: a close that
+    /// The session is **removed before the length is checked**: a close that
     /// failed must not leave bytes behind for a second attempt to append to.
     pub fn end(&mut self, staging_id: &str) -> Result<(Staged, Vec<u8>, String), StageRefusal> {
         let session = self
@@ -216,13 +222,10 @@ impl Staging {
                 got,
             });
         }
-        let digest = sha256_hex(&session.bytes);
-        if digest != session.declared_sha {
-            return Err(StageRefusal::DigestMismatch);
-        }
+        let digest = content_hash_hex(&session.bytes);
         Ok((
             Staged::Handle {
-                sha256: digest,
+                content_hash: digest,
                 byte_size: got,
             },
             session.bytes,
@@ -238,19 +241,17 @@ impl Staging {
 }
 
 /// The digest, lowercase hex.
+///
+/// **THE VAULT'S OWN** (#1025 S4, D-1025-S4-1). This used to be a private
+/// SHA-256 in the host process — a second hash function beside the one
+/// `core_content_item.content_hash` is UNIQUE on. A staged handle is exactly the
+/// value `core.add_document` takes and the vault deduplicates on, so a host
+/// computing it differently from the vault is a capture that files itself as a
+/// second copy of a document the member already has. It is
+/// `centraid_vault::content::content_digest`, called through, not re-derived.
 #[must_use]
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    use sha2::Digest as _;
-    let mut hasher = sha2::Sha256::new();
-    hasher.update(bytes);
-    hasher
-        .finalize()
-        .iter()
-        .fold(String::with_capacity(64), |mut text, byte| {
-            use std::fmt::Write as _;
-            let _ = write!(text, "{byte:02x}");
-            text
-        })
+pub fn content_hash_hex(bytes: &[u8]) -> String {
+    centraid_vault::content::content_digest(bytes)
 }
 
 /// How many chunks a payload of this size takes, as the sender plans it.
@@ -291,10 +292,10 @@ mod tests {
     #[test]
     fn a_three_megabyte_capture_stages_in_chunks_and_answers_a_handle() {
         let bytes = payload(3 * 1024 * 1024);
-        let digest = sha256_hex(&bytes);
+        let digest = content_hash_hex(&bytes);
         let mut staging = Staging::default();
         let Staged::Begun { staging_id } = staging
-            .begin("image/png", bytes.len() as u64, &digest)
+            .begin("image/png", bytes.len() as u64)
             .expect("begun")
         else {
             panic!("begin answers a staging id");
@@ -305,7 +306,7 @@ mod tests {
         assert_eq!(
             staged,
             Staged::Handle {
-                sha256: digest,
+                content_hash: digest,
                 byte_size: bytes.len() as u64,
             }
         );
@@ -334,13 +335,13 @@ mod tests {
         }
     }
 
-    /// A TRANSPOSED CHUNK IS NAMED, not discovered as a digest mismatch.
+    /// A TRANSPOSED CHUNK IS NAMED, not discovered as a wrong handle.
     #[test]
     fn a_chunk_out_of_order_names_the_chunk() {
         let bytes = payload(2 * MAX_CHUNK_BYTES);
         let mut staging = Staging::default();
         let Staged::Begun { staging_id } = staging
-            .begin("image/png", bytes.len() as u64, &sha256_hex(&bytes))
+            .begin("image/png", bytes.len() as u64)
             .expect("begun")
         else {
             panic!("a staging id");
@@ -360,10 +361,7 @@ mod tests {
     fn more_bytes_than_declared_is_refused_at_the_chunk() {
         let mut staging = Staging::default();
         let bytes = payload(100);
-        let Staged::Begun { staging_id } = staging
-            .begin("image/png", 50, &sha256_hex(&bytes[..50]))
-            .expect("begun")
-        else {
+        let Staged::Begun { staging_id } = staging.begin("image/png", 50).expect("begun") else {
             panic!("a staging id");
         };
         let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
@@ -371,26 +369,33 @@ mod tests {
             staging.chunk(&staging_id, 0, &encoded),
             Err(StageRefusal::Overrun { declared: 50 })
         );
-        assert!(
-            staging
-                .begin("image/png", MAX_STAGED_BYTES + 1, &sha256_hex(&bytes))
-                .is_err()
-        );
+        assert!(staging.begin("image/png", MAX_STAGED_BYTES + 1).is_err());
     }
 
-    /// THE HANDLE IS THE BYTES. A declared digest that is not them is refused,
-    /// and the session is gone either way.
+    /// THE HANDLE IS THE BYTES, AND THE HOST IS WHAT SAYS SO (#1025 S4).
+    ///
+    /// The sender declares no digest — it cannot compute BLAKE3 — so what this
+    /// asserts is the property that replaced the declaration: the handle is
+    /// `content_digest` over exactly the bytes that arrived, and the session is
+    /// consumed so a replayed close cannot hand out a second one.
     #[test]
-    fn a_digest_that_is_not_the_bytes_is_refused_and_consumes_the_session() {
+    fn the_handle_is_the_hosts_own_digest_and_the_session_is_consumed() {
         let bytes = payload(1024);
         let mut staging = Staging::default();
-        let lie = "0".repeat(64);
-        let Staged::Begun { staging_id } = staging.begin("image/png", 1024, &lie).expect("begun")
-        else {
+        let Staged::Begun { staging_id } = staging.begin("image/png", 1024).expect("begun") else {
             panic!("a staging id");
         };
         send(&mut staging, &staging_id, &bytes).expect("chunked");
-        assert_eq!(staging.end(&staging_id), Err(StageRefusal::DigestMismatch));
+        let (staged, assembled, _) = staging.end(&staging_id).expect("ended");
+        assert_eq!(
+            staged,
+            Staged::Handle {
+                // The VAULT's function, not this module's idea of one.
+                content_hash: centraid_vault::content::content_digest(&bytes),
+                byte_size: 1024,
+            }
+        );
+        assert_eq!(assembled, bytes);
         // CONSUMED: a replayed close cannot hand out a second handle.
         assert_eq!(
             staging.end(&staging_id),
@@ -404,7 +409,7 @@ mod tests {
         let bytes = payload(4096);
         let mut staging = Staging::default();
         let Staged::Begun { staging_id } = staging
-            .begin("image/png", bytes.len() as u64, &sha256_hex(&bytes))
+            .begin("image/png", bytes.len() as u64)
             .expect("begun")
         else {
             panic!("a staging id");
@@ -423,30 +428,22 @@ mod tests {
     #[test]
     fn a_fifth_open_session_is_refused() {
         let mut staging = Staging::default();
-        let digest = sha256_hex(b"x");
         for _ in 0..MAX_OPEN_SESSIONS {
-            staging.begin("image/png", 1, &digest).expect("begun");
+            staging.begin("image/png", 1).expect("begun");
         }
         assert_eq!(
-            staging.begin("image/png", 1, &digest),
+            staging.begin("image/png", 1),
             Err(StageRefusal::TooManySessions)
         );
         assert_eq!(staging.open(), MAX_OPEN_SESSIONS);
     }
 
-    /// A MALFORMED DIGEST NEVER OPENS A SESSION.
-    #[test]
-    fn a_declared_digest_is_sixty_four_hex_characters() {
-        let mut staging = Staging::default();
-        for bad in ["", "abc", &"z".repeat(64), &"a".repeat(63), &"A".repeat(65)] {
-            assert_eq!(
-                staging.begin("image/png", 1, bad),
-                Err(StageRefusal::MalformedDigest),
-                "{bad:?}"
-            );
-        }
-        assert_eq!(staging.open(), 0);
-    }
+    // DELETED WITH THE DECLARATION IT GUARDED (#1025 S4).
+    // `a_declared_digest_is_sixty_four_hex_characters` asserted that a
+    // malformed `sha256` on `stage:begin` never opened a session. There is no
+    // declared digest any more — the host computes the handle — so the shape it
+    // policed has no sender. The bound that REMAINS on `begin` is the declared
+    // SIZE, and `more_bytes_than_declared_is_refused_at_the_chunk` is its test.
 
     /// The split the two sides plan is the same split.
     #[test]

@@ -1,16 +1,8 @@
 {
   "alpns": {
-    "pair": {
-      "base64": "Y2VudHJhaWQvdjEvcGFpcg==",
-      "utf8": "centraid/v1/pair"
-    },
-    "peer": {
-      "base64": "Y2VudHJhaWQvdjEvcGVlcg==",
-      "utf8": "centraid/v1/peer"
-    },
-    "seat": {
-      "base64": "Y2VudHJhaWQvdjEvc2VhdA==",
-      "utf8": "centraid/v1/seat"
+    "plane": {
+      "base64": "Y2VudHJhaWQvdjE=",
+      "utf8": "centraid/v1"
     }
   },
   "caps": {

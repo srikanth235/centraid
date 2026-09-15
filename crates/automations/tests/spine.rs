@@ -108,7 +108,7 @@ fn every_signal_variant_is_raised_by_the_spine() {
     // 5. CapabilityUnavailable — a host with no network.
     let lock = centraid_media::models::Lock::parse(
         r#"{"schemaVersion":1,"files":[{"model":"yunet-arcface@1","path":"faces/yunet.onnx",
-            "capabilities":["faces"],"bytes":4,"sha256":"1111111111111111111111111111111111111111111111111111111111111111",
+            "capabilities":["faces"],"bytes":4,"hash":"1111111111111111111111111111111111111111111111111111111111111111",
             "license":"MIT","url":"https://example.test/yunet.onnx"}]}"#,
     )
     .expect("a lock");
@@ -143,10 +143,10 @@ fn a_host_with_no_network_boots_with_the_capability_unavailable() {
     let lock = centraid_media::models::Lock::parse(
         r#"{"schemaVersion":1,"files":[
             {"model":"clip-vit-b-32@1","path":"clip/visual.onnx","capabilities":["embed-image"],
-             "bytes":12,"sha256":"2222222222222222222222222222222222222222222222222222222222222222",
+             "bytes":12,"hash":"2222222222222222222222222222222222222222222222222222222222222222",
              "license":"MIT","url":"https://example.test/visual.onnx"},
             {"model":"yunet-arcface@1","path":"faces/yunet.onnx","capabilities":["faces"],
-             "bytes":4,"sha256":"3333333333333333333333333333333333333333333333333333333333333333",
+             "bytes":4,"hash":"3333333333333333333333333333333333333333333333333333333333333333",
              "license":"MIT","url":"https://example.test/yunet.onnx"}]}"#,
     )
     .expect("a lock");

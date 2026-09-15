@@ -20,7 +20,7 @@ iroh.workspace = true
 prost.workspace = true
 qrcode = { workspace = true }
 rand.workspace = true
-sha2.workspace = true
+blake3.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
 tracing.workspace = true

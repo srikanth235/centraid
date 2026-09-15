@@ -40,7 +40,7 @@ message Intent {
   // level. The cost is that the core validates JSON rather than getting it from
   // the decoder, and that cost is paid in `crates/vault`, once.
   bytes input = 4;
-  // Lowercase hex sha256 of the canonical payload; the gateway requires
+  // Lowercase hex BLAKE3 of the canonical payload (#1025 S4); the gateway requires
   // `/^[a-f0-9]{64}$/` and compares in constant time
   // (`packages/server/src/routes/replica-intent-route.ts:209`, `:257-260`).
   string payload_hash = 5;
@@ -56,6 +56,40 @@ message Intent {
   // `packages/blueprints/apps/locker/writes.ts:33-39`). The flag is attached
   // where the payload is BUILT, not at the call site.
   bool online_only = 8;
+  // BYTES THIS WRITE CANNOT BE EXECUTED WITHOUT (#1025 S3, R25).
+  //
+  // A photograph taken on a phone is minted into the SEAT'S own byte store and
+  // named here. The gateway opens a `blob` stream on the connection this seat
+  // opened, fetches and verifies every one of these, and only then executes —
+  // so a content row never names bytes the gateway does not hold. A pull that
+  // does not finish is `ERROR_CODE_BYTES_NOT_YET_HELD`, which leaves the intent
+  // in the outbox.
+  //
+  // **Part of the payload hash**, canonicalised as `needs` sorted by `hash`
+  // (`IntentPayload::hash`). That is what makes it a declaration and not a
+  // suggestion: a gateway cannot be told to fetch bytes the member did not sign
+  // for, and a proxy cannot add one in flight.
+  //
+  // It is a DECLARATION rather than something the gateway derives from the
+  // command, because the alternative is a per-command table of "which input
+  // property names bytes" that drifts every time a command is added — silently,
+  // with the symptom appearing on a second device weeks later as an empty cell.
+  repeated NeededBytes needs = 9;
+}
+
+// One blob an intent names, as its seat reads it.
+//
+// Three fields, and the two that are not the hash are there because the gateway
+// cannot work them out: there is no media-type sniffer on the gateway, and a
+// photograph promoted as `application/octet-stream` is a photograph a grid will
+// not embed. The hash is the one field that is VERIFIED, and it is verified
+// absolutely — bao proves every 16 KiB chunk group against it.
+message NeededBytes {
+  // 64 lowercase hex: the BLAKE3 root hash, the same value
+  // `core_content_item.content_hash` takes.
+  string hash = 1;
+  uint64 byte_size = 2;
+  string media_type = 3;
 }
 
 // One entry of the declared read-set.

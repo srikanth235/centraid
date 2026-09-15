@@ -1,8 +1,22 @@
-//! Mint and redeem (#1020, D-1020-C8).
+//! Mint and redeem (#1020, D-1020-C8; #1025 S3, D-1025-S3-4).
 //!
-//! The gateway side mints a ticket, prints its QR, and serves one redemption on
-//! `centraid/v1/pair`. The seat side decodes a ticket, dials that lane, and
-//! sends its public key. Both halves are here so the two cannot drift.
+//! The gateway side mints a ticket and prints its QR. The seat side decodes a
+//! ticket, dials `centraid/v1` — THE plane, the only one — and sends its public
+//! key on the first stream of that connection. Both halves are here so the two
+//! cannot drift.
+//!
+//! ## The dial that pairs is the dial that bootstraps
+//!
+//! There is no `centraid/v1/pair` any more. A redeeming device's connection is
+//! accepted PROVISIONAL (`Endpoint::accept`): one stream, a small frame, a
+//! short deadline, and `pair` is the only request kind it may carry. A
+//! successful redemption PROMOTES that same connection in place, so the phone
+//! goes pair → snapshot_head → bootstrap → log without a second QUIC setup and
+//! a second hole-punch in the middle of the one screen a member is watching.
+//!
+//! [`redeem`] therefore RETURNS its connection. A caller that drops it has
+//! merely paid for a connection it did not use; a caller that keeps it has the
+//! whole first-run sequence on one dial.
 
 use centraid_api_proto::core_v1::envelope;
 use centraid_api_proto::core_v1::{
@@ -32,6 +46,27 @@ pub struct Minted {
 ///
 /// The secret is in the returned ticket and **only its hash** reaches the
 /// store, so a gateway's own state cannot mint the same pairing twice.
+/// This gateway's own dialling hints, as a ticket and a `PairOk` both carry
+/// them (D-1020-C15).
+///
+/// One place, because the two answers must agree: a device that paired off a
+/// ticket and then persisted a `PairOk` with different addresses would have two
+/// records of one gateway.
+pub async fn dialling_hints(endpoint: &Endpoint) -> (String, Vec<String>) {
+    let addr = endpoint.addr().await;
+    let relay_url = addr
+        .as_ref()
+        .and_then(|addr| addr.relay_urls().next().map(ToString::to_string))
+        .unwrap_or_default();
+    // D-1020-C15: a relay-less deployment has nothing else to be reached
+    // through.
+    let direct_addrs: Vec<String> = addr
+        .as_ref()
+        .map(|addr| addr.ip_addrs().map(ToString::to_string).collect())
+        .unwrap_or_default();
+    (relay_url, direct_addrs)
+}
+
 pub async fn mint<S>(
     endpoint: &Endpoint,
     allowlist: &S,
@@ -43,17 +78,7 @@ where
 {
     let secret = fresh_secret().map_err(|error| ConnectError::Endpoint(error.to_string()))?;
     let ticket_id = format!("tkt_{}", crate::allowlist::hex_lower(&secret[..8]));
-    let addr = endpoint.addr().await;
-    let relay_url = addr
-        .as_ref()
-        .and_then(|addr| addr.relay_urls().next().map(ToString::to_string))
-        .unwrap_or_default();
-    // D-1020-C15: the dialling hints. A relay-less deployment has nothing else
-    // to be reached through.
-    let direct_addrs: Vec<String> = addr
-        .as_ref()
-        .map(|addr| addr.ip_addrs().map(ToString::to_string).collect())
-        .unwrap_or_default();
+    let (relay_url, direct_addrs) = dialling_hints(endpoint).await;
 
     let ticket = PairTicket {
         v: TICKET_VERSION,
@@ -77,6 +102,50 @@ where
     Ok(Minted { ticket, encoded })
 }
 
+/// What a gateway tells a redeeming device about ITSELF.
+///
+/// Three facts that travel together and are read together, so they are one
+/// value rather than three positional strings: a `vault_id` and a
+/// `gateway_address` transposed at a call site is a seat that keys its whole
+/// replica on an address (#1025 S1's bug, in one argument swap).
+pub struct VaultIdentity<'a> {
+    /// THE VAULT'S OWN ID, not the literal "vault". A seat keys its replica on
+    /// what it is told here: `SeatIdentity` IS the vault id since #1025 S1, it
+    /// names the replica file, and the bootstrap artifact's own `core_vault`
+    /// row is checked against it before the destination is touched.
+    pub vault_id: &'a str,
+    /// What a member sees on the confirm screen.
+    pub vault_name: &'a str,
+    /// This gateway's endpoint, hex. An ADDRESS and never a name.
+    pub gateway_address: &'a str,
+    /// Where this gateway is reachable through, when it uses a relay. Empty is
+    /// a LAN-only deployment.
+    pub relay_url: &'a str,
+    /// `<ip>:<port>` shortcuts. HINTS with no authority.
+    pub direct_addrs: Vec<String>,
+    /// THE BOOTSTRAP BLOB THIS PAIRING ANSWERS WITH (#1025 S7, item 5).
+    ///
+    /// `None` when the gateway could not build or find one. The pairing still
+    /// succeeds: the ticket is burned and the device is enrolled either way,
+    /// and telling a member their code failed would send them to mint one they
+    /// no longer need. The seat is then a paired device with no file, which is
+    /// a real state ("Copying your vault"), and the next window asks again.
+    pub snapshot: Option<SnapshotOffer>,
+}
+
+/// The three values a device needs to take a copy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotOffer {
+    /// The blob's BLAKE3 content address, lowercase hex.
+    pub hash: String,
+    /// The log position it stands at, and the seat's cursor after it lands.
+    pub seq: i64,
+    /// THE SIZE, WHICH IS THE ROOM CHECK'S INPUT. A phone that cannot fit the
+    /// artifact is told so by name before the first byte moves, rather than
+    /// filling its disk and failing somewhere further in.
+    pub bytes: u64,
+}
+
 /// What the gateway answers a redemption with, beside the response itself.
 pub struct Redeemed {
     pub response: PairResponse,
@@ -84,51 +153,38 @@ pub struct Redeemed {
     pub device: Option<Device>,
 }
 
-/// Serve ONE redemption on an accepted `centraid/v1/pair` connection.
+/// Answer ONE redemption whose request frame the lane has already read.
 ///
-/// The lane accepts an unenrolled peer by design — that is what it is for — and
-/// the ticket is the admission. The device's public key is taken from the
-/// CONNECTION, not from the request: a request field would let a redeeming
-/// device enrol somebody else's key.
-pub async fn serve_redemption<S>(
-    connection: &IrohConnection,
+/// The lane reads the first frame because it is the lane that decides a
+/// provisional connection may carry `pair` and nothing else; this function is
+/// what the answer to a `pair` frame IS. Splitting it that way keeps one
+/// question in one place: what a connection may carry is the lane's, what a
+/// redemption means is this module's.
+///
+/// `proved` is the device's public key **as iroh's handshake proved it**, taken
+/// from the connection and never from the request: a request field would let a
+/// redeeming device enrol somebody else's key.
+///
+/// The answer is written and flushed here, so the caller cannot forget to.
+pub async fn answer_redemption<S, W>(
+    send: &mut W,
+    request_id: u64,
+    asked: &PairRequest,
+    proved: [u8; 32],
     allowlist: &S,
-    vault_id: &str,
-    vault_name: &str,
-    gateway_id: &str,
+    gateway: &VaultIdentity<'_>,
     now_ms: u64,
 ) -> Result<Redeemed, ConnectError>
 where
     S: AllowlistStore,
+    W: tokio::io::AsyncWrite + Unpin,
 {
-    let (mut send, mut recv) = connection.accept_bi().await?;
-    let envelope = read_envelope(&mut recv)
-        .await?
-        .ok_or(ConnectError::PeerUnreachable)?;
-    let request_id = envelope.request_id;
-
-    let asked = match envelope.body {
-        Some(envelope::Body::Request(Request {
-            kind: Some(request::Kind::Pair(pair)),
-        })) => pair,
-        _ => {
-            let refused = refusal(PairErrorCode::BadRequest);
-            answer(&mut send, request_id, &refused).await?;
-            return Ok(Redeemed {
-                response: refused,
-                device: None,
-            });
-        }
-    };
-
-    // The proved identity, from iroh's handshake.
-    let proved = connection.peer_id();
     if !asked.device_public_key.is_empty() && asked.device_public_key != proved {
         // A device that names a key other than the one it just proved is
         // refused as a bad request rather than silently corrected: the only
         // reason to send a different key is to enrol someone else's.
         let refused = refusal(PairErrorCode::BadRequest);
-        answer(&mut send, request_id, &refused).await?;
+        answer(send, request_id, &refused).await?;
         return Ok(Redeemed {
             response: refused,
             device: None,
@@ -151,10 +207,34 @@ where
         Ok(device) => (
             PairResponse {
                 result: Some(pair_response::Result::Ok(PairOk {
-                    gateway_id: gateway_id.to_owned(),
+                    gateway_address: gateway.gateway_address.to_owned(),
                     device_id: device.device_id.clone(),
-                    vault_id: vault_id.to_owned(),
-                    vault_name: vault_name.to_owned(),
+                    vault_id: gateway.vault_id.to_owned(),
+                    vault_name: gateway.vault_name.to_owned(),
+                    // THE HEAD, IN THE ANSWER THAT CREATES THE PAIRING
+                    // (#1025 S7, item 5). A seat that is told where its copy
+                    // is in the same message that enrols it has no state in
+                    // which it is paired and does not know what to fetch.
+                    snapshot_hash: gateway
+                        .snapshot
+                        .as_ref()
+                        .map(|offer| offer.hash.clone())
+                        .unwrap_or_default(),
+                    snapshot_seq: gateway
+                        .snapshot
+                        .as_ref()
+                        .map_or(0, |offer| u64::try_from(offer.seq).unwrap_or(0)),
+                    snapshot_bytes: gateway.snapshot.as_ref().map_or(0, |offer| offer.bytes),
+                    relay_url: gateway.relay_url.to_owned(),
+                    direct_addrs: gateway.direct_addrs.clone(),
+                    // THE KEY THIS GATEWAY JUST ENROLLED (#1025 S7-13), which
+                    // is `proved` — the one iroh's TLS established on this
+                    // connection, and the one that went into the allowlist row
+                    // above. Never `asked.device_public_key`: a device may not
+                    // be told back a key it asserted, or the check it performs
+                    // at every later open would be a check against its own
+                    // claim rather than against the row that decides.
+                    enrolled_public_key: device.endpoint_id.to_vec(),
                 })),
             },
             Some(device),
@@ -162,7 +242,7 @@ where
         Err(RedeemRefusal::InvalidCode) => (refusal(PairErrorCode::InvalidCode), None),
         Err(RedeemRefusal::ExpiredCode) => (refusal(PairErrorCode::ExpiredCode), None),
     };
-    answer(&mut send, request_id, &response).await?;
+    answer(send, request_id, &response).await?;
     Ok(Redeemed {
         response,
         device: enrolled,
@@ -170,12 +250,17 @@ where
 }
 
 /// The seat side: redeem `ticket` against its gateway.
+///
+/// **Returns the connection it redeemed on** (#1025 S3, D-1025-S3-4). A
+/// successful redemption promoted it in place, so it is the connection the
+/// bootstrap and the first log pass should ride — the whole first run on one
+/// dial. A caller with no use for it may drop it.
 pub async fn redeem(
     endpoint: &Endpoint,
     ticket: &PairTicket,
     device_name: &str,
     platform: &str,
-) -> Result<PairResponse, ConnectError> {
+) -> Result<(IrohConnection, PairResponse), ConnectError> {
     let mut gateway = [0u8; 32];
     if ticket.gateway_endpoint.len() != 32 {
         return Err(ConnectError::Endpoint(
@@ -189,7 +274,7 @@ pub async fn redeem(
             gateway,
             Some(&ticket.relay_url),
             &ticket.direct_addrs,
-            alpn::PAIR,
+            alpn::PLANE,
         )
         .await?;
     let (mut send, mut recv) = connection.open_bi().await?;
@@ -221,9 +306,9 @@ pub async fn redeem(
     match envelope.body {
         Some(envelope::Body::Response(Response {
             kind: Some(response::Kind::Pair(pair)),
-        })) => Ok(pair),
+        })) => Ok((connection, pair)),
         _ => Err(ConnectError::Endpoint(
-            "the gateway answered the pair lane with something other than a PairResponse"
+            "the gateway answered a pair stream with something other than a PairResponse"
                 .to_owned(),
         )),
     }

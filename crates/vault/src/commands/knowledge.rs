@@ -1,6 +1,6 @@
 //! THE `knowledge` SCHEMA — nine commands, and none of them stores a note.
 //!
-//! A note is a `knowledge.note` wrapper over a canonical, sha256-deduped
+//! A note is a `knowledge.note` wrapper over a canonical, hash-deduped
 //! `core.content_item` body: rent the bytes, own the reference
 //! (`packages/vault/src/commands/knowledge.ts:1`-`:8`). A notebook is a surface
 //! view over `core_collection`, the one owner-curation mechanism (#274) — which
@@ -139,7 +139,7 @@ fn content_item_for(ctx: &CommandCtx<'_, '_>, body_text: &str, format: &str) -> 
     }
     let sha = crate::content::content_digest(body_text.as_bytes());
     if let Ok(content_id) = ctx.connection().query_row(
-        "SELECT content_id FROM core_content_item WHERE sha256 = ?1",
+        "SELECT content_id FROM core_content_item WHERE content_hash = ?1",
         [&sha],
         |row| row.get::<_, String>(0),
     ) {
@@ -148,7 +148,7 @@ fn content_item_for(ctx: &CommandCtx<'_, '_>, body_text: &str, format: &str) -> 
     let content_id = ctx.next_id();
     ctx.connection().execute(
         "INSERT INTO core_content_item
-           (content_id, content_uri, sha256, byte_size, language, creator_party_id,
+           (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
             origin_device_id, deleted_at, purge_at, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
         rusqlite::params![

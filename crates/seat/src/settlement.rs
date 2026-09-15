@@ -146,6 +146,30 @@ fn apply_one(
         record.waiting_on = answer.waiting_on.clone();
         record.reason = answer.reason.clone();
     })?;
+    // THE WRITE IS TAKEN BACK (#1025 S7, item 4).
+    //
+    // A refused write is a write that never happened, and this seat APPLIED it
+    // to its own replica the moment the member made it. So the prior images go
+    // back and the journal entries go — in this transaction, which is the
+    // applier's own, so the row and the verdict move together.
+    //
+    // NOT for a state that is still waiting on somebody: `parked` is an intent
+    // waiting on a decision and `conflict` is one waiting on the member, and
+    // both keep the value on screen under a badge that says why. What is
+    // restored is a verdict — denied, expired, failed, base-missing — from
+    // which this write will never run.
+    if matches!(
+        state,
+        IntentState::Denied | IntentState::Failed | IntentState::Expired
+    ) {
+        crate::pending::restore(outbox.connection(), &answer.intent_id, &|intent_id| {
+            outbox
+                .created_order(intent_id)
+                .ok()
+                .flatten()
+                .unwrap_or(i64::MAX)
+        })?;
+    }
     Ok(Applied::Transitioned(state))
 }
 

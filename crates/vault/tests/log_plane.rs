@@ -524,7 +524,7 @@ fn a_blob_and_a_wide_integer_survive_the_round_trip_through_the_log() {
             tx.set_producer("test.wide");
             tx.connection().execute(
                 "INSERT INTO core_content_item
-                   (content_id, content_uri, sha256, byte_size, created_at, updated_at)
+                   (content_id, content_uri, content_hash, byte_size, created_at, updated_at)
                  VALUES ('c-wide', 'inline:wide',
                          '0000000000000000000000000000000000000000000000000000000000000abc',
                          ?1, ?2, ?2)",

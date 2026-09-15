@@ -6,6 +6,7 @@
 //!   --file <name>   the file to write inside <dir>  (default demo-vault.db)
 //!   --name <text>   the vault's display name        (default "Demo vault")
 //!   --only <a,b,c>  seed only these apps            (default: all seven)
+//!   --force         overwrite a file that is ALREADY a vault
 //! ```
 //!
 //! **WHY A SECOND VAULT IS SEEDABLE AT ALL.** The switcher is only testable
@@ -42,6 +43,22 @@
 //! separation — its seeds sat behind a gateway route the shipped app called
 //! only from a "fill with sample data" offer on the first-run screen. The vault
 //! it writes is a throwaway.
+//!
+//! **AND `--file` IS THE INVITATION TO BREAK THAT, SO THE GUARD IS HERE.** This
+//! run deletes `<dir>/<file>` and its `-wal`, `-shm` and `.bytes` siblings
+//! before it founds, because a demo seeded on top of a previous run has counts
+//! nobody can predict. Pointed at a gateway's own vault directory — which is
+//! one `--file vault.db` away — that deletes the vault a gateway is serving and
+//! founds a new one under a NEW `vault_id` in a directory still named after the
+//! old one. It reported `CENTRAID_SEEDED` and looked like a success: a seat
+//! bootstrapped off it, drew the founding state, and `MAX(seq)` in the log had
+//! gone 1101 → 146. Two scenario runs were spent looking for a sync bug that
+//! was not there.
+//!
+//! So a file that already holds a `core_vault` row is REFUSED by name, and
+//! `--force` is the only way past. "It is a dev binary" is the argument for the
+//! guard and not against it: a dev binary that can silently destroy a gateway's
+//! vault is the one class worth guarding, and the cost is one read.
 //!
 //! **What did NOT come across, and why.** v0's photos seed generates real JPEG
 //! bytes for eighteen frames and stages face proposals over them; the frames'
@@ -189,6 +206,9 @@ struct Options {
     file: String,
     name: String,
     wanted: Wanted,
+    /// Overwrite a file that is already a vault. Off by default; see the
+    /// module header for what it is protecting.
+    force: bool,
 }
 
 fn options() -> Options {
@@ -197,8 +217,10 @@ fn options() -> Options {
     let mut file = "demo-vault.db".to_owned();
     let mut name = "Demo vault".to_owned();
     let mut wanted = Wanted(None);
+    let mut force = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--force" => force = true,
             "--file" => file = args.next().expect("--file takes a name"),
             "--name" => name = args.next().expect("--name takes a display name"),
             "--only" => {
@@ -223,7 +245,57 @@ fn options() -> Options {
         file,
         name,
         wanted,
+        force,
     }
+}
+
+/// The process exit code a refusal leaves.
+///
+/// Non-zero and its own number, so a script that seeds before it runs a
+/// scenario stops rather than carrying on over a vault it did not seed.
+const REFUSED: i32 = 2;
+
+/// Refuse a file that is already somebody's vault (#1025 S5).
+///
+/// Answered by `Vault::vault_id`, which is the vault's own question and needs
+/// no SQL here — `sql-confinement` would refuse a query in this crate, and it
+/// is right to.
+///
+/// A file that is NOT a vault is not a refusal: an empty file left by an
+/// aborted run, or a path that does not exist, is exactly what this tool is
+/// for. What it will not do is delete a founded vault it was not told to.
+fn refuse_an_existing_vault(vault_path: &std::path::Path, force: bool) {
+    if !vault_path.exists() {
+        return;
+    }
+    let Ok(vault) = Vault::open(vault_path) else {
+        // Not a Centraid file at all. The remove below is what it always was.
+        return;
+    };
+    let found = vault.vault_id().ok().flatten();
+    // Closed before anything else touches the path: an open handle over a file
+    // that is about to be removed is how a `-wal` outlives its database.
+    let _ = vault.close();
+    let Some(vault_id) = found else {
+        return;
+    };
+    if force {
+        eprintln!(
+            "seed-demo-vault: --force: overwriting vault {vault_id} at {}",
+            vault_path.display()
+        );
+        return;
+    }
+    // BY NAME AND LOUDLY. The id is what tells a caller which vault they were
+    // about to lose, and the path is what tells them how they got there.
+    eprintln!(
+        "seed-demo-vault: {} already holds vault {vault_id}.\n\
+         This tool DELETES the file it seeds, so running here would destroy that vault \
+         and found a new one with a new id.\n\
+         Seed somewhere else, or pass --force if that is really what you meant.",
+        vault_path.display()
+    );
+    std::process::exit(REFUSED);
 }
 
 fn main() {
@@ -232,17 +304,65 @@ fn main() {
         file,
         name: vault_name,
         wanted,
+        force,
     } = options();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let vault_path = dir.join(&file);
+    // BEFORE A BYTE IS REMOVED. The removal below is unconditional and the
+    // founding after it is too, so this is the only place the question can be
+    // asked at all (see the module header for the run that proved it).
+    refuse_an_existing_vault(&vault_path, force);
     // A FRESH FILE EVERY TIME. A demo vault seeded on top of a previous run's
     // rows has counts nobody can predict, and the counts are what Home draws.
     for suffix in ["", "-wal", "-shm"] {
         let _ = std::fs::remove_file(dir.join(format!("{file}{suffix}")));
     }
+    // AND ITS BYTES. The content store travels with the file it belongs to, so
+    // a fresh vault over a previous run's store would dedupe against
+    // photographs this run has not seeded yet and report counts nobody can
+    // predict — which is the same reason the file itself is removed.
+    let bytes_dir = vault_path.with_extension("bytes");
+    let _ = std::fs::remove_dir_all(&bytes_dir);
 
     let handle = centraid_core::Core::open(centraid_core::CoreConfig::gateway(&vault_path))
         .expect("a core opens");
+
+    // THE ONE CONTENT STORE, SEEDED DIRECTLY (#1025 S3, D-1025-S3-1).
+    //
+    // The bytes are the point of this seed: the first port sent titles with no
+    // `data_uri` at all and Photos seeded zero on every run. A core with no
+    // store refuses every photograph by name, so the store is opened here and
+    // put on the vault's byte door — the SAME store `centraid gateway` then
+    // serves a seat's `blob` streams from. There is no CAS to import any more,
+    // and no second directory for the two halves to disagree about.
+    //
+    // The runtime is leaked with the process: this binary seeds and exits, and
+    // shutting an iroh store down from a `Drop` that may run on one of its own
+    // threads is a deadlock for no gain.
+    let runtime = Box::leak(Box::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("a runtime"),
+    ));
+    let store = runtime
+        .block_on(centraid_blobs::ByteStore::open(&bytes_dir))
+        .expect("the content store opens");
+    // A CLONE KEPT TO CLOSE IT WITH (#1025 S7).
+    //
+    // iroh-blobs flushes its index on shutdown, and this binary never shut the
+    // store down: it seeded, exited, and left `.data` files the store's own
+    // index did not know were whole. A gateway opened on that directory then
+    // RESET the `blob` stream for those blobs — and because the byte plane used
+    // to stop the window on the first refusal, **the whole plane stopped for
+    // ever and every photograph on the phone stayed a placeholder**. Nothing
+    // failed at seed time and nothing was red; it took driving the loop end to
+    // end to see it.
+    let to_close = store.clone();
+    handle.attach_bytes(centraid_blobs::ContentBytes::new(
+        store,
+        runtime.handle().clone(),
+    ));
 
     // The calendar is discovered, never hard-coded — v0's agenda seed says so in
     // its own words. It exists because `Vault::found` mints a private
@@ -321,6 +441,10 @@ fn main() {
         }
     };
     handle.close();
+    // THE STORE IS FLUSHED BEFORE THIS PROCESS GOES. See the clone above: the
+    // artifact this binary leaves is a store another process has to serve from,
+    // and an unflushed index is a fixture that lies.
+    runtime.block_on(to_close.close());
 
     println!("CENTRAID_VAULT={}", vault_path.display());
     println!("CENTRAID_VAULT_NAME={vault_name}");
@@ -365,6 +489,7 @@ fn first_row(handle: &centraid_core::Handle, table: &str, column: &str) -> Optio
                     pk_column: column.to_owned(),
                     descending: false,
                 }),
+                with_held_thumbnail: false,
             }),
             limit: 1,
             after: None,

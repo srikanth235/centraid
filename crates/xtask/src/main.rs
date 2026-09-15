@@ -21,6 +21,7 @@ mod ci;
 mod gate;
 mod ledger;
 mod measure;
+mod photos_sample;
 mod rules;
 mod smoke;
 #[cfg(test)]
@@ -59,6 +60,11 @@ enum Command {
     },
     /// Run only the structural rules (the cheap half of every profile).
     Rules,
+    /// Regenerate the Photos sample manifest and the rows that name its frames.
+    ///
+    /// The generator the v0 retirement took with it (#1025 S4). See
+    /// `crates/xtask/src/photos_sample.rs` for the rule it enforces.
+    PhotosSample,
     /// Print the repository root every path-based rule will scan.
     ///
     /// One line, and it exists because the root was once baked in at compile
@@ -286,6 +292,18 @@ fn main() -> ExitCode {
             }
         },
         Command::Rules => rules::print_report(&root),
+        Command::PhotosSample => match photos_sample::run(&root) {
+            Ok(written) => {
+                for path in written {
+                    println!("wrote {path}");
+                }
+                true
+            }
+            Err(error) => {
+                eprintln!("photos-sample: {error:#}");
+                false
+            }
+        },
         Command::RepoRoot => {
             println!("{}", root.display());
             true

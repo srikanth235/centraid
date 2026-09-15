@@ -21,13 +21,16 @@ import { describe, expect, it } from "vitest";
  * |---|---|
  * | `wasm`, `WebAssembly`, `wasm-unsafe-eval` | v0 ran a WASM iroh endpoint in the service worker and needed `'wasm-unsafe-eval'` in its CSP. Both are gone; a CSP that admits WASM again is an extension that can run a network stack |
  * | `iroh`, endpoint dialling, `fetch`, `XMLHttpRequest`, `WebSocket` | there is nothing for this extension to reach. No `host_permissions`, no network — if Centraid is not on this machine, the Companion says so |
- * | `crypto.subtle.encrypt` / `decrypt` / `importKey` / `deriveKey` | the platform's digest is fine (a capture's sha256 is not a secret), but a key operation in this process is the first step of becoming a seat |
+ * | `crypto.subtle.encrypt` / `decrypt` / `importKey` / `deriveKey` | a key operation in this process is the first step of becoming a seat |
  * | `indexedDB` | v0's seat wraps `K` into IndexedDB. An extension with a key store is an extension with a key |
  *
- * `crypto.subtle.digest` and `crypto.getRandomValues` are ALLOWED, named
- * explicitly: the first hashes a screenshot so the host's handle can be checked,
- * and the second is v0's own password generator, which produces a secret for the
- * member rather than opening one.
+ * `crypto.getRandomValues` is ALLOWED, named explicitly: it is v0's own password
+ * generator, which produces a secret for the member rather than opening one.
+ *
+ * `crypto.subtle.digest` used to be allowed beside it, to hash a screenshot the
+ * worker then declared on `stage:begin`. #1025 S4 removed the declaration: the
+ * vault names bytes with BLAKE3, WebCrypto has no BLAKE3, and the host answers
+ * the handle. Nothing shipped hashes anything any more.
  */
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -142,9 +145,9 @@ describe("the Companion's bundle", () => {
     }
   });
 
-  it("allows exactly the two platform primitives it needs, and names them", () => {
+  it("allows exactly the one platform primitive it needs, and names it", () => {
     const uses = shipped().filter(({ text }) =>
-      /crypto\.(?:subtle\.digest|getRandomValues)/u.test(text)
+      /crypto\.getRandomValues/u.test(text)
     );
     // Both are used — a lint that passed because nothing used them would be
     // telling us nothing about the ban above.

@@ -190,18 +190,14 @@ fn vectors() -> Vec<(&'static str, &'static str, Vec<u8>)> {
 }
 
 fn generated() -> Json {
+    // ONE ENTRY (#1025 S3, D-1025-S3-4). The golden seals the ALPN because
+    // drift in one fails nowhere but at negotiation on a real network; it now
+    // seals that there is exactly one, so a lane's return regenerates this file
+    // rather than passing unnoticed.
     let alpns = json!({
-        "seat": {
-            "utf8": String::from_utf8_lossy(alpn::SEAT),
-            "base64": BASE64.encode(alpn::SEAT),
-        },
-        "pair": {
-            "utf8": String::from_utf8_lossy(alpn::PAIR),
-            "base64": BASE64.encode(alpn::PAIR),
-        },
-        "peer": {
-            "utf8": String::from_utf8_lossy(alpn::PEER),
-            "base64": BASE64.encode(alpn::PEER),
+        "plane": {
+            "utf8": String::from_utf8_lossy(alpn::PLANE),
+            "base64": BASE64.encode(alpn::PLANE),
         },
     });
 

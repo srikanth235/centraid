@@ -9,7 +9,6 @@ import {
   encodeChunk,
   MAX_INLINE_BYTES,
   needsStaging,
-  sha256Hex,
 } from "./stage-core.js";
 
 function payload(size: number): Uint8Array {
@@ -94,10 +93,8 @@ describe("the capture's own bytes", () => {
     expect(dataUriBytes("data:image/png,notbase64")).toBeUndefined();
   });
 
-  it("digests through the platform rather than by hand", async () => {
-    // The empty string's SHA-256, which is a constant anybody can check.
-    await expect(sha256Hex(new Uint8Array(0))).resolves.toBe(
-      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    );
-  });
+  // DELETED WITH THE FUNCTION (#1025 S4). `sha256Hex` hashed a capture so the
+  // worker could declare it on `stage:begin`. The handle is now the host's — the
+  // vault names bytes with BLAKE3 and `crypto.subtle.digest` has none — so this
+  // worker computes no digest at all and there is none to test.
 });

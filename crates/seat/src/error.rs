@@ -42,6 +42,16 @@ pub enum SeatError {
     #[error("`{app_id}.{action}` needs the gateway and this seat has none")]
     OnlineOnly { app_id: String, action: String },
 
+    /// THE BOOTSTRAP ARTIFACT IS FOR ANOTHER VAULT.
+    ///
+    /// Refused before the destination is touched, so the replica that is there
+    /// keeps its rows and its outbox. A seat that wrote its own id over
+    /// whatever arrived produced a file every later check agreed with — a
+    /// `Personal` seat holding `Family`'s epoch and rows
+    /// (#1014 C16/C17, carried into #1025 S1).
+    #[error("this bootstrap artifact names vault `{found}` and this seat paired for `{expected}`")]
+    WrongVault { expected: String, found: String },
+
     /// A gateway cursor cannot be served from. Carried through so a seat can
     /// branch on the reason rather than on a string.
     #[error("re-bootstrap required: {reason:?}")]

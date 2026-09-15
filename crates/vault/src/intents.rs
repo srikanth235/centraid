@@ -27,7 +27,6 @@
 //! else. `compare_utf16` is therefore not a nicety.
 
 use rusqlite::Connection;
-use sha2::{Digest as _, Sha256};
 
 use crate::clock::Clock;
 use crate::error::{IntentRefusal, Result, VaultError};
@@ -113,6 +112,45 @@ impl BaseVersion {
     }
 }
 
+/// BYTES AN INTENT CANNOT RUN WITHOUT, AS THE SEAT DECLARES THEM (#1025 S3,
+/// R25).
+///
+/// A photograph taken on a phone is minted into the seat's own byte store and
+/// named in the intent by its BLAKE3 hash. The gateway pulls those bytes over
+/// the connection the seat opened and commits the content row **only once it
+/// holds them** — bytes commit after rows, and never only on a phone.
+///
+/// ## Why this is a DECLARATION and not derived from the command
+///
+/// The alternative is for the gateway to know, per command, which input
+/// property names bytes. That is a second definition of the byte door, and it
+/// drifts silently: a command added without its entry commits a content row
+/// naming bytes the gateway does not hold, and nobody finds out until a second
+/// device asks for them and gets an empty cell. Nothing fails at the time and
+/// nothing is red.
+///
+/// A declaration cannot drift that way for two reasons. It is **inside the
+/// payload hash** — see [`IntentPayload::hash`] — so it is part of what the
+/// member's write was signed for and cannot be edited in flight or invented by
+/// the gateway. And a seat that declares nothing is refused LOUDLY by the
+/// command's own `staged_or_owned` precondition, which is an existing gate with
+/// an owner-facing sentence rather than a new one that has to be remembered.
+///
+/// The three fields are the three facts `blob_staging` needs and the gateway
+/// cannot work out for itself. The size and the media type are the SEAT'S
+/// reading of its own bytes: there is no sniffer on the gateway, and a
+/// photograph promoted as `application/octet-stream` is a photograph a grid
+/// will not embed. The hash is the only one of the three the gateway verifies,
+/// and it verifies it absolutely — bao proves every chunk group against it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NeededBytes {
+    /// 64 lowercase hex. The BLAKE3 root hash, the same value
+    /// `core_content_item.content_hash` takes.
+    pub hash: String,
+    pub byte_size: i64,
+    pub media_type: String,
+}
+
 /// What an intent claims to do.
 #[derive(Debug, Clone)]
 pub struct IntentPayload {
@@ -121,10 +159,16 @@ pub struct IntentPayload {
     pub input: serde_json::Value,
     pub base_versions: Vec<BaseVersion>,
     pub depends_on: Vec<String>,
+    /// Bytes this intent cannot run without. See [`NeededBytes`].
+    pub needs: Vec<NeededBytes>,
 }
 
 impl IntentPayload {
-    /// The canonical hash: sha-256 hex over the canonical JSON.
+    /// The canonical hash: BLAKE3 hex over the canonical JSON.
+    ///
+    /// **One hash** (#1025 S4, D-1025-S4-1). It used to be SHA-256; a payload
+    /// hash is Centraid's own name for a write and never a value a third party
+    /// computes, so nothing outside this repository has to agree with it.
     ///
     /// `baseVersions` and `dependsOn` are **omitted when empty**, not written
     /// as `[]` — the seat omits them and the gateway's expected hash must be
@@ -170,6 +214,35 @@ impl IntentPayload {
                 ),
             );
         }
+        // THE DECLARED BYTES, SORTED BY HASH and omitted when empty, for the
+        // same reason the two lists above are: the seat and the gateway must
+        // canonicalise to the same string, and the order two devices list one
+        // camera roll in is not a fact either of them can rely on.
+        if !self.needs.is_empty() {
+            let mut sorted = self.needs.clone();
+            sorted.sort_by(|left, right| compare_utf16(&left.hash, &right.hash));
+            object.insert(
+                "needs".to_owned(),
+                serde_json::Value::Array(
+                    sorted
+                        .into_iter()
+                        .map(|need| {
+                            let mut entry = serde_json::Map::new();
+                            entry.insert(
+                                "byteSize".to_owned(),
+                                serde_json::Value::from(need.byte_size),
+                            );
+                            entry.insert("hash".to_owned(), serde_json::Value::String(need.hash));
+                            entry.insert(
+                                "mediaType".to_owned(),
+                                serde_json::Value::String(need.media_type),
+                            );
+                            serde_json::Value::Object(entry)
+                        })
+                        .collect(),
+                ),
+            );
+        }
         if !self.depends_on.is_empty() {
             object.insert(
                 "dependsOn".to_owned(),
@@ -182,7 +255,7 @@ impl IntentPayload {
             );
         }
         let canonical = canonical_json(&serde_json::Value::Object(object))?;
-        Ok(hex::encode(Sha256::digest(canonical.as_bytes())))
+        Ok(hex::encode(blake3::hash(canonical.as_bytes()).as_bytes()))
     }
 }
 
@@ -423,7 +496,61 @@ mod tests {
             input: serde_json::json!({"amount_minor": 100, "description": "lunch"}),
             base_versions: Vec::new(),
             depends_on: Vec::new(),
+            needs: Vec::new(),
         }
+    }
+
+    /// THE DECLARED BYTES ARE IN THE HASH, and in a fixed order (#1025 S3).
+    ///
+    /// Both halves matter. If they were outside the preimage, a gateway could
+    /// be told to fetch bytes the member never signed for; if the order were
+    /// the caller's, two devices listing one camera roll differently would
+    /// refuse each other's intents as hash mismatches.
+    #[test]
+    fn declared_bytes_are_hashed_and_their_order_is_not() {
+        let bare = payload();
+        let one = NeededBytes {
+            hash: "aa".repeat(32),
+            byte_size: 11,
+            media_type: "image/jpeg".to_owned(),
+        };
+        let two = NeededBytes {
+            hash: "bb".repeat(32),
+            byte_size: 22,
+            media_type: "image/png".to_owned(),
+        };
+        let mut forwards = payload();
+        forwards.needs = vec![one.clone(), two.clone()];
+        let mut backwards = payload();
+        backwards.needs = vec![two, one];
+        assert_ne!(
+            bare.hash().expect("hashes"),
+            forwards.hash().expect("hashes")
+        );
+        assert_eq!(
+            forwards.hash().expect("hashes"),
+            backwards.hash().expect("hashes")
+        );
+    }
+
+    /// A declaration a byte differs in is a DIFFERENT intent. The size and the
+    /// media type are carried facts a gateway cannot check, so the hash is what
+    /// stops them being edited in flight.
+    #[test]
+    fn a_changed_size_or_media_type_is_a_different_payload() {
+        let mut base = payload();
+        base.needs = vec![NeededBytes {
+            hash: "aa".repeat(32),
+            byte_size: 11,
+            media_type: "image/jpeg".to_owned(),
+        }];
+        let mut resized = base.clone();
+        resized.needs[0].byte_size = 12;
+        let mut retyped = base.clone();
+        retyped.needs[0].media_type = "image/png".to_owned();
+        let hash = base.hash().expect("hashes");
+        assert_ne!(hash, resized.hash().expect("hashes"));
+        assert_ne!(hash, retyped.hash().expect("hashes"));
     }
 
     #[test]

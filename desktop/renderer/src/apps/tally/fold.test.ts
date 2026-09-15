@@ -267,7 +267,7 @@ describe("the photos grid", () => {
         ]
       ),
       content: page(
-        ["content_id", "sha256", "byte_size"],
+        ["content_id", "content_hash", "byte_size"],
         [["c-1", digest, 4096]]
       ),
       representations: page(
@@ -303,7 +303,7 @@ describe("the photos grid", () => {
         ["asset_id", "content_id", "kind"],
         [["a-1", "c-missing", "photo"]]
       ),
-      content: page(["content_id", "sha256"], []),
+      content: page(["content_id", "content_hash"], []),
     });
     expect(tile!.src).toBeUndefined();
   });

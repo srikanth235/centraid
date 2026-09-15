@@ -323,6 +323,79 @@ One schema with one promise would force the weaker half to carry the stronger ha
 
 **The desktop's local channel is not on this wire.** The seat socket's frame carries a channel tag: `0x00` is a `centraid.core.v1` envelope byte-identical to what crosses iroh, `0x01` is one UTF-8 JSON local message naming things that cannot exist remotely — a peer uid, a byte offset into a file this process can see, a capability token for a child on this machine. Adding those to `centraid.core.v1` would put them under its FILE promise to seats that update on their own schedule ([D-1020-F9](decisions.md#wave-3-lane-rulings-1020)). A new local message is **additive** and does not bump `LOCAL_PROTOCOL_VERSION`, whose own rule is that it is bumped when a message changes shape.
 
+## One ALPN, one connection per vault, one stream per request ([#1025](https://github.com/srikanth235/centraid/issues/1025) S2, S3)
+
+The v1 plane is **one ALPN**, and it is the only one a v1 endpoint advertises: `centraid/v1`. Everything a device does with its gateway rides it — redeeming a pairing code, a page of the log, a write, a bootstrap offer, a blob's bytes. `centraid/v1/byte`, `centraid/v1/peer` and `centraid/v1/pair` are all gone ([D-1025-S2-1](decisions.md#slice-s2--one-protocol-1025), [D-1025-S3-4](decisions.md#slice-s3--bytes-both-ways-one-store-1025)).
+
+| Layer | Rule |
+| --- | --- |
+| Connection | One per vault. `centraid_net::Endpoint::accept` looks the peer key up in the allowlist **once**, before any stream, and the answer holds for every stream the connection will ever carry. |
+| Stream | One per request. **Both sides loop on `accept_bi`** — the accepting side may open streams too, which is what lets a gateway pull a phone's blob on the connection the phone dialled. |
+| First frame | A `centraid.core.v1.Request` envelope naming the kind. Nothing else may come first. |
+
+### Two states, and a connection is promoted in place
+
+The accept-time lookup's answer is a **state**, not a refusal:
+
+| State | Who | What it may do |
+| --- | --- | --- |
+| **promoted** | an enrolled, unrevoked device | every request kind below |
+| **provisional** | everyone else — which is every device the first time it knocks | **exactly one stream**, a 2 KiB frame cap, a 5-second deadline, and `pair` is the only kind it may carry |
+
+A provisional connection that asks for anything else is refused `UNAUTHORIZED` **by name** and the **connection** ends, not just the stream: a stranger that asked for a log page has said what it is. A successful redemption **promotes that same connection in place** — no reconnect — so a phone goes `pair` → `blob` → `log` on one dial, in one window.
+
+The enrolment check has not moved and has not weakened: it is the same lookup, in the same place, before any stream, for the connection's whole life. What moved is where its answer is expressed — from a TLS label to a state on the accepted connection.
+
+### The request kinds a stream can open with
+
+| Kind | The stream is | Answer |
+| --- | --- | --- |
+| `pair` | a ticket redemption. **The only kind a provisional connection may carry** | `PairResponse`; on success the connection is promoted |
+| `hello` | the first stream a **promoted** connection opens, the version window | `Hello`, or `UpgradeRequired` and nothing else |
+| `log` | a page of the log since a cursor — and, with `tail`, **every page after it too** | `LogPage`, or `RebootstrapRequired`. With `tail`, many `LogPage`s on the one stream |
+| `intent` | a write, run on the gateway under the enrolled device's principal | `Outcome`, carrying the **commit position** the effect landed in — or `BYTES_NOT_YET_HELD`, see below |
+| `blob` | **handed over**: everything after this frame is iroh-blobs' own get/provide protocol, verbatim | no envelope — the transfer is the answer |
+
+#### A `log` stream may stay open ([#1025](https://github.com/srikanth235/centraid/issues/1025) S2, [D-1025-S7-40](decisions.md#slice-s2--the-tail-stream-1025))
+
+`LogRequest.tail` is the one field, and there are **no new message types**: a tail is the same answer, more than once. A gateway answering a tail serves the catch-up pages from `since` exactly as it serves a one-shot request — following `has_more` — and then **keeps the stream open**, writing a further `LogPage` every time that vault's watermark moves past what it last sent. `RebootstrapRequired` ends the stream as it ends any request.
+
+**One page per commit batch, never one per row.** The gateway's own wake carries no payload, so the stream serving a seat asks the log door where the watermark is and writes whatever is there; a batch of four hundred rows is one wake and one page.
+
+**One log per vault, and a seat never subscribes to a table.** Every table's changes are rows in that one log, named by `LogRow.table`. There is no filter on the request and no subscription vocabulary anywhere on this wire, because a seat holds a COPY of the vault and not a view of part of it.
+
+**A seat holds at most one tail per vault**, and a second tail from the same device replaces the first: the second is what that device believes. The gateway can enumerate the devices with a tail open — presence falls out of that registry — and it goes to a log line and nothing else, because what a member may learn about another member's devices is a product decision and not a protocol default.
+
+This is the whole of the freshness mechanism. There is no interval, no poll and no push wake: see [mobile-offline.md](mobile-offline.md#one-stream-three-occasions) for the three occasions a seat opens one.
+
+#### The bootstrap head rides the answers that ask for a copy ([#1025](https://github.com/srikanth235/centraid/issues/1025) S7, [D-1025-S7-5](decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025))
+
+There is no `snapshot_head` request. `PairOk` and `RebootstrapRequired` each carry `{snapshot_hash, snapshot_seq, snapshot_bytes}`, and those two messages are the **only** occasions on which a device is told to take a copy — so a separate request could only ever be a second round trip for an answer one of them already had, on the connection the redemption had just promoted, with a real state in between: a device that is paired and does not yet know what to fetch.
+
+`snapshot_bytes` is there for the **room check**, which happens before the first byte moves: a first bootstrap needs one copy of the artifact and a re-bootstrap two, because the old file is still there until the new one is renamed over it. It is also the denominator of the progress a "Copying your vault" screen draws.
+
+The one state with no other way to ask is **paired, with no file, and the pairing recovered from the shell's secure store**. It asks for a `log` page from a cursor it does not have and is answered `RebootstrapRequired` carrying the head, which is the conversation every seat under the floor already has.
+
+A `blob` stream carries no hash in its tagging frame. The hash is in iroh-blobs' own request, which follows on the same stream; naming it twice would be two places for a fetcher and a provider to disagree, and the second would be the one nobody checks.
+
+**A malformed first frame costs its stream and nothing else.** `crates/protocol`'s rule — a malformed frame ends the connection, because the stream's position is no longer known — still holds, of the stream. With one stream per request the blast radius is one request: the stream is dropped, the connection lives, and the pages in flight beside it are untouched.
+
+**Deadlines come from the shell.** `SeatNetwork::sync` and the `seat.sync` command take a `SyncWindow` — a relative deadline and an optional byte/item budget — and the core holds no constant of its own. A window the deadline cuts is a **normal end**: the pass reports what it kept, every applied commit is committed, every verified chunk group is durable, and the next pass continues from the cursor they left ([D-1025-S2-3](decisions.md#slice-s2--one-protocol-1025)).
+
+### Bytes commit after rows, and never only on a phone ([#1025](https://github.com/srikanth235/centraid/issues/1025) S3)
+
+A photograph taken on a phone lives in that phone's own content store. The **gateway pulls it** — on a `blob` stream of the connection the seat opened, because the phone is behind the worse NAT and is the side that knows when it is awake — and commits the content row only once it holds the bytes.
+
+An `intent` stream is therefore three steps in this order:
+
+1. the intent's `needs` are read out of it **through the payload-hash gate**. `Intent.needs` carries `{hash, byte_size, media_type}` per blob and is part of the canonical payload (`needs`, sorted by hash, omitted when empty), so a gateway cannot be told to fetch bytes the member did not sign for and a proxy cannot add one in flight;
+2. every declared blob this gateway does not already hold is fetched and staged;
+3. only then is the intent executed and the row committed.
+
+It is a **declaration** rather than something the gateway derives from the command: deriving it needs a per-command table of "which input property names bytes", which is a second definition of the byte door that drifts silently every time a command is added ([D-1025-S3-5](decisions.md#slice-s3--bytes-both-ways-one-store-1025)).
+
+A pull that does not finish answers `ERROR_CODE_BYTES_NOT_YET_HELD`, which is **retryable**: not executed, not failed. The seat reads an `Error` on an `intent` stream as "this attempt did not land", the write stays in its outbox, and the next window submits it again. Complete or nothing — the intent cannot run against half a photograph, and what landed is kept for the retry ([D-1025-S3-6](decisions.md#slice-s3--bytes-both-ways-one-store-1025)).
+
 ## Stream authority
 
 | Channel | Authority | Use |

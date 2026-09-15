@@ -14,7 +14,7 @@
 //!
 //! Making the envelope the AAD is what stops a payload being re-pointed at
 //! another generation: edit `generation` or `prevManifestHash` and the payload
-//! stops opening. `manifestHash` is the sha256 of the canonical stored bytes,
+//! stops opening. `manifestHash` is the hash of the canonical stored bytes,
 //! which is the generation's own address.
 //!
 //! Every byte of this lives in [`centraid_media::format`], moved from v0. This
@@ -189,10 +189,10 @@ pub fn read_public_envelope(stored: &[u8]) -> Result<PublicEnvelope> {
     PublicEnvelope::from_json(&serde_json::from_slice::<Value>(stored)?)
 }
 
-/// A generation's address: the sha256 of its canonical stored bytes.
+/// A generation's address: the content_hash of its canonical stored bytes.
 #[must_use]
 pub fn manifest_hash(stored: &[u8]) -> String {
-    centraid_media::format::sha256_hex(stored)
+    centraid_media::format::content_hash_hex(stored)
 }
 
 /// Follow `prevManifestHash` from the newest generation backwards.
@@ -267,7 +267,7 @@ mod tests {
 
     fn payload() -> Value {
         serde_json::json!({ "entries": [
-            { "path": "vault.db", "kind": "file", "size": 4096, "sha256": "ab" }
+            { "path": "vault.db", "kind": "file", "size": 4096, "content_hash": "ab" }
         ]})
     }
 

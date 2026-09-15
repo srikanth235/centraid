@@ -24,10 +24,15 @@
 //! ## The numbers are the product's, not this port's
 //!
 //! [`SESSION_TIMEOUT_MS`] 5 min, [`REVEAL_WINDOW_MS`] 30 s,
-//! [`PASSPHRASE_MINIMUM`] 12 characters, [`WRAP_ITERATIONS`] 600,000. They are
-//! the ones the deleted gateway `locker-auth.ts` used, kept because they were
-//! the **product's** answer and not the gateway's implementation detail
-//! (`locker-unlock.ts:22`-`:35`, `blueprints/apps/locker/reveal.ts:21`).
+//! [`PASSPHRASE_MINIMUM`] 12 characters. They are the ones the deleted gateway
+//! `locker-auth.ts` used, kept because they were the **product's** answer and
+//! not the gateway's implementation detail (`locker-unlock.ts:22`-`:35`,
+//! `blueprints/apps/locker/reveal.ts:21`).
+//!
+//! The KDF's cost is NOT one of them. v0's 600,000 PBKDF2-SHA-256 rounds were an
+//! implementation detail of the primitive a browser gave it, and #1025 S4
+//! replaces them with [`unlock::WRAP_PARAMETERS`] — Argon2id, 64 MiB, three
+//! passes, one lane (D-1025-S4-4).
 //!
 //! ## A session, not a mode — and the clock is CHECKED
 //!
@@ -60,6 +65,7 @@ pub mod unlock;
 pub use fill::{FillGrant, FillRequest, fill_grant};
 pub use session::{PASSPHRASE_MINIMUM, SESSION_TIMEOUT_MS, Session, SessionState, WrappedKey};
 pub use unlock::{
-    REVEAL_WINDOW_MS, Reveal, RevealRefusal, RevealTarget, Unlock, UnlockError, WRAP_ITERATIONS,
-    unwrap_member_key, wrap_member_key,
+    REVEAL_WINDOW_MS, Reveal, RevealRefusal, RevealTarget, Unlock, UnlockError, WRAP_KDF,
+    WRAP_MEMORY_KIB, WRAP_PARALLELISM, WRAP_PARAMETERS, WRAP_TIME_COST, unwrap_member_key,
+    wrap_member_key,
 };

@@ -79,6 +79,7 @@ const GAZETTEER_SOURCES: &[&str] = &["geonames-cities15000"];
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
         add_asset(),
+        derive_missing(),
         update_asset(),
         promote_caption(),
         set_asset_place(),
@@ -470,7 +471,7 @@ fn add_asset() -> CommandDefinition {
                 let count: i64 = ctx.connection().query_row(
                     "SELECT COUNT(*) FROM media_asset a
                        JOIN core_content_item c ON c.content_id = a.content_id
-                      WHERE c.sha256 = ?1 AND c.deleted_at IS NULL AND a.deleted_at IS NULL",
+                      WHERE c.content_hash = ?1 AND c.deleted_at IS NULL AND a.deleted_at IS NULL",
                     [&sha],
                     |row| row.get(0),
                 )?;
@@ -482,6 +483,61 @@ fn add_asset() -> CommandDefinition {
         online_only: false,
     }
 }
+
+/// `media.derive_missing` — the backfill sweep (#1025 S3, D-1025-S7-53).
+///
+/// A vault founded before derivatives existed holds originals and no tiers, so
+/// its grid is as blank on a fresh device as the defect this slice fixes. v0
+/// carries no migrations and this is not a schema change — it is derived data
+/// that was never derived, and the only way to have it is to make it.
+///
+/// **A COMMAND and not a background worker**, because the rows have to travel.
+/// The gateway is the only writer and a derivative reaches a seat as ordinary
+/// `core_content_derivative` log rows; a sweep that wrote outside the command
+/// path would fill the gateway's own grid and no other device's.
+///
+/// `RetrySafe`: the handler selects only items that have no tiers, so a second
+/// run over a swept vault considers nothing and writes nothing. The gateway
+/// runs it once per start with a bounded limit, which is what makes a vault of
+/// twenty thousand photographs converge over several starts instead of holding
+/// the first one open for an hour.
+fn derive_missing() -> CommandDefinition {
+    CommandDefinition {
+        name: "media.derive_missing",
+        owner_schema: "media",
+        input_schema: r#"{
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "limit": { "type": "integer", "minimum": 1, "maximum": 5000 }
+          }
+        }"#,
+        idempotency: Idempotency::RetrySafe,
+        risk: Risk::Low,
+        confirm: false,
+        preconditions: &[],
+        postconditions: &[],
+        handler: |ctx| {
+            let limit = ctx
+                .input
+                .get("limit")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|value| usize::try_from(value).ok())
+                .unwrap_or(DERIVE_SWEEP_LIMIT);
+            let (considered, derived) = crate::commands::core::derive_missing(ctx, limit)?;
+            Ok(serde_json::json!({
+                "considered": considered,
+                "derived": derived,
+            }))
+        },
+        sealed_input: &[],
+        online_only: false,
+    }
+}
+
+/// How many items one unasked-for sweep looks at. Bounded so a gateway start is
+/// a gateway start; the next one continues.
+pub const DERIVE_SWEEP_LIMIT: usize = 200;
 
 /// v0's six gates, plus the one this build adds
 /// (`packages/vault/src/commands/media.ts:344`-`:395`).
@@ -674,7 +730,7 @@ fn staged_meta(ctx: &CommandCtx<'_, '_>) -> serde_json::Value {
     };
     ctx.connection()
         .query_row(
-            "SELECT meta_json FROM blob_staging WHERE sha256 = ?1 AND variant IS NULL",
+            "SELECT meta_json FROM blob_staging WHERE content_hash = ?1 AND variant IS NULL",
             [sha],
             |row| row.get::<_, String>(0),
         )
@@ -850,7 +906,7 @@ fn add_asset_handler(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         let byte_size = i64::try_from(thumbhash.len()).unwrap_or(i64::MAX);
         ctx.connection().execute(
             "INSERT INTO core_content_derivative
-               (derivative_id, content_id, variant, sha256, media_type, byte_size,
+               (derivative_id, content_id, variant, content_hash, media_type, byte_size,
                 text_content, created_at, updated_at)
              VALUES (?1, ?2, 'thumbhash', NULL, 'text/plain', ?3, ?4, ?5, ?5)
              ON CONFLICT (content_id, variant) DO UPDATE SET
@@ -2583,8 +2639,8 @@ mod tests {
     }
 
     #[test]
-    fn the_schema_carries_twenty_commands() {
-        assert_eq!(definitions().len(), 20);
+    fn the_schema_carries_twenty_one_commands() {
+        assert_eq!(definitions().len(), 21);
     }
 
     /// v0's split, counted. The census reads the `once` arm as five and misses
@@ -2599,7 +2655,12 @@ mod tests {
         };
         assert_eq!(count(Idempotency::Idempotent), 12);
         assert_eq!(count(Idempotency::Once), 6);
-        assert_eq!(count(Idempotency::RetrySafe), 2);
+        // THREE, and the third is not v0's (#1025 S3, D-1025-S7-53).
+        // `media.derive_missing` is this build's own backfill sweep: it is
+        // retry-safe because re-running it re-derives nothing — the tier rows
+        // it writes are unique on `(content_id, variant)` and an item that
+        // gained them is no longer a candidate.
+        assert_eq!(count(Idempotency::RetrySafe), 3);
     }
 
     /// EXACTLY ONE command-level `confirm`, and it is not one Photos invokes.

@@ -23,7 +23,7 @@
 //! `EE 80 80`. A vault with an emoji in a row id diverges, on exactly one
 //! member's phone.
 
-use centraid_vault::intents::{BaseVersion, IntentPayload};
+use centraid_vault::intents::{BaseVersion, IntentPayload, NeededBytes};
 
 use crate::error::{Result, SeatError};
 
@@ -36,7 +36,7 @@ pub fn cmp_utf16(left: &str, right: &str) -> std::cmp::Ordering {
     centraid_vault::intents::compare_utf16(left, right)
 }
 
-/// A lowercase-hex sha-256 of a canonical payload.
+/// A lowercase-hex BLAKE3 of a canonical payload (#1025 S4, D-1025-S4-1).
 ///
 /// A newtype, because the gateway requires `/^[a-f0-9]{64}$/` and a `String`
 /// that had been through a `to_uppercase` anywhere would be refused with no
@@ -46,12 +46,17 @@ pub struct PayloadHash(String);
 
 impl PayloadHash {
     /// The hash of one payload.
+    ///
+    /// `needs` is the bytes this write cannot be executed without (#1025 S3).
+    /// It is IN the preimage, which is what stops a gateway being told to fetch
+    /// bytes the member never signed for — see [`NeededBytes`].
     pub fn of(
         app_id: &str,
         action: &str,
         input: &serde_json::Value,
         base_versions: &[BaseVersion],
         depends_on: &[String],
+        needs: &[NeededBytes],
     ) -> Result<Self> {
         let payload = IntentPayload {
             app_id: app_id.to_owned(),
@@ -59,6 +64,7 @@ impl PayloadHash {
             input: input.clone(),
             base_versions: base_versions.to_vec(),
             depends_on: depends_on.to_vec(),
+            needs: needs.to_vec(),
         };
         Ok(Self(payload.hash()?))
     }
@@ -67,7 +73,7 @@ impl PayloadHash {
     pub fn parse(text: &str) -> Result<Self> {
         if text.len() != 64 || !text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(SeatError::Invariant {
-                context: format!("`{text}` is not a 64-character lowercase-hex sha-256"),
+                context: format!("`{text}` is not a 64-character lowercase-hex digest"),
             });
         }
         if text.bytes().any(|byte| byte.is_ascii_uppercase()) {
@@ -161,20 +167,20 @@ mod tests {
         let forward = vec![base("note", "\u{10000}"), base("note", "\u{E000}")];
         let backward: Vec<BaseVersion> = forward.iter().rev().cloned().collect();
         assert_eq!(
-            PayloadHash::of("notes", "edit", &input, &forward, &[]).expect("it hashes"),
-            PayloadHash::of("notes", "edit", &input, &backward, &[]).expect("it hashes")
+            PayloadHash::of("notes", "edit", &input, &forward, &[], &[]).expect("it hashes"),
+            PayloadHash::of("notes", "edit", &input, &backward, &[], &[]).expect("it hashes")
         );
     }
 
     #[test]
     fn an_empty_base_version_set_is_omitted_and_not_written_as_an_empty_array() {
         let input = serde_json::json!({ "title": "a" });
-        let with_none = PayloadHash::of("notes", "edit", &input, &[], &[]).expect("it hashes");
+        let with_none = PayloadHash::of("notes", "edit", &input, &[], &[], &[]).expect("it hashes");
         // The same payload hashed with the field present-and-empty would be a
         // different preimage; v0 omits, so the only way to be sure is that an
         // intent with one base version hashes DIFFERENTLY.
-        let with_one =
-            PayloadHash::of("notes", "edit", &input, &[base("note", "n1")], &[]).expect("hashes");
+        let with_one = PayloadHash::of("notes", "edit", &input, &[base("note", "n1")], &[], &[])
+            .expect("hashes");
         assert_ne!(with_none, with_one);
         assert_eq!(with_none.as_str().len(), 64);
     }
@@ -182,9 +188,9 @@ mod tests {
     #[test]
     fn depends_on_is_part_of_the_payload_because_a_rewritten_chain_is_a_new_intent() {
         let input = serde_json::json!({ "title": "a" });
-        let alone = PayloadHash::of("notes", "edit", &input, &[], &[]).expect("hashes");
-        let chained =
-            PayloadHash::of("notes", "edit", &input, &[], &["i-1".to_owned()]).expect("hashes");
+        let alone = PayloadHash::of("notes", "edit", &input, &[], &[], &[]).expect("hashes");
+        let chained = PayloadHash::of("notes", "edit", &input, &[], &["i-1".to_owned()], &[])
+            .expect("hashes");
         assert_ne!(alone, chained);
     }
 
@@ -193,7 +199,7 @@ mod tests {
         // `JSON.stringify(NaN)` is `null`, so a payload whose hash depended on
         // that is a payload two implementations disagree about.
         let input = serde_json::json!({ "rate": 1.0 });
-        assert!(PayloadHash::of("m", "set", &input, &[], &[]).is_ok());
+        assert!(PayloadHash::of("m", "set", &input, &[], &[], &[]).is_ok());
         let mut map = serde_json::Map::new();
         map.insert(
             "rate".to_owned(),
@@ -202,7 +208,7 @@ mod tests {
             ),
         );
         assert!(
-            PayloadHash::of("m", "set", &serde_json::Value::Object(map), &[], &[]).is_ok(),
+            PayloadHash::of("m", "set", &serde_json::Value::Object(map), &[], &[], &[]).is_ok(),
             "a large finite number is fine; only non-finite is refused"
         );
     }
@@ -223,8 +229,8 @@ mod tests {
     /// blank one there is a diagnosis nobody can make.
     #[test]
     fn display_prints_the_hash_itself() {
-        let hash =
-            PayloadHash::of("notes", "edit", &serde_json::json!({}), &[], &[]).expect("it hashes");
+        let hash = PayloadHash::of("notes", "edit", &serde_json::json!({}), &[], &[], &[])
+            .expect("it hashes");
         assert_eq!(format!("{hash}"), hash.as_str());
         assert_eq!(hash.to_string().len(), 64);
     }

@@ -17,7 +17,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::{Connection, OptionalExtension as _};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
 use crate::error::Result;
 use crate::jsvalue::{encode_value, js_number_to_string};
@@ -125,14 +124,14 @@ pub fn primary_key_of(db: &Connection, table: &str) -> Result<Option<String>> {
 pub fn digest_values<'a>(
     values: impl IntoIterator<Item = rusqlite::types::ValueRef<'a>>,
 ) -> String {
-    let mut hash = Sha256::new();
+    let mut hash = blake3::Hasher::new();
     for value in values {
         // Type is part of the digest: SQLite holds `1` where `'1'` was, and a
         // migration that changed a column's affinity changed the data.
         hash.update(encode_value(value).as_bytes());
         hash.update(b"\0");
     }
-    let full = hex::encode(hash.finalize());
+    let full = hex::encode(hash.finalize().as_bytes());
     full[..16].to_owned()
 }
 

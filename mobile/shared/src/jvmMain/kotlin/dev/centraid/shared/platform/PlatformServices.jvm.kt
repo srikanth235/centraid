@@ -1,6 +1,7 @@
 package dev.centraid.shared.platform
 
 import centraid.screen.v1.MediaPermission
+import dev.centraid.shared.sync.WakeReason
 
 /**
  * The JVM's platform services: IN-MEMORY FAKES, and they say so
@@ -24,6 +25,11 @@ public class FakePlatformServices(
     override val networkStatus: FakeNetworkStatus = FakeNetworkStatus(),
     override val mediaLibrary: FakeMediaLibrary = FakeMediaLibrary(),
     override val ocr: FakeOcr = FakeOcr(),
+    // NOT A FAKE, and it is the one member here that must not be. A fake CSPRNG
+    // that tested green would prove the opposite of what the test is for, so
+    // the JVM actual is the real `java.security.SecureRandom` the tests draw
+    // from (#1025 S5).
+    override val secureRandom: SecureRandom = JvmSecureRandom(),
 ) : PlatformServices
 
 public class FakeSecureStore : SecureStore {
@@ -55,13 +61,36 @@ public class FakeBackgroundTasks(
         registered = true,
         sentence = "Centraid catches up in the background.",
     ),
+    /**
+     * What this fake platform says its windows are. A `var` per wake reason so
+     * a test can hand a pass any deadline it likes — which is the point of the
+     * deadline arriving from here rather than from a constant (#1025 S5).
+     */
+    public var windows: Map<WakeReason, BackgroundTasks.PlatformWindow> = emptyMap(),
 ) : BackgroundTasks {
     public var registrations: Int = 0
         private set
 
+    private val listeners = mutableListOf<() -> Unit>()
+
     override suspend fun register(): BackgroundTasks.Registration {
         registrations += 1
         return answer
+    }
+
+    override suspend fun window(wake: WakeReason): BackgroundTasks.PlatformWindow =
+        windows[wake] ?: BackgroundTasks.PlatformWindow(
+            deadlineMs = if (wake == WakeReason.FOREGROUND) Long.MAX_VALUE else 30_000,
+            source = "the JVM fake, standing in for a cooperative platform",
+        )
+
+    override fun onPlatformExpiration(listener: () -> Unit) {
+        listeners += listener
+    }
+
+    /** A test's OS, running out of time. */
+    override fun platformExpired() {
+        listeners.forEach { it() }
     }
 }
 
@@ -79,7 +108,55 @@ public class FakeMediaLibrary(
     public var grant: MediaPermission = MediaPermission.MEDIA_PERMISSION_NOT_ASKED,
     public var grantOnRequest: MediaPermission = MediaPermission.MEDIA_PERMISSION_GRANTED,
     public var assets: List<MediaLibrary.Asset> = emptyList(),
+    /**
+     * The bytes each `localId` answers with, for the staging half of a backup
+     * pass. An id with no entry answers null from [open] — which is the REAL
+     * case a pass must survive (an iCloud-only asset, one the member removed
+     * between the page and the read, one outside a LIMITED selection) and not
+     * an error.
+     */
+    public var originals: Map<String, ByteArray> = emptyMap(),
 ) : MediaLibrary {
+    /** Every `localId` [open] was asked for, in order. */
+    public val opened: MutableList<String> = mutableListOf()
+
+    /** Opens that were closed. A pass that leaks a resource fails this. */
+    public var closed: Int = 0
+        private set
+
+    private val libraryListeners = mutableListOf<() -> Unit>()
+
+    /** Pretend a new photograph was taken while the app is on screen. */
+    public fun libraryChanged() {
+        libraryListeners.forEach { it() }
+    }
+
+    override fun onLibraryChanged(listener: () -> Unit) {
+        libraryListeners += listener
+    }
+
+    override suspend fun open(localId: String): MediaLibrary.Original? {
+        opened += localId
+        val bytes = originals[localId] ?: return null
+        val asset = assets.firstOrNull { it.localId == localId }
+        return object : MediaLibrary.Original {
+            private var at = 0
+            override val mediaType: String =
+                if (asset?.kind == MediaLibrary.Kind.VIDEO) "video/quicktime" else "image/png"
+            override val bytes: Long = bytes.size.toLong()
+
+            override suspend fun read(max: Int): ByteArray {
+                if (at >= bytes.size) return ByteArray(0)
+                val end = minOf(at + max, bytes.size)
+                return bytes.copyOfRange(at, end).also { at = end }
+            }
+
+            override suspend fun close() {
+                closed += 1
+            }
+        }
+    }
+
     override suspend fun permission(): MediaPermission = grant
 
     override suspend fun requestPermission(): MediaPermission {
@@ -104,4 +181,13 @@ public class FakeOcr(public var availability: Boolean = false) : Ocr {
     override suspend fun available(): Boolean = availability
 
     override suspend fun recognise(imagePath: String): List<String> = emptyList()
+}
+
+/**
+ * The real `java.security.SecureRandom`. See [FakePlatformServices]'s field.
+ */
+public class JvmSecureRandom : SecureRandom {
+    private val random = java.security.SecureRandom()
+
+    override fun bytes(count: Int): ByteArray = ByteArray(count).also(random::nextBytes)
 }

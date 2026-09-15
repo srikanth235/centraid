@@ -77,21 +77,12 @@ export function dataUriBytes(
   return { bytes, mediaType };
 }
 
-/** The sha256 of some bytes, lowercase hex, through the platform's own digest. */
-export async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 /** One staging frame, ready to post. */
 export type StageFrame =
   | {
       readonly t: "stage:begin";
       readonly media_type: string;
       readonly byte_size: number;
-      readonly sha256: string;
     }
   | {
       readonly t: "stage:chunk";

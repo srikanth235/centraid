@@ -20,12 +20,20 @@ centraid-net = { path = "../net" }
 centraid-protocol = { path = "../protocol" }
 centraid-seat = { path = "../seat" }
 centraid-vault = { path = "../vault" }
+flate2.workspace = true
+iroh.workspace = true
 rusqlite.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
 tracing.workspace = true
+fs4.workspace = true
 
 [dev-dependencies]
 centraid-ontology = { path = "../ontology" }
 tempfile.workspace = true
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time"] }
+tokio = { workspace = true, features = [
+  "rt",
+  "rt-multi-thread",
+  "macros",
+  "time",
+] }

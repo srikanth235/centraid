@@ -711,8 +711,8 @@ pub struct SampleFrame {
     pub width: u32,
     pub height: u32,
     pub byte_size: i64,
-    /// The bytes' own sha256, 64 hex characters.
-    pub sha256: &'static str,
+    /// The bytes' own content_hash, 64 hex characters.
+    pub content_hash: &'static str,
 }
 
 impl SampleFrame {
@@ -1270,12 +1270,12 @@ fn seed_photos_demo(
         connection
             .execute(
                 "INSERT INTO core_content_item
-                   (content_id, content_uri, sha256, byte_size, created_at, updated_at)
+                   (content_id, content_uri, content_hash, byte_size, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
                 rusqlite::params![
                     content_id,
-                    format!("blob:{}", sample.sha256),
-                    sample.sha256,
+                    format!("blob:{}", sample.content_hash),
+                    sample.content_hash,
                     sample.byte_size,
                     created
                 ],
@@ -1591,7 +1591,7 @@ fn seed_year3_photos(
         connection
             .execute(
                 "INSERT INTO core_content_item
-                   (content_id, content_uri, sha256, byte_size, created_at, updated_at)
+                   (content_id, content_uri, content_hash, byte_size, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
                 rusqlite::params![
                     content_id,
@@ -1905,7 +1905,7 @@ pub fn seed_standing_answers(
 pub fn seed_blob_staging(
     connection: &Connection,
     staging_id: &str,
-    sha256: &str,
+    content_hash: &str,
     media_type: &str,
     byte_size: i64,
     original_name: Option<&str>,
@@ -1914,11 +1914,18 @@ pub fn seed_blob_staging(
     connection
         .execute(
             "INSERT INTO blob_staging
-               (staging_id, sha256, media_type, byte_size, original_name, meta_json,
+               (staging_id, content_hash, media_type, byte_size, original_name, meta_json,
                 staged_by, held_by_batch, variant, variant_of, inline_content,
                 staged_at, held_by_intent)
              VALUES (?1, ?2, ?3, ?4, ?5, '{}', NULL, NULL, NULL, NULL, NULL, ?6, NULL)",
-            rusqlite::params![staging_id, sha256, media_type, byte_size, original_name, at],
+            rusqlite::params![
+                staging_id,
+                content_hash,
+                media_type,
+                byte_size,
+                original_name,
+                at
+            ],
         )
         .map_err(|error| KitError::Door(error.to_string()))?;
     Ok(())
@@ -2175,7 +2182,7 @@ fn seed_docs_demo(
             connection
                 .execute(
                     "INSERT INTO core_content_item
-                       (content_id, content_uri, sha256, byte_size, language,
+                       (content_id, content_uri, content_hash, byte_size, language,
                         creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
                      VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
                     rusqlite::params![
@@ -2354,7 +2361,7 @@ fn encode_demo(text: &str) -> String {
 
 /// A DETERMINISTIC 64-hex sha for a fixture's bytes.
 ///
-/// **Not the real sha256, and it says so.** `core_content_item.sha256`'s CHECK
+/// **Not the real content_hash, and it says so.** `core_content_item.content_hash`'s CHECK
 /// pins the SHAPE (64 lowercase hex characters) and the column is `UNIQUE`; what
 /// a fixture needs is a distinct, reproducible value of that shape per content
 /// item, and a hash function in the kit would be a second implementation of a
@@ -2547,7 +2554,7 @@ fn seed_year3_docs(
         connection
             .execute(
                 "INSERT INTO core_content_item
-                   (content_id, content_uri, sha256, byte_size, language,
+                   (content_id, content_uri, content_hash, byte_size, language,
                     creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
                  VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
                 rusqlite::params![
@@ -2606,7 +2613,7 @@ fn seed_year3_docs(
                 connection
                     .execute(
                         "INSERT INTO core_content_item
-                           (content_id, content_uri, sha256, byte_size, language,
+                           (content_id, content_uri, content_hash, byte_size, language,
                             creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
                          VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
                         rusqlite::params![
@@ -3028,10 +3035,10 @@ fn seed_note_body(
 ) -> KitResult<String> {
     let door = |error: rusqlite::Error| KitError::Door(error.to_string());
     let media_type = notes_media_type(format);
-    let sha = text_sha256(text);
+    let sha = text_content_hash(text);
     let existing: Option<String> = connection
         .query_row(
-            "SELECT content_id FROM core_content_item WHERE sha256 = ?1",
+            "SELECT content_id FROM core_content_item WHERE content_hash = ?1",
             [&sha],
             |row| row.get(0),
         )
@@ -3043,7 +3050,7 @@ fn seed_note_body(
             connection
                 .execute(
                     "INSERT INTO core_content_item
-                       (content_id, content_uri, sha256, byte_size, language,
+                       (content_id, content_uri, content_hash, byte_size, language,
                         creator_party_id, origin_device_id, deleted_at, purge_at,
                         created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
@@ -3092,150 +3099,26 @@ fn seed_note_body(
     Ok(content_id)
 }
 
-/// The sha256 of a body's TEXT, in hex. Exposed so an app crate's test can hold
+/// The content hash of a body's TEXT, in hex. Exposed so an app crate's test can hold
 /// the kit's answer against `centraid_media`'s
 /// (`the_fixtures_sha_is_the_one_the_command_deduplicates_on`), which is what
 /// keeps a fixture-seeded note and a command-written note one content item.
 #[must_use]
-pub fn fixture_text_sha256(text: &str) -> String {
-    text_sha256(text)
+pub fn fixture_text_content_hash(text: &str) -> String {
+    text_content_hash(text)
 }
 
-/// The sha256 of a body's TEXT, in hex.
+/// The content hash of a body's TEXT, in hex.
 ///
-/// The kit depends on no hashing crate, so this is the 32-bit-word reference
-/// implementation of FIPS 180-4 — fifty lines, no dependency, and byte-identical
-/// to `centraid_media::format::sha256_hex` over the same input (which
-/// `the_fixture_sha_is_the_vaults_sha` in `crates/apps/notes` proves).
-fn text_sha256(text: &str) -> String {
-    const K: [u32; 64] = [
-        0x428a_2f98,
-        0x7137_4491,
-        0xb5c0_fbcf,
-        0xe9b5_dba5,
-        0x3956_c25b,
-        0x59f1_11f1,
-        0x923f_82a4,
-        0xab1c_5ed5,
-        0xd807_aa98,
-        0x1283_5b01,
-        0x2431_85be,
-        0x550c_7dc3,
-        0x72be_5d74,
-        0x80de_b1fe,
-        0x9bdc_06a7,
-        0xc19b_f174,
-        0xe49b_69c1,
-        0xefbe_4786,
-        0x0fc1_9dc6,
-        0x240c_a1cc,
-        0x2de9_2c6f,
-        0x4a74_84aa,
-        0x5cb0_a9dc,
-        0x76f9_88da,
-        0x983e_5152,
-        0xa831_c66d,
-        0xb003_27c8,
-        0xbf59_7fc7,
-        0xc6e0_0bf3,
-        0xd5a7_9147,
-        0x06ca_6351,
-        0x1429_2967,
-        0x27b7_0a85,
-        0x2e1b_2138,
-        0x4d2c_6dfc,
-        0x5338_0d13,
-        0x650a_7354,
-        0x766a_0abb,
-        0x81c2_c92e,
-        0x9272_2c85,
-        0xa2bf_e8a1,
-        0xa81a_664b,
-        0xc24b_8b70,
-        0xc76c_51a3,
-        0xd192_e819,
-        0xd699_0624,
-        0xf40e_3585,
-        0x106a_a070,
-        0x19a4_c116,
-        0x1e37_6c08,
-        0x2748_774c,
-        0x34b0_bcb5,
-        0x391c_0cb3,
-        0x4ed8_aa4a,
-        0x5b9c_ca4f,
-        0x682e_6ff3,
-        0x748f_82ee,
-        0x78a5_636f,
-        0x84c8_7814,
-        0x8cc7_0208,
-        0x90be_fffa,
-        0xa450_6ceb,
-        0xbef9_a3f7,
-        0xc671_78f2,
-    ];
-    let mut hash: [u32; 8] = [
-        0x6a09_e667,
-        0xbb67_ae85,
-        0x3c6e_f372,
-        0xa54f_f53a,
-        0x510e_527f,
-        0x9b05_688c,
-        0x1f83_d9ab,
-        0x5be0_cd19,
-    ];
-    let mut message = text.as_bytes().to_vec();
-    let bit_length = (message.len() as u64) * 8;
-    message.push(0x80);
-    while message.len() % 64 != 56 {
-        message.push(0);
-    }
-    message.extend_from_slice(&bit_length.to_be_bytes());
-    for chunk in message.chunks(64) {
-        let mut words = [0u32; 64];
-        for (index, word) in chunk.chunks(4).enumerate() {
-            words[index] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
-        }
-        for index in 16..64 {
-            let s0 = words[index - 15].rotate_right(7)
-                ^ words[index - 15].rotate_right(18)
-                ^ (words[index - 15] >> 3);
-            let s1 = words[index - 2].rotate_right(17)
-                ^ words[index - 2].rotate_right(19)
-                ^ (words[index - 2] >> 10);
-            words[index] = words[index - 16]
-                .wrapping_add(s0)
-                .wrapping_add(words[index - 7])
-                .wrapping_add(s1);
-        }
-        let mut state = hash;
-        for index in 0..64 {
-            let s1 =
-                state[4].rotate_right(6) ^ state[4].rotate_right(11) ^ state[4].rotate_right(25);
-            let choose = (state[4] & state[5]) ^ ((!state[4]) & state[6]);
-            let temp1 = state[7]
-                .wrapping_add(s1)
-                .wrapping_add(choose)
-                .wrapping_add(K[index])
-                .wrapping_add(words[index]);
-            let s0 =
-                state[0].rotate_right(2) ^ state[0].rotate_right(13) ^ state[0].rotate_right(22);
-            let majority = (state[0] & state[1]) ^ (state[0] & state[2]) ^ (state[1] & state[2]);
-            let temp2 = s0.wrapping_add(majority);
-            state[7] = state[6];
-            state[6] = state[5];
-            state[5] = state[4];
-            state[4] = state[3].wrapping_add(temp1);
-            state[3] = state[2];
-            state[2] = state[1];
-            state[1] = state[0];
-            state[0] = temp1.wrapping_add(temp2);
-        }
-        for (index, word) in state.iter().enumerate() {
-            hash[index] = hash[index].wrapping_add(*word);
-        }
-    }
-    hash.iter().map(|word| format!("{word:08x}")).collect()
+/// **ONE HASH** (#1025 S4, D-1025-S4-1). This used to be a fifty-line reference
+/// implementation of FIPS 180-4, carried so the kit would depend on no hashing
+/// crate — and it was a second implementation of a format decision that belongs
+/// to `crates/media`, kept honest only by one cross-crate test. There is no
+/// reference implementation of BLAKE3 worth hand-rolling, and no longer any
+/// reason to want one: `blake3` is one small dependency and it is the SAME
+/// function the vault deduplicates on, which is what that test was checking.
+fn text_content_hash(text: &str) -> String {
+    hex::encode(blake3::hash(text.as_bytes()).as_bytes())
 }
 
 /// The three schemes the Notes corpus needs, and their concepts.
@@ -3475,12 +3358,12 @@ fn seed_notes_demo(
     connection
         .execute(
             "INSERT INTO core_content_item
-               (content_id, content_uri, sha256, byte_size, language, creator_party_id,
+               (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
                 origin_device_id, deleted_at, purge_at, created_at, updated_at)
              VALUES (?1, 'blob:blake3-aa', ?2, 4096, NULL, ?3, NULL, NULL, NULL, ?4, ?4)",
             rusqlite::params![
                 attachment_content,
-                text_sha256("the cabin's confirmation page"),
+                text_content_hash("the cabin's confirmation page"),
                 owner_party_id,
                 created
             ],
@@ -3782,7 +3665,7 @@ fn seed_year3_notes(
     }
 
     // THE LONG BODY, written ONCE and rented by every note that carries one:
-    // bodies are sha256-deduped, so 600 notes over one 48 KiB body is what the
+    // bodies are hash-deduped, so 600 notes over one 48 KiB body is what the
     // product actually stores — and it is also the case a fold that decodes per
     // ROW rather than per CONTENT gets wrong.
     let long_text = "lorem ipsum dolor sit amet ".repeat(shape.long_body_bytes / 27 + 1);
@@ -5288,7 +5171,7 @@ pub fn seed_undated_asset(
 ) -> KitResult<()> {
     connection
         .execute(
-            "INSERT INTO core_content_item (content_id, content_uri, sha256, byte_size, created_at)
+            "INSERT INTO core_content_item (content_id, content_uri, content_hash, byte_size, created_at)
              VALUES (?1, 'blob:ff', ?2, 10, ?3)",
             rusqlite::params![content_id, format!("{:064x}", 0xffff_u32), now],
         )

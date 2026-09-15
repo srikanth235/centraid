@@ -419,21 +419,14 @@ fn a_three_megabyte_capture_stages_in_frames_that_fit() {
     let mut port = BrowserPort::open(Some(&seat.socket), Some(&token));
 
     let bytes: Vec<u8> = (0..3 * 1024 * 1024).map(|at| (at % 251) as u8).collect();
-    let digest = {
-        use sha2::Digest as _;
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(&bytes);
-        hasher
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>()
-    };
+    // THE VAULT'S DIGEST, not a second one computed here (#1025 S4): the handle
+    // this door answers is the value `core.add_document` deduplicates on.
+    let digest = centraid_vault::content::content_digest(&bytes);
     let begun = port.ask(&serde_json::json!({
         "t": "stage:begin",
         "media_type": "image/png",
         "byte_size": bytes.len(),
-        "sha256": digest,
+        "content_hash": digest,
     }));
     assert_eq!(begun["t"], "ok", "{begun}");
     let staging_id = begun["value"]["staging_id"]
@@ -471,7 +464,7 @@ fn a_three_megabyte_capture_stages_in_frames_that_fit() {
         "staging_id": staging_id,
     }));
     assert_eq!(handle["t"], "ok", "{handle}");
-    assert_eq!(handle["value"]["sha256"], digest);
+    assert_eq!(handle["value"]["content_hash"], digest);
     assert_eq!(handle["value"]["byte_size"], bytes.len());
     // HONEST ABOUT WHERE THE BYTES STOP (D-1020-X3).
     assert_eq!(handle["value"]["claimed"], false);

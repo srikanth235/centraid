@@ -83,8 +83,8 @@ fn samples() -> Vec<SampleFrame> {
             width: u32::try_from(entry["width"].as_u64().expect("a width")).expect("a width"),
             height: u32::try_from(entry["height"].as_u64().expect("a height")).expect("a height"),
             byte_size: entry["byte_size"].as_i64().expect("a byte size"),
-            sha256: Box::leak(
-                entry["sha256"]
+            content_hash: Box::leak(
+                entry["content_hash"]
                     .as_str()
                     .expect("a digest")
                     .to_owned()
@@ -170,13 +170,14 @@ fn the_contracts_sample_directory_is_the_v0_roll() {
         }
         let ours = fs::read(root().join("contracts/apps/photos/sample").join(frame.file))
             .unwrap_or_else(|error| panic!("{}: {error}", frame.file));
-        let theirs = fs::read(
-            root()
-                .join("packages/blueprints/apps/photos/sample")
-                .join(frame.file),
-        )
-        .unwrap_or_else(|error| panic!("{}: {error}", frame.file));
-        assert_eq!(ours, theirs, "{} drifted from the v0 roll", frame.file);
+        // THE v0 COPY IS GONE (#1025 S4). This compared the contracts roll
+        // against `packages/blueprints/apps/photos/sample` byte for byte;
+        // `chore(retire): delete the v0 tree` removed that directory, and the
+        // copy under `contracts/` is the roll now. What the comparison was
+        // protecting — that the manifest describes the FILES and not some other
+        // bytes — is asserted below against the files themselves, which is
+        // stronger: `cargo xtask photos-sample` regenerates the manifest from
+        // them, so a drift is a regeneration diff rather than a lost oracle.
         assert_eq!(
             i64::try_from(ours.len()).expect("a length"),
             frame.byte_size,
@@ -680,15 +681,19 @@ fn the_bundle_is_v0s_own_answers_and_says_how_many() {
     );
     // Presentation is still deferred the same way Tally's is (D-1020-D3-9).
     assert_eq!(manifest["design"], serde_json::json!("deferred"));
-    let command = manifest["regenerate"]
-        .as_str()
-        .expect("the manifest names the command that produces the bundle");
-    assert!(command.contains("export-photos-parity"), "{command}");
+    // IT IS EVIDENCE, NOT OUTPUT (#1025 S4). See the same change in
+    // `crates/apps/locker/tests/parity.rs`: the generator this named went with
+    // the v0 tree, so the manifest says `frozen` and this asserts that it says
+    // so rather than asserting a deleted file exists.
     assert!(
-        root()
-            .join("contracts/tools/export-photos-parity.ts")
-            .is_file(),
-        "the generator the manifest names is not there"
+        manifest["regenerate"].is_null(),
+        "the bundle is frozen: there is no command that reproduces it"
+    );
+    assert!(
+        manifest["frozen"]
+            .as_str()
+            .is_some_and(|why| why.contains("#1025 S4")),
+        "the manifest must SAY the bundle is frozen, and why"
     );
 
     // The queries the bundle carries are the manifest's own eight, and the

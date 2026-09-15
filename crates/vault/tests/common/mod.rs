@@ -43,22 +43,42 @@ impl Scratch {
         Ok(scratch)
     }
 
-    /// The same, with a LOCAL CONTENT STORE beside it.
+    /// The same, with THE BYTE PLANE'S CONTENT STORE beside it (#1025 S3).
     ///
     /// Separate from [`Self::founded`] and deliberately so: a vault with no
     /// store refuses every binary byte, and that is a real configuration with
     /// its own behaviour worth testing — a command that silently wrote a row
     /// pointing at bytes nothing kept would pass a test that always had a
-    /// store. See `Vault::with_blobs`.
+    /// store.
+    ///
+    /// It is **the real store**, `<vault>.bytes` behind
+    /// `centraid_blobs::ContentBytes`, and not a stand-in. A device holds one
+    /// content store (D-1025-S3-1), so a test fixture that attached a second
+    /// kind would be testing an arrangement no device has — which is precisely
+    /// how the flat CAS these tests used to open went a year without anyone
+    /// noticing that nothing else on a device read it.
+    ///
+    /// The runtime is the fixture's own and is leaked with it: these vaults
+    /// live for the length of one test binary, and shutting an iroh store down
+    /// from a `Drop` that may run on a runtime thread is the deadlock this note
+    /// exists to avoid.
     pub fn founded_with_blobs(seed: &str) -> Result<Self> {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir)?;
         let clock = Arc::new(FixedClock::frozen());
         let file = dir.join("vault.db");
-        let blobs = centraid_vault::backup::store::FsBlobStore::open_content(
-            centraid_vault::file::Vault::blobs_root_for(&file),
-        )
-        .expect("a content store opens");
+        let runtime = Box::leak(Box::new(
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("a runtime"),
+        ));
+        let store = runtime
+            .block_on(centraid_blobs::ByteStore::open(
+                file.with_extension("bytes"),
+            ))
+            .expect("a content store opens");
+        let blobs = centraid_blobs::ContentBytes::new(store, runtime.handle().clone());
         let vault = Vault::create_with(
             file,
             Box::new(Arc::clone(&clock)),
@@ -110,13 +130,13 @@ pub fn insert_note(vault: &Vault, title: &str) -> Result<String> {
         // wrapper that addresses it.
         tx.connection().execute(
             "INSERT INTO core_content_item
-               (content_id, content_uri, sha256, byte_size, creator_party_id,
+               (content_id, content_uri, content_hash, byte_size, creator_party_id,
                 created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
             rusqlite::params![
                 content_id,
                 format!("inline:{body}"),
-                hex::encode(<sha2::Sha256 as sha2::Digest>::digest(body.as_bytes())),
+                centraid_vault::content::content_digest(body.as_bytes()),
                 body.len() as i64,
                 author,
                 now

@@ -225,6 +225,10 @@ pub fn lockfile(root: &Path) -> Result<Verdict> {
             }
             findings.push(format!("bun.lock carries a non-TLS package URL: {url}"));
         }
+        // `sha512-` / `sha256-` are Subresource Integrity's own spelling, which
+        // npm writes into a lockfile and this step only reads. Not Centraid's
+        // naming, and therefore not what #1025 S4's one-hash rule governs
+        // (D-1025-S4-5).
         if !(text.contains("integrity") || text.contains("sha512-") || text.contains("sha256-")) {
             findings.push(
                 "bun.lock has no integrity or hash markers at all, so nothing in it is pinned by content".to_owned(),

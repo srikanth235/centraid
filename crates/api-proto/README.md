@@ -20,7 +20,6 @@ The split is not cosmetic: it is why the gateway can promise stability to seats 
 | `value.proto` | `Value` (SQLite's five storage classes), `NullValue`, `RecordKey` |
 | `row.proto` | `RowImage`, `PriorDelta` — the absent-versus-NULL and delta-prior contracts |
 | `log.proto` | `LogRow`, `LogPage`, `LogCursor`, `RebootstrapRequired`, `LogRequest` |
-| `snapshot.proto` | `SnapshotHead` — the pointer; the artifact moves over iroh-blobs by digest |
 | `intent.proto` | `Intent`, `BaseVersion`, `Outcome`, `Conflict`, `WaitingOn`, `ProducedRow` |
 | `command.proto` | `Command`, `Principal`, `CommandOutcome` |
 | `query.proto` | `PageQuery`, `PageOrder`, `PageCursor`, `PageRequest`, `Page`, `Row` |

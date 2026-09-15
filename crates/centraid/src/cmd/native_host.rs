@@ -405,10 +405,6 @@ impl Host {
                     .get("byte_size")
                     .and_then(serde_json::Value::as_u64)
                     .unwrap_or(0),
-                message
-                    .get("sha256")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or_default(),
             ),
             "chunk" => self.staging.chunk(
                 message
@@ -446,7 +442,7 @@ impl Host {
                 "chunk_bytes": stage::MAX_CHUNK_BYTES,
                 // THE SPLIT THE HOST EXPECTS, so the sender's plan and the
                 // assembler's agree before the first chunk rather than at the
-                // digest check (`stage-core.ts` computes the same number).
+                // length check (`stage-core.ts` computes the same number).
                 "chunks": stage::chunk_count(
                     message
                         .get("byte_size")
@@ -457,8 +453,11 @@ impl Host {
             Ok(stage::Staged::Chunked { received }) => {
                 ok(serde_json::json!({ "received": received }))
             }
-            Ok(stage::Staged::Handle { sha256, byte_size }) => ok(serde_json::json!({
-                "sha256": sha256,
+            Ok(stage::Staged::Handle {
+                content_hash,
+                byte_size,
+            }) => ok(serde_json::json!({
+                "content_hash": content_hash,
                 "byte_size": byte_size,
                 // HONEST ABOUT WHERE THE BYTES STOP (D-1020-X3): the handle is
                 // real and content-addressed; promoting it into the staging band

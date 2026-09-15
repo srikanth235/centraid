@@ -38,6 +38,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import type { IconName, IconPath } from "../../packages/design/src/icons.ts";
 import {
   APP_MARK_SMALL_STROKE,
   APP_MARK_STROKE,
@@ -50,7 +51,6 @@ import {
   icons,
   toNativeTheme,
 } from "../../packages/design/src/index.ts";
-import type { IconName, IconPath } from "../../packages/design/src/icons.ts";
 import type { NativeScheme } from "../../packages/design/src/native.ts";
 
 const SCHEMES: readonly NativeScheme[] = ["light", "dark"];

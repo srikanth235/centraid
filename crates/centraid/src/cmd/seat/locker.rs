@@ -738,7 +738,8 @@ mod tests {
         let text = std::fs::read_to_string(&path).expect("read");
         let wrapped: WrappedKey = serde_json::from_str(&text).expect("parsed");
         assert_eq!(wrapped.key_id, "key-1");
-        assert_eq!(wrapped.iterations, centraid_seat::locker::WRAP_ITERATIONS);
+        assert_eq!(wrapped.kdf, centraid_seat::locker::WRAP_KDF);
+        assert_eq!(wrapped.iterations, centraid_seat::locker::WRAP_TIME_COST);
         let custody = centraid_vault::custody::member_key::MemberKeyCustody::on_seat(
             dir.path(),
             "vault-1".to_owned(),

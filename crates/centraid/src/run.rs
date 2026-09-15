@@ -8,9 +8,12 @@ use std::path::{Path, PathBuf};
 
 use centraid_net::endpoint::{Endpoint, EndpointConfig, RelayMode};
 use centraid_net::{MemoryAllowlist, pairing, ticket};
-use centraid_protocol::alpn;
 
 use crate::exit;
+
+/// The gateway's long-term endpoint identity, in the key store beside the
+/// vault. One name, stated once: a second spelling would be a second gateway.
+const GATEWAY_ENDPOINT_KEY: &str = "gateway.endpoint.key";
 
 /// One line on stderr, so stdout stays parseable. `RUST_LOG`-style filters
 /// through `--log` / `CENTRAID_LOG`.
@@ -36,7 +39,13 @@ pub fn not_yet_available(verb: &str, owner: &str) -> u8 {
 
 pub struct GatewayArgs {
     pub data_dir: Option<PathBuf>,
-    pub print_qr: bool,
+    /// HOW MANY PAIR TICKETS TO MINT AT STARTUP (#1025 S3).
+    ///
+    /// A count and not a flag, because a member with a phone AND a tablet needs
+    /// two codes and a ticket is one-shot by design — burned by redemption, so
+    /// the second device cannot reuse the first's. `--print-qr` with no value
+    /// is one, which is every existing invocation.
+    pub print_qr: u8,
     pub vault_name: String,
     pub relay: Option<String>,
     pub no_relay: bool,
@@ -50,7 +59,7 @@ fn relay_mode(relay: Option<String>, no_relay: bool) -> RelayMode {
     }
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|since| since.as_millis() as u64)
@@ -89,8 +98,46 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
         }
     }
 
+    // THE GATEWAY'S OWN IDENTITY, AND IT IS LONG-TERM (#1025 S7,
+    // **D-1025-S7-8x**).
+    //
+    // A persisted allowlist is only half of "a paired seat still works after a
+    // restart". `EndpointConfig::default()` mints a fresh secret key, and
+    // `EndpointConfig::secret_key`'s own doc says what that means: "an identity
+    // that changes is a gateway every paired seat stops recognising". The
+    // pairing record a phone keeps names the gateway by its endpoint id, so a
+    // gateway that re-minted its key was unreachable at the only address its
+    // seats had — before admission was even asked.
+    //
+    // It lives in the KEY STORE beside the vault (`<data-dir>/keys`), which is
+    // the directory export, backup and copy gestures deliberately do not move:
+    // a copied vault must not come with the authority to answer as its gateway.
+    // A gateway with no `--data-dir` has nowhere to keep it and mints a fresh
+    // one, which is the ephemeral run it already was.
+    let secret_key = args.data_dir.as_ref().and_then(|dir| {
+        let keys = centraid_vault::custody::KeyStore::new(crate::cmd::keys_dir_in(dir));
+        for warning in keys.take_warnings() {
+            eprintln!("centraid: {warning}");
+        }
+        match keys.load_or_create(GATEWAY_ENDPOINT_KEY) {
+            Ok(secret) => <[u8; 32]>::try_from(secret.as_slice())
+                .ok()
+                .map(|bytes| centraid_net::endpoint::EndpointSecretKey::from_bytes(&bytes)),
+            Err(error) => {
+                // NOT FATAL, AND SAID OUT LOUD. A gateway that cannot keep its
+                // identity still serves this run; what it must not do is fail
+                // to mention that every seat will have to pair again.
+                eprintln!(
+                    "centraid: this gateway could not keep its endpoint identity ({error}); \
+                     it minted a fresh one and every paired seat must pair again."
+                );
+                None
+            }
+        }
+    });
     let config = EndpointConfig {
         relay: relay_mode(args.relay, args.no_relay),
+        secret_key,
         ..EndpointConfig::default()
     };
     let endpoint = match Endpoint::spawn(config).await {
@@ -101,18 +148,15 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
         }
     };
 
-    // D-1020-C8: the durable ALLOWLIST lands in crates/vault (lane D2). The
-    // VAULT is durable as of wave 3 lane G, and the difference is stated line
-    // by line below rather than left as one vague warning — "nothing is
-    // durable" and "the vault is durable and the pairings are not" are
-    // different operational facts, and an operator about to restart a gateway
-    // needs the second one.
-    let allowlist = std::sync::Arc::new(MemoryAllowlist::new());
+    // The allowlist is built BELOW, once it is known whether there is a vault
+    // to keep it in (#1025 S7, D-1025-S7-8x).
     let mut capture = None;
     // Remembered before `capture` is moved into the tick, because the seat lane
     // opens its own reader over the same file.
     let mut vault_file: Option<PathBuf> = None;
     let mut vault_id: Option<String> = None;
+    // The vault's own `display_name`, once there is a vault to ask.
+    let mut vault_display_name: Option<String> = None;
     // THE BYTE PLANE'S INDEX, and it is NOT `<data-dir>/blobs` (#1020,
     // D-1020-B1). That path is `cmd::blobs_dir_in`, the BACKUP plane's shared
     // artefact store, and putting an iroh-blobs index over it would have two
@@ -120,9 +164,9 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
     // for the same reason the content CAS is: a vault handed to someone else
     // is handed over whole, and a sibling directory travels with its file.
     let mut bytes_dir: Option<PathBuf> = None;
-    // The vault's own CAS, which since D-1020-B2 is BLAKE3-named — so the byte
-    // store can take it in place rather than translate it.
-    let mut content_cas: Option<PathBuf> = None;
+    // Where the bootstrap artifact is BUILT (#1025 S1). Scratch: the bytes a
+    // seat fetches come from the byte store, which took its own copy.
+    let mut snapshot_dir: Option<PathBuf> = None;
     match &args.data_dir {
         Some(dir) => {
             match open_or_found_vault(dir, &args.vault_name) {
@@ -134,8 +178,14 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
                     );
                     vault_file = Some(founded.file.clone());
                     vault_id = Some(founded.vault_id.clone());
+                    vault_display_name = Some(founded.display_name.clone());
                     bytes_dir = Some(founded.file.with_extension("bytes"));
-                    content_cas = Some(centraid_vault::Vault::blobs_root_for(&founded.file));
+                    // ITS OWN DIRECTORY, not `snapshot::pre_migration_dir`.
+                    // That one holds the copies a migration can be rolled back
+                    // to, and this keeper sweeps everything but the current
+                    // artifact — pointing them at one directory would delete
+                    // the safety copy to save the space of a bootstrap.
+                    snapshot_dir = Some(founded.file.with_extension("snapshots"));
                     capture = Some(founded);
                 }
                 Err(why) => {
@@ -143,28 +193,11 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
                     return exit::REFUSED;
                 }
             }
-            eprintln!(
-                "centraid: the device allowlist is still IN MEMORY (D-1020-C8, wave 2 lane D2): \
-                 every pairing in this run is lost on exit and a paired seat must pair again \
-                 after a restart. The vault itself is not."
-            );
         }
         None => eprintln!(
             "centraid: no --data-dir, so there is no vault and the allowlist is in memory. \
              Nothing this run does survives it."
         ),
-    }
-
-    println!("{READY_LINE} endpoint={}", hex(&endpoint.id()));
-
-    if args.print_qr {
-        match pairing::mint(&endpoint, allowlist.as_ref(), &args.vault_name, now_ms()).await {
-            Ok(minted) => print_ticket(&minted.encoded),
-            Err(error) => {
-                eprintln!("centraid: could not mint a pair ticket: {error}");
-                return exit::REFUSED;
-            }
-        }
     }
 
     // THE WAL CAPTURE TICK (#1020, D-1020-G9). `rpoSeconds` is the tick, which
@@ -250,12 +283,15 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
         None => None,
         Some(file) => {
             let config = centraid_core::CoreConfig {
+                pairing: None,
                 path: file.clone(),
                 role: centraid_core::Role::Gateway,
                 ui_thread_name: None,
                 create: false,
                 clock: None,
                 ids: None,
+                // A GATEWAY IS NOT A SEAT. Its endpoint identity is its own
+                // and this field is the seat's (#1025 S5).
                 expected_digest: None,
             };
             match centraid_core::Core::open(config) {
@@ -275,6 +311,49 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
         }
     };
 
+    // THE ALLOWLIST, AND IT SURVIVES THIS PROCESS (#1025 S7, **D-1025-S7-8x**,
+    // superseding D-1020-C8's placeholder).
+    //
+    // Built HERE and not at the top, because which store it is depends on
+    // whether there is a vault: enrolment is a fact about the vault, and it is
+    // kept in the vault's own `access_device` rows — the same rows
+    // `centraid devices list` and `centraid devices revoke` already read and
+    // write. See `crate::allowlist` for why that is where it belongs and for
+    // the two deliberate differences from the in-memory store.
+    //
+    // A gateway with no `--data-dir` has no vault, keeps its enrolments in
+    // memory, and says so on the line below rather than in a warning printed
+    // whether it was true or not.
+    let allowlist = std::sync::Arc::new(match core.clone() {
+        Some(core) => crate::allowlist::GatewayAllowlist::durable(core),
+        None => crate::allowlist::GatewayAllowlist::memory(),
+    });
+    if !allowlist.is_durable() && args.data_dir.is_some() {
+        // A data directory whose vault would not open. Pairing still works for
+        // this run and nothing it enrols outlives it, which is a different fact
+        // from "you passed no --data-dir" and is stated as one.
+        eprintln!(
+            "centraid: this gateway has no core, so its allowlist is in memory: \
+             every pairing in this run is lost on exit."
+        );
+    }
+
+    // THE TAIL'S TWO HALVES (#1025 S2, D-1025-S7-40).
+    //
+    // `commits` is the wake a tailing seat parks on, and the CORE rings it:
+    // every request that may have written this vault ends with a ring, and the
+    // stream serving a seat reads the log from where it left off. This is the
+    // one registration, at startup, and every tail on every connection hangs
+    // off it — which is also why the ring carries no payload.
+    //
+    // `tails` is who is holding one. Presence falls out of it and stops at a
+    // log line; see `crate::tails`.
+    let commits = crate::tails::Commits::new();
+    let tails = crate::tails::Tails::default();
+    if let Some(core) = core.as_ref() {
+        core.watch_commits(std::sync::Arc::new(commits.clone()));
+    }
+
     // THE BYTE PLANE (#1020, D-1020-B1).
     //
     // Opened once and shared by every byte-lane connection: `ByteStore` is a
@@ -283,32 +362,17 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
     //
     // Non-fatal, exactly like the seat-lane core above. A gateway that cannot
     // open its blob store can still pair and still serve rows; what a seat gets
-    // is a byte lane that refuses, which shows up as photographs that have not
+    // is a `blob` stream that refuses, which shows up as photographs that have not
     // arrived rather than as a gateway that will not start.
     let blobs = match bytes_dir {
         None => None,
         Some(root) => match centraid_blobs::ByteStore::open(&root).await {
-            Ok(store) => {
-                // TAKE THE VAULT'S OWN BYTES IN. The CAS is BLAKE3-named and so
-                // is this store, so each file's name is the hash it must have —
-                // which makes the import a verification rather than a copy, and
-                // makes it safe to repeat on every start.
-                if let Some(cas) = &content_cas {
-                    match store.import_content_cas(cas).await {
-                        Ok((0, 0)) => {}
-                        Ok((imported, 0)) => {
-                            tracing::info!(imported, "the vault's files are on the byte lane");
-                        }
-                        Ok((imported, mismatched)) => tracing::warn!(
-                            imported,
-                            mismatched,
-                            "some files did not hash to their own name and were not served"
-                        ),
-                        Err(error) => tracing::warn!(%error, "the content store would not import"),
-                    }
-                }
-                Some(store)
-            }
+            // ONE STORE, AND THERE IS NOTHING TO IMPORT INTO IT (#1025 S3,
+            // D-1025-S3-1). This used to sweep the vault's flat `<vault>.blobs`
+            // CAS in on every start, because the vault wrote one store and the
+            // byte plane served another. The vault writes THIS one now, so an
+            // import would be importing the store into itself.
+            Ok(store) => Some(store),
             Err(error) => {
                 tracing::warn!(
                     %error,
@@ -320,77 +384,92 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
         },
     };
 
+    // THE VAULT'S BYTE DOOR, OVER THE STORE THE SEAT LANE SERVES FROM (#1025
+    // S3, D-1025-S3-1). One store per vault on this device: `media.add_asset`
+    // spills into the bytes a seat can fetch, `content_location` answers with
+    // iroh's own data file, and a photograph a phone sent is the same blob a
+    // second phone asks for.
+    //
+    // Attached after `Core::open` because opening the store is asynchronous and
+    // opening a core is not. A gateway with no store holds text and refuses
+    // photographs, by name — which is the same honest state it was in before,
+    // and not a gateway that will not start.
+    if let (Some(handle), Some(store)) = (core.as_ref(), blobs.as_ref()) {
+        handle.attach_bytes(centraid_blobs::ContentBytes::new(
+            store.clone(),
+            tokio::runtime::Handle::current(),
+        ));
+    }
+
+    // THE BACKFILL SWEEP (#1025 S3, D-1025-S7-53). A vault founded before
+    // derivatives existed holds originals and no tiers, and a fresh device
+    // paired to it sees the very defect this slice fixes: "thumbnails always"
+    // fetching nothing. Bounded and resumable, so a large old roll converges
+    // over several starts; a vault already swept selects nothing and writes
+    // nothing. Runs AFTER `attach_bytes`, because it has bytes to read.
+    //
+    // Non-fatal, like every other start step here: a sweep that fails is a
+    // gateway that serves rows and originals, which is exactly where it was.
+    if let Some(handle) = core.as_ref() {
+        match handle.derive_missing_tiers(centraid_vault::commands::media::DERIVE_SWEEP_LIMIT) {
+            Ok(0) => {}
+            Ok(derived) => tracing::info!(
+                derived,
+                "derived the missing thumbnail and preview tiers for content this vault \
+                 committed before the gateway made them"
+            ),
+            Err(error) => tracing::warn!(
+                %error,
+                "the derivative backfill did not run; originals still serve and the next \
+                 start tries again"
+            ),
+        }
+    }
+
+    // THE BOOTSTRAP BLOB'S KEEPER (#1025 S1). Needs both halves — a place to
+    // build the artifact and a store to put it in — so a gateway missing
+    // either serves rows and refuses bootstraps by name, which is a seat that
+    // says "the gateway has nowhere to build a copy" rather than one that
+    // hangs.
+    let snapshots = match (snapshot_dir, blobs.clone()) {
+        (Some(dir), Some(store)) => Some(crate::snapshots::Snapshots::new(dir, store)),
+        _ => None,
+    };
+
     // The accept loop. A refused connection is logged and the loop continues:
     // one impostor must not take the gateway down.
     let serving = {
         let endpoint = endpoint.clone();
         let allowlist = allowlist.clone();
-        let vault_name = args.vault_name.clone();
+        // THE VAULT'S OWN NAME WHERE THERE IS ONE (#1025 S7-9). The flag is the
+        // fallback for a gateway with no `--data-dir`, which has no vault to
+        // ask — and which serves no pairing either.
+        let vault_name = vault_display_name.clone().unwrap_or_else(|| args.vault_name.clone());
         let vault_id = vault_id.clone();
         let core = core.clone();
         let blobs = blobs.clone();
+        let snapshots = snapshots.clone();
+        let commits = commits.clone();
+        let tails = tails.clone();
         tokio::spawn(async move {
             loop {
                 match endpoint.accept(allowlist.as_ref()).await {
                     Ok(None) => break,
-                    Ok(Some(accepted)) if accepted.alpn == alpn::PAIR => {
-                        // THE VAULT'S OWN ID, not the literal "vault". A seat
-                        // keys its whole replica on what it is told here —
-                        // `SeatIdentity::storage_key` is `sha256(gateway_id ‖
-                        // vault_id)` and names the replica file — so a constant
-                        // meant every vault on every gateway hashed to one key,
-                        // AND it never matched the id the log pages carry, so
-                        // nothing a seat downloaded could be tied back to the
-                        // vault it came from. Found by `tests/seat_lane.rs`,
-                        // which compares the two.
-                        let outcome = pairing::serve_redemption(
-                            &accepted.connection,
-                            allowlist.as_ref(),
-                            vault_id.as_deref().unwrap_or_default(),
-                            &vault_name,
-                            &hex(&endpoint.id()),
-                            now_ms(),
-                        )
-                        .await;
-                        // THE CLOSE HANDSHAKE (#1020, D-1020-G10). The
-                        // redemption is answered and flushed; dropping the
-                        // connection now would send CONNECTION_CLOSE and
-                        // discard the response before the seat read it — which
-                        // is a member told pairing failed on a device the
-                        // gateway just enrolled. Waiting for the PEER's close
-                        // is the synchronisation; the timeout is only there so
-                        // a seat that never closes cannot hold the lane, and it
-                        // is generous because it is a backstop and not a
-                        // guess at the network.
-                        let _ = tokio::time::timeout(
-                            std::time::Duration::from_secs(10),
-                            accepted.connection.closed(),
-                        )
-                        .await;
-                        match outcome {
-                            Ok(redeemed) => match redeemed.device {
-                                Some(device) => tracing::info!(
-                                    device = %device.device_id,
-                                    label = %device.label,
-                                    "a device paired"
-                                ),
-                                None => tracing::warn!("a redemption was refused"),
-                            },
-                            Err(error) => tracing::warn!(%error, "the pair lane failed"),
-                        }
-                    }
-                    // EVERY ARM NAMES ITS ALPN (#1020, D-1020-B1). This one
-                    // was an unguarded `Ok(Some(accepted))` and therefore
-                    // matched every lane that was not `PAIR`. The byte lane's
-                    // arm below became unreachable the moment it was added, so
-                    // a `centraid/v1/byte` connection would have been handed to
-                    // the envelope reader, which would have tried to parse
-                    // iroh-blobs' protocol as a length-framed frame. The
-                    // compiler said so; nothing at runtime would have.
-                    Ok(Some(accepted)) if accepted.alpn == alpn::SEAT => {
-                        // THE SEAT LANE (#1020, lane D2). `accept` has already
-                        // refused an unenrolled peer above this line, so the
-                        // device on `accepted` is enrolled by construction.
+                    // THE ONE PLANE, AND A CONNECTION IS IN ONE OF TWO STATES
+                    // (#1025 S3, D-1025-S3-4).
+                    //
+                    // `accept` looked the peer key up once; `device` is `Some`
+                    // for an enrolled, unrevoked device and `None` for everyone
+                    // else. Both go to the same lane, and the lane serves a
+                    // PROVISIONAL connection one `pair` stream and promotes it
+                    // in place if the ticket redeems — so a phone pairs and
+                    // bootstraps on one dial.
+                    //
+                    // There used to be two arms here and two ALPNs, and for a
+                    // while a third arm for `centraid/v1/byte` was unreachable
+                    // because the arm above it matched every lane but `PAIR`.
+                    // The compiler said so; nothing at runtime would have.
+                    Ok(Some(accepted)) => {
                         let device = accepted
                             .device
                             .as_ref()
@@ -402,74 +481,131 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
                             // which a seat would apply as "nothing changed".
                             tracing::warn!(
                                 %device,
-                                "a seat connected and this gateway holds no vault; \
+                                "a device connected and this gateway holds no vault; \
                                  start it with --data-dir"
                             );
                             continue;
                         };
-                        // ONE TASK PER SEAT, so a slow replica cannot hold the
-                        // accept loop and the next device can still pair.
+                        let lane = crate::seat_lane::Lane {
+                            handle: core,
+                            snapshots: snapshots.clone(),
+                            blobs: blobs.clone(),
+                            device_id: device.clone(),
+                            commits: commits.clone(),
+                            tails: tails.clone(),
+                        };
+                        let pairing = crate::seat_lane::Pairing {
+                            allowlist: allowlist.clone(),
+                            vault_id: vault_id.clone().unwrap_or_default(),
+                            vault_name: vault_name.clone(),
+                            gateway_address: hex(&endpoint.id()),
+                            // THE HINTS THE TICKET CARRIES, CARRIED AGAIN ON
+                            // THE ANSWER (#1025 S7, item 3). The shell persists
+                            // the pairing record in its secure store before
+                            // there is a replica to put it in, and one with no
+                            // way to dial is a durable identity presented to
+                            // nobody.
+                            //
+                            // THE ENDPOINT AND NOT THE ANSWER, because reading
+                            // the answer is an `await`: `Endpoint::addr` waits
+                            // on the address watcher, and awaiting it anywhere
+                            // in the ACCEPT LOOP — which is one task — stalls
+                            // every other device trying to connect. It is read
+                            // inside the per-connection task instead.
+                            endpoint: endpoint.clone(),
+                        };
+                        // ONE TASK PER CONNECTION, so a slow replica cannot
+                        // hold the accept loop and the next device can still
+                        // pair. The connection is MOVED into it: a seat's
+                        // window can end at any moment and holding `accepted`
+                        // for the task's length is what keeps QUIC from
+                        // discarding stream data the seat has not read
+                        // (D-1020-G10).
                         tokio::spawn(async move {
                             match crate::seat_lane::serve(
                                 &accepted.connection,
-                                core,
+                                lane,
                                 env!("CARGO_PKG_VERSION"),
+                                &pairing,
                             )
                             .await
                             {
-                                crate::seat_lane::Ended::PeerClosed { pages, rows } => {
-                                    tracing::info!(%device, pages, rows, "a seat caught up");
+                                crate::seat_lane::Ended::PeerClosed { streams, rows } => {
+                                    tracing::info!(%device, streams, rows, "a seat's window closed");
                                 }
                                 crate::seat_lane::Ended::Failed(why) => {
-                                    tracing::warn!(%device, %why, "the seat lane ended");
+                                    tracing::warn!(%device, %why, "the seat plane ended");
+                                }
+                                crate::seat_lane::Ended::Unredeemed(why) => {
+                                    // A STRANGER, not a device. Its own line
+                                    // because the operator's question is
+                                    // different: this is somebody who reached
+                                    // the gateway and did not pair, which on a
+                                    // public relay is ordinary and on a LAN is
+                                    // worth a look.
+                                    tracing::info!(%why, "an unenrolled peer did not pair");
+                                    // AND THE CONNECTION GOES, on this side
+                                    // (#1025 S3). A stranger must not be left
+                                    // holding a connection to a gateway it has
+                                    // no business on, and it will not close one
+                                    // it is squatting on. The wait below
+                                    // delivers the refusal first; this is what
+                                    // happens when the peer does not close.
+                                    let _ = tokio::time::timeout(
+                                        std::time::Duration::from_secs(2),
+                                        accepted.connection.closed(),
+                                    )
+                                    .await;
+                                    accepted.connection.close_unauthorized();
                                 }
                             }
-                        });
-                    }
-                    Ok(Some(accepted)) if accepted.alpn == alpn::BYTE => {
-                        // THE BYTE LANE (#1020, D-1020-B1). `accept` gates this
-                        // ALPN on the same allowlist rule as the seat lane, so
-                        // the peer here is an enrolled, unrevoked device.
-                        let device = accepted
-                            .device
-                            .as_ref()
-                            .map(|device| device.device_id.clone())
-                            .unwrap_or_default();
-                        let Some(blobs) = blobs.clone() else {
-                            tracing::warn!(
-                                %device,
-                                "a seat asked for files and this gateway has no byte store"
-                            );
-                            continue;
-                        };
-                        // ONE TASK PER CONNECTION, and the connection is MOVED
-                        // into it. A seat's window can end at any moment and
-                        // the next one arrives as a new connection; holding
-                        // `accepted` for the task's length is what keeps QUIC
-                        // from discarding stream data the seat has not read,
-                        // which is the same rule the pair lane learned the hard
-                        // way (D-1020-G10).
-                        tokio::spawn(async move {
-                            centraid_blobs::serve(&blobs, accepted.connection.iroh().clone()).await;
-                            tracing::info!(%device, "a byte-lane window closed");
+                            // THE CLOSE HANDSHAKE (#1020, D-1020-G10). Dropping
+                            // the connection sends CONNECTION_CLOSE and
+                            // discards anything the peer has not read — which
+                            // for a refused pairing is a member told it failed
+                            // on a device the gateway just enrolled. Waiting
+                            // for the PEER's close is the synchronisation; the
+                            // timeout is a backstop so a peer that never closes
+                            // cannot hold a task.
+                            let _ = tokio::time::timeout(
+                                std::time::Duration::from_secs(10),
+                                accepted.connection.closed(),
+                            )
+                            .await;
                             drop(accepted);
                         });
-                    }
-                    Ok(Some(accepted)) => {
-                        // An ALPN this build advertises and this loop does not
-                        // serve. `Endpoint::accept` refuses anything it does
-                        // not know, so reaching here means an advertised lane
-                        // lost its arm — worth a line rather than a silent drop.
-                        tracing::warn!(
-                            alpn = %String::from_utf8_lossy(&accepted.alpn),
-                            "an advertised lane has no arm in the accept loop"
-                        );
                     }
                     Err(error) => tracing::warn!(%error, "a connection was refused"),
                 }
             }
         })
     };
+
+    // READY IS AFTER THE ACCEPT LOOP EXISTS, AND THAT IS THE WHOLE POINT
+    // (#1025 S7).
+    //
+    // It used to be printed — with the pairing ticket right behind it —
+    // BEFORE the vault was opened, the byte store was opened and this task was
+    // spawned. So every script that waits on this line, which is what the line
+    // is for, got it while the gateway could not yet accept a connection: on a
+    // seeded fixture that window was long enough for a phone to dial, wait out
+    // its whole pairing timeout and be told the gateway did not answer, while
+    // the gateway's own log said a peer had aborted a handshake.
+    //
+    // A gateway that says it is ready and then refuses connections is lying to
+    // the one caller that believes it. Nothing here is slower; the line is
+    // simply true now.
+    println!("{READY_LINE} endpoint={}", hex(&endpoint.id()));
+
+    for _ in 0..args.print_qr {
+        match pairing::mint(&endpoint, allowlist.as_ref(), &args.vault_name, now_ms()).await {
+            Ok(minted) => print_ticket(&minted.encoded),
+            Err(error) => {
+                eprintln!("centraid: could not mint a pair ticket: {error}");
+                return exit::REFUSED;
+            }
+        }
+    }
 
     let _ = tokio::signal::ctrl_c().await;
     tracing::info!("shutting down");
@@ -484,6 +620,13 @@ pub async fn gateway(args: GatewayArgs) -> u8 {
 /// What the gateway holds open for a data directory.
 struct FoundedVault {
     vault_id: String,
+    /// THE VAULT'S OWN NAME, read out of `core_vault` (#1025 S7-9).
+    ///
+    /// Not `args.vault_name`. That flag names a vault at FOUNDING and is a
+    /// guess at every moment afterwards: a seeded fixture called "Tahoe Demo"
+    /// was served to a pairing phone as "Centraid", because "Centraid" is the
+    /// flag's default and the flag was what the answer carried.
+    display_name: String,
     file: PathBuf,
     data_dir: PathBuf,
     capture: crate::cmd::capture::WalCapture,
@@ -562,24 +705,12 @@ fn open_or_found_vault(data_dir: &Path, display_name: &str) -> Result<FoundedVau
     // has to happen before anything serves from it.
     let vault =
         Vault::open(&file).map_err(|error| format!("opening {}: {error}", file.display()))?;
-    // THE SAME CONVENTION THE CORE USES, and that is the point: a vault file
-    // must hold the same bytes whichever process opened it. A gateway that
-    // derived its own location would refuse a photograph the phone had just
-    // accepted, over the same file. `cmd::blobs_dir_in` is the BACKUP plane's
-    // shared store and is a different question.
-    let blobs_root = Vault::blobs_root_for(&file);
-    let vault = match centraid_vault::backup::store::FsBlobStore::open_content(&blobs_root) {
-        Ok(store) => vault.with_blobs(Box::new(store)),
-        Err(error) => {
-            // Not fatal: the vault's rows still serve and every text write
-            // still lands. Binary writes refuse, naming the cause.
-            tracing::warn!(
-                "no content store at {}: {error} — this vault can hold text and nothing else",
-                blobs_root.display()
-            );
-            vault
-        }
-    };
+    // THE CONTENT STORE IS ATTACHED LATER, and not here (#1025 S3). Opening the
+    // byte plane's store is asynchronous and this function is not; the gateway
+    // opens `<vault>.bytes` once, beside the seat lane that serves from it, and
+    // hands the SAME handle to this vault's byte door. Two stores over one
+    // directory would be two indexes over one set of files, which is what
+    // D-1025-S3-1 deleted.
     let vault_id = vault
         .vault_id()
         .map_err(|error| error.to_string())?
@@ -602,8 +733,14 @@ fn open_or_found_vault(data_dir: &Path, display_name: &str) -> Result<FoundedVau
         eprintln!("centraid: {warning}");
     }
     let capture = crate::cmd::capture::WalCapture::open(data_dir, &file, vault_id.clone(), master)?;
+    let display_name = vault
+        .display_name()
+        .map_err(|error| error.to_string())?
+        .unwrap_or_else(|| display_name.to_owned());
+
     Ok(FoundedVault {
         vault_id,
+        display_name,
         file,
         data_dir: data_dir.to_path_buf(),
         capture,
@@ -651,7 +788,7 @@ pub async fn pair_mint(
     eprintln!(
         "centraid: this ticket was minted by a process that is about to exit, so nothing can \
          redeem it. Run `centraid gateway --print-qr` for a ticket a device can use \
-         (D-1020-C8: the durable allowlist lands in wave 2 lane D1)."
+         (that gateway keeps its enrolments in its vault, D-1025-S7-8x)."
     );
     endpoint.close().await;
     exit::OK
@@ -686,7 +823,11 @@ pub async fn seat_pair(encoded: &str) -> u8 {
 
     use centraid_api_proto::core_v1::pair_response;
     match outcome {
-        Ok(response) => match response.result {
+        // THE CONNECTION IS DROPPED HERE, deliberately. `redeem` hands it back
+        // so a seat can bootstrap on the connection it just paired on
+        // (D-1025-S3-4); this verb's whole job is the enrolment, and the
+        // replica it would fetch belongs to `centraid seat`.
+        Ok((_connection, response)) => match response.result {
             Some(pair_response::Result::Ok(ok)) => {
                 println!("paired vault={} device={}", ok.vault_name, ok.device_id);
                 eprintln!(

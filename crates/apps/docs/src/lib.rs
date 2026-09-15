@@ -5,7 +5,7 @@
 //! description (`manifest.json`, copied verbatim from v0's `app.json`):
 //!
 //! - **IDENTITY IS THE WRAPPER, NOT THE BYTES.** A document is a
-//!   `core.document` wrapper around a sha256-deduped canonical content item
+//!   `core.document` wrapper around a hash-deduped canonical content item
 //!   (#352): identity is separate from bytes, so two documents may legitimately
 //!   share identical bytes. Dedup is on the bytes, never on document identity —
 //!   **a port that keys a drive row by content id merges two members' unrelated

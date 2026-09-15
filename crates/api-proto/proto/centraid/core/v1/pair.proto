@@ -81,11 +81,73 @@ message PairResponse {
 }
 
 message PairOk {
-  string gateway_id = 1;
+  // WHERE THIS VAULT IS REACHED RIGHT NOW — an ADDRESS, never a name
+  // (#1025 S1). The gateway's iroh endpoint id, lowercase hex. A device keys
+  // nothing by it: the replica file, the outbox and the byte store are named
+  // by `vault_id`, so a vault restored onto another machine keeps every one of
+  // them and only this value changes. Two tickets carrying the same endpoint
+  // are a coincidence a device never acts on.
+  //
+  // NAMED FOR WHAT IT IS since #1025 S2: it was `gateway_id`, and a name
+  // ending in `_id` is the one thing this field must never be read as.
+  string gateway_address = 1;
   // The vault-side `access_device.device_id` the seat now is.
   string device_id = 2;
   string vault_id = 3;
   string vault_name = 4;
+  // THE BOOTSTRAP BLOB, NAMED IN THE ANSWER THAT CREATES THE PAIRING
+  // (#1025 S7, item 5).
+  //
+  // There used to be a `snapshot_head` request for these three values, asked
+  // on the connection the redemption had just promoted, one round trip after
+  // the answer that could have carried them. Deleting it removes a request
+  // kind, a response kind and a stream — and removes the state in between, in
+  // which a device is paired and does not yet know what to fetch.
+  //
+  // `snapshot_bytes` is here for the ROOM CHECK, which happens before the
+  // first byte moves: a phone with less free space than the artifact is told
+  // so by name rather than filling its disk and failing somewhere further in.
+  // It is also the denominator of the progress a "Copying your vault" screen
+  // draws.
+  //
+  // The seat asks for the same three again when it falls under the floor, and
+  // it is answered on `RebootstrapRequired` — which is the other message that
+  // tells a device to take a copy. Those are the only two occasions, so those
+  // are the only two messages that carry them.
+  //
+  // The blob's BLAKE3 content address, lowercase hex.
+  string snapshot_hash = 5;
+  // The log position the artifact stands at. The seat's cursor after it lands.
+  uint64 snapshot_seq = 6;
+  uint64 snapshot_bytes = 7;
+  // Where to reach the gateway through, when it uses a relay. A DIALLING HINT:
+  // empty is a LAN-only deployment, not an error.
+  //
+  // Here because the shell persists the pairing BEFORE there is a replica to
+  // put it in (#1025 S7, item 3): until the first copy lands, the pairing
+  // record lives only in the secure store, and a record with no way to dial is
+  // a durable identity presented to nobody — which is exactly the defect S5
+  // found from the other end.
+  string relay_url = 8;
+  // `<ip>:<port>` shortcuts. Hints with NO AUTHORITY — a stale or tampered
+  // address reaches the right gateway or nothing at all — which is what makes
+  // them safe to persist beside the id that is proved.
+  repeated string direct_addrs = 9;
+  // THE PUBLIC KEY THIS GATEWAY JUST ENROLLED, 32 raw bytes (#1025 S7-13).
+  //
+  // Derived from the endpoint that redeemed — the key iroh's TLS PROVED on the
+  // connection, never a field the redeeming device sent — so it is the
+  // gateway's own statement of which identity is now in its allowlist.
+  //
+  // It travels back because the device has to be able to check, at every later
+  // open, that the endpoint it is about to dial with is the one that was
+  // enrolled. Without it a seat whose secure store lost or never kept the
+  // secret mints a fresh keypair and dials as a STRANGER: the gateway refuses
+  // it as an unenrolled peer, and the member reads a version-window sentence
+  // over what is really a lost credential. The check is the shell's enrolment
+  // record against the spawned endpoint, and the refusal is
+  // `ERROR_CODE_IDENTITY_MISMATCH`.
+  bytes enrolled_public_key = 10;
 }
 
 // The closed refusal vocabulary. v0's is the same three

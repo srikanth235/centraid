@@ -5,7 +5,7 @@ One Kotlin Multiplatform shared module over the five-function C ABI, with a Comp
 ```
 mobile/
 ├── core/        the C ABI binding — JNA on JVM and Android, cinterop on iOS
-├── shared/      screen state machines, navigation, the sync scheduler
+├── shared/      the shell, the apps, the screen contract, navigation, sync
 ├── androidApp/  Compose. Gated on -Pcentraid.android=true + ANDROID_HOME
 ├── iosApp/      SwiftUI + XcodeGen + SPM. Needs a macOS host
 └── maestro/     device flows, and the iOS transfer experiment's protocol
@@ -88,10 +88,20 @@ Everything on iOS needs a macOS host. In order:
 #    version from five hours earlier.
 cargo build -p centraid-core-ffi --target aarch64-apple-ios-sim
 
-# 1. The Kotlin side. Cinterop needs an Apple toolchain, so klib
-#    cross-compilation is OFF on Linux and back ON here.
+# 1. The Kotlin side, AND IT IS THE XCFRAMEWORK TASK, NOT THE LINK TASK.
+#    `iosApp/project.yml` names
+#    `shared/build/XCFrameworks/debug/CentraidShared.xcframework` as the
+#    framework dependency, and `:shared:linkDebugFrameworkIosSimulatorArm64`
+#    does not write that path — it produces a plain `.framework` under
+#    `shared/build/bin/`, leaves the XCFramework as stale (or as absent) as it
+#    found it, and reports success. Xcode then builds against whatever bytes
+#    were last assembled, so a Kotlin change simply does not reach the app and
+#    nothing anywhere says so — the same silent-staleness shape as the Rust
+#    slice, one layer out (docs/traps/stale-core-slice.md).
+#    Cinterop needs an Apple toolchain, so klib cross-compilation is OFF on
+#    Linux and back ON here.
 cd mobile && ./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true \
-    :shared:linkDebugFrameworkIosSimulatorArm64
+    :shared:assembleCentraidSharedDebugXCFramework
 
 # 2. The generated Swift types. `buf.gen.yaml` is documentation-only
 #    (`plugins: []`), so this is protoc directly; the output is gitignored.
@@ -111,26 +121,18 @@ xcodegen generate
 cd mobile/iosApp && swift test
 ```
 
-**What step 2 unblocks:** `mobile/iosApp/Sources/StateViews.swift` has one `unwired()` function that every decoder funnels through, and it is a `fatalError` rather than a default value because a screen that rendered an empty list there would be indistinguishable from an empty vault. Nineteen fixtures are waiting for it.
+**What step 2 unblocked:** `mobile/iosApp/Sources/StateViews.swift` used to funnel every decoder through one `unwired()` `fatalError`. The SwiftProtobuf types are generated (`Sources/Generated`) and every decoder in that file is real (#1025 S5, lane L5): the three-state read law is a Swift `enum` with three cases per screen, and a decode that fails renders the screen's LOADING state rather than an empty one, because an empty `.data` case would be a screen claiming an empty vault before it had read one.
 
-**What is deliberately unimplemented on iOS, and fails loudly:**
+**What was deliberately unimplemented on iOS, and what became of each** (#1025 S5):
 
-|  | Why, and what it needs |
+|  | Where it stands |
 | --- | --- |
-| `IosSecureStore` | the Keychain needs a `Security.framework` cinterop. It **fails** rather than writing a vault credential to `NSUserDefaults`, which is a plist in the app container. The first thing a macOS session should write. |
-| `IosMediaLibrary.page` | `PHAsset` enumeration plus a streamed SHA-256 over `PHAssetResource`. The largest single piece. Four v0 rules it must keep: exact SHA-256 is identity, dHash is a hint that never auto-merges, a Live Photo pair shares one `capture_group_id`, and motion photos / RAW / burst members get **no inferred grouping**. |
-| `IosNetworkStatus` | `NWPathMonitor`. Until then it reports `platformRefused`, which is a **true** statement, and `WriteGate` treats an unknown answer as not-reachable so a guess cannot send a write into a void. |
-| `ShellModel.send` | the bridge from SwiftUI to `CentraidShared`'s `ScreenHost`. A `fatalError`, so a half-wired build fails on the first tap instead of looking inert. |
+| `IosSecureStore` | **Implemented** over `kSecClassGenericPassword` with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, so a background pass can read while locked and a vault credential cannot ride an iCloud or encrypted-backup restore onto a device the seat ledger never enrolled. This row used to say the Keychain "needs a `Security.framework` cinterop that no machine in this repository's CI can build" — **that claim was never checked and is false**: `platform.Security` ships as a DEFAULT Kotlin/Native platform library, and the same compiler that was already compiling the file compiled `SecItemAdd` on the first try. It is what the per-vault endpoint key is kept in. |
+| `IosNetworkStatus` | **Implemented** over `NWPathMonitor` (`platform.Network`, also a default platform library). `platformRefused` is now reserved for the monitor failing to answer within 2 s; a satisfied path is online and an unsatisfied one is offline, which are facts rather than refusals. While this row stood, it hard-coded `platformRefused = true` and `WriteGate` treats unknown as not-reachable — so **every write on iOS was refused, always**. `UIDevice.isBatteryMonitoringEnabled` is set at construction, without which `charging` read false for ever. |
+| `IosMediaLibrary.page` | **Implemented** (#1025 S6, D-1025-S7-70/71/72). `PHAsset` enumeration keyset on `creationDate` with the `localIdentifier` as the tiebreak — `NSPredicate` over `PHAsset` cannot express `localIdentifier`, so the predicate is `>=` and the overlap is dropped in Kotlin — plus a **streamed `PHAssetResource` byte door** (`MediaLibrary.open`) that feeds `Staging`, so THE CORE hashes and the phone never names its own bytes. `requestPermission` now actually asks, at `PHAccessLevelReadWrite`; it used to return the current status, so the "Allow photo access" button could be pressed for ever without the system prompt appearing. A Live Photo is two assets sharing one `capture_group_id`; burst members and RAW get **no inferred grouping**; `phash` is left to the gateway, which derives one at commit from bytes it holds. The whole pass — enumerate, stage, queue `media.add_asset` with `needs` — is `dev.centraid.shared.shell.CameraRoll`. |
+| `ShellModel.send` | **Wired for all four screens** (#1025 S5, lane L5). Home goes through `HomeBridge`; Tally, Photos and Notes go through `TallyBridge`, `PhotosBridge` and `NotesBridge`, which live in the app's own package because a bridge names its screen's types and `PerAppLayoutSpec` keeps that inside `apps`. Each attaches to the ONE `HomeSession` — one session, whatever the number of open cores — through `HomeSession.attachScreen`, which both serves the screen's `ReadPage` (`sync/ScreenRuntime.kt`) and routes it onto the change stream. The row used to say their machines had no read runtime at all, and that was the larger half of the defect: `ScreenEffect.ReadPage` reached nothing, so all three drew their seeded `LOADING` state for ever. The `fatalError` is gone — an unknown screen name is dropped, because in a build where every screen is wired it would only turn a typo into a crash on a member's phone. |
 
-**`.xcode-version` is `26.6`, confirmed by the first real iOS compile.** The
-pin was `16.4` and had never been tested against anything; D-1020-E5a's rule was
-that the first compile confirms or replaces it. Kotlin/Native 2.4.20 **accepted**
-Xcode 26.6 — it refused nothing and named no other version — so 26.6 is what the
-file now holds, and it is a measurement rather than the guess the `16.4` was.
-`:shared:linkDebugFrameworkIosSimulatorArm64` links in **26 s** on an M-series
-Mac. **Thirteen** defects stood between the committed tree and a green `swift test`,
-and a fourteenth (a `nm` invocation with GNU-only flags) kept the Rust symbol gate
-red on any Mac. None was visible to a machine that could not run these four steps.
+**`.xcode-version` is `26.6`, confirmed by the first real iOS compile.** The pin was `16.4` and had never been tested against anything; D-1020-E5a's rule was that the first compile confirms or replaces it. Kotlin/Native 2.4.20 **accepted** Xcode 26.6 — it refused nothing and named no other version — so 26.6 is what the file now holds, and it is a measurement rather than the guess the `16.4` was. `:shared:linkDebugFrameworkIosSimulatorArm64` links in **26 s** on an M-series Mac. **Thirteen** defects stood between the committed tree and a green `swift test`, and a fourteenth (a `nm` invocation with GNU-only flags) kept the Rust symbol gate red on any Mac. None was visible to a machine that could not run these four steps.
 
 ## The other hand-offs
 
@@ -162,6 +164,36 @@ red on any Mac. None was visible to a machine that could not run these four step
 
 One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue or icon set, which is why wave A extended the emitter rather than typing eight app names and 139 silhouettes into two languages.
 
+## How `shared/commonMain` is laid out
+
+One shell, many apps — the same shape as `crates/apps`, `copy` and
+`contracts/apps` (#1025 S5, D-1025-S5-1):
+
+```
+dev/centraid/shared/
+├── shell/      Home, the springboard, first moves, the band, the vault roster,
+│               the gateway link, the mount and where replicas live
+├── screen/     THE CONTRACT, and nothing else: ScreenMachine + ScreenHost
+├── apps/       tally/ photos/ notes/ — each app's machine and its reads
+├── nav/        the navigation model
+├── sync/       the scheduler, the write gate, the change stream, the window,
+│               the per-screen read runtime and the shared failure mapping
+└── platform/   the expect/actual seam
+```
+
+Two Konsist rules make the shape load-bearing rather than decorative
+(`PerAppLayoutSpec`):
+
+1. **An `apps.<x>` package imports no other `apps.<y>`.** Two apps meet in the
+   VAULT, as rows, and never in a reducer.
+2. **Nothing outside `apps` imports from inside it.** The shell drives a screen
+   through `ScreenMachine`/`ScreenHost`, which is what lets it host a screen it
+   knows nothing else about; a `shell/` file naming `apps.tally.TallyListState`
+   would be a shell that has to be edited to add an app.
+
+A third assertion says `screen` holds exactly two files, because a screen that
+moved back into it is a screen rule 2 can no longer say anything about.
+
 ## Home, and the pattern the fan-out follows
 
 Home is built (#1020, wave A). It is the hardest single screen — a graded springboard over eight unlike tile bodies — and it was built alone so its pattern is settled before the other screens fan out. Four rules came out of it, and they are the ones a later screen should copy:
@@ -169,76 +201,101 @@ Home is built (#1020, wave A). It is the hardest single screen — a graded spri
 1. **THE VIEWS DECIDE NOTHING, including layout.** `earns_grid`, `springboard`, `things`, `every_tile_unreadable` AND `grid_rows` are all computed in `HomeMachine` and written onto the state. `grid_rows` is there because the first build let each renderer pack the grid and they disagreed immediately: Compose's `LazyVerticalGrid` honours a span and SwiftUI's `LazyVGrid` **silently ignores `.gridCellColumns`**, so one shell drew Photos full width and the other drew it at a half. Two packers for one grid was the defect; one packer in the machine is the fix.
 2. **EVERY VALUE IS A TOKEN OR A STATED GEOMETRY.** No `.secondary`, no `.quaternary`, no SF Symbols, no Material icons. The first build of Home used all four and looked like a SwiftUI sample rather than the product; the token table and the emitted silhouettes are what make the two shells draw one thing.
 3. **ONE ICON SET.** `Catalog.kt`/`Catalog.swift` carry the same 24×24 path data the web renderer draws. Compose reads it with `PathParser`; iOS has `Sources/Icon.swift`, a small path reader, and `Tests/IconSilhouetteTests.swift` asserts every emitted silhouette parses — written after a greedy number scan made the Settings gear vanish with nothing failing.
-4. **THE FRAME IS PART OF THE SCREEN.** The vault lockup (which vault, which gateway — and the mark IS the switch), the title row and the floating band are v0's chrome, not decoration, and a Home without them is a grid rather than a shell.
+4. **THE FRAME IS PART OF THE SCREEN.** The vault lockup (which vault, and how that vault stands on this device — and the mark IS the switch), the title row and the floating band are v0's chrome, not decoration, and a Home without them is a grid rather than a shell. The second fact is the VAULT's and never a gateway's name: `VaultLockup.State` has three cases — syncing, synced, offline — every one of them derived from the last pass's outcome and whether a pass is in flight, and none of them a state a gateway is probed for ([D-1025-S7-9](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
 
-### Seeing it with real data, and switching between two vaults
+### Seeing it with real data: pair with a gateway
+
+A device makes its own replica now. Nothing is placed on it.
 
 ```sh
-mobile/scripts/demo-vault.sh ios      # or android, or nothing for both
+# 1. A gateway, with tickets to spend. `--no-relay` keeps it on the LAN, which
+#    is where a simulator can reach it.
+cargo run -p centraid -- gateway --data-dir /tmp/gw --print-qr 3 --no-relay
+
+# 2. Rows worth looking at, written through the REAL command plane into the
+#    vault the gateway just founded. A second connection to a live file is what
+#    WAL is for.
+cargo run -p centraid --bin seed-demo-vault -- /tmp/gw/vault/<id> --file vault.db --name Tahoe
+
+# 3. In the app: the gear -> Gateway -> paste a `ticket ...` line -> Pair this
+#    device -> Sync now.
 ```
 
-That seeds **two** vaults — "Demo vault" with every app, and "Work" with only
-Docs, Tasks and Agenda — and places both on the device. Two, and deliberately
-unalike: the switcher is only testable against two, and two vaults holding the
-same rows under the same name would prove nothing, because a switch that quietly
-did not happen would look exactly like one that did.
+**The vault is PAIRED, not placed** (#1025 S1, S5). `Shelf.admit` opens a FRESH
+core at `Replicas.PAIRING_FILE` (`centraid-pairing.sqlite3`) and redeems the
+ticket there — `Core::open` on a missing seat path answers a handle whose reads
+are refused `Unpaired`, which is a screen a member can read, and `Request::Pair`
+takes the first copy into that file. **Every vault already held keeps its core
+open through this**; the only handle closed is the one on the pairing file
+itself, which is the file about to be paired into. The shell then settles TWO
+things under the vault id the gateway named — the replica (`Replicas.settle`) and
+the one `Enrolments` record — because before that moment there was no id to name
+either after. It was three settles until #1025 S7-13, and three renames with no
+transaction over them is three chances to settle by halves
+([D-1025-S7-14](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
 
-**The vault is PLACED, not paired.** The network is not built — `Handle::
-start_endpoint` is a stub, the C ABI answers `Request::Pair` with
-`NotYetAvailable`, and `centraid gateway` admits an enrolled seat and then closes
-the connection. What lands on the device is the same file a seat would hold after
-a download, minus the download. `<vault>.blobs/` travels with it: that is where
-every photograph's bytes are (`Vault::blobs_root_for`), and a vault copied
-without it is a library of rows pointing at nothing.
+**A device proves who it is at open** ([D-1025-S7-15](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
+`PairOk` carries the public key the gateway enrolled, derived there from the
+connection iroh's TLS proved; it goes into the enrolment record beside the
+secret, and every later open compares the endpoint that came up against it. A
+mismatch refuses the open with `ERROR_CODE_IDENTITY_MISMATCH` and dials nothing:
+a seat whose Keychain item is gone would otherwise present a fresh key, be closed
+by its own gateway as an unenrolled peer, and render "this app and that gateway
+are too far apart in version to talk" over a lost credential.
 
-Three things about the switcher are worth knowing before you touch it:
+**A pairing never rides the live core** ([D-1025-S7-10](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
+`Handle::pair` bootstraps its first copy into whatever file the handle is open
+on, so redeeming a ticket down the core holding vault A wrote vault B over vault
+A — a member who had a vault a second earlier read "No vault yet". The first
+vault and the Nth take the identical path, with no branch on "does this device
+already hold one", and the core refuses to bootstrap into a replica that already
+holds a vault with `ERROR_CODE_VAULT_ALREADY_HELD`, checked BEFORE the ticket is
+redeemed so a refusal burns nothing ([D-1025-S7-11](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
+One ticket admits one vault, the one `PairOk.vault_id` names.
 
-- **The directory IS the roster.** Every `.db` in the shell's own data directory
-  is a vault; there is no manifest beside them, because a vault's name lives
-  inside the vault and a manifest would be a second place it lives.
-- **The survey runs before the active core opens.** `SingleHandleGuard` allows
-  one core per process (R-1020-24), so `VaultRoster.survey` opens each file in
-  turn and closes it before the next. A roster read afterwards is refused on
-  every file, including the one already open.
-- **A reload carries what the shell TOLD Home and replaces what Home READ.**
-  `HomeState.reloaded()` is the only caller of `firstLoad()`. That rule used to
-  live at the three call sites and was wrong at every one of them in turn — the
-  lockup, then the roster, then the roster again on the switch branch. If you
-  add a shell-known field to `HomeState`, add it to `reloaded()` in the same
-  commit or it will vanish on the next open.
+**A name off a ticket is a placeholder** ([D-1025-S7-12](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
+The gateway answers `PairOk.vault_name` from the vault's own
+`core_vault.display_name`, and the shell still re-reads it from the replica
+(`VaultRoster.identify`) the moment there is a file to ask: a vault's name lives
+inside the vault, which is why the seeded fixture above is "Tahoe" in the roster
+and not whatever the gateway's `--vault-name` flag last said.
+
+`mobile/scripts/demo-vault.sh` is the old way and its seat path is dead. What it
+places is a GATEWAY-role artifact: a vault with every private table and the
+device's own authority over rows it is supposed to be a copy of.
+
+**The byte store travels with the replica.** `centraid-replica-<vaultId>.sqlite3` has
+`centraid-replica-<vaultId>.bytes` beside it — `replica.with_extension("bytes")` in
+`crates/seat-link`, the last extension REPLACED and not appended. A replica
+without its store is a library of rows pointing at nothing
+([D-1025-S3-1](../docs/decisions.md#slice-s3--bytes-both-ways-one-store-1025)),
+and it renders as placeholders rather than as an error — which is how the first
+draft of `Replicas.settle` got it wrong and why `ReplicasSpec` pins the name.
+
+Four things about the switcher are worth knowing before you touch it:
+
+- **The directory IS the roster.** Every `centraid-replica-*.sqlite3` in the shell's own data directory is a vault; there is no manifest beside them, because a vault's name lives inside the vault and a manifest would be a second place it lives. See `Replicas`.
+- **`Shelf` owns the set, and nothing else adds to it.** At launch `Shelf.load` opens every replica as the seat it is, on its own `Enrolments` record — ONE entry per vault carrying the endpoint secret, the gateway address, the relay statement and the key the gateway said it enrolled ([D-1025-S7-14](../docs/decisions.md)) — asks each one `VaultRoster.identify`, and leaves it open. The `GATEWAY`-role probe that opened and closed each file in turn is gone with the one-core-per-process reading of R-1020-24. Afterwards only `Shelf.admit` and `Shelf.forget` change the membership ([D-1025-S7-10](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). A file that will not open is simply not a holding: a row that fails on tap is a door that does not open.
+- **The roster is a STREAM, not a one-shot survey.** `Shelf.roster` republishes on every membership or state change, so the switcher's rows and the header's second line are one value rendered twice and cannot disagree. The `VaultRoster.survey` that read the three stores once at launch is gone with `HomeEvent.VaultsListed`; `HomeEvent.RosterChanged` carries the stream, and `VaultRoster` is now only `QUERY` and `identify`. A vault admitted after launch used to be invisible until the app was relaunched.
+- **Every held vault's core is open, and a switch costs nothing** (#1025 S7-13, [D-1025-S7-18](../docs/decisions.md)). `SingleHandleGuard` is keyed on the REPLICA PATH: R-1020-24 is that app extensions never open the vault, whose hazard is two handles on one FILE, and a process-keyed guard also refused two handles on two different vaults, which share no file, no outbox and no endpoint. So a switch is a pure rebind — `HomeSession` re-points its runtime and change reader and nothing is closed, reopened or re-identified. "Open" means the file and the endpoint and **not** an active dial; dialling stays the sync round's decision, foreground first, with the metered rule unchanged. The only two things that close a background core are `Shelf.forget` and `Shelf.rest()`, the OS asking for memory back (iOS `didReceiveMemoryWarningNotification`, Android `onTrimMemory`); a rested holding reopens on the next touch or sync round. There is no cap and no idle timeout.
+- **One tokio runtime for the process, N endpoints on it** ([D-1025-S7-19](../docs/decisions.md)). Each `SeatLink` used to build its own; with every held vault's core open that is one runtime per vault. `SeatLink::Drop` closes the endpoint and flushes the byte store, which the dropped runtime used to do by killing everything on it.
+- **A reload carries what the shell TOLD Home and replaces what Home READ.** `HomeState.reloaded()` is the only caller of `firstLoad()`. That rule used to live at the three call sites and was wrong at every one of them in turn — the lockup, then the roster, then the roster again on the switch branch. If you add a shell-known field to `HomeState`, add it to `reloaded()` in the same commit or it will vanish on the next open.
 
 ### Thumbnails, and the two traps between a byte and a pixel
 
-Home's mosaic draws real photographs (#1020, D-1020-DC1). The path is worth
-knowing because nothing about it is guessable from either end:
+Home's mosaic draws real photographs (#1020, D-1020-DC1). The path is worth knowing because nothing about it is guessable from either end:
 
-1. `HomeReads`' photos query selects `content_id` **for the door, not for the
-   body** — a thumbnail is located by CONTENT and read as the ASSET, so the
-   runtime needs both ids off one row.
-2. `HomeRuntime.thumbnails` batches one `ContentUrlRequest` for the four cells
-   the mosaic will draw, **before** the tile's event is sent. A cell that
-   arrived blank and acquired its photograph a moment later would be two states
-   for one row and a visible pop on every open.
-3. The core answers a **path**, never bytes: the platform opens the file, so
-   decoding and caching stay where they belong.
+1. `HomeReads`' photos query selects `content_id` **for the door, not for the body** — a thumbnail is located by CONTENT and read as the ASSET, so the runtime needs both ids off one row.
+2. `HomeRuntime.thumbnails` batches one `ContentUrlRequest` for the four cells the mosaic will draw, **before** the tile's event is sent. A cell that arrived blank and acquired its photograph a moment later would be two states for one row and a visible pop on every open.
+3. The core answers a **path**, never bytes: the platform opens the file, so decoding and caching stay where they belong.
 4. `ContentImage` opens it.
 
 Two things will waste an afternoon if you do not know them:
 
-- **`UIImage(contentsOfFile:)` leans on the path extension.** A
-  content-addressed file is named by its digest and has none, so that
-  initializer returns nil for every photograph in the store — silently.
-  `UIImage(data:)` sniffs the bytes, and is the only thing that can be right
-  when the name is a hash.
-- **The Rust archive is linked by path** and nothing rebuilds it. See
-  [docs/traps/stale-core-slice.md](../docs/traps/stale-core-slice.md) and step 0
-  above.
+- **`UIImage(contentsOfFile:)` leans on the path extension.** A content-addressed file is named by its digest and has none, so that initializer returns nil for every photograph in the store — silently. `UIImage(data:)` sniffs the bytes, and is the only thing that can be right when the name is a hash.
+- **The Rust archive is linked by path** and nothing rebuilds it. See [docs/traps/stale-core-slice.md](../docs/traps/stale-core-slice.md) and step 0 above.
 
-A cell stays a placeholder when the door says the bytes are not here, when it
-refuses to call them embeddable (`image/svg+xml` is executed by a renderer in
-the embedding page's origin), or when they are **not a still image** — a video's
-thumbnail is its poster derivative, and handing a mosaic an MP4 draws a blank
-that reads as a failed render.
+A cell stays a placeholder when the door says the bytes are not here, when it refuses to call them embeddable (`image/svg+xml` is executed by a renderer in the embedding page's origin), or when they are **not a still image** — a video's thumbnail is its poster derivative, and handing a mosaic an MP4 draws a blank that reads as a failed render.
 
 ### Android, end to end
 
@@ -248,21 +305,9 @@ cd mobile && ./gradlew -Pcentraid.android=true :androidApp:installDebug
 mobile/scripts/demo-vault.sh android                             # seed and place both vaults
 ```
 
-**JNA is one library in two packages and the package is the extension.** Same
-group, name and version — `net.java.dev.jna:jna` — published both as a jar and
-as an `.aar`. The jar bundles `libjnidispatch` for DESKTOP ABIs as ordinary
-resources; the aar carries the Android ones as real `lib/<abi>/libjnidispatch.so`
-entries, which is the only shape a packager installs and `System.loadLibrary`
-finds. Getting it wrong fails two ways and both were seen:
+**JNA is one library in two packages and the package is the extension.** Same group, name and version — `net.java.dev.jna:jna` — published both as a jar and as an `.aar`. The jar bundles `libjnidispatch` for DESKTOP ABIs as ordinary resources; the aar carries the Android ones as real `lib/<abi>/libjnidispatch.so` entries, which is the only shape a packager installs and `System.loadLibrary` finds. Getting it wrong fails two ways and both were seen:
 
-- **jar on Android** — the app builds, installs, runs, Home draws, and the first
-  `centraid_open` dies with `dlopen failed: library "libjnidispatch.so" not
-  found`. A `@aar`-less catalogue alias resolves to the jar, so an entry that
-  merely *looks* like the Android one does exactly this. `unzip -l` the APK: if
-  you see `com/sun/jna/win32-x86-64/jnidispatch.dll` and no
-  `lib/arm64-v8a/libjnidispatch.so`, this is what happened.
-- **both** — `checkDebugDuplicateClasses` refuses out loud, because every
-  `com.sun.jna` class is in each.
+- **jar on Android** — the app builds, installs, runs, Home draws, and the first `centraid_open` dies with `dlopen failed: library "libjnidispatch.so" not found`. A `@aar`-less catalogue alias resolves to the jar, so an entry that merely _looks_ like the Android one does exactly this. `unzip -l` the APK: if you see `com/sun/jna/win32-x86-64/jnidispatch.dll` and no `lib/arm64-v8a/libjnidispatch.so`, this is what happened.
+- **both** — `checkDebugDuplicateClasses` refuses out loud, because every `com.sun.jna` class is in each.
 
-`mobile/core/build.gradle.kts` names the `@aar` extension explicitly and says
-why; the version still comes from the catalogue.
+`mobile/core/build.gradle.kts` names the `@aar` extension explicitly and says why; the version still comes from the catalogue.

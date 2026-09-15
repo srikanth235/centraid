@@ -285,9 +285,11 @@ test.describe("the Companion over native messaging", () => {
       );
       expect(document).toBeDefined();
       expect(document).not.toHaveProperty("screenshot_bytes");
-      // THE HANDLE IS THE BYTES, and the extension computed it: the digest the
-      // method frame carries is the sha256 of the payload the test built, so a
-      // chunker that dropped or reordered a window would not agree with it.
+      // THE HANDLE IS THE BYTES, AND THE HOST COMPUTED IT (#1025 S4): the
+      // extension declares no digest — the vault names bytes with BLAKE3 and
+      // WebCrypto has none — so what the method frame carries is the handle the
+      // host answered, over the bytes the host ASSEMBLED. A chunker that dropped
+      // or reordered a window would not agree with it.
       expect(document?.["staged_sha"]).toBe(
         createHash("sha256")
           .update(

@@ -36,6 +36,26 @@ pub trait PageDoor {
     fn page(&self, query: &PageQuery, request: &PageRequest) -> KitResult<Page<Row>>;
 }
 
+/// One page.
+///
+/// **The one read an app should reach for**, and since #1025 S7 it is a PLAIN
+/// READ. It used to compose this device's pending writes over the mirrored rows
+/// here, and there is nothing left to compose: a seat APPLIES its own predicted
+/// write to the replica, through the same applier the gateway's pages go
+/// through, and journals the prior images so the write can be taken back
+/// (`centraid_seat::pending`). What a member is looking at IS the replica.
+///
+/// That is the whole of the change and it removes a class rather than a
+/// function: a composition is a second description of what a write does, and
+/// the first one — the handler — already exists.
+pub fn read_page(
+    door: &dyn PageDoor,
+    query: &PageQuery,
+    request: &PageRequest,
+) -> KitResult<Page<Row>> {
+    door.page(query, request)
+}
+
 /// One `IN (…)` fragment and the binds it takes, built together.
 #[derive(Debug, Clone, PartialEq)]
 pub struct InListFragment {

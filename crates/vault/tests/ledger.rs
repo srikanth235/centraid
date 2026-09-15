@@ -731,7 +731,7 @@ fn the_archive_pass_seals_a_cold_range_prunes_it_and_leaves_the_recent_turns() {
     )
     .expect("record");
     // Refused before the bytes go anywhere: a 63-character digest is not a
-    // sha256, and the table's CHECK would say so in constraint language.
+    // content_hash, and the table's CHECK would say so in constraint language.
     assert!(archive::record_segment(&fixture.vault, &range, "short", 1, 1, 1, &[]).is_err());
 
     let pruned = archive::prune(&fixture.vault, &archive_id).expect("prune");

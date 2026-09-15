@@ -141,18 +141,15 @@ pub async fn run(args: SeatArgs) -> u8 {
             }
         };
 
-        // THE GATEWAY THIS SEAT IS PAIRED TO is not known to this verb yet: the
-        // durable allowlist and the seat's own pairing record land with the
-        // gateway dial (wave 4). An empty endpoint id is honest — the role is
-        // still the role, and the four states report `Unconfigured` rather
-        // than pretending a link exists.
+        // THE ROLE NAMES NO GATEWAY (#1025 S1, D-1025-S1-1). Where this
+        // vault is reached is the pairing record's business and it changes
+        // when the vault moves; the role only says what this core is.
         let role = Role::Seat {
             kind: if args.thin {
                 SeatKind::Thin
             } else {
                 SeatKind::Replicated
             },
-            gateway: Vec::new(),
         };
         let config = CoreConfig {
             role,

@@ -225,6 +225,90 @@ impl Vault {
         }
     }
 
+    /// RUN A WRITE AND THROW IT AWAY, KEEPING WHAT IT WOULD HAVE LOGGED
+    /// (#1025 S7, item 4).
+    ///
+    /// The same pair as [`Self::commit`] — `BEGIN IMMEDIATE`, sessions per
+    /// capture table, the body, decode the changesets **inside** the
+    /// transaction — and then `ROLLBACK` instead of allocating a `commit_seq`
+    /// and writing the log rows. What comes back is the decoded changes: the
+    /// page this commit WOULD have produced.
+    ///
+    /// **This is how a seat predicts its own write.** A member types, taps
+    /// save, and the row changes on screen at once; what they are looking at is
+    /// the mirrored row with this device's own pending write over it. Before
+    /// this the overlay was a hand-written `{entity: {rowId: {column: value}}}`
+    /// payload that nothing produced and no app could produce correctly — so
+    /// the seat ran the real handler against its own replica and captured what
+    /// it wrote, which is the only description of a write that cannot disagree
+    /// with the gateway's.
+    ///
+    /// THE ROLLBACK IS THE POINT. A seat is a copy and has no authority over
+    /// any row; a prediction that stayed would be a seat writing to its own
+    /// mirror, which the applier would then overwrite from the log — silently,
+    /// and only if the gateway agreed.
+    ///
+    /// The sessions are dropped BEFORE the rollback, for the reason the module
+    /// header gives: SQLite's session extension does not un-record what a full
+    /// rollback undid, so a session left open across one replays the
+    /// rolled-back changes into the next commit.
+    ///
+    /// Nesting is refused rather than silently flattened: a dry run inside a
+    /// real commit would roll the real one back.
+    pub fn dry_run<T>(
+        &self,
+        body: impl FnOnce(&CommitTx<'_, '_>) -> Result<T>,
+    ) -> Result<(T, Vec<crate::log::capture::DecodedRow>)> {
+        if self.depth.get() > 0 {
+            return Err(VaultError::Invariant {
+                context: "a dry run inside a commit would roll the commit back".to_owned(),
+            });
+        }
+        let connection = self.connection();
+        let local: Vec<String> = crate::log::local_tables().to_vec();
+        let tables = capture_tables(connection, &local)?;
+        let local_set: HashSet<String> = local.into_iter().collect();
+
+        connection
+            .execute_batch("BEGIN IMMEDIATE")
+            .map_err(|error| VaultError::from_sqlite("opening a dry run", error))?;
+        self.depth.set(1);
+
+        let capture = match Capture::open(connection, &tables) {
+            Ok(capture) => RefCell::new(capture),
+            Err(error) => {
+                self.depth.set(0);
+                let _ = connection.execute_batch("ROLLBACK");
+                return Err(error);
+            }
+        };
+
+        let outcome = (|| -> Result<(T, Vec<crate::log::capture::DecodedRow>)> {
+            let value = {
+                let tx = CommitTx {
+                    connection,
+                    capture: Some(&capture),
+                    producer: RefCell::new("prediction".to_owned()),
+                };
+                body(&tx)?
+            };
+            let (decoded, _touched) = capture.borrow_mut().decode(connection, &local_set)?;
+            // THE LOCAL ROWS GO. They are a gateway's own lane — logged for the
+            // doorbell and never served to a seat — so a prediction that kept
+            // them would be predicting rows the gateway will never send, and
+            // the page could never equal the one that arrives.
+            Ok((
+                value,
+                decoded.into_iter().filter(|row| !row.local).collect(),
+            ))
+        })();
+
+        drop(capture);
+        self.depth.set(0);
+        let _ = connection.execute_batch("ROLLBACK");
+        outcome
+    }
+
     /// Is a commit open on this vault?
     #[must_use]
     pub fn in_commit(&self) -> bool {

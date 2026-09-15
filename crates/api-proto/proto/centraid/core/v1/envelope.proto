@@ -29,7 +29,6 @@ import "centraid/core/v1/intent.proto";
 import "centraid/core/v1/log.proto";
 import "centraid/core/v1/pair.proto";
 import "centraid/core/v1/query.proto";
-import "centraid/core/v1/snapshot.proto";
 
 message Envelope {
   // Zero is reserved for the handshake, which is not a request: `Hello` is
@@ -49,7 +48,11 @@ message Request {
   oneof kind {
     Hello hello = 1;
     LogRequest log = 2;
-    SnapshotHeadRequest snapshot_head = 3;
+    // 3 WAS `snapshot_head`, DELETED (#1025 S7, item 5). The head travels on
+    // `PairOk` and on `RebootstrapRequired` — the two answers that tell a
+    // device to take a copy — so there is nothing left to ask for. The number
+    // is not reused: a field number that comes back meaning something else is
+    // how an old build reads a new message as a shape it recognises.
     Intent intent = 4;
     Command command = 5;
     PageRequest page = 6;
@@ -58,6 +61,13 @@ message Request {
     DevicesRevoke devices_revoke = 9;
     BackupNow backup_now = 10;
     ContentUrlRequest content_urls = 11;
+    // THE STREAM IS HANDED OVER AFTER THIS ONE (#1025 S2). See
+    // `content.proto`'s `BlobRequest`: no response envelope follows, because
+    // what follows is iroh-blobs' protocol on the same stream.
+    BlobRequest blob = 12;
+    // A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM (#1025 S4). See
+    // `content.proto`'s `StageRequest`.
+    StageRequest stage = 13;
   }
 }
 
@@ -68,13 +78,14 @@ message Response {
     Unsupported unsupported = 3;
     LogPage log = 4;
     RebootstrapRequired rebootstrap_required = 5;
-    SnapshotHead snapshot_head = 6;
+    // 6 WAS `SnapshotHead`, deleted with the request that asked for it.
     Outcome outcome = 7;
     CommandOutcome command = 8;
     Page page = 9;
     PairResponse pair = 10;
     DevicesListResult devices_list = 11;
     ContentUrls content_urls = 12;
+    StageResponse stage = 13;
   }
 }
 

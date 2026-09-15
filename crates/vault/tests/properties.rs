@@ -122,6 +122,7 @@ proptest! {
             app_id: "tally".to_owned(),
             action: "tally.add_expense".to_owned(),
             input: serde_json::json!({"amount_minor": 1}),
+            needs: Vec::new(),
             base_versions: order
                 .into_iter()
                 .map(|row_id| BaseVersion {

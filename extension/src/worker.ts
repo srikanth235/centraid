@@ -20,12 +20,7 @@ import { HostLink, IDLE_CLOSE_MS, memberSentence } from "./host-link.js";
 import type { HostFrame } from "./host-link.js";
 import { stagesBytes } from "./methods.js";
 import { lockerGestureRefusal } from "./page-origin.js";
-import {
-  chunkFrames,
-  dataUriBytes,
-  needsStaging,
-  sha256Hex,
-} from "./stage-core.js";
+import { chunkFrames, dataUriBytes, needsStaging } from "./stage-core.js";
 import {
   APPROVAL_ALARM,
   APPROVAL_ALARM_MINUTES,
@@ -131,12 +126,14 @@ async function stagedCapture(
   const read = dataUriBytes(screenshot, "image/png");
   if (!read) throw new Error("The tab capture was not a PNG image.");
   if (!needsStaging(read.bytes.length)) return await link.ask(method, input);
-  const sha256 = await sha256Hex(read.bytes);
+  // THE HOST NAMES THE BYTES, NOT THIS WORKER (#1025 S4, D-1025-S4-6). The
+  // handle is the value `core_content_item.content_hash` is UNIQUE on, which is
+  // BLAKE3, and `crypto.subtle.digest` has no BLAKE3 — so a digest declared here
+  // could only ever be a second, different name for the same capture.
   const begun = (await link.send({
     t: "stage:begin",
     media_type: read.mediaType,
     byte_size: read.bytes.length,
-    sha256,
   })) as { value?: { staging_id?: string } };
   const stagingId = begun.value?.staging_id;
   if (typeof stagingId !== "string")
@@ -147,9 +144,15 @@ async function stagedCapture(
     // oxlint-disable-next-line no-await-in-loop
     await link.send(frame as unknown as Record<string, unknown>);
   }
-  await link.send({ t: "stage:end", staging_id: stagingId });
+  const ended = (await link.send({
+    t: "stage:end",
+    staging_id: stagingId,
+  })) as { value?: { content_hash?: string } };
+  const contentHash = ended.value?.content_hash;
+  if (typeof contentHash !== "string")
+    throw new Error("The staged capture was not given a handle.");
   const { screenshot: _dropped, ...rest } = input;
-  return await link.ask(method, { ...rest, staged_sha: sha256 });
+  return await link.ask(method, { ...rest, staged_sha: contentHash });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
