@@ -33,12 +33,14 @@ class ShelfSpec : StringSpec({
     fun holding(
         outcome: SyncOutcome? = null,
         passInFlight: Boolean = false,
+        tailing: Boolean = false,
     ) = Shelf.Holding(
         vaultId = "v1",
         path = "/replicas/centraid-replica-v1.sqlite3",
         name = "Tahoe Demo",
         outcome = outcome,
         passInFlight = passInFlight,
+        tailing = tailing,
     )
 
     "a holding no pass has ever reported on is SYNCING, not online" {
@@ -92,6 +94,27 @@ class ShelfSpec : StringSpec({
         // still queue, and the next window continues from here.
         holding(outcome = SyncOutcome(unreachable = true)).state shouldBe
             VaultLockup.State.STATE_OFFLINE
+    }
+
+    "a just-recorded unreachable outranks a marked-but-not-receiving tail" {
+        // R-SHELL-1 / trap unreachable-vault (#1025 live-shell). openTail marks
+        // `tailing` true when the stream is ASKED FOR, before any byte arrives.
+        // That mark must not promote a holding whose last pass (or dead tail)
+        // already said unreachable into STATE_ONLINE — the header would keep
+        // reading "synced" over a gateway that is down.
+        holding(
+            outcome = SyncOutcome(unreachable = true),
+            tailing = true,
+        ).state shouldBe VaultLockup.State.STATE_OFFLINE
+    }
+
+    "a live tail over a reachable last pass is ONLINE" {
+        // The healthy foreground case: catch-up reported, then the stream is
+        // held open. Quiet vaults move nothing for hours and are not offline.
+        holding(
+            outcome = SyncOutcome(unreachable = false, rowsApplied = 3),
+            tailing = true,
+        ).state shouldBe VaultLockup.State.STATE_ONLINE
     }
 
     "an ordinary pass on a vault already holding its copy is ONLINE" {

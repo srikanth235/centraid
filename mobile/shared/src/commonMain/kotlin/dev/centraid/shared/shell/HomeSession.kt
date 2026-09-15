@@ -267,7 +267,12 @@ public class HomeSession private constructor(
         // open stream already knows — so the answer is a sentence, and the
         // member is told the true thing rather than shown a spinner that means
         // nothing.
-        if (shelf.foregroundHolding()?.tailing == true) {
+        // A MARKED TAIL OVER AN UNREACHABLE LAST PASS IS NOT LIVE (R-SHELL-1).
+        // `openTail` sets `tailing` when the stream is asked for; Sync now must
+        // still dial when the last answer was unreachable rather than claim the
+        // vault is live.
+        val front = shelf.foregroundHolding()
+        if (front?.tailing == true && front.outcome?.unreachable != true) {
             return SyncOutcome(
                 tailOpen = true,
                 sentence = "This vault is live \u2014 changes arrive as they happen.",
@@ -354,10 +359,19 @@ public class HomeSession private constructor(
         // reported: there is no window in which the header says ONLINE over a
         // device that has not spoken to its gateway.
         shelf.tailOpened(holding.vaultId)
+        // THE LOCKUP MOVES WITH THE MARK: roster alone updates the switcher
+        // rows; the header reads `vault_changed`, so a freshly opened (or
+        // freshly failed) tail must republish here too.
+        publishLockup()
         tailing = scope.launch {
             val outcome = passOn(core, window)
             shelf.tailClosed(holding.vaultId, outcome)
             publishSeat(outcome)
+            // A DEAD OR SETTLED TAIL MUST REACH THE HEADER (R-SHELL-1). Without
+            // this, `tailClosed` updates the holding and the roster while the
+            // published lockup keeps the previous ONLINE/"synced" line for the
+            // whole outage.
+            publishLockup()
         }
     }
 

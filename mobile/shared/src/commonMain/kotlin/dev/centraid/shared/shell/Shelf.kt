@@ -140,10 +140,12 @@ public class Shelf(
          *
          * The foreground holding's ordinary state while a member is looking at
          * the app: one stream to the gateway, held open, carrying every page
-         * the vault commits. **A tail that is open IS a gateway that is
-         * reached** — which is why it decides [state] ahead of the last pass's
-         * answer, and why a quiet vault does not drift towards "offline" after
-         * an hour of nobody writing anything.
+         * the vault commits. **A receiving tail over a reachable last pass IS
+         * a gateway that is reached** — which is why it decides [state] ahead
+         * of a successful last pass, and why a quiet vault does not drift
+         * towards "offline" after an hour of nobody writing anything. A mark
+         * set when the stream is merely asked for does not outrank a
+         * just-recorded unreachable (R-SHELL-1).
          */
         public val tailing: Boolean = false,
         /**
@@ -167,16 +169,19 @@ public class Shelf(
         public val resting: Boolean get() = core == null
 
         /**
-         * THE STATE, DERIVED (#1025 S7-9).
+         * THE STATE, DERIVED (#1025 S7-9; R-SHELL-1).
          *
-         * Three cases, in this order, and the order is the whole definition:
+         * Cases, in this order, and the order is the whole definition:
          *
          * 1. A pass IN FLIGHT is syncing, whatever the last one said.
-         * 2. A bootstrap that ran and has not fetched the whole copy is
-         *    syncing — this is "paired, no file yet" and "the copy is 40%
-         *    here", which are the same thing to a member and were two cases in
-         *    the enum this replaced.
-         * 3. Otherwise the last pass decides: it reached the gateway, or it did
+         * 2. A just-recorded unreachable is OFFLINE — even if [tailing] was
+         *    marked true when the stream was asked for. Marking the ask must
+         *    not outrank a failed pass or a dead tail (trap unreachable-vault).
+         * 3. A receiving / asked-for tail over a reachable last pass is ONLINE
+         *    (#1025 S2, D-1025-S7-40).
+         * 4. A bootstrap that ran and has not fetched the whole copy is
+         *    syncing — "paired, no file yet" and "the copy is 40% here".
+         * 5. Otherwise the last pass decides: it reached the gateway, or it did
          *    not.
          *
          * **A holding that has never run a pass is [VaultLockup.State.STATE_SYNCING]
@@ -187,24 +192,24 @@ public class Shelf(
          */
         public val state: VaultLockup.State
             get() {
-                // A TAIL THAT IS OPEN IS ONLINE, and it outranks everything
-                // below (#1025 S2, D-1025-S7-40). The catch-up ran before it —
-                // the round opens a tail only after a pass has reported — so
-                // by the time this is true the device is current within one
-                // round trip and stays that way for as long as the stream
-                // lasts. A "syncing" spinner over that would be a device
-                // narrating the healthiest state it has.
-                if (tailing) return VaultLockup.State.STATE_ONLINE
                 if (passInFlight) return VaultLockup.State.STATE_SYNCING
-                val last = outcome ?: return VaultLockup.State.STATE_SYNCING
+                val last = outcome
+                // UNREACHABLE OUTRANKS A PENDING TAIL MARK (R-SHELL-1).
+                // `openTail` sets `tailing` when the stream is asked for, before
+                // any byte arrives. That mark alone must not say ONLINE over a
+                // pass (or closed tail) that already reported unreachable.
+                if (last != null && last.unreachable) {
+                    return VaultLockup.State.STATE_OFFLINE
+                }
+                // A TAIL OVER A REACHABLE LAST PASS IS ONLINE (#1025 S2,
+                // D-1025-S7-40). Quiet vaults move nothing for hours and are
+                // not offline for a second of it.
+                if (tailing) return VaultLockup.State.STATE_ONLINE
+                if (last == null) return VaultLockup.State.STATE_SYNCING
                 if (last.bootstrap.ran && last.copyFetched < last.copyTotal) {
                     return VaultLockup.State.STATE_SYNCING
                 }
-                return if (last.unreachable) {
-                    VaultLockup.State.STATE_OFFLINE
-                } else {
-                    VaultLockup.State.STATE_ONLINE
-                }
+                return VaultLockup.State.STATE_ONLINE
             }
 
         /** This holding as a row the switcher and the header both draw. */
@@ -689,12 +694,12 @@ public class Shelf(
     // -----------------------------------------------------------------------
 
     /**
-     * A TAIL OPENED ON [vaultId] (#1025 S2, D-1025-S7-40).
+     * A TAIL OPENED ON [vaultId] (#1025 S2, D-1025-S7-40; R-SHELL-1).
      *
-     * Called when the stream is asked for, not when the first page lands: the
-     * round runs a bounded catch-up pass first and opens the tail after it
-     * reported, so there is no window in which this says ONLINE over a device
-     * that has not spoken to its gateway.
+     * Called when the stream is asked for, not when the first page lands. The
+     * round runs a bounded catch-up first; [Holding.state] still refuses ONLINE
+     * when the last outcome is unreachable, so marking the ask alone cannot
+     * claim "synced" over a gateway that just failed to answer.
      */
     public fun tailOpened(vaultId: String) {
         update(vaultId) { it.copy(tailing = true) }
