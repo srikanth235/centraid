@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
@@ -212,6 +213,31 @@ public class AndroidBackgroundTasks(private val context: Context) : BackgroundTa
 }
 
 public class AndroidNetworkStatus(private val context: Context) : NetworkStatus {
+    private val listeners = mutableListOf<(NetworkStatus.Reading) -> Unit>()
+
+    init {
+        // THE RADIO IS A STREAM (#1025, R-SHELL-4). `current()` is still a
+        // question; airplane mode off is an event, and a snapshot asked later
+        // is how the header stayed "synced" until the member tapped Sync now.
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        manager?.registerDefaultNetworkCallback(
+            object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) = emit()
+                override fun onLost(network: Network) = emit()
+                override fun onUnavailable() = emit()
+                override fun onCapabilitiesChanged(
+                    network: Network,
+                    networkCapabilities: NetworkCapabilities,
+                ) = emit()
+
+                private fun emit() {
+                    val reading = snapshot(manager)
+                    listeners.toList().forEach { it(reading) }
+                }
+            },
+        )
+    }
+
     override suspend fun current(): NetworkStatus.Reading {
         val manager = context.getSystemService(ConnectivityManager::class.java)
             ?: return NetworkStatus.Reading(
@@ -221,6 +247,14 @@ public class AndroidNetworkStatus(private val context: Context) : NetworkStatus 
                 // THE PLATFORM WOULD NOT SAY. Not the same as offline.
                 platformRefused = true,
             )
+        return snapshot(manager)
+    }
+
+    override fun onChange(listener: (NetworkStatus.Reading) -> Unit) {
+        listeners += listener
+    }
+
+    private fun snapshot(manager: ConnectivityManager): NetworkStatus.Reading {
         val capabilities = manager.getNetworkCapabilities(manager.activeNetwork)
         val battery = context.getSystemService(BatteryManager::class.java)
         return NetworkStatus.Reading(

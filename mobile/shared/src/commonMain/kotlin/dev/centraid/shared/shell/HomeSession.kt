@@ -9,11 +9,13 @@ import centraid.screen.v1.SeatState
 import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.shared.platform.NetworkStatus
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.sync.ChangeStream
 import dev.centraid.shared.sync.LinkConditions
+import dev.centraid.shared.sync.RadioResume
 import dev.centraid.shared.sync.ScreenFetches
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
@@ -299,12 +301,30 @@ public class HomeSession private constructor(
      *
      * **There is no timer here and none anywhere else.** A foreground interval
      * is a deleted concept: between the catch-up and the tail closing, this
-     * device is current within one round trip.
+     * device is current within one round trip. Airplane mode off is not a
+     * timer either: [watchRadio] hears the path come back and runs this same
+     * occasion again (R-SHELL-4).
      */
     public suspend fun foreground(): SyncOutcome {
+        looking = true
+        val gen = lookGen
         val outcome = round(WakeReason.FOREGROUND)
-        openTail()
+        if (looking && lookGen == gen) openTail()
         return outcome
+    }
+
+    /**
+     * THE MEMBER LEFT: close the tail and stop listening for a radio resume.
+     *
+     * Distinct from [stopTail], which lock and suspend still call. A radio
+     * that returns while the member is not looking must not open a tail
+     * behind a backgrounded app (D-1025-S7-40, D-1025-S7-41); [lookGen]
+     * makes a resume that was already in flight skip [openTail] after this.
+     */
+    public suspend fun leftTheForeground() {
+        lookGen += 1
+        looking = false
+        stopTail()
     }
 
     /**
@@ -316,17 +336,22 @@ public class HomeSession private constructor(
      * gateway would spend it waiting for a commit nobody is making.
      */
     public suspend fun background(wake: WakeReason = WakeReason.SCHEDULED): SyncOutcome {
+        lookGen += 1
+        looking = false
         stopTail()
         return round(wake)
     }
 
     /**
-     * CLOSE THE TAIL. What lock, suspend and foreground-lost all do.
+     * CLOSE THE TAIL. What lock and suspend do.
      *
      * A COMMAND AND NOT A CANCELLATION: the coroutine is blocked inside the
      * core, and cancelling it from out here would abandon a page half applied.
      * The core closes the stream at a page boundary and the call returns with
      * what it moved, which is then recorded like any other pass.
+     *
+     * Foreground-lost goes through [leftTheForeground] so a later radio-up
+     * does not reopen the stream while the member is in the app switcher.
      */
     public suspend fun stopTail() {
         val open = tailing ?: return
@@ -341,6 +366,68 @@ public class HomeSession private constructor(
         // inside it. The other way round waits forever.
         open.join()
         tailing = null
+    }
+
+    /**
+     * THE RADIO IS A STREAM (#1025, R-SHELL-4).
+     *
+     * [NetworkStatus.onChange] fires when the path moves. Airplane mode on
+     * lowers reachability (the header may not wait for a hung QUIC socket);
+     * airplane mode off, while the member is still looking, is the foreground
+     * occasion again — catch up, then hold the tail. A path that stays
+     * satisfied while a gateway is down does not retry: that would be the
+     * poll D-1025-S7-40 deleted. Sync now and the next [foreground] remain
+     * the openers for a gateway that returns on a radio that never left.
+     */
+    private fun watchRadio() {
+        services.networkStatus.onChange { reading ->
+            scope.launch { onRadio(reading) }
+        }
+        scope.launch {
+            if (radioOnline == null) {
+                radioOnline = services.networkStatus.current().online
+            }
+        }
+    }
+
+    private suspend fun onRadio(reading: NetworkStatus.Reading) {
+        val act = RadioResume.act(looking, radioOnline, reading.online)
+        radioOnline = reading.online
+        when (act) {
+            RadioResume.Act.NONE -> Unit
+            RadioResume.Act.LOST -> radioLost()
+            RadioResume.Act.RESUME -> resumeRadio()
+        }
+    }
+
+    /**
+     * The path went unsatisfied. Lower reachability; do not raise it
+     * (trap unreachable-vault). A clean [stopTail] can return a successful
+     * outcome, so the holding is marked unreachable here — otherwise the
+     * header would keep "synced" over airplane mode.
+     */
+    private suspend fun radioLost() {
+        stopTail()
+        val holding = shelf.foregroundHolding() ?: return
+        val outcome = SyncOutcome(
+            unreachable = true,
+            sentence = "This device is offline.",
+        )
+        shelf.tailClosed(holding.vaultId, outcome)
+        publishSeat(outcome)
+        publishLockup()
+    }
+
+    /**
+     * The path came back while the member is looking. Same occasion as
+     * [foreground], without claiming the member just arrived: [lookGen]
+     * drops the tail open if they left during the round.
+     */
+    private suspend fun resumeRadio() {
+        val gen = lookGen
+        if (!looking) return
+        round(WakeReason.FOREGROUND)
+        if (looking && lookGen == gen) openTail()
     }
 
     /**
@@ -540,6 +627,8 @@ public class HomeSession private constructor(
         // THE TAIL FIRST (#1025 S2, D-1025-S7-40). A core closed under a pass
         // that is blocked inside it is the one teardown order that hangs, and a
         // tail is a pass that does not end on its own.
+        lookGen += 1
+        looking = false
         stopTail()
         shelf.closeAll()
         scope.cancel()
@@ -625,11 +714,28 @@ public class HomeSession private constructor(
      * is what "a tail with an immediate close" is.
      *
      * Null is a session with no tail open: a background window, a locked
-     * device, or a foreground that has not reached its gateway yet. **There is
-     * no timer beside it and no interval anywhere** — that is the whole of this
-     * slice.
+     * device, a radio that dropped, or a foreground that has not reached its
+     * gateway yet. **There is no timer beside it and no interval anywhere** —
+     * the radio is an event (R-SHELL-4), not a retry cadence.
      */
     private var tailing: Job? = null
+
+    /**
+     * THE MEMBER IS LOOKING AT THE APP (R-SHELL-4).
+     *
+     * True between [foreground] and [leftTheForeground] / [background]. A
+     * radio that returns only reopens the tail while this is true; [lookGen]
+     * invalidates an in-flight resume so a leave during the round cannot
+     * open a stream behind the app switcher.
+     */
+    private var looking: Boolean = false
+    private var lookGen: Int = 0
+
+    /**
+     * Last radio reading this session heard. Null until [watchRadio] seeds
+     * it or the first [NetworkStatus.onChange] arrives; see [RadioResume].
+     */
+    private var radioOnline: Boolean? = null
 
     /**
      * ONE REBIND AT A TIME. Two interleaved would leave one cancelling the
@@ -775,6 +881,9 @@ public class HomeSession private constructor(
             // that arrives only on the next change.
             session.serveRoster()
             session.rebind()
+            // THE RADIO, FOR THE LIFE OF THE SESSION (R-SHELL-4). Seeded here
+            // so a monitor's first "path is satisfied" is not a resume.
+            session.watchRadio()
             host.send(HomeEvent(opened = HomeEvent.Opened()))
             return session
         }

@@ -16,6 +16,7 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
 import kotlin.coroutines.resume
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.BackgroundTasks.BGAppRefreshTaskRequest
@@ -42,13 +43,11 @@ import platform.Foundation.dateWithTimeIntervalSinceNow
 import platform.Network.nw_path_get_status
 import platform.Network.nw_path_is_constrained
 import platform.Network.nw_path_is_expensive
-import platform.Network.nw_path_monitor_cancel
 import platform.Network.nw_path_monitor_create
 import platform.Network.nw_path_monitor_set_queue
 import platform.Network.nw_path_monitor_set_update_handler
 import platform.Network.nw_path_monitor_start
 import platform.Network.nw_path_status_satisfied
-import platform.Network.nw_path_t
 import platform.Security.SecItemAdd
 import platform.Security.SecRandomCopyBytes
 import platform.Security.kSecRandomDefault
@@ -412,6 +411,11 @@ public class IosBackgroundTasks : BackgroundTasks {
  * full sync pass over a link the owner explicitly narrowed.
  */
 public class IosNetworkStatus : NetworkStatus {
+    private val listeners = mutableListOf<(NetworkStatus.Reading) -> Unit>()
+    private val firstPath = CompletableDeferred<Unit>()
+    private var lastOnline: Boolean? = null
+    private var lastMetered: Boolean = true
+
     init {
         // BATTERY MONITORING HAS TO BE TURNED ON, AND NOTHING TURNED IT ON
         // (#1025 S5). `batteryState` is documented to answer
@@ -422,51 +426,56 @@ public class IosNetworkStatus : NetworkStatus {
         // it is not a read, it is this object's construction, which is the
         // right place for a per-process flag that costs nothing to set twice.
         UIDevice.currentDevice.batteryMonitoringEnabled = true
+        // ONE MONITOR FOR THE PROCESS (#1025, R-SHELL-4). The previous shape
+        // started and cancelled a monitor around each `current()` call, so a
+        // path that moved between reads was a fact nobody heard — airplane
+        // mode off did not reopen the tail. The monitor is a stream; we keep
+        // it.
+        val monitor = nw_path_monitor_create()
+        nw_path_monitor_set_update_handler(monitor) { path ->
+            val online = nw_path_get_status(path) == nw_path_status_satisfied
+            val metered = nw_path_is_expensive(path) || nw_path_is_constrained(path)
+            lastOnline = online
+            lastMetered = metered
+            if (!firstPath.isCompleted) firstPath.complete(Unit)
+            val reading = reading(online, metered)
+            listeners.toList().forEach { it(reading) }
+        }
+        nw_path_monitor_set_queue(monitor, dispatch_get_main_queue())
+        nw_path_monitor_start(monitor)
     }
 
     override suspend fun current(): NetworkStatus.Reading {
-        val charging = UIDevice.currentDevice.batteryState ==
-            UIDeviceBatteryState.UIDeviceBatteryStateCharging
-        val path = currentPath()
+        val online = lastOnline
+        if (online != null) return reading(online, lastMetered)
+        withTimeoutOrNull(PATH_TIMEOUT_MS) { firstPath.await() }
+        val arrived = lastOnline
             ?: return NetworkStatus.Reading(
                 online = false,
                 metered = true,
-                charging = charging,
+                charging = charging(),
                 // THE PLATFORM WOULD NOT SAY — the monitor never called back.
                 // Not the same as offline, and the only case that earns this.
                 platformRefused = true,
             )
-        return NetworkStatus.Reading(
-            online = nw_path_get_status(path) == nw_path_status_satisfied,
-            metered = nw_path_is_expensive(path) || nw_path_is_constrained(path),
-            charging = charging,
-            platformRefused = false,
-        )
+        return reading(arrived, lastMetered)
     }
 
-    /**
-     * One reading from a monitor started and cancelled around it.
-     *
-     * `NWPathMonitor` is a stream and this interface asks a question, so the
-     * monitor lives exactly as long as the first callback. It is cancelled in a
-     * `finally`: a monitor left running holds a dispatch source per call.
-     */
-    private suspend fun currentPath(): nw_path_t = withTimeoutOrNull(PATH_TIMEOUT_MS) {
-        val monitor = nw_path_monitor_create()
-        try {
-            suspendCancellableCoroutine { continuation ->
-                nw_path_monitor_set_update_handler(monitor) { path ->
-                    // RESUMED AT MOST ONCE. The handler fires again on every
-                    // path change, and a second `resume` throws.
-                    if (continuation.isActive) continuation.resume(path)
-                }
-                nw_path_monitor_set_queue(monitor, dispatch_get_main_queue())
-                nw_path_monitor_start(monitor)
-            }
-        } finally {
-            nw_path_monitor_cancel(monitor)
-        }
+    override fun onChange(listener: (NetworkStatus.Reading) -> Unit) {
+        listeners += listener
     }
+
+    private fun reading(online: Boolean, metered: Boolean): NetworkStatus.Reading =
+        NetworkStatus.Reading(
+            online = online,
+            metered = metered,
+            charging = charging(),
+            platformRefused = false,
+        )
+
+    private fun charging(): Boolean =
+        UIDevice.currentDevice.batteryState ==
+            UIDeviceBatteryState.UIDeviceBatteryStateCharging
 
     private companion object {
         /**

@@ -273,6 +273,19 @@ public class HomeBridge {
     }
 
     /**
+     * THE MEMBER LEFT THE FOREGROUND (#1025, R-SHELL-4).
+     *
+     * Closes the tail and stops a radio-up from reopening it while the app
+     * is in the switcher. Lock and suspend still call [stopTail]: those leave
+     * the process without a member looking, but they are not a scene-phase
+     * leave, and the next [foreground] is what resumes.
+     */
+    public fun leftTheForeground() {
+        val open = session ?: return
+        scope.launch { open.leftTheForeground() }
+    }
+
+    /**
      * CLOSE THE TAIL AND NOTHING ELSE. What locking and suspending do.
      *
      * No round follows: a device that is locked is a device whose decrypted

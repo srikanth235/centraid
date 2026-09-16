@@ -101,7 +101,23 @@ public class FakeNetworkStatus(
         charging = true,
     ),
 ) : NetworkStatus {
+    private val listeners = mutableListOf<(NetworkStatus.Reading) -> Unit>()
+
     override suspend fun current(): NetworkStatus.Reading = reading
+
+    override fun onChange(listener: (NetworkStatus.Reading) -> Unit) {
+        listeners += listener
+    }
+
+    /**
+     * A test's radio. Assigning [reading] alone does not fire: a fixture that
+     * only wants [current] to answer a value should keep doing that. This is
+     * the airplane-mode toggle.
+     */
+    public fun set(next: NetworkStatus.Reading) {
+        reading = next
+        listeners.toList().forEach { it(next) }
+    }
 }
 
 public class FakeMediaLibrary(

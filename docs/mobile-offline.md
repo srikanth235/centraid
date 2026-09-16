@@ -24,7 +24,7 @@ The occasions are three, and they are all the same mechanism with a different bo
 
 | Occasion | What opens, and what closes it |
 | --- | --- |
-| **Foreground** | A round catches every holding up, then the foreground holding's log stream stays open. It closes when the foreground is lost — iOS `inactive`/`background`, Android `onPause` — or when the device locks. |
+| **Foreground** | A round catches every holding up, then the foreground holding's log stream stays open. It closes when the foreground is lost — iOS `inactive`/`background`, Android `onPause` — or when the device locks. **Airplane mode is this occasion interrupted, not a fourth one** (R-SHELL-4): a path that stops being satisfied lowers reachability and closes the tail so the header cannot keep "synced"; a path that becomes satisfied again *while the member is still looking* is the same catch-up-then-tail as arriving. `WakeReason.CONNECTIVITY` is that event. Nothing retries on a timer — a gateway that returns on a radio that never left still needs Sync now or the next foreground. |
 | **Background pass** | The tail is closed first, then one bounded round runs inside the deadline the platform stated. A stream parked on a quiet gateway would spend the whole window waiting for a commit nobody is making. |
 | **Relaunch** | The same as a foreground, resuming from the durable cursor. A relaunch is not a re-bootstrap. |
 

@@ -2860,3 +2860,47 @@ and cell `aspectRatio` boxes — no parallel overflow found.
 - Device re-proof of the Allow-button absence after grant.
 - Folding duplicated permission sentences into `dev.centraid.design.Copy`
   (still filed from S6).
+
+## Live-shell radio resume — airplane mode off reopens the tail (#1025)
+
+R-SHELL-4; cites D-1025-S7-40 (one mechanism, three occasions; no poll),
+D-1025-S7-41 (no background wake from this event), trap
+[unreachable-vault](../docs/traps/unreachable-vault.md). Live list item 4's
+second half: the header now goes OFFLINE (R-SHELL-1), but the tail stayed
+dead until Sync now or a leave/return.
+
+**Cause.** `WakeReason.CONNECTIVITY` existed and `NetworkStatus.current()`
+answered a snapshot. Nothing listened. iOS started and cancelled an
+`NWPathMonitor` around each read, so a path that moved between reads was a
+fact nobody heard. Android queried `ConnectivityManager` the same way. The
+foreground occasion died with the socket and did not come back when the
+radio did.
+
+**Ruling R-SHELL-4.** Airplane mode is the foreground occasion interrupted,
+not a fourth occasion and not a timer. A path that stops being satisfied
+lowers reachability (the header must not wait for a hung QUIC socket) and
+never raises it. A path that becomes satisfied again *while the member is
+still looking* is catch-up-then-tail, the same as arriving. A radio change
+behind the app switcher is NONE — the next `foreground()` is the opener. A
+gateway that returns on a radio that never left still needs Sync now or the
+next foreground; reconnecting a dead tail while the path is still satisfied
+would be the poll D-1025-S7-40 deleted.
+
+**Fix.**
+
+| Path | Change |
+| --- | --- |
+| `RadioResume.kt` | Pure table: looking × wasOnline × nowOnline → NONE / LOST / RESUME. |
+| `NetworkStatus.onChange` | Required listener. iOS keeps one `NWPathMonitor`; Android registers `NetworkCallback`. JVM fake `set()` fires; assigning `reading` does not. |
+| `HomeSession` | `watchRadio` for the life of the session. LOST → `stopTail` + unreachable so the header cannot stay "synced". RESUME → round + `openTail` if `lookGen` still matches. `leftTheForeground()` distinct from `stopTail()`. |
+| iOS `ShellModel` / Android `MainActivity` | Leave calls `leftTheForeground`. |
+| `docs/mobile-offline.md` | Foreground occasion covers airplane mode. |
+
+**Demonstrated red.** `RadioResumeSpec` is the airplane-mode table. Pre-fix
+there is no rising-edge act at all (`RESUME` is the missing case). JVM fake
+fires only from `set()`.
+
+**Not done.** Device re-proof of airplane on/off on the simulator. A
+`--no-relay` gateway whose *direct addresses* changed is still outside this
+slice (D-1025-S7-81 already persisted endpoint identity). CLI write into a
+live gateway (bug 10) is still wave 2.

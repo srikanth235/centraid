@@ -262,10 +262,13 @@ final class ShellModel: ObservableObject {
     /// Both halves of leaving — the app switcher and a real background — do the
     /// same thing here, because a stream held open by a process the OS is about
     /// to suspend is a socket nobody is reading. What resumes it is the next
-    /// `active`, from the durable cursor.
+    /// `active`, from the durable cursor — or, while still `active`, the radio
+    /// coming back (airplane mode off, R-SHELL-4). Leaving must tell the
+    /// session the member is gone, or a path-up would reopen the tail behind
+    /// the app switcher.
     func leftTheForeground() {
         #if canImport(CentraidShared)
-        home.stopTail()
+        home.leftTheForeground()
         #endif
     }
 

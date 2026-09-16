@@ -162,6 +162,22 @@ public interface BackgroundTasks {
 public interface NetworkStatus {
     public suspend fun current(): Reading
 
+    /**
+     * Hear the radio move (#1025, R-SHELL-4).
+     *
+     * `NWPathMonitor` on iOS, `ConnectivityManager.NetworkCallback` on
+     * Android. The listener is the airplane-mode journey: a path that stops
+     * being satisfied is LOST, one that becomes satisfied again while the
+     * member is looking is RESUME. This is not a poll — the platform fires
+     * when the path changes, and nothing in the shell holds an interval
+     * (D-1025-S7-40).
+     *
+     * The reading is the same object [current] answers. A listener that
+     * treated "the callback fired" as "the gateway is reachable" would be
+     * the trap: only a pass may raise reachability.
+     */
+    public fun onChange(listener: (Reading) -> Unit)
+
     public data class Reading(
         public val online: Boolean,
         public val metered: Boolean,

@@ -122,17 +122,20 @@ public class MainActivity : ComponentActivity() {
     }
 
     /**
-     * THE MEMBER LEFT: close the tail (#1025 S2, D-1025-S7-40).
+     * THE MEMBER LEFT: close the tail (#1025 S2, D-1025-S7-40, R-SHELL-4).
      *
      * `onPause` and not `onStop`, for the same reason iOS closes on `inactive`:
      * a phone in the recents switcher is not a phone the member is looking at,
      * and a stream held open by a process about to be frozen is a socket nobody
-     * reads. The next `onResume` reopens it from the durable cursor.
+     * reads. The next `onResume` reopens it from the durable cursor. While
+     * still resumed, airplane mode off is the same opener — so leaving has to
+     * mark the member gone, or a path-up would reopen the tail in the recents
+     * switcher.
      */
     override fun onPause() {
         super.onPause()
         val open = session ?: return
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.stopTail() }
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.leftTheForeground() }
     }
 
     override fun onTrimMemory(level: Int) {
