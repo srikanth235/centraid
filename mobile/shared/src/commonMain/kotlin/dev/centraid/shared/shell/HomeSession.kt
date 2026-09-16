@@ -21,6 +21,7 @@ import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.sync.SyncWindowPolicy
+import dev.centraid.shared.sync.TailResume
 import dev.centraid.shared.sync.TransferRule
 import dev.centraid.shared.sync.WakeReason
 import kotlinx.coroutines.CoroutineDispatcher
@@ -29,6 +30,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -285,7 +287,15 @@ public class HomeSession private constructor(
         // AND THE TAIL IS REOPENED, because that is what the button is for: a
         // foreground wake that ended with no tail open is a device that would
         // otherwise sit on its cursor until the member tapped again.
-        if (wake == WakeReason.FOREGROUND) openTail()
+        if (wake == WakeReason.FOREGROUND) {
+            cancelReconnect()
+            if (outcome.unreachable) {
+                scheduleReconnect()
+            } else {
+                reconnectAttempt = 0
+                openTail()
+            }
+        }
         return outcome
     }
 
@@ -306,11 +316,9 @@ public class HomeSession private constructor(
      * occasion again (R-SHELL-4).
      */
     public suspend fun foreground(): SyncOutcome {
+        cancelReconnect()
         looking = true
-        val gen = lookGen
-        val outcome = round(WakeReason.FOREGROUND)
-        if (looking && lookGen == gen) openTail()
-        return outcome
+        return catchUpThenTail(lookGen)
     }
 
     /**
@@ -324,6 +332,7 @@ public class HomeSession private constructor(
     public suspend fun leftTheForeground() {
         lookGen += 1
         looking = false
+        cancelReconnect()
         stopTail()
     }
 
@@ -338,6 +347,7 @@ public class HomeSession private constructor(
     public suspend fun background(wake: WakeReason = WakeReason.SCHEDULED): SyncOutcome {
         lookGen += 1
         looking = false
+        cancelReconnect()
         stopTail()
         return round(wake)
     }
@@ -354,18 +364,26 @@ public class HomeSession private constructor(
      * does not reopen the stream while the member is in the app switcher.
      */
     public suspend fun stopTail() {
+        // A LOCK OR LEAVE IS NOT A RESTART. Cancel any backoff first so a
+        // job that already settled cannot reopen the stream behind us.
+        cancelReconnect()
         val open = tailing ?: return
-        shelf.core()?.call(
-            Envelope(
-                request = Request(
-                    command = Command(name = SEAT_TAIL_STOP_COMMAND, invoke_key = "shell"),
+        stopping = true
+        try {
+            shelf.core()?.call(
+                Envelope(
+                    request = Request(
+                        command = Command(name = SEAT_TAIL_STOP_COMMAND, invoke_key = "shell"),
+                    ),
                 ),
-            ),
-        )
-        // ORDERED: tell the core first, then wait for the job that is blocked
-        // inside it. The other way round waits forever.
-        open.join()
-        tailing = null
+            )
+            // ORDERED: tell the core first, then wait for the job that is blocked
+            // inside it. The other way round waits forever.
+            open.join()
+            tailing = null
+        } finally {
+            stopping = false
+        }
     }
 
     /**
@@ -375,9 +393,8 @@ public class HomeSession private constructor(
      * lowers reachability (the header may not wait for a hung QUIC socket);
      * airplane mode off, while the member is still looking, is the foreground
      * occasion again — catch up, then hold the tail. A path that stays
-     * satisfied while a gateway is down does not retry: that would be the
-     * poll D-1025-S7-40 deleted. Sync now and the next [foreground] remain
-     * the openers for a gateway that returns on a radio that never left.
+     * satisfied while a gateway is down is [TailResume]'s: the dead stream is
+     * reopened on a backoff, which is not a poll of a live tail.
      */
     private fun watchRadio() {
         services.networkStatus.onChange { reading ->
@@ -407,6 +424,7 @@ public class HomeSession private constructor(
      * header would keep "synced" over airplane mode.
      */
     private suspend fun radioLost() {
+        cancelReconnect()
         stopTail()
         val holding = shelf.foregroundHolding() ?: return
         val outcome = SyncOutcome(
@@ -426,8 +444,42 @@ public class HomeSession private constructor(
     private suspend fun resumeRadio() {
         val gen = lookGen
         if (!looking) return
-        round(WakeReason.FOREGROUND)
-        if (looking && lookGen == gen) openTail()
+        catchUpThenTail(gen)
+    }
+
+    /**
+     * Catch up, then hold the tail — or, if the gateway did not answer, schedule
+     * the reopen (R-SHELL-5). Shared by [foreground], airplane-mode up, and the
+     * dead-tail backoff so a restart and a radio-up cannot diverge.
+     */
+    private suspend fun catchUpThenTail(gen: Int): SyncOutcome {
+        val outcome = round(WakeReason.FOREGROUND)
+        if (!looking || lookGen != gen) return outcome
+        if (outcome.unreachable) {
+            scheduleReconnect()
+            return outcome
+        }
+        reconnectAttempt = 0
+        openTail()
+        return outcome
+    }
+
+    private fun cancelReconnect() {
+        reconnect?.cancel()
+        reconnect = null
+    }
+
+    private fun scheduleReconnect() {
+        if (!TailResume.shouldReconnect(looking, stopping, radioOnline)) return
+        cancelReconnect()
+        val gen = lookGen
+        val wait = TailResume.backoffMs(reconnectAttempt)
+        reconnectAttempt += 1
+        reconnect = scope.launch {
+            delay(wait)
+            if (lookGen != gen) return@launch
+            resumeRadio()
+        }
     }
 
     /**
@@ -460,6 +512,12 @@ public class HomeSession private constructor(
             // published lockup keeps the previous ONLINE/"synced" line for the
             // whole outage.
             publishLockup()
+            // A DEAD TAIL WHILE LOOKING IS REOPENED (R-SHELL-5). Gateway
+            // restart does not move the radio, so [RadioResume] cannot see it.
+            // Our own stop and a leave do not come through here as a resume.
+            if (TailResume.shouldReconnect(looking, stopping, radioOnline)) {
+                scheduleReconnect()
+            }
         }
     }
 
@@ -629,6 +687,7 @@ public class HomeSession private constructor(
         // tail is a pass that does not end on its own.
         lookGen += 1
         looking = false
+        cancelReconnect()
         stopTail()
         shelf.closeAll()
         scope.cancel()
@@ -715,8 +774,8 @@ public class HomeSession private constructor(
      *
      * Null is a session with no tail open: a background window, a locked
      * device, a radio that dropped, or a foreground that has not reached its
-     * gateway yet. **There is no timer beside it and no interval anywhere** —
-     * the radio is an event (R-SHELL-4), not a retry cadence.
+     * gateway yet. A *live* tail has no interval (D-1025-S7-40). A *dead* one
+     * while the member is looking is reopened on a backoff (R-SHELL-5).
      */
     private var tailing: Job? = null
 
@@ -730,6 +789,17 @@ public class HomeSession private constructor(
      */
     private var looking: Boolean = false
     private var lookGen: Int = 0
+
+    /**
+     * True only while [stopTail] is asking the core to close the stream, so
+     * the job that then settles does not schedule a reconnect of a stop we
+     * issued (lock, leave, radio-down).
+     */
+    private var stopping: Boolean = false
+
+    /** Backoff job for a dead tail (R-SHELL-5). Null while nothing is waiting. */
+    private var reconnect: Job? = null
+    private var reconnectAttempt: Int = 0
 
     /**
      * Last radio reading this session heard. Null until [watchRadio] seeds

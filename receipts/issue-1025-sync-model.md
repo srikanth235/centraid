@@ -2904,3 +2904,36 @@ fires only from `set()`.
 `--no-relay` gateway whose *direct addresses* changed is still outside this
 slice (D-1025-S7-81 already persisted endpoint identity). CLI write into a
 live gateway (bug 10) is still wave 2.
+
+## Live-shell tail resume — gateway restart reopens the tail (#1025)
+
+R-SHELL-5; cites D-1025-S7-40 ("stay open as long as the OS allows"; the
+deleted interval is a poll of a *live* tail, not the reopen of a dead one),
+R-SHELL-4 (radio-down is a different opener). Live list item 4, the
+restart half: the path never moves, the stream dies, and until this the
+member had to tap Sync now.
+
+**Cause.** R-SHELL-4 hears `NetworkStatus.onChange`. A gateway process that
+exits and comes back on the same radio does not fire that. `openTail`'s job
+settled, published OFFLINE, and waited.
+
+**Ruling R-SHELL-5.** A dead tail while the member is looking and the radio
+is not known-offline is reopened on a deterministic 1s…30s backoff. That is
+the foreground occasion keeping the stream open for as long as the OS
+allows, not a fourth occasion and not a poll: a live tail still has no
+timer. Cancelled on leave, on our own `stopTail` (lock / suspend), and on
+radio-down (R-SHELL-4 owns that edge). A pass that does not reach does not
+raise the header — R-SHELL-1 still holds. `--no-relay` address *change*
+is still discovery, not this backoff; a restart whose endpoint identity
+and addresses still match is this.
+
+**Fix.**
+
+| Path | Change |
+| --- | --- |
+| `TailResume.kt` | Pure table: looking × stopping × radioOnline → reconnect or not; `backoffMs`. |
+| `HomeSession` | Tail job schedules reconnect when it settles unexpectedly. `catchUpThenTail` shared by foreground, radio-up, and the backoff. `stopping` distinguishes our stop from a dead peer. |
+| `docs/mobile-offline.md` | Foreground occasion covers gateway restart. |
+
+**Demonstrated red.** `TailResumeSpec`: looking + radio-up → reconnect;
+leave / our stop / radio-down → not; backoff 1s, 2s, … 30s cap.
