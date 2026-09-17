@@ -1,9 +1,8 @@
 package dev.centraid.shared.sync
 
 import centraid.core.v1.Command
+import centraid.core.v1.CommandStatus
 import centraid.core.v1.Envelope
-import centraid.core.v1.Intent
-import centraid.core.v1.IntentStatus
 import centraid.core.v1.PageCursor
 import centraid.core.v1.PageQuery
 import centraid.core.v1.PageRequest
@@ -99,7 +98,15 @@ public interface ScreenWrites<S, E> {
      */
     public fun seat(state: S): SeatState?
 
-    /** The app the write belongs to; `Intent.app_id`. */
+    /**
+     * The app the write belongs to.
+     *
+     * It was `Intent.app_id`, and `Command` carries no such field: a command is
+     * registered under a name the vault holds and the app is that name's first
+     * segment (`notes.save`). It stays because a log line still has to say which
+     * app wrote, and deriving it from the command name would be a second
+     * spelling of a fact the screen already knows.
+     */
     public val appId: String
 
     /**
@@ -109,7 +116,7 @@ public interface ScreenWrites<S, E> {
      * sentence out of an error: `Error.detail` is logs-only and a shell that
      * made its own from a peer's words would be the hole in that rule.
      */
-    public fun settled(status: IntentStatus, sentence: String): E?
+    public fun settled(status: CommandStatus, sentence: String): E?
 }
 
 /**
@@ -117,7 +124,7 @@ public interface ScreenWrites<S, E> {
  *
  * Beside [ScreenWrites] and shaped like it, because it is the same kind of
  * thing: a member action this screen can take that is not a read. It is NOT a
- * write — nothing commits, there is no intent and no outbox entry — and it must
+ * write — nothing commits and there is no outbox entry — and it must
  * not go through the write gate, because a queued download is a promise nobody
  * can keep: the member wants the file now or wants to be told the gateway is
  * away.
@@ -330,18 +337,20 @@ public class ScreenRuntime<S, E>(
     /**
      * Serve one write: gate it, then hand it to the core.
      *
-     * **The shell declares no payload hash** (#1025 S4, D-1025-S4-6). The field
-     * is BLAKE3 over the canonical JSON, and neither CryptoKit nor
-     * MessageDigest offers BLAKE3 — a shell that filled it would be filling it
-     * with a different function's value under the vault's name, which is the
-     * defect S4 closed at the staging door. It is left empty and the core
-     * computes it, with the same canonicalisation the gateway rehashes with.
+     * ## A WRITE IS A COMMAND, AND THERE IS NO INTENT (#1029 §1, §6)
      *
-     * `intent_id` IS the screen's `invokeKey`, which is content-derived rather
+     * This sent `Request::Intent` — a write QUEUED for a gateway to run, with a
+     * payload hash the gateway rehashed and a `needs` list it pulled bytes on.
+     * There is no gateway. The phone is the vault, so the write it makes IS the
+     * commit: `Request::Command` down the same door, answered by the
+     * `CommandOutcome` the handler produced. `intent.proto` is deleted and the
+     * envelope's arm 4 is retired, not reused.
+     *
+     * `invoke_key` IS the screen's `invokeKey`, which is content-derived rather
      * than ordinal (`NotesEditorMachine`: `"notes.save:<noteId>:<baseRevision>"`).
-     * A retry of the same save carries the same id, so the gateway's replay
-     * ledger short-circuits it; a save over a NEW base revision carries a
-     * different one, so two real edits are two writes.
+     * It kept a replayed intent from re-executing a command that had already
+     * committed, and it does exactly that here — `command.proto` calls the field
+     * required for that reason.
      */
     private suspend fun submit(write: ScreenEffect.SubmitWrite, writes: ScreenWrites<S, E>) {
         when (val verdict = WriteGate.verdict(write, writes.seat(host.state.value))) {
@@ -349,7 +358,7 @@ public class ScreenRuntime<S, E>(
                 // REFUSED, AND SAID SO. Not queued and not silently dropped:
                 // the member is told the write did not happen, with the
                 // sentence that says why.
-                writes.settled(IntentStatus.INTENT_STATUS_DENIED, verdict.sentence)
+                writes.settled(CommandStatus.COMMAND_STATUS_DENIED, verdict.sentence)
                     ?.let { host.send(it) }
                 return
             }
@@ -363,7 +372,7 @@ public class ScreenRuntime<S, E>(
         val handle = core()
         if (handle == null) {
             writes.settled(
-                IntentStatus.INTENT_STATUS_DENIED,
+                CommandStatus.COMMAND_STATUS_DENIED,
                 "No vault is open on this device.",
             )?.let { host.send(it) }
             return
@@ -371,28 +380,27 @@ public class ScreenRuntime<S, E>(
         val request = Envelope(
             request_id = 0,
             request = Request(
-                intent = Intent(
-                    intent_id = write.invokeKey,
-                    app_id = writes.appId,
-                    action = write.command,
+                command = Command(
+                    name = write.command,
+                    invoke_key = write.invokeKey,
                     input = write.inputJson.encodeUtf8(),
                 ),
             ),
         )
         val event = when (val outcome = handle.call(request)) {
             is CoreOutcome.Failed -> writes.settled(
-                IntentStatus.INTENT_STATUS_FAILED,
+                CommandStatus.COMMAND_STATUS_FAILED,
                 outcome.failure.sentence,
             )
             is CoreOutcome.Answered -> {
-                val answered = outcome.value.response?.outcome
+                val answered = outcome.value.response?.command
                 if (answered == null) {
-                    writes.settled(IntentStatus.INTENT_STATUS_FAILED, "")
+                    writes.settled(CommandStatus.COMMAND_STATUS_FAILED, "")
                 } else {
-                    // THE CORE'S OWN SENTENCE, when it has one. `Outcome.reason`
-                    // is the author's words for a denial or a failed
-                    // precondition — never the raw predicate, which reaches the
-                    // audit trail only.
+                    // THE CORE'S OWN SENTENCE, when it has one.
+                    // `CommandOutcome.reason` is the author's words for a denial
+                    // or a failed precondition — never the raw predicate, which
+                    // reaches the audit trail only.
                     writes.settled(answered.status, answered.reason)
                 }
             }
@@ -404,8 +412,8 @@ public class ScreenRuntime<S, E>(
      * FETCH ONE ORIGINAL THE MEMBER TAPPED (#1025 S5, D-1025-S7-63).
      *
      * `seat.bytes.fetch` — `seat.sync` with a one-item window — and NOT a
-     * write: no gate, no intent, no outbox entry. A queued download is a
-     * promise nobody can keep.
+     * write: no gate and no outbox entry. A queued download is a promise nobody
+     * can keep.
      *
      * **A settle event goes out on every path, the failures included.** The
      * success path's bytes redraw the cell through the ordinary `RowsChanged`

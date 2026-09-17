@@ -1,6 +1,6 @@
 package dev.centraid.shared.apps.notes
 
-import centraid.core.v1.IntentStatus
+import centraid.core.v1.CommandStatus
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
@@ -170,27 +170,28 @@ public object NotesReads :
     /**
      * The save's outcome, as the editor's own settle event.
      *
-     * **QUEUED IS ITS OWN STATE, and the proto already had it**:
-     * `SAVE_STATE_QUEUED`, "written to this device's outbox; the gateway has
-     * not confirmed". It is neither CLEAN nor a failure, and collapsing it into
-     * CLEAN would be the shell claiming a confirmation the gateway has not
-     * given — which is the badge a member reads to know a write is still owed.
-     * `SENDING` and `PARKED` are the same fact: somewhere durable, on its way.
+     * **QUEUED IS STILL ITS OWN STATE, and it is still reachable** (#1029 §1).
+     * It used to mean "in this device's outbox; the gateway has not confirmed",
+     * and there is no gateway — but `CommandStatus` keeps `QUEUED`, `IN_FLIGHT`
+     * and `PARKED`, and all three say the same thing they said: somewhere
+     * durable, not yet committed. Collapsing them into CLEAN would be the shell
+     * claiming a commit that has not happened, which is the badge a member reads
+     * to know a write is still owed.
      *
-     * Only `EXECUTED` is clean. `DENIED`, `FAILED` and `CONFLICT` are
-     * `SAVE_STATE_REFUSED`, which keeps the member's words on the screen with a
-     * sentence OVER them rather than instead of them.
+     * Only `EXECUTED` is clean. `DENIED` and `FAILED` are `SAVE_STATE_REFUSED`,
+     * which keeps the member's words on the screen with a sentence OVER them
+     * rather than instead of them.
      */
-    override fun settled(status: IntentStatus, sentence: String): NotesEditorEvent =
+    override fun settled(status: CommandStatus, sentence: String): NotesEditorEvent =
         NotesEditorEvent(
             save_settled = NotesEditorEvent.SaveSettled(
                 outcome = when (status) {
-                    IntentStatus.INTENT_STATUS_EXECUTED ->
+                    CommandStatus.COMMAND_STATUS_EXECUTED ->
                         NotesEditorState.SaveState.SAVE_STATE_CLEAN
 
-                    IntentStatus.INTENT_STATUS_QUEUED,
-                    IntentStatus.INTENT_STATUS_SENDING,
-                    IntentStatus.INTENT_STATUS_PARKED,
+                    CommandStatus.COMMAND_STATUS_QUEUED,
+                    CommandStatus.COMMAND_STATUS_IN_FLIGHT,
+                    CommandStatus.COMMAND_STATUS_PARKED,
                     -> NotesEditorState.SaveState.SAVE_STATE_QUEUED
 
                     else -> NotesEditorState.SaveState.SAVE_STATE_REFUSED

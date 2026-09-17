@@ -1,8 +1,7 @@
 package dev.centraid.shared.shell
 
+import centraid.core.v1.Command
 import centraid.core.v1.Envelope
-import centraid.core.v1.Intent
-import centraid.core.v1.NeededBytes
 import centraid.core.v1.Request
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
@@ -292,28 +291,24 @@ public class CameraRoll(
                 val answer = handle.call(
                     Envelope(
                         request = Request(
-                            intent = Intent(
-                                // THE HASH IS THE ID. See the class comment on
-                                // why it is not the local identifier.
-                                intent_id = "$ACTION:$hash",
-                                app_id = APP,
-                                action = ACTION,
+                            command = Command(
+                                name = ACTION,
+                                // THE HASH IS THE INVOKE KEY. See the class
+                                // comment on why it is not the local
+                                // identifier. It was `Intent.intent_id` and it
+                                // does the same job: the same photograph
+                                // re-offered is the same key, so the re-walk
+                                // that follows a reinstall commits once.
+                                invoke_key = "$ACTION:$hash",
                                 input = inputFor(asset, hash).encodeUtf8(),
-                                // THE DECLARATION THE GATEWAY PULLS ON. Without
-                                // it the gateway would execute a command naming
-                                // bytes it does not hold, and the row would
-                                // point at nothing on every other device.
-                                needs = listOf(
-                                    NeededBytes(
-                                        hash = hash,
-                                        byte_size = staged.staged.byteSize,
-                                        media_type = original.mediaType,
-                                    ),
-                                ),
-                                // A PHOTOGRAPH IS NEVER ONLINE-ONLY. Its whole
-                                // point is that it survives being taken in a
-                                // basement.
-                                online_only = false,
+                                // NO `needs` AND NO `online_only` (#1029 §1).
+                                // `NeededBytes` was the declaration a GATEWAY
+                                // pulled the bytes on, and `online_only` was
+                                // the flag that forbade the outbox. There is no
+                                // gateway and no outbox: the bytes are already
+                                // staged in THIS vault's own store by the call
+                                // above, and the command commits the row beside
+                                // them.
                             ),
                         ),
                     ),
