@@ -20,6 +20,7 @@ somebody redeems an invite.
 centraid-gateway invite  --data-dir ~/vault --quota-gib 64   # read this aloud
 centraid-gateway invites --data-dir ~/vault                  # what became of them
 centraid-gateway scrub   --data-dir ~/vault [--repair]       # re-hash, no key
+centraid-gateway health  --url http://127.0.0.1:8443         # the image health check
 centraid-gateway install --data-dir ~/vault --origin … [--dry-run]
 ```
 
@@ -140,8 +141,10 @@ cargo test -p centraid-gateway-server
 - `tests/canary.rs` — the blindness scan, against a live store.
 - `tests/first_run.rs` — it starts with no vault and no keys.
 - `tests/no_rules_here.rs` — no rule was reimplemented in this adapter.
+- `tests/container.rs` — the image and the CLI still agree about what to run.
 
 ## The container
 
-`docker/` holds a Dockerfile and what to run it with. See
-[`docker/README.md`](../../docker/README.md).
+[`deploy/gateway-server/`](../../deploy/gateway-server/README.md) holds the
+Dockerfile and what to run it with — a tunnel, a Funnel or a reverse proxy,
+ACME, a bucket, and what each default means.

@@ -1,13 +1,14 @@
 #![forbid(unsafe_code)]
 //! `centraid-gateway` — one binary a household runs (#1029 §3).
 //!
-//! Five verbs, and the first of them is the whole product:
+//! Six verbs, and the first of them is the whole product:
 //!
 //! ```text
 //! centraid-gateway serve   --data-dir ~/vault --origin https://vault.example.org
 //! centraid-gateway invite  --data-dir ~/vault --quota-gib 64
 //! centraid-gateway invites --data-dir ~/vault
 //! centraid-gateway scrub   --data-dir ~/vault
+//! centraid-gateway health  --url http://127.0.0.1:8443
 //! centraid-gateway install --data-dir ~/vault [--dry-run]
 //! ```
 //!
@@ -45,12 +46,15 @@ struct Cli {
 enum Command {
     /// Listen, and serve the protocol.
     Serve {
-        #[arg(long)]
+        #[arg(long, env = "CENTRAID_GATEWAY_DATA_DIR")]
         data_dir: PathBuf,
         /// The origin a phone reaches this server on. Proxied upload targets
         /// are built from it, so it is the one thing a self-hoster behind a
         /// tunnel must get right.
-        #[arg(long)]
+        ///
+        /// Readable from the environment because the container image has no
+        /// other way to be told: a `CMD` cannot know the household's hostname.
+        #[arg(long, env = "CENTRAID_GATEWAY_ORIGIN")]
         origin: String,
         #[arg(long)]
         bind: Option<String>,
@@ -79,6 +83,16 @@ enum Command {
         /// Repair what the mirror still holds intact.
         #[arg(long)]
         repair: bool,
+    },
+    /// Ask a running gateway whether it is up, and print what it answered.
+    ///
+    /// The container image's health check, and the command an operator runs by
+    /// hand — one definition of "up", so there is no second one to drift from
+    /// it. It answers on an empty server, before anybody has redeemed an
+    /// invite, because a phone negotiates a version before it has an account.
+    Health {
+        #[arg(long, default_value = "http://127.0.0.1:8443")]
+        url: String,
     },
     /// Write a systemd unit or a launchd agent.
     Install {
@@ -192,6 +206,18 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
+            Ok(())
+        }
+        Command::Health { url } => {
+            let body = reqwest::get(format!("{}/v1/health", url.trim_end_matches('/')))
+                .await
+                .context("reaching the gateway")?
+                .error_for_status()
+                .context("the gateway answered an error")?
+                .text()
+                .await
+                .context("reading the health body")?;
+            println!("{body}");
             Ok(())
         }
         Command::Install {
