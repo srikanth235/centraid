@@ -889,6 +889,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-gateway-core"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "blake3",
+ "centraid-api-proto",
+ "ed25519-dalek",
+ "hex",
+ "sha2",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "centraid-identity"
 version = "1.0.0-alpha.0"
 dependencies = [

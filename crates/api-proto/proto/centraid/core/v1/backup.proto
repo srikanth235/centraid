@@ -164,6 +164,16 @@ message GenerationList {
 // period, on the gateway's own clock.
 message DeleteRequest {
   repeated bytes objects = 1;
+  // THE MEMBER SAW THE SIZE WARNING AND SAID YES.
+  //
+  // The size guard (F4) holds older bases while the vault's live history
+  // contains a base that came in under half the one before it. Only the phone
+  // can say whether that shrink was intended, because only the phone can read
+  // the row census — "this backup is much smaller than yesterday's" is computed
+  // there and nowhere else. So the release is a flag the phone sends, and the
+  // gateway's contribution is that it has to be SENT: a phone that never showed
+  // the member anything has no reason to set it.
+  bool member_confirmed_shrink = 2;
 }
 
 message DeleteResponse {

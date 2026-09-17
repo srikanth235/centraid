@@ -324,6 +324,21 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          agree with ourselves; the RFC's bytes are the point of the file (W0.5-R1)",
     ),
     (
+        "gateway-core/src/checksum.rs",
+        "THE WIRE'S ATTESTED CHECKSUM (#1029 §3), in W0.5-R1's shape and with \
+         the same boundary. An object's NAME is the BLAKE3-256 of its \
+         ciphertext, everywhere, and that does not move. What this file holds \
+         is the SECOND name the same bytes have on somebody else's API: R2, S3, \
+         B2 and MinIO attest SHA-256 and nothing else, and R2 records it only \
+         when the client sent it — so a blind gateway that must verify bytes it \
+         never sees has to speak the store's checksum or verify nothing at all. \
+         A checksum restated in BLAKE3 would not be that protocol any more. The \
+         BOUNDARY is the point: this is the ONLY module in \
+         `crates/gateway-core` that names SHA-256, the object name beside it is \
+         BLAKE3 (`gateway-core/src/ids.rs`), and `auth.rs`'s request body digest \
+         is BLAKE3 because THAT digest is ours",
+    ),
+    (
         "xtask/src/artifact.rs",
         "`cargo xtask artifact-key` hashes the tree into a GitHub Actions cache \
          key. It names nothing inside a vault and GitHub's cache is not ours",
