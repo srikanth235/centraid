@@ -1,41 +1,34 @@
 #![forbid(unsafe_code)]
-//! The wire protocol (#1020 wave 2 lane C).
+//! WHAT IS LEFT OF THE WIRE PROTOCOL: the call session and the version window
+//! ([#1029](https://github.com/srikanth235/centraid/issues/1029) §3, §6).
 //!
-//! **No iroh type appears in this crate**, and that is the design rather than a
-//! coincidence (D-1020-C1). Everything here is written over
-//! `tokio::io::{AsyncRead, AsyncWrite}` and the two traits in [`transport`];
-//! `crates/net` implements them over iroh 1.x and lane D2's `turmoil`
-//! simulation implements them over turmoil's streams. #1020 makes deterministic
-//! simulation the *primary* sync proof, and a protocol that named a real
-//! network could not be one.
+//! This crate was the stream protocol a seat spoke to a gateway: one ALPN,
+//! `u32BE(len) ‖ bytes` framing with a 256 KiB ceiling, `Envelope`s over
+//! frames, and a handshake at request id 0. v0 has no iroh transport and no
+//! second host, so there is no stream to frame and no peer to hand-shake with.
 //!
 //! | Module | What it holds |
 //! | --- | --- |
-//! | [`alpn`] | the one v1 ALPN |
-//! | [`framing`] | `u32BE(len) ‖ bytes`, the 256 KiB ceiling, the three refusals |
-//! | [`wire`] | `Envelope`s over frames, and the frame-level relay |
 //! | [`session`] | request-id multiplexing, and what `Cancel` may cancel |
-//! | [`handshake`] | the exchange at request id 0 |
 //! | [`version`] | `SCHEMA_VERSION`, `MIN_SUPPORTED`, `judge` |
 //! | [`error`] | the typed errors and their wire codes |
 //!
-//! The byte-level facts are also fixtures: `contracts/protocol/framing-golden.json`
-//! carries the frame bytes for named messages, and
-//! `tests/framing_golden.rs` regenerates and diffs them. A fixture is the
-//! only form in which a Swift or Kotlin implementation can be held to the same
-//! answer.
+//! **Both survivors are read by `crates/core`'s CALL DOOR, not by a network.**
+//! [`session::Session`] is what mints a request id, decides whether a `Cancel`
+//! may cancel it, and settles it — over the C ABI, where the "peer" is the
+//! shell in the same process. [`version::judge`] is what a shell's `Hello` is
+//! answered against, and a shell linking a prebuilt core is exactly the
+//! version-skew case it was written for.
+//!
+//! `alpn`, `framing`, `wire`, `handshake` and `transport` are deleted with the
+//! transport, and `contracts/protocol/framing-golden.json` with them: the
+//! byte-level fixture existed so a Swift and a Kotlin implementation of the
+//! FRAMING could be held to one answer, and neither has a frame to build.
 
-pub mod alpn;
 pub mod error;
-pub mod framing;
-pub mod handshake;
 pub mod session;
-pub mod transport;
 pub mod version;
-pub mod wire;
 
 pub use error::{ProtocolError, Result};
-pub use framing::{CHUNK_BYTES, MAX_FRAME_BYTES, read_frame, write_frame};
 pub use session::{RequestKind, Session};
-pub use transport::{Connection, Transport};
 pub use version::{MIN_SUPPORTED, SCHEMA_VERSION, WINDOW_MINORS, judge, local_hello};

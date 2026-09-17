@@ -21,7 +21,6 @@ use centraid_vault::Vault;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::page::KeysetPage;
 
-use crate::config::Role;
 use crate::convert::value_from_wire;
 use crate::error::{CoreError, Result};
 
@@ -133,19 +132,17 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                     .chain(
                         query
                             .with_held_thumbnail
-                            .then(|| {
-                                // THREE COMPUTED COLUMNS, IN THIS ORDER, and
-                                // the order is the contract (#1025 S5): a
-                                // positional row is the door's shape, so a
-                                // shell counts past its own `select` list to
-                                // reach them. `PhotosReads`' index constants
-                                // are the other half of this sentence.
-                                [
-                                    centraid_vault::page::HELD_THUMBNAIL_COLUMN,
-                                    centraid_vault::page::HELD_ORIGINAL_HASH_COLUMN,
-                                    centraid_vault::page::HELD_ORIGINAL_HELD_COLUMN,
-                                ]
-                            })
+                            // THREE COMPUTED COLUMNS, IN THIS ORDER, and the
+                            // order is the contract (#1025 S5): a positional
+                            // row is the door's shape, so a shell counts past
+                            // its own `select` list to reach them.
+                            // `PhotosReads`' index constants are the other
+                            // half of this sentence.
+                            .then_some([
+                                centraid_vault::page::HELD_THUMBNAIL_COLUMN,
+                                centraid_vault::page::HELD_ORIGINAL_HASH_COLUMN,
+                                centraid_vault::page::HELD_ORIGINAL_HELD_COLUMN,
+                            ])
                             .into_iter()
                             .flatten()
                             .map(ToOwned::to_owned),
@@ -205,11 +202,17 @@ fn output_name(entry: &str) -> &str {
 /// A field on the request could then only do one of two things: agree with the
 /// handle, or be a caller's claim about its own authority — and the second is
 /// not a thing a local write is allowed to assert.
+/// `changes` IS HOW A SCREEN LEARNS THE WRITE HAPPENED (#1029 §1). The commit
+/// guard's `update_hook` says which tables moved, and this is where that
+/// answer becomes a change event on the queue a shell drains. Before it, the
+/// only producer of change events was the seat's applier — so on a phone with
+/// no seat nothing ever pushed one, and every screen was a poll or a lie.
 pub fn invoke(
     vault: &Vault,
     registry: &Registry,
     principal: &centraid_vault::Principal,
     request: &wire::Command,
+    changes: &crate::events::ChangeFeed,
 ) -> Result<wire::CommandOutcome> {
     if request.invoke_key.is_empty() {
         // REQUIRED, unlike v0, where the fallback was the call's ORDINAL and
@@ -231,6 +234,10 @@ pub fn invoke(
     };
 
     let outcome = vault.execute(registry, principal, &Command::new(&request.name, input))?;
+    // AFTER THE COMMIT, because that is when the guard reads its census, and a
+    // screen redrawn from a transaction that could still roll back is the
+    // failure this ordering exists to prevent.
+    changes.tables_changed(&outcome.tables);
     Ok(wire::CommandOutcome {
         status: match outcome.status {
             CommandStatus::Executed => wire::CommandStatus::Executed,
@@ -245,10 +252,6 @@ pub fn invoke(
         invocation_id: outcome.invocation_id,
         receipt_id: outcome.receipt_id,
         revoked_at: None,
-        // THE NUMBER A SEAT SETTLES AGAINST. `None` when the handler wrote
-        // nothing a session saw, which is an honest absence: there is no commit
-        // to wait for, and the seat's version-set path takes over.
-        commit_seq: outcome.commit_seq.map(i64::unsigned_abs),
     })
 }
 
@@ -274,33 +277,6 @@ pub fn describe(registry: &Registry, name: &str) -> Result<serde_json::Value> {
     }))
 }
 
-/// The outcomes waiting on somebody's decision.
-pub fn parked(vault: &Vault) -> Result<Vec<wire::Outcome>> {
-    // THE SELECT IS THE VAULT'S. `sql-confinement` keeps SQL out of this crate,
-    // and it is right to: a door that read the ledger itself would be a second
-    // reader of a table `crates/vault` owns the shape of.
-    let outcomes = vault.read(|connection| {
-        centraid_vault::intents::list_outcomes_with_status(connection, "parked")
-    })?;
-    Ok(outcomes
-        .into_iter()
-        .map(|outcome| wire::Outcome {
-            intent_id: outcome.intent_id,
-            status: wire::IntentStatus::Parked as i32,
-            commit_seq: outcome.commit_seq.map(i64::unsigned_abs),
-            // The waits, the conflicts and the produced rows are columns the
-            // ledger carries and this reader does not yet project. EMPTY rather
-            // than invented: a `waiting_on` this door guessed would tell a
-            // member to chase the wrong person.
-            waiting_on: Vec::new(),
-            conflicts: Vec::new(),
-            produced: Vec::new(),
-            answered_versions: Vec::new(),
-            reason: String::new(),
-        })
-        .collect())
-}
-
 /// Full-text search. **Stub**: the FTS plane is wave 4.
 pub fn search(_query: &str) -> Result<Vec<wire::Row>> {
     Err(CoreError::NotYetAvailable {
@@ -317,76 +293,16 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
     })
 }
 
-/// Reveal a sealed value — **answered by ROLE**, and the `locker` schema is
-/// not answerable on the gateway at all (#1020, D-1020-L2, D-1020-L3).
-///
-/// Three answers, and the split is the trust premise:
-///
-/// | Role | Schema | Answer |
-/// |---|---|---|
-/// | [`Role::Gateway`] | `locker` | **refused**, structurally: the value the
-///   judgement needs cannot be built (`centraid_vault::SealedSubject::new`) |
-/// | [`Role::Gateway`] | anything else | judged and revealed — a connector
-///   token is host-readable **by design** (W6-D1) |
-/// | `Role::Seat` | `locker` | unwrapped **locally**, by
-///   `crate::locker`, behind the member's unlock |
-///
-/// A reveal is still **online-only** on a seat for the reason it always was: a
-/// mass reveal must never be queued, replayed, or answered from a durable
-/// store, and the receipt the gateway owes has to land before the plaintext
-/// exists. `export` carries nothing in and its result is every secret, which
-/// is why that refusal is structural rather than a policy somebody can relax.
-pub fn reveal(
-    role: &Role,
-    schema: &str,
-    table: &str,
-    app_id: &str,
-    action: &str,
-) -> Result<RevealRoute> {
-    match role {
-        Role::Gateway => {
-            // THE KEY DOOR'S DELETION, AT THIS LAYER. The subject is what the
-            // authority plane judges, and it has no representation for
-            // Locker — so this arm cannot be written to succeed.
-            let subject = centraid_vault::SealedSubject::new(schema, table).map_err(|refusal| {
-                CoreError::InvalidRequest {
-                    detail: refusal.to_string(),
-                }
-            })?;
-            Ok(RevealRoute::Gateway { subject })
-        }
-        Role::Seat { .. } => {
-            if schema == centraid_vault::BLIND_SCHEMA {
-                // A SEAT UNWRAPS LOCALLY — and it still needs the gateway,
-                // for the receipt and for nothing else.
-                return Ok(RevealRoute::Seat {
-                    schema: schema.to_owned(),
-                    table: table.to_owned(),
-                });
-            }
-            // The sealed-column class lives on the host, so a seat asking for
-            // one is asking the gateway.
-            Err(CoreError::OnlineOnly {
-                app_id: app_id.to_owned(),
-                action: action.to_owned(),
-            })
-        }
-    }
-}
-
-/// Who performs a reveal. There is no arm in which the gateway performs a
-/// Locker one.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RevealRoute {
-    /// The gateway unseals a sealed **column** — a connector token — under its
-    /// own DEK, for a principal the authority plane allowed.
-    Gateway {
-        subject: centraid_vault::SealedSubject,
-    },
-    /// The seat unwraps `K` and opens the cell itself; the gateway's only part
-    /// is the receipt (`locker.reveal_receipt`).
-    Seat { schema: String, table: String },
-}
+// THE REVEAL ROUTER IS GONE, AND THE RULE IT ENCODED SURVIVES IN THE COMMAND
+// (#1029 §1). `reveal` answered "who performs this reveal" — the gateway for a
+// sealed column, the seat for a Locker cell — and the answer was the trust
+// premise: a Locker key must never be on a host the member does not hold.
+// There is one host (#1029 §6), so the question has one answer and nothing
+// ever called this function: a Locker reveal runs through `locker.reveal` in
+// `crates/vault/src/commands/locker.rs`, behind `crate::locker`'s unlock, and
+// the SEALED-COLUMN arm served connector tokens, which leave with the
+// connectors. `SealedSubject` still has no Locker representation, so the
+// structural half of the rule is where it always was — in `crates/vault`.
 
 /// Mint a path for content. **Stub**: wave 3.
 pub fn content(_content_id: &str) -> Result<String> {
@@ -502,56 +418,21 @@ mod tests {
         ));
     }
 
-    /// THE KEY DOOR IS DELETED AT THIS LAYER TOO (#1020, D-1020-L2).
+    /// THE KEY DOOR IS DELETED AT THE TYPE LEVEL (#1020, D-1020-L2).
     ///
-    /// A gateway asked for a Locker cell cannot be written to succeed: the
-    /// subject the authority plane judges has no Locker representation, so
-    /// this is the refusal rather than a policy check. A gateway asked for a
-    /// **sealed column** still answers, because a connector token is
-    /// host-readable by design (W6-D1) — and that asymmetry is the premise.
+    /// The router that used to ask "gateway or seat" is gone with the roles
+    /// (#1029 §1), and the half of the rule that was never about roles is
+    /// still enforced by `crates/vault`: `SealedSubject` has no Locker
+    /// representation, so no sealed-column path can be written to open a
+    /// Locker cell even by mistake.
     #[test]
-    fn a_gateway_cannot_route_a_locker_reveal_and_can_route_a_connector_token() {
-        let refusal = reveal(&Role::Gateway, "locker", "item", "locker", "reveal")
-            .expect_err("a gateway has no Locker reveal");
-        assert_eq!(refusal.code(), wire::ErrorCode::InvalidRequest);
+    fn the_sealed_subject_has_no_locker_representation() {
+        let refusal =
+            centraid_vault::SealedSubject::new("locker", "item").expect_err("no such subject");
         assert!(
             refusal.to_string().contains("unwrapped only on the seat"),
             "{refusal}"
         );
-
-        let route = reveal(
-            &Role::Gateway,
-            "sync",
-            "connection_credential",
-            "connectors",
-            "refresh",
-        )
-        .expect("a connector token is the gateway's to open");
-        assert!(matches!(route, RevealRoute::Gateway { .. }));
-    }
-
-    /// A SEAT UNWRAPS A LOCKER CELL ITSELF, and asks the gateway for a sealed
-    /// column — which is online-only, exactly as it was.
-    #[test]
-    fn a_seat_unwraps_a_locker_cell_and_forwards_a_sealed_column() {
-        let seat = Role::Seat {
-            kind: crate::config::SeatKind::Replicated,
-        };
-        assert_eq!(
-            reveal(&seat, "locker", "item", "locker", "reveal").expect("routed"),
-            RevealRoute::Seat {
-                schema: "locker".to_owned(),
-                table: "item".to_owned()
-            }
-        );
-        let refusal = reveal(
-            &seat,
-            "sync",
-            "connection_credential",
-            "connectors",
-            "refresh",
-        )
-        .expect_err("a sealed column is the gateway's");
-        assert!(matches!(refusal, CoreError::OnlineOnly { .. }));
+        assert!(centraid_vault::SealedSubject::new("sync", "connection_credential").is_ok());
     }
 }

@@ -23,7 +23,6 @@ mod ledger;
 mod measure;
 mod photos_sample;
 mod rules;
-mod smoke;
 #[cfg(test)]
 mod testing;
 

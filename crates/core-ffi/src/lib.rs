@@ -41,7 +41,6 @@ pub mod marshal;
 
 use std::panic::AssertUnwindSafe;
 
-use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreError, Handle};
 
 // The status codes. Zero is success and every failure is negative, so a caller
@@ -139,24 +138,23 @@ pub unsafe extern "C" fn centraid_open(
     // only on the success path.
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
         let config = marshal::config_from_json(bytes)?;
-        let vault_path = config.path.clone();
-        let handle = Core::open(config)?;
-        // SEAT ROLES ONLY (#1025 S1). The previous rule — "every role, because
-        // the network belongs to the device" — read correctly and attached the
-        // wrong thing: a `SeatLink` is now built PER REPLICA and its whole job
-        // is to replace that file with a copy from a gateway. Handing one to a
-        // gateway-role core means an endpoint, a key and a byte store standing
-        // by to overwrite the vault this device is the authority for, which is
-        // the one operation that cannot be undone.
+        // NOTHING IS ATTACHED HERE ANY MORE (#1029 §6). `attach_network` built
+        // a `SeatLink` — an endpoint, a key and a byte store — so a replica
+        // could be replaced by a copy from a gateway. There is no gateway to
+        // take a copy from and no inbound endpoint on this device, so the open
+        // is the open: the file, the migrations, the handle.
         //
-        // A phone that holds a local vault AND pairs with a gateway is still
-        // served: that is two vaults on one device, each with its own core and
-        // its own endpoint, which is exactly what "the vault is the unit on a
-        // device" means.
-        if !handle.is_gateway() {
-            attach_network(&handle, &vault_path)?;
-        }
-        Ok::<_, CoreError>(handle)
+        // **WHAT WENT WITH IT, AND WHO OWES IT BACK.** `SeatLink` also opened
+        // `<vault>.bytes` and handed it to `Handle::attach_bytes`, which is
+        // how a photograph on this phone got a store to live in. That store is
+        // NOT opened here: `ByteStore::open` is asynchronous and
+        // `ContentBytes` holds a tokio runtime handle, so whoever attaches it
+        // has to own a runtime for the life of the core — a decision that
+        // belongs to the wave that rebuilds the phone's byte plane (#1029 W6),
+        // not to the one that deletes the seat. Until then a core opened over
+        // this ABI holds text and refuses binary bytes, by name, which is the
+        // honest state `Core::open_vault` already documents.
+        Core::open(config)
     }));
     match outcome {
         Ok(Ok(handle)) => {
@@ -172,94 +170,6 @@ pub unsafe extern "C" fn centraid_open(
         // answer: a poisoned handle it never received cannot be restarted.
         Err(_) => CENTRAID_PANICKED,
     }
-}
-
-/// Give a seat its network (#1020, D-1020-B7).
-///
-/// **Non-fatal on purpose, with ONE exception.** A core with no network is
-/// exactly a local-first vault: every screen still reads, every write still
-/// queues, and the shell draws "not connected to a gateway" — which is a true
-/// state and the one every phone is in before it scans a code. Failing
-/// `centraid_open` because a UDP socket would not bind would be refusing to
-/// show a member their own vault over a network they were not using.
-///
-/// The exception is [`CoreError::IdentityMismatch`], which IS fatal: see below.
-///
-/// The link is built from the REPLICA PATH and derives its own
-/// `<stem>.bytes` store beside it, matching the gateway's layout and the
-/// content CAS's: a vault handed to someone else is handed over whole, and a
-/// sibling directory travels with the file it belongs to. One endpoint, one
-/// key, one store per open replica (#1025 S1) — and since #1025 S7-13, one
-/// tokio runtime for all of them.
-///
-/// ## Everything comes off the ENROLMENT RECORD (#1025 S7-13)
-///
-/// The secret to bind with, the relay decision, and the public key to check the
-/// result against are three properties of one enrolment with one gateway, and
-/// the shell hands them over as one record. There used to be a `relays: bool`
-/// beside the secret that no shell ever set.
-///
-/// ## THE IDENTITY IS CHECKED BEFORE THE FIRST DIAL
-///
-/// If the record names an `enrolled_public_key` and the endpoint that came up
-/// has a different one, the secret half is gone — a Keychain item that was
-/// never written, a record settled under one name and a key under another — and
-/// **the open is refused**. The network is not attached and nothing is dialled.
-///
-/// This is the defect #1025 S7-9 reproduced and could not place: a seat whose
-/// secret did not reach here minted a fresh keypair, dialled its own gateway,
-/// and was closed as an unenrolled peer — which the seat then rendered as "this
-/// app and that gateway are too far apart in version to talk". A member was
-/// sent to update an app that was working correctly. A device that cannot be
-/// itself says so, at the door, in its own words.
-fn attach_network(handle: &Handle, vault_path: &std::path::Path) -> Result<(), CoreError> {
-    let enrolment = handle.enrolment();
-    let link = match centraid_seat_link::SeatLink::start_with_key(
-        vault_path,
-        env!("CARGO_PKG_VERSION"),
-        handle.endpoint_secret(),
-        handle.relay_hint(),
-    ) {
-        Ok(link) => link,
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                "this seat has no network; it will read what it already holds"
-            );
-            return Ok(());
-        }
-    };
-    // THE ENDPOINT THAT CAME UP, AGAINST THE ROW THE GATEWAY WROTE.
-    let enrolled = enrolment
-        .map(|record| record.enrolled_public_key.as_str())
-        .filter(|key| !key.is_empty());
-    if let Some(enrolled) = enrolled {
-        let found = centraid_core::link::hex_lower(&link.endpoint_id());
-        if !found.eq_ignore_ascii_case(enrolled) {
-            // DROPPED BEFORE THE REFUSAL TRAVELS. The socket is bound by now;
-            // leaving it up while the open fails would leave an endpoint on the
-            // device with no handle to close it.
-            drop(link);
-            tracing::error!(
-                %enrolled,
-                %found,
-                "this device's endpoint is not the one its gateway enrolled; not dialling"
-            );
-            return Err(CoreError::IdentityMismatch {
-                enrolled: enrolled.to_owned(),
-                found,
-            });
-        }
-    }
-    // THE ONE CONTENT STORE, ON THE VAULT'S BYTE DOOR (#1025 S3,
-    // D-1025-S3-1). `SeatLink` opened `<replica>.bytes` beside the
-    // endpoint; the same handle now backs `media.add_asset`'s spill and
-    // `content_location`'s answer. Before this the core opened a flat
-    // CAS of its own and a photograph this phone fetched could not be
-    // displayed on it.
-    handle.attach_bytes(link.content_door());
-    handle.attach_network(Box::new(link));
-    Ok(())
 }
 
 /// Answer one request.

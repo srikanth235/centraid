@@ -123,43 +123,12 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
          one `blake3::hash` call is the door itself",
     ),
     (
-        "vault/tests/automation_plane.rs",
-        "a test fixture row of the right shape",
-    ),
-    (
         "vault/tests/common/mod.rs",
         "`content_digest` over the body the fixture wrote",
     ),
     (
         "vault/tests/docs_commands.rs",
         "`content_hash_hex` over the staged bytes, which is `content_digest`",
-    ),
-    (
-        "vault/tests/log_plane.rs",
-        "a test fixture row of the right shape",
-    ),
-    (
-        "vault/src/ledger/archive.rs",
-        "`conversation_archive.segment_hash` — the digest of a SEALED segment, \
-         computed by the caller that sealed it and refused here unless it is 64 \
-         characters; this module never mints one",
-    ),
-    (
-        "seat/src/bytes.rs",
-        "a test fixture's own `CREATE TABLE`/`INSERT`, with two-character \
-         stand-in values; the module itself only READS the column",
-    ),
-    (
-        "seat/src/held.rs",
-        "`seat_blob_held.content_hash` — the blob's own name as the byte store \
-         handed it back, already verified against those bytes on arrival, plus a \
-         test fixture's own `CREATE TABLE`/`INSERT` with stand-in values; this \
-         module never computes a digest",
-    ),
-    (
-        "seat/tests/held_thumbnail.rs",
-        "a test fixture row; the values are literals of the right shape and \
-         nothing reads them as digests",
     ),
     (
         "vault/tests/media_commands.rs",
@@ -318,11 +287,6 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
         "xtask/src/ci.rs",
         "reads Subresource Integrity markers (`sha512-`, `sha256-`) out of \
          `bun.lock`. SRI's spelling is the W3C's",
-    ),
-    (
-        "xtask/src/smoke.rs",
-        "pins a Docker base image by `@sha256:` and verifies a release tarball \
-         against `SHA256SUMS`. Both are the registry's and the release's own",
     ),
 ];
 

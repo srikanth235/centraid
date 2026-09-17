@@ -1,4 +1,4 @@
-//! The restore drill: back up, lose everything, recover, and re-pair a seat
+//! The restore drill: back up, lose everything, recover, and check the file
 //! (#1020, D-1020-R7).
 //!
 //! This is the acceptance box *"the restore drill runs in CI"*, and it is the
@@ -40,7 +40,7 @@
 //! swap — nothing else in this module changes.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::backup::keyring::Keyring;
 use crate::backup::kit::{LockerKeyEntry, RecoveryKitDocument, RecoveryKitTarget};
@@ -50,10 +50,8 @@ use crate::backup::{self, BackupError};
 use crate::custody::keystore::KeyStore;
 use crate::custody::locker_key;
 use crate::custody::member_key::MemberKeyCustody;
-use crate::error::{RebootstrapReason, VaultError};
+use crate::error::VaultError;
 use crate::file::Vault;
-use crate::log::door::{self, Cursor};
-use crate::log::{LogPage, apply};
 
 /// How the caller runs `centraid recover`. Given `(kit, password_file,
 /// data_dir)`, it must leave a restored vault under `<data_dir>/vault/<id>`.
@@ -88,28 +86,8 @@ pub struct DrillOutcome {
     pub total_rows: i64,
     pub generation: u64,
     pub manifest_hash: String,
-    /// The epoch the original vault was in, which the old seat's cursor names.
-    pub epoch_before: String,
-    /// The epoch the restored vault fenced to.
-    pub epoch_after: String,
-    /// What the old cursor was told. Always `EpochMismatch`, or the drill fails.
-    pub old_seat_verdict: RebootstrapReason,
-    /// Rows the re-paired seat applied while converging.
-    pub seat_rows_applied: usize,
-    /// Whether the re-paired replica's census equals the restored vault's.
-    pub seat_converged: bool,
     pub report: RestoreDrillReport,
     pub elapsed_ms: u128,
-}
-
-/// A seat's replica, for the convergence half.
-///
-/// One vault file, one cursor. The gateway-side applier is what writes into it
-/// in wave 2; `crates/seat` replaces this whole struct in wave 2 lane D2
-/// without changing the drill above it.
-pub struct SeatReplica {
-    pub file: PathBuf,
-    pub cursor: Cursor,
 }
 
 const DRILL_PASSWORD: &str = "a drill password nobody keeps";
@@ -201,15 +179,6 @@ pub fn run_restore_drill(root: &Path, recover: Recover<'_>) -> Result<DrillOutco
             Ok(())
         })?;
     }
-    let state_before = door::log_state(&vault)?;
-    let epoch_before = state_before.epoch.clone();
-    // The seat's cursor: where it had read to before everything was lost.
-    let seat_cursor = Cursor {
-        epoch: epoch_before.clone(),
-        seq: state_before.watermark.seq,
-    };
-    door::record_seat_cursor(&vault, "device-seat-1", seat_cursor.seq)?;
-
     // ---- 3. the census the restore is judged against ----------------------
     let census_before = census(&vault_file)?;
     let total_rows: i64 = census_before.values().filter(|count| **count > 0).sum();
@@ -329,92 +298,25 @@ pub fn run_restore_drill(root: &Path, recover: Recover<'_>) -> Result<DrillOutco
     }
     let rows_compared = census_before.len();
 
-    // ---- 8. the old seat re-pairs and converges ---------------------------
+    // ---- 8. WAS THE OLD SEAT'S RE-PAIR, AND THERE IS NO SEAT (#1029 §6) ---
+    //
+    // It opened the restored vault, asserted the fence had moved the epoch,
+    // presented the old seat's cursor and required
+    // `RebootstrapRequired{epoch-mismatch}`, then re-enrolled the device, took
+    // a sanitised snapshot, applied every page into a second file and compared
+    // the two censuses. Every one of those steps needed a second host, a log
+    // page door and an applier, and all three are deleted.
+    //
+    // THE DRILL IS NOT FINISHED HERE. #1029's phone-shaped drill — restore
+    // onto a second device from the 24-word phrase, and watch the first freeze
+    // on `VAULT_MOVED` — is the replacement, and it belongs to the wave that
+    // builds the lease. What remains below is the half that still holds: a
+    // vault was lost, a generation restored it, and `restore_check` says the
+    // file is sound.
     let recovered = Vault::open(&restored_file)?;
-    let state_after = door::log_state(&recovered)?;
-    let epoch_after = state_after.epoch.clone();
-    if epoch_after == epoch_before {
-        return Err(fail(
-            "the restored vault was not fenced: a paired seat's cursor would still resolve, and \
-             it would be served a history that never happened",
-        ));
-    }
-    // The old cursor, presented to the restored vault.
-    let verdict = match door::read_log_page(&recovered, &seat_cursor, 64) {
-        Err(VaultError::RebootstrapRequired { reason }) => reason,
-        Err(error) => return Err(error.into()),
-        Ok(_) => {
-            return Err(fail(
-                "the old seat's cursor was SERVED by the restored vault — it must be told to \
-                 re-bootstrap",
-            ));
-        }
-    };
-    if verdict != RebootstrapReason::EpochMismatch {
-        return Err(fail(format!(
-            "the old seat was told `{verdict}`, and the restore's reason is epoch-mismatch"
-        )));
-    }
-
-    // Re-pair: the device is enrolled again against the restored vault, which
-    // is the ceremony's outcome, and it starts from the floor with no cursor.
-    let owner = recovered.read(|connection| {
-        Ok(connection.query_row(
-            "SELECT owner_party_id FROM access_device LIMIT 1",
-            [],
-            |row| row.get::<_, String>(0),
-        )?)
-    })?;
-    recovered.enrol_device(
-        "device-seat-1",
-        &owner,
-        "Ada's laptop, re-paired",
-        "linux",
-        "seat-public-key-1",
-    )?;
-    // Re-bootstrap: the seat takes a fresh snapshot and then the log from it.
-    let seat_dir = root.join("seat");
-    std::fs::create_dir_all(&seat_dir).map_err(|error| fail(error.to_string()))?;
-    // The SEAT snapshot here, deliberately: this is a seat bootstrapping, and
-    // a seat gets the sanitised artefact. The backup's base copy is the other
-    // one (see `backup::base`).
-    let head = crate::snapshot::build_snapshot(&recovered, &seat_dir)?;
-    let seat_file = seat_dir.join("replica.db");
-    inflate(&seat_dir.join(&head.name), &seat_file)?;
-
-    // NOW the write, after the seat's snapshot was taken. Order matters: a
-    // commit made before the snapshot is already inside it, and the seat would
-    // converge having applied nothing — which proves nothing about the log.
-    // A write after the re-pair, so convergence has something to carry.
-    recovered.commit(|tx| {
-        tx.set_producer("drill.after-restore");
-        tx.connection().execute(
-            "INSERT INTO core_content_item \
-               (content_id, content_uri, content_hash, byte_size, created_at) \
-             VALUES ('content-after', 'cas:content-after', \
-               'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', 7, \
-               '2026-02-01T00:00:00.000Z')",
-            [],
-        )?;
-        Ok(())
-    })?;
-
-    let mut seat = SeatReplica {
-        file: seat_file,
-        cursor: Cursor {
-            epoch: head.epoch.clone(),
-            seq: head.seq,
-        },
-    };
-    let seat_rows_applied = converge(&recovered, &mut seat)?;
     let restored_census = census(&restored_file)?;
-    let seat_census = census(&seat.file)?;
-    let seat_converged = replicated_census_matches(&restored_census, &seat_census);
-    if !seat_converged {
-        return Err(fail(format!(
-            "the re-paired seat did not converge: {}",
-            census_difference(&restored_census, &seat_census)
-        )));
+    if restored_census.is_empty() {
+        return Err(fail("the restored vault holds no tables at all"));
     }
     recovered.close()?;
 
@@ -425,39 +327,9 @@ pub fn run_restore_drill(root: &Path, recover: Recover<'_>) -> Result<DrillOutco
         total_rows,
         generation: outcome.generation,
         manifest_hash: outcome.manifest_hash,
-        epoch_before,
-        epoch_after,
-        old_seat_verdict: verdict,
-        seat_rows_applied,
-        seat_converged,
         report,
         elapsed_ms: started.elapsed().as_millis(),
     })
-}
-
-/// Feed the seat every page until its cursor reaches the watermark.
-fn converge(gateway: &Vault, seat: &mut SeatReplica) -> Result<usize> {
-    let target = rusqlite::Connection::open(&seat.file)?;
-    let mut applied = 0_usize;
-    loop {
-        let page: LogPage = door::read_log_page(gateway, &seat.cursor, 64)?;
-        if page.rows.is_empty() {
-            seat.cursor = page.next;
-            break;
-        }
-        let outcome = apply::apply_log_page(
-            &target,
-            &page.rows,
-            Some(&page.vault_epoch),
-            seat.cursor.seq,
-        )?;
-        applied += outcome.applied;
-        seat.cursor = page.next.clone();
-        if !page.has_more {
-            break;
-        }
-    }
-    Ok(applied)
 }
 
 /// Row counts per table, for a file on disk.
@@ -481,32 +353,6 @@ pub fn census(file: &Path) -> Result<BTreeMap<String, i64>> {
         census.insert(table, count);
     }
     Ok(census)
-}
-
-/// Does the seat's copy agree with the gateway, on the tables a seat carries?
-///
-/// A seat's file legitimately differs from the gateway's on the private tables
-/// and on the log itself: the snapshot dropped them and truncated it. So
-/// convergence is compared over the tables the seat's copy actually **has**,
-/// which is what "every table, values not bytes" means for a sanitised
-/// snapshot.
-fn replicated_census_matches(
-    gateway: &BTreeMap<String, i64>,
-    seat: &BTreeMap<String, i64>,
-) -> bool {
-    census_difference(gateway, seat).is_empty()
-}
-
-fn census_difference(gateway: &BTreeMap<String, i64>, seat: &BTreeMap<String, i64>) -> String {
-    seat.iter()
-        .filter(|(table, _)| !matches!(table.as_str(), "replica_log" | "replica_meta"))
-        .filter_map(|(table, seat_count)| {
-            let gateway_count = gateway.get(table).copied().unwrap_or(-1);
-            (gateway_count != *seat_count)
-                .then(|| format!("{table}: gateway {gateway_count}, seat {seat_count}"))
-        })
-        .collect::<Vec<_>>()
-        .join("; ")
 }
 
 fn inflate(gz: &Path, out: &Path) -> Result<()> {
@@ -600,10 +446,17 @@ pub fn run_upgrade_failure_drill(root: &Path, failing_sql: &str) -> Result<Upgra
     let report = backup::restore_check(&file, None).map_err(|error| fail(error.to_string()))?;
     // The snapshot is sanitised, so the private tables are gone from the
     // restored file; what must be back is every table the snapshot carries.
-    let differences = census_difference(&census_before, &census_after_restore);
+    let differences: Vec<String> = census_after_restore
+        .iter()
+        .filter_map(|(table, restored)| {
+            let before = census_before.get(table).copied().unwrap_or(-1);
+            (before != *restored).then(|| format!("{table}: before {before}, restored {restored}"))
+        })
+        .collect();
     if !differences.is_empty() {
         return Err(fail(format!(
-            "the pre-migration snapshot did not put the vault back: {differences}"
+            "the pre-migration snapshot did not put the vault back: {}",
+            differences.join("; ")
         )));
     }
     Ok(UpgradeFailureOutcome {

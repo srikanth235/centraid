@@ -37,7 +37,10 @@ fn jpeg_with_orientation(width: u32, height: u32, orientation: u16) -> Vec<u8> {
     }
     let mut plain = Vec::new();
     image::DynamicImage::ImageRgb8(canvas)
-        .write_to(&mut std::io::Cursor::new(&mut plain), image::ImageFormat::Jpeg)
+        .write_to(
+            &mut std::io::Cursor::new(&mut plain),
+            image::ImageFormat::Jpeg,
+        )
         .expect("the fixture encodes");
 
     let mut tiff = Vec::new();
@@ -57,7 +60,11 @@ fn jpeg_with_orientation(width: u32, height: u32, orientation: u16) -> Vec<u8> {
     let mut out = Vec::with_capacity(plain.len() + payload.len() + 4);
     out.extend_from_slice(&plain[..2]); // SOI
     out.extend_from_slice(&[0xFF, 0xE1]);
-    out.extend_from_slice(&u16::try_from(payload.len() + 2).expect("a small segment").to_be_bytes());
+    out.extend_from_slice(
+        &u16::try_from(payload.len() + 2)
+            .expect("a small segment")
+            .to_be_bytes(),
+    );
     out.extend_from_slice(&payload);
     out.extend_from_slice(&plain[2..]);
     out
@@ -127,7 +134,11 @@ impl World {
             .expect("the command runs")
     }
 
-    fn add_asset(&self, media_type: &str, bytes: &[u8]) -> centraid_vault::commands::CommandOutcome {
+    fn add_asset(
+        &self,
+        media_type: &str,
+        bytes: &[u8],
+    ) -> centraid_vault::commands::CommandOutcome {
         self.scratch
             .vault
             .execute(
@@ -184,7 +195,12 @@ fn an_exif_rotated_original_derives_upright_tiers_with_no_metadata() {
     let world = World::new("derive-exif");
     let bytes = jpeg_with_orientation(4000, 3000, 6);
     let outcome = world.add_staged_asset("image/jpeg", &bytes);
-    assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
 
     let tiers = world.tiers();
     assert_eq!(
@@ -261,7 +277,12 @@ fn a_png_original_derives_jpeg_tiers() {
         // A transparent corner, deliberately: JPEG has no alpha, and an encoder
         // handed RGBA errors rather than flattening — which would mean a PNG
         // with transparency silently had no thumbnail.
-        pixel.0 = [(x % 256) as u8, (y % 256) as u8, 128, if x < 50 { 0 } else { 255 }];
+        pixel.0 = [
+            (x % 256) as u8,
+            (y % 256) as u8,
+            128,
+            if x < 50 { 0 } else { 255 },
+        ];
     }
     let mut png = Vec::new();
     image::DynamicImage::ImageRgba8(canvas)
@@ -269,7 +290,12 @@ fn a_png_original_derives_jpeg_tiers() {
         .expect("the fixture encodes");
 
     let outcome = world.add_asset("image/png", &png);
-    assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
 
     let tiers = world.tiers();
     assert_eq!(tiers.len(), 2, "{tiers:?}");
@@ -279,7 +305,11 @@ fn a_png_original_derives_jpeg_tiers() {
         let decoded = image::load_from_memory(&stored).expect("the derivative decodes");
         // 900x600 is under the preview edge, so the preview is a re-encode at
         // the source's own size; the thumb fits inside 360.
-        let expected = if variant == "thumb" { (360, 240) } else { (900, 600) };
+        let expected = if variant == "thumb" {
+            (360, 240)
+        } else {
+            (900, 600)
+        };
         assert_eq!((decoded.width(), decoded.height()), expected, "`{variant}`");
     }
 }
@@ -303,13 +333,20 @@ fn an_original_that_does_not_decode_commits_with_no_derivative_rows() {
         "the original commits anyway: {:?}",
         outcome.reason
     );
-    assert!(world.tiers().is_empty(), "no tiers for bytes that do not decode");
+    assert!(
+        world.tiers().is_empty(),
+        "no tiers for bytes that do not decode"
+    );
 
     let originals: i64 = world
         .scratch
         .vault
         .read(|connection| {
-            Ok(connection.query_row("SELECT COUNT(*) FROM core_content_item", [], |row| row.get(0))?)
+            Ok(
+                connection.query_row("SELECT COUNT(*) FROM core_content_item", [], |row| {
+                    row.get(0)
+                })?,
+            )
         })
         .expect("the count reads");
     assert_eq!(originals, 1, "the original is in the library");
@@ -323,7 +360,12 @@ fn an_original_that_does_not_decode_commits_with_no_derivative_rows() {
 fn a_video_original_derives_nothing_in_this_build() {
     let world = World::new("derive-video");
     let outcome = world.add_asset("video/mp4", b"\0\0\0\x18ftypmp42not-really-a-video");
-    assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
     assert!(world.tiers().is_empty());
 }
 
@@ -339,7 +381,12 @@ fn the_backfill_sweep_derives_once_and_then_nothing() {
     for size in [(800u32, 600u32), (640, 480)] {
         let bytes = jpeg_with_orientation(size.0, size.1, 1);
         let outcome = world.add_asset("image/jpeg", &bytes);
-        assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{:?}",
+            outcome.reason
+        );
     }
     assert_eq!(world.tiers().len(), 4, "two items, two tiers each");
 
@@ -368,7 +415,12 @@ fn the_backfill_sweep_derives_once_and_then_nothing() {
                 &Command::new("media.derive_missing", serde_json::json!({ "limit": 100 })),
             )
             .expect("the sweep runs");
-        assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{:?}",
+            outcome.reason
+        );
         outcome.output
     };
 
@@ -393,5 +445,9 @@ fn a_second_commit_of_known_bytes_re_derives_nothing() {
     world.add_asset("image/jpeg", &bytes);
     let before = world.tiers();
     world.add_asset("image/jpeg", &bytes);
-    assert_eq!(before, world.tiers(), "the tiers are the ones already there");
+    assert_eq!(
+        before,
+        world.tiers(),
+        "the tiers are the ones already there"
+    );
 }

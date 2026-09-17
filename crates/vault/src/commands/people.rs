@@ -77,7 +77,6 @@
 //! `ctx.now`, never SQLite's clock, so the restore window is fixturable at any
 //! instant (lane V's rule).
 
-use crate::access::Principal;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 
@@ -190,11 +189,13 @@ fn base_currency(ctx: &CommandCtx<'_, '_>) -> String {
 }
 
 /// Who asserted a link. v0 reads the identity kind (`people.ts:143`-`:145`).
-fn asserted_by(ctx: &CommandCtx<'_, '_>) -> &'static str {
-    match ctx.principal {
-        Principal::Agent { .. } => "agent",
-        Principal::OwnerDevice { .. } | Principal::Automation { .. } => "owner",
-    }
+///
+/// ALWAYS THE OWNER SINCE #1029 §1. The `agent` spelling was for an assistant
+/// or an ACP harness asserting while riding an owner, and both are deleted;
+/// the column keeps its CHECK so a later writer can mint a second value
+/// deliberately rather than by accident.
+const fn asserted_by(_ctx: &CommandCtx<'_, '_>) -> &'static str {
+    "owner"
 }
 
 /// A concept scheme's id, created on first use.

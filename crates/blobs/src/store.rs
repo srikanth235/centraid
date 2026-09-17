@@ -226,15 +226,6 @@ impl ByteStore {
         &self.root
     }
 
-    /// The underlying store, for [`crate::lane`] and for nothing else.
-    ///
-    /// `pub(crate)`: a caller that reaches iroh-blobs' own API has stepped past
-    /// [`Holding`] and past the tagging rule above, and the two places that
-    /// legitimately need it are both in this crate.
-    pub(crate) const fn inner(&self) -> &FsStore {
-        &self.store
-    }
-
     fn blobs(&self) -> &Blobs {
         self.store.blobs()
     }

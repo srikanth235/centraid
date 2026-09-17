@@ -25,32 +25,10 @@ enum AdminCommand {
   ADMIN_COMMAND_BACKUP_NOW = 3;
 }
 
-message DevicesList {}
-
-message DeviceRow {
-  string device_id = 1;
-  // The iroh EndpointId, 32 raw bytes.
-  bytes endpoint_id = 2;
-  string label = 3;
-  string platform = 4;
-  // RFC 3339.
-  string enrolled_at = 5;
-  // PRESENT means revoked. A tombstone rather than a deletion, because a
-  // revoked device that re-presents its key must be refused for the same
-  // reason twice, not treated as new.
-  optional string revoked_at = 6;
-}
-
-message DevicesListResult {
-  repeated DeviceRow devices = 1;
-}
-
-message DevicesRevoke {
-  // The device id or its endpoint id in hex; v0 accepts either
-  // (`EnrollmentStore.revoke(idOrEndpointId)`).
-  string device = 1;
-}
-
+// DevicesList, DeviceRow, DevicesListResult AND DevicesRevoke LEFT WITH THE
+// SEATS THEY LISTED (#1029 §1, §6). Their two consumers were the gateway's
+// allowlist — now server-side — and a paired client's "Devices" screen.
+//
 message BackupNow {
   // Take the snapshot even if the interval has not elapsed.
   bool force = 1;

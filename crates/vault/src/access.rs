@@ -243,22 +243,18 @@ pub enum Principal {
         may_act: bool,
         scope_clamp: Option<ScopeClamp>,
     },
-    /// An agent, always acting on behalf of an owner.
-    Agent {
-        agent_id: String,
-        /// The owner whose authority caps this agent's.
-        on_behalf_of: Box<Principal>,
-        /// `true` for the built-in assistant, whose enrollment key is
-        /// `_assistant` in v0 and which holds NO standing answer.
-        assistant: bool,
-        may_act: bool,
-        scope_clamp: Option<ScopeClamp>,
-    },
-    /// An automation, identified by the manifest that compiled it.
-    Automation {
-        manifest_ref: String,
-        scope_clamp: Option<ScopeClamp>,
-    },
+    // TWO VARIANTS LEFT WITH THEIR CALLERS (#1029 §1). `Agent` was the
+    // assistant and any ACP harness riding an owner, and `Automation` was a
+    // compiled manifest running on a schedule. `crates/assist` and
+    // `crates/automations` are deleted, so nothing in this workspace can
+    // construct either — and an authority plane that still judged them would
+    // be judging callers that cannot exist.
+    //
+    // `OwnerDevice` is therefore the only variant, and it is deliberately
+    // still an enum: `may_act` and `scope_clamp` are real distinctions a
+    // read-only surface (a widget, a share extension) makes on the phone, and
+    // collapsing the type to a struct is a rename across every `match` in this
+    // crate for no behaviour. W9 can make it one.
 }
 
 impl Principal {
@@ -275,19 +271,14 @@ impl Principal {
     #[must_use]
     pub fn may_act(&self) -> bool {
         match self {
-            Self::OwnerDevice { may_act, .. } | Self::Agent { may_act, .. } => *may_act,
-            // An automation runs because the owner scheduled it; `act` is what
-            // it is for. It is `reveal` that is unreachable for one.
-            Self::Automation { .. } => true,
+            Self::OwnerDevice { may_act, .. } => *may_act,
         }
     }
 
     #[must_use]
     pub const fn scope_clamp(&self) -> Option<&ScopeClamp> {
         match self {
-            Self::OwnerDevice { scope_clamp, .. }
-            | Self::Agent { scope_clamp, .. }
-            | Self::Automation { scope_clamp, .. } => scope_clamp.as_ref(),
+            Self::OwnerDevice { scope_clamp, .. } => scope_clamp.as_ref(),
         }
     }
 
@@ -296,8 +287,6 @@ impl Principal {
     pub fn caller_id(&self) -> &str {
         match self {
             Self::OwnerDevice { device_id, .. } => device_id,
-            Self::Agent { agent_id, .. } => agent_id,
-            Self::Automation { manifest_ref, .. } => manifest_ref,
         }
     }
 }
@@ -372,7 +361,7 @@ pub fn evaluate_reveal(
 }
 
 fn judge(
-    connection: &Connection,
+    _connection: &Connection,
     principal: &Principal,
     schema: &str,
     table: &str,
@@ -391,17 +380,10 @@ fn judge(
         });
     }
 
-    // 2. AN AGENT CANNOT EXCEED THE OWNER IT ACTS FOR. Before the clamp, so a
-    //    generous clamp on the agent cannot outrun a restricted owner.
-    if let Principal::Agent { on_behalf_of, .. } = principal {
-        let owner = judge(connection, on_behalf_of, schema, table, verb)?;
-        if let Decision::Deny { failing, .. } = owner {
-            return Ok(Decision::Deny {
-                failing: format!("the owner this agent acts for cannot do it either: {failing}"),
-                authority_id: None,
-            });
-        }
-    }
+    // 2. WAS "AN AGENT CANNOT EXCEED THE OWNER IT ACTS FOR" (#1029 §1). An
+    //    agent rode an owner and was judged against it first, so a generous
+    //    clamp on the agent could not outrun a restricted owner. There is no
+    //    agent to ride one.
 
     // 3. THE EXECUTION CLAMP NARROWS WHOEVER HOLDS IT.
     let clamped = match principal.scope_clamp() {
@@ -425,118 +407,22 @@ fn judge(
         }
     };
 
-    // 4. An owner device.
-    if let Principal::OwnerDevice { .. } = principal {
-        let (row_filter, field_mask) = clamped.unwrap_or_default();
-        return Ok(Decision::Allow {
-            authority_id: None,
-            row_filter,
-            field_mask,
-        });
-    }
-
-    // 5. THE ASSISTANT HOLDS NO STANDING ANSWER. Allowed only while riding an
-    //    acting owner, which step 2 already confirmed.
-    if let Principal::Agent {
-        assistant: true,
-        on_behalf_of,
-        ..
-    } = principal
-    {
-        if !matches!(**on_behalf_of, Principal::OwnerDevice { .. }) {
-            return Ok(Decision::Deny {
-                failing: "the assistant holds no standing answer and is not riding an owner"
-                    .to_owned(),
-                authority_id: None,
-            });
-        }
-        let (row_filter, field_mask) = clamped.unwrap_or_default();
-        return Ok(Decision::Allow {
-            authority_id: None,
-            row_filter,
-            field_mask,
-        });
-    }
-
-    // A non-assistant agent riding an owner inherits the owner's answer,
-    // narrowed by its own clamp. Step 2 proved the owner can.
-    if let Principal::Agent {
-        on_behalf_of,
-        assistant: false,
-        ..
-    } = principal
-        && matches!(**on_behalf_of, Principal::OwnerDevice { .. })
-    {
-        let (row_filter, field_mask) = clamped.unwrap_or_default();
-        return Ok(Decision::Allow {
-            authority_id: None,
-            row_filter,
-            field_mask,
-        });
-    }
-
-    // 6. Everything else needs a standing answer.
-    match standing_answer_id(connection, principal, schema, table, verb)? {
-        Some(authority_id) => {
-            let (row_filter, field_mask) = clamped.unwrap_or_default();
-            Ok(Decision::Allow {
-                authority_id: Some(authority_id),
-                row_filter,
-                field_mask,
-            })
-        }
-        None => Ok(Decision::Deny {
-            failing: format!("no standing answer grants {} on {subject}", verb.as_str()),
-            authority_id: None,
-        }),
-    }
-}
-
-/// The `share_authority` row that answers, if one does.
-///
-/// `principal_kind = 'automation' AND decision = 'granted' AND revoked_at IS
-/// NULL`, over a pack subject (`agent.pack` × schema) or an entity subject
-/// (`core.entity` × `schema.table`), ordered `granted_at ASC, rowid ASC LIMIT 1`
-/// — the OLDEST answer wins, so a later grant cannot silently widen an earlier
-/// one's row filter.
-///
-/// **`reveal` is deliberately unreachable here.** A sealed reveal is Locker's
-/// permit; an authority row that could grant one would be a second key custody.
-fn standing_answer_id(
-    connection: &Connection,
-    principal: &Principal,
-    schema: &str,
-    table: &str,
-    verb: Requested,
-) -> Result<Option<String>> {
-    if verb == Requested::Reveal {
-        return Ok(None);
-    }
-    let Principal::Automation { manifest_ref, .. } = principal else {
-        return Ok(None);
-    };
-    let subject = format!("{schema}.{table}");
-    let mut statement = connection.prepare_cached(
-        "SELECT authority_id, verb FROM share_authority
-          WHERE principal_kind = 'automation'
-            AND principal_id = ?1
-            AND decision = 'granted'
-            AND revoked_at IS NULL
-            AND (
-                  (subject_type = 'agent.pack' AND subject_id = ?2)
-               OR (subject_type = 'core.entity' AND subject_id = ?3)
-            )
-          ORDER BY granted_at ASC, rowid ASC",
-    )?;
-    let rows: Vec<(String, String)> = statement
-        .query_map(rusqlite::params![manifest_ref, schema, subject], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows
-        .into_iter()
-        .find(|(_, granted)| verb.satisfied_by(granted))
-        .map(|(id, _)| id))
+    // 4. An owner device, which is the only caller there is.
+    //
+    //    5, 6 AND 7 WERE THE ASSISTANT, THE ORDINARY AGENT AND THE STANDING
+    //    ANSWER (#1029 §1). The assistant held no standing answer and was
+    //    allowed only while riding an acting owner; a non-assistant agent
+    //    inherited the owner's answer narrowed by its own clamp; and an
+    //    AUTOMATION was the only caller a `share_authority` row could ever
+    //    answer for, matched on `principal_kind = 'automation'`. None of those
+    //    three callers exists, which is why this is the last step and why the
+    //    `share_authority` reader went with them.
+    let (row_filter, field_mask) = clamped.unwrap_or_default();
+    Ok(Decision::Allow {
+        authority_id: None,
+        row_filter,
+        field_mask,
+    })
 }
 
 /// Intersect the covering scopes: AND the filters, intersect the masks.
@@ -697,17 +583,6 @@ mod tests {
                 .expect("judged")
                 .is_allow()
         );
-        // AND A REVEAL IS UNREACHABLE THROUGH A STANDING ANSWER: an
-        // authority row that could grant one would be a second key custody.
-        let automation = Principal::Automation {
-            manifest_ref: "manifest-1".to_owned(),
-            scope_clamp: None,
-        };
-        assert!(
-            !evaluate_reveal(&connection, &automation, &subject)
-                .expect("judged")
-                .is_allow()
-        );
     }
 
     #[test]
@@ -831,105 +706,18 @@ mod tests {
         assert_eq!(intersect(&[&open]).expect("intersects").1, None);
     }
 
-    #[test]
-    fn an_agent_cannot_exceed_the_owner_it_acts_for() {
-        let connection = memory();
-        let read_only_owner = Principal::OwnerDevice {
-            device_id: "widget".to_owned(),
-            may_act: false,
-            scope_clamp: None,
-        };
-        let agent = Principal::Agent {
-            agent_id: "helper".to_owned(),
-            on_behalf_of: Box::new(read_only_owner),
-            assistant: false,
-            may_act: true,
-            scope_clamp: None,
-        };
-        match evaluate_access(&connection, &agent, "tally", "expense", Verb::Act).expect("judged") {
-            Decision::Deny { failing, .. } => {
-                assert!(failing.contains("acts for"), "{failing}");
-            }
-            Decision::Allow { .. } => panic!("the owner's cap is the agent's cap"),
-        }
-    }
-
-    #[test]
-    fn reveal_is_unreachable_through_a_standing_answer() {
-        let connection = memory();
-        connection
-            .execute(
-                "INSERT INTO share_authority VALUES
-                   ('auth-1','automation','manifest-1','agent.pack','tally','reveal','granted','2026-01-01T00:00:00.000Z',NULL)",
-                [],
-            )
-            .expect("the grant inserts");
-        let automation = Principal::Automation {
-            manifest_ref: "manifest-1".to_owned(),
-            scope_clamp: None,
-        };
-        // A row that says `reveal` in the table does not produce one.
-        let subject = SealedSubject::new("tally", "expense").expect("a subject");
-        assert!(
-            !evaluate_reveal(&connection, &automation, &subject)
-                .expect("judged")
-                .is_allow()
-        );
-    }
-
-    #[test]
-    fn an_automation_needs_a_standing_answer_and_the_oldest_one_wins() {
-        let connection = memory();
-        connection
-            .execute_batch(
-                "INSERT INTO share_authority VALUES
-                   ('auth-late','automation','m','agent.pack','tally','read+act','granted','2026-02-01T00:00:00.000Z',NULL),
-                   ('auth-early','automation','m','agent.pack','tally','read','granted','2026-01-01T00:00:00.000Z',NULL);",
-            )
-            .expect("the grants insert");
-        let automation = Principal::Automation {
-            manifest_ref: "m".to_owned(),
-            scope_clamp: None,
-        };
-        match evaluate_access(&connection, &automation, "tally", "expense", Verb::Read)
-            .expect("judged")
-        {
-            Decision::Allow { authority_id, .. } => {
-                assert_eq!(authority_id.as_deref(), Some("auth-early"));
-            }
-            Decision::Deny { failing, .. } => panic!("{failing}"),
-        }
-        // `act` is not satisfied by the early `read` row, so the later
-        // `read+act` one answers — the ordering picks the oldest row that
-        // ACTUALLY satisfies the verb, not the oldest row full stop.
-        match evaluate_access(&connection, &automation, "tally", "expense", Verb::Act)
-            .expect("judged")
-        {
-            Decision::Allow { authority_id, .. } => {
-                assert_eq!(authority_id.as_deref(), Some("auth-late"));
-            }
-            Decision::Deny { failing, .. } => panic!("{failing}"),
-        }
-    }
-
-    #[test]
-    fn a_revoked_or_refused_grant_answers_nothing() {
-        let connection = memory();
-        connection
-            .execute_batch(
-                "INSERT INTO share_authority VALUES
-                   ('auth-revoked','automation','m','agent.pack','tally','read','granted','2026-01-01T00:00:00.000Z','2026-03-01T00:00:00.000Z'),
-                   ('auth-refused','automation','m','agent.pack','tally','read','refused','2026-01-01T00:00:00.000Z',NULL);",
-            )
-            .expect("the grants insert");
-        let automation = Principal::Automation {
-            manifest_ref: "m".to_owned(),
-            scope_clamp: None,
-        };
-        assert!(
-            !evaluate_access(&connection, &automation, "tally", "expense", Verb::Read)
-                .expect("judged")
-                .is_allow()
-        );
-    }
+    // FOUR TESTS STOOD HERE AND THEIR CALLERS ARE DELETED (#1029 §1).
+    //
+    // `an_agent_cannot_exceed_the_owner_it_acts_for`,
+    // `reveal_is_unreachable_through_a_standing_answer`,
+    // `an_automation_needs_a_standing_answer_and_the_oldest_one_wins` and
+    // `a_revoked_or_refused_grant_answers_nothing` all built a
+    // `Principal::Agent` or a `Principal::Automation`. `crates/assist` and
+    // `crates/automations` are gone, so nothing can construct either, and the
+    // `share_authority` reader they exercised — the only consumer of
+    // `principal_kind = 'automation'` — went with them.
+    //
+    // The property `reveal_is_unreachable_through_a_standing_answer` protected
+    // is NOT lost: a reveal is Locker's permit, and there is no longer any
+    // path from `share_authority` to a decision at all.
 }

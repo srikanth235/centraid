@@ -319,7 +319,7 @@ fn main() {
     let bytes_dir = vault_path.with_extension("bytes");
     let _ = std::fs::remove_dir_all(&bytes_dir);
 
-    let handle = centraid_core::Core::open(centraid_core::CoreConfig::gateway(&vault_path))
+    let handle = centraid_core::Core::open(centraid_core::CoreConfig::new(&vault_path))
         .expect("a core opens");
 
     // THE ONE CONTENT STORE, SEEDED DIRECTLY (#1025 S3, D-1025-S3-1).
@@ -877,24 +877,28 @@ struct Frame {
     favorite: bool,
 }
 
+/// `at` is `(day, hour)` and `size` is `(width, height)`.
+///
+/// Grouped into pairs rather than eight positionals: clippy's
+/// `too_many_arguments` fires at eight, and two of the four numbers were
+/// already a coordinate and two were already a dimension — so the pairs are
+/// what the call sites meant, not a workaround for the lint.
 const fn frame(
     file: &'static str,
     title: &'static str,
-    day: i64,
-    hour: i64,
-    width: i64,
-    height: i64,
+    at: (i64, i64),
+    size: (i64, i64),
     thumbhash: &'static str,
     phash: &'static str,
 ) -> Frame {
     Frame {
         file,
         title,
-        day,
-        hour,
+        day: at.0,
+        hour: at.1,
         month_offset: 0,
-        width,
-        height,
+        width: size.0,
+        height: size.1,
         thumbhash,
         phash,
         favorite: false,
@@ -912,10 +916,8 @@ fn roll() -> Vec<Frame> {
             ..frame(
                 "downtown-blue-hour.png",
                 "Downtown at blue hour",
-                -13,
-                20,
-                360,
-                240,
+                (-13, 20),
+                (360, 240),
                 "DPcFFYJIeHl1eHdweIdoeJeAfAeI",
                 "3727170f8b494d6e",
             )
@@ -925,10 +927,8 @@ fn roll() -> Vec<Frame> {
             ..frame(
                 "harbor-lights.png",
                 "Harbor lights from the pier",
-                -13,
-                21,
-                270,
-                360,
+                (-13, 21),
+                (270, 360),
                 "TPcFDQJoiHJ4B3dXiHqHR4hwiQcn",
                 "935517099b3bb235",
             )
@@ -938,10 +938,8 @@ fn roll() -> Vec<Frame> {
             ..frame(
                 "cabin-window-morning.png",
                 "First morning from the cabin window",
-                -11,
-                7,
-                270,
-                360,
+                (-11, 7),
+                (270, 360),
                 "XdcVFQJ3d4+HV4hXh4eHd4dwhwk3",
                 "0f0f0f272b958f27",
             )
@@ -951,10 +949,8 @@ fn roll() -> Vec<Frame> {
             ..frame(
                 "trailhead-sign.png",
                 "Trailhead before the climb",
-                -9,
-                9,
-                270,
-                360,
+                (-9, 9),
+                (270, 360),
                 "mOgNDQJoiI93R5dXd4h3h1iMgAeH",
                 "0f072f0d4d554149",
             )
@@ -964,10 +960,8 @@ fn roll() -> Vec<Frame> {
             ..frame(
                 "granite-switchback.png",
                 "Granite switchbacks",
-                -9,
-                11,
-                360,
-                240,
+                (-9, 11),
+                (360, 240),
                 "G+cNLYZod3h/d3dzh1iId4iAhghY",
                 "0f0f0f171f9f0f97",
             )
@@ -975,10 +969,8 @@ fn roll() -> Vec<Frame> {
         frame(
             "sand-harbor-dawn.png",
             "Sand Harbor at dawn",
-            -4,
-            6,
-            360,
-            240,
+            (-4, 6),
+            (360, 240),
             "JNcJDYJYd3d/d4d0iCeIh5hwgAkn",
             "1f0f0f0e57334f25",
         ),
@@ -987,10 +979,8 @@ fn roll() -> Vec<Frame> {
             ..frame(
                 "truckee-river-bend.png",
                 "Bend in the Truckee",
-                -4,
-                10,
-                360,
-                240,
+                (-4, 10),
+                (360, 240),
                 "m9cJFYQ3eIh/eXeGh0h3dKhwhApY",
                 "170f0f0b1b09071f",
             )
@@ -1000,10 +990,8 @@ fn roll() -> Vec<Frame> {
             ..frame(
                 "emerald-bay-overlook.png",
                 "Emerald Bay overlook",
-                -3,
-                19,
-                360,
-                240,
+                (-3, 19),
+                (360, 240),
                 "UwcKDYJnd3iPd4dzh1iHhrdwc/hX",
                 "1f0f0f1337250d17",
             )
@@ -1011,20 +999,16 @@ fn roll() -> Vec<Frame> {
         frame(
             "tahoe-dusk-ridge.png",
             "Dusk over the west shore",
-            -3,
-            20,
-            360,
-            240,
+            (-3, 20),
+            (360, 240),
             "DAcKDYJod3d7h4hweHiIeJiAi2gH",
             "1d2b070f5b371e4b",
         ),
         frame(
             "backyard-last-light.png",
             "Last light in the backyard",
-            -1,
-            19,
-            360,
-            240,
+            (-1, 19),
+            (360, 240),
             "GDgOJYhneHiIeHeAiKh3h3eAcVcI",
             "0f170f0f0f4f4bc9",
         ),
@@ -1052,80 +1036,64 @@ fn portraits() -> Vec<Frame> {
         frame(
             "ana-kitchen-window.png",
             "Ana by the kitchen window",
-            -12,
-            9,
-            270,
-            360,
+            (-12, 9),
+            (270, 360),
             "6QcKHQTqdn9pZme4V3x1Z3dvUvQF",
             "303878783ce480c0",
         ),
         frame(
             "marco-workshop.png",
             "Marco in the workshop",
-            -10,
-            15,
-            270,
-            360,
+            (-10, 15),
+            (270, 360),
             "oSgKDQTod496lmfIV3x1ZzeAdQSI",
             "0070706c70e88080",
         ),
         frame(
             "ana-trailhead.png",
             "Ana at the trailhead",
-            -8,
-            11,
-            270,
-            360,
+            (-8, 11),
+            (270, 360),
             "pecJHQTXeH+KdmjXSIxlZ0iJgIAI",
             "0070704454c88080",
         ),
         frame(
             "marco-harbor-wall.png",
             "Marco by the harbour wall",
-            -6,
-            17,
-            270,
-            360,
+            (-6, 17),
+            (270, 360),
             "IQgKHQjZd495lmfIV3tmaDaAZwN4",
             "0030705064ec80c0",
         ),
         frame(
             "ana-and-marco-table.png",
             "Ana and Marco at the table",
-            -4,
-            20,
-            270,
-            360,
+            (-4, 20),
+            (270, 360),
             "pCgODQKZp3+IuHe4d4lIWFDuBHRO",
             "0000ccccbcba30dc",
         ),
         frame(
             "ana-profile-doorway.png",
             "Someone in the doorway",
-            -3,
-            18,
-            270,
-            360,
+            (-3, 18),
+            (270, 360),
             "IwgOFQSQd2iXd4iYaIl2eISfYOYJ",
             "0060e0a890100000",
         ),
         frame(
             "ana-porch-evening.png",
             "Ana on the porch",
-            -2,
-            19,
-            270,
-            360,
+            (-2, 19),
+            (270, 360),
             "oygKNQaod496hoe3V3yUZ5h/hvlX",
             "007070544cec8086",
         ),
         frame(
             "empty-hallway.png",
             "The hallway, no one in it",
-            -1,
-            13,
-            270,
-            360,
+            (-1, 13),
+            (270, 360),
             "aAgKBQB3iI94d4iXd3iHiEd/dYA3",
             "0030300c0c0c0000",
         ),
@@ -1445,7 +1413,14 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) -> u32 {
         (start, end)
     };
     let mut seeded = 0;
-    let events: [(&str, Option<&str>, (String, String), Option<&str>); 5] = [
+    /// One seeded event: title, description, `(starts_at, ends_at)`, rrule.
+    type SeededEvent = (
+        &'static str,
+        Option<&'static str>,
+        (String, String),
+        Option<&'static str>,
+    );
+    let events: [SeededEvent; 5] = [
         ("Pick up the dry cleaning", None, slot(0, 17, 0, 30), None),
         (
             "Morning run",
@@ -1549,7 +1524,10 @@ fn seed_tally(seeder: &mut Seeder, now: i64, me: &str) -> u32 {
     let everyone: Vec<String> = std::iter::once(me.to_owned())
         .chain(friends.iter().cloned())
         .collect();
-    let expenses: [(&str, i64, &String, &str, i64, Option<Vec<String>>); 5] = [
+    /// One seeded expense: description, minor units, payer, category, days
+    /// ago, and the parties it splits between (`None` is everyone).
+    type SeededExpense<'a> = (&'a str, i64, &'a String, &'a str, i64, Option<Vec<String>>);
+    let expenses: [SeededExpense<'_>; 5] = [
         ("Cabin deposit", 30_000, &everyone[0], "travel", 6, None),
         ("Gas for the drive up", 4_820, &jake, "transport", 6, None),
         (

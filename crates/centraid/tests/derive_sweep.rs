@@ -15,12 +15,13 @@
 //! and the backfill never ran once. Two green suites either side of a guard
 //! that let nothing through.
 //!
-//! This test is therefore deliberately THROUGH THE HANDLE, over a real byte
-//! store, and it is here rather than in `crates/core` because that crate's
-//! dev-dependencies carry neither a tokio runtime nor a real photograph — and
-//! `ContentBytes` needs both.
+//! The role half of that guard is gone with `Role` itself (#1029 §1) and what
+//! is left is the half that was load-bearing: an open vault. This test is
+//! therefore deliberately THROUGH THE HANDLE, over a real byte store, and it
+//! is here rather than in `crates/core` because that crate's dev-dependencies
+//! carry neither a tokio runtime nor a real photograph — and `ContentBytes`
+//! needs both.
 
-use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig};
 
 /// A REAL PHOTOGRAPH, from this repository's own sample roll.
@@ -40,18 +41,18 @@ fn data_uri(bytes: &[u8]) -> String {
     )
 }
 
-/// Open a gateway core at `path` with `store` attached.
+/// Open a core at `path` with `store` attached.
 ///
-/// The same two steps and the same order as `run.rs`: the core first, because
-/// opening one is synchronous, then `attach_bytes`, because opening the store
-/// is not. The store is passed IN and cloned rather than reopened, because this
-/// test opens two cores over one directory in sequence and a second
-/// `ByteStore::open` over a live one would be a second writer to its index.
-fn gateway_with_bytes(
+/// The core first, because opening one is synchronous, then `attach_bytes`,
+/// because opening the store is not. The store is passed IN and cloned rather
+/// than reopened, because this test opens two cores over one directory in
+/// sequence and a second `ByteStore::open` over a live one would be a second
+/// writer to its index.
+fn core_with_bytes(
     path: &std::path::Path,
     store: &centraid_blobs::ByteStore,
 ) -> centraid_core::Handle {
-    let handle = Core::open(CoreConfig::gateway(path)).expect("the gateway core opens");
+    let handle = Core::open(CoreConfig::new(path)).expect("the gateway core opens");
     handle.attach_bytes(centraid_blobs::ContentBytes::new(
         store.clone(),
         tokio::runtime::Handle::current(),
@@ -75,50 +76,39 @@ async fn a_gateway_start_derives_the_tiers_a_vault_is_missing() {
     let store = centraid_blobs::ByteStore::open(&blobs_path)
         .await
         .expect("the byte store opens");
-    let handle = gateway_with_bytes(&vault_path, &store);
+    let handle = core_with_bytes(&vault_path, &store);
     handle
         .with_vault(|vault| Ok(vault.found("Sweep", "Owner")?))
         .expect("the vault founds");
-    let owner = handle
-        .with_vault(|vault| Ok(vault.self_party_id()?))
-        .expect("the owner reads");
-    handle
-        .with_vault(|vault| Ok(vault.enrol_device("d1", &owner, "A Phone", "ios", "pk-1")?))
-        .expect("the device enrols");
 
     let input = serde_json::json!({
         "data_uri": data_uri(A_PHOTOGRAPH),
         "kind": "photo",
         "title": "Tahoe, dusk",
     });
-    // THE PAYLOAD HASH IS THE SUBMITTER'S, not the door's: `submit_intent` is
-    // the GATEWAY's side and a hash that does not reproduce is refused there.
-    // (A shell's own `queue_write` is the opposite — it refuses a declared one
-    // and computes its own, D-1025-S4-6.)
-    let payload = centraid_vault::intents::IntentPayload {
-        app_id: "media".to_owned(),
-        action: "add_asset".to_owned(),
-        input: input.clone(),
-        base_versions: Vec::new(),
-        depends_on: Vec::new(),
-        needs: Vec::new(),
+    // THROUGH THE CALL DOOR, as the owner (#1029 §1). This used to go through
+    // `Handle::submit_intent`, the gateway's side of a seat's `submit` stream,
+    // under the enrolled device that stream was admitted as. There is no
+    // second host and no enrolment: `api::invoke` takes the principal from the
+    // handle, and that principal is the owner of the device the vault is on.
+    let answer = handle
+        .call(&centraid_core::Request {
+            kind: Some(centraid_core::api_proto::request::Kind::Command(
+                centraid_core::api_proto::Command {
+                    name: "media.add_asset".to_owned(),
+                    input: serde_json::to_vec(&input).expect("the input encodes"),
+                    invoke_key: "derive-sweep-add-asset".to_owned(),
+                    ..Default::default()
+                },
+            )),
+        })
+        .expect("the command runs");
+    let Some(centraid_core::api_proto::response::Kind::Command(outcome)) = answer.kind else {
+        panic!("a command outcome: {answer:?}");
     };
-    let outcome = handle
-        .submit_intent(
-            &wire::Intent {
-                intent_id: "i-1".to_owned(),
-                app_id: "media".to_owned(),
-                action: "add_asset".to_owned(),
-                input: serde_json::to_vec(&input).expect("the input encodes"),
-                payload_hash: payload.hash().expect("the payload hashes"),
-                ..Default::default()
-            },
-            "d1",
-        )
-        .expect("the gateway runs the intent");
     assert_eq!(
         outcome.status,
-        wire::IntentStatus::Executed as i32,
+        centraid_core::api_proto::CommandStatus::Executed as i32,
         "the photograph did not commit: {outcome:?}"
     );
 
@@ -144,15 +134,12 @@ async fn a_gateway_start_derives_the_tiers_a_vault_is_missing() {
     // for.
     {
         let connection = rusqlite::Connection::open(&vault_path).expect("the vault file opens");
-        assert_eq!(
-            centraid_vault::testdoor::forget_derivatives(&connection),
-            2
-        );
+        assert_eq!(centraid_vault::testdoor::forget_derivatives(&connection), 2);
     }
     assert!(variants(&vault_path).is_empty());
 
     // ---- 3. THE SWEEP, AT A GATEWAY START, THROUGH THE HANDLE -------------
-    let handle = gateway_with_bytes(&vault_path, &store);
+    let handle = core_with_bytes(&vault_path, &store);
     let derived = handle
         .derive_missing_tiers(centraid_vault::commands::media::DERIVE_SWEEP_LIMIT)
         .expect("the sweep runs");
@@ -188,13 +175,13 @@ async fn a_gateway_start_derives_the_tiers_a_vault_is_missing() {
 async fn a_seat_sweeps_nothing() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let path = dir.path().join("seat.db");
-    let made = Core::open(CoreConfig::gateway(&path)).expect("opens");
+    let made = Core::open(CoreConfig::new(&path)).expect("opens");
     made.with_vault(|vault| Ok(vault.found("Sweep", "Owner")?))
         .expect("founds");
     made.close();
     drop(made);
 
-    let seat = Core::open(CoreConfig::thin_seat(&path)).expect("the seat opens");
+    let seat = Core::open(CoreConfig::new(&path)).expect("the seat opens");
     assert_eq!(
         seat.derive_missing_tiers(centraid_vault::commands::media::DERIVE_SWEEP_LIMIT)
             .expect("answers"),

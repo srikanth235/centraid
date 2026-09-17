@@ -227,11 +227,17 @@ impl EventQueue {
 /// `Handle::next_event` drained a queue only the tests ever filled, so a shell
 /// that waited for a row to arrive waited forever.
 ///
-/// It implements the seam `crates/seat` declares, because that is where the
-/// applied rows are: the applier knows exactly which `(table, primary key)`
-/// moved and in which commit, and this crate already depends on that one.
-/// The other direction was never available — `crates/seat` must not depend on
-/// `crates/core`.
+/// **THE SEAM IS GONE AND THE PRODUCER IS NOT (#1029 §1).** This used to
+/// implement `centraid_seat::sync::ChangeSink`, a trait `crates/seat` declared
+/// because the applied rows were the applier's and `crates/seat` could not
+/// depend on `crates/core`. With the seat plane deleted the trait had one
+/// implementor — this one — and every `dyn ChangeSink` call site went with the
+/// applier, so the three methods are inherent here rather than a trait moved
+/// into this crate to abstract over nothing.
+///
+/// What feeds it now is the vault's own `update_hook` inside the commit guard
+/// (#1029 §1, W2-2): the hook knows exactly which `(table, primary key)` moved
+/// and in which commit, which is the same fact the applier used to hand over.
 pub struct ChangeFeed {
     queue: std::sync::Arc<EventQueue>,
 }
@@ -243,7 +249,7 @@ pub struct ChangeFeed {
 /// `BytesArrived` is gone: a grid is keyed by ASSET id, so an event carrying
 /// content ids matched nothing it was showing and the shell had to answer it
 /// with "re-read everything" in an event kind of its own.
-/// `centraid_seat::bytes::asset_rows_for` does the join, so what arrives here
+/// The caller does the hash-to-asset join before it gets here, so what arrives
 /// are ids the screens already compare against.
 const ASSET_TABLE: &str = "media_asset";
 
@@ -279,10 +285,44 @@ impl ChangeFeed {
             std::thread::sleep(STALL_RETRY);
         }
     }
-}
 
-impl centraid_seat::sync::ChangeSink for ChangeFeed {
-    fn rows_applied(
+    /// THE TABLES A COMMIT TOUCHED, AS CHANGE EVENTS (#1029 §1).
+    ///
+    /// One event per table, in the order the guard reports them. The queue
+    /// coalesces per table anyway, so a push per table is the natural grain.
+    ///
+    /// **`pk_set` IS EMPTY, AND THAT IS THE HONEST ANSWER.** The old producer
+    /// was the seat applier, which held the page it had just applied and so
+    /// knew every `(table, primary key)` it moved. What replaces it is a
+    /// rusqlite `update_hook`, and the hook is handed a ROWID — not the
+    /// declared primary key — so naming the keys would mean a read per changed
+    /// row, inside the commit, to translate one into the other. An empty
+    /// `pk_set` reads as "re-read this table", which is what a screen does
+    /// with a key set it did not recognise anyway.
+    ///
+    /// `commit_seq: 0` for the same reason it is zero for arriving bytes:
+    /// there is no commit position any more (#1029 §1), and the queue's
+    /// coalescing takes the maximum so a zero never lowers a waiting event.
+    pub fn tables_changed(&self, tables: &[String]) {
+        for table in tables {
+            self.offer(Event {
+                kind: Some(event::Kind::Change(ChangeEvent {
+                    table: table.clone(),
+                    pk_set: Vec::new(),
+                    commit_seq: 0,
+                })),
+            });
+        }
+    }
+
+    /// Rows landed and are durable. `touched` is one `(table, primary key)`
+    /// per changed row, in the order they changed; `commit_seq` is the commit
+    /// they landed in, because an overlay clears against a commit seq and the
+    /// lower of two would leave paint on the screen.
+    ///
+    /// Called AFTER the transaction commits. A shell told about rows that then
+    /// rolled back would be a screen redrawn from a file that never had them.
+    pub fn rows_applied(
         &self,
         touched: &[(String, Vec<centraid_vault::value::Value>)],
         commit_seq: i64,
@@ -312,7 +352,19 @@ impl centraid_seat::sync::ChangeSink for ChangeFeed {
         }
     }
 
-    fn blobs_arrived(&self, asset_ids: &[String]) {
+    /// BYTES LANDED FOR THESE ASSET ROWS (#1025 S7, D-1025-S7-20).
+    ///
+    /// The half a member sees: photographs arrived on a device and **nothing
+    /// on the screen moved**, because no ROW changed and a change event is
+    /// what a screen listens for. A grid drew "not on this device yet" over
+    /// files that were on the device, until something else happened to make it
+    /// re-read.
+    ///
+    /// Its own method rather than a `rows_applied` with an invented commit
+    /// seq: a blob arriving is not a commit and clears no overlay, and handing
+    /// it a commit number would be a number a settlement could later be
+    /// compared against.
+    pub fn blobs_arrived(&self, asset_ids: &[String]) {
         // THE SAME `ChangeEvent`, AND ONE OF THEM (#1025 S5/S7). A screen's
         // question is "do I need to re-read?", and for a thumbnail that has
         // just landed the answer is the same as for a row that has just
@@ -348,7 +400,8 @@ impl centraid_seat::sync::ChangeSink for ChangeFeed {
         });
     }
 
-    fn behind(&self, behind: i64) {
+    /// How far behind this vault's last upload is, as a display number.
+    pub fn behind(&self, behind: i64) {
         // RECORDED, NOT PUSHED. A health event is a SAMPLE, and the queue emits
         // one when it has something to say — a stall beginning or ending. A
         // pass that pushed one per window would spend the bounded queue on

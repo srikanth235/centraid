@@ -296,10 +296,12 @@ fn every_request_carries_a_request_id_and_cancel_names_one() {
     // an in-flight bounded id can be held.)
     let bounded = envelope(
         7,
-        wire::request::Kind::Log(wire::LogRequest {
-            since: None,
-            limit: 10,
-            tail: false,
+        wire::request::Kind::Hello(wire::Hello {
+            identity: None,
+            schema_version: 1,
+            min_supported: 1,
+            product_version: "test".to_owned(),
+            capabilities: Vec::new(),
         }),
     );
     let (code, _) = call(opened.handle, &bounded);

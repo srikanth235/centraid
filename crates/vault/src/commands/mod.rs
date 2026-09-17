@@ -38,7 +38,6 @@
 
 pub mod core;
 pub mod core_links;
-pub mod enrich;
 pub mod knowledge;
 pub mod locker;
 pub mod media;
@@ -56,8 +55,7 @@ use crate::audit::{self, Check, Invocation, Receipt};
 use crate::clock::Ids;
 use crate::error::{Result, VaultError};
 use crate::file::Vault;
-use crate::intents::{self, IntentPayload};
-use crate::log::{CommitTx, ProducedRow};
+use crate::log::CommitTx;
 
 /// The one served ontology version. Equality, on purpose.
 pub const ONTOLOGY_VERSION: &str = "1.0";
@@ -276,9 +274,6 @@ impl Registry {
         for definition in core_links::definitions() {
             registry.register(definition)?;
         }
-        for definition in enrich::definitions() {
-            registry.register(definition)?;
-        }
         for definition in knowledge::definitions() {
             registry.register(definition)?;
         }
@@ -420,10 +415,6 @@ fn predicate_names(conditions: &[CommandCondition]) -> String {
 pub struct Command {
     pub name: String,
     pub input: serde_json::Value,
-    /// The seat's idempotency key, when the call came from an outbox.
-    pub intent_id: Option<String>,
-    /// The device that owns the intent, for the ledger's own bookkeeping.
-    pub device_id: Option<String>,
 }
 
 impl Command {
@@ -432,21 +423,7 @@ impl Command {
         Self {
             name: name.into(),
             input,
-            intent_id: None,
-            device_id: None,
         }
-    }
-
-    /// The same command, carrying a seat's intent id.
-    #[must_use]
-    pub fn with_intent(
-        mut self,
-        intent_id: impl Into<String>,
-        device_id: impl Into<String>,
-    ) -> Self {
-        self.intent_id = Some(intent_id.into());
-        self.device_id = Some(device_id.into());
-        self
     }
 }
 
@@ -463,8 +440,9 @@ pub struct CommandOutcome {
     pub status: CommandStatus,
     pub invocation_id: String,
     pub receipt_id: String,
-    pub commit_seq: Option<i64>,
-    pub produced: Vec<ProducedRow>,
+    /// The tables this command changed, from the commit guard's
+    /// `update_hook`. What a change event is made of (#1029 §1).
+    pub tables: Vec<String>,
     pub output: serde_json::Value,
     /// The owner-facing sentence, on a failure.
     pub reason: Option<String>,
@@ -474,180 +452,7 @@ pub struct CommandOutcome {
     pub replayed: bool,
 }
 
-/// WHAT A SEAT PREDICTS ITS OWN WRITE WILL DO (#1025 S7, item 4).
-///
-/// The row images the handler produced, in the shape `replica_log` carries
-/// them, plus whatever the handler answered. A seat stores this as the pending
-/// page for its intent and composes it over the mirrored rows; the applier
-/// drops it in the transaction that lands the gateway's real page.
-#[derive(Debug, Clone)]
-pub struct Prediction {
-    /// One per changed row, exactly as the log would have carried it.
-    pub rows: Vec<crate::log::capture::DecodedRow>,
-    pub output: serde_json::Value,
-}
-
 impl Vault {
-    /// RUN A COMMAND AGAINST THIS COPY AND THROW THE WRITE AWAY (#1025 S7,
-    /// item 4).
-    ///
-    /// A seat holds a copy and has no authority over any row, so this never
-    /// commits: [`Vault::dry_run`] rolls back and hands back the page the
-    /// handler would have logged. That page is the overlay — the only
-    /// description of a pending write that cannot disagree with the gateway's,
-    /// because it is produced by the same handler.
-    ///
-    /// ## WHAT IT DOES AND DOES NOT RUN
-    ///
-    /// **Gate 3 (the registry) and gate 2 (the schema) run, and a failure is a
-    /// REFUSAL.** An unknown command is never queued: `knowledge.save_note` was
-    /// named by the notes editor for a whole wave, the registry has never had
-    /// it, and a member read *"That request does not make sense to this build"*
-    /// on every window for ever because the seat retried a write that could
-    /// never succeed. Refusing at the door is what makes that a sentence at the
-    /// moment of the gesture instead.
-    ///
-    /// **Gates 4, 6 and 7 (preconditions, handler, postconditions) run**,
-    /// because they are what produces the rows.
-    ///
-    /// **The audit trail does not.** No invocation, no checks, no receipt: the
-    /// tables they are written to are PRIVATE and a replica does not have them
-    /// — that is what a replica IS. A prediction is not an execution and must
-    /// not leave evidence that one happened; the gateway writes the real trail
-    /// when it runs the real command.
-    ///
-    /// **Authority does not.** `evaluate_access` reads private tables too, and
-    /// the decision is not a seat's to make: the gateway refuses what it
-    /// refuses, and the seat's answer then replaces the prediction. A seat that
-    /// guessed at authority would be a seat that could grant it.
-    ///
-    /// **The ledger does not.** Replay idempotency is the gateway's identity
-    /// for an execution, and a prediction has not been submitted to anything.
-    pub fn predict(
-        &self,
-        registry: &Registry,
-        principal: &Principal,
-        command: &Command,
-    ) -> Result<Prediction> {
-        // GATE 3, AND ITS FAILURE IS A REFUSAL. `UnknownCommand` is what the
-        // seat turns into "this build cannot do that", at the gesture rather
-        // than after a week of retries.
-        let entry = registry
-            .get(&command.name)
-            .ok_or_else(|| VaultError::UnknownCommand {
-                name: command.name.clone(),
-            })?;
-        let definition = &entry.definition;
-
-        // GATE 2, with the same scrub the real execution uses: a validation
-        // message must not echo a sealed input back at anybody.
-        let invalid: Vec<String> = entry
-            .validator
-            .iter_errors(&command.input)
-            .map(|error| {
-                audit::scrub_sealed(
-                    &format!("{}: {error}", error.instance_path),
-                    definition.sealed_input,
-                    &command.input,
-                )
-            })
-            .collect();
-        if !invalid.is_empty() {
-            return Err(VaultError::InvalidInput {
-                name: command.name.clone(),
-                detail: invalid.join("; "),
-            });
-        }
-
-        let invocation_id = self.ids().next();
-        // FOREIGN KEYS OFF FOR THE DURATION, AND FOR THE APPLIER'S OWN REASON.
-        //
-        // A prediction does not write the audit trail (see above), and handlers
-        // reference it: a revision names the invocation that made it. With the
-        // invocation absent the constraint fails, and the failure is about
-        // BOOKKEEPING a seat has no business doing rather than about the write.
-        //
-        // This is rule 4 of the seat applier, one step earlier: "a mirror does
-        // not re-decide what the writer committed". The gateway enforces every
-        // constraint when it runs the command for real, and a prediction that
-        // enforced them against a copy missing the rows it is not allowed to
-        // write would refuse writes the gateway accepts.
-        //
-        // OUTSIDE THE TRANSACTION, because SQLite ignores the pragma inside
-        // one — which is exactly the kind of silently-inert statement this
-        // would otherwise become.
-        let restore_foreign_keys: bool = self
-            .connection()
-            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
-            .unwrap_or(true);
-        self.connection()
-            .pragma_update(None, "foreign_keys", "OFF")?;
-        let ran = self.dry_run(|tx| {
-            tx.set_producer(&command.name);
-            let ctx = CommandCtx {
-                tx,
-                command: definition.name,
-                input: command.input.clone(),
-                principal: principal.clone(),
-                now: self.clock().now_text(),
-                // A PREDICTED INVOCATION ID, and it is one of the fields the
-                // property test enumerates as gateway-minted: the gateway mints
-                // its own and the two will differ. It exists because the
-                // handler's context wants one, not because anything reads it.
-                invocation_id: invocation_id.clone(),
-                ids: self.ids(),
-                clock: self.clock(),
-                produced_ids: std::cell::RefCell::new(Vec::new()),
-                blobs: self.blobs(),
-            };
-            // GATE 4. The checks are RUN and not written: a failing
-            // precondition means the gateway would refuse this, and predicting
-            // a row it will not write is worse than predicting nothing.
-            for condition in definition.preconditions {
-                if let Some(sentence) = (condition.check)(&ctx)? {
-                    return Err(VaultError::Invariant {
-                        context: format!(
-                            "`{}` would be refused by `{}`: {sentence}",
-                            definition.name, condition.predicate
-                        ),
-                    });
-                }
-            }
-            // GATE 6.
-            let output = (definition.handler)(&ctx)?;
-            // GATE 7. A handler that broke its own postcondition on this copy
-            // is one whose prediction is not worth showing.
-            for condition in definition.postconditions {
-                if let Some(sentence) = (condition.check)(&ctx)? {
-                    return Err(VaultError::Invariant {
-                        context: format!(
-                            "`{}` broke its own postcondition `{}`: {sentence}",
-                            definition.name, condition.predicate
-                        ),
-                    });
-                }
-            }
-            Ok(output)
-        });
-        if restore_foreign_keys {
-            self.connection()
-                .pragma_update(None, "foreign_keys", "ON")
-                .ok();
-        }
-        let (output, rows) = ran?;
-        Ok(Prediction {
-            // THE AUDIT TRAIL IS NOT PREDICTED, even when a handler writes into
-            // it itself — `locker.watchtower` files a receipt of its own. See
-            // `audit::TRAIL_TABLES`: these rows are the record that a command
-            // RAN, and on a seat it has not.
-            rows: rows
-                .into_iter()
-                .filter(|row| !audit::TRAIL_TABLES.contains(&row.table.as_str()))
-                .collect(),
-            output,
-        })
-    }
-
     /// Run a command through the gate order.
     pub fn execute(
         &self,
@@ -686,49 +491,13 @@ impl Vault {
             });
         }
 
-        // REPLAY IDEMPOTENCY, before the handler and before the journal: a
-        // duplicate delivery must not even write a second invocation row.
-        let claim = IntentPayload {
-            app_id: definition.owner_schema.to_owned(),
-            action: command.name.clone(),
-            input: command.input.clone(),
-            base_versions: Vec::new(),
-            depends_on: Vec::new(),
-            // THE VAULT'S OWN SPELLING carries no declared bytes, and must not:
-            // this hash is the LEDGER's identity for an execution, and the
-            // seat's payload hash is a different value over a different
-            // preimage (`centraid_core::intent`'s module header).
-            needs: Vec::new(),
-        };
-        let payload_hash = claim.hash()?;
-        if let Some(intent_id) = command.intent_id.as_deref() {
-            let existing = self.read(|connection| intents::read_outcome(connection, intent_id))?;
-            if let Some(existing) = existing {
-                if intents::is_expired(&existing, self.clock().now_ms()) {
-                    return Err(VaultError::IntentRefused {
-                        refusal: crate::error::IntentRefusal::OutcomeExpired,
-                        detail: format!("intent `{intent_id}` is past its 30-day window"),
-                    });
-                }
-                intents::assert_identity(&existing, &claim, &payload_hash, "executed")?;
-                if existing.is_terminal() {
-                    // ANSWERED FROM THE LEDGER. The handler does not run, and
-                    // that is the whole point of the ledger.
-                    return Ok(CommandOutcome {
-                        status: CommandStatus::Executed,
-                        invocation_id: existing.invocation_id.clone().unwrap_or_default(),
-                        receipt_id: String::new(),
-                        commit_seq: existing.commit_seq,
-                        produced: Vec::new(),
-                        output: serde_json::Value::Null,
-                        reason: None,
-                        predicate: None,
-                        replayed: true,
-                    });
-                }
-            }
-        }
-
+        // NO REPLAY LEDGER (#1029 §1). `replica_intent_outcome` answered a
+        // SEAT resubmitting an intent its gateway may already have run: the
+        // network between them could lose an answer, so the same write could
+        // arrive twice and the ledger was what made the second one a replay
+        // rather than a second execution. There is no network between the
+        // caller and this vault — the caller is the shell on the device the
+        // file is on — so a command that arrives twice was made twice.
         // Gate 2. Validation, with the scrub on every message.
         let invalid: Vec<String> = entry
             .validator
@@ -914,43 +683,11 @@ impl Vault {
 
         let (status, receipt_id, output, reason, predicate) = result.value;
 
-        if let (Some(intent_id), Some(device_id)) =
-            (command.intent_id.as_deref(), command.device_id.as_deref())
-        {
-            // The ledger row is written OUTSIDE the command's own commit on
-            // purpose: `replica_intent_outcome` is a LOCAL table, so its rows
-            // are logged for the doorbell and never served, and writing it
-            // inside would make the command's commit carry a local row whose
-            // presence a seat cannot see anyway.
-            let outcome_status = if status == CommandStatus::Executed {
-                "executed"
-            } else {
-                "failed"
-            };
-            self.commit(|tx| {
-                tx.set_producer("intents.record");
-                intents::record_outcome(
-                    tx.connection(),
-                    self.clock(),
-                    &intents::OutcomeRecord {
-                        intent_id,
-                        device_id,
-                        claim: &claim,
-                        payload_hash: &payload_hash,
-                        status: outcome_status,
-                        invocation_id: Some(&invocation_id),
-                        commit_seq: result.commit_seq,
-                    },
-                )
-            })?;
-        }
-
         Ok(CommandOutcome {
             status,
             invocation_id,
             receipt_id,
-            commit_seq: result.commit_seq,
-            produced: result.produced,
+            tables: result.tables,
             output,
             reason,
             predicate,

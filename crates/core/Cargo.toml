@@ -33,7 +33,6 @@ centraid-apps-locker = { path = "../apps/locker" }
 centraid-blobs = { path = "../blobs" }
 centraid-ontology = { path = "../ontology" }
 centraid-protocol = { path = "../protocol" }
-centraid-seat = { path = "../seat" }
 centraid-vault = { path = "../vault" }
 prost.workspace = true
 # THE LOCKER'S OWN PRIMITIVES (#1029 §1), moved in with `crates/core/src/locker`:

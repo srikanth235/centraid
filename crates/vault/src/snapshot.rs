@@ -53,11 +53,7 @@ use crate::file::Vault;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     Vacuumed,
-    Sanitised,
     Numbered,
-    Dropped,
-    Redacted,
-    LogTruncated,
     Compacted,
     Gzipped,
 }
@@ -90,13 +86,10 @@ pub enum Fault {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnapshotHead {
     pub vault_id: String,
-    pub epoch: String,
-    pub seq: i64,
-    pub schema_epoch: i64,
     /// blake3 of the artifact's BYTES — the gzipped file as it moves.
     pub digest: String,
     pub size: u64,
-    /// The artifact's file name, which the digest of `<epoch>:<seq>` names.
+    /// The artifact's file name, derived from the digest of the copy.
     pub name: String,
 }
 
@@ -143,41 +136,16 @@ pub fn pre_migration_dir(vault_path: &Path) -> PathBuf {
 /// not a decompression; and it has to already carry the seat's own tables,
 /// because a phone that had to create them would be editing the file it just
 /// linked, before it has a cursor in it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Shape {
-    /// Gzipped, replicated tables only. The backup and the pre-migration copy.
-    Archive,
-    /// Uncompressed, and already carrying the seat's own empty tables. What a
-    /// phone adopts.
-    ///
-    /// The DDL is handed in rather than reached for: `crates/seat` sits ABOVE
-    /// this crate, so a vault that knew the seat's schema would be a
-    /// dependency the wrong way round. The gateway links `crates/seat` and
-    /// passes `centraid_seat::seat_own_ddl()` down.
-    Replica { seat_ddl: &'static str },
-}
-
 /// Build a snapshot into `dir`, returning its head.
 ///
 /// `dir` is created if it does not exist. The artifact's name is derived, not
 /// given: a caller that chose the name could produce two different files under
 /// one identity, which is the whole thing content-addressing prevents.
 pub fn build_snapshot(vault: &Vault, dir: &Path) -> Result<SnapshotHead> {
-    build_shaped(vault, dir, Shape::Archive)
+    build_shaped(vault, dir)
 }
 
-/// Build the artifact a seat ADOPTS: uncompressed, replica-shaped.
-///
-/// `seat_ddl` is `centraid_seat::seat_own_ddl()`, handed down by the gateway.
-pub fn build_replica_snapshot(
-    vault: &Vault,
-    dir: &Path,
-    seat_ddl: &'static str,
-) -> Result<SnapshotHead> {
-    build_shaped(vault, dir, Shape::Replica { seat_ddl })
-}
-
-fn build_shaped(vault: &Vault, dir: &Path, shape: Shape) -> Result<SnapshotHead> {
+fn build_shaped(vault: &Vault, dir: &Path) -> Result<SnapshotHead> {
     std::fs::create_dir_all(dir)?;
     let working = dir.join("snapshot.building");
     let working_gz = dir.join("snapshot.building.gz");
@@ -187,7 +155,7 @@ fn build_shaped(vault: &Vault, dir: &Path, shape: Shape) -> Result<SnapshotHead>
     let _ = std::fs::remove_file(&working);
     let _ = std::fs::remove_file(&working_gz);
 
-    let outcome = build_into(vault, &working, &working_gz, shape);
+    let outcome = build_into(vault, &working, &working_gz);
     if outcome.is_err() {
         // NO PARTIAL ARTIFACT. Both scratch files go; the only thing that ever
         // appears under the final name is a complete file.
@@ -206,12 +174,7 @@ fn build_shaped(vault: &Vault, dir: &Path, shape: Shape) -> Result<SnapshotHead>
     Ok(head)
 }
 
-fn build_into(
-    vault: &Vault,
-    working: &Path,
-    working_gz: &Path,
-    shape: Shape,
-) -> Result<(SnapshotHead, PathBuf)> {
+fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(SnapshotHead, PathBuf)> {
     // 1. VACUUM INTO. Not a transaction, and it cannot be in one.
     let target = vault
         .copy_target()
@@ -223,47 +186,28 @@ fn build_into(
     vault.fault_at(Step::Vacuumed)?;
 
     let copy = Connection::open(working)?;
-    // 2. BEFORE ANY DROP.
     copy.pragma_update(None, "secure_delete", "ON")?;
-    copy.pragma_update(None, "foreign_keys", "OFF")?;
-    vault.fault_at(Step::Sanitised)?;
 
-    // 3. FROM THE COPY.
-    let (vault_id, epoch, schema_epoch, seq) = numbers_from(&copy)?;
+    // 2. FROM THE COPY. Reading the live vault around a `VACUUM INTO` — which
+    // cannot be in a transaction — read numbers stamped under a state the copy
+    // no longer carried.
+    let vault_id = vault_id_from(&copy)?;
     vault.fault_at(Step::Numbered)?;
 
-    // 4. Triggers, then indexes and views, then the private tables.
-    drop_objects(&copy)?;
-    vault.fault_at(Step::Dropped)?;
-
-    // 5. Between the drops and the VACUUM.
-    redact_columns(&copy)?;
-    vault.fault_at(Step::Redacted)?;
-
-    // 6. The log goes, the cursor stays.
-    copy.execute("DELETE FROM replica_log", [])
-        .map_err(|error| VaultError::from_sqlite("truncating the snapshot's log", error))?;
-    copy.execute(
-        "UPDATE replica_meta SET floor_seq = ?1, active_commit_id = NULL WHERE singleton = 1",
-        [seq],
-    )
-    .map_err(|error| VaultError::from_sqlite("keeping the snapshot's cursor", error))?;
-    vault.fault_at(Step::LogTruncated)?;
-
-    // 6b. THE SEAT'S OWN TABLES, BEFORE THE COMPACTION (#1025 S7, item 3).
+    // WHAT USED TO BE BETWEEN HERE AND THE COMPACTION (#1029 §1). Steps 4, 5
+    // and 6 sanitised the copy for a SEAT: they dropped every private table
+    // and the triggers and indexes naming one, removed the excluded JSON keys
+    // from replicated images, truncated `replica_log` and rewrote
+    // `replica_meta`'s floor, and — for the adoption shape — planted the
+    // seat's own empty tables so a phone could rename the artifact into place.
+    // There is no seat and no artifact for one, so a snapshot is now what it
+    // always was underneath: a compacted copy of this file.
     //
-    // Empty, and every statement `IF NOT EXISTS`. The artifact is then already
-    // a replica, so a phone adopts it by renaming it into place — no table
-    // copy, no second full-size write, and no window in which a file at the
-    // replica's name is not one.
-    //
-    // Before the `VACUUM`, because creating four tables allocates pages and the
-    // compaction is what gives them back.
-    if let Shape::Replica { seat_ddl } = shape {
-        copy.execute_batch(seat_ddl)
-            .map_err(|error| VaultError::from_sqlite("shaping the snapshot for a seat", error))?;
-    }
-
+    // **THE PRIVATE TABLES ARE THEREFORE IN IT.** That is not a regression
+    // being introduced — it is #1029's B1 being stated: the base copy already
+    // carried `locker_key` and `access_device_secret` and was stored UNSEALED,
+    // which is the first defect the backup rewrite fixes. W3 seals the base;
+    // nothing here should pretend a `DROP TABLE` was the protection.
     // 7. The step that reclaims the pages.
     copy.execute_batch("VACUUM")
         .map_err(|error| VaultError::from_sqlite("compacting the snapshot", error))?;
@@ -271,35 +215,18 @@ fn build_into(
         .map_err(|(_, error)| VaultError::Sqlite(error))?;
     vault.fault_at(Step::Compacted)?;
 
-    // 8. GZIP, FOR AN ARCHIVE AND NEVER FOR A BOOTSTRAP. A phone adopts the
-    // artifact by renaming it, and a rename is not a decompression.
-    let (built, name) = match shape {
-        Shape::Archive => {
-            gzip_file(working, working_gz)?;
-            vault.fault_at(Step::Gzipped)?;
-            let name_digest = blake3::hash(format!("{epoch}:{seq}").as_bytes()).to_hex();
-            (
-                working_gz.to_path_buf(),
-                format!("snapshot-{}-{seq}.db.gz", &name_digest[..16]),
-            )
-        }
-        Shape::Replica { .. } => {
-            let name_digest = blake3::hash(format!("replica:{epoch}:{seq}").as_bytes()).to_hex();
-            (
-                working.to_path_buf(),
-                format!("replica-{}-{seq}.db", &name_digest[..16]),
-            )
-        }
-    };
+    // 4. GZIP. The artifact moves as one compressed file.
+    gzip_file(working, working_gz)?;
+    vault.fault_at(Step::Gzipped)?;
+    let built = working_gz.to_path_buf();
+    let plain_digest = blake3::hash(&std::fs::read(&built)?).to_hex();
+    let name = format!("snapshot-{}.db.gz", &plain_digest[..16]);
 
     let bytes = std::fs::read(&built)?;
     let digest = blake3::hash(&bytes).to_hex().to_string();
     Ok((
         SnapshotHead {
             vault_id,
-            epoch,
-            seq,
-            schema_epoch,
             digest,
             size: bytes.len() as u64,
             name,
@@ -308,86 +235,15 @@ fn build_into(
     ))
 }
 
-/// The four numbers, read from the copy.
-fn numbers_from(copy: &Connection) -> Result<(String, String, i64, i64)> {
-    let (epoch, floor, schema_epoch): (String, i64, i64) = copy.query_row(
-        "SELECT epoch, floor_seq, schema_epoch FROM replica_meta WHERE singleton = 1",
-        [],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )?;
-    let highest: i64 = copy.query_row(
-        "SELECT COALESCE(MAX(seq), 0) FROM replica_log WHERE epoch = ?1",
-        [&epoch],
-        |row| row.get(0),
-    )?;
-    let vault_id: String = copy
+/// The vault's own id, read from the copy.
+fn vault_id_from(copy: &Connection) -> Result<String> {
+    Ok(copy
         .query_row(
             "SELECT vault_id FROM core_vault ORDER BY vault_id LIMIT 1",
             [],
             |row| row.get(0),
         )
-        .unwrap_or_default();
-    Ok((vault_id, epoch, schema_epoch, highest.max(floor)))
-}
-
-/// Drop every object a seat's copy must not carry.
-///
-/// Every statement's failure is classified, because a drop is where a capped
-/// or genuinely full disk shows up: dropping a table writes to the freelist.
-fn drop_objects(copy: &Connection) -> Result<()> {
-    let private: Vec<String> = centraid_ontology::registries::private_table_names()
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
-
-    // Triggers: keep only FTS sync, and identify one by its BODY. A trigger
-    // named `core_party_touch_updated_at` mints a `row_version` a mirror must
-    // not mint; a trigger whose body names an `fts_*` table keeps the index in
-    // step with the data. The name says nothing reliable about either.
-    let triggers: Vec<(String, String)> = copy
-        .prepare("SELECT name, COALESCE(sql, '') FROM sqlite_master WHERE type = 'trigger'")?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    for (name, sql) in triggers {
-        if mentions_fts_table(&sql) {
-            continue;
-        }
-        copy.execute_batch(&format!(
-            "DROP TRIGGER IF EXISTS {}",
-            crate::log::quoted(&name)
-        ))?;
-    }
-
-    // Indexes and views naming a private table. `sqlite_autoindex_*` is
-    // implicit and not nameable in DDL, so it is skipped rather than attempted.
-    let objects: Vec<(String, String, String)> = copy
-        .prepare(
-            "SELECT type, name, COALESCE(sql, '') FROM sqlite_master
-              WHERE type IN ('index', 'view')",
-        )?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    for (kind, name, sql) in objects {
-        if name.starts_with("sqlite_autoindex") {
-            continue;
-        }
-        if !names_private_table(&sql, &private) {
-            continue;
-        }
-        let statement = if kind == "view" { "VIEW" } else { "INDEX" };
-        copy.execute_batch(&format!(
-            "DROP {statement} IF EXISTS {}",
-            crate::log::quoted(&name)
-        ))?;
-    }
-
-    for table in &private {
-        copy.execute_batch(&format!(
-            "DROP TABLE IF EXISTS {}",
-            crate::log::quoted(table)
-        ))?;
-    }
-    Ok(())
+        .unwrap_or_default())
 }
 
 /// Does this trigger's body name an FTS table?
@@ -460,37 +316,6 @@ pub fn strip_sql_comments(sql: &str) -> String {
         index += 1;
     }
     out
-}
-
-/// Remove the excluded JSON keys from the columns that carry them.
-///
-/// `json_remove` guarded by `json_type(col, path) IS NOT NULL`, so a row with
-/// nothing to remove is not rewritten — the byte-identity rule again, one layer
-/// down: an untouched row must not move.
-fn redact_columns(copy: &Connection) -> Result<()> {
-    for exclusion in &crate::log::constants().json_key_exclusions {
-        let exists: i64 = copy.query_row(
-            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
-            [&exclusion.table],
-            |row| row.get(0),
-        )?;
-        if exists == 0 {
-            continue;
-        }
-        for key in &exclusion.json_keys {
-            let path = format!("$.{key}");
-            let column = crate::log::quoted(&exclusion.column);
-            copy.execute(
-                &format!(
-                    "UPDATE {} SET {column} = json_remove({column}, ?1)
-                      WHERE json_type({column}, ?1) IS NOT NULL",
-                    crate::log::quoted(&exclusion.table)
-                ),
-                [&path],
-            )?;
-        }
-    }
-    Ok(())
 }
 
 fn gzip_file(from: &Path, to: &Path) -> Result<()> {

@@ -47,14 +47,11 @@ pub mod bootstrap;
 pub mod clock;
 pub mod commands;
 pub mod content;
-pub mod converge;
 pub mod custody;
 pub mod devices;
 pub mod error;
 pub mod file;
 pub mod intents;
-// Wave 4 lane assist: the `ledger` band's statements (#1020, D-1020-AS3).
-pub mod ledger;
 pub mod log;
 pub mod migrations;
 pub mod operations;
@@ -70,12 +67,11 @@ pub use access::{
 };
 pub use clock::{Clock, ClockIds, FixedClock, Ids, SeededIds, SystemClock};
 pub use commands::{
-    Command, CommandDefinition, CommandOutcome, CommandStatus, Idempotency, Prediction, Registry,
-    Risk,
+    Command, CommandDefinition, CommandOutcome, CommandStatus, Idempotency, Registry, Risk,
 };
 pub use error::{IntentRefusal, RebootstrapReason, Result, VaultError};
 pub use file::Vault;
-pub use log::{CommitResult, CommitTx, Cursor, LogOp, LogPage, LogRow, LogState};
+pub use log::{ChangeCensus, CommitResult, CommitTx};
 pub use migrations::{APPLICATION_ID, head_version};
-pub use snapshot::{Fault, Shape, SnapshotHead, Step, build_replica_snapshot, build_snapshot};
+pub use snapshot::{Fault, SnapshotHead, Step, build_snapshot};
 pub use value::{RowImage, Value};

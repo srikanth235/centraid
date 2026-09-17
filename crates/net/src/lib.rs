@@ -1,39 +1,24 @@
 #![forbid(unsafe_code)]
-//! The iroh endpoint (#1020 wave 2 lane C).
+//! WHAT IS LEFT OF THE NETWORK CRATE: the pair ticket, and nothing else
+//! ([#1029](https://github.com/srikanth235/centraid/issues/1029) §3, §6).
 //!
-//! This crate is where iroh lives and nowhere else: `crates/protocol` is
-//! written over a transport trait so that lane D2's `turmoil` simulation can be
-//! the primary sync proof (D-1020-C1), and this crate is that trait's
-//! production implementation.
+//! The iroh transport is gone — the endpoint, ALPN routing, relay modes, the
+//! bounded dial, the device allowlist and both halves of pairing left with it,
+//! because v0 has no paired client and the phone has no inbound endpoint at
+//! all.
 //!
-//! | Module | What it holds |
-//! | --- | --- |
-//! | [`endpoint`] | the iroh endpoint, ALPN routing, relay modes, the bounded dial, `idle`/`resume` |
-//! | [`allowlist`] | [`allowlist::AllowlistStore`] and the in-memory implementation |
-//! | [`ticket`] | the pair ticket, `base64url`, and its terminal QR |
-//! | [`pairing`] | mint and redeem, both halves |
-//! | [`error`] | the typed connect failures and the events they become |
+//! What remains is [`ticket`], and it remains for one reason: it is the
+//! **parent of the §7 link ticket** — 15-minute lifetime, one use, secret
+//! stored hashed — which W8 builds on top of it.
 //!
-//! **No listening TCP socket.** iroh is QUIC over UDP, and the only listener
-//! this product may ever have is the wave 3 blob door, off by default until the
-//! iPhone measurement rules on it (#1020 open question 3). The xtask
-//! `no-listening-socket` rule scans this crate for `TcpListener::bind` on every
-//! gate run, and `crates/centraid`'s test asserts the running process owns no
-//! LISTEN socket.
+//! **This crate is parked, not kept.** #1029's Reference A moves `ticket.rs`
+//! into `crates/identity`, and W2 did not make that move: a sibling lane held
+//! `crates/identity` open while this one ran. The file is left where it is with
+//! its crate reduced to it, and the move is a hand-off to W8 — the wave that
+//! has to read it anyway. Nothing in the workspace depends on this crate today.
 //!
-//! **Where the durable allowlist is.** Not here: see [`allowlist`]'s module
-//! documentation for D-1020-C8 and why SQL confinement moved the design rather
-//! than the rule.
+//! **No listening socket, and now no socket of any kind.** The
+//! `no-listening-socket` rule still scans this crate and there is nothing left
+//! here for it to find.
 
-pub mod allowlist;
-pub mod endpoint;
-pub mod error;
-pub mod pairing;
 pub mod ticket;
-
-pub use allowlist::{AllowlistStore, Device, MemoryAllowlist, RedeemRefusal, Ticket};
-pub use endpoint::{
-    Accepted, CONNECT_TIMEOUT, Endpoint, EndpointConfig, IrohConnection, RawRecv, RawSend,
-    RelayMode,
-};
-pub use error::ConnectError;

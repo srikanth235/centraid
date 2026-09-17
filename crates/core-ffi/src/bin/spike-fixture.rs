@@ -25,7 +25,7 @@ fn main() {
     let _ = std::fs::remove_file(dir.join("spike-vault.db-wal"));
     let _ = std::fs::remove_file(dir.join("spike-vault.db-shm"));
 
-    let handle = centraid_core::Core::open(centraid_core::CoreConfig::gateway(&vault_path))
+    let handle = centraid_core::Core::open(centraid_core::CoreConfig::new(&vault_path))
         .expect("a core opens");
     handle
         .with_vault(|vault| {

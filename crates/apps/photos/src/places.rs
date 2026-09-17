@@ -25,8 +25,6 @@
 //! is why a gazetteer that wrote digits into `name` cannot leak them through
 //! the phrase.
 
-use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::{PageDoor, read_pages};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
 

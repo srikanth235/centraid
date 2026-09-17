@@ -466,66 +466,21 @@ fn content_references(connection: &rusqlite::Connection, limit: usize) -> Result
     Ok(rows)
 }
 
-/// Bump the restored vault's replica epoch, so every cursor a paired seat
-/// holds stops resolving.
-///
-/// This is the **fencing** phase, and it is the reason a restore does not
-/// quietly diverge. A restored vault is behind every seat that was paired to
-/// the original: those seats hold cursors into a log that no longer has those
-/// rows, and serving them would hand them a history that never happened. The
-/// epoch bump makes every one of those cursors answer
-/// `RebootstrapRequired{epoch-mismatch}` instead, which is a seat throwing its
-/// copy away and taking a fresh snapshot — the only correct outcome.
-///
-/// The floor is derived from **the log this file has**, never from a counter
-/// kept elsewhere: v0 derived it from `sqlite_sequence` and that made every
-/// seat go silently and permanently stale on every restore.
-///
-/// Returns the new epoch, or `None` for a file with no replica plane. It runs
-/// over the restored file directly rather than through [`crate::Vault`],
-/// because the fence must happen **before** anything can read the file as a
-/// live vault.
-pub fn fence_restored_vault(file: &Path) -> Result<Option<String>> {
-    let connection = rusqlite::Connection::open(file)?;
-    let has_meta: bool = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'replica_meta')",
-        [],
-        |row| row.get(0),
-    )?;
-    if !has_meta {
-        return Ok(None);
-    }
-    // A fresh epoch, derived from the moment and the process so two restores
-    // of the same generation are two epochs. A seat that saw the first must
-    // re-bootstrap against the second too.
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|since| since.as_nanos())
-        .unwrap_or_default();
-    let epoch = format!(
-        "restore-{}",
-        &crate::backup::store::digest(&stamp.to_le_bytes())[..16]
-    );
-    connection.execute_batch("BEGIN IMMEDIATE")?;
-    let applied = connection.execute(
-        "UPDATE replica_meta SET epoch = ?1, epoch_reason = 'backup-restore', \
-         floor_seq = MAX(\
-           COALESCE(floor_seq, 0), \
-           COALESCE((SELECT MAX(seq) FROM replica_log), 0)\
-         )",
-        [&epoch],
-    );
-    match applied {
-        Ok(_) => {
-            connection.execute_batch("COMMIT")?;
-            Ok(Some(epoch))
-        }
-        Err(error) => {
-            let _ = connection.execute_batch("ROLLBACK");
-            Err(error.into())
-        }
-    }
-}
+// FENCING IS GONE, AND THE LEASE REPLACES IT (#1029 §6, F3).
+//
+// `fence_restored_vault` bumped `replica_meta.epoch` on a restored file so
+// that every SEAT paired to the original would be answered
+// `RebootstrapRequired{epoch-mismatch}` on its next page request, throw its
+// copy away and re-bootstrap. There is no seat, no page request and no
+// `replica_meta` to bump: the plane that carried the epoch is deleted.
+//
+// The problem it solved is real and has a new answer. #1029 F3 says
+// supersession needs an ORDER, and generation ids are 128 random bits with
+// none — so the LEASE gets its own monotonic epoch, a restored phone claims
+// the next one, and the old phone is told `VAULT_MOVED` and freezes its vault
+// read-only with its unacked spool shown rather than discarded. That is W5's,
+// and it is a fence between two PHONES rather than between a gateway and its
+// replicas.
 
 /// The lock a live gateway holds on a data directory, with its pid.
 ///
@@ -775,49 +730,6 @@ mod tests {
         // refusal the owner has to know to delete by hand.
         std::fs::write(DataDirLock::file_in(dir.path()), "4294967294").unwrap();
         assert!(DataDirLock::acquire(dir.path()).is_ok());
-    }
-
-    #[test]
-    fn fencing_bumps_the_epoch_and_derives_the_floor_from_the_log_the_file_has() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = restored_vault(dir.path());
-        let before: String = rusqlite::Connection::open(&file)
-            .unwrap()
-            .query_row("SELECT epoch FROM replica_meta LIMIT 1", [], |row| {
-                row.get(0)
-            })
-            .unwrap();
-        let fenced = fence_restored_vault(&file).unwrap().unwrap();
-        let (after, reason): (String, Option<String>) = rusqlite::Connection::open(&file)
-            .unwrap()
-            .query_row(
-                "SELECT epoch, epoch_reason FROM replica_meta LIMIT 1",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .unwrap();
-        assert_eq!(after, fenced);
-        assert_ne!(
-            after, before,
-            "every paired seat's cursor must stop resolving"
-        );
-        assert_eq!(reason.as_deref(), Some("backup-restore"));
-
-        // Fencing twice is two epochs: a seat that saw the first must
-        // re-bootstrap against the second too.
-        let again = fence_restored_vault(&file).unwrap().unwrap();
-        assert_ne!(again, fenced);
-    }
-
-    #[test]
-    fn fencing_a_file_with_no_replica_plane_is_none_rather_than_a_failure() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("bare.db");
-        rusqlite::Connection::open(&file)
-            .unwrap()
-            .execute_batch("CREATE TABLE leftovers (x)")
-            .unwrap();
-        assert_eq!(fence_restored_vault(&file).unwrap(), None);
     }
 
     #[test]

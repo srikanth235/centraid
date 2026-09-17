@@ -60,9 +60,8 @@ pub struct Vault {
     schema_version: i64,
     clock: Box<dyn Clock>,
     ids: Box<dyn Ids>,
-    /// Commit-guard depth. A nested `commit` is a deliberate no-op, exactly as
-    /// v0's `withReplicaCommit` nests: the inner body runs inside the outer
-    /// pair, and one pair means one `commit_seq` for one logical commit.
+    /// Commit-guard depth. A nested `commit` is a deliberate no-op: the inner
+    /// body runs inside the outer pair, and one pair is one transaction.
     pub(crate) depth: Cell<u32>,
     /// Read depth, so a nested read does not clear `query_only` early.
     read_depth: Cell<u32>,
@@ -137,9 +136,7 @@ impl Vault {
         crate::migrations::seed_entity_kinds(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
 
-        let vault = Self::wrap(connection, path, head_version(), clock, ids)?;
-        crate::log::seed_replica_meta(&vault)?;
-        Ok(vault)
+        Self::wrap(connection, path, head_version(), clock, ids)
     }
 
     /// Open an existing v1 vault, migrating it forward if it is behind.

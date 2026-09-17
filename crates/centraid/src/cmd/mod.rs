@@ -13,17 +13,11 @@
 //! script reads stdout and gets one JSON document and nothing else. A progress
 //! line on stdout would make the report unparseable exactly when it matters.
 
-pub mod assist;
-pub mod automations;
 pub mod backup;
-pub mod capture;
 pub mod doctor;
 pub mod export;
 pub mod gateway_install;
-pub mod mcp;
-pub mod native_host;
 pub mod recover;
-pub mod seat;
 pub mod units;
 
 use std::path::{Path, PathBuf};

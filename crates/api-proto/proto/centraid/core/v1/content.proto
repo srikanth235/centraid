@@ -78,26 +78,10 @@ message ContentUrls {
   repeated ContentUrl urls = 1;
 }
 
-// A `blob` stream (#1025 S2).
-//
-// THE LAST ENVELOPE ON THE STREAM, and that is the whole message. Every stream
-// on the one ALPN opens with a `Request`; this kind says "the rest of these
-// bytes are iroh-blobs' own get/provide protocol, verbatim". The serving side
-// hands the remainder to `iroh_blobs::provider::handle_stream` and the fetching
-// side drives `execute_get` over the same pair, so neither reimplements bao.
-//
-// It carries NO HASH. The hash is in iroh-blobs' own request, which follows on
-// this stream and which the provider parses; naming it twice would be two
-// places for a fetcher and a provider to disagree about what was asked for —
-// and the second one would be the one nobody checks. What this frame decides is
-// the FRAMING of everything after it, which is the one thing the envelope
-// reader cannot work out for itself.
-//
-// Admission is not decided here. `centraid_net::Endpoint::accept` proved the
-// peer is an enrolled, unrevoked device before this stream existed; the
-// provider's own event gate then refuses anything that is not a request for one
-// blob, which is a framing rule rather than an authority one.
-message BlobRequest {}
+// `BlobRequest` STOOD HERE (#1029 §3). It tagged a QUIC stream and handed the
+// rest of it to iroh-blobs' own protocol; there is no stream and no second
+// host to hand one to.
+
 
 // THE WRITE HALF'S DOOR: A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM
 // (#1025 S4, D-1025-S4-6).

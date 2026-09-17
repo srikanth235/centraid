@@ -1,19 +1,15 @@
 #![forbid(unsafe_code)]
 //! The byte plane (#1020 wave 3 lane B).
 //!
-//! Rows replicate on the seat lane; **bytes move here**. The split is not
-//! tidiness — the two planes have opposite shapes. A log page is small, ordered
-//! and must be applied whole; a photograph is large, unordered and can be
-//! applied in pieces. Trying to carry both on one lane makes the small one wait
-//! behind the large one, which on a phone means a caption takes as long as the
-//! video it describes.
+//! Rows live in the vault file; **bytes live here**. The split is not
+//! tidiness — the two have opposite shapes. A row is small, ordered and must
+//! land whole; a photograph is large, unordered and can land in pieces.
 //!
 //! | Module | What it holds |
 //! | --- | --- |
 //! | [`door`] | [`door::ContentBytes`] — this store wearing the vault's byte door, so a device has ONE content store |
 //! | [`hash`] | [`hash::ContentHash`], the `blob:blake3-<hex>` URI, and why the hash function changed |
 //! | [`store`] | [`store::ByteStore`] — what this device holds, and [`store::Holding`], which has three states |
-//! | [`lane`] | [`lane::serve_stream`] and [`lane::fetch`], and the law they keep |
 //! | [`plan`] | WHICH blobs a window asks for, and in what order — pure, no I/O |
 //!
 //! ## Bytes never conflict
@@ -33,25 +29,25 @@
 //! is the part most likely to change as real phones report back, and a pure
 //! function is the part that can be changed without a device in the room.
 //!
-//! What it does NOT do is find the wants. That needs the seat's own rows, and
-//! SQL is confined to `crates/{ontology,vault,seat,search}` and
-//! `crates/apps/kit`, so the query lives in `crates/seat` and hands its answer
-//! here.
+//! What it does NOT do is find the wants. That needs the vault's own rows, and
+//! SQL is confined to `crates/{ontology,vault,search}` and `crates/apps/kit`,
+//! so the query lives there and hands its answer here.
 //!
-//! ## No listening socket
+//! ## No socket at all (#1029 §3, §6)
 //!
-//! iroh is QUIC over UDP and this crate opens nothing of its own: it is handed
-//! connections that `centraid_net` accepted. The `no-listening-socket` rule
-//! holds here with no feature flag, same as `crates/net`.
+//! The transfer lane is gone with the iroh transport: `serve_stream` and
+//! `fetch` moved bytes between a gateway and a seat over a QUIC connection,
+//! and there is no second host to move them to. What is left is the STORE —
+//! `iroh-blobs`' filesystem store, which opens no socket — and the planner
+//! over it. The `no-listening-socket` rule holds here with no feature flag,
+//! and there is nothing left for it to find.
 
 pub mod door;
 pub mod hash;
-pub mod lane;
 pub mod plan;
 pub mod store;
 
 pub use door::ContentBytes;
 pub use hash::{BLOB_URI_PREFIX, ContentHash, HashError};
-pub use lane::{FetchReport, LaneError, fetch, serve_stream};
 pub use plan::{Budget, OriginalsRule, Plan, Tier, Want, plan};
 pub use store::{ByteStore, Holding, StoreError, Sweep};

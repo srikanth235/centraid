@@ -175,8 +175,10 @@ fn decode_upright(bytes: &[u8]) -> Option<image::DynamicImage> {
 fn encode_jpeg(image: &image::DynamicImage) -> Option<Vec<u8>> {
     let rgb = image.to_rgb8();
     let mut out = Vec::new();
-    let encoder =
-        image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::Cursor::new(&mut out), JPEG_QUALITY);
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(
+        std::io::Cursor::new(&mut out),
+        JPEG_QUALITY,
+    );
     image::DynamicImage::ImageRgb8(rgb)
         .write_with_encoder(encoder)
         .ok()?;
