@@ -123,52 +123,6 @@ pub fn the_one_photograph(connection: &Connection) -> Option<(String, String, St
         .ok()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A FILE THAT IS NOT A VAULT ANSWERS ZERO rather than panicking. The
-    /// counts are used inside assertions, and a door that failed on an
-    /// unfounded file would turn "the row is not there" into a panic with a
-    /// SQLite message in it.
-    #[test]
-    fn an_unfounded_file_answers_zero_and_empty() {
-        let connection = Connection::open_in_memory().expect("opens");
-        assert_eq!(vault_rows(&connection), 0);
-        assert_eq!(parties_named(&connection, "Anyone"), 0);
-        assert!(parties(&connection).is_empty());
-        assert_eq!(the_one_photograph(&connection), None);
-        assert!(note_titles(&connection).is_empty());
-    }
-
-    #[test]
-    fn a_founded_vault_has_one_vault_row_and_its_owner_party() {
-        let dir = crate::testdoor::tests::scratch("founded");
-        let path = dir.join("vault.db");
-        let vault = crate::Vault::create(&path).expect("created");
-        let founded = vault.found("Test", "Owner").expect("founded");
-        let (rows, parties_held) = vault
-            .read(|connection| Ok((vault_rows(connection), parties(connection))))
-            .expect("reads");
-        vault.close().expect("closes");
-        assert_eq!(rows, 1);
-        assert!(
-            parties_held
-                .iter()
-                .any(|(id, _)| *id == founded.owner_party_id),
-            "the founding owner is not among the parties"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    pub(super) fn scratch(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("centraid-vault-testdoor-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch dir");
-        dir
-    }
-}
-
 /// Which derivative tiers a content item has, ordered — `["preview", "thumb"]`
 /// for an image the gateway has derived (#1025 S7, the verifier's finding on
 /// the backfill sweep).
@@ -218,4 +172,50 @@ pub fn forget_derivatives(connection: &Connection) -> usize {
 /// assert against a file that never had one.
 pub fn drop_the_private_staging_band(connection: &Connection) -> bool {
     connection.execute("DROP TABLE blob_staging", []).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A FILE THAT IS NOT A VAULT ANSWERS ZERO rather than panicking. The
+    /// counts are used inside assertions, and a door that failed on an
+    /// unfounded file would turn "the row is not there" into a panic with a
+    /// SQLite message in it.
+    #[test]
+    fn an_unfounded_file_answers_zero_and_empty() {
+        let connection = Connection::open_in_memory().expect("opens");
+        assert_eq!(vault_rows(&connection), 0);
+        assert_eq!(parties_named(&connection, "Anyone"), 0);
+        assert!(parties(&connection).is_empty());
+        assert_eq!(the_one_photograph(&connection), None);
+        assert!(note_titles(&connection).is_empty());
+    }
+
+    #[test]
+    fn a_founded_vault_has_one_vault_row_and_its_owner_party() {
+        let dir = crate::testdoor::tests::scratch("founded");
+        let path = dir.join("vault.db");
+        let vault = crate::Vault::create(&path).expect("created");
+        let founded = vault.found("Test", "Owner").expect("founded");
+        let (rows, parties_held) = vault
+            .read(|connection| Ok((vault_rows(connection), parties(connection))))
+            .expect("reads");
+        vault.close().expect("closes");
+        assert_eq!(rows, 1);
+        assert!(
+            parties_held
+                .iter()
+                .any(|(id, _)| *id == founded.owner_party_id),
+            "the founding owner is not among the parties"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    pub(super) fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("centraid-vault-testdoor-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch dir");
+        dir
+    }
 }

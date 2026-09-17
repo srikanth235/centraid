@@ -31,7 +31,7 @@
 //! reads** (`tally-simplify.ts:41-44`), and byte order is the more stable of
 //! the two about that: it does not depend on a host locale.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use centraid_apps_kit::money::{Money, money};
 

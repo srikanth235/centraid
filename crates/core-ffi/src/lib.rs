@@ -154,7 +154,7 @@ pub unsafe extern "C" fn centraid_open(
         // not to the one that deletes the seat. Until then a core opened over
         // this ABI holds text and refuses binary bytes, by name, which is the
         // honest state `Core::open_vault` already documents.
-        Ok::<_, CoreError>(Core::open(config)?)
+        Core::open(config)
     }));
     match outcome {
         Ok(Ok(handle)) => {

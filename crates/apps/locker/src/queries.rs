@@ -41,7 +41,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, Window, in_list, read_by_id, read_window};
+use centraid_apps_kit::reads::{PageDoor, Window, in_list, read_by_id, read_window};
 use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 

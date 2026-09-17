@@ -132,19 +132,17 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                     .chain(
                         query
                             .with_held_thumbnail
-                            .then(|| {
-                                // THREE COMPUTED COLUMNS, IN THIS ORDER, and
-                                // the order is the contract (#1025 S5): a
-                                // positional row is the door's shape, so a
-                                // shell counts past its own `select` list to
-                                // reach them. `PhotosReads`' index constants
-                                // are the other half of this sentence.
-                                [
-                                    centraid_vault::page::HELD_THUMBNAIL_COLUMN,
-                                    centraid_vault::page::HELD_ORIGINAL_HASH_COLUMN,
-                                    centraid_vault::page::HELD_ORIGINAL_HELD_COLUMN,
-                                ]
-                            })
+                            // THREE COMPUTED COLUMNS, IN THIS ORDER, and the
+                            // order is the contract (#1025 S5): a positional
+                            // row is the door's shape, so a shell counts past
+                            // its own `select` list to reach them.
+                            // `PhotosReads`' index constants are the other
+                            // half of this sentence.
+                            .then_some([
+                                centraid_vault::page::HELD_THUMBNAIL_COLUMN,
+                                centraid_vault::page::HELD_ORIGINAL_HASH_COLUMN,
+                                centraid_vault::page::HELD_ORIGINAL_HELD_COLUMN,
+                            ])
                             .into_iter()
                             .flatten()
                             .map(ToOwned::to_owned),

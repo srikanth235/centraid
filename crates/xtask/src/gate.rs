@@ -876,24 +876,19 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
     output.status.success()
 }
 
+/// The workspace's own tests.
+///
 /// `cargo nextest run` when it is installed, `cargo test` otherwise. Which one
 /// ran is in the step's line, because "the tests passed" means something
-/// different under a runner that reports per-test timings and one that does not.
-/// THE EDIT-RUN LOOP LEAVES THE SIMULATION TO THE GATE (#1020, close pass,
-/// D-1020-CL9).
+/// different under a runner that reports per-test timings and one that does
+/// not.
 ///
-/// `local`'s budget is the feedback-time promise a developer feels after an
-/// edit, and on the rebased tree the profile takes 150.7 s warm against 120 s —
-/// **all of it `test`** (147.8 s, of which ~133 s is test execution and the
-/// rest cargo's own accounting). The single largest binary is
-//// The workspace's own tests.
-///
-/// **It used to EXCLUDE `crates/sim` in the `local` profile** and run it twice
-/// everywhere else — once here and once as a `sim` step — because the
-/// deterministic simulation was #1020's primary sync proof and cost ~29 s. The
-/// simulation simulated SEATS, and there are none (#1029 §1, §6): the crate,
-/// the step and the exclusion all go, and every profile now runs one
-/// unqualified `--workspace`.
+/// **It used to EXCLUDE `crates/sim` in the `local` profile** (D-1020-CL9) and
+/// run it twice everywhere else — once here and once as a `sim` step — because
+/// the deterministic simulation was #1020's primary sync proof and cost ~29 s
+/// of a 120 s budget. The simulation simulated SEATS, and there are none
+/// (#1029 §1, §6): the crate, the step and the exclusion all go, and every
+/// profile now runs one unqualified `--workspace`.
 fn run_tests(ctx: &Ctx) -> Result<Outcome> {
     if cargo_subcommand_available(&ctx.root, "nextest") {
         process(ctx, "test", "cargo", &["nextest", "run", "--workspace"])
