@@ -204,11 +204,17 @@ fn output_name(entry: &str) -> &str {
 /// A field on the request could then only do one of two things: agree with the
 /// handle, or be a caller's claim about its own authority — and the second is
 /// not a thing a local write is allowed to assert.
+/// `changes` IS HOW A SCREEN LEARNS THE WRITE HAPPENED (#1029 §1). The commit
+/// guard's `update_hook` says which tables moved, and this is where that
+/// answer becomes a change event on the queue a shell drains. Before it, the
+/// only producer of change events was the seat's applier — so on a phone with
+/// no seat nothing ever pushed one, and every screen was a poll or a lie.
 pub fn invoke(
     vault: &Vault,
     registry: &Registry,
     principal: &centraid_vault::Principal,
     request: &wire::Command,
+    changes: &crate::events::ChangeFeed,
 ) -> Result<wire::CommandOutcome> {
     if request.invoke_key.is_empty() {
         // REQUIRED, unlike v0, where the fallback was the call's ORDINAL and
@@ -230,6 +236,10 @@ pub fn invoke(
     };
 
     let outcome = vault.execute(registry, principal, &Command::new(&request.name, input))?;
+    // AFTER THE COMMIT, because that is when the guard reads its census, and a
+    // screen redrawn from a transaction that could still roll back is the
+    // failure this ordering exists to prevent.
+    changes.tables_changed(&outcome.tables);
     Ok(wire::CommandOutcome {
         status: match outcome.status {
             CommandStatus::Executed => wire::CommandStatus::Executed,
@@ -244,10 +254,11 @@ pub fn invoke(
         invocation_id: outcome.invocation_id,
         receipt_id: outcome.receipt_id,
         revoked_at: None,
-        // THE NUMBER A SEAT SETTLES AGAINST. `None` when the handler wrote
-        // nothing a session saw, which is an honest absence: there is no commit
-        // to wait for, and the seat's version-set path takes over.
-        commit_seq: outcome.commit_seq.map(i64::unsigned_abs),
+        // NO COMMIT POSITION (#1029 §1). It was the number a SEAT's overlay
+        // settled against, allocated by the log plane that is deleted. The
+        // field leaves the wire in W2-5 with the rest of the seat's
+        // vocabulary; until then it is absent, which is honest.
+        commit_seq: None,
     })
 }
 
@@ -273,33 +284,6 @@ pub fn describe(registry: &Registry, name: &str) -> Result<serde_json::Value> {
     }))
 }
 
-/// The outcomes waiting on somebody's decision.
-pub fn parked(vault: &Vault) -> Result<Vec<wire::Outcome>> {
-    // THE SELECT IS THE VAULT'S. `sql-confinement` keeps SQL out of this crate,
-    // and it is right to: a door that read the ledger itself would be a second
-    // reader of a table `crates/vault` owns the shape of.
-    let outcomes = vault.read(|connection| {
-        centraid_vault::intents::list_outcomes_with_status(connection, "parked")
-    })?;
-    Ok(outcomes
-        .into_iter()
-        .map(|outcome| wire::Outcome {
-            intent_id: outcome.intent_id,
-            status: wire::IntentStatus::Parked as i32,
-            commit_seq: outcome.commit_seq.map(i64::unsigned_abs),
-            // The waits, the conflicts and the produced rows are columns the
-            // ledger carries and this reader does not yet project. EMPTY rather
-            // than invented: a `waiting_on` this door guessed would tell a
-            // member to chase the wrong person.
-            waiting_on: Vec::new(),
-            conflicts: Vec::new(),
-            produced: Vec::new(),
-            answered_versions: Vec::new(),
-            reason: String::new(),
-        })
-        .collect())
-}
-
 /// Full-text search. **Stub**: the FTS plane is wave 4.
 pub fn search(_query: &str) -> Result<Vec<wire::Row>> {
     Err(CoreError::NotYetAvailable {
@@ -316,54 +300,16 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
     })
 }
 
-/// Reveal a sealed value — **answered by SCHEMA** (#1020, D-1020-L2,
-/// D-1020-L3; restated by #1029 §1).
-///
-/// It used to be answered by ROLE, and the role was the trust premise: a
-/// gateway could open a sealed COLUMN and could not open a Locker cell,
-/// because a Locker key must never be on a host the member does not hold.
-/// With the phone the only host (#1029 §6) there is no non-phone host left to
-/// keep the key off, so what is left of the rule is the half that was always
-/// about the DATA: a Locker cell is unwrapped locally, behind the member's
-/// unlock, by `crate::locker`; a sealed column is opened under the vault's own
-/// DEK for a principal the authority plane allowed.
-///
-/// The structural refusal stays where it was. `centraid_vault::SealedSubject`
-/// has no representation for Locker, so the sealed-column arm CANNOT be
-/// written to open a Locker cell — the two routes cannot be confused by a
-/// later edit, which is the property that made this a type and not a policy.
-pub fn reveal(schema: &str, table: &str) -> Result<RevealRoute> {
-    if schema == centraid_vault::BLIND_SCHEMA {
-        return Ok(RevealRoute::Local {
-            schema: schema.to_owned(),
-            table: table.to_owned(),
-        });
-    }
-    // THE KEY DOOR'S DELETION, AT THIS LAYER. The subject is what the
-    // authority plane judges, and it has no representation for Locker — so
-    // this arm cannot be written to succeed for one.
-    let subject = centraid_vault::SealedSubject::new(schema, table).map_err(|refusal| {
-        CoreError::InvalidRequest {
-            detail: refusal.to_string(),
-        }
-    })?;
-    Ok(RevealRoute::SealedColumn { subject })
-}
-
-/// How a reveal is performed. There is no arm in which a sealed-column route
-/// opens a Locker cell.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RevealRoute {
-    /// A sealed **column** — a connector token — unsealed under the vault's
-    /// own DEK, for a principal the authority plane allowed.
-    SealedColumn {
-        subject: centraid_vault::SealedSubject,
-    },
-    /// A Locker cell: `K` is unwrapped and the cell opened here, behind the
-    /// member's unlock, with a receipt written beside it
-    /// (`locker.reveal_receipt`).
-    Local { schema: String, table: String },
-}
+// THE REVEAL ROUTER IS GONE, AND THE RULE IT ENCODED SURVIVES IN THE COMMAND
+// (#1029 §1). `reveal` answered "who performs this reveal" — the gateway for a
+// sealed column, the seat for a Locker cell — and the answer was the trust
+// premise: a Locker key must never be on a host the member does not hold.
+// There is one host (#1029 §6), so the question has one answer and nothing
+// ever called this function: a Locker reveal runs through `locker.reveal` in
+// `crates/vault/src/commands/locker.rs`, behind `crate::locker`'s unlock, and
+// the SEALED-COLUMN arm served connector tokens, which leave with the
+// connectors. `SealedSubject` still has no Locker representation, so the
+// structural half of the rule is where it always was — in `crates/vault`.
 
 /// Mint a path for content. **Stub**: wave 3.
 pub fn content(_content_id: &str) -> Result<String> {
@@ -479,30 +425,13 @@ mod tests {
         ));
     }
 
-    /// THE KEY DOOR IS DELETED AT THIS LAYER TOO (#1020, D-1020-L2).
+    /// THE KEY DOOR IS DELETED AT THE TYPE LEVEL (#1020, D-1020-L2).
     ///
-    /// A Locker cell routes to the local unwrap and can never reach the
-    /// sealed-column arm: the subject the authority plane judges has no Locker
-    /// representation, so that arm is a refusal by construction rather than a
-    /// policy check. A sealed column still routes, because a connector token
-    /// is host-readable by design (W6-D1).
-    #[test]
-    fn a_locker_cell_unwraps_locally_and_a_sealed_column_routes_to_the_dek() {
-        assert_eq!(
-            reveal("locker", "item").expect("routed"),
-            RevealRoute::Local {
-                schema: "locker".to_owned(),
-                table: "item".to_owned()
-            }
-        );
-        let route =
-            reveal("sync", "connection_credential").expect("a connector token is openable here");
-        assert!(matches!(route, RevealRoute::SealedColumn { .. }));
-    }
-
-    /// AND THE SEALED-COLUMN ARM CANNOT BE ASKED FOR A LOCKER CELL. The
-    /// `BLIND_SCHEMA` gate above is what routes it away; `SealedSubject` is
-    /// what makes the other arm impossible even if that gate were removed.
+    /// The router that used to ask "gateway or seat" is gone with the roles
+    /// (#1029 §1), and the half of the rule that was never about roles is
+    /// still enforced by `crates/vault`: `SealedSubject` has no Locker
+    /// representation, so no sealed-column path can be written to open a
+    /// Locker cell even by mistake.
     #[test]
     fn the_sealed_subject_has_no_locker_representation() {
         let refusal =
@@ -511,5 +440,6 @@ mod tests {
             refusal.to_string().contains("unwrapped only on the seat"),
             "{refusal}"
         );
+        assert!(centraid_vault::SealedSubject::new("sync", "connection_credential").is_ok());
     }
 }

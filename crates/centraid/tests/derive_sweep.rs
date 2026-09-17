@@ -97,6 +97,7 @@ async fn a_gateway_start_derives_the_tiers_a_vault_is_missing() {
                 centraid_core::api_proto::Command {
                     name: "media.add_asset".to_owned(),
                     input: serde_json::to_vec(&input).expect("the input encodes"),
+                    invoke_key: "derive-sweep-add-asset".to_owned(),
                     ..Default::default()
                 },
             )),

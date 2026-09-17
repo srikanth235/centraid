@@ -38,7 +38,6 @@ pub mod locker_key;
 pub mod member_key;
 /// The rotation scenario's own reads and writes — see the module header for
 /// why `crates/sim` cannot hold them.
-pub mod rotation_scenario;
 pub mod seal;
 
 pub use keystore::{

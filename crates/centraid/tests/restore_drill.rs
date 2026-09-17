@@ -15,7 +15,6 @@ use std::path::Path;
 use std::process::Command;
 
 use centraid_vault::backup::drill;
-use centraid_vault::error::RebootstrapReason;
 
 /// Run `centraid recover` as a process, the way an operator does.
 fn recover(kit: &Path, password_file: &Path, data_dir: &Path) -> Result<(), String> {
@@ -61,16 +60,26 @@ fn recover(kit: &Path, password_file: &Path, data_dir: &Path) -> Result<(), Stri
             "done"
         ])
     );
+    // NOTHING TO FENCE (#1029 §6, F3). The epoch bump made every paired SEAT
+    // re-bootstrap, and there are none. The phase stays in the vocabulary — a
+    // restore still has to say what it did at each step — and the lease epoch
+    // a restored PHONE claims is W5's replacement for it.
     assert!(
-        report["fencedEpoch"].is_string(),
-        "the restored vault must be fenced: {report:#}"
+        report["fencedEpoch"].is_null(),
+        "there is no seat to fence out: {report:#}"
     );
     Ok(())
 }
 
-/// **The acceptance box**: the restore drill runs, and it re-pairs a seat.
+/// **The acceptance box**: the restore drill runs and the restored file is
+/// sound.
+///
+/// It used to end "and it re-pairs a seat" — restore, present the old seat's
+/// cursor, watch it be told to re-bootstrap, then converge a fresh replica.
+/// That half is deleted with the seat (#1029 §6) and its replacement is the
+/// phone-shaped drill #1029 describes, which needs the lease.
 #[test]
-fn the_restore_drill_restores_a_lost_vault_and_re_pairs_its_seat() {
+fn the_restore_drill_restores_a_lost_vault() {
     let scratch = tempfile::tempdir().expect("scratch dir");
     let outcome = drill::run_restore_drill(scratch.path(), &recover).expect("the drill");
 
@@ -90,29 +99,24 @@ fn the_restore_drill_restores_a_lost_vault_and_re_pairs_its_seat() {
         outcome.report.checks
     );
 
-    // The old seat was fenced out, re-paired, and converged.
-    assert_ne!(outcome.epoch_before, outcome.epoch_after);
-    assert_eq!(outcome.old_seat_verdict, RebootstrapReason::EpochMismatch);
-    assert!(outcome.seat_converged);
-    assert!(
-        outcome.seat_rows_applied > 0,
-        "the re-paired seat applied nothing, so convergence proved nothing"
-    );
+    // THE SEAT HALF IS GONE (#1029 §6). It asserted that the restored vault
+    // had fenced its epoch, that the old seat's cursor was answered
+    // `RebootstrapRequired{epoch-mismatch}`, and that a re-paired replica
+    // converged. There is no second host to fence out, no cursor to present
+    // and no replica to converge — and what replaces it is the phone-shaped
+    // drill #1029 describes: restore onto a second device from the 24-word
+    // phrase and watch the first freeze on `VAULT_MOVED`. That drill needs the
+    // lease, which is not built here.
 
     // The wall clock the release gate records.
     eprintln!(
-        "restore-drill: {} ms — vault {}, generation {} ({}), {} tables compared, {} rows, \
-         old seat {} -> {} ({}), {} row(s) applied while converging",
+        "restore-drill: {} ms — vault {}, generation {} ({}), {} tables compared, {} rows",
         outcome.elapsed_ms,
         outcome.vault_id,
         outcome.generation,
         &outcome.manifest_hash[..16],
         outcome.rows_compared,
         outcome.total_rows,
-        outcome.epoch_before,
-        outcome.epoch_after,
-        outcome.old_seat_verdict,
-        outcome.seat_rows_applied,
     );
 }
 

@@ -279,19 +279,14 @@ fn recover(
     );
 
     // ---- fencing -----------------------------------------------------------
-    // A restored vault is behind every seat that was paired to the original, so
-    // their cursors must stop resolving. The epoch bump is what does it, and
-    // `backup-restore` is the reason it records.
-    let fenced =
-        backup::restore::fence_restored_vault(&restored_file).map_err(|error| error.to_string())?;
+    // THERE IS NOTHING LEFT TO FENCE OUT (#1029 §6, F3). The epoch bump made
+    // every SEAT paired to the original re-bootstrap; there are no seats. The
+    // lease epoch a restored PHONE claims — and the `VAULT_MOVED` freeze the
+    // old one takes — is what replaces it, and it is W5's.
+    let fenced: Option<String> = None;
     phase(
         RecoverPhase::Fencing,
-        &format!(
-            "epoch {} — every paired seat must re-bootstrap",
-            fenced
-                .as_deref()
-                .unwrap_or("(none: no replica plane in this file)")
-        ),
+        "nothing to fence: this vault has no paired devices (#1029 §6)",
     );
 
     // ---- adopting ----------------------------------------------------------

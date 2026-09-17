@@ -51,9 +51,16 @@ fn the_registry_carries_every_command_this_build_has() {
         // not one of v0's and which the gateway runs at start (#1025 S3,
         // D-1025-S7-53).
         ("media.", 21),
-        // The whole 9-command `enrich.*` schema: `request_enrichment` came
-        // from lane Photos and the other eight from lane automations.
-        ("enrich.", 9),
+        // NO `enrich.*` AT ALL (#1029 §1, open question 9). Nine commands
+        // went: `request_enrichment` queued a row for an enrichment WORKER,
+        // `record_consent` recorded a harness's egress consent,
+        // `mark_requests_drained` and `record_target_failure` were that
+        // worker's own bookkeeping, `upsert_embedding`, `upsert_faces` and
+        // `rebuild_face_clusters` were its writes, and `regenerate` /
+        // `regenerate_all` re-queued it. The worker was `crates/automations`
+        // over `crates/assist`, and both are deleted — so every one of them
+        // had exactly one caller and it is gone.
+        ("enrich.", 0),
         // v0's twenty `locker.*` plus `reveal_receipt` and `rotate_key`, the
         // two the member-key custody change needs (wave 4 lane Locker).
         ("locker.", 22),
@@ -75,10 +82,8 @@ fn the_registry_carries_every_command_this_build_has() {
         assert_eq!(count(prefix), expected, "{prefix}");
     }
     assert!(registry.get("media.answer_face_proposal").is_some());
-    assert!(registry.get("enrich.request_enrichment").is_some());
-    assert!(registry.get("enrich.record_consent").is_some());
-    assert!(registry.get("enrich.upsert_faces").is_some());
-    assert!(registry.get("enrich.regenerate_all").is_some());
+    assert!(registry.get("enrich.request_enrichment").is_none());
+    assert!(registry.get("enrich.upsert_faces").is_none());
     assert!(registry.get("core.add_party").is_some());
     assert!(registry.get("core.add_document").is_some());
     assert!(registry.get("core.set_extracted_text").is_some());
@@ -154,16 +159,13 @@ fn a_real_command_writes_its_row_its_log_row_and_its_receipt() {
     assert_eq!(name, "Ada Lovelace");
     assert_eq!(kind, "person");
 
-    // THE LOG ROW, produced by the SAME commit — the handler ran inside the
-    // guard, which is the whole reason gate six is where it is.
-    assert!(outcome.commit_seq.is_some());
+    // THE CENSUS, from the SAME commit — the handler ran inside the guard,
+    // which is the whole reason gate six is where it is, and the
+    // `update_hook` therefore saw its rows (#1029 §1).
     assert!(
-        outcome
-            .produced
-            .iter()
-            .any(|row| row.table == "core_party" && row.row_version == Some(1)),
-        "the command produced no core_party row: {:?}",
-        outcome.produced
+        outcome.tables.iter().any(|table| table == "core_party"),
+        "the command changed no core_party row: {:?}",
+        outcome.tables
     );
 
     // THE JOURNAL AND THE RECEIPT.
@@ -455,95 +457,6 @@ fn a_stale_registration_is_an_ontology_mismatch_and_not_a_compatibility_range() 
 }
 
 #[test]
-fn a_duplicate_delivery_at_the_command_door_executes_once() {
-    let (scratch, registry) = installed("idempotency");
-    common::enrol(&scratch.vault, "phone", "pk").expect("the device enrols");
-    let command = Command::new(
-        "core.add_party",
-        serde_json::json!({"display_name": "Once Only"}),
-    )
-    .with_intent("intent-1", "phone");
-
-    let first = scratch
-        .vault
-        .execute(&registry, &Principal::owner("phone"), &command)
-        .expect("the first delivery runs");
-    assert_eq!(first.status, CommandStatus::Executed);
-    assert!(!first.replayed);
-
-    let second = scratch
-        .vault
-        .execute(&registry, &Principal::owner("phone"), &command)
-        .expect("the second delivery is answered from the ledger");
-    // ANSWERED FROM THE LEDGER. The handler did not run again, which is the
-    // whole point of the ledger.
-    assert!(second.replayed);
-    assert_eq!(second.commit_seq, first.commit_seq);
-
-    let parties: i64 = scratch
-        .vault
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT COUNT(*) FROM core_party WHERE display_name = 'Once Only'",
-                [],
-                |row| row.get(0),
-            )?)
-        })
-        .expect("the count reads");
-    assert_eq!(parties, 1, "the duplicate delivery executed twice");
-
-    // AND THE SAME ID WITH A DIFFERENT PAYLOAD IS A REUSE, not a retry.
-    let forked = Command::new(
-        "core.add_party",
-        serde_json::json!({"display_name": "Something Else"}),
-    )
-    .with_intent("intent-1", "phone");
-    let error = scratch
-        .vault
-        .execute(&registry, &Principal::owner("phone"), &forked)
-        .expect_err("a reused id must be refused");
-    assert!(error.to_string().contains("intent_id_reused"), "{error}");
-}
-
-#[test]
-fn an_expired_outcome_says_so_rather_than_re_executing() {
-    let (scratch, registry) = installed("expiry");
-    common::enrol(&scratch.vault, "phone", "pk").expect("the device enrols");
-    let command = Command::new(
-        "core.add_party",
-        serde_json::json!({"display_name": "Aged"}),
-    )
-    .with_intent("intent-aged", "phone");
-    scratch
-        .vault
-        .execute(&registry, &Principal::owner("phone"), &command)
-        .expect("the first delivery runs");
-
-    // Past the 30-day window, which is the log's retention floor on purpose:
-    // an outcome that outlived the log rows its `commit_seq` points into can
-    // no longer say where its effect landed.
-    scratch.clock.advance_days(31);
-    let error = scratch
-        .vault
-        .execute(&registry, &Principal::owner("phone"), &command)
-        .expect_err("an expired outcome must refuse");
-    assert!(error.to_string().contains("outcome_expired"), "{error}");
-    // AND IT DID NOT RE-EXECUTE. "I no longer know" is the honest answer;
-    // "here, do it again" is the one that double-charges someone.
-    let parties: i64 = scratch
-        .vault
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT COUNT(*) FROM core_party WHERE display_name = 'Aged'",
-                [],
-                |row| row.get(0),
-            )?)
-        })
-        .expect("the count reads");
-    assert_eq!(parties, 1);
-}
-
-#[test]
 fn tagging_an_item_is_idempotent_and_the_same_label_returns_the_same_edge() {
     let (scratch, registry) = installed("tag");
     let note = common::insert_note(&scratch.vault, "Holiday").expect("a note is written");
@@ -683,22 +596,15 @@ fn updating_a_party_reads_back_exactly_what_it_was_sent() {
         .expect("the count reads");
     assert_eq!(posts, 1);
 
-    // AND THE UPDATE IS AN UPDATE LOG ROW WITH A DELTA PRIOR.
-    assert!(updated.commit_seq.is_some());
-    let prior: Option<String> = scratch
-        .vault
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT prior_json FROM replica_log
-                  WHERE commit_seq = ?1 AND \"table\" = 'core_party' AND op = 'update'",
-                [updated.commit_seq.expect("there is one")],
-                |row| row.get(0),
-            )?)
-        })
-        .expect("the row reads");
-    let prior = prior.expect("an update carries a prior");
-    assert!(prior.contains("Before"), "{prior}");
-    assert!(!prior.contains("After"), "{prior}");
+    // AND THE UPDATE REPORTED THE TABLE IT CHANGED. The prior image it used
+    // to be checked against lived in `replica_log`, which is deleted with the
+    // replica plane (#1029 §1); what a screen needs, and all it ever needed,
+    // is that `core_party` moved.
+    assert!(
+        updated.tables.iter().any(|table| table == "core_party"),
+        "{:?}",
+        updated.tables
+    );
 }
 
 #[test]

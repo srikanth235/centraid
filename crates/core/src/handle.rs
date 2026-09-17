@@ -36,8 +36,8 @@ use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_protocol::session::{RequestKind, Session};
+use centraid_vault::Vault;
 use centraid_vault::commands::Registry;
-use centraid_vault::{Vault, log};
 
 use crate::config::CoreConfig;
 use crate::error::{CoreError, Result};
@@ -620,7 +620,6 @@ impl Handle {
 
         match kind {
             K::Hello(hello) => Ok(response(wire::response::Kind::Hello(self.hello(hello)))),
-            K::Log(log_request) => self.log_page(log_request),
             K::Page(page_request) => Ok(response(wire::response::Kind::Page(
                 self.with_vault(|vault| crate::api::page(vault, page_request))?,
             ))),
@@ -628,21 +627,30 @@ impl Handle {
                 self.with_vault(|vault| crate::api::content_urls(vault, refs))?,
             ))),
             K::Stage(frame) => Ok(response(wire::response::Kind::Stage(self.stage(frame)?))),
-            K::Command(command) => Ok(response(wire::response::Kind::Command(self.with_vault(
-                |vault| crate::api::invoke(vault, &self.registry, &self.owner(), command),
-            )?))),
-            // THE VERBS THAT ONLY MEANT ANYTHING ACROSS A PAIRING (#1029 §1,
-            // §6). `pair` redeemed a ticket against a gateway, `intent` queued
-            // a write for one to run, `blob` tagged a stream on a connection,
-            // and the two `devices` verbs listed and revoked the seats that
-            // had redeemed a ticket. There is no second host, so all five are
-            // refused by name rather than half-answered. The arms themselves
-            // leave the wire in W2-5, with `pair.proto` and `intent.proto`.
-            K::Pair(_) | K::Intent(_) | K::Blob(_) | K::DevicesList(_) | K::DevicesRevoke(_) => {
-                Err(CoreError::Unsupported {
-                    type_url: "centraid.core.v1.Request".to_owned(),
-                })
+            K::Command(command) => {
+                let changes = crate::events::ChangeFeed::new(self.events());
+                Ok(response(wire::response::Kind::Command(self.with_vault(
+                    |vault| {
+                        crate::api::invoke(vault, &self.registry, &self.owner(), command, &changes)
+                    },
+                )?)))
             }
+            // THE VERBS THAT ONLY MEANT ANYTHING ACROSS A PAIRING (#1029 §1,
+            // §6). `log` served a page of `replica_log` to a seat's cursor,
+            // `pair` redeemed a ticket against a gateway, `intent` queued a
+            // write for one to run, `blob` tagged a stream on a connection,
+            // and the two `devices` verbs listed and revoked the seats that had
+            // redeemed a ticket. There is no second host, so all six are
+            // refused by name rather than half-answered. The arms themselves
+            // leave the wire in W2-5, with `log.proto` and `intent.proto`.
+            K::Log(_)
+            | K::Pair(_)
+            | K::Intent(_)
+            | K::Blob(_)
+            | K::DevicesList(_)
+            | K::DevicesRevoke(_) => Err(CoreError::Unsupported {
+                type_url: "centraid.core.v1.Request".to_owned(),
+            }),
             K::BackupNow(_) => Err(CoreError::NotYetAvailable {
                 what: "backup",
                 lands_in: "wave 2 lane R",
@@ -654,7 +662,7 @@ impl Handle {
         })
     }
 
-    /// that names them runs (#1025 S3).
+    /// One staging frame from a shell: the write half's door (#1025 S4).
     ///
     /// The bytes are already in this vault's content store, verified against
     /// their own name by bao. This writes the `blob_staging` row that carries
@@ -739,61 +747,6 @@ impl Handle {
         // than one artifact.
         hello.identity = Some(crate::identity::ArtifactIdentity::current().to_wire());
         hello
-    }
-
-    fn log_page(&self, request: &wire::LogRequest) -> Result<wire::Response> {
-        if request.limit == 0 {
-            return Err(CoreError::InvalidRequest {
-                detail: "a log page limit is required and must be > 0".to_owned(),
-            });
-        }
-        let limit = i64::from(request.limit).min(log::door::max_page());
-        let outcome = self.with_vault(|vault| {
-            let state = log::log_state(vault)?;
-            let since = match &request.since {
-                Some(cursor) => log::Cursor {
-                    epoch: cursor.epoch.clone(),
-                    seq: i64::try_from(cursor.seq).unwrap_or(i64::MAX),
-                },
-                // ABSENT means "from the floor" — not "from zero", which for a
-                // pruned log is a cursor below the floor and a re-bootstrap for
-                // a seat that has simply never asked.
-                None => state.floor.clone(),
-            };
-            // EMPTY MEANS "this door did not say", which is what v0 makes
-            // optional on the wire so an older gateway that says nothing does
-            // not brick a compatible pair.
-            let vault_id = vault.vault_id()?.unwrap_or_default();
-            match log::read_log_page(vault, &since, limit) {
-                Ok(page) => Ok(Ok(crate::convert::log_page_to_wire(&page, &vault_id))),
-                Err(centraid_vault::VaultError::RebootstrapRequired { reason }) => {
-                    Ok(Err(wire::RebootstrapRequired {
-                        reason: crate::convert::rebootstrap_to_wire(reason) as i32,
-                        epoch: state.epoch.clone(),
-                        floor: state.floor.seq.unsigned_abs(),
-                        watermark: state.watermark.seq.unsigned_abs(),
-                        schema_epoch: u32::try_from(state.schema_epoch).unwrap_or(0),
-                        // EMPTY HERE, AND FILLED BY THE LANE (#1025 S7, item 5).
-                        // The artifact is the GATEWAY PROCESS's — `Snapshots`
-                        // builds and keeps it — and this core knows only its
-                        // own vault. A core that invented a hash would be
-                        // naming a blob nobody serves, so it names none and
-                        // `crates/centraid`'s seat lane, which holds the
-                        // keeper, fills these three in on the way out.
-                        snapshot_hash: String::new(),
-                        snapshot_seq: 0,
-                        snapshot_bytes: 0,
-                    }))
-                }
-                Err(other) => Err(other.into()),
-            }
-        })?;
-        Ok(match outcome {
-            Ok(page) => response(wire::response::Kind::Log(page)),
-            // A REBOOTSTRAP IS A RESPONSE, not an error: the seat is being told
-            // what to do next, and an error would make the shell guess.
-            Err(required) => response(wire::response::Kind::RebootstrapRequired(required)),
-        })
     }
 
     fn forget_cancel(&self, request_id: u64) {
@@ -1003,56 +956,21 @@ mod tests {
         scratch.handle.call(&hello()).expect("the second");
     }
 
+    /// THE THREE LOG-PAGE TESTS ARE GONE WITH THEIR DOOR (#1029 §1).
+    ///
+    /// `a_log_page_with_a_zero_limit_is_refused`,
+    /// `an_absent_cursor_means_from_the_floor_and_not_from_zero` and
+    /// `a_cursor_from_another_epoch_is_a_response_and_not_an_error` all drove
+    /// `Request::Log`, which served a page of `replica_log` to a SEAT's cursor.
+    /// There is no seat and no `replica_log`; the request is answered
+    /// `Unsupported` until the arm leaves the wire in W2-5.
     #[test]
-    fn a_log_page_with_a_zero_limit_is_refused() {
+    fn a_log_request_is_refused_rather_than_half_answered() {
         let scratch = Scratch::founded();
         assert!(matches!(
-            scratch.handle.call(&log_request(0)),
-            Err(CoreError::InvalidRequest { .. })
+            scratch.handle.call(&log_request(32)),
+            Err(CoreError::Unsupported { .. })
         ));
-    }
-
-    #[test]
-    fn an_absent_cursor_means_from_the_floor_and_not_from_zero() {
-        let scratch = Scratch::founded();
-        let Some(wire::response::Kind::Log(page)) =
-            scratch.handle.call(&log_request(10)).expect("answers").kind
-        else {
-            panic!("a log page comes back");
-        };
-        // A founded vault's floor is 0 and the page serves rather than telling
-        // the seat to re-bootstrap — which is what "from the floor" buys for a
-        // PRUNED log, where zero would be below the floor.
-        assert!(!page.epoch.is_empty());
-        assert!(page.watermark >= page.floor);
-    }
-
-    #[test]
-    fn a_cursor_from_another_epoch_is_a_response_and_not_an_error() {
-        let scratch = Scratch::founded();
-        let request = wire::Request {
-            kind: Some(wire::request::Kind::Log(wire::LogRequest {
-                since: Some(wire::LogCursor {
-                    epoch: "some-other-epoch".to_owned(),
-                    seq: 0,
-                }),
-                limit: 10,
-                tail: false,
-            })),
-        };
-        let Some(wire::response::Kind::RebootstrapRequired(required)) =
-            scratch.handle.call(&request).expect("it answers").kind
-        else {
-            panic!("a rebootstrap is a RESPONSE; an error would make the shell guess");
-        };
-        assert_eq!(
-            required.reason,
-            wire::RebootstrapReason::EpochMismatch as i32
-        );
-        assert!(
-            !required.epoch.is_empty(),
-            "the seat is told the real epoch"
-        );
     }
 
     #[test]
@@ -1207,6 +1125,45 @@ mod tests {
     /// `principal_from_wire` answered `InvalidRequest` — because a gateway
     /// serving seats had a second caller to authorise. There is no second
     /// caller, so the field is not read and its absence is not a refusal.
+    /// A WRITE THROUGH THE CALL DOOR PUSHES A CHANGE EVENT (#1029 §1).
+    ///
+    /// The last hole in the loop: `EventQueue` was bounded, coalescing and
+    /// fully tested, and the only thing that ever pushed a change event into
+    /// it was the SEAT's applier. On a phone with no seat nothing pushed one,
+    /// so a shell that waited for a row to arrive waited forever. The commit
+    /// guard's `update_hook` says which tables moved and `api::invoke` offers
+    /// them here.
+    #[test]
+    fn a_command_that_writes_pushes_a_change_event_naming_the_table() {
+        let scratch = Scratch::founded();
+        let answer = scratch
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Command(wire::Command {
+                    name: "core.add_party".to_owned(),
+                    input: br#"{"display_name":"Ada Lovelace"}"#.to_vec(),
+                    invoke_key: "w2-change-event".to_owned(),
+                    ..Default::default()
+                })),
+            })
+            .expect("the command runs");
+        let Some(wire::response::Kind::Command(outcome)) = answer.kind else {
+            panic!("a command outcome");
+        };
+        assert_eq!(outcome.status, wire::CommandStatus::Executed as i32);
+
+        let mut tables = Vec::new();
+        while let Ok(Some(event)) = scratch.handle.next_event(Duration::from_millis(20)) {
+            if let Some(wire::event::Kind::Change(change)) = event.kind {
+                tables.push(change.table);
+            }
+        }
+        assert!(
+            tables.iter().any(|table| table == "core_party"),
+            "the write produced no change event for the table it wrote: {tables:?}"
+        );
+    }
+
     #[test]
     fn a_command_with_no_principal_is_answered_rather_than_refused() {
         let scratch = Scratch::founded();

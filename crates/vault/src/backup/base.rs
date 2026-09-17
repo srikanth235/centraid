@@ -1,6 +1,23 @@
 //! The backup base copy — a **complete** vault, not a sanitised one (#1020,
 //! D-1020-R8).
 //!
+//! ## WHAT #1029 DID TO THIS MODULE'S REASON FOR EXISTING
+//!
+//! It existed because `crate::snapshot::build_snapshot` sanitised: it dropped
+//! every private table, redacted the excluded JSON keys and truncated
+//! `replica_log`, all for a phone about to ADOPT the artefact as its replica.
+//! There is no seat and no adoption (#1029 §6), so that sanitisation is gone
+//! and the two builders now produce the same thing: a compacted `VACUUM INTO`
+//! copy of the file.
+//!
+//! **They should be one function, and merging them is W3\'s** — because W3 is
+//! the wave that SEALS the base (#1029 B1: the copy is stored unsealed and
+//! includes `locker_key` and `access_device_secret`) and replaces the whole
+//! `VACUUM INTO` base with page-aligned ranges (#1029 B4: `VACUUM INTO`
+//! renumbers pages, which is why WAL frames could never be replayed onto it).
+//! Merging them here would be merging two functions that are both about to be
+//! replaced.
+//!
 //! ## Why this exists, and why it contradicts "one snapshot, three uses"
 //!
 //! D-1020-D1-7 rules that there is exactly one snapshot pipeline and it serves
@@ -123,10 +140,20 @@ mod tests {
     use crate::custody::locker_key;
     use crate::custody::member_key::MemberKeyCustody;
 
-    /// The regression the restore drill found. A seat snapshot is sanitised and
-    /// a backup base is not, and the difference is custody.
+    /// THE BASE COPY KEEPS THE PRIVATE BANDS — and so, now, does the snapshot.
+    ///
+    /// The claim this test was written for is that a BACKUP must not lose
+    /// custody: `locker_key` names the vault\'s live key, and a generation
+    /// without it restores a vault that cannot name its own key. That half is
+    /// unchanged and is asserted below.
+    ///
+    /// What changed is the contrast. The seat snapshot used to DROP those
+    /// tables, because it was the artefact a phone adopted as its replica;
+    /// there is no seat (#1029 §6), so it drops nothing and the two artefacts
+    /// now carry the same tables. That is #1029\'s B1 stated rather than
+    /// introduced — the base was always unsealed — and sealing it is W3\'s.
     #[test]
-    fn a_base_copy_keeps_the_private_bands_the_seat_snapshot_drops() {
+    fn a_base_copy_keeps_the_private_bands_that_carry_custody() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("vault.db");
         let vault = Vault::create(&file).unwrap();
@@ -187,15 +214,14 @@ mod tests {
                 in_base.contains(private),
                 "the base copy must keep {private}"
             );
+            // AND THE SNAPSHOT NOW KEEPS THEM TOO. Not an improvement — a
+            // restatement of #1029 B1, which W3 fixes by sealing rather than
+            // by dropping.
             assert!(
-                !in_seat.contains(private),
-                "the seat snapshot is supposed to drop {private}"
+                in_seat.contains(private),
+                "the snapshot no longer sanitises, so {private} is in it"
             );
         }
-        assert!(
-            in_base.contains("replica_log"),
-            "the log is part of a backup"
-        );
 
         // And the base copy still names its live Locker key, which is the
         // sentence the whole module exists for.

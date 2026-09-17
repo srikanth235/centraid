@@ -286,6 +286,35 @@ impl ChangeFeed {
         }
     }
 
+    /// THE TABLES A COMMIT TOUCHED, AS CHANGE EVENTS (#1029 §1).
+    ///
+    /// One event per table, in the order the guard reports them. The queue
+    /// coalesces per table anyway, so a push per table is the natural grain.
+    ///
+    /// **`pk_set` IS EMPTY, AND THAT IS THE HONEST ANSWER.** The old producer
+    /// was the seat applier, which held the page it had just applied and so
+    /// knew every `(table, primary key)` it moved. What replaces it is a
+    /// rusqlite `update_hook`, and the hook is handed a ROWID — not the
+    /// declared primary key — so naming the keys would mean a read per changed
+    /// row, inside the commit, to translate one into the other. An empty
+    /// `pk_set` reads as "re-read this table", which is what a screen does
+    /// with a key set it did not recognise anyway.
+    ///
+    /// `commit_seq: 0` for the same reason it is zero for arriving bytes:
+    /// there is no commit position any more (#1029 §1), and the queue's
+    /// coalescing takes the maximum so a zero never lowers a waiting event.
+    pub fn tables_changed(&self, tables: &[String]) {
+        for table in tables {
+            self.offer(Event {
+                kind: Some(event::Kind::Change(ChangeEvent {
+                    table: table.clone(),
+                    pk_set: Vec::new(),
+                    commit_seq: 0,
+                })),
+            });
+        }
+    }
+
     /// Rows landed and are durable. `touched` is one `(table, primary key)`
     /// per changed row, in the order they changed; `commit_seq` is the commit
     /// they landed in, because an overlay clears against a commit seq and the

@@ -3,8 +3,12 @@
 //!
 //! **The conversion lives here and nowhere else.** `crates/vault` deliberately
 //! does not depend on `crates/api-proto` (lane C wrote the schema concurrently
-//! with lane D1's file), and `crates/seat` does not either. So this module is
-//! the single seam, and a spelling that drifts drifts in one file.
+//! with lane D1's file), so this module is the single seam and a spelling that
+//! drifts drifts in one file.
+//!
+//! What it carries is now only VALUES: the log-row and log-page conversions
+//! went with the replica log plane (#1029 §1), and the wire types they targeted
+//! leave `core.proto` in W2-5.
 //!
 //! ## The one asymmetry worth naming
 //!
@@ -13,11 +17,10 @@
 //! past `Number.MAX_SAFE_INTEGER` — because that encoding is v0's and lives
 //! *inside the file*, where a JS reader must still be able to read it. Protobuf
 //! has real 64-bit integers, so the wire needs no escape and must not invent
-//! one: a seat that received `{"i"}` on the wire would be parsing JSON out of a
-//! protobuf field.
+//! one: a caller that received `{"i"}` on the wire would be parsing JSON out of
+//! a protobuf field.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_vault::log::{LogOp, LogPage, LogRow};
 use centraid_vault::value::{RowImage, Value};
 
 use crate::error::{CoreError, Result};
@@ -102,132 +105,6 @@ pub fn image_from_wire(image: &wire::RowImage) -> Result<RowImage> {
     Ok(out)
 }
 
-/// A log op as the wire spells it.
-#[must_use]
-pub const fn op_to_wire(op: LogOp) -> wire::LogOp {
-    match op {
-        LogOp::Insert => wire::LogOp::Insert,
-        LogOp::Update => wire::LogOp::Update,
-        LogOp::Delete => wire::LogOp::Delete,
-        LogOp::Ddl => wire::LogOp::Ddl,
-    }
-}
-
-/// A log op read back. `UNSPECIFIED` is refused: a row whose op this build does
-/// not know must not be applied as an insert.
-pub fn op_from_wire(op: i32) -> Result<LogOp> {
-    Ok(match wire::LogOp::try_from(op) {
-        Ok(wire::LogOp::Insert) => LogOp::Insert,
-        Ok(wire::LogOp::Update) => LogOp::Update,
-        Ok(wire::LogOp::Delete) => LogOp::Delete,
-        Ok(wire::LogOp::Ddl) => LogOp::Ddl,
-        Ok(wire::LogOp::Unspecified) | Err(_) => {
-            return Err(CoreError::InvalidRequest {
-                detail: format!("`{op}` is not a log op this build knows"),
-            });
-        }
-    })
-}
-
-/// One log row as the wire spells it.
-///
-/// `local` does not cross: a local row is captured for the doorbell and **never
-/// served**, so a wire field for it would be a field that is always false and
-/// an invitation to serve one.
-#[must_use]
-pub fn log_row_to_wire(row: &LogRow) -> wire::LogRow {
-    wire::LogRow {
-        seq: row.seq.unsigned_abs(),
-        commit_seq: row.commit_seq.unsigned_abs(),
-        schema_epoch: u32::try_from(row.schema_epoch).unwrap_or(0),
-        ddl_version: u32::try_from(row.ddl_version).unwrap_or(0),
-        table: row.table.clone(),
-        op: op_to_wire(row.op) as i32,
-        pk: Some(key_to_wire(&row.primary_key)),
-        row: row.row.as_ref().map(image_to_wire),
-        // ABSENT means "no prior is known"; PRESENT AND EMPTY means "the
-        // statement touched only the key". `optional` is what keeps those two
-        // apart, and collapsing them is the claim that forces a re-bootstrap.
-        prior: row.prior.as_ref().map(prior_to_wire),
-        indirect: row.indirect,
-        deferred: row.deferred,
-        producer: row.producer.clone(),
-        committed_at: row.committed_at.clone(),
-    }
-}
-
-/// One log row read back.
-pub fn log_row_from_wire(row: &wire::LogRow, epoch: &str) -> Result<LogRow> {
-    let op = op_from_wire(row.op)?;
-    Ok(LogRow {
-        seq: i64::try_from(row.seq).unwrap_or(i64::MAX),
-        commit_seq: i64::try_from(row.commit_seq).unwrap_or(i64::MAX),
-        // The epoch rides ONCE PER PAGE, not per row, so it is stamped from the
-        // page header here. The applier then checks every row against the
-        // FILE's epoch, which is the gate the header cannot be trusted for.
-        epoch: epoch.to_owned(),
-        schema_epoch: i64::from(row.schema_epoch),
-        ddl_version: i64::from(row.ddl_version),
-        table: row.table.clone(),
-        op,
-        primary_key: row
-            .pk
-            .as_ref()
-            .map(|key| key.values.iter().map(value_from_wire).collect())
-            .transpose()?
-            .unwrap_or_default(),
-        row: row.row.as_ref().map(image_from_wire).transpose()?,
-        prior: row
-            .prior
-            .as_ref()
-            .map(|prior| {
-                let mut out = RowImage::new();
-                for (column, value) in &prior.columns {
-                    out.insert(column.clone(), value_from_wire(value)?);
-                }
-                Ok::<_, CoreError>(out)
-            })
-            .transpose()?,
-        indirect: row.indirect,
-        producer: row.producer.clone(),
-        deferred: row.deferred,
-        // A served row is never local, by construction: the door filters them.
-        local: false,
-        committed_at: row.committed_at.clone(),
-    })
-}
-
-/// A whole page as the wire spells it.
-#[must_use]
-pub fn log_page_to_wire(page: &LogPage, vault_id: &str) -> wire::LogPage {
-    wire::LogPage {
-        vault_id: vault_id.to_owned(),
-        epoch: page.vault_epoch.clone(),
-        schema_epoch: u32::try_from(page.schema_epoch).unwrap_or(0),
-        ddl_version: u32::try_from(page.ddl_version).unwrap_or(0),
-        floor: page.floor.seq.unsigned_abs(),
-        watermark: page.watermark.seq.unsigned_abs(),
-        next: page.next.seq.unsigned_abs(),
-        has_more: page.has_more,
-        rows: page.rows.iter().map(log_row_to_wire).collect(),
-    }
-}
-
-/// A re-bootstrap reason as the wire spells it.
-#[must_use]
-pub const fn rebootstrap_to_wire(
-    reason: centraid_vault::RebootstrapReason,
-) -> wire::RebootstrapReason {
-    use centraid_vault::RebootstrapReason as R;
-    match reason {
-        R::EpochMismatch => wire::RebootstrapReason::EpochMismatch,
-        R::Retention => wire::RebootstrapReason::Retention,
-        R::CursorAhead => wire::RebootstrapReason::CursorAhead,
-        R::Initial => wire::RebootstrapReason::Initial,
-        R::InvalidCursor => wire::RebootstrapReason::InvalidCursor,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,89 +142,5 @@ mod tests {
     #[test]
     fn an_absent_value_kind_is_refused_and_not_read_as_null() {
         assert!(value_from_wire(&wire::Value { kind: None }).is_err());
-    }
-
-    #[test]
-    fn an_absent_prior_and_an_empty_prior_stay_apart() {
-        let base = LogRow {
-            seq: 1,
-            commit_seq: 1,
-            epoch: "e".to_owned(),
-            schema_epoch: 4,
-            ddl_version: 0,
-            table: "t".to_owned(),
-            op: LogOp::Update,
-            primary_key: vec![Value::Text("k".to_owned())],
-            row: Some(RowImage::new()),
-            prior: None,
-            indirect: false,
-            producer: "p".to_owned(),
-            deferred: false,
-            local: false,
-            committed_at: "t".to_owned(),
-        };
-        assert!(
-            log_row_to_wire(&base).prior.is_none(),
-            "absent stays absent"
-        );
-
-        let mut touched_only_the_key = base.clone();
-        touched_only_the_key.prior = Some(RowImage::new());
-        let wired = log_row_to_wire(&touched_only_the_key);
-        assert!(
-            wired.prior.is_some(),
-            "present-and-empty is a REAL ANSWER and must not collapse to absent"
-        );
-        assert!(wired.prior.expect("present").columns.is_empty());
-    }
-
-    #[test]
-    fn a_row_read_back_takes_its_epoch_from_the_page_header() {
-        let row = wire::LogRow {
-            seq: 5,
-            commit_seq: 2,
-            schema_epoch: 4,
-            ddl_version: 0,
-            table: "t".to_owned(),
-            op: wire::LogOp::Insert as i32,
-            pk: Some(key_to_wire(&[Value::Text("k".to_owned())])),
-            row: None,
-            prior: None,
-            indirect: false,
-            deferred: false,
-            producer: "p".to_owned(),
-            committed_at: "t".to_owned(),
-        };
-        let read = log_row_from_wire(&row, "the-page-epoch").expect("it reads");
-        assert_eq!(read.epoch, "the-page-epoch");
-        // And a served row is never local, by construction.
-        assert!(!read.local);
-    }
-
-    #[test]
-    fn an_unknown_log_op_is_refused_and_not_applied_as_an_insert() {
-        assert!(op_from_wire(wire::LogOp::Unspecified as i32).is_err());
-        assert!(op_from_wire(99).is_err());
-        assert_eq!(
-            op_from_wire(wire::LogOp::Delete as i32).expect("known"),
-            LogOp::Delete
-        );
-    }
-
-    #[test]
-    fn every_rebootstrap_reason_has_a_wire_value_that_is_not_unspecified() {
-        for reason in [
-            centraid_vault::RebootstrapReason::EpochMismatch,
-            centraid_vault::RebootstrapReason::Retention,
-            centraid_vault::RebootstrapReason::CursorAhead,
-            centraid_vault::RebootstrapReason::Initial,
-            centraid_vault::RebootstrapReason::InvalidCursor,
-        ] {
-            assert_ne!(
-                rebootstrap_to_wire(reason),
-                wire::RebootstrapReason::Unspecified,
-                "`{reason}` has no wire value"
-            );
-        }
     }
 }

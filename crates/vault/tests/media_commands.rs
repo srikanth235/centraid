@@ -1122,71 +1122,14 @@ fn forgetting_the_only_member_clears_their_judgements_and_erases_nobody_elses_fa
 // The enrichment hint.
 // ---------------------------------------------------------------------------
 
-/// **A HINT IS A ROW AND NOTHING ELSE** (D-1020-P4). The recipe's walk is the
-/// automations lane's, so what is asserted here is that the command moves
-/// exactly one row and does not touch the policy, the cursor or the derivation
-/// stamps.
-#[test]
-fn a_hint_is_a_row_and_nothing_else() {
-    let world = World::new("enrich-hint");
-    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
-    let before = |table: &str| -> i64 {
-        world
-            .scratch
-            .vault
-            .read(|connection| {
-                Ok(
-                    connection.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                        row.get(0)
-                    })?,
-                )
-            })
-            .expect("the count reads")
-    };
-    let policies = before("enrich_policy");
-    let derivations = before("enrich_derivation");
-    let failures = before("enrich_target_failure");
-
-    let output = world.executed(
-        "enrich.request_enrichment",
-        serde_json::json!({
-            "entity_type": "media.asset",
-            "entity_id": "asset-1",
-            "reason": "manual",
-            "capability": "faces"
-        }),
-    );
-    let request_id = output["request_id"].as_str().expect("an id").to_owned();
-    assert_eq!(
-        world.count(
-            "SELECT COUNT(*) FROM enrich_request
-              WHERE request_id = ?1 AND capability = 'faces' AND drained_at IS NULL",
-            &request_id
-        ),
-        1
-    );
-    assert_eq!(before("enrich_request"), 1, "one row, not a queue");
-    assert_eq!(before("enrich_policy"), policies, "the policy is untouched");
-    assert_eq!(before("enrich_derivation"), derivations);
-    assert_eq!(before("enrich_target_failure"), failures);
-}
-
-/// THE CONSENT SCOPE. An untagged owner ask would read as consent for every
-/// enricher, not the one the member chose.
-#[test]
-fn a_manual_ask_with_no_capability_is_refused_with_a_sentence() {
-    let world = World::new("enrich-scope");
-    let reason = world.refused(
-        "enrich.request_enrichment",
-        serde_json::json!({ "entity_type": "media.asset", "reason": "manual" }),
-    );
-    assert!(reason.contains("name the capability"), "{reason}");
-    // A passive signal needs none: it is not an owner's answer to anything.
-    world.executed(
-        "enrich.request_enrichment",
-        serde_json::json!({ "entity_type": "media.asset", "reason": "on-view" }),
-    );
-}
+// TWO TESTS STOOD HERE, AND THEIR COMMAND IS DELETED (#1029 §1, question 9).
+//
+// `a_hint_is_a_row_and_nothing_else` and
+// `a_manual_ask_with_no_capability_is_refused_with_a_sentence` both drove
+// `enrich.request_enrichment`, which queued an `enrich_request` row for an
+// enrichment WORKER to drain. The worker was `crates/automations` over
+// `crates/assist`, both deleted, so the queue has a writer and no reader — and
+// a command that files work nothing will ever do is worse than no command.
 
 // ---------------------------------------------------------------------------
 // `media.add_asset` — the door that took a blob store to open.

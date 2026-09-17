@@ -252,16 +252,6 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // line above.
     assert_eq!(user_version, 2);
     assert_eq!(journal, "wal");
-
-    let state = centraid_vault::log::log_state(&scratch.vault).expect("the log state reads");
-    assert_eq!(state.floor.seq, 0);
-    assert_eq!(state.watermark.seq, 0);
-    assert_eq!(state.commit_seq, 0);
-    assert_eq!(
-        state.schema_epoch,
-        centraid_vault::log::constants().schema_epoch
-    );
-    assert!(!state.epoch.is_empty());
 }
 
 #[test]

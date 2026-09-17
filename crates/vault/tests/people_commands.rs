@@ -11,9 +11,12 @@
 //!    **every referencing column the sweep names** and asserts ZERO survivors.
 //!    The planting is generated too: a fixture that typed its own rows would
 //!    prove the sweep covers the columns whoever typed it remembered.
-//! 2. **Every `once` command replays from the ledger** (D-1020-PE3). Fourteen
-//!    of the twenty-eight are `once`, and a replayed `intent_id` must execute
-//!    NOTHING a second time — not a second row, not a second invocation row.
+//! 2. ~~**Every `once` command replays from the ledger**~~ (D-1020-PE3). The
+//!    ledger keyed a replay on a SEAT's intent id, and there is no seat
+//!    (#1029 §1, §6): a command that arrives twice was made twice, because the
+//!    caller is the shell on the device the file is on. The `idempotent` half
+//!    of the split is still tested below, and it is the half that never needed
+//!    a ledger.
 //! 3. **A collision is answered per table, never deleted by default** (#916
 //!    review 2.1): a share is a NUMBER and it adds, a primacy flag demotes, a
 //!    row whose two ends became one party is dropped and COUNTED, and a foreign
@@ -73,18 +76,6 @@ impl Circle {
                 &self.registry,
                 &self.principal,
                 &Command::new(command, input),
-            )
-            .unwrap_or_else(|error| panic!("`{command}` errored rather than answering: {error}"))
-    }
-
-    /// Run a command under a seat's intent id, which is what the ledger keys a
-    /// replay on.
-    fn run_with_intent(&self, command: &str, input: Value, intent_id: &str) -> CommandOutcome {
-        self.vault()
-            .execute(
-                &self.registry,
-                &self.principal,
-                &Command::new(command, input).with_intent(intent_id, "phone"),
             )
             .unwrap_or_else(|error| panic!("`{command}` errored rather than answering: {error}"))
     }
@@ -803,129 +794,6 @@ fn a_relationship_reuses_a_party_of_that_name_and_a_pet_is_an_animal() {
 // ---------------------------------------------------------------------------
 // D-1020-PE3 — the fourteen `once` commands, replayed.
 // ---------------------------------------------------------------------------
-
-/// EVERY `once` COMMAND REPLAYS FROM THE LEDGER, and a replay executes nothing.
-///
-/// The check is per command rather than one sample, because "once" is a
-/// property of the definition and a port can get it right for the one command
-/// somebody tested. The state the replay must not change is measured as the row
-/// count of every table People writes, before and after.
-#[test]
-fn a_replayed_once_command_executes_nothing_a_second_time() {
-    let circle = Circle::open("people-replay");
-    let maya = circle.person("Maya Alvarez", 30);
-    let ray = circle.person("Grandpa Ray", 7);
-    let list = circle.run("people.create_list", json!({ "name": "Family" }))["list_id"]
-        .as_str()
-        .expect("a list id")
-        .to_owned();
-    let channel = circle.run(
-        "people.save_contact_channel",
-        json!({ "party_id": maya, "kind": "email", "value": "maya@example.com" }),
-    )["channel_id"]
-        .as_str()
-        .expect("a channel id")
-        .to_owned();
-    let edit = circle.run(
-        "people.edit_person",
-        json!({ "party_id": ray, "role": "Grandfather" }),
-    );
-
-    // THE FOURTEEN, each with an input that executes cleanly the first time.
-    let cases: Vec<(&str, Value)> = vec![
-        (
-            "people.add_person",
-            json!({ "display_name": "Replay Once", "cadence_days": 14 }),
-        ),
-        ("people.trash_person", json!({ "party_id": maya })),
-        (
-            "people.undo_person",
-            json!({ "party_id": ray, "revision_id": edit["revision_id"] }),
-        ),
-        (
-            "people.log_interaction",
-            json!({ "party_id": ray, "kind": "Call", "text": "Sunday" }),
-        ),
-        (
-            "people.add_note",
-            json!({ "party_id": ray, "text": "Beat me at cribbage twice." }),
-        ),
-        (
-            "people.add_task",
-            json!({ "party_id": ray, "text": "Post the photographs" }),
-        ),
-        (
-            "people.add_important_date",
-            json!({ "party_id": ray, "label": "Birthday", "month_day": "08-14" }),
-        ),
-        (
-            "people.add_relationship",
-            json!({ "party_id": ray, "name": "Edith", "kind": "Wife" }),
-        ),
-        (
-            "people.add_gift",
-            json!({ "party_id": ray, "text": "Fountain pen ink" }),
-        ),
-        (
-            "people.add_debt",
-            json!({ "party_id": ray, "direction": "owed", "amount_minor": 1_250 }),
-        ),
-        ("people.create_list", json!({ "name": "Replay List" })),
-        (
-            "people.add_journal_entry",
-            json!({ "mood": "Tired", "text": "Nothing happened." }),
-        ),
-        (
-            "people.delete_contact_channel",
-            json!({ "channel_id": channel }),
-        ),
-        (
-            "people.undo_contact_channel",
-            json!({ "channel_id": channel }),
-        ),
-    ];
-    // The list exists so `move_person` below has somewhere to file to; it is
-    // `idempotent`, not `once`, and is deliberately not in the table.
-    drop(list);
-
-    let once: Vec<&str> = cases.iter().map(|(name, _)| *name).collect();
-    assert_eq!(
-        once.len(),
-        14,
-        "the census's split is 14 idempotent / 14 once; every `once` command is replayed here"
-    );
-
-    for (command, input) in cases {
-        let intent = format!("replay:{command}");
-        let first = circle.run_with_intent(command, input.clone(), &intent);
-        assert_eq!(
-            first.status,
-            CommandStatus::Executed,
-            "`{command}` refused: {:?} / {:?}",
-            first.predicate,
-            first.reason
-        );
-        assert!(!first.replayed);
-        let before = circle.count("SELECT COUNT(*) FROM agent_command_invocation");
-        let rows = circle.count("SELECT COUNT(*) FROM core_entity");
-        let second = circle.run_with_intent(command, input, &intent);
-        // ANSWERED FROM THE LEDGER: the handler did not run again.
-        assert!(
-            second.replayed,
-            "`{command}` ran a second time under one intent id"
-        );
-        assert_eq!(
-            circle.count("SELECT COUNT(*) FROM agent_command_invocation"),
-            before,
-            "`{command}`'s replay wrote a second invocation row"
-        );
-        assert_eq!(
-            circle.count("SELECT COUNT(*) FROM core_entity"),
-            rows,
-            "`{command}`'s replay minted a second entity"
-        );
-    }
-}
 
 /// AND THE FOURTEEN `idempotent` ONES ARE SAFE TO RUN TWICE WITHOUT AN INTENT
 /// ID, which is the other half of the split: no ledger, same state.

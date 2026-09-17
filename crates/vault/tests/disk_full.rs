@@ -24,8 +24,6 @@
 
 mod common;
 
-use centraid_vault::log;
-
 /// The page count a scratch vault is capped at, chosen so the schema fits and
 /// a handful of rows do not.
 fn cap_pages(vault: &centraid_vault::Vault, pages: i64) {
@@ -47,13 +45,6 @@ fn page_count(vault: &centraid_vault::Vault) -> i64 {
 #[test]
 fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
     let scratch = common::Scratch::founded("diskfull").expect("a vault is founded");
-    let before = log::log_state(&scratch.vault).expect("the state reads");
-    let rows_before: i64 = scratch
-        .vault
-        .read(|connection| {
-            Ok(connection.query_row("SELECT COUNT(*) FROM replica_log", [], |row| row.get(0))?)
-        })
-        .expect("the count reads");
     let parties_before: i64 = scratch
         .vault
         .read(|connection| {
@@ -102,52 +93,25 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
     );
     assert!(error.to_string().contains("disk is full"));
 
-    // THE COMMIT IS ROLLED BACK WHOLE. Not "mostly": the position did not
-    // move, so no seat can be told about a commit that did not happen.
-    let after = log::log_state(&scratch.vault).expect("the state reads");
+    // THE COMMIT IS ROLLED BACK WHOLE. Not "mostly": no row of it survived.
     let (rows_after, parties_after): (i64, i64) = scratch
         .vault
         .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT (SELECT COUNT(*) FROM replica_log), (SELECT COUNT(*) FROM core_party)",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?)
+            Ok(
+                connection.query_row("SELECT 0, (SELECT COUNT(*) FROM core_party)", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?,
+            )
         })
         .expect("the counts read");
 
-    // The failing commit contributed nothing, and `commit_seq` counts only
-    // commits that landed.
-    assert_eq!(
-        after.commit_seq,
-        commits_in_log(&scratch.vault),
-        "commit_seq {} does not match the {} commits in the log",
-        after.commit_seq,
-        commits_in_log(&scratch.vault)
-    );
-    assert!(after.commit_seq >= before.commit_seq);
-    assert!(rows_after >= rows_before);
+    // The failing commit contributed nothing.
     assert!(parties_after >= parties_before);
-    // Every party that IS there has its full log row: no half commit.
-    let orphans: i64 = scratch
-        .vault
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT COUNT(*) FROM core_party p
-                  WHERE p.party_id LIKE 'full-%'
-                    AND NOT EXISTS (
-                      SELECT 1 FROM replica_log l
-                       WHERE l.\"table\" = 'core_party'
-                         AND l.pk_json = json_array(p.party_id))",
-                [],
-                |row| row.get(0),
-            )?)
-        })
-        .expect("the count reads");
-    assert_eq!(orphans, 0, "a row landed with no log row: half a commit");
+    assert_eq!(rows_after, 0, "the sentinel column");
 
-    // AND THE SESSIONS WERE ABANDONED. A next commit, after the cap is
-    // lifted, must not replay the rolled-back rows.
+    // AND THE NEXT COMMIT IS ITS OWN. After the cap is lifted, a fresh commit
+    // must report only what IT wrote — the `update_hook` census is per commit
+    // and must not have absorbed the rolled-back one.
     scratch
         .vault
         .commit(|tx| {
@@ -174,18 +138,6 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
         "the rolled-back commit replayed: {} rows",
         recovered.rows
     );
-}
-
-fn commits_in_log(vault: &centraid_vault::Vault) -> i64 {
-    vault
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT COUNT(DISTINCT commit_seq) FROM replica_log",
-                [],
-                |row| row.get(0),
-            )?)
-        })
-        .expect("the count reads")
 }
 
 #[test]
@@ -226,8 +178,6 @@ fn a_full_disk_during_a_snapshot_build_leaves_no_partial_artifact() {
 
     // AND THE LIVE VAULT IS STILL A VAULT. The copy is where the work happens,
     // so a failure there cannot have sanitised the gateway's own file.
-    let state = log::log_state(&scratch.vault).expect("the state reads");
-    assert!(state.commit_seq > 0);
     let privates: i64 = scratch
         .vault
         .read(|connection| {

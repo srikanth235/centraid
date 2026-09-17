@@ -20,8 +20,6 @@ centraid-apps-tally = { path = "../apps/tally" }
 centraid-core = { path = "../core" }
 centraid-blobs = { path = "../blobs" }
 centraid-protocol = { path = "../protocol" }
-centraid-assist = { path = "../assist" }
-centraid-automations = { path = "../automations" }
 centraid-vault = { path = "../vault" }
 base64.workspace = true
 clap.workspace = true
