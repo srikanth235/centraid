@@ -55,6 +55,7 @@ pub mod handle;
 pub mod identity;
 pub mod intent;
 pub mod link;
+pub mod locker;
 pub mod stage;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.

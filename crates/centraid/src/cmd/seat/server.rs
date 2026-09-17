@@ -829,7 +829,7 @@ async fn reveal_for_fill(
         url_match_policy: text(&row, "url_match_policy")
             .unwrap_or_else(|| "registrable-domain".to_owned()),
     };
-    let request = centraid_seat::locker::FillRequest {
+    let request = centraid_core::locker::FillRequest {
         item_id: item_id.to_owned(),
         page_origin: page_origin.to_owned(),
         column: column.to_owned(),

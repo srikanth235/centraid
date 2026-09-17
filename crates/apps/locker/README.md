@@ -31,7 +31,7 @@ Locker is 8 queries, 16 actions and 37 scopes over three schemas, and holds **th
 | Step | Where the plaintext is |
 | --- | --- |
 | a list, a search, the trash, the item pane | nowhere. The sealed cells are ciphertext at rest and the payload carries their **shape** |
-| a reveal | on the seat, for thirty seconds, after the gateway wrote the receipt — `crates/seat::locker` |
+| a reveal | on the seat, for thirty seconds, after the gateway wrote the receipt — `crates/core::locker` |
 | Watchtower, a one-time code | on the seat, inside the reveal window, folded by `watchtower` and `totp` here |
 | a fill into a page | on the seat, matched against the row's own stored policy by `origin`, then handed to the extension with a thirty-second life |
 | a plaintext export | on the seat, under a confirmed `locker.export` and its one receipt |

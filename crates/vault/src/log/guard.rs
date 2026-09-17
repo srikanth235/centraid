@@ -42,13 +42,22 @@ use crate::value::Value;
 /// The ONLY one in this crate's public surface. It is deliberately not
 /// `Deref<Target = Connection>`: a caller that wants the connection asks for it
 /// by name, which is what makes the receipt's grep meaningful.
-pub struct CommitTx<'guard, 'conn> {
+///
+/// **It used to carry the commit's `Capture`, and nothing ever read it**
+/// (#1029, W1). The field was `Option<&'guard RefCell<Capture<'conn>>>`, and
+/// the only thing that filled it was [`Vault::commit`] — which then decoded the
+/// sessions through its OWN binding rather than through the handle it had just
+/// given the body. So it granted a handler no reach it did not already have,
+/// and cost the type a lifetime parameter that rippled out into
+/// `commands::CommandCtx`. It is removed rather than wired up: the capture hook
+/// #1029 §2 wants is W3's to place, and a field nothing reads is not a seam —
+/// it is a claim every later reader has to disprove.
+pub struct CommitTx<'conn> {
     connection: &'conn Connection,
-    capture: Option<&'guard RefCell<Capture<'conn>>>,
     producer: RefCell<String>,
 }
 
-impl<'conn> CommitTx<'_, 'conn> {
+impl<'conn> CommitTx<'conn> {
     /// The connection this commit writes through.
     #[must_use]
     pub const fn connection(&self) -> &'conn Connection {
@@ -99,14 +108,13 @@ impl Vault {
     /// the one that allocates a position.
     pub fn commit<T>(
         &self,
-        body: impl FnOnce(&CommitTx<'_, '_>) -> Result<T>,
+        body: impl FnOnce(&CommitTx<'_>) -> Result<T>,
     ) -> Result<CommitResult<T>> {
         let connection = self.connection();
 
         if self.depth.get() > 0 {
             let tx = CommitTx {
                 connection,
-                capture: None,
                 producer: RefCell::new(String::new()),
             };
             let value = body(&tx)?;
@@ -143,7 +151,6 @@ impl Vault {
             let (value, producer) = {
                 let tx = CommitTx {
                     connection,
-                    capture: Some(&capture),
                     producer: RefCell::new("unnamed".to_owned()),
                 };
                 let value = body(&tx)?;
@@ -243,7 +250,7 @@ impl Vault {
     /// real commit would roll the real one back.
     pub fn dry_run<T>(
         &self,
-        body: impl FnOnce(&CommitTx<'_, '_>) -> Result<T>,
+        body: impl FnOnce(&CommitTx<'_>) -> Result<T>,
     ) -> Result<(T, Vec<crate::log::capture::DecodedRow>)> {
         if self.depth.get() > 0 {
             return Err(VaultError::Invariant {
@@ -273,7 +280,6 @@ impl Vault {
             let value = {
                 let tx = CommitTx {
                     connection,
-                    capture: Some(&capture),
                     producer: RefCell::new("prediction".to_owned()),
                 };
                 body(&tx)?

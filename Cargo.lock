@@ -907,14 +907,20 @@ dependencies = [
 name = "centraid-core"
 version = "1.0.0-alpha.0"
 dependencies = [
+ "aes-gcm 0.11.1",
+ "argon2",
+ "base64 0.22.1",
  "centraid-api-proto",
+ "centraid-apps-locker",
  "centraid-blobs",
  "centraid-ontology",
  "centraid-protocol",
  "centraid-seat",
  "centraid-vault",
  "prost",
+ "rand 0.9.5",
  "rusqlite",
+ "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tracing",
@@ -1042,11 +1048,7 @@ dependencies = [
 name = "centraid-seat"
 version = "1.0.0-alpha.0"
 dependencies = [
- "aes-gcm 0.11.1",
- "argon2",
- "base64 0.22.1",
  "blake3",
- "centraid-apps-locker",
  "centraid-ontology",
  "centraid-vault",
  "flate2",

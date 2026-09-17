@@ -55,7 +55,7 @@
 //! The reuse pass groups by a **digest** of the password, so the intermediate
 //! map this fold builds is not a table of every password in the vault. The
 //! digest function is passed in rather than chosen here: a hash in an app crate
-//! is a hash whose collision behaviour nobody owns, and `crates/seat::locker`
+//! is a hash whose collision behaviour nobody owns, and `crates/core::locker`
 //! passes the one the custody plane already uses.
 
 use std::collections::BTreeMap;

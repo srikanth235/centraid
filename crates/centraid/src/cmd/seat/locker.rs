@@ -1,7 +1,7 @@
 //! THE SEAT'S LOCKER PLANE: the unlock boundary, wired to the socket
 //! (#1020 wave 4 lane extension, D-1020-X6; D-1020-L3, D-1020-L8).
 //!
-//! `crates/seat::locker` is the boundary — the passphrase wrap, the five-minute
+//! `crates/core::locker` is the boundary — the passphrase wrap, the five-minute
 //! session, the thirty-second reveal window, the origin match over the row's
 //! own policy. What it has no opinion about is **where the wrapped blob lives**
 //! and **who is allowed to ask**, and those are this file's two jobs, because
@@ -39,7 +39,7 @@
 //! sealed cell never rides the payload*). So the read here is the sidecar's
 //! own, in the shape `catalogue::content_by_digest` established — not in the
 //! catalogue and not reachable by name from the socket. The column is resolved
-//! against `centraid_seat::locker::unlock::SEALED_CELLS` and a name that is not
+//! against `centraid_core::locker::unlock::SEALED_CELLS` and a name that is not
 //! in it never reaches a query, so the one caller-supplied string that would
 //! otherwise be spliced into `select` cannot be.
 
@@ -48,8 +48,8 @@ use std::sync::Mutex;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
-use centraid_seat::locker::unlock::{RevealRefusal, SEALED_CELLS};
-use centraid_seat::locker::{
+use centraid_core::locker::unlock::{RevealRefusal, SEALED_CELLS};
+use centraid_core::locker::{
     FillRequest, Session, SessionState, WrappedKey, fill_grant, unwrap_member_key, wrap_member_key,
 };
 
@@ -274,7 +274,7 @@ impl LockerPlane {
             key_id: row.key_id.clone(),
         };
         let receipts = Receipting { write: receipt };
-        let unlock = centraid_seat::locker::Unlock {
+        let unlock = centraid_core::locker::Unlock {
             session: &session,
             cells: &cells,
             receipts: &receipts,
@@ -300,8 +300,8 @@ impl LockerPlane {
 }
 
 /// Lower a fill refusal to a code and a member sentence.
-fn lower_fill(refusal: centraid_seat::locker::fill::FillRefusal) -> LockerRefusal {
-    use centraid_seat::locker::fill::FillRefusal as F;
+fn lower_fill(refusal: centraid_core::locker::fill::FillRefusal) -> LockerRefusal {
+    use centraid_core::locker::fill::FillRefusal as F;
     match refusal {
         F::Reveal(inner) => from_reveal(&inner),
         F::OriginMismatch => LockerRefusal::of(
@@ -363,10 +363,10 @@ struct OneCell {
     key_id: Option<String>,
 }
 
-impl centraid_seat::locker::unlock::SealedCells for OneCell {
+impl centraid_core::locker::unlock::SealedCells for OneCell {
     fn cell(
         &self,
-        _target: &centraid_seat::locker::RevealTarget,
+        _target: &centraid_core::locker::RevealTarget,
     ) -> Result<Option<(String, Option<String>)>, RevealRefusal> {
         Ok(Some((self.ciphertext.clone(), self.key_id.clone())))
     }
@@ -376,10 +376,10 @@ struct Receipting<'a> {
     write: &'a dyn Fn(&str, &str) -> Result<String, String>,
 }
 
-impl centraid_seat::locker::unlock::Receipts for Receipting<'_> {
+impl centraid_core::locker::unlock::Receipts for Receipting<'_> {
     fn reveal(
         &self,
-        target: &centraid_seat::locker::RevealTarget,
+        target: &centraid_core::locker::RevealTarget,
         kind: &str,
         origin: Option<&str>,
     ) -> Result<String, String> {
@@ -570,7 +570,7 @@ mod tests {
         assert_eq!(answer.origin, "https://www.bank.example");
         assert_eq!(
             answer.expires_at_ms,
-            centraid_seat::locker::REVEAL_WINDOW_MS
+            centraid_core::locker::REVEAL_WINDOW_MS
         );
         assert_eq!(
             written.into_inner(),
@@ -738,8 +738,8 @@ mod tests {
         let text = std::fs::read_to_string(&path).expect("read");
         let wrapped: WrappedKey = serde_json::from_str(&text).expect("parsed");
         assert_eq!(wrapped.key_id, "key-1");
-        assert_eq!(wrapped.kdf, centraid_seat::locker::WRAP_KDF);
-        assert_eq!(wrapped.iterations, centraid_seat::locker::WRAP_TIME_COST);
+        assert_eq!(wrapped.kdf, centraid_core::locker::WRAP_KDF);
+        assert_eq!(wrapped.iterations, centraid_core::locker::WRAP_TIME_COST);
         let custody = centraid_vault::custody::member_key::MemberKeyCustody::on_seat(
             dir.path(),
             "vault-1".to_owned(),

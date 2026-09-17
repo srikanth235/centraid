@@ -168,7 +168,7 @@ mod tests {
     /// custody change.
     ///
     /// What changes in wave 4 is **who** enforces them: the reveal runs on the
-    /// seat that holds `K` (`crates/seat::locker`), so the declared reach is a
+    /// seat that holds `K` (`crates/core::locker`), so the declared reach is a
     /// clamp the seat applies rather than one the gateway does. The gateway's
     /// own `reveal` refuses the `locker` schema structurally — see
     /// `crates/vault::access` (D-1020-L2) — which is why these three scopes are

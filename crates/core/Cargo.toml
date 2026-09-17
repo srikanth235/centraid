@@ -22,6 +22,11 @@ debug-fault = []
 
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
+# THE UNLOCK BOUNDARY'S ORIGIN MATCHER (#1029 §1). `locker::fill` asks
+# `centraid_apps_locker` whether a page's origin matches a stored one before it
+# will hand an autofill grant out — the one question a fill must not answer
+# itself.
+centraid-apps-locker = { path = "../apps/locker" }
 # THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
 # core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
 # door and this is the crate that has both halves in scope.
@@ -31,6 +36,14 @@ centraid-protocol = { path = "../protocol" }
 centraid-seat = { path = "../seat" }
 centraid-vault = { path = "../vault" }
 prost.workspace = true
+# THE LOCKER'S OWN PRIMITIVES (#1029 §1), moved in with `crates/core/src/locker`:
+# Argon2id over the passphrase, AES-GCM around `K`, base64 for the wrapped blob
+# at rest, and `rand` for its salt and nonce.
+aes-gcm.workspace = true
+argon2.workspace = true
+base64.workspace = true
+rand.workspace = true
+serde.workspace = true
 # The network seam hands a connection DOWN (`link::SeatNetwork::sync`): SQLite
 # allows one writer and this crate holds it, so the type has to be nameable here.
 rusqlite.workspace = true
