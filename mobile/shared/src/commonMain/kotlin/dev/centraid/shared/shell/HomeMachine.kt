@@ -318,7 +318,7 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
      *
      * A table Home does not read moves nothing.
      */
-    override fun rowsChanged(table: String, keys: List<String>, commitSeq: ULong): HomeEvent? =
+    override fun rowsChanged(table: String, keys: List<String>): HomeEvent? =
         if (table in HomeReads.TABLES) HomeEvent(refreshed = HomeEvent.Refreshed()) else null
 
     override fun seatChanged(seat: SeatState): HomeEvent = HomeEvent(seat_changed = HomeEvent.SeatChanged(seat = seat))

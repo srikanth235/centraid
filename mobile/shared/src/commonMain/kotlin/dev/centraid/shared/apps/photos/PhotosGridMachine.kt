@@ -274,7 +274,6 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
     override fun rowsChanged(
         table: String,
         keys: List<String>,
-        commitSeq: ULong,
     ): PhotosGridEvent? = when (table) {
         TABLE -> PhotosGridEvent(rows_changed = PhotosGridEvent.RowsChanged(asset_ids = keys))
         else -> null

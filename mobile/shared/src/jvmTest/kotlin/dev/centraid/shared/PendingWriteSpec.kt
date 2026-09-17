@@ -50,14 +50,13 @@ class PendingWriteSpec : StringSpec({
         val event: PhotosGridEvent? = PhotosGridMachine.rowsChanged(
             table = "media_asset",
             keys = listOf("a-1", "a-2"),
-            commitSeq = 0uL,
         )
         event.shouldNotBeNull()
         event.rows_changed.shouldNotBeNull()
         event.rows_changed!!.asset_ids shouldBe listOf("a-1", "a-2")
         // AND A TABLE THIS SCREEN DOES NOT READ IS NOT ITS EVENT — including
         // the one the byte plane used to name.
-        PhotosGridMachine.rowsChanged("core_content_item", listOf("c-1"), 0uL).shouldBeNull()
-        PhotosGridMachine.rowsChanged("knowledge_note", listOf("n-1"), 0uL).shouldBeNull()
+        PhotosGridMachine.rowsChanged("core_content_item", listOf("c-1")).shouldBeNull()
+        PhotosGridMachine.rowsChanged("knowledge_note", listOf("n-1")).shouldBeNull()
     }
 })

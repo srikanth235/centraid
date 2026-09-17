@@ -26,11 +26,20 @@ public interface ScreenMachine<S, E> {
      * A ROW MOVED IN THE VAULT. What does this screen make of it?
      * (#1025 S5, D-1025-S5-3.)
      *
-     * The core's change stream (`next_event`) says `(table, keys, commit_seq)`
-     * and nothing else — it never carries values, which is what makes
-     * coalescing lossless in `crates/core`'s event queue. So each screen turns
-     * that into its OWN event, here, and `null` means "not mine": a table this
-     * screen does not read, or keys it is not showing.
+     * The core's change stream (`next_event`) says `(table, keys)` and nothing
+     * else — it never carries values, which is what makes coalescing lossless
+     * in `crates/core`'s event queue. So each screen turns that into its OWN
+     * event, here, and `null` means "not mine": a table this screen does not
+     * read, or keys it is not showing.
+     *
+     * **`commitSeq` IS GONE** (#1029 §1). It was the position a SEAT's overlay
+     * settled against — `ChangeEvent`'s commit-seq field, allocated by
+     * `replica_meta` in the log plane — and no machine ever read it: every one of
+     * the four named it and none of them used it, because a screen re-reads its
+     * own page and has nothing to compare a commit number to. The overlay, the
+     * log plane and `replica_meta` are deleted; the field stays on the wire for
+     * a moment longer because `crates/api-proto` is another lane's, and it
+     * leaves with its producers there.
      *
      * **One declaration and not two.** The first draft of this had a `tables`
      * set beside a translator, and the two are a pair that can disagree — a
@@ -43,7 +52,7 @@ public interface ScreenMachine<S, E> {
      * key is, and a screen that cannot recognise its own ids in a list of
      * strings has a bigger problem than this signature.
      */
-    public fun rowsChanged(table: String, keys: List<String>, commitSeq: ULong): E?
+    public fun rowsChanged(table: String, keys: List<String>): E?
 
     /**
      * WHAT THIS SEAT CAN SAY ABOUT ITSELF, CHANGED (#1025 S5, D-1025-S5-6).

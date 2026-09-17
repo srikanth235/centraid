@@ -259,7 +259,6 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
     override fun rowsChanged(
         table: String,
         keys: List<String>,
-        commitSeq: ULong,
     ): NotesEditorEvent? = if (table == TABLE) {
         NotesEditorEvent(rows_changed = NotesEditorEvent.RowsChanged(note_ids = keys))
     } else {

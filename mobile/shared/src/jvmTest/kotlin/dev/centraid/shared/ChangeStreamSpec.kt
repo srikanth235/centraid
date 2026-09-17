@@ -50,11 +50,16 @@ import kotlinx.coroutines.launch
  */
 class ChangeStreamSpec : StringSpec({
 
+    // THE COMMIT-SEQ FIELD IS NOT SET HERE, AND NOT READ (#1029 §1). This
+    // fake set it to 7 because the stream passed the number to every machine
+    // and no machine ever used it — it was the position a SEAT's overlay
+    // settled against, and the overlay left with the log plane. The field is
+    // still on the wire, because `crates/api-proto` is another lane's, and no
+    // line of this shell reads it.
     fun change(table: String, vararg keys: String): Event = Event(
         change = ChangeEvent(
             table = table,
             pk_set = keys.map { RecordKey(values = listOf(Value(text = it))) },
-            commit_seq = 7L,
         ),
     )
 
@@ -125,10 +130,10 @@ class ChangeStreamSpec : StringSpec({
         // The routing decision is the MACHINE's, so it is asserted on the
         // machine: a stream holding its own table map would be a second place
         // every screen's reads are written down.
-        TallyListMachine.rowsChanged("media_asset", listOf("ast-1"), 1uL).shouldBeNull()
-        PhotosGridMachine.rowsChanged("tally_expense", listOf("exp-1"), 1uL).shouldBeNull()
-        NotesEditorMachine.rowsChanged("media_asset", listOf("ast-1"), 1uL).shouldBeNull()
-        HomeMachine.rowsChanged("locker_item", listOf("lck-1"), 1uL).shouldBeNull()
+        TallyListMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
+        PhotosGridMachine.rowsChanged("tally_expense", listOf("exp-1")).shouldBeNull()
+        NotesEditorMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
+        HomeMachine.rowsChanged("locker_item", listOf("lck-1")).shouldBeNull()
     }
 
     "every table Home counts is a table Home redraws on" {
@@ -136,7 +141,7 @@ class ChangeStreamSpec : StringSpec({
         // query moved to another table would otherwise stop redrawing on sync
         // with nothing failing anywhere.
         HomeReads.READS.forEach { read ->
-            HomeMachine.rowsChanged(read.query.from, listOf("x"), 1uL).shouldNotBeNull()
+            HomeMachine.rowsChanged(read.query.from, listOf("x")).shouldNotBeNull()
         }
         HomeReads.TABLES shouldBe HomeReads.READS.map { it.query.from }.toSet()
     }
