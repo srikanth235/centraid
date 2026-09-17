@@ -59,6 +59,16 @@ const CAPABILITIES: &[&str] = &[];
 /// (#1020 wave 3, lane E finding 4).
 pub const DEBUG_FAULT_COMMAND: &str = "debug.panic";
 
+/// THE ONLY CALLER THERE IS, AS A RECEIPT NAMES IT (#1029 §1).
+///
+/// The phone is the only host that opens a vault (#1029 §6), so every command
+/// this core runs is the owner's own, made on the device the vault lives on.
+/// The name is what a receipt and an audit row carry, and it is deliberately a
+/// fact rather than an identifier: there is no enrolment to quote, no device
+/// registry to look it up in, and a generated id would be a second thing to
+/// keep true across a restore for no reader.
+pub const OWNER_DEVICE: &str = "this-device";
+
 /// The type a shell holds. Opaque across the C ABI.
 pub struct Handle {
     /// THE VAULT, WHEN THERE IS ONE (#1025 S1).
@@ -1990,6 +2000,16 @@ impl Handle {
         &self.registry
     }
 
+    /// WHO THIS CORE'S COMMANDS RUN AS (#1029 §1).
+    ///
+    /// Taken from the handle and never from the request. See
+    /// [`crate::api::invoke`] for why there is nothing else it could be, and
+    /// [`OWNER_DEVICE`] for what a receipt ends up naming.
+    #[must_use]
+    pub fn owner(&self) -> centraid_vault::Principal {
+        centraid_vault::Principal::owner(OWNER_DEVICE)
+    }
+
     // ------------------------------------------------------------ internals --
 
     fn check_open(&self) -> Result<()> {
@@ -2105,7 +2125,9 @@ impl Handle {
                 )))
             }
             K::Command(command) => Ok(response(wire::response::Kind::Command(
-                self.with_vault(|vault| crate::api::invoke(vault, &self.registry, command))?,
+                self.with_vault(|vault| {
+                    crate::api::invoke(vault, &self.registry, &self.owner(), command)
+                })?,
             ))),
             K::Pair(pair) => Ok(response(wire::response::Kind::Pair(self.pair(pair)?))),
             // A SEAT QUEUES IT; A GATEWAY REFUSES IT (#1025 S5).
@@ -3771,6 +3793,84 @@ mod tests {
         // ended and `next` is ABSENT — never a cursor past the end.
         assert!(!page.rows.is_empty());
         assert!(page.next.is_none());
+    }
+
+    /// THE PRINCIPAL COMES OFF THE HANDLE (#1029 §1).
+    ///
+    /// A command carrying no principal at all used to be refused —
+    /// `principal_from_wire` answered `InvalidRequest` — because a gateway
+    /// serving seats had a second caller to authorise. There is no second
+    /// caller, so the field is not read and its absence is not a refusal.
+    #[test]
+    fn a_command_with_no_principal_is_answered_rather_than_refused() {
+        let scratch = Scratch::gateway();
+        let outcome = scratch
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Command(wire::Command {
+                    name: "people.add_person".to_owned(),
+                    input: br#"{"display_name":"Ada","cadence_days":0}"#.to_vec(),
+                    invoke_key: "w1-principal-from-the-handle".to_owned(),
+                    // ABSENT, and that is the assertion.
+                    principal: None,
+                    ..Default::default()
+                })),
+            })
+            .expect("the command is answered");
+        let Some(wire::response::Kind::Command(answer)) = outcome.kind else {
+            panic!("a command outcome comes back");
+        };
+        assert_eq!(
+            answer.status,
+            wire::CommandStatus::Executed as i32,
+            "the command ran; reason was `{}`",
+            answer.reason
+        );
+    }
+
+    /// AND A PRINCIPAL ON THE REQUEST CANNOT RAISE ONE.
+    ///
+    /// The field survives on the wire (deleting it is the contracts lane's),
+    /// so the thing worth asserting is that filling it changes nothing: a
+    /// caller's claim about its own authority is not a grant.
+    #[test]
+    fn a_principal_on_the_request_does_not_change_who_the_command_runs_as() {
+        let scratch = Scratch::gateway();
+        let run = |principal: Option<wire::Principal>, key: &str| {
+            let outcome = scratch
+                .handle
+                .call(&wire::Request {
+                    kind: Some(wire::request::Kind::Command(wire::Command {
+                        name: "people.add_person".to_owned(),
+                        input: br#"{"display_name":"Grace","cadence_days":0}"#.to_vec(),
+                        invoke_key: key.to_owned(),
+                        principal,
+                        ..Default::default()
+                    })),
+                })
+                .expect("the command is answered");
+            let Some(wire::response::Kind::Command(answer)) = outcome.kind else {
+                panic!("a command outcome comes back");
+            };
+            answer.status
+        };
+        let plain = run(None, "w1-principal-plain");
+        // An AGENT is the strongest thing the old wire vocabulary could claim,
+        // and it rode an owner it named itself.
+        let claimed = run(
+            Some(wire::Principal {
+                kind: wire::PrincipalKind::Agent as i32,
+                caller_id: "_assistant".to_owned(),
+                principal_id: "_assistant".to_owned(),
+                surface: "money".to_owned(),
+                on_behalf_of_owner: true,
+            }),
+            "w1-principal-claimed",
+        );
+        assert_eq!(
+            plain, claimed,
+            "the request's principal is not read, so it cannot change the answer"
+        );
     }
 
     #[test]

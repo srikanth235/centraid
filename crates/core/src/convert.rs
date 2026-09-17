@@ -228,62 +228,6 @@ pub const fn rebootstrap_to_wire(
     }
 }
 
-/// A principal off the wire.
-///
-/// **Never inferred from the connection inside the core.** The gateway resolves
-/// the enrolled device to a principal at the ALPN boundary and stamps it on the
-/// request; every authority decision downstream reads that field. A core that
-/// derived the principal from its own socket would be a core that cannot be
-/// asked "what would this OTHER caller be allowed", which is what a thin seat's
-/// forwarding needs.
-pub fn principal_from_wire(
-    principal: Option<&wire::Principal>,
-) -> Result<centraid_vault::Principal> {
-    let Some(principal) = principal else {
-        return Err(CoreError::InvalidRequest {
-            detail: "a command carries no principal; the core never infers one".to_owned(),
-        });
-    };
-    match wire::PrincipalKind::try_from(principal.kind) {
-        Ok(wire::PrincipalKind::OwnerDevice) => Ok(centraid_vault::Principal::owner(
-            if principal.surface.is_empty() {
-                principal.caller_id.clone()
-            } else {
-                // A NAMED SURFACE becomes the caller id, as v0's `identity.ts`
-                // does: the surface is what the receipt should name, because
-                // "the Money screen asked" is the fact a member can audit and
-                // "device 4f2a" is not.
-                principal.surface.clone()
-            },
-        )),
-        Ok(wire::PrincipalKind::Agent) => {
-            if !principal.on_behalf_of_owner {
-                // AN AGENT ALWAYS RIDES AN OWNER. The assistant holds no
-                // standing answer of its own, and an agent can never exceed
-                // the owner it rides — so an agent with no owner to ride is
-                // not an agent with less authority, it is a request the
-                // authority plane cannot evaluate.
-                return Err(CoreError::InvalidRequest {
-                    detail: "an agent principal must ride an acting owner".to_owned(),
-                });
-            }
-            Ok(centraid_vault::Principal::Agent {
-                agent_id: principal.caller_id.clone(),
-                on_behalf_of: Box::new(centraid_vault::Principal::owner(
-                    principal.principal_id.clone(),
-                )),
-                // v0's marker: the built-in assistant's enrollment key.
-                assistant: principal.principal_id == "_assistant",
-                may_act: true,
-                scope_clamp: None,
-            })
-        }
-        Ok(wire::PrincipalKind::Unspecified) | Err(_) => Err(CoreError::InvalidRequest {
-            detail: format!("`{}` is not a principal kind", principal.kind),
-        }),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,33 +334,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_named_surface_becomes_the_caller_id() {
-        let principal = wire::Principal {
-            kind: wire::PrincipalKind::OwnerDevice as i32,
-            caller_id: "device-4f2a".to_owned(),
-            principal_id: String::new(),
-            surface: "money".to_owned(),
-            on_behalf_of_owner: false,
-        };
-        let read = principal_from_wire(Some(&principal)).expect("it reads");
-        assert_eq!(read.caller_id(), "money");
-    }
 
-    #[test]
-    fn a_command_with_no_principal_is_refused_rather_than_given_one() {
-        assert!(principal_from_wire(None).is_err());
-        assert!(
-            principal_from_wire(Some(&wire::Principal {
-                kind: wire::PrincipalKind::Unspecified as i32,
-                caller_id: "x".to_owned(),
-                principal_id: String::new(),
-                surface: String::new(),
-                on_behalf_of_owner: false,
-            }))
-            .is_err()
-        );
-    }
 
     #[test]
     fn every_rebootstrap_reason_has_a_wire_value_that_is_not_unspecified() {

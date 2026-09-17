@@ -190,13 +190,27 @@ fn output_name(entry: &str) -> &str {
         .map_or(entry, |at| entry[at + 4..].trim())
 }
 
-/// Run a command through D1's gate order.
+/// Run a command through D1's gate order, **under the principal the HANDLE
+/// holds** (#1029 §1).
+///
+/// The principal used to be read off `request.principal`, and that was right
+/// while a gateway served seats: the gateway resolved an enrolled device at the
+/// ALPN boundary, stamped the result on the request, and every authority
+/// decision downstream read that field — which also let a thin seat ask "what
+/// would this OTHER caller be allowed".
+///
+/// **There is no other caller.** The phone is the only host that opens a vault
+/// (#1029 §6), so the only principal a command can run under is the owner of
+/// the device it is running on, and the handle knows that without being told.
+/// A field on the request could then only do one of two things: agree with the
+/// handle, or be a caller's claim about its own authority — and the second is
+/// not a thing a local write is allowed to assert.
 pub fn invoke(
     vault: &Vault,
     registry: &Registry,
+    principal: &centraid_vault::Principal,
     request: &wire::Command,
 ) -> Result<wire::CommandOutcome> {
-    let principal = crate::convert::principal_from_wire(request.principal.as_ref())?;
     if request.invoke_key.is_empty() {
         // REQUIRED, unlike v0, where the fallback was the call's ORDINAL and
         // only stable for a handler making the same call sequence every time.
@@ -216,7 +230,7 @@ pub fn invoke(
         })?
     };
 
-    let outcome = vault.execute(registry, &principal, &Command::new(&request.name, input))?;
+    let outcome = vault.execute(registry, principal, &Command::new(&request.name, input))?;
     Ok(wire::CommandOutcome {
         status: match outcome.status {
             CommandStatus::Executed => wire::CommandStatus::Executed,
