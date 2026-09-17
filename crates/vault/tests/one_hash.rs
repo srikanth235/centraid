@@ -123,6 +123,18 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
          one `blake3::hash` call is the door itself",
     ),
     (
+        "vault/src/page.rs",
+        "its own `#[cfg(test)]` fixture, and nothing else in the file writes a \
+         row: `note_body_reads_core_content_text_and_null_when_absent` seeds two \
+         `core_content_item` rows so the note-body join has something to miss on. \
+         Both `content_hash` values are 64-hex literals of the right SHAPE \
+         (`aaaa…`, `bbbb…`) that no assertion reads as a digest — the test is \
+         about `core_content_text.body_text` being NULL or not. Judged on its \
+         merits rather than silenced: the scan is right that this is a writer, \
+         and a fixture literal is a declared source exactly as `search/tests/door.rs` \
+         is (#1029 W3-0)",
+    ),
+    (
         "vault/tests/common/mod.rs",
         "`content_digest` over the body the fixture wrote",
     ),
@@ -276,8 +288,28 @@ fn string_literals(text: &str) -> Vec<String> {
 
 /// Where `sha256` may still appear under `crates/`, and why.
 ///
-/// Two crates and two reasons, both "somebody else's protocol":
+/// Three crates and one reason wearing three coats — "somebody else's
+/// protocol", in each case a protocol whose hash is fixed by its own
+/// specification and cannot be restated in BLAKE3 without ceasing to be that
+/// protocol:
 const SHA256_ALLOWED: &[(&str, &str)] = &[
+    (
+        "identity/src/sealed_box.rs",
+        "RFC 9180 `mode_base` with `kdf_id = 0x0001`, which IS HKDF-SHA256. The \
+         ciphersuite is the interoperability contract a non-Centraid peer \
+         implements, and `crates/identity` also carries BIP39's PBKDF2-HMAC-SHA512 \
+         and SLIP-0010's HMAC-SHA512 for the same reason (W0.5-R1). \
+         `crates/identity/src/lib.rs` carries the full reasoning and, critically, \
+         the BOUNDARY: the carve-out is that crate's alone. Everything this \
+         repository defines for itself — every object name, commitment and \
+         dictionary id, `crates/media` included — stays BLAKE3",
+    ),
+    (
+        "identity/tests/rfc9180.rs",
+        "opens RFC 9180 Appendix A.1's own ciphertexts with A.1's own key, so it \
+         must name A.1's ciphersuite. A vector we generated proves only that we \
+         agree with ourselves; the RFC's bytes are the point of the file (W0.5-R1)",
+    ),
     (
         "xtask/src/artifact.rs",
         "`cargo xtask artifact-key` hashes the tree into a GitHub Actions cache \
