@@ -227,3 +227,148 @@ and `crates/core-ffi/tests/symbols.rs::exactly_five_symbols_are_exported` passes
 - `node .governance/law/run.mjs --brief-digest d58a237d3db1` → 10 rules, no findings
 - `node scripts/check-ledgers.mjs --base c48251ac` → only the expired quarantine row (`cargo xtask gate --lane ledgers` cannot run in a worktree: "no merge base found")
 - `cargo xtask gate --profile local` → FAIL on fmt, clippy, test, rules, ledgers, every one of them a base failure in the table above. Budget line: `BUDGET cold ok — 207.0s of the 3200s coldLocalProfileSeconds ceiling in contracts/ledgers/compile-time.json`
+
+## W0.5 — discovery (lane B): the record, publish and resolve, the account listing
+
+Lane A made the keys. This lane makes a key **findable**: the signed pkarr
+record an identity key publishes, publish and resolve against a configurable
+`iroh-dns-server`, the account's own record and the signed vault listing a
+fresh phone restores from, and the typed-URL fallback for when resolution
+fails. It extends `crates/identity` and re-decides none of lane A's shapes.
+
+### What landed
+
+| Where | What |
+| --- | --- |
+| `crates/identity/src/record.rs` (new) | `IdentityRecord` — `mailbox=<gateway base URL>` and `cert=<device certificate, base64url>` in one TXT record at `_centraid`, under the vault identity key's own zone. `AccountRecord` — `gateway=` under the account key and nothing else. `GatewayUrl`, an `http`/`https`-only newtype checked once at the edge. `RecordError`, every key-bearing variant naming the key in z-base32. |
+| `crates/identity/src/discovery.rs` (new) | `Discovery::{new,with_server}` over a pkarr relay client; `publish_identity`, `publish_account`, `resolve_identity`, `resolve_account`, `locate_account`. `DEFAULT_DNS_SERVER = "https://dns.iroh.link/pkarr"`. `ResolutionSource::{Published,Typed}` and `Located`/`SourceUsed` — one restore path, two sources. `DiscoveryError::Unreachable`, with no variant that could be rendered as "unknown person". |
+| `crates/identity/src/account.rs` (new) | `VaultClaim` ("vault V, minted at index i, belongs to account A", signed by A) and `VaultListing`, the document A signs over the whole set. `restore` re-derives every vault from the phrase alone; `resume_mint` carries the high-water mark forward. Fixed-width wire forms for both. |
+| `crates/identity/src/lib.rs` | Three rows in the module map and their re-exports. Lane A's hash carve-out paragraph is untouched — nothing new hashes here. |
+| `crates/identity/tests/discovery_round_trip.rs` (new) | Four tests against a real `iroh_dns_server::Server` started in-process on a free port. |
+| `crates/identity/tests/discovery_vectors.rs` (new) | Generates and diffs `contracts/crypto/discovery-vectors.json`, the same `CENTRAID_UPDATE_FIXTURES=1` shape lane A used, plus two tests that read the pinned bytes back and verify them. |
+| `contracts/crypto/discovery-vectors.json` (new) | The signed identity record and the signed account record byte for byte, the `cert=` payload on its own, and the vault listing's wire form. |
+| `Cargo.toml` | Workspace entries for `pkarr` (`default-features = false`) and `iroh-dns-server` (dev only), each with its reason. |
+| `crates/identity/Cargo.toml` | `pkarr`, `url`; dev: `iroh-dns-server`, `tempfile`, `tokio`. |
+
+36 tests added: 12 in `record.rs`, 12 in `account.rs`, 5 in `discovery.rs`,
+4 in `tests/discovery_round_trip.rs`, 3 in `tests/discovery_vectors.rs`. Lane
+A's 44 still pass; `cargo test -p centraid-identity` is 80.
+
+### What the local-DNS-server exit actually proved
+
+`tests/discovery_round_trip.rs` starts n0's **own** `iroh-dns-server` in
+process — HTTP on `127.0.0.1:0` so the OS picks a free port, HTTPS off, the
+metrics server off (it otherwise binds a *fixed* port and two test binaries
+would fight over it), the mainline DHT fallback off, its store in a `tempfile`
+directory — publishes through the pkarr relay client, resolves back, and shuts
+the server down with the test. No stub, no fallback, and nothing was mocked.
+
+What that buys over a round trip through our own encoder and decoder:
+
+1. an `iroh-dns-server` **accepts** our packet — the owner name, the TXT
+   entries and the size are all things a server can refuse;
+2. what comes back is what went in, byte for byte, through somebody else's
+   store and somebody else's parser;
+3. the answer is not our own client's cache: every resolve in `discovery.rs`
+   is `ResolvePolicy::NetworkOnly`, so a publish cannot satisfy its own
+   resolve;
+4. **republishing at `epoch + 1` works end to end** — the server serves the
+   newer record, and a contact that has seen it refuses the old phone's
+   certificate, which is `VAULT_MOVED` proven against a real server rather than
+   asserted;
+5. the restore path runs whole: the account record resolves to the gateway, the
+   listing re-derives vaults 0, 1 and 4, and the mint resumes at 5.
+
+The server is a **dev-dependency**. `cargo tree -p centraid-identity | grep -c
+'^iroh '` is `0`, and the normal (non-dev) tree contains no `iroh*` crate at
+all; the dev tree gains `iroh-base`, `iroh-dns` and `iroh-metrics` and never
+`iroh` proper, so no endpoint, ALPN or QUIC listener reaches even the tests.
+
+### Rulings spent
+
+- **§6 / the umbrella invariant — no listening socket, no iroh endpoint.**
+  Spent in the manifest, not in a comment: `pkarr` is
+  `default-features = false, features = ["signed_packet", "relays"]`, because
+  the default feature set enables `dht`, whose mainline client **binds a UDP
+  socket and joins a gossip overlay**. With `dht` off the only backend compiled
+  in is the relay client, which is outbound HTTP to the configured server and
+  nothing else. This is the one place a dependency's default would have broken
+  the invariant silently.
+- **F2 — restore must not depend on the lost phone.** The account listing, not
+  gap-limit discovery. `account.rs`'s header records why the wallet answer is
+  refused: it needs the lost phone's records still standing, and it silently
+  truncates a sparse account. `resume_mint` never reuses an index.
+- **F3 — the epoch orders, backup generations do not.** The record layer reads
+  a superseded certificate back as a valid record and `DeviceTrust` is what
+  refuses it; a test in `record.rs` asserts which layer refuses what, so a
+  stale record is `VAULT_MOVED` and never corruption.
+- **F9 — DNS must not see the social graph.** The vault listing is held by the
+  gateway and is deliberately **not** in the account's pkarr record: that
+  record is world-readable by anyone holding the account key, so a listing in
+  DNS would publish a person's vault set as one linked group. A test asserts
+  the account key's bytes and its z-base32 are both absent from a
+  contact-facing vault record. The same ruling is why every resolve is
+  `NetworkOnly` and the API is shaped around a key rather than around a send —
+  a resolve per message would be the wrong shape.
+- **W0.5-R1 — the hash carve-out is spent and bounded.** Nothing in this lane
+  adds a hash. pkarr's signing is Ed25519 over pkarr's own record encoding,
+  which is that specification's choice and not ours; no digest was invented
+  here, so `blake3` had nothing to be spent on.
+- **D-1020-R1 dropped pre-release** — `discovery-vectors.json` carries the same
+  standing lane A gave `identity-vectors.json`: regression vectors, freely
+  regenerated until first release, with the paragraph that has to be deleted to
+  end it named in the test's header.
+
+### Decisions this lane made that are not in a ruling
+
+1. **The account record's entry is `gateway=`, not `mailbox=`.** An account has
+   no mailbox — a mailbox is `/m/{identity_key}` and belongs to one vault. One
+   name reused would invite a reader to treat an account key as a vault key.
+2. **`RECORD_TTL_SECONDS` is 300.** Records refresh on a timer and on every
+   gateway or device change, so this window is how long a superseded `cert=`
+   can be believed after a restore. Shorter costs queries on a path that is
+   already move-recovery; longer is dead time on the one transition the record
+   exists for.
+3. **`IdentityRecord` takes its identity key from the certificate** rather than
+   storing it alongside, so a record that disagrees with itself cannot be
+   built. `sign_at` still refuses a mismatched signing key, for the case where
+   the certificate is somebody else's.
+4. **A repeated entry is a refusal, not a first-wins.** Two `mailbox=` values
+   are a publisher saying two things, and taking the first would make which
+   gateway a contact reaches depend on wire order.
+5. **Both the claim and the listing are signed.** One claim shows one vault's
+   membership without handing over the rest; the document's signature is the
+   only thing that notices a gateway serving a **subset**, because every
+   surviving claim in a truncated set still verifies on its own. There is a
+   test that drops a claim.
+6. **The listing is canonical — ascending by index, no repeats.** One account
+   has one byte form of its listing, and a repeated index is refused as two
+   vaults on one derivation path rather than sorted away.
+7. **The golden vectors pin `SignedPacket::as_bytes`, not `serialize`.**
+   `serialize` prefixes `last_seen`, which is the reading clock: it is not part
+   of the record and is not reproducible.
+8. **`SourceUsed::Typed` says nothing was verified.** A typed URL has no
+   signature to check because there was no record; the variant's documentation
+   says the gateway must still prove itself downstream.
+
+### Found, not this lane's slice
+
+- **`contracts/crypto/` is still unindexed.** Lane A flagged it for W9; this
+  lane adds a fourth file (`discovery-vectors.json`) and the directory still
+  has no README and no entry in any register.
+- **`DeviceCertificate::{to_bytes,from_bytes}` now has its first consumer** —
+  `record.rs`. Lane A's "no consumer yet" note is superseded for that pair;
+  `SealedBox::{to_bytes,from_bytes}` still has none.
+- **Nothing consumes `discovery.rs` yet.** The gateway that serves a vault
+  listing over HTTP, and the phone screen that asks for a typed URL, are both
+  other waves'. What exists here is the client half and its record format.
+- **`pkarr` re-exports `simple_dns` and `ntimestamp` types across this crate's
+  public API** (`Timestamp` in `sign_at`). If a later wave wants
+  `crates/identity` to have no third-party types on its surface, `sign_at` is
+  the one signature to change.
+- **Five inherited gate failures on the base `c48251ac`**, none of them this
+  lane's and none touched: `fmt` (18 files, listed in lane A's section, none in
+  `crates/identity`), `clippy` (`crates/vault/src/log/guard.rs`), `rules`
+  (`sql-confinement` on `crates/centraid/tests/walking_skeleton.rs`,
+  `abi-five-symbols` on `core-ffi`), `test` (`centraid --test bytes_upward`),
+  and `ledgers` (an expired `tests/quarantine.json` row).
