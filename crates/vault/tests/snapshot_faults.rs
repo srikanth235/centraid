@@ -157,10 +157,34 @@ fn an_interrupted_build_leaves_no_artifact_and_the_next_one_succeeds() {
     scratch.vault.inject_fault(None);
     let head = centraid_vault::build_snapshot(&scratch.vault, &dir).expect("the retry builds");
     assert!(dir.join(&head.name).exists());
+
+    // AND THE ARTIFACT IS A COMPLETE COPY, CANARY INCLUDED (#1029 §6, B1).
+    //
+    // This assertion was inverted, and it was the last line of this file still
+    // written for a reader that no longer exists. It read
+    // `!gzipped_contains(…CANARY…)` — "the retry after eight faults produced an
+    // unsanitised artifact" — which was right while a snapshot was the artifact
+    // a SEAT adopted and therefore had to have its private tables dropped. §6
+    // deletes the seat, this file's own header says the builder no longer
+    // sanitises anything, and the two had been contradicting each other since.
+    //
+    // Judged on its merits rather than deleted: everything above is still
+    // exactly right and is the reason this test exists — an interrupted build
+    // publishes nothing, the live vault is untouched by any fault, and a retry
+    // succeeds. What changed is what a completed artifact IS. It is a complete
+    // copy of the file, private bands and all, which is the plain statement of
+    // B1, and the protection is that a backup base is SEALED
+    // (`backup::base::build_base`, and
+    // `backup::base::tests::the_base_is_sealed_and_carries_no_readable_locker_key`
+    // is where that is asserted). A `DROP TABLE` for a reader who no longer
+    // exists was never the protection, and an assertion that kept looking for
+    // one made it appear to be.
     assert!(
-        !snapshot::gzipped_contains(&dir.join(&head.name), CANARY.as_bytes())
+        snapshot::gzipped_contains(&dir.join(&head.name), CANARY.as_bytes())
             .expect("the artifact reads"),
-        "the retry after eight faults produced an unsanitised artifact"
+        "a snapshot is a COMPLETE copy now — a canary missing from it means the \
+         builder started sanitising again, and a backup built on it would be \
+         losing custody rather than protecting it"
     );
 }
 

@@ -173,7 +173,7 @@ pub fn build_base(
     let mut known = read_object_index(vault)?;
     let mut ranges = Vec::new();
     for (index, chunk) in bytes.chunks(RANGE_BYTES as usize).enumerate() {
-        let plaintext_hash = blake3::hash(chunk).to_hex().to_string();
+        let plaintext_hash = crate::content::content_digest(chunk);
         let index32 = u32::try_from(index).unwrap_or(u32::MAX);
         let offset = index as u64 * RANGE_BYTES;
 
@@ -223,7 +223,7 @@ pub fn build_base(
         page_size,
         db_size_pages,
         file_bytes,
-        plaintext_hash: blake3::hash(&bytes).to_hex().to_string(),
+        plaintext_hash: crate::content::content_digest(&bytes),
         ranges,
     };
     record_base(vault, &head)?;
@@ -346,7 +346,7 @@ pub fn restore_base(
         // THE PLAINTEXT HASH IS CHECKED HERE, not only the object's name. The
         // name proves the ciphertext is whole; this proves the bytes are the
         // bytes the base was built from, which is the claim a restore makes.
-        if blake3::hash(&plain).to_hex().to_string() != range.plaintext_hash {
+        if crate::content::content_digest(&plain) != range.plaintext_hash {
             return Err(BaseError::MissingRange {
                 generation: head.generation.hex(),
                 offset: range.offset,
@@ -500,13 +500,42 @@ mod tests {
         }
     }
 
-    /// **F10.** A second base over an unchanged vault reuses every range.
+    /// **F10.** A daily base is cheap because the ranges that did not change
+    /// reuse the objects that already hold them.
+    ///
+    /// The vault is grown past one range on purpose. With a single 4 MiB range
+    /// there is nothing to reuse: writing the first base's own index rows is a
+    /// commit, so that range has changed by the time the second base is taken,
+    /// and a test over a small vault would assert nothing. Past 4 MiB the
+    /// arithmetic that makes F10 affordable becomes visible — a one-row edit
+    /// touches one range and every other one is reused.
     #[test]
-    fn an_unchanged_range_reuses_its_object_and_nothing_new_is_sealed() {
+    fn the_ranges_that_did_not_change_reuse_their_objects() {
         let dir = tempfile::tempdir().expect("a directory");
         let vault = founded(dir.path());
         let keys = keys();
         let blobs = FsBlobStore::open(dir.path().join("objects")).expect("opens");
+
+        // Past two ranges: 4 MiB of rows on top of the schema's own ~3 MiB.
+        vault
+            .commit(|tx| {
+                for index in 0..1_400 {
+                    tx.connection().execute(
+                        "INSERT INTO core_content_item \
+                           (content_id, content_uri, content_hash, byte_size, created_at) \
+                         VALUES (?1, ?2, ?3, ?4, '2026-01-01T00:00:00.000Z')",
+                        rusqlite::params![
+                            format!("content-{index}"),
+                            "x".repeat(3_000),
+                            format!("{index:064}"),
+                            index as i64,
+                        ],
+                    )?;
+                }
+                Ok(())
+            })
+            .expect("writes");
+
         let first = build_base(
             &vault,
             &keys,
@@ -516,6 +545,7 @@ mod tests {
             &dir.path().join("scratch"),
         )
         .expect("builds");
+        assert!(first.ranges.len() > 1, "the vault is more than one range");
         assert_eq!(first.sealed_ranges(), first.ranges.len(), "all new");
 
         let second = build_base(
@@ -528,14 +558,16 @@ mod tests {
         )
         .expect("builds");
         vault.close().expect("closes");
-        // The first base's own index rows are a commit, so the file has moved
-        // by one page at most; what must hold is that the ranges that did not
-        // change were not resealed.
+        let reused = second.ranges.len() - second.sealed_ranges();
         assert!(
-            second.sealed_ranges() < second.ranges.len() || second.ranges.len() == 1,
-            "an unchanged range must reuse its object: {} of {} resealed",
+            reused > 0,
+            "{} of {} ranges were resealed over a vault that only gained index rows",
             second.sealed_ranges(),
             second.ranges.len()
+        );
+        assert!(
+            second.new_bytes() < first.new_bytes(),
+            "the second base must cost less than the first"
         );
     }
 
@@ -562,10 +594,7 @@ mod tests {
         restore_base(&keys, &head, &blobs, &restored).expect("restores");
         let bytes = std::fs::read(&restored).expect("reads");
         assert_eq!(bytes.len() as u64, head.file_bytes);
-        assert_eq!(
-            blake3::hash(&bytes).to_hex().to_string(),
-            head.plaintext_hash
-        );
+        assert_eq!(crate::content::content_digest(&bytes), head.plaintext_hash);
 
         // And it is a vault: the private bands the base exists to carry are in
         // it, readable now that it is decrypted.

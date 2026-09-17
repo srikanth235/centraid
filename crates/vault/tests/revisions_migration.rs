@@ -486,8 +486,16 @@ fn the_migration_refuses_a_vault_that_already_holds_a_malformed_chain() {
 fn the_rung_is_on_the_ladder_and_a_fresh_vault_carries_it() {
     let ladder = centraid_vault::migrations::LADDER;
     let names: Vec<&str> = ladder.iter().map(|rung| rung.name).collect();
-    assert_eq!(names, ["baseline", "revisions"]);
-    assert_eq!(centraid_vault::migrations::head_version(), 2);
+    // Rung three is the in-vault backup index (#1029 §2, §4). This test is
+    // rung TWO's, so it asserts rung two's position in the ladder rather than
+    // the ladder's length — a rung appended above it is the ladder working, and
+    // a rung inserted below it is the failure this line is for.
+    assert_eq!(
+        &names[..2],
+        &["baseline", "revisions"],
+        "rung two must still be rung two"
+    );
+    assert!(centraid_vault::migrations::head_version() >= 2);
     assert_eq!(
         centraid_vault::migrations::REVISIONS_SQL,
         proposal(),
@@ -495,7 +503,10 @@ fn the_rung_is_on_the_ladder_and_a_fresh_vault_carries_it() {
     );
 
     let fresh = Proposed::open("ladder-rung-two", true);
-    assert_eq!(fresh.vault().schema_version(), 2);
+    assert_eq!(
+        fresh.vault().schema_version(),
+        centraid_vault::migrations::head_version()
+    );
     for guard in [
         "core_entity_revision_no_self_parent",
         "core_entity_revision_parent_is_immutable",
@@ -523,7 +534,7 @@ fn the_rung_is_on_the_ladder_and_a_fresh_vault_carries_it() {
             found, expected, ..
         }) => {
             assert_eq!(found, ahead);
-            assert_eq!(expected, 2);
+            assert_eq!(expected, centraid_vault::migrations::head_version());
         }
         other => panic!(
             "a newer file must be refused, not opened: {:?}",

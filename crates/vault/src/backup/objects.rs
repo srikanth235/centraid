@@ -13,9 +13,24 @@
 //! two files had to agree about which epoch was live. There is one root key here
 //! and it comes from §0's derivation: `seed / vault'(i) / root'`. Everything
 //! else — a segment's key, a base range's key — is a **random content key
-//! wrapped into that object's own header**, which is what makes rotation mean
-//! something: re-wrapping headers re-keys the backup without touching a byte of
-//! ciphertext.
+//! wrapped into that object's own header**, and every object is reachable from
+//! the root through exactly one wrap.
+//!
+//! ### What rotating that root key costs, which is more than it should
+//!
+//! The obvious rotation is to re-wrap each header under the new root and leave
+//! the bodies alone. **That does not work in `centraid-object/1` as it stands**,
+//! and it is worth writing down rather than discovering later: the per-chunk
+//! AAD is the WHOLE header, the wrapped key included, so changing the wrap
+//! invalidates every body tag in the object. Rotating the root therefore means
+//! re-sealing and re-uploading every object, not rewriting a few bytes of each.
+//!
+//! Excluding the wrap from the chunk AAD would make the cheap rotation possible
+//! and would cost nothing in strength — a substituted wrap yields a different
+//! content key, so the body already fails to open — but that is a change to the
+//! format lane A landed, not one to make while rewriting its caller. It is a
+//! finding for the umbrella (`receipts/issue-1029-phone-is-the-vault.md`), and
+//! B11's own defect — two masters, neither rotatable — is closed either way.
 //!
 //! ## The vault identity key is associated data, never a key
 //!

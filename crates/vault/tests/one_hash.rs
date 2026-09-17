@@ -135,6 +135,19 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
          is (#1029 W3-0)",
     ),
     (
+        "vault/src/backup/base.rs",
+        "`content_digest` over the 4 MiB page range it just sealed — the \
+         plaintext hash IS the range-dedup key, which is why the index column \
+         exists (#1029 §2, §4). `object_name` beside it is the object's own \
+         name, which is `BlobStore::put`'s return and therefore \
+         `backup::store::digest`, the same function",
+    ),
+    (
+        "vault/tests/backup_crash_matrix.rs",
+        "`content_digest` over the row bytes the matrix writes — a fixture \
+         corpus, hashed through the one door so the scan is not lied to",
+    ),
+    (
         "vault/tests/common/mod.rs",
         "`content_digest` over the body the fixture wrote",
     ),

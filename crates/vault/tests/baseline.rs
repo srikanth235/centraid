@@ -16,9 +16,10 @@
 //!
 //! So the answer to "what is excluded from the comparison" is **nothing**. The
 //! founded schema and the corpus's schema are equal as sets and as text, EXCEPT
-//! for what the ladder adds above the baseline — since the close pass that is
-//! rung two's four revision guards (#1020, D-1020-N2), named in
-//! `RUNG_TWO_OBJECTS` and asserted as the whole of the difference. Any future
+//! for what the ladder adds above the baseline — rung two's four revision
+//! guards (#1020, D-1020-N2) and rung three's four backup-index objects
+//! (#1029 §2, §4), named in
+//! `LADDER_OBJECTS` and asserted as the whole of the difference. Any future
 //! exclusion has to be added to this table with its reason, and the assertion
 //! below is what forces that.
 
@@ -28,13 +29,19 @@ use std::collections::BTreeMap;
 
 use centraid_vault::{APPLICATION_ID, Vault, head_version};
 
-/// What rung two adds to the baseline (#1020, D-1020-N2).
+/// What the ladder adds above the baseline: rung two's four revision guards
+/// (#1020, D-1020-N2) and rung three's in-vault backup index (#1029 §2, §4).
 ///
 /// The corpus is a v0 file and knows nothing of the v1 ladder above rung one,
-/// so a founded v1 file legitimately carries these four and nothing else. Named
-/// here rather than filtered by prefix: a guard that stopped being created, or a
-/// fifth object arriving from somewhere, both have to show up as a failure.
-const RUNG_TWO_OBJECTS: [&str; 4] = [
+/// so a founded v1 file legitimately carries exactly these and nothing else.
+/// Named here rather than filtered by prefix: a guard that stopped being
+/// created, or an object arriving from somewhere, both have to show up as a
+/// failure.
+const LADDER_OBJECTS: [&str; 8] = [
+    "backup_base_range",
+    "backup_base_range_by_hash",
+    "backup_object_range",
+    "backup_object_range_by_object",
     "core_entity_revision_no_self_parent",
     "core_entity_revision_parent_is_immutable",
     "core_entity_revision_parent_is_same_object",
@@ -93,7 +100,7 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
         if expected.contains_key(key) {
             continue;
         }
-        if RUNG_TWO_OBJECTS.contains(&key.1.as_str()) {
+        if LADDER_OBJECTS.contains(&key.1.as_str()) {
             beyond.push(key.1.as_str());
             continue;
         }
@@ -106,9 +113,10 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
     assert_eq!(findings.join("\n"), "");
     // AND THE DELTA IS THE LADDER, NAMED (#1020, close pass). A founded file is
     // the baseline PLUS every rung above it, so the difference from the corpus
-    // is not "nothing" any more — it is exactly rung two's four guards, and a
-    // fifth object appearing here is a rung nobody declared.
-    assert_eq!(beyond, RUNG_TWO_OBJECTS);
+    // is not "nothing" any more — it is exactly rung two's four guards and rung
+    // three's four backup-index objects, and anything else appearing here is a
+    // rung nobody declared.
+    assert_eq!(beyond, LADDER_OBJECTS);
 
     // NOT VACUOUS. Two empty schemas compare equal, which is the one way this
     // could pass for free.
@@ -117,7 +125,7 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
         "only {} objects in the corpus",
         expected.len()
     );
-    assert_eq!(expected.len() + RUNG_TWO_OBJECTS.len(), actual.len());
+    assert_eq!(expected.len() + LADDER_OBJECTS.len(), actual.len());
 }
 
 #[test]
@@ -246,11 +254,11 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // because there is no v0-artifact compatibility and the v0 ladder number
     // says nothing about a v1 file (D-1020-D1-2).
     assert_eq!(user_version, head_version());
-    // Rung two (the revision guards, #1020 D-1020-N2) landed in the close pass,
-    // so the ladder is two long. Spelled out rather than left as
+    // Rung two is the revision guards (#1020, D-1020-N2); rung three is the
+    // in-vault backup index (#1029 §2, §4). Spelled out rather than left as
     // `head_version()` alone: a rung silently vanishing would still satisfy the
     // line above.
-    assert_eq!(user_version, 2);
+    assert_eq!(user_version, 3);
     assert_eq!(journal, "wal");
 }
 

@@ -303,13 +303,37 @@ fn a_gateway_without_the_key_door_cannot_produce_plaintext() {
     carries_no_secret("the seat snapshot (compressed)", &bytes);
     carries_no_secret("the seat snapshot (inflated)", &inflate(&bytes));
 
-    // ---- 4. THE BACKUP BASE ----------------------------------------------
-    let base_dir = gateway.scratch.dir().join("base");
-    let base = centraid_vault::backup::base::build_backup_base(&gateway.scratch.vault, &base_dir)
-        .expect("a base is built");
-    let bytes = std::fs::read(base_dir.join(&base.name)).expect("the base reads");
-    carries_no_secret("the backup base (compressed)", &bytes);
-    carries_no_secret("the backup base (inflated)", &inflate(&bytes));
+    use centraid_vault::backup::store::BlobStore as _;
+
+    // ---- 4. THE BACKUP BASE, WHICH IS NOW SEALED (#1029 B1) ---------------
+    //
+    // The base used to be a gzipped copy, and this scan read both the gzip and
+    // the inflated bytes because a compressed plaintext is still a plaintext.
+    // Every range is now a `centraid-object/1` object, so the scan reads the
+    // ciphertext — which is the point, and which would pass vacuously if the
+    // sealing were ever removed. So the OPENED range is scanned too: it is the
+    // artefact the old check was really about, and a base that leaked a member
+    // key into the plaintext it seals is still a leak the moment a key is lost.
+    let objects = centraid_vault::backup::FsBlobStore::open(gateway.scratch.dir().join("objects"))
+        .expect("a store opens");
+    let keys = centraid_vault::backup::ObjectKeys::new([0x5a; 32], [0x6b; 32]);
+    let base = centraid_vault::backup::build_base(
+        &gateway.scratch.vault,
+        &keys,
+        &objects,
+        centraid_vault::backup::GenerationId::mint().expect("mints"),
+        0,
+        &gateway.scratch.dir().join("base-scratch"),
+    )
+    .expect("a base is built");
+    for range in &base.ranges {
+        let sealed = objects.get(&range.object_name).expect("the range reads");
+        carries_no_secret("a sealed base range", &sealed);
+        let plain = keys
+            .open(centraid_media::object::Kind::Base, &sealed)
+            .expect("the range opens");
+        carries_no_secret("an opened base range", &plain);
+    }
 
     // ---- 5. THE VAULT FILE ITSELF ----------------------------------------
     // Not a door, and the reason it is here anyway: a gate that only checked
@@ -474,11 +498,23 @@ fn the_gateway_binary_exports_no_member_key_reader() {
             "the gateway binary exports `{name}`, which is a member-key door"
         );
     }
-    // The scan is not vacuous: the binary DOES carry the custody symbols that
-    // are allowed — the format layer and the seat-side custody.
+    // THE SCAN IS NOT VACUOUS, and the symbol it proves that with had to move
+    // (#1029 §5). It used to look for `locker_key`, on the reasoning that a
+    // binary carrying the allowed custody symbols is a binary `nm` really read.
+    // The binary carries none of them now: `backup now`, `recover` and `export`
+    // are deleted as gateway commands, and with them the last code path in this
+    // binary that touched Locker custody at all. That is a stronger result than
+    // the gate was asserting, so the non-vacuity check moves to the custody
+    // symbols the binary DOES still link — `doctor` reads a seal-key
+    // fingerprint — and the absence of every Locker symbol is now itself
+    // asserted rather than assumed.
     assert!(
-        symbols.contains("locker_key") || symbols.contains("locker"),
-        "`nm` found no Locker symbols at all, so the assertions above prove nothing"
+        symbols.contains("custody") && symbols.contains("seal_key_fingerprint"),
+        "`nm` found no custody symbols at all, so the assertions above prove nothing"
+    );
+    assert!(
+        !symbols.contains("locker"),
+        "the gateway binary links Locker custody again — nothing in it should"
     );
 }
 

@@ -199,6 +199,11 @@ pub struct BackupOutcome {
 /// 5. **Only then release the spool**, and only through the txid the store
 ///    acked (§2).
 ///
+/// `blobs` is where sealed objects go. It is a parameter rather than
+/// `home.objects()` because it is the seam W4 replaces with a gateway, and
+/// because a test that cannot make the store refuse cannot test the case where
+/// the disk fills.
+///
 /// # Errors
 /// [`BackupError`] for anything a step refused. A refusal leaves the spool
 /// intact: nothing is released until the whole generation is stored.
@@ -206,9 +211,9 @@ pub fn take_generation(
     vault: &Vault,
     keys: &ObjectKeys,
     home: &BackupHome,
+    blobs: &dyn BlobStore,
     previous: Option<&str>,
 ) -> Result<BackupOutcome, BackupError> {
-    let blobs = home.objects()?;
     let spool = home.spool()?;
 
     // 1. Everything committed is in the spool, and the log is quiet.
@@ -223,7 +228,7 @@ pub fn take_generation(
     let base = base::build_base(
         vault,
         keys,
-        &blobs,
+        blobs,
         cursor.generation,
         cursor.last_txid,
         &home.scratch(),

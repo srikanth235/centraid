@@ -124,14 +124,14 @@ pub fn run_drill(
     // ---- 2 and 3. capture, then the generation ---------------------------
     let spool = home.spool().map_err(|error| fail(error.to_string()))?;
     backup::capture(&vault, &spool, keys).map_err(BackupError::from)?;
-    let first = backup::take_generation(&vault, keys, &home, None)?;
+    let first = backup::take_generation(&vault, keys, &home, &blobs, None)?;
 
     // ---- 4. more commits, and a tail the first base does not cover -------
     for index in writes..writes + after {
         write_one(&vault, index)?;
     }
     backup::capture(&vault, &spool, keys).map_err(BackupError::from)?;
-    let outcome = backup::take_generation(&vault, keys, &home, Some(&first.manifest))?;
+    let outcome = backup::take_generation(&vault, keys, &home, &blobs, Some(&first.manifest))?;
 
     // The file as it stands, which is what "byte-exact" is measured against.
     // Checkpointed first, so the comparison is against a file with no log
@@ -234,9 +234,7 @@ fn write_one(vault: &Vault, index: usize) -> std::result::Result<(), VaultError>
             rusqlite::params![
                 format!("content-{index}"),
                 format!("cas:content-{index}"),
-                blake3::hash(format!("drill content {index}").as_bytes())
-                    .to_hex()
-                    .to_string(),
+                crate::content::content_digest(format!("drill content {index}").as_bytes()),
                 (64 + index) as i64,
             ],
         )?;

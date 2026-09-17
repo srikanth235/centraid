@@ -212,6 +212,16 @@ pub struct CaptureOutcome {
 /// [`WalError::Restarted`] is **not** an error out of here: it is the break, and
 /// it is handled by starting a new generation.
 pub fn capture(vault: &Vault, spool: &Spool, keys: &ObjectKeys) -> Result<CaptureOutcome> {
+    // `PRAGMA optimize` WRITES `sqlite_stat1`, SO IT IS A COMMIT — and it runs
+    // here, before the WAL is read, so that this tick captures it. Reference B
+    // states the order exactly: "run it, capture, then checkpoint". Running it
+    // from `checkpoint` instead would fold an uncaptured commit into the
+    // database file, and a restore would then land one commit behind the file it
+    // is supposed to reproduce. The replay fuzz found that, intermittently,
+    // because whether `optimize` writes anything depends on what was written
+    // before it.
+    let _ = vault.connection().execute_batch("PRAGMA optimize");
+
     let mut cursor = match spool.cursor()? {
         Some(cursor) => cursor,
         // A vault with no cursor has never captured. Its base is txid 0 and its
@@ -223,11 +233,16 @@ pub fn capture(vault: &Vault, spool: &Spool, keys: &ObjectKeys) -> Result<Captur
         }
     };
 
-    let Some(bytes) = wal::read_sidecar(vault.path())? else {
-        // No `-wal` at all: the file was checkpointed and closed. Nothing to do,
-        // and emphatically not an error — see docs/traps/wal-checkpoint.md.
+    // NO LOG, OR A LOG WITH NOTHING BUT ROOM FOR A HEADER. Both are the normal
+    // state of a vault just after a TRUNCATE checkpoint: SQLite leaves a
+    // zero-length `-wal` behind rather than removing it, and a zero-length file
+    // has no header to parse. Neither is an error — a quiet vault is quiet, and
+    // treating an empty log as malformed would make every checkpoint break the
+    // next tick (see `docs/traps/wal-checkpoint.md`).
+    let bytes = wal::read_sidecar(vault.path())?.unwrap_or_default();
+    if bytes.len() < wal::HEADER_BYTES {
         return Ok(quiet(&cursor));
-    };
+    }
 
     let page_size = u32::try_from(crate::file::PAGE_SIZE).unwrap_or(4096);
     let mut broke = false;
@@ -334,32 +349,50 @@ pub struct CheckpointOutcome {
 /// ran ahead of the spool would remove frames nothing else holds, which is the
 /// one way this design loses a committed transaction.
 ///
-/// `PRAGMA optimize` runs first, because it **writes `sqlite_stat1`** and is
-/// therefore a commit — running it after the checkpoint would leave a frame in a
-/// log the caller believes it just emptied (§2's trap list). Its commit is
-/// captured on the next tick.
+/// `PRAGMA optimize` is NOT run here: it writes `sqlite_stat1` and is therefore a
+/// commit, so it belongs at the start of [`capture`], where the same tick ships
+/// it (Reference B: "run it, capture, then checkpoint").
 ///
 /// # Errors
-/// [`CaptureError::NotSpooled`] when the spool does not cover the committed
-/// txids; otherwise whatever SQLite refused.
+/// [`CaptureError::NotSpooled`] when the spool does not cover every committed
+/// txid, or when the log holds a commit capture has not cut; otherwise whatever
+/// SQLite refused.
 pub fn checkpoint(vault: &Vault, spool: &Spool) -> Result<CheckpointOutcome> {
     let cursor = spool.cursor()?;
     if let Some(cursor) = &cursor {
-        // Everything the spool must hold is everything capture has cut, and
-        // capture only ever cuts on a commit boundary.
-        let covered = spool.covers(cursor.acked_txid + 1, cursor.last_txid)?;
-        if !covered {
+        // 1. Everything capture has cut is in the spool.
+        if !spool.covers(cursor.acked_txid + 1, cursor.last_txid)? {
             return Err(CaptureError::NotSpooled {
                 spooled: cursor.acked_txid,
                 committed: cursor.last_txid,
             });
         }
+        // 2. AND CAPTURE HAS CUT EVERYTHING THE LOG HOLDS. This second half is
+        // the one that matters, and the spool's own bookkeeping cannot answer
+        // it: the cursor only knows what capture told it, so a commit made
+        // *after* the last tick is invisible there and would be checkpointed
+        // into the database file with nothing holding its pages. The log itself
+        // is the only honest witness, so it is asked.
+        let page_size = u32::try_from(crate::file::PAGE_SIZE).unwrap_or(4096);
+        let bytes = wal::read_sidecar(vault.path())?.unwrap_or_default();
+        if bytes.len() >= wal::HEADER_BYTES {
+            let uncaptured = match wal::read_frames(&bytes, &cursor.wal, page_size) {
+                Ok(read) => read.commits,
+                // A restart is a break, which capture handles; it is not a
+                // reason to refuse a checkpoint of a log we cannot read anyway.
+                Err(WalError::Restarted { .. }) => 0,
+                Err(error) => return Err(error.into()),
+            };
+            if uncaptured > 0 {
+                return Err(CaptureError::NotSpooled {
+                    spooled: cursor.last_txid,
+                    committed: cursor.last_txid + uncaptured,
+                });
+            }
+        }
     }
 
     let connection = vault.connection();
-    // A commit, so it goes BEFORE the checkpoint that is meant to empty the log.
-    let _ = connection.execute_batch("PRAGMA optimize");
-
     let (busy, log_frames, checkpointed) = connection
         .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
             Ok((
