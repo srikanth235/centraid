@@ -34,7 +34,6 @@ use crate::artifact;
 use crate::ci;
 use crate::ledger;
 use crate::rules;
-use crate::smoke;
 
 /// The four device cells (#1020 open question 13, D-1020-G4). Named here, in
 /// the runner, so `gate-nightly.yml`'s matrix and this file cannot disagree
@@ -62,9 +61,18 @@ pub struct Ctx {
     /// infrastructure failure in CI, because the workflow installs it.
     pub ci: bool,
     pub artifacts: PathBuf,
-    /// The profile this run is. A step that must do LESS on the edit-run loop
-    /// than on the gate reads it here rather than being two steps with two
-    /// names — see [`run_tests`] (#1020, close pass, D-1020-CL9).
+    /// The profile this run is.
+    ///
+    /// Its one reader was [`run_tests`], which excluded `crates/sim` on the
+    /// edit-run loop; the crate is deleted (#1029 §1) and nothing reads this
+    /// today. It is kept rather than removed because a `Ctx` that could not
+    /// say which profile it is would make the next step that needs to do less
+    /// locally a second step with a second name, which is the shape
+    /// D-1020-CL9 chose against.
+    #[allow(
+        dead_code,
+        reason = "no step needs it since `crates/sim` went (#1029 §1)"
+    )]
     pub profile: Profile,
 }
 
@@ -147,46 +155,27 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // Two bun scripts and a clean-tree assertion — the shape `mobile-jvm`
         // already uses, on the profile that actually runs on a pull request.
         step("emitters", run_emitters),
-        // THE DESKTOP SEAT'S PURE CORES (#1020 wave 3 lane F, D-1020-F8). Every
-        // `electron`-importing module has a pure twin with unit tests, which is
-        // v0's own split and the reason it is testable without a display; this
-        // step runs those, plus the three tsconfigs, and costs single-digit
-        // seconds. The Playwright run that needs a window is `desktop-e2e`, in
-        // `nightly`.
-        step("desktop-unit", run_desktop_unit),
-        // THE COMPANION'S OWN TWO PROGRAMS (#1020 wave 4 lane extension,
-        // D-1020-X11). Its vitest files are in `desktop-unit`'s project — one
-        // project over `desktop/electron`, `desktop/renderer` and
-        // `extension/src`, because the pure cores are shared across those
-        // boundaries and a second runner over three files would be a second
-        // thing to keep green (D-1020-F10). What is NOT in that project is the
-        // Companion's two type programs and its own lint, and both are about
-        // files outside this tree: the manifests' agreement with
-        // `contracts/extension/ids.json`, and every method name the popup and
-        // content script can send being one of the eighteen.
-        step("extension-unit", run_extension_unit),
+        // `desktop-unit` AND `extension-unit` STOOD HERE (#1029 §6). The
+        // desktop seat was an Electron shell around a `centraid seat` sidecar
+        // over a local socket, and the Companion's only server was that
+        // socket. There is no paired client and no seat; `desktop/` and
+        // `extension/` are deleted, and #1029 question 10 rules the extension
+        // re-proposed on top of a desktop reader if and when §6 is built.
         // THE CI-SHAPE GATES, re-homed out of `scripts/ci/**` (D-1020-G3).
         // They are not v0's gates — they are gates about the shape of CI and
         // about the supply chain — so taking `ci.yml` off `pull_request` had to
         // move them rather than drop them.
         step("advisory", run_advisory),
         step("lockfile", run_lockfile),
-        // THE #842 PROMPT-INJECTION CORPUS (#1020 wave 4 lane assist,
-        // D-1020-AS6). It is a gate rather than one suite among many because
-        // what it guards is a SECURITY property that no other step covers: the
-        // gateway's standing answer when content inside the member's own data
-        // asks the assistant to exceed its grant. A breach is a defect, so the
-        // corpus stays and the code changes.
-        //
-        // Named separately from `test` so the count is visible in the gate
-        // output — "14 payloads, 10 proven, 4 deferred on the park gate" is the
-        // line a reviewer needs, and `cargo test --workspace` prints none of it.
-        step("prompt-injection", run_prompt_injection),
-        // THE SYNC PROOF AND THE RESPONSIVENESS PROMISE (D-1020-D2-4,
-        // D-1020-D2-6). The simulation runs 25 seeds here and 250 in
-        // `nightly`; the budget fails the gate on any bounded read over its
-        // ceiling, which is the issue's own rule.
-        step("sim", run_sim),
+        // `prompt-injection` STOOD HERE (#1029 §1). It ran the #842 corpus
+        // against the ASSISTANT's standing answer when content inside the
+        // member's own data asked it to exceed its grant. `crates/assist` is
+        // deleted and so is `Principal::Agent`, so there is no assistant to
+        // hold an answer and no grant to exceed.
+        // `sim` STOOD HERE (#1029 §1). The deterministic simulation drove
+        // SEATS against a gateway over `turmoil` and asserted convergence;
+        // `crates/sim` is deleted with the plane it simulated. The
+        // responsiveness half of D-1020-D2-6 survives as `call-budget`, below.
         step("call-budget", run_call_budget),
         // CLAUSE 9 AGAINST A REAL PANIC (#1020 wave 3, lane E finding 4). The
         // `debug-fault` feature is off in every other step and in every release
@@ -201,21 +190,11 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     }
     let mut nightly = pr;
     nightly.extend([
-        // The deeper sweep, on top of `pr`'s 25 seeds rather than replacing
-        // them: each profile is stated as a CONCATENATION of the one before.
-        step("sim-nightly", run_sim_nightly),
-        // THE DESKTOP SEAT'S EXIT CRITERION (#1020 wave 3 lane F): a real
-        // Electron app, a real `centraid seat` sidecar over a real socket, and
-        // a `<video>` that seeks inside a blob whose bytes are still arriving.
-        // Nightly rather than `pr` because it builds a release binary and
-        // launches a browser — tens of seconds either side of the assertion.
-        step("desktop-e2e", run_desktop_e2e),
-        // THE COMPANION IN A REAL BROWSER (#1020 wave 4 lane extension). In
-        // `nightly` for `desktop-e2e`'s reason and one more: extensions need a
-        // full Chromium rather than the headless shell, so the run is HEADED and
-        // needs a display — `xvfb-run` in CI, which is a dependency a pull
-        // request should not take.
-        step("extension-e2e", run_extension_e2e),
+        // `sim-nightly`, `desktop-e2e` AND `extension-e2e` STOOD HERE
+        // (#1029 §1, §6). The 250-seed sweep simulated seats, the Electron
+        // run launched a real desktop shell over a real `centraid seat`
+        // sidecar, and the Companion run drove a headed Chromium against that
+        // shell's socket. All three subjects are deleted.
         step("device-lanes", run_device_lanes),
     ]);
     if profile == Profile::Nightly {
@@ -226,7 +205,13 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("restore-drill", run_restore_drill),
         step("artifact-identity", run_artifact_identity),
         step("prebuilt-core-required", run_prebuilt_core_required),
-        step("vps-smoke", run_vps_smoke),
+        // `vps-smoke` STOOD HERE (D-1020-G5, #1029 §6). It installed the
+        // binary in a clean container, ran `centraid gateway`, redeemed a pair
+        // ticket from a SEAT over iroh in the same container, waited for the
+        // WAL capture tick and took a generation. `centraid gateway`, the seat
+        // and the capture tick are all deleted, so the script had nothing left
+        // to run. The end-to-end it stood for belongs to `crates/gateway-server`
+        // (#1029 W4b) and to the phone-shaped restore drill.
     ]);
     release
 }
@@ -901,77 +886,20 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
 /// edit, and on the rebased tree the profile takes 150.7 s warm against 120 s —
 /// **all of it `test`** (147.8 s, of which ~133 s is test execution and the
 /// rest cargo's own accounting). The single largest binary is
-/// `crates/sim/tests/seeds.rs` at 22.9 s for three tests, and the sim crate's
-/// three suites together are ~29 s.
+//// The workspace's own tests.
 ///
-/// **Nothing is weakened, because `pr` runs the sim crate TWICE.** Its `test`
-/// step is this same function with the exclusion off, and `sim` is a second
-/// step over `-p centraid-sim` at 25 seeds; `nightly` adds `sim-nightly` on top
-/// of both. So the deterministic simulation — #1020's primary sync proof — is
-/// exercised by every gate that gates a merge, and what changes is that a
-/// developer editing an app crate no longer pays 29 s for it on every save.
-/// A developer editing `crates/sim` runs `cargo test -p centraid-sim`, which is
-/// what the `sim` step runs.
-///
-/// This is a PROFILE-TABLE change, stated in `crates/xtask/README.md` and in
-/// the receipt, not a silent move.
+/// **It used to EXCLUDE `crates/sim` in the `local` profile** and run it twice
+/// everywhere else — once here and once as a `sim` step — because the
+/// deterministic simulation was #1020's primary sync proof and cost ~29 s. The
+/// simulation simulated SEATS, and there are none (#1029 §1, §6): the crate,
+/// the step and the exclusion all go, and every profile now runs one
+/// unqualified `--workspace`.
 fn run_tests(ctx: &Ctx) -> Result<Outcome> {
-    let local = ctx.profile == Profile::Local;
     if cargo_subcommand_available(&ctx.root, "nextest") {
-        let mut args = vec!["nextest", "run", "--workspace"];
-        if local {
-            args.extend(["--exclude", SIM_PACKAGE]);
-        }
-        process(ctx, "test", "cargo", &args)
+        process(ctx, "test", "cargo", &["nextest", "run", "--workspace"])
     } else {
-        let mut args = vec!["test", "--workspace"];
-        if local {
-            args.extend(["--exclude", SIM_PACKAGE]);
-        }
-        process(ctx, "test", "cargo", &args)
+        process(ctx, "test", "cargo", &["test", "--workspace"])
     }
-}
-
-/// The one package `local`'s `test` step leaves out; `pr`'s own `sim` step and
-/// its unexcluded `test` step both run it.
-const SIM_PACKAGE: &str = "centraid-sim";
-
-/// The deterministic simulation — #1020's primary sync proof (D-1020-D2-4).
-///
-/// In `pr` at 25 seeds, which is the count that fits the profile's budget. A
-/// seed that fails prints `SIM_SEED=<n>` and its schedule, so the artifact a
-/// developer needs is in the step's own output.
-fn run_sim(ctx: &Ctx) -> Result<Outcome> {
-    process(
-        ctx,
-        "sim",
-        "cargo",
-        &["test", "-p", "centraid-sim", "--", "--nocapture"],
-    )
-}
-
-/// The same, at the `nightly` count.
-///
-/// A separate step rather than the same one with a different environment,
-/// because each profile is stated as a CONCATENATION of the one before: `pr`'s
-/// 25 seeds still run in `nightly`, and this adds the deeper sweep on top
-/// rather than replacing it.
-fn run_sim_nightly(ctx: &Ctx) -> Result<Outcome> {
-    process_with_env(
-        ctx,
-        "sim-nightly",
-        "cargo",
-        &[
-            "test",
-            "-p",
-            "centraid-sim",
-            "--test",
-            "seeds",
-            "--",
-            "--nocapture",
-        ],
-        &[("SIM_SEEDS", "250")],
-    )
 }
 
 /// The `call` budget — the issue's "any request that exceeds it in `pr` profile
@@ -1556,7 +1484,7 @@ fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
 /// A tree with no `.ts` file under the listed roots skips with that reason;
 /// otherwise the step runs `bun run check:push:static`.
 fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
-    const V1_DIRS: [&str; 5] = ["crates", "contracts", "mobile", "desktop", "extension"];
+    const V1_DIRS: [&str; 3] = ["crates", "contracts", "mobile"];
     const EXTENSIONS: [&str; 4] = ["ts", "tsx", "mts", "cts"];
     let mut found = Vec::new();
     for dir in V1_DIRS {
@@ -1570,61 +1498,11 @@ fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
     }
     if found.is_empty() {
         return Ok(Outcome::Skipped(
-            "no TypeScript under crates/, contracts/, mobile/, desktop/ or extension/ — `bun run check:push:static` runs here the moment there is (#1020)"
+            "no TypeScript under crates/, contracts/ or mobile/ — `bun run check:push:static` runs here the moment there is (#1020)"
                 .to_owned(),
         ));
     }
     process(ctx, "ts-static", "bun", &["run", "check:push:static"])
-}
-
-/// The #842 corpus, against the Rust turn plane (D-1020-AS6).
-///
-/// The corpus itself lives in `contracts/assist/prompt-injection/` with its
-/// origin header, and it is **grow-only**: the loader reads the directory, so a
-/// new payload is picked up with no change here. The run spawns the real
-/// `fake-acp-harness` binary, which is why this is a `cargo test` invocation
-/// rather than a rule — the boundary under test needs a real subprocess, and a
-/// fake clock would wedge its I/O.
-fn run_prompt_injection(ctx: &Ctx) -> Result<Outcome> {
-    let payloads = corpus_size(&ctx.root);
-    let outcome = process(
-        ctx,
-        "prompt-injection",
-        "cargo",
-        &[
-            "test",
-            "-p",
-            "centraid-assist",
-            "--test",
-            "prompt_injection",
-        ],
-    )?;
-    // The SIZE is reported on success, because a corpus that shrank to nothing
-    // would otherwise pass in silence — which is the one failure mode a gate
-    // over a grow-only corpus has.
-    Ok(match outcome {
-        Outcome::Ok(label) => Outcome::Ok(format!("{label} ({payloads} payloads)")),
-        other => other,
-    })
-}
-
-/// How many payloads are committed. Counted from the directory rather than
-/// taken from the test, so the two cannot agree with each other while both
-/// being wrong.
-fn corpus_size(root: &Path) -> usize {
-    std::fs::read_dir(root.join("contracts/assist/prompt-injection"))
-        .map(|entries| {
-            entries
-                .flatten()
-                .filter(|entry| {
-                    entry
-                        .path()
-                        .extension()
-                        .is_some_and(|extension| extension == "json")
-                })
-                .count()
-        })
-        .unwrap_or(0)
 }
 
 /// The advisory register (D-1020-G3). See `crate::ci::advisory`.
@@ -1635,217 +1513,6 @@ fn run_advisory(ctx: &Ctx) -> Result<Outcome> {
 /// Both lockfiles (D-1020-G3). See `crate::ci::lockfile`.
 fn run_lockfile(ctx: &Ctx) -> Result<Outcome> {
     verdict(ctx, "lockfile", ci::lockfile(&ctx.root)?)
-}
-
-/// The desktop seat's pure cores, and its three type programs.
-///
-/// `desktop/vitest.config.ts` is its own project, kept out of the
-/// repository-wide vitest list and its `tests/floors.json` coverage scoring,
-/// and this step is how CI runs it (D-1020-F8).
-///
-/// `bun` absent is a SKIP locally and a FAILURE in CI, the same rule every
-/// other tool in this file follows: in CI the workflow installs it, so its
-/// absence is an infrastructure fault rather than a developer's choice.
-fn run_desktop_unit(ctx: &Ctx) -> Result<Outcome> {
-    if !ctx.root.join("desktop/vitest.config.ts").is_file() {
-        return Ok(Outcome::Skipped(
-            "no desktop/ tree yet — `bun run --cwd desktop/electron test` runs here the moment there is (#1020 wave 3 lane F)"
-                .to_owned(),
-        ));
-    }
-    if !binary_available("bun") {
-        return Ok(missing_binary(
-            ctx,
-            "bun",
-            "the desktop seat's pure cores and its three type programs",
-            "`.github/actions/setup` installs it in CI; locally, see docs/toolchain.md",
-        ));
-    }
-    match process(
-        ctx,
-        "desktop-unit",
-        "bun",
-        &["run", "--cwd", "desktop/electron", "test"],
-    )? {
-        Outcome::Ok(_) => {}
-        other => return Ok(other),
-    }
-    process(
-        ctx,
-        "desktop-unit",
-        "bun",
-        &["run", "--cwd", "desktop/electron", "typecheck"],
-    )
-}
-
-/// The Companion's two type programs and its own lint (D-1020-X11).
-///
-/// Its vitest files ride `desktop-unit`'s project (D-1020-F10); what runs here is
-/// what that project cannot: `tsc` over the shipped tree with `types: []` — so a
-/// `node:fs` import in `src/worker.ts` is a type error rather than a review
-/// comment — and `scripts/lint.mjs`, which checks this tree against two files
-/// outside it.
-fn run_extension_unit(ctx: &Ctx) -> Result<Outcome> {
-    if !ctx.root.join("extension/package.json").is_file() {
-        return Ok(Outcome::Skipped(
-            "no extension/ tree yet (#1020 wave 4 lane extension)".to_owned(),
-        ));
-    }
-    if !binary_available("bun") {
-        return Ok(missing_binary(
-            ctx,
-            "bun",
-            "the Companion's type programs and its own lint",
-            "`.github/actions/setup` installs it in CI; locally, see docs/toolchain.md",
-        ));
-    }
-    match process(
-        ctx,
-        "extension-unit",
-        "bun",
-        &["run", "--cwd", "extension", "typecheck"],
-    )? {
-        Outcome::Ok(_) => {}
-        other => return Ok(other),
-    }
-    process(
-        ctx,
-        "extension-unit",
-        "bun",
-        &["run", "--cwd", "extension", "lint"],
-    )
-}
-
-/// The Companion's Playwright run: the lane's exit criterion.
-///
-/// Chromium loads the unpacked build, a native-messaging host manifest is
-/// written into the profile with the id Chromium derived, and the host it names
-/// is a node script speaking the browser's framing. **Headed**, under a display:
-/// the headless shell cannot load an extension at all, and it fails with an
-/// empty service-worker list rather than an error — which is why the missing
-/// display is named here instead of being discovered as a timeout.
-fn run_extension_e2e(ctx: &Ctx) -> Result<Outcome> {
-    if !ctx
-        .root
-        .join("extension/e2e/playwright.config.ts")
-        .is_file()
-    {
-        return Ok(Outcome::Skipped(
-            "no extension/e2e yet (#1020 wave 4 lane extension)".to_owned(),
-        ));
-    }
-    if !binary_available("bun") {
-        return Ok(missing_binary(
-            ctx,
-            "bun",
-            "the Companion's Playwright run",
-            "`.github/actions/setup` installs it in CI; locally, see docs/toolchain.md",
-        ));
-    }
-    if std::env::var("DISPLAY").is_err() && !binary_available("xvfb-run") {
-        return Ok(Outcome::Skipped(
-            "no DISPLAY and no `xvfb-run`: an extension needs a full Chromium, which needs a              display. Run `xvfb-run -a bun run --cwd extension e2e` (#1020 wave 4 lane extension)"
-                .to_owned(),
-        ));
-    }
-    let under_xvfb = std::env::var("DISPLAY").is_err();
-    let (program, args): (&str, Vec<&str>) = if under_xvfb {
-        (
-            "xvfb-run",
-            vec!["-a", "bun", "run", "--cwd", "extension", "e2e"],
-        )
-    } else {
-        ("bun", vec!["run", "--cwd", "extension", "e2e"])
-    };
-    process(ctx, "extension-e2e", program, &args)
-}
-
-/// The desktop seat's Playwright run: the lane's exit criterion.
-///
-/// Three prerequisites, each reported as itself rather than as one "it did not
-/// run": the `centraid` binary the shell spawns, `bun` for the app build, and a
-/// display for Electron. The display is the one a hosted Linux runner does not
-/// have, so `xvfb-run` is used when it is there and the step says so when it is
-/// not — a browser test that "passed" with no window would be the loudest kind
-/// of lie.
-fn run_desktop_e2e(ctx: &Ctx) -> Result<Outcome> {
-    if !ctx.root.join("desktop/e2e/playwright.config.ts").is_file() {
-        return Ok(Outcome::Skipped(
-            "no desktop/e2e yet (#1020 wave 3 lane F)".to_owned(),
-        ));
-    }
-    for tool in ["bun", "node"] {
-        if !binary_available(tool) {
-            return Ok(missing_binary(
-                ctx,
-                tool,
-                "the desktop seat's Playwright run (bun builds the app, node runs Playwright)",
-                "`.github/actions/setup` installs both in CI",
-            ));
-        }
-    }
-    // THE BINARY THE SHELL SPAWNS. Built debug, not release: the assertion is
-    // about the media door's byte arithmetic and Chromium's reaction to it, and
-    // a release build would add minutes to a nightly for no change in what is
-    // proven.
-    match process(ctx, "desktop-e2e", "cargo", &["build", "-p", "centraid"])? {
-        Outcome::Ok(_) => {}
-        other => return Ok(other),
-    }
-    match process(
-        ctx,
-        "desktop-e2e",
-        "bun",
-        &["run", "--cwd", "desktop/electron", "build"],
-    )? {
-        Outcome::Ok(_) => {}
-        other => return Ok(other),
-    }
-    let playwright = "node_modules/.bin/playwright";
-    if !ctx.root.join(playwright).is_file() {
-        return Ok(missing_binary(
-            ctx,
-            playwright,
-            "the desktop seat's Playwright run",
-            "run `bun install` (the workflow does)",
-        ));
-    }
-    // Where Playwright's browsers live. Named rather than left to the default
-    // under `$HOME`, because CI and this container both stage them centrally
-    // and a run that silently downloaded its own copy would be a run nobody
-    // budgeted for.
-    let browsers =
-        std::env::var("PLAYWRIGHT_BROWSERS_PATH").unwrap_or_else(|_| "/opt/pw-browsers".to_owned());
-    let env = [("PLAYWRIGHT_BROWSERS_PATH", browsers.as_str())];
-    let headless = std::env::var("DISPLAY").is_err() && binary_available("xvfb-run");
-    if headless {
-        return process_with_env(
-            ctx,
-            "desktop-e2e",
-            "xvfb-run",
-            &[
-                "-a",
-                playwright,
-                "test",
-                "-c",
-                "desktop/e2e/playwright.config.ts",
-            ],
-            &env,
-        );
-    }
-    if std::env::var("DISPLAY").is_err() {
-        return Ok(Outcome::Failed(
-            "no DISPLAY and no xvfb-run: Electron has no real headless mode, so this step cannot run here. Install xvfb (`apt-get install xvfb`) or run it on a machine with a display (#1020 wave 3 lane F)"
-                .to_owned(),
-        ));
-    }
-    process_with_env(
-        ctx,
-        "desktop-e2e",
-        playwright,
-        &["test", "-c", "desktop/e2e/playwright.config.ts"],
-        &env,
-    )
 }
 
 /// THE DEVICE LANES, with a RUNNER CONTRACT rather than a bare skip
@@ -2221,23 +1888,6 @@ fn run_prebuilt_core_required(ctx: &Ctx) -> Result<Outcome> {
     )))
 }
 
-/// THE RELEASE SMOKE (D-1020-G5). See `crate::smoke`.
-fn run_vps_smoke(ctx: &Ctx) -> Result<Outcome> {
-    let outcome = smoke::run(&ctx.root, &ctx.artifacts)?;
-    if outcome.line.starts_with("SKIPPED:") {
-        return Ok(if outcome.ok {
-            Outcome::Skipped(outcome.line)
-        } else {
-            Outcome::Failed(outcome.line)
-        });
-    }
-    Ok(if outcome.ok {
-        Outcome::Ok(outcome.line)
-    } else {
-        Outcome::Failed(outcome.line)
-    })
-}
-
 /// A `ci::Verdict` as a step outcome, with the findings written to the step's
 /// artifact directory and printed — the same shape `run_rules` uses, so a
 /// finding is never only in an exit code.
@@ -2284,29 +1934,26 @@ mod tests {
         steps(profile).into_iter().map(|entry| entry.name).collect()
     }
 
-    /// The two steps wave 2 lane D2 owes the `pr` profile (#1020).
+    /// The `call` budget the `pr` profile owes (#1020).
     ///
-    /// Named rather than counted: a test that asserted "`pr` has fourteen
-    /// steps" would pass after somebody replaced one of these with something
-    /// else.
+    /// It used to assert `sim` as well — #1020's primary sync proof, 25 seeds
+    /// on every PR. The simulation simulated SEATS and is deleted with them
+    /// (#1029 §1); what it proved about CONVERGENCE has no subject, and what
+    /// it proved about responsiveness is `call-budget`'s, which is why that
+    /// half is asserted by name here rather than left to a step count.
     #[test]
-    fn the_pr_profile_runs_the_simulation_and_the_call_budget() {
+    fn the_pr_profile_runs_the_call_budget() {
         let pr = names(Profile::Pr);
         assert!(
-            pr.contains(&"sim"),
-            "`pr` does not run the deterministic simulation, which is #1020's primary \
-             sync proof and is required on every PR"
+            !pr.contains(&"sim"),
+            "`sim` came back without a `crates/sim` to run"
         );
         assert!(
             pr.contains(&"call-budget"),
             "`pr` does not run the `call` budget; the issue's rule is that any request \
              exceeding it in `pr` fails the gate"
         );
-        // And the deeper sweep is nightly's ALONE: 250 seeds do not fit a
-        // 900-second PR budget, and putting them there is how a gate gets
-        // skipped rather than fixed.
-        assert!(!pr.contains(&"sim-nightly"));
-        assert!(names(Profile::Nightly).contains(&"sim-nightly"));
+        assert!(!names(Profile::Nightly).contains(&"sim-nightly"));
     }
 
     #[test]
@@ -2346,16 +1993,17 @@ mod tests {
     }
 
     #[test]
-    fn release_adds_the_drill_the_identity_check_the_required_triples_and_the_smoke() {
+    fn release_adds_the_drill_the_identity_check_and_the_required_triples() {
         let nightly = names(Profile::Nightly);
         let release = names(Profile::Release);
+        // `vps-smoke` was the fourth. It ran `centraid gateway` in a clean
+        // container and paired a seat with it over iroh (#1029 §6).
         assert_eq!(
             &release[nightly.len()..],
             [
                 "restore-drill",
                 "artifact-identity",
-                "prebuilt-core-required",
-                "vps-smoke"
+                "prebuilt-core-required"
             ]
         );
     }
@@ -2472,19 +2120,19 @@ mod tests {
     /// a filter bug (#1020 wave 3 lane F finding 1).
     #[test]
     fn a_step_of_another_profile_is_refused_with_this_profiles_own_step_names() {
-        // `desktop-e2e` is a `nightly` step. It selects there…
+        // `device-lanes` is a `nightly` step. It selects there…
         assert_eq!(
-            select(Profile::Nightly, Some("desktop-e2e"))
+            select(Profile::Nightly, Some("device-lanes"))
                 .expect("a nightly step")
                 .iter()
                 .map(|step| step.name)
                 .collect::<Vec<_>>(),
-            ["desktop-e2e"]
+            ["device-lanes"]
         );
         // …and the refusal from `local` names `local` and lists every step
         // `local` really has, so the next person does not read this file to
         // find out what to type.
-        let error = select(Profile::Local, Some("desktop-e2e")).expect_err("must refuse");
+        let error = select(Profile::Local, Some("device-lanes")).expect_err("must refuse");
         let text = format!("{error:#}");
         assert!(text.contains("the `local` profile"), "{text}");
         for real in steps(Profile::Local) {

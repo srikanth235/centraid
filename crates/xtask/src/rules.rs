@@ -26,10 +26,9 @@ use std::path::{Path, PathBuf};
 
 /// Where SQL is allowed to appear. Everywhere else under `crates/` a SQL
 /// keyword in a string literal is a finding (#1020 invariant).
-const SQL_ALLOWED_ROOTS: [&str; 5] = [
+const SQL_ALLOWED_ROOTS: [&str; 4] = [
     "crates/ontology",
     "crates/vault",
-    "crates/seat",
     "crates/search",
     "crates/apps/kit",
 ];

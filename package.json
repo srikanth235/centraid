@@ -2,12 +2,10 @@
   "name": "centraid-monorepo",
   "version": "0.1.0",
   "private": true,
-  "description": "Centraid — a personal, local-first superapp for desktop, installable web, and mobile clients.",
+  "description": "Centraid — a personal, local-first superapp. The phone is the vault (#1029).",
   "workspaces": {
     "packages": [
-      "packages/*",
-      "desktop/electron",
-      "extension"
+      "packages/*"
     ],
     "catalog": {
       "typescript": "5.9.3"
@@ -23,7 +21,7 @@
     "check:diff-coverage": "node scripts/test-report/diff-coverage-run.mjs",
     "check:diff-coverage:full": "node scripts/test-report/diff-coverage-run.mjs --dependents",
     "check:fast": "bun run format:check && bun run lint && bun run typecheck:affected",
-    "check:full": "bun run check:pr && bun run test:affected:full && bun run coverage && bun run test:suite-wall-clock && bun run test:mutation:pr && bun run test:perf:pr && bun run --cwd apps/desktop test:e2e && bun run --cwd apps/web e2e",
+    "check:full": "bun run check:pr && bun run test:affected:full && bun run coverage && bun run test:suite-wall-clock && bun run test:mutation:pr && bun run test:perf:pr",
     "check:mobile-suite-budgets": "node scripts/check-mobile-suite-budgets.mjs",
     "check:na-cells": "node scripts/audit-na-cells.mjs",
     "check:pr": "bun install --frozen-lockfile && bun run check:push && bun run typecheck && bun run lint:types && bun run lint:workflow-pins && bun run check:diff-coverage",

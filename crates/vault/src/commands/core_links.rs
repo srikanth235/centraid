@@ -306,11 +306,10 @@ fn link_entities() -> CommandDefinition {
             // undo one. An automation runs because the owner scheduled it, so its
             // assertion is the owner's — which is v0's answer too, reached
             // there because a scheduled run carries the owner's credential.
-            let asserted_by = match &ctx.principal {
-                crate::access::Principal::Agent { .. } => "agent",
-                crate::access::Principal::OwnerDevice { .. }
-                | crate::access::Principal::Automation { .. } => "owner",
-            };
+            // ALWAYS THE OWNER (#1029 §1). The `agent` spelling was for an
+            // assistant or an ACP harness asserting a link while riding an
+            // owner; there is no such caller.
+            let asserted_by = "owner";
             let link_id = ctx.next_id();
             ctx.connection().execute(
                 "INSERT INTO core_link
