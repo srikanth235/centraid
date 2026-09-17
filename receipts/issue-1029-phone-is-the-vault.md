@@ -725,3 +725,148 @@ Writing them found two real bugs, both fixed in `777352ad`:
 | 9 `bun run check:push:static` | **4/4 green** (`bun install` first; the worktree had no `node_modules`) |
 | 10 `node scripts/check-ledgers.mjs --base 44e35f22` | **ok — 19 sections across 5 ledgers hold**. It refused the bare removal first, correctly: see `6d9f8bb1`, where the retired floor is carried onto its successor at a higher number rather than waived |
 | 11 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
+
+## W4 — the protocol and gateway-core (lane A)
+
+The gateway is a **protocol with two deployments**, and *neither deployment is
+the reference implementation: the protocol and its conformance suite are*
+(§3). This lane is the protocol and the suite. No adapter, no server binary,
+no network: W4b owns the standalone server and W4c the Worker, and both must
+pass what is here without reimplementing a rule.
+
+### What landed
+
+| Where | What |
+| --- | --- |
+| `crates/api-proto/proto/centraid/core/v1/gateway.proto` (new) | `ProtocolRange`, `SignedRequest` (the preimage as a message, so two adapters cannot assemble different bytes), `ClockSkew`, `VersionRefusal` |
+| `crates/api-proto/proto/centraid/core/v1/backup.proto` (new) | `ObjectKind`, `ObjectDeclaration` (name **and** attested checksum), uploads, `CommitRequest` with `optional prev_head`, generations, `DeleteRequest`/`DeleteRefusalReason`, `ScrubReport` |
+| `crates/api-proto/proto/centraid/core/v1/lease.proto` (new) | `LeaseClaim`, `Lease`, `VaultMoved`, `VaultRegistration`, `VaultsResponse`, `AdmissionRequest` (invite or purchase), `Plan` |
+| `crates/api-proto/proto/centraid/core/v1/mailbox.proto` (new) | `DepositCapability`, deposits, `DrainResponse`, `AckRequest`, `ShareCapability`, `PackRange`, `Feed` |
+| `crates/api-proto/proto/centraid/core/v1/error.proto` | `ERROR_CODE_VAULT_MOVED = 25` in the 20s as §3 asks, and the gateway block at 80–94 |
+| `crates/api-proto/{build.rs,README.md,tests/roundtrip.rs}` | the four files listed; the README's `log.proto` and `intent.proto` rows dropped (W2 deleted both files); five round-trip tests for the shapes that carry rules |
+| `contracts/gateway/schema.sql` (new) | the one SQL schema both adapters apply |
+| `crates/gateway-core/**` (new) | 18 modules, two ports, the in-memory adapter and the conformance suite |
+| `crates/vault/tests/one_hash.rs` | one allowlist entry: `gateway-core/src/checksum.rs` |
+| `crates/core/src/error.rs` | owner-facing sentences for the sixteen new codes |
+
+### The decisions this lane spent
+
+**The messages live in `centraid.core.v1`, not a third package.** `core.v1`'s
+`buf breaking` promise *is* this promise — "a gateway's commitment to seats that
+update on their own schedule" — and `api-proto/tests/tree.rs` already refuses a
+third package that would have to restate it in `buf.yaml`.
+
+**The object NAME stays BLAKE3; the ATTESTED CHECKSUM is SHA-256.** §3 says "the
+gateway confirms that its SHA-256 equals its name", and W3 landed the name as
+BLAKE3 of the ciphertext (`crates/media/src/object`). Both cannot be true, and
+ONE HASH settles which: the name is ours and stays BLAKE3; the checksum is the
+store's, because R2, S3, B2 and MinIO attest SHA-256 and nothing else, and R2
+records it only when the client sent it. So `ObjectDeclaration` carries **both
+names of the same bytes**, and the declaration is the binding a gateway can hold
+an attest-only store to. `crates/gateway-core/src/checksum.rs` is the only module
+that names SHA-256 and carries the allowlist entry, in W0.5-R1's shape.
+
+**The SQL schema is a contract file, not a Rust string.** `cargo xtask rules`'
+sql-confinement scans Rust string literals; §3 says `gateway-core` joins its
+allowlist. Putting the DDL in `contracts/gateway/schema.sql` and reaching it with
+`include_str!` makes the question moot — the crate holds no SQL, `rules.rs` was
+not touched, and the schema is where a contract between two adapters belongs.
+**The allowlist edit §3 anticipated is therefore not needed.**
+
+**The ports are `async fn` in trait with no `Send` bound.** A Durable Object's
+futures are `!Send`; a `Send` bound would make this crate unimplementable in half
+of what it exists for. One `StoreFault` rather than two associated error types,
+because no rule branches on which store failed.
+
+**`crates/gateway-core` does not depend on `crates/identity`.** The certificate's
+byte layout belongs to the crate that mints it, and `centraid-identity` carries
+pkarr, which a Worker has no business linking. An adapter decodes and verifies
+the certificate there and hands `auth::CertifiedDevice` in; every *policy* over it
+— the epoch order, the replay window, the request signature — is here.
+
+### What the conformance suite proves
+
+It is a **library function**, not a `#[test]`: `cargo test` cannot reach inside a
+Worker under Miniflare, so W4b and W4c call `conformance::run` with their own
+`Harness`. `crates/gateway-core/tests/conformance.rs` is one of the three callers,
+over the in-memory adapter, and it also drives a harness that stores nothing —
+so a suite that could not fail would be caught.
+
+Fifteen cases: both checksum modes; no attestation is a rejection;
+read-and-hash catching bytes that do not hash to their name; refusing to presign
+a committed name and refusing to re-bind one; the two-device manifest-CAS race
+and the fresh-writer claim; version skew both ways; the retention-abuse run and
+the base-tombstone rate limit; `VAULT_MOVED` versus a stale epoch; quota and
+lapse; the blind scrub; the grace period; and the canary.
+
+**What it cannot prove, named rather than left to be found:**
+
+1. **That an adapter's compare-and-set is atomic.** The race case drives two
+   writers in sequence. The *rule* refusing the loser is what is under test;
+   that the adapter applies it under something that serialises is
+   `StateStore::compare_and_set_head`'s contract and the adapter's own tests.
+2. **That attest mode catches a name that lies about its bytes.** It cannot —
+   that is a property of attest-only stores, not a gap. The suite asserts the
+   *difference* between the modes instead of papering over it.
+3. **That the ciphertext is ciphertext.** The canary proves nothing on the
+   gateway path copies a plaintext or a plaintext hash into the store; that the
+   phone sealed properly is `crates/media`'s vectors.
+
+### Findings
+
+1. **The size guard as §3 words it does not hold, and the abuse run found it.**
+   "A base whose total padded size is under half its **predecessor's**" checks
+   the newest pair only — so a stolen phone uploads one tiny base (the guard
+   trips), then a *second* tiny base, at which point the newest pair is
+   tiny-against-tiny, the ratio is 1.0 and the guard goes quiet with fifty empty
+   generations sitting in the history. Every delete after that sails through.
+   The guard is now a property of the **live history**: any consecutive pair
+   under the threshold trips it, and it stays tripped until the shrunken bases
+   are gone or the member confirms. The release is `member_confirmed_shrink` on
+   `DeleteRequest`, which is §3's own "until the member confirms on the phone" —
+   the warning is computed there because the row census is readable only there
+   (F4). Reading alone would not have found this; writing the fifty-generation
+   run did.
+2. **`centraid-identity` is very likely not WASM-clean, and W4c needs it.** This
+   crate deliberately avoids depending on it, but an adapter must decode a
+   device certificate somewhere, and `centraid-identity` carries `pkarr`,
+   `url` and `iroh-dns-server` in dev. **Owner question for W4c:** split the
+   certificate/HPKE half of `crates/identity` from the pkarr half, or have the
+   Worker decode the 136-byte certificate against `identity`'s published layout?
+   Recommend the split, in the wave that opens `gateway/cloudflare`.
+3. **The `gateway-engine-mode-agnostic` governance directive has no subject.**
+   It scans `packages/server/src/engine/**/*.ts`, which v1 does not have; its
+   principle — *the "same code, three hosts" property breaks the moment the
+   engine starts checking which host it is living in* — now belongs to
+   `crates/gateway-core`, where `tests/wasm_clean.rs` enforces it against a
+   `GatewayMode`. Repointing the directive is an estate change and was not made
+   here. **Owner question:** repoint it at `crates/gateway-core/src/**`, or
+   retire it and let the crate test carry it?
+4. **`crates/api-proto/README.md` was stale before this lane.** Its file table
+   still listed `log.proto` and `intent.proto`, both deleted in W2. The two rows
+   are dropped with this lane's additions.
+5. **Anti-replay inside the window is not implemented and is not a rule here.**
+   The replay window bounds *how long* a captured request is usable, not whether
+   it can be replayed inside it. For writes this is mostly moot — a replayed
+   commit either fails the compare-and-set or is idempotent — but a replayed
+   *delete* is not. A seen-nonce set is storage, so it would be a third port.
+   **Owner question for W4b/W4c:** add one, or accept the window as the bound
+   and say so in `SECURITY.md`?
+
+### Verification (lane A)
+
+`export CARGO_TARGET_DIR=/home/user/.cargo-target-w4a` throughout. No network,
+no adapter, no server.
+
+| Exit item | Result |
+| --- | --- |
+| 1 `cargo build --workspace` | **clean** |
+| 2 `cargo test -p centraid-gateway-core` | **73 green** — 68 unit, 2 conformance, 3 wasm-clean. The named cases: `commit/two-devices-racing-leave-exactly-one-winner`, `retention/fifty-empty-generations-cannot-push-a-real-base-out` and `retention/one-client-base-tombstone-per-vault-per-day`, `checksum/attest-mode-…` and `checksum/read-and-hash-mode-…` and `checksum/no-attestation-is-a-rejection`, `canary/no-plaintext-or-plaintext-hash-is-anywhere-in-the-store` |
+| 3 `cargo test -p centraid-api-proto` | **12 green** |
+| 4 `cargo test --workspace` | **green, 1530 tests, exit 0** (1452 on the base; +78) |
+| 5 `cargo check -p centraid-gateway-core --target wasm32-unknown-unknown` | **clean**, after `rustup target add`. Run once, at the end |
+| 6 `gate --lane fmt` / `--lane clippy` / `--lane rules` | **PASS**, **PASS**, **PASS** (4 rules, 0 pending; sql-confinement clean over 184 files) |
+| 7 `gate --profile local` | `fmt` `clippy` `test` `rules` all **ok**; **BUDGET ok — 73.3s of 120s** (`test` 71.4s). An earlier run of the same tree measured 161.8s with `test` 159.8s while the sibling mobile lane was building — a 2.2x spread on one contended 4-vCPU container, the same variance W3 recorded. Nothing in the ledger was touched. Only `ledgers` fails, and not on its subject: **"no merge base found"**, the worktree limitation both W3 lanes recorded |
+| 8 `bun run check:push:static` | **4/4 green** (`bun install` first) |
+| 9 `node scripts/check-ledgers.mjs --base 2a0a1f0a` | **ok — 19 sections across 5 ledgers hold** |
+| 10 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
