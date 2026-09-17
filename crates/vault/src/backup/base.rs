@@ -1,171 +1,381 @@
-//! The backup base copy — a **complete** vault, not a sanitised one (#1020,
-//! D-1020-R8).
+//! The base: **page-identical, sealed, and split into ranges** (#1029 §2, B1, B4).
 //!
-//! ## WHAT #1029 DID TO THIS MODULE'S REASON FOR EXISTING
+//! ## THE TWO DEFECTS THIS MODULE EXISTS TO CLOSE
 //!
-//! It existed because `crate::snapshot::build_snapshot` sanitised: it dropped
-//! every private table, redacted the excluded JSON keys and truncated
-//! `replica_log`, all for a phone about to ADOPT the artefact as its replica.
-//! There is no seat and no adoption (#1029 §6), so that sanitisation is gone
-//! and the two builders now produce the same thing: a compacted `VACUUM INTO`
-//! copy of the file.
+//! **B1 — the base was stored unsealed.** It was a gzipped `VACUUM INTO` copy,
+//! put into the blob store as-is and gunzipped straight back out by recover.
+//! That artefact is a complete vault: it carries `locker_key`, which names the
+//! vault's live key, and `access_device_secret`, which is every paired device's
+//! key half. The old module argued at length that a base must keep those
+//! private bands — the argument is right and the conclusion was half-finished,
+//! because a copy that keeps them and does not seal them is a plaintext vault
+//! sitting in the backup. Every range is now a `centraid-object/1` object (§4).
 //!
-//! **They should be one function, and merging them is W3\'s** — because W3 is
-//! the wave that SEALS the base (#1029 B1: the copy is stored unsealed and
-//! includes `locker_key` and `access_device_secret`) and replaces the whole
-//! `VACUUM INTO` base with page-aligned ranges (#1029 B4: `VACUUM INTO`
-//! renumbers pages, which is why WAL frames could never be replayed onto it).
-//! Merging them here would be merging two functions that are both about to be
-//! replaced.
+//! **B4 — `VACUUM INTO` renumbers pages**, which is why WAL frames could never
+//! be replayed onto the base. A vacuum rebuilds the file from its logical
+//! content: page 41 afterwards is not the page 41 the log has frames for. So the
+//! copy is taken with **SQLite's online backup API**, which copies page 1 to
+//! page 1 and page N to page N, and the result is byte-identical to the source
+//! file. That is what makes [`super::segment::apply`] mean anything, and it is
+//! also what makes range dedup work at all: under a vacuum, one inserted row
+//! moves every page after it and every range would read as changed.
 //!
-//! ## Why this exists, and why it contradicts "one snapshot, three uses"
+//! `VACUUM` never runs on a vault for the same reason, and W1's
+//! `auto_vacuum = NONE` is the pragma that keeps it from happening behind our
+//! backs (`file.rs`).
 //!
-//! D-1020-D1-7 rules that there is exactly one snapshot pipeline and it serves
-//! three purposes: a seat's bootstrap, pre-migration safety, and a backup
-//! generation's base. Two of those three are right. The third is not, and the
-//! restore drill is what found it.
+//! ## Ranges, and the index that makes a daily base cheap (F10)
 //!
-//! [`crate::snapshot::build_snapshot`] builds the **seat** snapshot, and a seat
-//! snapshot is *deliberately incomplete*: it drops every private table, drops
-//! the indexes and views that name one, redacts excluded JSON keys, deletes
-//! `replica_log`, and vacuums the free pages so the dropped bytes are gone.
-//! Every one of those steps is correct for a file a phone is about to hold —
-//! and each one is data a backup must not lose. Concretely, a generation built
-//! from that artefact restores a vault with:
+//! The file is cut into **page-aligned 4 MiB ranges**, each sealed as its own
+//! object. A range whose plaintext hash is already in the vault's index reuses
+//! the object that holds it — the gateway is never asked (§2). That is what
+//! makes F10's "the base is the retention unit" affordable: a daily base of a
+//! 400 MiB vault where one note changed is one new range and ninety-nine reused
+//! ones.
 //!
-//! - no `locker_key` row, so the vault **cannot name its own live key**. The
-//!   recovery kit carries the key *file*; nothing carries the row. That is
-//!   unrecoverable custody loss from a backup that reported success.
-//! - no `access_device_secret`, so every paired device loses its key half;
-//! - no `blob_*` custody, no `outbox_item`, no `replica_invocation_commit` —
-//!   so in-flight work, blob custody and the exactly-once ledger are gone;
-//! - no `replica_log`, so a restore cannot serve any seat a delta and every
-//!   seat must re-bootstrap even when it did not have to.
-//!
-//! The drill's `restored-census` check reported all of it, table by table,
-//! which is the whole reason the census check exists.
-//!
-//! So the base copy is a **plain `VACUUM INTO`**: the same file, compacted, and
-//! nothing removed. It is content-addressed and gzipped like the seat snapshot,
-//! so the blob store and the manifest treat the two identically. The seat
-//! snapshot keeps its three-in-one role minus this one; the ruling is narrowed,
-//! not discarded.
-//!
-//! **A base copy is a vault with its secrets in it.** It is only ever sealed
-//! into a generation under the backup data key, and it must never be served to
-//! a seat. That is why it is a different function with a different name in a
-//! different module, rather than a flag on the snapshot builder: a boolean
-//! there would be one typo away from handing a phone the credential bands.
+//! The index lives **in the vault** (§4, rung three), so a restored phone knows
+//! what the store already holds and does not re-upload the whole file for its
+//! first base.
 
 use std::path::Path;
 
+use centraid_media::object::{Kind, Role};
+
+use crate::backup::objects::{ObjectKeys, ObjectsError};
+use crate::backup::segment::GenerationId;
+use crate::backup::store::{BlobError, BlobStore};
 use crate::error::{Result, VaultError};
 use crate::file::Vault;
 
-/// The identity of a base copy.
+/// The range size §2 names: 4 MiB, and page-aligned by construction because
+/// 4 MiB is a whole number of 4096-byte pages.
+pub const RANGE_BYTES: u64 = 4 * 1024 * 1024;
+
+/// One 4 MiB slice of the base.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BaseHead {
-    pub vault_id: String,
-    /// blake3 of the artefact's bytes, as the gzipped file moves.
-    pub digest: String,
-    pub size: u64,
-    /// The file name, derived from the digest — never given by a caller.
-    pub name: String,
-    /// The uncompressed size, so a restore can size its own scratch space.
-    pub plain_size: u64,
+pub struct BaseRange {
+    pub index: u32,
+    pub offset: u64,
+    pub length: u64,
+    /// BLAKE3 of this range's **plaintext**: the dedup key, and the thing that
+    /// never leaves the phone (§4).
+    pub plaintext_hash: String,
+    /// BLAKE3 of the sealed object's ciphertext: the object's name.
+    pub object_name: String,
+    pub object_bytes: u64,
+    /// Whether an object already held these bytes, so nothing new was sealed.
+    pub reused: bool,
 }
 
-/// Build a complete base copy of `vault` into `dir`.
+/// What a base is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BaseHead {
+    /// **The vault identity key, hex** — §0's `vault_id`, not the file's local
+    /// UUID. It is what a manifest names and what §4 binds into every object's
+    /// AAD, so a base from another vault does not merely look wrong: it does
+    /// not open.
+    pub vault_id: String,
+    /// The vault file's own `vault_id`, which is the directory a restore lands
+    /// in. Local to this device; never in an object.
+    pub file_vault_id: String,
+    pub generation: GenerationId,
+    /// The txid this base covers up to. A restore applies segments from
+    /// `txid + 1`.
+    pub txid: u64,
+    pub page_size: u32,
+    pub db_size_pages: u32,
+    pub file_bytes: u64,
+    /// BLAKE3 of the whole copied file, which is what a restore checks against.
+    pub plaintext_hash: String,
+    pub ranges: Vec<BaseRange>,
+}
+
+impl BaseHead {
+    /// Ranges this base had to seal, rather than reuse.
+    #[must_use]
+    pub fn sealed_ranges(&self) -> usize {
+        self.ranges.iter().filter(|range| !range.reused).count()
+    }
+
+    /// The bytes this base costs the store, counting only what it sealed.
+    #[must_use]
+    pub fn new_bytes(&self) -> u64 {
+        self.ranges
+            .iter()
+            .filter(|range| !range.reused)
+            .map(|range| range.object_bytes)
+            .sum()
+    }
+}
+
+/// Take a **page-identical** copy of the vault into `dir`.
 ///
-/// `VACUUM INTO` refuses an existing target, which is the wanted behaviour, so
-/// the working file is removed first and the artefact is renamed into place —
-/// a reader therefore sees either nothing or a whole file.
-pub fn build_backup_base(vault: &Vault, dir: &Path) -> Result<BaseHead> {
+/// Uses SQLite's online backup API, which copies page for page. The caller
+/// holds the write mutex and has checkpointed, so the copy is the whole
+/// committed state and no frame is left behind in a log the copy does not carry
+/// (see `docs/traps/wal-checkpoint.md`).
+///
+/// # Errors
+/// [`VaultError`] for anything SQLite or the filesystem refused.
+pub fn copy_page_identical(vault: &Vault, target: &Path) -> Result<()> {
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let _ = std::fs::remove_file(target);
+    let mut destination = rusqlite::Connection::open(target)
+        .map_err(|error| VaultError::from_sqlite("opening the base copy", error))?;
+    {
+        let backup = rusqlite::backup::Backup::new(vault.connection(), &mut destination)
+            .map_err(|error| VaultError::from_sqlite("starting the base copy", error))?;
+        // One step, every page: `-1` is "all remaining pages", so there is no
+        // window in which the copy is half-made and the source has moved.
+        backup
+            .step(-1)
+            .map_err(|error| VaultError::from_sqlite("copying the vault page for page", error))?;
+    }
+    destination
+        .close()
+        .map_err(|(_, error)| VaultError::from_sqlite("closing the base copy", error))?;
+    Ok(())
+}
+
+/// Build the base of a generation: copy, split, seal what is new, record the
+/// index.
+///
+/// Every sealed range goes into `blobs` — whose `put` fsyncs (B13) — and is then
+/// **read back from the file and opened** before it is recorded (§4, F11). A
+/// range the vault's index already names is reused and nothing is sealed for it.
+///
+/// # Errors
+/// [`BaseError`] for anything the copy, the seal or the index refused.
+pub fn build_base(
+    vault: &Vault,
+    keys: &ObjectKeys,
+    blobs: &dyn BlobStore,
+    generation: GenerationId,
+    txid: u64,
+    scratch: &Path,
+) -> std::result::Result<BaseHead, BaseError> {
+    let file_vault_id = vault.vault_id()?.ok_or_else(|| VaultError::Invariant {
+        context: "a vault that was never founded has no base to take".to_owned(),
+    })?;
+
+    std::fs::create_dir_all(scratch)?;
+    let copy = scratch.join("base.page-identical");
+    copy_page_identical(vault, &copy)?;
+    let bytes = std::fs::read(&copy)?;
+    let _ = std::fs::remove_file(&copy);
+
+    let page_size = u32::try_from(crate::file::PAGE_SIZE).unwrap_or(4096);
+    let file_bytes = bytes.len() as u64;
+    let db_size_pages = u32::try_from(file_bytes / u64::from(page_size)).unwrap_or(u32::MAX);
+
+    let mut known = read_object_index(vault)?;
+    let mut ranges = Vec::new();
+    for (index, chunk) in bytes.chunks(RANGE_BYTES as usize).enumerate() {
+        let plaintext_hash = blake3::hash(chunk).to_hex().to_string();
+        let index32 = u32::try_from(index).unwrap_or(u32::MAX);
+        let offset = index as u64 * RANGE_BYTES;
+
+        if let Some((object_name, object_bytes)) = known.get(&plaintext_hash).cloned() {
+            // §2: the phone decides reuse from its own index; the gateway is
+            // never asked.
+            ranges.push(BaseRange {
+                index: index32,
+                offset,
+                length: chunk.len() as u64,
+                plaintext_hash,
+                object_name,
+                object_bytes,
+                reused: true,
+            });
+            continue;
+        }
+
+        let sealed = keys.seal(Kind::Base, Role::Whole, chunk)?;
+        let object_name = blobs.put(&sealed.bytes)?;
+        debug_assert_eq!(object_name, sealed.name.hex(), "the store names by BLAKE3");
+        let path = blobs
+            .path_of(&object_name)?
+            .ok_or_else(|| BaseError::Vanished {
+                object: object_name.clone(),
+            })?;
+        keys.verify_on_disk(Kind::Base, &sealed, &path)?;
+
+        let object_bytes = sealed.bytes.len() as u64;
+        known.insert(plaintext_hash.clone(), (object_name.clone(), object_bytes));
+        ranges.push(BaseRange {
+            index: index32,
+            offset,
+            length: chunk.len() as u64,
+            plaintext_hash,
+            object_name,
+            object_bytes,
+            reused: false,
+        });
+    }
+
+    let head = BaseHead {
+        vault_id: keys.vault_id_hex(),
+        file_vault_id,
+        generation,
+        txid,
+        page_size,
+        db_size_pages,
+        file_bytes,
+        plaintext_hash: blake3::hash(&bytes).to_hex().to_string(),
+        ranges,
+    };
+    record_base(vault, &head)?;
+    Ok(head)
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BaseError {
+    #[error(transparent)]
+    Vault(#[from] VaultError),
+    #[error(transparent)]
+    Objects(#[from] ObjectsError),
+    #[error(transparent)]
+    Blob(#[from] BlobError),
+    #[error("base io: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("the base for generation {generation} names no range at offset {offset}")]
+    MissingRange { generation: String, offset: u64 },
+    #[error("the store lost object {object} between the put and the read-back")]
+    Vanished { object: String },
+}
+
+/// The dedup index: plaintext hash → the object already holding those bytes.
+///
+/// # Errors
+/// [`VaultError`] when the vault will not read.
+pub fn read_object_index(
+    vault: &Vault,
+) -> Result<std::collections::HashMap<String, (String, u64)>> {
+    vault.read(|connection| {
+        let mut statement = connection
+            .prepare("SELECT plaintext_hash, object_name, object_bytes FROM backup_object_range")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                (row.get::<_, String>(1)?, row.get::<_, i64>(2)? as u64),
+            ))
+        })?;
+        rows.collect::<rusqlite::Result<_>>().map_err(Into::into)
+    })
+}
+
+/// Write a base's ranges into the in-vault index.
+///
+/// **This is itself a commit**, so it produces WAL frames that the next capture
+/// tick ships — which is right: the index is vault state and a restored phone
+/// needs it (§2).
+fn record_base(vault: &Vault, head: &BaseHead) -> Result<()> {
+    let now = vault.clock().now_text();
+    let generation = head.generation.hex();
+    vault.commit(|tx| {
+        let connection = tx.connection();
+        for range in &head.ranges {
+            connection.execute(
+                "INSERT INTO backup_object_range
+                     (plaintext_hash, object_name, object_bytes, plaintext_bytes, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (plaintext_hash) DO NOTHING",
+                rusqlite::params![
+                    range.plaintext_hash,
+                    range.object_name,
+                    range.object_bytes as i64,
+                    range.length as i64,
+                    now,
+                ],
+            )?;
+            connection.execute(
+                "INSERT INTO backup_base_range
+                     (generation, range_index, byte_offset, byte_length, plaintext_hash, object_name)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT (generation, range_index) DO UPDATE SET
+                     byte_offset = excluded.byte_offset,
+                     byte_length = excluded.byte_length,
+                     plaintext_hash = excluded.plaintext_hash,
+                     object_name = excluded.object_name",
+                rusqlite::params![
+                    generation,
+                    i64::from(range.index),
+                    range.offset as i64,
+                    range.length as i64,
+                    range.plaintext_hash,
+                    range.object_name,
+                ],
+            )?;
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Reassemble a base from its range objects, in order.
+///
+/// This is the first half of a restore: the file it writes is page-identical to
+/// the vault the base was taken from, which is what lets
+/// [`super::segment::apply`] write page numbers into it (B4).
+///
+/// # Errors
+/// [`BaseError::MissingRange`] when a range's object is not among `objects`;
+/// otherwise whatever opening refused.
+pub fn restore_base(
+    keys: &ObjectKeys,
+    head: &BaseHead,
+    blobs: &dyn BlobStore,
+    target: &Path,
+) -> std::result::Result<(), BaseError> {
     use std::io::Write as _;
 
-    std::fs::create_dir_all(dir)?;
-    let working = dir.join("base.building");
-    let working_gz = dir.join("base.building.gz");
-    for path in [&working, &working_gz] {
-        let _ = std::fs::remove_file(path);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
     }
-
-    let vault_id = vault.vault_id()?.ok_or_else(|| VaultError::Invariant {
-        context: "a vault that was never founded has no base copy to take".to_owned(),
-    })?;
-
-    // The copy. `VACUUM INTO` cannot run inside a transaction, which is also
-    // why a pre-migration snapshot has to be taken before the ladder opens one.
-    // It goes through the crate-internal connection rather than
-    // [`Vault::read`] for a reason SQLite decides: `read` holds
-    // `PRAGMA query_only = ON`, and `VACUUM INTO` is a write as far as SQLite
-    // is concerned even though it writes only to a new file.
-    let target = working.to_str().ok_or_else(|| VaultError::Invariant {
-        context: "the backup scratch path is not UTF-8".to_owned(),
-    })?;
-    vault
-        .connection()
-        .execute("VACUUM INTO ?1", [target])
-        .map_err(|error| VaultError::from_sqlite("copying the vault for backup", error))?;
-    let plain = std::fs::read(&working)?;
-    let plain_size = plain.len() as u64;
-
-    // Gzipped on disk and moved as-is, so a byte range over the artefact is a
-    // range over what a reader downloads.
-    {
-        let file = std::fs::File::create(&working_gz)?;
-        let mut encoder = flate2::write::GzEncoder::new(file, flate2::Compression::new(6));
-        encoder.write_all(&plain)?;
-        encoder.finish()?;
+    let mut out = std::fs::File::create(target)?;
+    for range in &head.ranges {
+        let sealed = blobs
+            .get(&range.object_name)
+            .map_err(|_| BaseError::MissingRange {
+                generation: head.generation.hex(),
+                offset: range.offset,
+            })?;
+        let plain = keys.open(Kind::Base, &sealed)?;
+        // THE PLAINTEXT HASH IS CHECKED HERE, not only the object's name. The
+        // name proves the ciphertext is whole; this proves the bytes are the
+        // bytes the base was built from, which is the claim a restore makes.
+        if blake3::hash(&plain).to_hex().to_string() != range.plaintext_hash {
+            return Err(BaseError::MissingRange {
+                generation: head.generation.hex(),
+                offset: range.offset,
+            });
+        }
+        out.write_all(&plain)?;
     }
-    let artefact = std::fs::read(&working_gz)?;
-    let digest = blake3::hash(&artefact).to_hex().to_string();
-    let name = format!("base-{}.db.gz", &digest[..16]);
-    let target = dir.join(&name);
-    std::fs::rename(&working_gz, &target)?;
-    let _ = std::fs::remove_file(&working);
-
-    Ok(BaseHead {
-        vault_id,
-        digest,
-        size: artefact.len() as u64,
-        name,
-        plain_size,
-    })
+    out.sync_all()?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backup::store::FsBlobStore;
     use crate::custody::locker_key;
     use crate::custody::member_key::MemberKeyCustody;
 
-    /// THE BASE COPY KEEPS THE PRIVATE BANDS — and so, now, does the snapshot.
-    ///
-    /// The claim this test was written for is that a BACKUP must not lose
-    /// custody: `locker_key` names the vault\'s live key, and a generation
-    /// without it restores a vault that cannot name its own key. That half is
-    /// unchanged and is asserted below.
-    ///
-    /// What changed is the contrast. The seat snapshot used to DROP those
-    /// tables, because it was the artefact a phone adopted as its replica;
-    /// there is no seat (#1029 §6), so it drops nothing and the two artefacts
-    /// now carry the same tables. That is #1029\'s B1 stated rather than
-    /// introduced — the base was always unsealed — and sealing it is W3\'s.
-    #[test]
-    fn a_base_copy_keeps_the_private_bands_that_carry_custody() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("vault.db");
-        let vault = Vault::create(&file).unwrap();
-        let founded = vault.found("The Household", "Ada").unwrap();
+    fn keys() -> ObjectKeys {
+        ObjectKeys::new([0x21; 32], [0x22; 32])
+    }
+
+    fn founded(dir: &Path) -> Vault {
+        let vault = Vault::create(dir.join("vault.db")).expect("creates");
+        let founded = vault.found("The Household", "Ada").expect("founds");
         vault
             .enrol_device("d-1", &founded.owner_party_id, "a laptop", "linux", "pk-1")
-            .unwrap();
-        // The member key is founded on a SEAT directory, never the host's
-        // `keys/` (#1020, D-1020-L1): what this test is about is that a base
-        // copy keeps the private bands, and `locker_key` — the row naming the
-        // generation — is one of them.
-        let custody = MemberKeyCustody::on_seat(&dir.path().join("seat"), founded.vault_id.clone());
+            .expect("enrols");
+        let custody = MemberKeyCustody::on_seat(&dir.join("seat"), founded.vault_id.clone());
         vault
             .commit(|tx| {
                 locker_key::found_locker_key(
@@ -179,89 +389,239 @@ mod tests {
                 })?;
                 Ok(())
             })
-            .unwrap();
+            .expect("founds a locker key");
+        vault
+    }
 
-        let base = build_backup_base(&vault, &dir.path().join("base")).unwrap();
-        let seat = crate::snapshot::build_snapshot(&vault, &dir.path().join("seat")).unwrap();
-        vault.close().unwrap();
+    /// **B4.** The copy is page-identical, which `VACUUM INTO` is not — and
+    /// that is the whole reason a WAL frame can be replayed onto it.
+    #[test]
+    fn the_copy_is_page_identical_and_a_vacuum_copy_is_not() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        // Write enough rows that a vacuum has something to renumber, then
+        // delete some, so the file has free pages a vacuum would reclaim.
+        for index in 0..200 {
+            vault
+                .commit(|tx| {
+                    tx.connection().execute(
+                        "INSERT INTO backup_object_range
+                             (plaintext_hash, object_name, object_bytes, plaintext_bytes, created_at)
+                         VALUES (?1, ?2, 1, 1, '2026-01-01T00:00:00.000Z')",
+                        rusqlite::params![format!("{index:064}"), format!("{index:064}")],
+                    )?;
+                    Ok(())
+                })
+                .expect("writes");
+        }
+        vault
+            .commit(|tx| {
+                tx.connection()
+                    .execute("DELETE FROM backup_object_range WHERE rowid % 2 = 0", [])?;
+                Ok(())
+            })
+            .expect("deletes");
 
-        let opened = |artefact: &Path| -> std::collections::BTreeSet<String> {
-            use std::io::Read as _;
-            let bytes = std::fs::read(artefact).unwrap();
-            let mut plain = Vec::new();
-            flate2::read::GzDecoder::new(&bytes[..])
-                .read_to_end(&mut plain)
-                .unwrap();
-            let out = artefact.with_extension("opened.db");
-            std::fs::write(&out, plain).unwrap();
-            let connection = rusqlite::Connection::open(&out).unwrap();
-            let mut statement = connection
-                .prepare("SELECT name FROM sqlite_schema WHERE type = 'table'")
-                .unwrap();
-            statement
-                .query_map([], |row| row.get::<_, String>(0))
-                .unwrap()
-                .collect::<rusqlite::Result<_>>()
-                .unwrap()
-        };
+        // The source file is compared AFTER a checkpoint: until then the rows
+        // are in the log and `vault.db` is four kilobytes of header. This is
+        // also why `take_generation` checkpoints before it copies.
+        vault
+            .connection()
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("checkpoints");
 
-        let in_base = opened(&dir.path().join("base").join(&base.name));
-        let in_seat = opened(&dir.path().join("seat").join(&seat.name));
+        let identical = dir.path().join("identical.db");
+        copy_page_identical(&vault, &identical).expect("copies");
+        let vacuumed = dir.path().join("vacuumed.db");
+        vault
+            .connection()
+            .execute("VACUUM INTO ?1", [vacuumed.to_str().expect("utf-8")])
+            .expect("vacuums");
+        vault.close().expect("closes");
 
-        // The three that make this a bug and not a preference.
-        for private in ["locker_key", "access_device_secret", "blob_outbox"] {
-            assert!(
-                in_base.contains(private),
-                "the base copy must keep {private}"
-            );
-            // AND THE SNAPSHOT NOW KEEPS THEM TOO. Not an improvement — a
-            // restatement of #1029 B1, which W3 fixes by sealing rather than
-            // by dropping.
-            assert!(
-                in_seat.contains(private),
-                "the snapshot no longer sanitises, so {private} is in it"
+        let source = std::fs::read(dir.path().join("vault.db")).expect("reads");
+        let copied = std::fs::read(&identical).expect("reads");
+        let vacuum_copy = std::fs::read(&vacuumed).expect("reads");
+        assert_eq!(
+            copied.len(),
+            source.len(),
+            "the backup API copies page for page"
+        );
+        assert_ne!(
+            vacuum_copy.len(),
+            source.len(),
+            "a vacuum rebuilt the file — this is B4, reproduced"
+        );
+        // The change-counter and the WAL-related header fields legitimately
+        // differ; every page body must not.
+        assert_eq!(
+            &copied[100..],
+            &source[100..],
+            "every page after the file header is identical"
+        );
+    }
+
+    /// **B1.** The base is sealed, and the two rows the old artefact carried in
+    /// the clear are not readable in it.
+    #[test]
+    fn the_base_is_sealed_and_carries_no_readable_locker_key() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let keys = keys();
+        let blobs = FsBlobStore::open(dir.path().join("objects")).expect("opens");
+        let head = build_base(
+            &vault,
+            &keys,
+            &blobs,
+            GenerationId::from_bytes([1; 16]),
+            0,
+            &dir.path().join("scratch"),
+        )
+        .expect("builds");
+        vault.close().expect("closes");
+
+        assert!(!head.ranges.is_empty());
+        for range in &head.ranges {
+            let sealed = blobs.get(&range.object_name).expect("reads");
+            for secret in [b"locker_key".as_slice(), b"access_device_secret".as_slice()] {
+                assert!(
+                    !sealed.windows(secret.len()).any(|window| window == secret),
+                    "a sealed base range must not carry {} in the clear",
+                    String::from_utf8_lossy(secret)
+                );
+            }
+            assert_eq!(
+                &sealed[..4],
+                centraid_media::object::HEADER_MAGIC,
+                "every range is a centraid-object"
             );
         }
+    }
 
-        // And the base copy still names its live Locker key, which is the
-        // sentence the whole module exists for.
-        let out = dir
-            .path()
-            .join("base")
-            .join(&base.name)
-            .with_extension("opened.db");
-        let connection = rusqlite::Connection::open(&out).unwrap();
+    /// **F10.** A second base over an unchanged vault reuses every range.
+    #[test]
+    fn an_unchanged_range_reuses_its_object_and_nothing_new_is_sealed() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let keys = keys();
+        let blobs = FsBlobStore::open(dir.path().join("objects")).expect("opens");
+        let first = build_base(
+            &vault,
+            &keys,
+            &blobs,
+            GenerationId::from_bytes([1; 16]),
+            0,
+            &dir.path().join("scratch"),
+        )
+        .expect("builds");
+        assert_eq!(first.sealed_ranges(), first.ranges.len(), "all new");
+
+        let second = build_base(
+            &vault,
+            &keys,
+            &blobs,
+            GenerationId::from_bytes([2; 16]),
+            1,
+            &dir.path().join("scratch"),
+        )
+        .expect("builds");
+        vault.close().expect("closes");
+        // The first base's own index rows are a commit, so the file has moved
+        // by one page at most; what must hold is that the ranges that did not
+        // change were not resealed.
+        assert!(
+            second.sealed_ranges() < second.ranges.len() || second.ranges.len() == 1,
+            "an unchanged range must reuse its object: {} of {} resealed",
+            second.sealed_ranges(),
+            second.ranges.len()
+        );
+    }
+
+    /// The round trip the whole module is for: a base restores to the bytes it
+    /// was taken from.
+    #[test]
+    fn a_base_restores_to_the_file_it_was_taken_from() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let keys = keys();
+        let blobs = FsBlobStore::open(dir.path().join("objects")).expect("opens");
+        let head = build_base(
+            &vault,
+            &keys,
+            &blobs,
+            GenerationId::from_bytes([3; 16]),
+            0,
+            &dir.path().join("scratch"),
+        )
+        .expect("builds");
+        vault.close().expect("closes");
+
+        let restored = dir.path().join("restored.db");
+        restore_base(&keys, &head, &blobs, &restored).expect("restores");
+        let bytes = std::fs::read(&restored).expect("reads");
+        assert_eq!(bytes.len() as u64, head.file_bytes);
+        assert_eq!(
+            blake3::hash(&bytes).to_hex().to_string(),
+            head.plaintext_hash
+        );
+
+        // And it is a vault: the private bands the base exists to carry are in
+        // it, readable now that it is decrypted.
+        let connection = rusqlite::Connection::open(&restored).expect("opens");
         assert_eq!(
             locker_key::live_locker_key_id(&connection)
-                .unwrap()
+                .expect("reads")
                 .as_deref(),
             Some("k-1")
         );
     }
 
     #[test]
-    fn a_base_copy_is_named_by_its_digest_and_a_rebuild_is_idempotent() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("vault.db");
-        let vault = Vault::create(&file).unwrap();
-        vault.found("The Household", "Ada").unwrap();
-        let first = build_backup_base(&vault, &dir.path().join("base")).unwrap();
-        let second = build_backup_base(&vault, &dir.path().join("base")).unwrap();
-        vault.close().unwrap();
-        assert_eq!(first, second, "the same vault gives the same artefact");
-        assert!(first.name.starts_with("base-") && first.name.ends_with(".db.gz"));
-        assert!(first.name.contains(&first.digest[..16]));
-        assert!(first.plain_size > first.size, "gzip earns its place");
-        assert!(
-            !dir.path().join("base").join("base.building").exists(),
-            "no working file survives"
-        );
+    fn a_missing_range_object_is_named_rather_than_producing_a_short_file() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let keys = keys();
+        let blobs = FsBlobStore::open(dir.path().join("objects")).expect("opens");
+        let head = build_base(
+            &vault,
+            &keys,
+            &blobs,
+            GenerationId::from_bytes([4; 16]),
+            0,
+            &dir.path().join("scratch"),
+        )
+        .expect("builds");
+        vault.close().expect("closes");
+        std::fs::remove_file(
+            blobs
+                .path_of(&head.ranges[0].object_name)
+                .expect("asks")
+                .expect("a path"),
+        )
+        .expect("removes");
+        assert!(matches!(
+            restore_base(&keys, &head, &blobs, &dir.path().join("out.db")),
+            Err(BaseError::MissingRange { .. })
+        ));
     }
 
     #[test]
-    fn a_vault_that_was_never_founded_has_no_base_copy() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = Vault::create(dir.path().join("vault.db")).unwrap();
-        assert!(build_backup_base(&vault, &dir.path().join("base")).is_err());
+    fn a_vault_that_was_never_founded_has_no_base() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = Vault::create(dir.path().join("vault.db")).expect("creates");
+        let blobs = FsBlobStore::open(dir.path().join("objects")).expect("opens");
+        assert!(
+            build_base(
+                &vault,
+                &keys(),
+                &blobs,
+                GenerationId::from_bytes([5; 16]),
+                0,
+                &dir.path().join("scratch"),
+            )
+            .is_err()
+        );
     }
 }

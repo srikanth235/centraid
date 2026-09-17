@@ -153,23 +153,34 @@ impl FsBlobStore {
 }
 
 impl BlobStore for FsBlobStore {
+    /// **Durable, and under a name two writers cannot both choose** (#1029 B13).
+    ///
+    /// Reference A: "`FsBlobStore::put` never fsyncs, and its temp name is only
+    /// `{id}.{pid}.tmp`, so two threads can collide." Both halves were real and
+    /// both are fixed by [`crate::backup::spool::write_durably`], which is the
+    /// one place this crate writes a file it intends to survive a crash:
+    ///
+    /// - the bytes are fsynced, **and so is the directory** — a rename is not
+    ///   durable until its directory is synced, and without that there is a
+    ///   window in which the bytes exist and the name does not, which for a
+    ///   backup object is the same as the object never having been written;
+    /// - the temp name carries 16 random bytes as well as the process id, so
+    ///   two threads of one process cannot meet on it. Without that, one writer
+    ///   renames a file the other is still filling, and the store ends up
+    ///   holding a half-written object under the digest of a whole one — which
+    ///   `get` would then report as corruption in the *store* rather than as
+    ///   the race it was.
     fn put(&self, bytes: &[u8]) -> Result<String> {
         let id = digest(bytes);
         let target = self.file_of(&id)?;
         if target.exists() {
             return Ok(id);
         }
-        // Same directory, so the rename is on one filesystem and therefore
-        // atomic. A reader sees the whole blob or no blob.
-        let temp = self.root.join(format!("{id}.{}.tmp", std::process::id()));
-        fs::write(&temp, bytes).map_err(io_at(&temp))?;
-        match fs::rename(&temp, &target) {
-            Ok(()) => Ok(id),
-            Err(error) => {
-                let _ = fs::remove_file(&temp);
-                Err(io_at(&target)(error))
-            }
-        }
+        crate::backup::spool::write_durably(&target, bytes).map_err(|error| BlobError::Io {
+            path: target.clone(),
+            source: io::Error::other(error.to_string()),
+        })?;
+        Ok(id)
     }
 
     fn get(&self, id: &str) -> Result<Vec<u8>> {
@@ -295,6 +306,33 @@ mod tests {
             BTreeSet::from([digest(b"real")]),
             "only hex-digest names are blobs"
         );
+    }
+
+    /// **B13.** Two writers cannot meet on a temp name, and a put leaves
+    /// nothing behind.
+    #[test]
+    fn a_put_is_durable_and_its_temp_name_cannot_collide() {
+        use std::collections::BTreeSet;
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsBlobStore::open(dir.path()).unwrap();
+        let id = store.put(b"a sealed object").unwrap();
+        assert_eq!(store.get(&id).unwrap(), b"a sealed object");
+
+        let leftovers: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "no temp file survives a put");
+
+        // The name the defect named — `{id}.{pid}.tmp` — is one string for
+        // every writer in a process. This one is not.
+        let path = dir.path().join(&id);
+        let names: BTreeSet<String> = (0..128)
+            .map(|_| crate::backup::spool::unique_temp_name(&path))
+            .collect();
+        assert_eq!(names.len(), 128, "128 draws, 128 names");
     }
 
     #[test]

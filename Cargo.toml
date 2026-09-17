@@ -67,6 +67,13 @@ rusqlite = { version = "0.40", features = [
   "session",
   "hooks",
   "functions",
+  # THE ONLINE BACKUP API, and it is a durability requirement (#1029 B4).
+  # A backup base must be PAGE-IDENTICAL: `VACUUM INTO` rebuilds the file from
+  # its logical content and renumbers every page, which is why WAL frames could
+  # never be replayed onto the old base. `rusqlite::backup` copies page 1 to
+  # page 1 and page N to page N, which is what makes a page number in a segment
+  # mean anything (`crates/vault/src/backup/base.rs`).
+  "backup",
 ] }
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip` is NOT optional here (#1020, D-1020-D1-18). serde_json's

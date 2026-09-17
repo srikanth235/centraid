@@ -1,42 +1,17 @@
 // First-party MIT code (#1020, D-1020-R1). The hash and the KDF are BLAKE3
 // (#1025 S4, D-1025-S4-1/-3).
 //
-// SUPERSEDED IN PART BY `centraid-object/1` (#1029 §4).
+// WHAT THIS MODULE IS NOW (#1029 §4).
 //
-// `content_hash_hex`, `canonical_json`, `derive_bytes` and `derive_data_key`
-// are live and stay. The four seals below — `seal_wal_segment`,
-// `open_wal_segment`, `seal_snapshot_manifest`, `open_snapshot_manifest`, and
-// the `derive_nonce`/`seal_aes_gcm`/`open_aes_gcm` primitives they are built
-// from — are the WAL-segment seal and the manifest seal that `crate::object`
-// replaces, and they carry the defect it exists to close: `derive_nonce`
-// derives an AES-GCM nonce from an ADDRESS, which is safe only if one address
-// always maps to one set of bytes. It does not (Reference A, B9), so these
-// have nonce reuse under a single key and must not acquire a new caller.
-//
-// They are still here for one reason: their only callers are
-// `crates/vault/src/backup/{wal,manifest}.rs`, which the capture lane owns and
-// is rewriting onto `centraid-object/1`. Deleting them from under that lane
-// would be an edit to its files. They go when its rewrite lands; nothing else
-// in the workspace calls them (`grep -rn 'seal_wal_segment\|seal_snapshot_manifest'
-// crates/ --include=*.rs`).
+// Four hashes and a canonicalizer. The v0-derived seals that stood here — the
+// WAL-segment seal and the snapshot-manifest seal, with the AES-GCM primitives
+// under them — are deleted with their last callers: `centraid-object/1`
+// (`crate::object`) replaces both, and its nonces are random rather than
+// derived from an address, which is the defect they carried (#1029 B9,
+// `receipts/issue-1029-phone-is-the-vault.md`).
 
-use aes_gcm::{
-    Aes256Gcm, KeyInit,
-    aead::{Aead, Payload},
-};
-use anyhow::{Context, Result, bail};
-use base64::{Engine, engine::general_purpose::STANDARD};
-use serde_json::{Map, Value};
-
-#[derive(Debug, Clone)]
-pub struct WalAddress<'a> {
-    pub db: &'a str,
-    pub generation: &'a str,
-    pub group: u64,
-    pub start_offset: u64,
-    pub end_offset: u64,
-    pub tick_ms: u64,
-}
+use anyhow::{Result, bail};
+use serde_json::Value;
 
 /// The digest that names bytes on this plane.
 ///
@@ -113,167 +88,6 @@ pub fn derive_data_key(master: &[u8], vault_id: &str) -> Result<[u8; 32]> {
     derive_bytes(master, &format!("centraid-backup:data:{vault_id}"), 32)?
         .try_into()
         .map_err(|_| anyhow::anyhow!("data key length"))
-}
-
-pub fn derive_nonce(key: &[u8], info: &str) -> Result<[u8; 12]> {
-    derive_bytes(key, info, 12)?
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("nonce length"))
-}
-
-pub fn seal_aes_gcm(key: &[u8; 32], nonce: &[u8; 12], plain: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
-    let cipher = Aes256Gcm::new_from_slice(key).context("invalid AES key")?;
-    let body = cipher
-        .encrypt(nonce.into(), Payload { msg: plain, aad })
-        .map_err(|_| anyhow::anyhow!("AES-GCM seal failed"))?;
-    let mut sealed = Vec::with_capacity(12 + body.len());
-    sealed.extend_from_slice(nonce);
-    sealed.extend_from_slice(&body);
-    Ok(sealed)
-}
-
-pub fn open_aes_gcm(key: &[u8; 32], sealed: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
-    if sealed.len() < 28 {
-        bail!("encrypted blob truncated");
-    }
-    let cipher = Aes256Gcm::new_from_slice(key).context("invalid AES key")?;
-    cipher
-        .decrypt(
-            sealed[..12].try_into().context("AES-GCM nonce length")?,
-            Payload {
-                msg: &sealed[12..],
-                aad,
-            },
-        )
-        .map_err(|_| anyhow::anyhow!("AES-GCM authentication failed"))
-}
-
-pub fn snapshot_public_without_sealed(value: &Value) -> Result<Value> {
-    let object = value.as_object().context("manifest must be an object")?;
-    if object.get("format").and_then(Value::as_str) != Some("centraid-snapshot/2") {
-        bail!("unsupported snapshot format");
-    }
-    let mut public = Map::new();
-    for (key, value) in object {
-        if key != "sealedPayload" {
-            public.insert(key.clone(), value.clone());
-        }
-    }
-    Ok(Value::Object(public))
-}
-
-fn wal_nonce_info(address: &WalAddress<'_>) -> String {
-    format!(
-        "centraid-backup:wal-nonce:{}:{}:{}:{}:{}:{}",
-        address.db,
-        address.generation,
-        address.group,
-        address.start_offset,
-        address.end_offset,
-        address.tick_ms
-    )
-}
-
-fn wal_aad(vault_id: &str, address: &WalAddress<'_>) -> String {
-    format!(
-        "centraid-wal/1:{vault_id}:{}:{}:{}:{}:{}:{}",
-        address.db,
-        address.generation,
-        address.group,
-        address.start_offset,
-        address.end_offset,
-        address.tick_ms
-    )
-}
-
-pub fn seal_wal_segment(
-    data_key: &[u8; 32],
-    vault_id: &str,
-    address: &WalAddress<'_>,
-    plain: &[u8],
-) -> Result<Vec<u8>> {
-    if address.db != "vault" && address.db != "journal" {
-        bail!("invalid WAL database name");
-    }
-    if address.end_offset.saturating_sub(address.start_offset) != plain.len() as u64 {
-        bail!("WAL segment length disagrees with address");
-    }
-    let nonce = derive_nonce(data_key, &wal_nonce_info(address))?;
-    seal_aes_gcm(
-        data_key,
-        &nonce,
-        plain,
-        wal_aad(vault_id, address).as_bytes(),
-    )
-}
-
-pub fn open_wal_segment(
-    data_key: &[u8; 32],
-    vault_id: &str,
-    address: &WalAddress<'_>,
-    sealed: &[u8],
-) -> Result<Vec<u8>> {
-    let plain = open_aes_gcm(data_key, sealed, wal_aad(vault_id, address).as_bytes())?;
-    if address.end_offset.saturating_sub(address.start_offset) != plain.len() as u64 {
-        bail!("WAL segment length disagrees with address");
-    }
-    Ok(plain)
-}
-
-pub fn seal_snapshot_manifest(
-    master_key: &[u8; 32],
-    vault_id: &str,
-    public_envelope: &Value,
-    payload: &Value,
-) -> Result<(Vec<u8>, String)> {
-    if public_envelope.get("format").and_then(Value::as_str) != Some("centraid-snapshot/2") {
-        bail!("unsupported snapshot format");
-    }
-    let public_object = public_envelope
-        .as_object()
-        .context("snapshot public envelope must be an object")?;
-    let data_key = derive_data_key(master_key, vault_id)?;
-    let payload_bytes = canonical_json(payload).into_bytes();
-    let nonce_identity = content_hash_hex(
-        canonical_json(&serde_json::json!({
-            "publicEnvelope": public_envelope,
-            "payloadHash": content_hash_hex(&payload_bytes),
-        }))
-        .as_bytes(),
-    );
-    let nonce = derive_nonce(
-        &data_key,
-        &format!("centraid-backup:manifest-nonce:{nonce_identity}"),
-    )?;
-    let aad = canonical_json(public_envelope);
-    let sealed = seal_aes_gcm(&data_key, &nonce, &payload_bytes, aad.as_bytes())?;
-    let mut stored = public_object.clone();
-    stored.insert(
-        "sealedPayload".into(),
-        Value::String(STANDARD.encode(sealed)),
-    );
-    let bytes = canonical_json(&Value::Object(stored)).into_bytes();
-    let hash = content_hash_hex(&bytes);
-    Ok((bytes, hash))
-}
-
-pub fn open_snapshot_manifest(
-    master_key: &[u8; 32],
-    vault_id: &str,
-    stored_bytes: &[u8],
-) -> Result<Value> {
-    let stored: Value = serde_json::from_slice(stored_bytes).context("manifest is not JSON")?;
-    let public = snapshot_public_without_sealed(&stored)?;
-    let sealed = stored
-        .get("sealedPayload")
-        .and_then(Value::as_str)
-        .context("manifest has no sealedPayload")?;
-    let sealed = STANDARD
-        .decode(sealed)
-        .context("manifest payload is not base64")?;
-    let data_key = derive_data_key(master_key, vault_id)?;
-    let plain = open_aes_gcm(&data_key, &sealed, canonical_json(&public).as_bytes())?;
-    serde_json::from_slice(&plain).context("manifest payload is not JSON")
 }
 
 #[cfg(test)]

@@ -482,55 +482,219 @@ fn content_references(connection: &rusqlite::Connection, limit: usize) -> Result
 // and it is a fence between two PHONES rather than between a gateway and its
 // replicas.
 
-/// The lock a live gateway holds on a data directory, with its pid.
+/// **The lock on a data directory — an OS file lock, not a pid** (#1029 B10).
 ///
-/// `recover` refuses a directory a live gateway is using, because restoring
-/// under a running gateway means two processes writing one file — which SQLite
-/// will let them do, and which produces a vault neither of them agrees with.
+/// ## The two halves of B10
+///
+/// Reference A: "`DataDirLock` is never taken by the gateway. `process_is_live`
+/// reads `/proc`, which doesn't exist on macOS/iOS, so any lock is taken over."
+///
+/// The second half is the one that decides the design. A lock whose liveness
+/// test is "is there a `/proc/<pid>` directory" answers **"no"** on every Apple
+/// platform, which is the platform this product now runs on (§1: the phone is
+/// the vault). Every lock was therefore stale, and the refusal this type exists
+/// for could not fire once. Probing a pid is also wrong on its own terms: pids
+/// are reused, so a stale lock whose number has been recycled reads as live.
+///
+/// So there is no liveness test. The lock is an **advisory exclusive lock the
+/// operating system holds on an open file**: it is held for exactly as long as
+/// the holder's file is open, and the kernel releases it when the process exits
+/// — crash, kill or clean close alike. There is no stale state to age out, no
+/// pid to probe, and no `/proc`. It works the same on Linux, macOS and iOS.
+///
+/// The first half — "never taken" — is the caller's, and [`Self::acquire`] is
+/// what a caller now has to hold: the returned guard owns the open file, so a
+/// caller cannot take the lock and drop it by accident without also dropping
+/// the guard.
 #[derive(Debug)]
 pub struct DataDirLock {
     path: PathBuf,
+    /// The open file **is** the lock. Dropping it releases it, which is why it
+    /// is held here and not closed after `acquire`.
+    handle: std::fs::File,
 }
 
 impl DataDirLock {
     #[must_use]
     pub fn file_in(dir: &Path) -> PathBuf {
-        dir.join("gateway.lock")
+        dir.join("vault.lock")
     }
 
-    /// Take the lock, or report the pid that holds it.
+    /// Take the lock, or report that something else holds it.
+    ///
+    /// # Errors
+    /// [`RestoreError::Other`] when the directory cannot be made, or when the
+    /// lock is held.
     pub fn acquire(dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(dir)
             .map_err(|error| RestoreError::Other(format!("creating {}: {error}", dir.display())))?;
         let path = Self::file_in(dir);
-        if let Ok(existing) = std::fs::read_to_string(&path) {
-            let pid = existing.trim();
-            // A lock file whose process is gone is a crash, not a live
-            // gateway: it is taken over rather than becoming a permanent
-            // refusal the owner has to know to delete.
-            if pid.parse::<u32>().is_ok_and(process_is_live) {
-                return Err(RestoreError::Other(format!(
-                    "a live gateway (pid {pid}) holds {} — stop it before restoring into this data directory",
-                    dir.display()
-                )));
-            }
-        }
-        std::fs::write(&path, std::process::id().to_string())
-            .map_err(|error| RestoreError::Other(format!("writing {}: {error}", path.display())))?;
-        Ok(Self { path })
+        let handle = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .map_err(|error| RestoreError::Other(format!("opening {}: {error}", path.display())))?;
+        handle.try_lock().map_err(|_| {
+            RestoreError::Other(format!(
+                "another process holds {} — close it before restoring into this data directory",
+                dir.display()
+            ))
+        })?;
+        Ok(Self { path, handle })
+    }
+
+    /// The file the lock is held on.
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 
 impl Drop for DataDirLock {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        // The kernel releases the lock when the handle closes. The file is left
+        // in place deliberately: removing it would let a second process create
+        // and lock a *new* file with the same name while a third still holds
+        // the old inode, which is the classic lock-file race.
+        let _ = self.handle.unlock();
     }
 }
 
-fn process_is_live(pid: u32) -> bool {
-    // No signals: `/proc` is the answer on the platform the gateway runs on,
-    // and a `kill(0)` would need a `libc` dependency for one question.
-    Path::new(&format!("/proc/{pid}")).exists()
+/// **Restore a generation: the base, then every segment, applied** (#1029 B3).
+///
+/// ## B3, which is the defect this whole lane turns on
+///
+/// Reference A: "Restore **never applies** WAL segments. It decrypts each one,
+/// discards it, and reports 'replayed'." `recover.rs:258-266` opened every
+/// segment into a local and dropped it at the end of the loop. A member whose
+/// phone died between two bases got the base and was told the tail had been
+/// replayed.
+///
+/// What makes the fix possible is the other two: the base is **page-identical**
+/// (B4), so a page number means something, and a segment is a set of **pages**
+/// cut on a **commit boundary** (B7), so applying a prefix of them always
+/// lands on a state the database was really in.
+///
+/// ## What "an acknowledged segment prefix" means
+///
+/// Segments are applied in txid order and a **gap is refused**
+/// ([`super::segment::apply_all`]). Stopping early is fine and is what `--at`
+/// does; skipping is not, because pages from txid 9 laid onto a file that
+/// stopped at txid 4 is a file that was never a state of the database.
+///
+/// Returns the txid the restored file stands at.
+///
+/// # Errors
+/// [`RestoreError::Other`] wrapping whatever the base, a segment or the store
+/// refused.
+pub fn restore_generation(
+    keys: &crate::backup::ObjectKeys,
+    manifest: &crate::backup::GenerationManifest,
+    blobs: &dyn BlobStore,
+    target: &Path,
+    at_txid: Option<u64>,
+) -> Result<RestoredGeneration> {
+    use crate::backup::base::{BaseHead, restore_base};
+    use crate::backup::segment::{PageSegment, apply_all};
+
+    let other = |error: String| RestoreError::Other(error);
+    let head = BaseHead {
+        vault_id: manifest.vault_id.clone(),
+        // A restore has no local vault yet; the directory it lands in is the
+        // caller's choice and `target` already names it.
+        file_vault_id: String::new(),
+        generation: manifest.generation,
+        txid: manifest.base_txid,
+        page_size: u32::try_from(crate::file::PAGE_SIZE).unwrap_or(4096),
+        db_size_pages: 0,
+        file_bytes: manifest.base_file_bytes,
+        plaintext_hash: manifest.base_plaintext_hash.clone(),
+        ranges: manifest.base.clone(),
+    };
+    restore_base(keys, &head, blobs, target).map_err(|error| other(error.to_string()))?;
+
+    // THE SEGMENTS ARE OPENED AND APPLIED, in txid order, stopping where the
+    // caller asked. `--at` is a stop, never a skip.
+    let mut chosen = Vec::new();
+    for reference in &manifest.segments {
+        if at_txid.is_some_and(|at| reference.first_txid > at) {
+            break;
+        }
+        let sealed = blobs
+            .get(&reference.object)
+            .map_err(|error| other(error.to_string()))?;
+        let plain = keys
+            .open(centraid_media::object::Kind::Segment, &sealed)
+            .map_err(|error| other(error.to_string()))?;
+        let segment = PageSegment::decode(&plain).map_err(|error| other(error.to_string()))?;
+        if at_txid.is_some_and(|at| segment.last_txid > at) {
+            // A segment that straddles the cut is left whole on the floor: a
+            // half-applied segment is a half-applied transaction range.
+            break;
+        }
+        chosen.push(segment);
+    }
+    let applied = chosen.len();
+    let txid = apply_all(target, &chosen, manifest.base_txid + 1)
+        .map_err(|error| other(error.to_string()))?;
+
+    let census = chosen
+        .last()
+        .map(|segment| segment.census.clone())
+        .unwrap_or_else(|| manifest.base_census.clone());
+    Ok(RestoredGeneration {
+        txid,
+        segments_applied: applied,
+        segments_left: manifest.segments.len() - applied,
+        census,
+    })
+}
+
+/// What a restore landed on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestoredGeneration {
+    /// The txid the file stands at.
+    pub txid: u64,
+    pub segments_applied: usize,
+    /// Segments the manifest names that `--at` left on the floor. Non-zero is
+    /// the "truncated" line a report prints, so a member is never quietly
+    /// handed less than they have.
+    pub segments_left: usize,
+    /// The census the generation says the file should have at `txid`.
+    pub census: Vec<(String, i64)>,
+}
+
+impl RestoredGeneration {
+    /// Whether the restored file's own rows are the rows the generation
+    /// promised at this txid (§2).
+    ///
+    /// This is the check a structural one cannot make: `integrity_check` speaks
+    /// about pages, and a perfect page tree over no rows is a clean report and
+    /// a total loss.
+    ///
+    /// # Errors
+    /// [`RestoreError`] when the restored file will not open.
+    pub fn census_matches(&self, file: &Path) -> Result<std::result::Result<(), String>> {
+        let connection = open_restored(file)?;
+        for (table, expected) in &self.census {
+            let sql = format!(
+                "SELECT count(*) FROM {}",
+                crate::log::identifiers::quoted(table)
+            );
+            let Ok(actual) = connection.query_row(&sql, [], |row| row.get::<_, i64>(0)) else {
+                return Ok(Err(format!("the restored vault has no table {table}")));
+            };
+            if actual != *expected {
+                return Ok(Err(format!(
+                    "{table}: the generation says {expected} rows at txid {} and the restored vault has {actual}",
+                    self.txid
+                )));
+            }
+        }
+        Ok(Ok(()))
+    }
 }
 
 #[cfg(test)]
@@ -712,24 +876,38 @@ mod tests {
         assert_eq!(DEFAULT_DRILL_CAS_SAMPLE, 64);
     }
 
+    /// **B10.** A held directory is refused, and the refusal does not depend on
+    /// reading `/proc` — which does not exist on the platform this product runs
+    /// on, and was therefore answering "not live" to every question.
     #[test]
-    fn a_live_gateways_data_directory_is_refused_and_a_stale_lock_is_taken_over() {
+    fn a_held_data_directory_is_refused_and_the_refusal_needs_no_proc() {
         let dir = tempfile::tempdir().unwrap();
         let held = DataDirLock::acquire(dir.path()).unwrap();
-        // This process IS live, so a second acquire must refuse and name it.
         let error = DataDirLock::acquire(dir.path()).unwrap_err();
-        assert!(error.to_string().contains("a live gateway"), "{error}");
-        assert!(error.to_string().contains(&std::process::id().to_string()));
-        drop(held);
         assert!(
-            !DataDirLock::file_in(dir.path()).exists(),
-            "the lock is released"
+            error.to_string().contains("another process holds"),
+            "{error}"
+        );
+        assert!(
+            !error.to_string().contains("/proc"),
+            "the refusal must not depend on /proc: {error}"
         );
 
-        // A lock left by a crashed gateway is taken over, not a permanent
-        // refusal the owner has to know to delete by hand.
-        std::fs::write(DataDirLock::file_in(dir.path()), "4294967294").unwrap();
-        assert!(DataDirLock::acquire(dir.path()).is_ok());
+        // The lock is the OPEN FILE, not the file's contents. Nothing here reads
+        // a pid, so a recycled pid cannot make a live lock look stale nor a
+        // stale one look live — and a platform with no `/proc` is not a
+        // platform where every lock is taken over.
+        let recorded = std::fs::read_to_string(DataDirLock::file_in(dir.path())).unwrap();
+        assert!(
+            recorded.is_empty(),
+            "the lock file carries no pid to be wrong about: {recorded:?}"
+        );
+
+        // Released when the holder goes — by drop here, and by the kernel when
+        // a process dies, which is the case a pid file could never get right.
+        drop(held);
+        let after = DataDirLock::acquire(dir.path()).unwrap();
+        assert_eq!(after.path(), DataDirLock::file_in(dir.path()));
     }
 
     #[test]

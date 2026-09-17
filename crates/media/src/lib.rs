@@ -31,13 +31,10 @@
 //! so there is no artefact any member holds that has to keep opening. [`object`]'s own vectors live in `contracts/crypto/object-vectors.json`
 //! and are regression vectors, not a released format.
 //!
-//! ## WHAT IS STILL HERE AND SHOULD NOT BE
-//!
-//! [`format`]'s `seal_wal_segment` and `seal_snapshot_manifest` are the other
-//! two seals `centraid-object/1` replaces. They still stand because their only
-//! callers are `crates/vault/src/backup/{wal,manifest}.rs`, which W3's capture
-//! lane owns and is rewriting onto [`object`]; deleting them here would be an
-//! edit to that lane's files. Their module header says so at the call site.
+//! The other two seals it replaced — the WAL-segment seal and the
+//! snapshot-manifest seal — are deleted with their last callers, which were
+//! `crates/vault/src/backup`'s. [`format`] keeps only the hashes and the
+//! canonicalizer.
 
 pub mod duplicates;
 pub mod format;

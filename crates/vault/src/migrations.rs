@@ -60,6 +60,14 @@ pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_b
 /// histories a member keeps.
 pub const REVISIONS_SQL: &str = include_str!("../../../contracts/migrations/002_revisions.sql");
 
+/// Rung three: the in-vault backup index (#1029 §2, §4).
+///
+/// §4's "**the vault is the index**": the range-dedup index and one
+/// generation's base composition are rows here rather than an index file that
+/// would have to be loaded whole.
+pub const BACKUP_INDEX_SQL: &str =
+    include_str!("../../../contracts/migrations/003_backup_index.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -75,6 +83,11 @@ pub const LADDER: &[Migration] = &[
         version: 2,
         name: "revisions",
         sql: REVISIONS_SQL,
+    },
+    Migration {
+        version: 3,
+        name: "backup-index",
+        sql: BACKUP_INDEX_SQL,
     },
 ];
 

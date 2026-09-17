@@ -688,26 +688,35 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 // Steps
 // ---------------------------------------------------------------------------
 
-/// THE RESTORE DRILL (#1020, wave 2 lane R, D-1020-R7).
+/// THE RESTORE DRILL (#1020, wave 2 lane R, D-1020-R7; rewritten for #1029 §2).
 ///
 /// The acceptance box is *"the restore drill runs in CI"*, and this is the step
-/// that makes it true. It runs `crates/centraid`'s `restore_drill` integration
+/// that makes it true. It runs `centraid-vault`'s `restore_drill` integration
 /// test, which:
 ///
-/// - founds a vault, enrols a seat and writes commits;
-/// - takes a generation (a complete base copy + the sealed WAL tail + a
-///   manifest) and a password-wrapped recovery kit;
-/// - **deletes the live data directory, keys and all**;
-/// - runs the real `centraid recover` binary into a fresh directory;
-/// - proves `restore_check` is clean and every row is back, table by table;
-/// - proves the old seat is told `RebootstrapRequired{epoch-mismatch}`,
-///   re-pairs, re-bootstraps and converges.
+/// - founds a vault and writes commits;
+/// - captures, so the spool holds every committed page;
+/// - takes a generation — a page-identical sealed base, the segments after it,
+///   and a manifest chained by its own object name;
+/// - writes **more** commits and captures them, so there is a tail the first
+///   base does not cover;
+/// - **deletes the live vault, its log and its spool**;
+/// - restores: the base, then every segment, applied (#1029 B3);
+/// - proves `restore_check` is clean, proves the census matches the census the
+///   generation carried at that txid, and proves the restored file is
+///   **byte-identical** to the one that was lost.
+///
+/// **It moved crates with the code it is about** (#1029 §5). It used to run
+/// `crates/centraid`'s test against the real `centraid recover` binary and a
+/// password-wrapped recovery kit; the kit file is deleted (the member's 24
+/// words replace it) and `recover` is deleted as a gateway command, so there is
+/// no binary left to drive. What the drill proves is unchanged.
 ///
 /// It is a `cargo test` invocation rather than logic in this file on purpose:
-/// the drill needs the vault crate and the binary, and this runner is on the
-/// edit-run loop with three dependencies. `--nocapture` is passed so the
-/// drill's own wall-clock line reaches the artifact log, and the step records
-/// its own elapsed time beside it.
+/// the drill needs the vault crate, and this runner is on the edit-run loop
+/// with three dependencies. `--nocapture` is passed so the drill's own
+/// wall-clock line reaches the artifact log, and the step records its own
+/// elapsed time beside it.
 ///
 /// **It must FAIL, never skip.** A release profile that could pass without the
 /// drill would report "release is green" for a release nobody proved
@@ -721,7 +730,7 @@ fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
         &[
             "test",
             "-p",
-            "centraid",
+            "centraid-vault",
             "--test",
             "restore_drill",
             "--",
@@ -748,7 +757,7 @@ fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
         ),
     )?;
     Ok(Outcome::Ok(format!(
-        "restore, re-pair and converge in {seconds:.1}s (release budget is unbounded by ruling) — evidence: {}",
+        "lose a vault and restore it byte-exact in {seconds:.1}s (release budget is unbounded by ruling) — evidence: {}",
         display_relative(&ctx.root, &dir)
     )))
 }

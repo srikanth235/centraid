@@ -71,11 +71,6 @@ enum Command {
         #[command(subcommand)]
         command: GatewayCommand,
     },
-    /// Backup.
-    Backup {
-        #[command(subcommand)]
-        command: BackupCommand,
-    },
     /// Check a vault and report. Read-only and lock-free, so it is safe against
     /// a serving gateway — which is why the container health check runs it.
     Doctor {
@@ -84,42 +79,6 @@ enum Command {
         /// Print the JSON report even when the vault is clean.
         #[arg(long)]
         json: bool,
-    },
-    /// Restore from a recovery kit. The kit carries the keys; the blob store
-    /// carries the bytes.
-    Recover {
-        #[arg(long)]
-        kit: Option<PathBuf>,
-        /// The kit's password, read from a file. NEVER a flag: a flag is in the
-        /// shell history and in every `ps` listing on the host.
-        #[arg(long)]
-        password_file: Option<PathBuf>,
-        #[arg(long)]
-        data_dir: Option<PathBuf>,
-        /// Point-in-time: replay WAL segments up to this instant and no
-        /// further. `YYYY-MM-DDTHH:MM:SS[.mmm]Z`; anything else is exit 2.
-        #[arg(long)]
-        at: Option<String>,
-        /// Materialise every content blob now instead of on demand.
-        #[arg(long)]
-        full: bool,
-        /// Which vault, when the kit carries more than one.
-        #[arg(long)]
-        vault: Option<String>,
-        /// Yes, restore — after reading what it says it is about to do.
-        #[arg(long)]
-        yes: bool,
-    },
-    /// Export a portable copy: the vault as a snapshot generation, plus a
-    /// password-wrapped recovery kit.
-    Export {
-        #[arg(long)]
-        data_dir: Option<PathBuf>,
-        #[arg(long)]
-        out: Option<PathBuf>,
-        /// The passphrase to wrap the bundle's recovery kit with, from a file.
-        #[arg(long)]
-        password_file: Option<PathBuf>,
     },
 }
 
@@ -143,18 +102,6 @@ enum GatewayCommand {
         /// The `%i` in `centraid-gateway@%i`, for `--system`.
         #[arg(long, default_value = "default")]
         instance: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum BackupCommand {
-    /// Take a generation now: the snapshot, the sealed WAL tail, the manifest.
-    Now {
-        #[arg(long)]
-        data_dir: Option<PathBuf>,
-        /// Take one even when the policy says it is not due.
-        #[arg(long)]
-        force: bool,
     },
 }
 
@@ -221,40 +168,9 @@ fn main() -> ExitCode {
                     instance,
                 }),
             },
-            Command::Backup { command } => match command {
-                BackupCommand::Now { data_dir, force } => {
-                    cmd::backup::now(cmd::backup::BackupNowArgs { data_dir, force })
-                }
-            },
             Command::Doctor { data_dir, json } => {
                 cmd::doctor::run(cmd::doctor::DoctorArgs { data_dir, json })
             }
-            Command::Recover {
-                kit,
-                password_file,
-                data_dir,
-                at,
-                full,
-                vault,
-                yes,
-            } => cmd::recover::run(cmd::recover::RecoverArgs {
-                kit,
-                password_file,
-                data_dir,
-                at,
-                full,
-                vault,
-                yes,
-            }),
-            Command::Export {
-                data_dir,
-                out,
-                password_file,
-            } => cmd::export::run(cmd::export::ExportArgs {
-                data_dir,
-                out,
-                password_file,
-            }),
         }
     });
     ExitCode::from(code)
