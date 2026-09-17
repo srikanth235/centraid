@@ -65,8 +65,9 @@ pub use seal::{
 ///
 /// One helper, used by all three layers, so there is exactly one place to look
 /// when asking "where does a nonce come from". Every nonce in this module is
-/// random per value except CBSF's and the backup plane's, which are
-/// deliberately **derived** — see `crates/media` and [`crate::backup`].
+/// random per value. The backup plane's are still **derived** — see
+/// [`crate::backup`] and `centraid_media::format`, whose header names that as
+/// the defect `centraid-object/1` closes (#1029 §4, Reference A B9).
 pub(crate) fn random_bytes<const N: usize>() -> [u8; N] {
     use rand::RngCore as _;
     let mut bytes = [0_u8; N];

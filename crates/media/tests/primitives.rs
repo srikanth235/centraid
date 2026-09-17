@@ -19,8 +19,8 @@
 //! Every `context` and every keyed input below is a real one: the backup
 //! keyring's data and dedup keys, the member-key envelope's context with a vault
 //! id folded into it (BLAKE3 has no salt argument — D-1025-S4-3), a WAL nonce,
-//! and the two-stage CBSF frame MAC. If a site's context string changes, its
-//! vector moves and this test says which.
+//! and `centraid-object/1`'s key-wrap context. If a site's context string
+//! changes, its vector moves and this test says which.
 
 use std::path::{Path, PathBuf};
 
@@ -95,16 +95,14 @@ fn generated() -> Value {
     })
     .collect();
 
-    // CBSF's synthetic nonce: a keyed MAC over the AAD and the body's own keyed
-    // tag. The two-stage shape is what lets a streaming sealer derive a nonce
-    // without holding the plaintext twice, so the vector pins the SHAPE and not
-    // only the primitive.
-    let body_tag = blake3::keyed_hash(&KEY, b"a CBSF frame body");
-    let mut nonce = blake3::Hasher::new_keyed(&KEY);
-    nonce.update(b"cbsf-nonce\0");
-    nonce.update(b"blob:deadbeef:v2:f0/1");
-    nonce.update(b"\0");
-    nonce.update(body_tag.as_bytes());
+    // `centraid-object/1`'s key-wrap key, derived from the vault root so the
+    // root is never itself an AEAD key (#1029 §4). It REPLACED the frame-nonce
+    // vector that stood here, whose site went with the frame format it pinned:
+    // that format derived its nonce from the object's ADDRESS, which is exactly
+    // the defect B9 names, and a vector with no site is decoration. The context string below is the domain
+    // separator — if it moves, every object ever sealed stops opening, and this
+    // is what says so.
+    let object_wrap_key = blake3::derive_key("centraid-object/1 vault-root key wrap", &KEY);
 
     json!({
         "schema": "centraid-blake3-vectors/1",
@@ -112,9 +110,9 @@ fn generated() -> Value {
         "keyHex": hex::encode(KEY),
         "deriveKey": derived,
         "keyedHash": keyed,
-        "cbsfFrameNonce": {
-            "bodyTagHex": hex::encode(body_tag.as_bytes()),
-            "nonceHex": hex::encode(&nonce.finalize().as_bytes()[..12]),
+        "objectKeyWrapKey": {
+            "context": "centraid-object/1 vault-root key wrap",
+            "keyHex": hex::encode(object_wrap_key),
         },
     })
 }
