@@ -725,3 +725,114 @@ Writing them found two real bugs, both fixed in `777352ad`:
 | 9 `bun run check:push:static` | **4/4 green** (`bun install` first; the worktree had no `node_modules`) |
 | 10 `node scripts/check-ledgers.mjs --base 44e35f22` | **ok — 19 sections across 5 ledgers hold**. It refused the bare removal first, correctly: see `6d9f8bb1`, where the retired floor is carried onto its successor at a higher number rather than waived |
 | 11 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
+
+## W2 — the mobile half (lane M)
+
+Branch `claude/1029-w2m-mobile`, base `2a0a1f0a`. **Nothing was deleted. The lane is
+blocked on the same wall W2 hit, re-confirmed with fresh evidence, and this section is
+the hand-up.** One commit, this section.
+
+The lane was dispatched on the premise that Maven Central had recovered — a re-probe of
+`kotlin-stdlib-2.1.0.pom` answered `200`. **That probe was not representative.** Maven
+Central is rate-limiting this container's egress *intermittently and per-request*, and a
+single serial `curl` is the one shape of request that gets through.
+
+### The blocker, measured
+
+`./gradlew :shared:jvmTest :core:jvmTest` was run three times from
+`/home/user/centraid-w2m/mobile`. All three failed in configuration, before a single
+line of Kotlin was compiled:
+
+| Run | Shape | Result |
+| --- | --- | --- |
+| 1 | default | `BUILD FAILED` — `Could not resolve com.squareup.wire:wire-kotlin-generator:7.0.1`, `429 Too Many Requests`, "23 more failures with identical causes" |
+| 2 | default, retry (the brief's one permitted retry) | `BUILD FAILED` — same, on `wire-swift-generator` and `com.charleskorn.kaml:kaml:0.104.0`, "16 more failures" |
+| 3 | `--max-workers=1 --no-parallel` | `BUILD FAILED` — same. Serializing the resolve does not clear it |
+
+The failing requests are all `Could not HEAD 'https://repo.maven.apache.org/...'`.
+Probing that exact distinction is what named the cause:
+
+```
+HEAD=200 GET=200  .../com/charleskorn/kaml/kaml/0.104.0/kaml-0.104.0.pom
+HEAD=429 GET=200  .../com/squareup/wire/wire-swift-generator/7.0.1/wire-swift-generator-7.0.1.pom
+```
+
+**The same URL answers `429` to `HEAD` and `200` to `GET` in the same second.** This is a
+flapping upstream limiter, not an outage and not a proxy fault —
+`$HTTPS_PROXY/__agentproxy/status` reports `enabled: true`,
+`bundleCoversEveryHost: true`, and one stale `plugins.gradle.org` relay drop already
+named in the brief. Gradle's resolver does not retry a `429`, and it needs ~24
+consecutive successes to configure the root project.
+
+Gradle caches what does resolve, so repeated runs converge in principle. They do not
+converge in practice here: after three runs `/root/.gradle/caches/modules-2` is **2.3 MB**
+and holds **no wire artefact at all** (`find … -path '*wire*' -name '*.jar'` → empty).
+The tree needs the whole Kotlin 2.4.0 and Wire 7.0.1 toolchains.
+
+**So the compiler never ran, and the lane stopped.** Deleting `Replicas`, `GatewayLink`,
+`CoreRole` and the sync surface reaches ten files that reference those symbols by name
+(`grep -rln 'SEAT_REPLICATED\|SeatKind\|Replicas\|GatewayLink' mobile/` → `Replicas.kt`,
+`Shelf.kt`, `HomeSession.kt`, `HomeBridge.kt`, `Enrolments.kt`, `ReplicasSpec.kt`,
+`ShellModel.swift`, `MainActivity.kt`, `README.md`, `CentraidCore.kt`) — W2's estimate of
+eleven, confirmed. `Shelf` alone takes its entire file layer from `Replicas`
+(`list`, `pathOf`, `vaultIdOf`, `pairingPath`, `settle`), so the deletion is a rewrite of
+`Shelf`, not an import removal. **A blind refactor of ten interdependent Kotlin and Swift
+files with no compiler is how a tree ends up broken with nobody able to tell**, which is
+the judgement W2 made and this lane re-makes on the same evidence.
+
+The worktree is unmodified apart from this section: `git status --short` shows only the
+untracked brief.
+
+### Two defects in the brief, which the next attempt must resolve before it starts
+
+1. **W2M-3 cannot be obeyed as written.** It orders `ChangeEvent.commit_seq` removed
+   "from the proto **and** from its Kotlin readers, in one commit". That field lives in
+   `crates/api-proto/proto/centraid/core/v1/change.proto:28` — and the brief's own header
+   says **"never touch `crates/api-proto`"**, with a sibling lane live in it. The two
+   instructions are not reconcilable by a worker. Worse, the field is *produced* on the
+   Rust side by `crates/core/src/events.rs` (`:312`, `:349`, `:398`, `:446`) and
+   `crates/apps/kit/src/changes.rs` (its own `ChangeEvent.commit_seq`, `:33`), and asserted
+   by `crates/api-proto/tests/roundtrip.rs:122` and `crates/core-ffi/tests/{spike,contract}.rs`.
+   Removing wire field 3 is a multi-crate Rust change inside the area this lane was told to
+   stay out of. **Owner question: does W2M-3 belong to the mobile lane at all, or to
+   whichever lane owns `crates/api-proto`?** Recommend the latter, with the Kotlin readers
+   handed to it as a dependency, since the atomicity the slice demands is only achievable
+   from inside that crate.
+2. **Exit item 4 is unsatisfiable and always was.**
+   `grep -rn 'commit_seq' … crates/ --include=*.rs` cannot go empty: `crates/vault/src/intents.rs`
+   carries `commit_seq` as a **column on the intents ledger** (`:272`, `:291`, `:407`,
+   `:427`, `:439`) — a different thing from `ChangeEvent.commit_seq`, with its own writers,
+   untouched by W1 and W2 and not this lane's subject. `crates/vault/src/{log/mod,log/guard,error,intents}.rs`
+   and `crates/ontology/src/{snapshot,registries}.rs` also name it in prose about why the
+   log plane left. The exit item needs narrowing to `ChangeEvent`'s field, or it will read
+   as a red on a lane that did its job.
+
+### Found, and not this lane's slice
+
+1. **W2M-1's designed-states trim is a Rust change, not a mobile one.** The brief points
+   at "the kit `manifest.rs:44`" to keep `offline` and drop `pending`, `stale`, `conflict`,
+   `parked`. That is `crates/apps/kit/src/manifest.rs:42`,
+   `CANONICAL_DESIGNED_STATES: [&str; 7]` — and `manifest.rs:450` requires **every**
+   canonical state to be declared by every app, so the array's consumers are
+   `crates/apps/{agenda,tasks,notes,…}/src/manifest.rs`, each asserting
+   `states.designed.len() == CANONICAL_DESIGNED_STATES.len()`. Trimming it is a change
+   across every app crate and its manifest tests, inside `crates/`. It does not belong in a
+   Kotlin lane.
+2. **`mobile/maestro/flows/cold-start-and-relaunch.yaml` still does not exist**, as W2
+   recorded. `mobile/maestro/flows/` holds `home.yaml` only. Reference A's inventory is
+   stale on this row for the second wave running.
+3. **The stale comments W2M-2 names are real and were left in place**, because touching
+   them means touching files this lane could not compile: `CentraidAbi.kt:68` documents a
+   removed open key, and `HomeSession.kt:123` says "one core per process" where `Shelf`
+   holds one core per *vault* (`Shelf.kt:60-96` describes the cap's removal in full). They
+   are a two-line doc fix for whoever next opens the tree with a working compiler.
+
+### What a successor needs
+
+The Gradle cache is **cold** for this tree (170 MB total, 2.3 MB of modules, no Wire). The
+first thing to establish is whether Maven answers `HEAD` reliably — not `GET`, and not
+`kotlin-stdlib-2.1.0`, which is cached and proves nothing. If it does not, the options are
+an internal mirror, a pre-seeded `~/.gradle` from a host that can reach Maven, or a vendored
+dependency set; none is a worker's call. **Nothing on this lane should be attempted without
+a compiler**, and that includes the parts that look like pure deletions: `Shelf` is the
+counter-example.
