@@ -264,11 +264,18 @@ pub fn abi_symbol_count(root: &Path) -> RuleReport {
 /// Attribute and signature are on different lines in every real formatting of
 /// this, so the scanner looks ahead from the attribute past comments and
 /// further attributes to the first signature line.
+///
+/// The line has to *be* the attribute, not merely mention it. Every export in
+/// `crates/core-ffi` carries a ``// SAFETY: `no_mangle` exports this…``
+/// comment above its attribute, and a plain substring test counted that
+/// comment as a second attribute for the same signature — five exports read as
+/// ten, and the rule failed on a clean tree (#1029).
 pub fn exported_c_symbols(source: &str) -> Vec<String> {
     let lines: Vec<&str> = source.lines().collect();
     let mut names = Vec::new();
     for (index, line) in lines.iter().enumerate() {
-        if !line.contains("no_mangle") {
+        let attribute = line.trim();
+        if !(attribute.starts_with("#[") && attribute.contains("no_mangle")) {
             continue;
         }
         for ahead in lines.iter().skip(index + 1).take(6) {
@@ -686,6 +693,23 @@ fn escaped() -> &'static str { "a \" quote" }
         }
         write(&root, "crates/core-ffi/src/lib.rs", &source);
         assert!(abi_symbol_count(&root).findings.is_empty());
+    }
+
+    #[test]
+    fn a_safety_comment_naming_the_attribute_is_not_a_second_symbol() {
+        // The real `crates/core-ffi/src/lib.rs` shape: a SAFETY comment that
+        // spells `no_mangle` sits above the attribute it explains. Counting
+        // the comment as an attribute doubled every export (#1029).
+        let source = "\
+// SAFETY: `no_mangle` exports this under its `centraid_`-prefixed name, which
+// is the one the shells link.
+#[unsafe(no_mangle)]
+pub extern \"C\" fn centraid_open() {}
+";
+        assert_eq!(
+            exported_c_symbols(source),
+            vec!["centraid_open".to_string()]
+        );
     }
 
     #[test]
