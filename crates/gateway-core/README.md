@@ -1,6 +1,6 @@
 # `crates/gateway-core` — every rule a gateway enforces
 
-The gateway is a **protocol with two deployments** ([#1029](https://github.com/srikanth235/centraid/issues/1029) §3): a paid hosted offering on Cloudflare, and a standalone server anyone can run. *Neither deployment is the reference implementation: the protocol and its conformance suite are.* This crate is the protocol's rules, written once, with no I/O.
+The gateway is a **protocol with two deployments** ([#1029](https://github.com/srikanth235/centraid/issues/1029) §3): a paid hosted offering on Cloudflare, and a standalone server anyone can run. _Neither deployment is the reference implementation: the protocol and its conformance suite are._ This crate is the protocol's rules, written once, with no I/O.
 
 | Half | Where |
 | --- | --- |
@@ -17,7 +17,7 @@ The gateway is a **protocol with two deployments** ([#1029](https://github.com/s
 
 It never receives plaintext, a plaintext hash, or a key. Read the fields of `store::StoredObject` and `store::VaultState`, and every column in `contracts/gateway/schema.sql`, and ask what they could tell somebody who stole them: identity keys, generation ids, txid ranges, object kinds, **padded** sizes and timing. Nothing else — because a field is the only way anything else could arrive.
 
-**This is the test a new rule is judged against.** If a rule needs plaintext, a plaintext hash or a key, the rule is wrong. The shrink guard is the worked example: it began as a comparison of *sealed row censuses*, which a blind store cannot read, and became padded base size plus a server-side delete rate limit (F4). The row-census warning moved to the phone, where the census is readable.
+**This is the test a new rule is judged against.** If a rule needs plaintext, a plaintext hash or a key, the rule is wrong. The shrink guard is the worked example: it began as a comparison of _sealed row censuses_, which a blind store cannot read, and became padded base size plus a server-side delete rate limit (F4). The row-census warning moved to the phone, where the census is readable.
 
 `src/conformance.rs`'s canary is what keeps this from being a paragraph: it plants a plaintext, puts a ciphertext derived from it through the whole object path, and asserts that neither the plaintext nor its BLAKE3 appears in any stored byte or anywhere in the state store.
 
@@ -25,13 +25,13 @@ It never receives plaintext, a plaintext hash, or a key. Read the fields of `sto
 
 W4c compiles this crate to `wasm32-unknown-unknown`. So there are no threads, no filesystem, no sockets, **no ambient clock** and **no ambient randomness**: time is a `ServerTime` argument and anything random is passed in by the adapter.
 
-`SystemTime::now()` is the one that matters, because it *compiles* for that target and *panics* when called — it would pass every test here and die inside a Worker. `tests/wasm_clean.rs` scans for it and its relatives; `cargo check -p centraid-gateway-core --target wasm32-unknown-unknown` is the other half.
+`SystemTime::now()` is the one that matters, because it _compiles_ for that target and _panics_ when called — it would pass every test here and die inside a Worker. `tests/wasm_clean.rs` scans for it and its relatives; `cargo check -p centraid-gateway-core --target wasm32-unknown-unknown` is the other half.
 
 ### 3. No rule branches on which deployment it is in
 
 There is no `GatewayMode` here and there is not going to be one; `tests/wasm_clean.rs` refuses one. What differs between the adapters is behind `ByteStore` and `StateStore`. The one honest difference is `checksum::ChecksumMode`, and it is a property of the **store** the adapter was pointed at — B2 and MinIO attest different headers — not of the adapter, which is why the conformance suite runs both modes.
 
-The repository already carried this rule for v0's `packages/server/`, as the `gateway-engine-mode-agnostic` governance directive: *the "same code, three hosts" property breaks the moment the engine starts checking which host it is living in.* The subject moved here with #1029; the reasoning did not change.
+The repository already carried this rule for v0's `packages/server/`, as the `gateway-engine-mode-agnostic` governance directive: _the "same code, three hosts" property breaks the moment the engine starts checking which host it is living in._ The subject moved here with #1029; the reasoning did not change.
 
 ## ONE HASH, and the one exception
 
