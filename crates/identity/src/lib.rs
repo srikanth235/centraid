@@ -7,6 +7,7 @@
 //! | --- | --- |
 //! | [`phrase`] | the BIP39 24-word phrase and the 64-byte [`phrase::Seed`] it derives |
 //! | [`derive`] | SLIP-0010 hardened derivation: the account key, and each vault's identity, box and root keys |
+//! | [`certificate`] | "identity key K certifies device D at epoch E", and the verifier that refuses a superseded one |
 //!
 //! ## WHY THREE HASH FAMILIES LIVE IN THIS CRATE AND NOWHERE ELSE (W0.5-R1)
 //!
@@ -23,9 +24,13 @@
 //! **Do not spend this carve-out on anything else.** A digest inside this crate
 //! that is not pinned by a published specification is `blake3`.
 
+pub mod certificate;
 pub mod derive;
 pub mod phrase;
 
+pub use certificate::{
+    CERTIFICATE_CONTEXT, CertificateError, DeviceCertificate, DeviceKey, DeviceTrust, Epoch,
+};
 pub use derive::{
     AccountKey, BoxKey, DeriveError, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey,
 };
