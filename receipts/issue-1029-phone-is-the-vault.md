@@ -573,3 +573,77 @@ and `xtask/src/smoke.rs`'s exemption — which is what those tests ask for by na
 used to exclude `crates/sim` locally (D-1020-CL9) and now runs one unqualified
 `--workspace`; the crate is deleted, so the exclusion could not stay. The ledger row is
 `contracts/ledgers/gate-budgets.json` and moving it is the owner's call, not this lane's.
+
+## W3 — the object format (lane A)
+
+`centraid-object/1` is one format for every object the vault writes — base page
+ranges, spool segments, manifests, originals, thumbnails and packs — replacing
+the v0-derived sealed-frame module, which was wrong at the byte level. The
+capture side that seals with it is lane B's and is not in this section.
+
+### What landed
+
+| Where | What |
+| --- | --- |
+| `crates/media/src/object/mod.rs` (new) | The format. `seal`/`open` over a `Custody` (`Wrapped` under the vault root, or `FileKey` from the vault's blob-custody row), the AEAD key wrap whose AAD is length-prefixed `(format, kind, role)`, the chunked XChaCha20-Poly1305 body, the Padmé frame, `ObjectName` (BLAKE3 of the **ciphertext**), `verify_read_back` (F11), `seal_list`/`open_list` and the 16 MiB cap (F6). `random_bytes` is the one entropy door and it is `rand::rngs::OsRng`. |
+| `crates/media/src/object/header.rs` (new) | The typed header: magic, version, kind, role, flags, **a 16-byte per-object salt**, the dictionary id, the wrapped key. Every refusal is checked before a key is touched. `no_field_of_the_header_is_a_plaintext_commitment` is the regression that names the defect. |
+| `crates/media/src/object/dict.rs` (new) | `Dictionary` — trained by `zstd::dict::from_continuous`, identified by **BLAKE3** of its bytes, compressing at level 3 and decompressing under a caller-supplied bound. |
+| `crates/media/src/object/pad.rs` (new) | `padme`, and the paragraph that says it **bounds** the compression size-class leak and does not remove it. |
+| `crates/media/src/object/pack.rs` (new) | Packs: items concatenated as whole objects, a sealed trailing item table, `open_range` (the read path that never touches the table), `should_repack` at the 5% threshold, and `repack`, which copies live items verbatim. `LiveShareIndex` is F8's seam and `NoLiveShares` is the honest placeholder. |
+| `crates/media/tests/object.rs` (new) | The four adversarial tests: `no_nonce_repeats_across_retries_or_restarts`, `the_cap_holds_for_the_worst_case_input`, `an_oversized_input_becomes_a_list_of_objects`, `a_pack_is_addressable_by_range_and_its_headers_do_not_transplant`, `padme_collapses_neighbouring_sizes_onto_one_object_size`. |
+| `crates/media/tests/object_vectors.rs` + `contracts/crypto/object-vectors.json` (new) | The vectors. Deterministic fields are recomputed and compared; the committed ciphertext is **opened**, not compared, because sealing is deliberately not reproducible. |
+| `crates/media/src/cbsf.rs` (**deleted**) | The v0 frame format. |
+| `crates/media/src/lib.rs`, `crates/media/Cargo.toml` | `#![forbid(unsafe_code)]` (it had none), the module map, `+chacha20poly1305`, `+rand`, `-flate2` (deflate was a frame algorithm and nothing else in the crate wrote one). |
+| `Cargo.toml`, `Cargo.lock` | `chacha20poly1305 = "0.11"`, declared beside `aes-gcm` with why: the 24-byte nonce is what makes "draw it at random" a design rather than a budget. |
+| `crates/media/tests/golden.rs`, `crates/media/tests/primitives.rs`, `contracts/golden/format-golden.json`, `contracts/crypto/blake3-vectors.json` | The frame vectors are gone; the frame-nonce vector is replaced by `centraid-object/1`'s key-wrap context, since a vector with no site is decoration. |
+| `crates/vault/tests/one_hash.rs` | W3-0 — three declarations, each with its reason. |
+| `crates/vault/src/custody/mod.rs` | One stale comment: the derived-nonce exception is now named as the defect this format closes. |
+
+### The four defects it closes, and the fifth a test found
+
+1. **The plaintext hash is not in the header.** The old header wrote BLAKE3 of the plaintext in the clear at bytes 5..37 — a confirmable commitment on the outside of the envelope. An object's name is now the BLAKE3 of its own **ciphertext**; the plaintext hash lives in the vault, where the phone deduplicates on it.
+2. **B9 — every nonce is random.** The old nonce was a keyed MAC over the object's *address*, safe only if one address always maps to one set of bytes. It did not. `no_nonce_repeats_across_retries_or_restarts` seals the same plaintext 256 times in-process and then **re-runs the test binary as a child process** and asserts the two nonce sets are disjoint — a generator seeded once per process passes the first half and fails the second.
+3. **A header cannot be transplanted.** The wrap AAD carries kind and role, length-prefixed exactly as `centraid_identity::sealed_box` does it.
+4. **Sizes are bounded.** zstd against a dictionary the header names by its BLAKE3, then Padmé, then a 16 MiB cap with a larger input becoming an ordered list of ordinary objects.
+5. **THE FIFTH, WHICH READING DID NOT FIND.** Kind and role stop a header moving between objects of *different* kinds and do nothing about two of the same kind — and a `blob` or `thumbnail` header carries no wrapped key at all, so two same-kind file-key headers were byte-identical and their chunk AAD with them. The adversarial pack test glued one item's header onto another's body and it **opened**. §4's fresh per-blob file key would also have defeated it, but the property would then rest on a caller's key discipline rather than on the format. Every header now carries 16 random bytes of salt.
+
+### Rulings spent
+
+- **B9** — random nonces, asserted across retries and restarts.
+- **F6** — 16 MiB, one upload path; `the_cap_holds_for_the_worst_case_input` proves the headroom with incompressible bytes rather than arithmetic.
+- **F8** — `repack` asks `LiveShareIndex` **before copying a byte** and refuses; W8 fills the seam.
+- **D-1020-R1 dropped pre-release** — said beside the fixture, which is why the frame vectors could be deleted rather than migrated.
+- **W0.5-R1 does not extend here** — `crates/media`'s names, commitments and dictionary ids are BLAKE3, and `one_hash`'s allowlist entry says so at the boundary.
+
+### What the deletion exposed
+
+1. **Nothing outside `crates/media` ever called the frame format.** Its only consumers were the crate's own tests and two golden fixtures. The comment at `crates/vault/src/custody/mod.rs:68` that cited it as a derived-nonce exception was the last reference, and it was stale.
+2. **`flate2` was in `crates/media` for deflate frames alone.** Dropped from the crate; three other crates still declare it.
+3. **`crates/media/src/lib.rs` had no `#![forbid(unsafe_code)]`**, unlike every other crate in the workspace. Added.
+4. **The two remaining v0 seals have no lane.** `format.rs`'s `seal_wal_segment` and `seal_snapshot_manifest` are the other two seals this format replaces and they carry the same derived-nonce defect (`derive_nonce` over a WAL address, and a nonce derived from a manifest's own content hash). Their only callers are `crates/vault/src/backup/{wal,manifest}.rs`, which is lane B's by this brief's §6, so deleting them would either edit that lane's files or break `cargo build --workspace`. **They are marked superseded in prose at both ends and must not acquire a new caller.** They go with lane B's rewrite.
+
+### Found, not this lane's
+
+1. **`crates/vault/tests/snapshot_faults.rs::an_interrupted_build_leaves_no_artifact_and_the_next_one_succeeds` is RED on the base.** Verified by checking `2985cf4d` out over `crates/` and `contracts/` and re-running: it fails identically there. It is deterministic, not flaky, and the assertion is `"the retry after eight faults produced an unsanitised artifact"` — a snapshot-builder fault, nothing to do with this lane. **Nobody owns it yet.**
+2. **`tests/floors.json:54` carries `"blob-format-cbsf-properties": 6` and `tests/claims.json:3909` a claim owned by `packages/core/src/blob/cbsf-properties.test.ts`** — a v0 TypeScript file deleted waves ago. Estate files, tighten-only, and a separate commit by `estate-separation`. Not started.
+3. **The `local` profile's `test` step is still over budget** — 152.7 s against 120 s here, unchanged in character from W2's 152.1 s. Owner item.
+4. **`crates/media/README.md` is stale** and describes the deleted module. W9's, per this brief's doctrine 10.
+
+### Verification
+
+`export CARGO_TARGET_DIR=/home/user/.cargo-target-w3` throughout. Local store only; no network.
+
+| Exit item | Result |
+| --- | --- |
+| 1 `cargo build --workspace` | **clean** |
+| 2 `cargo test -p centraid-media` | **71 green** — 59 unit, 6 `object.rs`, 3 `golden.rs`, 2 `primitives.rs`, 1 `object_vectors.rs` |
+| 3 `cargo test -p centraid-vault --test one_hash` | **4/4 PASS** (it was red on base) |
+| 4 `cargo test --workspace` | green **except** `snapshot_faults`, proven inherited above |
+| 5 `grep -rn 'cbsf\|CBSF' crates/ --include=*.rs` | **empty** |
+| 6 `cargo xtask gate --lane fmt` | **PASS** |
+| 7 `cargo xtask gate --lane clippy` | **PASS** |
+| 8 `cargo xtask gate --lane rules` | **PASS**, 4 rules clean |
+| 9 `cargo xtask gate --profile local` | FAIL on `test` (the inherited `snapshot_faults`) and `ledgers` (cannot run in this worktree: "no merge base found (tried origin/main, main, …)" — `git merge-base origin/main HEAD` is empty here). Budget line: **"the `local` profile took 182.6s against a 120s budget"**, `test` 152.7 s of it |
+| 10 `bun run check:push:static` | **4/4 green** (needed `bun install`; the worktree had no `node_modules`) |
+| 11 `node scripts/check-ledgers.mjs --base 2985cf4d` | **clean** — 19 sections across 5 ledgers |
+| 12 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |

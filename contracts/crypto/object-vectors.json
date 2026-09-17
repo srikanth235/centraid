@@ -20,11 +20,7 @@
   },
   "list": {
     "partCount": 3,
-    "partSealedBytes": [
-      14942442,
-      14942442,
-      1190
-    ],
+    "partSealedBytes": [14942442, 14942442, 1190],
     "plaintextBytes": 29361152
   },
   "objects": [
