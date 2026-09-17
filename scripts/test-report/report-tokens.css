@@ -489,7 +489,7 @@
 
 /* ---------------------------------------------------------------------------
    Site layer — page-scale values the product shell has no use for. Every one
-   composes from a token above; see docs/design-divergences.md for the one
+   composes from a token above; see docs/design-machinery.md for the one
    sanctioned step beyond the ramp.
    --------------------------------------------------------------------------- */
 
@@ -543,7 +543,7 @@
 /* ---------------------------------------------------------------------------
    Report layer — the matrix status ramp. One name per state, per role; every
    value resolves from a product token above. See
-   docs/design-divergences.md#the-nightly-test-report for what bounds it.
+   docs/design-machinery.md#the-nightly-test-report for what bounds it.
    --------------------------------------------------------------------------- */
 
 :root {
@@ -611,7 +611,7 @@
 /* ---------------------------------------------------------------------------
    Night Watch layer — the report page's own ground, ink, rules and signal
    tints. One name per rung, both themes; see
-   docs/design-divergences.md#the-nightly-test-report for what bounds it.
+   docs/design-machinery.md#the-nightly-test-report for what bounds it.
    --------------------------------------------------------------------------- */
 
 :root {

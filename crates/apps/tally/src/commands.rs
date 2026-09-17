@@ -1,18 +1,16 @@
 //! THE 23 ACTIONS, as command invocations.
 //!
 //! Every Tally action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app
-//! (`packages/blueprints/apps/_shared/action-kit.ts`, #1020 apps §3.4). So this
+//! projection lives in the command, not the app (#1020 apps §3.4). So this
 //! module is a table, not logic — it names which command each action invokes
 //! and hands the input through.
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5). v0's `invokeKey` is optional
 //! and falls back to the call's **ordinal**, which "is only stable for a
-//! handler that makes the same call sequence every time"
-//! (`packages/blueprints/types/centraid.d.ts:86-95`). A replayed intent whose
-//! handler branched differently then re-executes a committed command under
-//! another call's key. The port makes the key a required field, so the fallback
-//! does not exist to be relied on.
+//! handler that makes the same call sequence every time" (v0's own comment).
+//! A replayed intent whose handler branched differently then re-executes a
+//! committed command under another call's key. The port makes the key a
+//! required field, so the fallback does not exist to be relied on.
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10). v0 wraps every
 //! action in `runVaultAction`, which answers HTTP 200 with
@@ -82,9 +80,8 @@ impl Outcome {
 /// The one door an app writes through.
 ///
 /// `Err` means the door itself is absent — v0's `VAULT_UNAVAILABLE`, which
-/// fails closed (`packages/server/src/engine/handlers/handler-runner.ts:196-200`).
-/// Every decision the vault takes, including a refusal, arrives as an
-/// [`Outcome`].
+/// fails closed. Every decision the vault takes, including a refusal,
+/// arrives as an [`Outcome`].
 pub trait Commands {
     fn invoke(&self, invocation: &Invocation) -> Result<Outcome, CommandsUnavailable>;
 }

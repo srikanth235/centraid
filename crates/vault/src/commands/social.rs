@@ -7,7 +7,7 @@
 //! park for owner confirmation while the owner acts directly (#306, tier 3
 //! semantic egress — structure cannot verify a send). Sending marks state;
 //! **transport is a projection-side concern** and the gateway keeps no byte
-//! custody and opens no sockets (`packages/vault/src/commands/social.ts:1`-`:7`).
+//! custody and opens no sockets.
 //!
 //! ### This is NOT where a contact channel is written
 //!

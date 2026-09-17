@@ -5,8 +5,7 @@
 // argument list, `scripts/ci/gate-classes.json`, and the weekly
 // `.github/workflows/hygiene.yml`. A hygiene gate that quietly reappears in
 // `check:push` re-charges every push for it; one that leaves `check:push`
-// without arriving in the weekly lane is enforced NOWHERE, which is the exact
-// failure the #782 comment block in ci.yml exists to prevent. This file is
+// without arriving in the weekly lane is enforced NOWHERE (#782). This file is
 // what makes that impossible to do by accident.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

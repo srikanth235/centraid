@@ -17,7 +17,6 @@ centraid-api-proto = { path = "../api-proto" }
 prost.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
-tracing.workspace = true
 
 [dev-dependencies]
 base64.workspace = true

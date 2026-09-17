@@ -34,11 +34,11 @@
 //! Docs declares `confirmation: "required"` on exactly one action,
 //! `empty-trash`, and that is the DISPATCHING SURFACE's gate. No `core.*`
 //! command this build carries sets `confirm: true` —
-//! `core.empty_document_trash` deliberately does not
-//! (`packages/vault/src/commands/documents.ts:538`: "owner confirmation is in
-//! front of the command"), and its `risk` is `high`, which is salience and
-//! never an approval trigger. Collapsing the two would put a dialog in front
-//! of the owner's own empty-trash and drop nothing in exchange.
+//! `core.empty_document_trash` deliberately does not — owner confirmation is
+//! already in front of the command — and its `risk` is `high`, which is
+//! salience and never an approval trigger. Collapsing the two would put a
+//! dialog in front of the owner's own empty-trash and drop nothing in
+//! exchange.
 //!
 //! ### Identity is the wrapper, never the bytes (D-1020-DC1)
 //!
@@ -56,17 +56,15 @@
 //!   `email`/`tel` identifier with a sentence naming
 //!   `social.save_contact_channel`, rather than dropping it.
 //! - **D-1020-DC8**: an inline `data_uri` whose media type is **not** `text/*`
-//!   is refused with a sentence naming the missing seam. v0 spills those bytes
-//!   into the local CAS (`ctx.blobs.spill`,
-//!   `packages/vault/src/blob/mint.ts:90`-`:99`) and `CommandCtx` carries no
-//!   blob door — the same gap lane Photos named for `media.add_asset`. The
-//!   refusal is per INPUT SHAPE rather than per command, which is the whole
-//!   difference: the entire `text/*` path and the entire `staged_sha` path are
-//!   real, because `promoteStagedBlob` is pure row work and says so
-//!   (`packages/vault/src/blob/promote.ts:1`-`:5`: "no I/O — the bytes are
-//!   already in the local CAS"). So a scanned PDF staged through the blob door
-//!   files, versions and restores here for real; only a PDF pasted inline as
-//!   base64 refuses.
+//!   is refused with a sentence naming the missing seam. Spilling those bytes
+//!   into the local CAS needs a blob door, and `CommandCtx` carries none — the
+//!   same gap lane Photos named for `media.add_asset`. The refusal is per
+//!   INPUT SHAPE rather than per command, which is the whole difference: the
+//!   entire `text/*` path and the entire `staged_sha` path are real, because
+//!   promoting a staged blob is pure row work — no I/O, the bytes are already
+//!   in the local CAS. So a scanned PDF staged through the blob door files,
+//!   versions and restores here for real; only a PDF pasted inline as base64
+//!   refuses.
 //! - **D-1020-DC9**: `queueMissingDeviceEnrichmentRequests` — the
 //!   `enrich_request` rows v0's claim writes for a device that has not
 //!   contributed a derivative — is NOT written here. `enrich.*` is the
@@ -507,7 +505,7 @@ fn tag_item() -> CommandDefinition {
 /// The folders scheme. **An `https` URI, not a `urn:`, and that is not drift**:
 /// this literal is interpolated into condition SQL, where `:folders` reads as a
 /// NAMED PARAMETER (#258, the colon-literal trap) and no parameter name can
-/// start with a slash (`packages/vault/src/commands/documents.ts:47`).
+/// start with a slash.
 pub const FOLDER_SCHEME_URI: &str = "https://centraid.dev/schemes/folders";
 
 /// The flags scheme and the star's notation, for the same reason.
@@ -523,21 +521,19 @@ pub const DOCUMENT_TARGET_TYPE: &str = "core.document";
 /// The trash grace window (#352). Thirty days, in v0's arithmetic.
 const PURGE_AFTER_DAYS: i64 = 30;
 
-/// Decoded-size cap for the inline `data:` door: ~256 KB of content, ~350 KB of
-/// base64 (`packages/vault/src/blob/mint.ts:19`). Anything larger takes the
-/// staging route, because the journal records every input.
+/// Decoded-size cap for the inline `data:` door: ~256 KB of content, ~350 KB
+/// of base64. Anything larger takes the staging route, because the journal
+/// records every input.
 pub(crate) const MAX_INLINE_DATA_URI_CHARS: usize = 360_000;
 
-/// The inline-body budget for `text/*`: ~64 KiB of DECODED text
-/// (`packages/vault/src/commands/inline-body-guard.ts:13`).
+/// The inline-body budget for `text/*`: ~64 KiB of DECODED text.
 ///
 /// **This is not the 1 MiB "SB-text" ceiling** and the two are easy to
-/// conflate. 1 MiB is `core.content_item`'s `replicaValues.textCeilingBytes`
-/// (`packages/vault/src/schema/entity-catalog.ts:77`) — a REPLICA rule about
-/// when a seat stops carrying a body's value and names the absence. The gate a
-/// command enforces is this one, and it is sixteen times tighter, because a
-/// text body cannot redirect to the CAS at all: the FTS feed decodes it
-/// in-transaction and a trigger cannot do I/O.
+/// conflate. 1 MiB is `core.content_item`'s `replicaValues.textCeilingBytes` —
+/// a REPLICA rule about when a seat stops carrying a body's value and names
+/// the absence. The gate a command enforces is this one, and it is sixteen
+/// times tighter, because a text body cannot redirect to the CAS at all: the
+/// FTS feed decodes it in-transaction and a trigger cannot do I/O.
 pub(crate) const INLINE_BODY_BUDGET_BYTES: usize = 64 * 1024;
 
 /// What produced the text in `core_content_text`, so a decoder change can
@@ -547,10 +543,10 @@ const CONTENT_TEXT_DECODER: &str = "data-uri/v1";
 /// The RFC 6838 answer for bytes nothing described (`blob/promote.ts:43`).
 pub(crate) const DEFAULT_MEDIA_TYPE: &str = "application/octet-stream";
 
-/// The wrappers that keep a body history: their table and their pointer
-/// (`packages/vault/src/commands/revisions.ts:40`). A `core.*` command in this
-/// build only ever writes the first, but the guard is the v0 guard: an entity
-/// that keeps no body history must not acquire one by accident.
+/// The wrappers that keep a body history: their table and their pointer. A
+/// `core.*` command in this build only ever writes the first, but the guard
+/// holds regardless: an entity that keeps no body history must not acquire
+/// one by accident.
 const BODY_HISTORY_WRAPPERS: &[(&str, &str, &str)] = &[
     ("core.document", "core_document", "document_id"),
     ("knowledge.note", "knowledge_note", "note_id"),
@@ -801,8 +797,7 @@ fn media_type_of_owner(
         .ok())
 }
 
-/// THE ONE DECODER for a canonical body (#996 R4/R8,
-/// `packages/vault/src/schema/content-text.ts:19`).
+/// THE ONE DECODER for a canonical body (#996 R4/R8).
 ///
 /// `None` for anything that is not `text/*` over a `data:` URI — and `None` is
 /// the answer "we could not decode these bytes", which is why
@@ -1024,7 +1019,7 @@ pub(crate) fn revision_chain_of(
 }
 
 /// The chain-walk cap. A well-formed chain terminates on a null parent; this
-/// caps a malformed one (`packages/blueprints/apps/docs/queries/history.ts:23`).
+/// caps a malformed one.
 pub const MAX_CHAIN_STEPS: usize = 500;
 
 /// A content item this command minted or claimed.
@@ -1080,12 +1075,9 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
     }
     // TEXT STAYS IN THE ROW (the FTS feed decodes it in-transaction); binary
     // bytes SPILL to the local content store and the row keeps only
-    // `blob:blake3-<hex>`. That is v0's SPLIT verbatim; the hash is not v0's
-    // (D-1020-B2)
-    // (`packages/vault/src/blob/mint.ts:88`-`:99`), and the port shipped the
-    // split with no store behind it: every photograph and every PDF was
-    // refused by `media.add_asset` and `core.add_document` for a year of
-    // commits because `CommandCtx` had no blob door. It has one now.
+    // `blob:blake3-<hex>` (D-1020-B2). `CommandCtx` carries a blob door, so
+    // every photograph and every PDF files through `media.add_asset` and
+    // `core.add_document` for real.
     //
     // A vault opened WITHOUT a store still refuses, and says so — see
     // `pre_inline_bytes_are_storable`, which is the gate that should have
@@ -1144,8 +1136,7 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
     })
 }
 
-/// Claim one staged sha into a canonical content item
-/// (`packages/vault/src/blob/promote.ts:52`).
+/// Claim one staged sha into a canonical content item.
 ///
 /// **Pure row work, no I/O** — the bytes are already in the local CAS, which is
 /// what lets this path be real while the inline binary path is not (D-1020-DC8).
@@ -1397,8 +1388,8 @@ fn upsert_text_derivative(
 }
 
 /// Parse and DECODE a `data:` URI — **the bytes are identity now, not the
-/// text** (`packages/vault/src/blob/mint.ts:28`). Which is also what fixed the
-/// old dedup hole: the same bytes under two declared mime types were two rows.
+/// text**, which closes the dedup hole where the same bytes under two
+/// declared mime types were two rows.
 pub(crate) fn decode_data_uri(uri: &str) -> Result<(String, Vec<u8>)> {
     let refuse = |detail: &str| VaultError::InvalidInput {
         name: "data_uri".to_owned(),
@@ -1886,7 +1877,7 @@ pub(crate) fn derive_missing(ctx: &CommandCtx<'_, '_>, limit: usize) -> Result<(
 }
 
 /// The id a CREATED row takes: the seat's when it minted one, ours otherwise
-/// (#922 G2, `packages/vault/src/commands/minted-id.ts:33`).
+/// (#922 G2).
 pub(crate) fn minted_id(ctx: &CommandCtx<'_, '_>, property: &str) -> String {
     ctx.optional_str(property)
         .map_or_else(|| ctx.next_id(), str::to_owned)
@@ -3158,9 +3149,8 @@ fn untag_item() -> CommandDefinition {
 /// **The automations lane calls this by name.** Everything about the model and
 /// the provider side of a recognition run is that lane's; the only thing here
 /// is where the text goes. The `capability`/`model`/`profile`/`prompt_rev`/
-/// `confidence`/`regions` inputs are accepted and validated — v0's schema
-/// verbatim — and the derivation stamp they feed
-/// (`packages/vault/src/enrich/derivation.ts`) is the automations lane's table,
+/// `confidence`/`regions` inputs are accepted and validated, and the
+/// derivation stamp they feed is the automations lane's table (`enrich.*`),
 /// so this build records the text and not the stamp (D-1020-DC9).
 fn set_extracted_text() -> CommandDefinition {
     CommandDefinition {

@@ -1,10 +1,8 @@
 //! The blob door: byte ranges over blobs that may still be arriving
 //! (#1020, D-1020-F3).
 //!
-//! This is what `centraid://` answers. The range arithmetic and the
-//! never-inline rules are ported from v0's `packages/server/src/routes/
-//! blob-read-route.ts` and `blob-response.ts` — the gateway already had the
-//! semantics; what is new here is the **partial** case.
+//! This is what `centraid://` answers: range arithmetic, the never-inline
+//! rules, and the **partial** case.
 //!
 //! ## The layout of an arriving blob
 //!

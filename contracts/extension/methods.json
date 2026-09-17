@@ -1,10 +1,6 @@
 {
   "version": 1,
   "max_frame_bytes": 1048576,
-  "source": [
-    "apps/extension/src/types.ts",
-    "apps/extension/src/companion-api.ts"
-  ],
   "methods": [
     {
       "name": "status",

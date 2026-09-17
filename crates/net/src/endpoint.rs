@@ -55,9 +55,8 @@ use crate::error::ConnectError;
 /// watching a spinner gets an answer.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// The QUIC application close code for an unauthorised peer. v0 uses `401`
-/// (`CLOSE_UNAUTHORIZED`, `packages/tunnel/src/protocol.ts:80`) and this is the
-/// same number, so a packet capture reads the same across the two trees.
+/// The QUIC application close code for an unauthorised peer: `401`, so a
+/// packet capture reads as the HTTP refusal it corresponds to.
 pub const CLOSE_UNAUTHORIZED: u32 = 401;
 
 /// How many connectivity events a slow subscriber may fall behind before it
@@ -105,9 +104,8 @@ pub struct EndpointConfig {
     /// The ALPNs this endpoint ACCEPTS. Dialling is unaffected.
     ///
     /// TWO, AND THEY ARE THE WHOLE LIST (#1025 S2): the one data plane and the
-    /// pairing exception. v0's rule — "no link policy ⇒ never negotiate the
-    /// plane" (`packages/tunnel/src/gateway-endpoint.ts:149-154`) — is kept by
-    /// there being no third plane to declare rather than by a declared plane
+    /// pairing exception. "No link policy ⇒ never negotiate the plane" is kept
+    /// by there being no third plane to declare rather than by a declared plane
     /// nothing advertises.
     pub alpns: Vec<Vec<u8>>,
     /// The endpoint's long-term identity. `None` mints a fresh one, which is
@@ -543,9 +541,7 @@ impl IrohConnection {
     /// waits on [`Self::closed`] with its own short budget first, and this is
     /// what happens when the peer does not close on its own.
     ///
-    /// The code is [`CLOSE_UNAUTHORIZED`], the same `401` v0 uses
-    /// (`packages/tunnel/src/protocol.ts:80`), so a packet capture reads the
-    /// same across the two trees.
+    /// The code is [`CLOSE_UNAUTHORIZED`].
     pub fn close_unauthorized(&self) {
         self.inner.close(
             VarInt::from_u32(CLOSE_UNAUTHORIZED),

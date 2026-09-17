@@ -51,8 +51,7 @@ struct TallyListStateView {
 
     /// The list's own destinations, in the order the screen names them.
     ///
-    /// **A BAND DESTINATION IS A PARAMETER, NOT A SECOND SCREEN**
-    /// (`apps/mobile/src/navigation.ts:19-24`) — so each of these carries a
+    /// **A BAND DESTINATION IS A PARAMETER, NOT A SECOND SCREEN** — so each of these carries a
     /// `DestinationChanged` for the SAME machine, and never a route.
     var bands: [BandView] {
         [

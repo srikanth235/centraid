@@ -17,8 +17,8 @@ export default defineConfig({
   testDir: import.meta.dirname,
   // `*.e2e.ts` and not `*.spec.ts`, deliberately. `oxlint.config.ts` — which is
   // law and not this lane's file — puts every test-or-spec TS file under the
-  // vitest plugin, and its two Playwright exemptions are keyed on the v0 paths
-  // (`apps/desktop/tests/e2e`, `apps/web/tests/e2e`). Renaming the suffix keeps
+  // vitest plugin, and its Playwright exemptions do not cover this tree. The
+  // suffix keeps
   // these files out of that glob entirely, which is better than asking for a
   // third exemption: the lint config stays untouched and the file name says
   // which runner owns it.

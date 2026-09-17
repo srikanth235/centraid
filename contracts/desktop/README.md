@@ -1,6 +1,6 @@
 # `contracts/desktop/` — the desktop seat's fixtures
 
-Files the desktop seat's tests read, committed so the claim does not depend on the machine that makes it ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3, lane F).
+Files the desktop seat's tests read, committed so the claim does not depend on the machine that makes it ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 | File | What it pins | Who reads it |
 | --- | --- | --- |

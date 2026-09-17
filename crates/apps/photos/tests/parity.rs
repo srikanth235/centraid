@@ -171,7 +171,7 @@ fn the_contracts_sample_directory_is_the_v0_roll() {
         let ours = fs::read(root().join("contracts/apps/photos/sample").join(frame.file))
             .unwrap_or_else(|error| panic!("{}: {error}", frame.file));
         // THE v0 COPY IS GONE (#1025 S4). This compared the contracts roll
-        // against `packages/blueprints/apps/photos/sample` byte for byte;
+        // against v0's photos sample directory byte for byte;
         // `chore(retire): delete the v0 tree` removed that directory, and the
         // copy under `contracts/` is the roll now. What the comparison was
         // protecting — that the manifest describes the FILES and not some other

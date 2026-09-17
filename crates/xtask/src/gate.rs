@@ -144,7 +144,7 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // committed artifact nobody re-derived, and `lint:path-filters` reported
         // all three as claimed by nothing: `skipped` counts as a PASS in
         // ci.yml's `check`, so such a change merged green and unexercised.
-        // Three bun scripts and a clean-tree assertion — the shape `mobile-jvm`
+        // Two bun scripts and a clean-tree assertion — the shape `mobile-jvm`
         // already uses, on the profile that actually runs on a pull request.
         step("emitters", run_emitters),
         // THE DESKTOP SEAT'S PURE CORES (#1020 wave 3 lane F, D-1020-F8). Every
@@ -204,7 +204,6 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // The deeper sweep, on top of `pr`'s 25 seeds rather than replacing
         // them: each profile is stated as a CONCATENATION of the one before.
         step("sim-nightly", run_sim_nightly),
-        step("v0-oracle", run_v0_oracle),
         // THE DESKTOP SEAT'S EXIT CRITERION (#1020 wave 3 lane F): a real
         // Electron app, a real `centraid seat` sidecar over a real socket, and
         // a `<video>` that seeks inside a blob whose bytes are still arriving.
@@ -218,7 +217,6 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // request should not take.
         step("extension-e2e", run_extension_e2e),
         step("device-lanes", run_device_lanes),
-        step("lane-health", run_lane_health),
     ]);
     if profile == Profile::Nightly {
         return nightly;
@@ -464,7 +462,6 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
 /// in a nightly profile is a drift check that reports a day late.
 fn run_emitters(ctx: &Ctx) -> Result<Outcome> {
     for emitter in [
-        "contracts/tools/export-copy.ts",
         "contracts/tools/export-design-corpus.ts",
         "contracts/tools/export-native-theme.ts",
     ] {
@@ -1322,15 +1319,6 @@ fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
 /// request can introduce a secret — which is also why it cannot be left behind
 /// in a workflow that no longer runs on pull requests.
 ///
-/// INHERITED RED, named rather than hidden (D-1020-B1): this step is red on the
-/// tree as it stands, because `packages/model-runtime/LICENSES.md` trips the
-/// `generic-api-key` rule — a licence text, arrived with #1011/#1012. The fix is
-/// the owner's: a reasoned allowlist row in `.gitleaks.toml` naming the file, or
-/// moving the offending string. It is deliberately NOT fixed from here, because
-/// a gate whose first act is to widen its own allowlist has gated nothing. A
-/// gate that stops reporting because its target is red today would be a
-/// weakening, which is why the step is here and red rather than absent.
-///
 /// **The scan is over the repository's files, not over its build output**
 /// (D-1020-B2-5). `--no-git` is what gives the step its working-tree coverage —
 /// an uncommitted secret is exactly what a pre-merge scan is for — but it also
@@ -1500,7 +1488,7 @@ fn git_says_tracked(root: &Path, file: &str) -> bool {
 /// The full lockfile advisory inventory (#671), through the repo's own script so
 /// the CRITICAL-only threshold and the report stay in one place.
 ///
-/// INHERITED RED, on the same terms (D-1020-B1): `astro@7.1.5` in `bun.lock`
+/// INHERITED RED, named rather than hidden (D-1020-B1): `astro@7.1.5` in `bun.lock`
 /// carries a CRITICAL (score 9.8). The fix is a dependency bump, which is a
 /// change outside #1020's scope and is the second owner hand-off. Nothing was
 /// added to `osv-scanner.toml`.
@@ -1563,13 +1551,10 @@ fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
     Ok(outcome)
 }
 
-/// The v1 tree's TypeScript, through the repo's own script.
+/// The tree's TypeScript, through the repo's own script.
 ///
-/// There is none today, and this step says so rather than running v0's static
-/// gate: #1020 rules v0's gates off pull requests from wave 1, so re-running
-/// them here under a different name would be the same CI bill with the ruling
-/// pasted over it. The moment a `.ts` file appears anywhere in the v1 tree, the
-/// step runs `bun run check:push:static` for real.
+/// A tree with no `.ts` file under the listed roots skips with that reason;
+/// otherwise the step runs `bun run check:push:static`.
 fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
     const V1_DIRS: [&str; 5] = ["crates", "contracts", "mobile", "desktop", "extension"];
     const EXTENSIONS: [&str; 4] = ["ts", "tsx", "mts", "cts"];
@@ -1585,60 +1570,11 @@ fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
     }
     if found.is_empty() {
         return Ok(Outcome::Skipped(
-            "no TypeScript in the v1 tree yet (crates/, contracts/, mobile/, desktop/, extension/) — `bun run check:push:static` runs here the moment there is. v0's own static gate runs on main pushes and nightly, not on pull requests (#1020)"
+            "no TypeScript under crates/, contracts/, mobile/, desktop/ or extension/ — `bun run check:push:static` runs here the moment there is (#1020)"
                 .to_owned(),
         ));
     }
-    // The static gate typechecks the workspace through its PUBLISHED entry
-    // points, so it needs the packages' `dist/` on disk — the same prerequisite
-    // `v0-oracle` names. Without it tsc reports hundreds of "Cannot find module
-    // '@centraid/server/engine'" lines, which read as a product defect and are
-    // an unbuilt tree. Saying so is the difference between a gate and a puzzle.
-    if !ctx.root.join("packages/server/dist").is_dir() {
-        return Ok(Outcome::Failed(format!(
-            "the workspace is not built: packages/server/dist is absent, and `bun run check:push:static` resolves `@centraid/*` through the published entry points. Run `bun run build` once (gate.yml does it before this profile) — this is an unprovisioned tree, not a type error. {} .ts file(s) in the v1 tree made this step live",
-            found.len()
-        )));
-    }
     process(ctx, "ts-static", "bun", &["run", "check:push:static"])
-}
-
-/// The v0 oracle: the pinned v0 tree's own tests over the `contracts/` files.
-///
-/// One suite today — the golden vault, which lane A keeps green against
-/// `contracts/`. This is the whole of what v0's CI still owes a v1 commit
-/// (#1020, *Two trees, one CI bill*), and it runs nightly, not per PR.
-///
-/// The suite imports its workspace packages by their PUBLISHED entry points
-/// (`@centraid/core/blob`), so it needs their `dist/` on disk — the same reason
-/// `ci.yml`'s `verify` job builds before it runs vitest. The build is turbo-
-/// cached and filtered to the suite's closure, so a warm tree pays ~0.5 s for
-/// it; running the suite without it fails with a module-resolution error that
-/// looks like a product bug and is not one.
-fn run_v0_oracle(ctx: &Ctx) -> Result<Outcome> {
-    const SUITE: &str = "packages/vault/src/golden-vault.test.ts";
-    if !ctx.root.join(SUITE).is_file() {
-        return Ok(Outcome::Failed(format!(
-            "{SUITE} is gone — the v0 oracle suite is the only thing keeping `contracts/` honest while both trees exist. If v0 was retired, this step retires with it (wave 6), not before"
-        )));
-    }
-    let built = process(
-        ctx,
-        "v0-oracle-build",
-        "node",
-        &[
-            "scripts/ci/turbo.mjs",
-            "run",
-            "build",
-            "--filter=@centraid/vault...",
-        ],
-    )?;
-    if let Outcome::Failed(detail) = built {
-        return Ok(Outcome::Failed(format!(
-            "the oracle suite's package closure would not build: {detail}"
-        )));
-    }
-    process(ctx, "v0-oracle", "bunx", &["vitest", "run", SUITE])
 }
 
 /// The #842 corpus, against the Rust turn plane (D-1020-AS6).
@@ -1701,16 +1637,11 @@ fn run_lockfile(ctx: &Ctx) -> Result<Outcome> {
     verdict(ctx, "lockfile", ci::lockfile(&ctx.root)?)
 }
 
-/// Lane health off the Actions API (D-1020-G3). Nightly only — it reads
-/// `api.github.com`, and a pull request's verdict must not depend on a third
-/// party being up.
 /// The desktop seat's pure cores, and its three type programs.
 ///
-/// **Not** part of the repository-wide vitest project list. That list drives the
-/// v0 coverage run scored against `tests/floors.json`, and adding a new tree to
-/// it would move coverage numbers for reasons that have nothing to do with the
-/// v0 oracle it measures — so `desktop/vitest.config.ts` is its own project and
-/// this step is how CI runs it (D-1020-F8).
+/// `desktop/vitest.config.ts` is its own project, kept out of the
+/// repository-wide vitest list and its `tests/floors.json` coverage scoring,
+/// and this step is how CI runs it (D-1020-F8).
 ///
 /// `bun` absent is a SKIP locally and a FAILURE in CI, the same rule every
 /// other tool in this file follows: in CI the workflow installs it, so its
@@ -1915,16 +1846,6 @@ fn run_desktop_e2e(ctx: &Ctx) -> Result<Outcome> {
         &["test", "-c", "desktop/e2e/playwright.config.ts"],
         &env,
     )
-}
-
-fn run_lane_health(ctx: &Ctx) -> Result<Outcome> {
-    let repo =
-        std::env::var("GITHUB_REPOSITORY").unwrap_or_else(|_| "srikanth235/centraid".to_owned());
-    let result = ci::lane_health(&ctx.root, &repo, "ci.yml", 40)?;
-    if result.ok && result.line.starts_with("SKIPPED:") {
-        return Ok(Outcome::Skipped(result.line));
-    }
-    verdict(ctx, "lane-health", result)
 }
 
 /// THE DEVICE LANES, with a RUNNER CONTRACT rather than a bare skip

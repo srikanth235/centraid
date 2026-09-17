@@ -1,8 +1,7 @@
 //! PEOPLE'S COPY LEAF, and the shape it has rather than the one Tally has
 //! (#1020, D-1020-T5).
 //!
-//! `contracts/tools/export-copy.ts` emits `copy/people.json` from
-//! `packages/blueprints/apps/people/people-copy.ts` plus the app's shelf table.
+//! `copy/people.json` holds People's sentences plus the app's shelf table.
 //! **Copy leaves move with their screens** (census §A0): a route id in one and
 //! not the other is a silent empty string, which is the one failure in copy that
 //! no surface reports and no snapshot catches.

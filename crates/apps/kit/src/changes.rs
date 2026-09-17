@@ -4,15 +4,13 @@
 //!
 //! - The **canonical** notice is the applier's: the unit is the *entity*, and a
 //!   `shapeId` is simply absent, because a seat has no shapes — what it has is
-//!   the tables a batch wrote, which is both narrower and truer
-//!   (`packages/client/src/replica/seat/invalidations.ts:1-17`).
+//!   the tables a batch wrote, which is both narrower and truer.
 //! - A **purge** is not a list of entities: the plane every read stands on is
 //!   replaced, so it matches everything (`invalidations.ts:38-44`).
 //!
-//! The matching rule is ported verbatim from
-//! `packages/client/src/replica/live-query.ts:99-111`: **skip only when
-//! dependency and invalidation both name rows, and different ones; anything
-//! wider reruns.** The order of the four tests is load-bearing and is kept.
+//! The matching rule is **skip only when dependency and invalidation both
+//! name rows, and different ones; anything wider reruns.** The order of the
+//! four tests is load-bearing and is kept.
 //!
 //! Keys are NUL-joined, because no id carries that byte, so parts cannot
 //! collide (`live-query.ts:169`).
@@ -25,8 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// core **coalesces per `(table, pk)` and drops nothing** (#1020, Execution
 /// model): a consumer that stops reading stalls sync after the queue fills,
 /// which is the correct backpressure. An **empty `pk_set` is meaningful**: it
-/// says "this table changed; re-derive what you render", exactly as v0's empty
-/// table list does (`packages/server/src/engine/changes/change-bus.ts:57-58`).
+/// says "this table changed; re-derive what you render".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangeEvent {
     pub table: String,
@@ -77,8 +74,7 @@ pub fn coalesce(events: impl IntoIterator<Item = ChangeEvent>) -> Vec<ChangeEven
         .collect()
 }
 
-/// What one read depends on. `row_id: None` means THE WHOLE ENTITY
-/// (`packages/client/src/replica/types.ts:220-230`).
+/// What one read depends on. `row_id: None` means THE WHOLE ENTITY.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Dependency {
     /// Absent on a seat: a seat has no shapes.

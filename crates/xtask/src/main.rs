@@ -92,20 +92,6 @@ enum Command {
         #[arg(long)]
         explain: bool,
     },
-    /// Per-lane first-attempt pass rate and chronic red, off the GitHub Actions
-    /// API (#1020, D-1020-G3; re-homed from `scripts/ci/lane-health.mjs`).
-    /// Nightly only — a pull request's verdict must not depend on api.github.com.
-    LaneHealth {
-        /// `owner/name`.
-        #[arg(long, default_value = "srikanth235/centraid")]
-        repo: String,
-        /// Which workflow's runs to read.
-        #[arg(long, default_value = "ci.yml")]
-        workflow: String,
-        /// How many runs on `main` to look back over.
-        #[arg(long, default_value_t = 40)]
-        runs: usize,
-    },
     /// Measure the edit-run loop and print (or write) the compile-time ledger.
     Measure {
         /// Write the measurements into `contracts/ledgers/compile-time.json`.
@@ -129,7 +115,8 @@ pub enum Profile {
     /// What every pull request must satisfy. `local` plus supply chain, a
     /// release build, the v1 tree's TypeScript, and the budget.
     Pr,
-    /// `pr` plus the v0 oracle suite and the device lanes.
+    /// `pr` plus the deeper simulation sweep, the display-bound e2e runs and
+    /// the device lanes.
     Nightly,
     /// `nightly` plus the restore drill and the VPS smoke.
     Release,
@@ -332,23 +319,6 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Command::LaneHealth {
-            repo,
-            workflow,
-            runs,
-        } => match ci::lane_health(&root, &repo, &workflow, runs) {
-            Ok(result) => {
-                println!("{}", result.line);
-                for finding in &result.findings {
-                    println!("  {finding}");
-                }
-                result.ok
-            }
-            Err(error) => {
-                eprintln!("xtask: {error:#}");
-                false
-            }
-        },
         Command::Measure { write, only } => match measure::run(&root, write, &only) {
             Ok(()) => true,
             Err(error) => {

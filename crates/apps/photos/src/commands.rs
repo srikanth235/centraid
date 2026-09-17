@@ -1,8 +1,7 @@
 //! THE 18 ACTIONS, as command invocations.
 //!
 //! Every Photos action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app
-//! (`packages/blueprints/apps/_shared/action-kit.ts`). So this module is a
+//! projection lives in the command, not the app. So this module is a
 //! table, not logic.
 //!
 //! **Three of the eighteen invoke a command outside `media.*`**, and that is
@@ -18,13 +17,11 @@
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
 //!
-//! **`online_only` is empty for Photos, and that is a checked claim.** Locker
-//! declares `ONLINE_ONLY_ACTIONS` in `packages/blueprints/apps/locker/writes.ts`;
-//! `packages/blueprints/apps/photos/` has no `writes.ts` at all
-//! (`ls packages/blueprints/apps/photos | grep writes` prints nothing), and
-//! `grep -rn ONLINE_ONLY packages/blueprints/apps/photos` finds none. So every
-//! Photos action may be queued offline, including `upload` — which is the whole
-//! point of a camera-roll backup that works on a plane.
+//! **`online_only` is empty for Photos, and that is a checked claim**
+//! (`no_photos_action_is_online_only`, below). Locker declares
+//! `ONLINE_ONLY_ACTIONS`; Photos has no equivalent. So every Photos action
+//! may be queued offline, including `upload` — which is the whole point of a
+//! camera-roll backup that works on a plane.
 
 use std::collections::BTreeMap;
 
@@ -157,8 +154,8 @@ pub fn action_row(action: &str) -> Option<&'static ActionRow> {
 
 /// `core.tag_item` is polymorphic over a SUBJECT type, and Photos' subjects are
 /// always assets. The action's input names an `asset_id`; the command takes
-/// `subject_type` + `subject_id` (`packages/vault/src/commands/tags.ts:80-85`,
-/// and `crates/vault/src/commands/core.rs`'s `TAGGABLE`).
+/// `subject_type` + `subject_id` (`crates/vault/src/commands/core.rs`'s
+/// `TAGGABLE`).
 const TAG_SUBJECT_TYPE: &str = "media.asset";
 
 /// **The capability stays pinned to `faces`, and it is the CONSENT SCOPE**

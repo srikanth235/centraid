@@ -1,11 +1,8 @@
 //! THE BALANCE ENGINE. Pure, and the one place that decides who owes whom.
 //!
-//! Ported from `packages/blueprints/src/tally-balance.ts` and
-//! `packages/blueprints/src/tally-simplify.ts`, whose doctrine this module
-//! keeps: **balances are never stored.** They are derived at read time by this
-//! one fold, and the simplification proposal is derived the same way and
-//! written nowhere (`packages/blueprints/apps/tally/app.json`'s description;
-//! #996 ruling R22).
+//! This module's doctrine: **balances are never stored.** They are derived
+//! at read time by this one fold, and the simplification proposal is
+//! derived the same way and written nowhere (#996 ruling R22).
 //!
 //! Three rules that are load-bearing and easy to lose in a port:
 //!
@@ -320,30 +317,6 @@ pub fn simplification(
         transfers,
         debts_before,
     }
-}
-
-/// Every party any part of the ledger names, whether or not they are still a
-/// member.
-///
-/// **Circle membership is current state, the ledger durable history**
-/// (`queries/dashboard.ts:400-424`): a member who left must stay nameable
-/// wherever an expense or settlement still refers to them, or a group's ledger
-/// prints "Someone" against a row the member remembers.
-pub fn parties_on_the_ledger(data: &BalanceData) -> BTreeSet<String> {
-    let mut parties: BTreeSet<String> = BTreeSet::new();
-    for roster in data.members_by_group.values() {
-        parties.extend(roster.iter().cloned());
-    }
-    for expense in &data.expenses {
-        parties.insert(expense.paid_by.clone());
-        parties.extend(expense.splits.keys().cloned());
-        parties.extend(expense.payers.keys().cloned());
-    }
-    for settlement in &data.settlements {
-        parties.insert(settlement.from_party.clone());
-        parties.insert(settlement.to_party.clone());
-    }
-    parties
 }
 
 #[cfg(test)]

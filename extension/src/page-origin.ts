@@ -4,11 +4,10 @@
  *
  * ## What moved out of this file, and why that is the security improvement
  *
- * v0's Companion carries the whole origin-matching policy —
- * `apps/extension/src/origin-matching.ts` plus `tldts` and the Public Suffix
- * List, bundled into the extension. That is a copy of a security policy, with
- * its own copy of a list that goes stale, living in the least trusted process in
- * the chain. After wave 4 it buys nothing: the fill's decision is the SEAT's
+ * The extension carries no origin-matching policy and no Public Suffix List. A
+ * copy here would be a security policy, with its own copy of a list that goes
+ * stale, living in the least trusted process in the chain — and it would buy
+ * nothing: the fill's decision is the SEAT's
  * (`crates/seat::locker::fill_grant` matches the page origin against the row's
  * own stored `url_match_policy`, and re-normalises the caller's origin first),
  * and the candidate list is filtered by the native host over
@@ -19,8 +18,8 @@
  * So the registrable-domain question is gone from the extension. What is left is
  * the part that is genuinely the page's own business and needs no list:
  *
- * 1. **eligibility** — HTTPS, or a real loopback development origin. v0's rule,
- *    character for character, including the three cases its comment exists for:
+ * 1. **eligibility** — HTTPS, or a real loopback development origin, including
+ *    the three cases that matter:
  *    `127.0.0.1.evil.test` and `127.foo.bar` are NOT loopback, and `localhost`,
  *    `::1` and `[::1]` are.
  * 2. **normalisation** — `scheme://host[:port]`, so the frame carries an origin
@@ -36,8 +35,7 @@
  * True only for real IPv4 loopback (`127.0.0.0/8`) and the exact hostnames
  * `localhost` / `::1`.
  *
- * Carried verbatim from v0 (`origin-matching.ts:11`–`:29`) with its reason:
- * hostnames that merely start with `127.` — `127.0.0.1.evil.test` — must not
+ * Hostnames that merely start with `127.` — `127.0.0.1.evil.test` — must not
  * inherit the HTTP eligibility exception.
  */
 export function isLoopback(hostname: string): boolean {

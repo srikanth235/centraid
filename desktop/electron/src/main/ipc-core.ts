@@ -1,16 +1,11 @@
 /*
- * The channel map, Electron-free (#1020, D-1020-F2). v0's `ipc-core.ts`, at a
- * tenth the size — and the shrinking is the point.
+ * The channel map, Electron-free (#1020, D-1020-F2). It is small on purpose.
  *
- * v0 carries **41 channels** (`apps/desktop/src/main/ipc-core.ts:4`–`:53`)
- * because the renderer reached the vault over loopback HTTP and every door main
- * had to hold got its own channel. Here the renderer reaches the vault through
- * ONE door — the seat socket, held by main — so the bridge is the socket's
- * shape plus the shell's own business (the window, the seat's lifecycle, the
- * update). v0's own note applies unchanged and is worth restating:
- * *templates, conversation, user prefs, harness detection and automations are
- * not IPC bridges* (`preload-core.ts:157`–`:158`); here they are socket
- * messages, which is the same rule with a different transport.
+ * The renderer reaches the vault through ONE door — the seat socket, held by
+ * main — so the bridge is the socket's shape plus the shell's own business (the
+ * window, the seat's lifecycle, the update). A channel per capability is the
+ * shape to avoid: templates, conversation, user prefs, harness detection and
+ * automations are not IPC bridges; they are socket messages.
  *
  * The map is consumed by BOTH sides so they cannot drift, which is why it is in
  * a file neither `electron` nor `net` reaches.

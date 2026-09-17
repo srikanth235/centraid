@@ -115,6 +115,10 @@ pub const CENTRAID_TIMEOUT: i32 = -5;
 /// `config` must point to `len` readable bytes and `out` must point to writable
 /// storage for one pointer. Both are borrowed for the duration of the call
 /// only; this function keeps neither.
+// SAFETY: `no_mangle` exports this under its `centraid_`-prefixed name, which
+// no other symbol in the library shares; the function is `unsafe` because the
+// caller must uphold the `# Safety` contract above, and every raw pointer is
+// null-checked or borrowed through `marshal` before it is used.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn centraid_open(
     config: *const u8,
@@ -275,6 +279,10 @@ fn attach_network(handle: &Handle, vault_path: &std::path::Path) -> Result<(), C
 /// `handle` must be a live pointer from [`centraid_open`] that has not been
 /// passed to [`centraid_close`]. `req` must point to `len` readable bytes.
 /// `out_buf` and `out_len` must point to writable storage.
+// SAFETY: `no_mangle` exports this under its `centraid_`-prefixed name, which
+// no other symbol in the library shares; the function is `unsafe` because the
+// caller must uphold the `# Safety` contract above, and every raw pointer is
+// null-checked or borrowed through `marshal` before it is used.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn centraid_call(
     handle: *mut Handle,
@@ -347,6 +355,10 @@ pub unsafe extern "C" fn centraid_call(
 /// # Safety
 ///
 /// As [`centraid_call`], for `handle`, `out_buf` and `out_len`.
+// SAFETY: `no_mangle` exports this under its `centraid_`-prefixed name, which
+// no other symbol in the library shares; the function is `unsafe` because the
+// caller must uphold the `# Safety` contract above, and every raw pointer is
+// null-checked or borrowed through `marshal` before it is used.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn centraid_next_event(
     handle: *mut Handle,
@@ -376,6 +388,7 @@ pub unsafe extern "C" fn centraid_next_event(
         // whatever was in them, which is why this is a clause and not a note.
         Ok(Ok(None)) => CENTRAID_TIMEOUT,
         Ok(Err(error)) => code_for(&error),
+        // SAFETY: both out-pointers were checked non-null on entry.
         Err(_) => unsafe { poison(core, "next_event", out_buf, out_len) },
     }
 }
@@ -394,6 +407,10 @@ pub unsafe extern "C" fn centraid_next_event(
 ///
 /// `buf` must be a pointer this library returned through an out-parameter, with
 /// exactly the `len` it reported, and must not have been freed already.
+// SAFETY: `no_mangle` exports this under its `centraid_`-prefixed name, which
+// no other symbol in the library shares; the function is `unsafe` because the
+// caller must uphold the `# Safety` contract above, and every raw pointer is
+// null-checked or borrowed through `marshal` before it is used.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn centraid_free(buf: *mut u8, len: usize) {
     if buf.is_null() {
@@ -417,6 +434,10 @@ pub unsafe extern "C" fn centraid_free(buf: *mut u8, len: usize) {
 ///
 /// `handle` must be a live pointer from [`centraid_open`] that has not already
 /// been closed. It must not be used afterwards.
+// SAFETY: `no_mangle` exports this under its `centraid_`-prefixed name, which
+// no other symbol in the library shares; the function is `unsafe` because the
+// caller must uphold the `# Safety` contract above, and every raw pointer is
+// null-checked or borrowed through `marshal` before it is used.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn centraid_close(handle: *mut Handle) -> i32 {
     if handle.is_null() {
@@ -442,6 +463,8 @@ pub unsafe extern "C" fn centraid_close(handle: *mut Handle) -> i32 {
 /// # Safety
 ///
 /// `out_buf` and `out_len` must be non-null and point to writable storage.
+// SAFETY: `unsafe` because the caller must uphold the `# Safety` contract
+// above; the one unsafe operation in the body carries its own note.
 unsafe fn poison(core: &Handle, what: &str, out_buf: *mut *mut u8, out_len: *mut usize) -> i32 {
     let diagnostic_id = core.poison(what);
     let encoded = marshal::encode_error(0, &CoreError::Poisoned { diagnostic_id });
@@ -476,14 +499,4 @@ fn code_for(error: &CoreError) -> i32 {
         // second, smaller error vocabulary for the shell to learn.
         _ => CENTRAID_OK,
     }
-}
-
-/// Whether a response's body is an error, for a caller that only has the bytes.
-///
-/// A convenience for the contract tests rather than part of the ABI: a shell
-/// decodes the `Envelope` and matches on its body.
-#[must_use]
-pub fn is_error_envelope(bytes: &[u8]) -> bool {
-    marshal::decode_envelope(bytes)
-        .is_ok_and(|envelope| matches!(envelope.body, Some(wire::envelope::Body::Error(_))))
 }

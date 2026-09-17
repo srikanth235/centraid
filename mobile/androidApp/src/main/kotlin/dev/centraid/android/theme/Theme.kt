@@ -11,8 +11,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import centraid.screen.v1.Money
@@ -75,32 +73,10 @@ public fun CentraidTheme(content: @Composable () -> Unit) {
 public val LocalCentraidTokens: androidx.compose.runtime.ProvidableCompositionLocal<NativeTheme> =
     staticCompositionLocalOf { CentraidTokens.light }
 
-/** The token table in force. */
-public val centraidTokens: NativeTheme
-    @Composable @ReadOnlyComposable get() = LocalCentraidTokens.current
-
 /** A colour role, in force. See [color] for why a missing role is loud. */
 @Composable
 @ReadOnlyComposable
 public fun centraidColor(role: String): Color = LocalCentraidTokens.current.color(role)
-
-/**
- * A SPACING RUNG, NEVER A TYPED-IN NUMBER.
- *
- * The rungs are 4/8/12/16/24/32; a value between them is a value nobody chose.
- */
-@Composable
-@ReadOnlyComposable
-public fun centraidSpace(rung: String): Dp = requireNotNull(
-    LocalCentraidTokens.current.spacing[rung],
-) { "no such spacing rung '$rung'" }.dp
-
-/** A radius, in force. */
-@Composable
-@ReadOnlyComposable
-public fun centraidRadius(name: String): Dp = requireNotNull(
-    LocalCentraidTokens.current.radii[name],
-) { "no such radius '$name'" }.dp
 
 /**
  * A TYPE ROLE, WITH ITS OWN LINE HEIGHT.

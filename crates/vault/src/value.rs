@@ -1,7 +1,7 @@
 //! A SQLite value, a row image, and the JSON the log stores them as.
 //!
-//! Three distinctions this module exists to keep, each of which v0 lost once
-//! and paid for (plane census seam 2, `packages/core/src/protocol/row-json.ts:1-28`):
+//! Three distinctions this module exists to keep, each of which was lost once
+//! and paid for (plane census seam 2):
 //!
 //! 1. **An absent key is not a NULL.** An UPDATE's changeset record omits every
 //!    column the statement did not touch. A reader that cannot tell an omitted

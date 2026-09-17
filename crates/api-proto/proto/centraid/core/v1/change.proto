@@ -16,8 +16,7 @@ import "centraid/core/v1/value.proto";
 // fills, which is the correct backpressure and is reported as a `HealthEvent`,
 // not as a lost change.
 //
-// This is a WAKE, exactly as v0's feed is (`docs/protocol.md:269`): it carries
-// no row a client may depend on. A seat pulls its own `LogPage`s and a shell
+// This is a WAKE: it carries no row a client may depend on. A seat pulls its own `LogPage`s and a shell
 // re-runs its own `PageQuery`. That is why there is no row image here and why
 // adding one later would be a change of meaning, not a new field.
 message ChangeEvent {
@@ -38,8 +37,7 @@ message HealthEvent {
   // The event queue filled and sync is waiting for the consumer.
   bool stalled = 3;
   // Log positions the seat is behind the gateway's watermark. A DISTANCE IN LOG
-  // POSITIONS, not in rows and not in time
-  // (`packages/client/src/replica/seat/watermark.ts:18-20`).
+  // POSITIONS, not in rows and not in time.
   uint64 behind = 4;
 }
 

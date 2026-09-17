@@ -33,8 +33,7 @@
 //!   rather than after — without it a busy vault's newest 200 receipts could be
 //!   entirely someone else's and the clamp would hand the screen an empty
 //!   history (census §A8).
-//! - **`online_only` is exactly v0's five** (`ONLINE_ONLY_ACTIONS`,
-//!   `packages/blueprints/apps/locker/writes.ts:33`-`:39`):
+//! - **`online_only` is exactly v0's five** (`ONLINE_ONLY_ACTIONS`):
 //!   `add-item, edit-item, set-field, set-passkey, export`. Never a wider set —
 //!   `trash/restore/purge/star/archive/duplicate/remove-field/set-addresses/clear-passkey`
 //!   are all durable in the outbox, and `export` keeps the entry with a new
@@ -93,8 +92,7 @@ pub use watchtower::{WatchEntry, Watchtower};
 /// Every v0 Locker query wraps its body and answers `{…empty, vaultDenied:
 /// {code, message}}` rather than throwing. `revoked_at` comes from the HOST,
 /// because a revoked app cannot read the consent tables to date its own
-/// revocation (`packages/server/src/engine/handlers/vault-bridge.ts:29`-`:36`)
-/// — so it is an `Option` this crate never fills in.
+/// revocation — so it is an `Option` this crate never fills in.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Denial {
     pub code: Option<String>,
@@ -186,7 +184,7 @@ impl ReadRefusal {
 #[derive(PartialEq, Eq)]
 pub struct Revealed {
     /// `{entity, entity_id, column}` — an ADDRESS the pane already holds, never
-    /// a value (`packages/blueprints/apps/locker/reveal.ts:23`-`:40`).
+    /// a value.
     pub target: SidecarTarget,
     /// The plaintext, for as long as [`Self::expires_at`] has not passed.
     pub value: String,
@@ -197,10 +195,10 @@ pub struct Revealed {
     pub expires_at: String,
 }
 
-/// A reveal is a **gesture, not a mode**, and 30 s is the product's number
-/// (`packages/blueprints/apps/locker/reveal.ts:21`). It is stated on the seat
-/// that owns the screen it governs, because the reason for it was never the
-/// permit's lifetime — it was the shoulder standing behind the member.
+/// A reveal is a **gesture, not a mode**, and 30 s is the product's number.
+/// It is stated on the seat that owns the screen it governs, because the
+/// reason for it was never the permit's lifetime — it was the shoulder
+/// standing behind the member.
 pub const REVEAL_LIFE_MS: u64 = 30_000;
 
 /// THE ADDRESS OF A SECRET, never the secret.

@@ -1,8 +1,7 @@
 //! THE FIFTEEN ACTIONS, as command invocations.
 //!
 //! Every Notes action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app
-//! (`packages/blueprints/apps/_shared/action-kit.ts`). So this module is a
+//! projection lives in the command, not the app. So this module is a
 //! table, not logic.
 //!
 //! **Notes reaches FOUR schemas from fifteen actions**, and that is the fact a
@@ -35,10 +34,8 @@
 //! nothing and drop the non-owner park in exchange.
 //!
 //! **Nothing here is `online_only`, and that is a checked claim.** Locker
-//! declares `ONLINE_ONLY_ACTIONS` in `packages/blueprints/apps/locker/writes.ts`;
-//! `grep -rn ONLINE_ONLY packages/blueprints/apps/notes` finds none and there is
-//! no `writes.ts` in that directory. So every Notes action may be queued
-//! offline — which is the point of writing a note on a train.
+//! declares `ONLINE_ONLY_ACTIONS`; Notes declares none. So every Notes action
+//! may be queued offline — which is the point of writing a note on a train.
 
 use std::collections::BTreeMap;
 
@@ -181,16 +178,6 @@ pub const ACTIONS: [ActionRow; 15] = [
     act("add-tag", "core.tag_item"),
     act("remove-tag", "core.untag_item"),
 ];
-
-/// `send-to-tasks`' SECOND invocation, which is not always made.
-///
-/// The task lands first; the backlink is `core.link_entities` from the note to
-/// the task. It is "no invoke at all when the task did not land or there is no
-/// note", which is why its key is named rather than ordinal.
-pub const SEND_TO_TASKS_BACKLINK: &str = "core.link_entities";
-/// v0's own literal (`actions/send-to-tasks.ts:48`), kept so the two sides
-/// agree about which call this is.
-pub const SEND_TO_TASKS_BACKLINK_KEY: &str = "notes.send-to-tasks.backlink";
 
 /// One action's row, by the name the manifest gives it.
 #[must_use]

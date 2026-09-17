@@ -1,12 +1,11 @@
 //! A row, and the three states a column value has.
 //!
 //! **NULL, MISSING and a value are three different claims** (#1020, apps seam
-//! 6). v0 keeps them apart with three mechanisms: `guardedRow` Proxies a row so
-//! that reading a column the replica *stripped* throws rather than reading as
-//! absent data (`packages/client/src/replica/inline-query-ctx-core.ts:50`),
-//! `ReplicaRowEnvelope.hasUnavailableFields` separates "not disclosed" from
-//! "over the ceiling", and `Page.next` is *absent* rather than null when rows
-//! end (`packages/core/src/page/window.ts:59`).
+//! 6). v0 keeps them apart with three mechanisms: `guardedRow` Proxies a row
+//! so that reading a column the replica *stripped* throws rather than
+//! reading as absent data, `ReplicaRowEnvelope.hasUnavailableFields`
+//! separates "not disclosed" from "over the ceiling", and `Page.next` is
+//! *absent* rather than null when rows end.
 //!
 //! Rust's `Option<T>` collapses two of those, and the collapse is how the
 //! ONT-23 class of bug comes back as "0 instead of unknown". So a row is a map
@@ -29,8 +28,7 @@ pub enum Cell {
 
 impl Cell {
     /// The cell as the cursor spells it — `String(value)` in v0, so an integer
-    /// sort column round-trips as its decimal text
-    /// (`packages/core/src/page/statement.ts:77`, apps seam 7).
+    /// sort column round-trips as its decimal text (apps seam 7).
     pub fn to_cursor_text(&self) -> String {
         match self {
             // `pageCursorOf` maps a null sort key to the empty string, and a

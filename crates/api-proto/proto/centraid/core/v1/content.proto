@@ -1,12 +1,10 @@
 // THE BYTE DOOR'S READ HALF (#1020, D-1020-DC1; census §A3).
 //
-// v0 reaches three shell verbs — `window.centraid.blobText`, `blobUrl` and
-// `stageBlob` (`packages/blueprints/apps/docs/blob-text.ts:14`). This file
-// promotes the SECOND of them to a core request, which is the one a grid needs:
-// a surface asks "where are these bytes" and hands the answer to an `<img>`, a
-// `UIImage` or a Compose painter. The bytes themselves never cross the ABI, so
-// range requests and caching stay the platform's and the core never buffers a
-// photograph.
+// This file promotes `blobUrl` to a core request, which is the one a grid
+// needs: a surface asks "where are these bytes" and hands the answer to an
+// `<img>`, a `UIImage` or a Compose painter. The bytes themselves never cross
+// the ABI, so range requests and caching stay the platform's and the core
+// never buffers a photograph.
 //
 // `crates/apps/docs/src/bytes.rs` holds the same three shapes as an app-crate
 // trait and states the rules; this is that trait's `Url` arm on the wire. The

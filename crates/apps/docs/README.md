@@ -1,10 +1,10 @@
 # `centraid-apps-docs` — a drive as a projection of the vault
 
-Docs is 13,183 lines of v0 TypeScript: 4 queries, 16 actions, 34 scopes over five schemas, and an 82-line demo seed. This crate is the read plane and the action table; the writes are `crates/vault`'s `core` schema — **all sixteen of them** — and the bytes ride a door.
+Docs is 4 queries, 16 actions and 34 scopes over five schemas, plus a demo seed. This crate is the read plane and the action table; the writes are `crates/vault`'s `core` schema — **all sixteen of them** — and the bytes ride a door.
 
 | Module | What it is |
 | --- | --- |
-| `manifest` | v0's `app.json`, byte for byte, parsed by the kit's parser at load time. Two copies of "which tables does Docs write" is how the two answers drift. |
+| `manifest` | The app's `manifest.json`, parsed by the kit's parser at load time. Two copies of "which tables does Docs write" is how the two answers drift. |
 | `queries` | `drive`, `search`, `history` and `activity`: the statements, the taxonomy pair, the folder rail, the labels, the custody decoration and the occurrence walk. |
 | `shares` | The share fold — who a document is shared with, over the document **or any folder above it**, with nine bounded windows under one stated cap. |
 | `origins` | Where a document came from. A second, independent denial over an independent plane: a delivered copy carries no folders-scheme tag, so the drive's window cannot see it. |
@@ -13,9 +13,9 @@ Docs is 13,183 lines of v0 TypeScript: 4 queries, 16 actions, 34 scopes over fiv
 
 ## The rulings this crate is shaped by
 
-Every one is an answer to a way the port could have been wrong, and every one has a test named after it.
+Every one is an answer to a way this crate could be wrong, and every one has a test named after it.
 
-**D-1020-DC1 — identity is the wrapper, never the bytes.** A document is a `core.document` wrapper around a sha256-deduped content item, and **two documents may legitimately share identical bytes** (#352). Dedup is on the bytes; a port that keyed a drive row by content id merges two members' unrelated files. `n_wrappers_over_one_sha_are_n_drive_rows` is a property test over _n_, not a case at two, because a port that special-cased two would still be wrong at three — and each of the _n_ carries its own history and its own representation over the same sha.
+**D-1020-DC1 — identity is the wrapper, never the bytes.** A document is a `core.document` wrapper around a sha256-deduped content item, and **two documents may legitimately share identical bytes** (#352). Dedup is on the bytes; a reader that keyed a drive row by content id would merge two members' unrelated files. `n_wrappers_over_one_sha_are_n_drive_rows` is a property test over _n_, not a case at two, because code that special-cased two would still be wrong at three — and each of the _n_ carries its own history and its own representation over the same sha.
 
 **D-1020-DC2 — the fold is one module with named windows.** A share is a **standing answer, not a roster**: `share_authority` holds who may reach the document and `share_fulfillment` holds whether it has reached them. `via` says `document` or `folder`, so a member is never told the document itself was shared when it only sits in a shared folder. `delivered_at IS NOT NULL` is the only thing that makes a member `current` (#846: a pass that went unreachable drops back to `syncing`, and reading that as "invited" would tell someone a share they watched land had never arrived). **A denial is `Denied`, not `[]`** — "we cannot see" and "shared with nobody" are different facts and the second is the one a member acts on.
 
@@ -27,7 +27,7 @@ Every one is an answer to a way the port could have been wrong, and every one ha
 
 ## The four queries, and the three reads that discover rows
 
-**D-1020-DC10 — the declared window is walked to its stated size.** `MAX_PAGE_ROWS` clamps a page to 500, and v0 asks for its 2,000-row window as one page and takes the rows — so a drive declaring `limit: 2000` answers 500 documents and discards the cursor that says there are more. Measured at the year-3 profile: **500 of 7,600 live documents**. A list is where a clamp is defensible, but the clamp has to be the one the caller asked for and not one the page contract imposed behind it; `core_tag.tagged_at` is `NOT NULL`, so the keyset walk is continuable and the stated window is reachable. Photos' library takes one page instead, because its own sort column is nullable and a walk there would silently drop every NULL (D-1020-P11). The port answers 2,000 in 480 ms at that profile, and `truncated` is still the read's own claim rather than a row count.
+**D-1020-DC10 — the declared window is walked to its stated size.** `MAX_PAGE_ROWS` clamps a page to 500, so asking for the 2,000-row window as one page would answer 500 documents and discard the cursor that says there are more — **500 of 7,600 live documents** at the year-3 profile. A list is where a clamp is defensible, but the clamp has to be the one the caller asked for and not one the page contract imposed behind it; `core_tag.tagged_at` is `NOT NULL`, so the keyset walk is continuable and the stated window is reachable. Photos' library takes one page instead, because its own sort column is nullable and a walk there would silently drop every NULL (D-1020-P11). The walk answers 2,000 in 480 ms at that profile, and `truncated` is still the read's own claim rather than a row count.
 
 The drive's window is a **walked page set** over `core_tag`, newest `tagged_at` first. Everything else — the wrappers, the stars, the labels, the content rows, the custody states, the representations and the whole share fold — is `IN`-bounded by ids that page returned. `truncated` is that page's own cursor: `rows.length >= window` cannot tell a window that filled exactly from one that ran out.
 
@@ -37,7 +37,7 @@ The second discovery read is the origin plane, and it runs **before** the folder
 
 `activity` reads `access_provenance` scoped by the polymorphic `(entity_type, entity_id)` pair. An empty rail is honest: no activity has been recorded yet, not an error.
 
-**And in v0 that rail has never shown an event.** The gateway's paged door serves only tables registered as entities, and `access_provenance` declares no `FOREIGN KEY (prov_id) REFERENCES core_entity(entity_id)` — so `docs.activity.provenance` is refused at `packages/vault/src/gateway/paged-door.ts:436` before any access decision is taken, for every caller including the owner. The manifest declares the scope, the handler ships, the rows are there, and the screen is empty. `crates/apps/docs/tests/parity.rs`'s `the_activity_rail_the_gateways_door_refuses` reads the three events a filed-then-edited-then-starred document actually has; the fixture records v0's refusal verbatim so the day the door admits the audit band, the fixture fails and the finding is re-judged.
+**The frozen fixture records a refusal here.** The implementation it was captured from served only tables registered as entities through its paged door, and `access_provenance` declares no `FOREIGN KEY (prov_id) REFERENCES core_entity(entity_id)` — so `docs.activity.provenance` was refused for every caller, the owner included. `crates/apps/docs/tests/parity.rs`'s `the_activity_rail_the_gateways_door_refuses` reads the three events a filed-then-edited-then-starred document actually has, beside that recorded refusal.
 
 ## What stops this crate doing more
 

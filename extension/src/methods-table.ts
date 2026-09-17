@@ -1,21 +1,16 @@
 /*
- * GENERATED — do not edit. `bun contracts/tools/export-extension-methods.ts`.
+ * THE CLOSED COMPANION METHOD TABLE, hand-maintained.
  *
- * The closed Companion method table, derived from v0's own
- * `apps/extension/src/{types,companion-api}.ts` and byte-equal in content to
- * `contracts/extension/methods.json`, which the native host compiles in
- * (`crates/centraid/src/cmd/native_host/methods.rs`). Two files hold this one
- * fact because a service worker cannot resolve a JSON import without a bundler
- * and this Companion has none; `methods.test.ts` asserts they agree.
+ * Equal in content to `contracts/extension/methods.json`, which the native host
+ * compiles in (`crates/centraid/src/cmd/native_host/methods.rs`). Two files hold
+ * this one fact because a service worker cannot resolve a JSON import without a
+ * bundler and this Companion has none; `methods.test.ts` asserts they agree, so
+ * a change lands in both files in the same commit.
  */
 
 export default {
   version: 1,
   max_frame_bytes: 1048576,
-  source: [
-    "apps/extension/src/types.ts",
-    "apps/extension/src/companion-api.ts",
-  ],
   methods: [
     {
       name: "status",

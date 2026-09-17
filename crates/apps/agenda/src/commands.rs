@@ -1,8 +1,7 @@
 //! THE SEVEN ACTIONS, as command invocations.
 //!
 //! Every Agenda action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app
-//! (`packages/blueprints/apps/_shared/action-kit.ts`). So this module is a
+//! projection lives in the command, not the app. So this module is a
 //! table, not logic.
 //!
 //! **FIVE OF THE SEVEN ARE `schedule.*`** and two are `core.*` — the attachment
@@ -21,11 +20,9 @@
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
 //!
 //! **`online_only` is empty for Agenda, and that is a checked claim.**
-//! `ONLINE_ONLY_ACTIONS` is declared in `packages/blueprints/apps/locker/writes.ts`
-//! and `grep -rn ONLINE_ONLY packages/blueprints/apps/agenda` finds none;
-//! there is no `writes.ts` in that directory. So every Agenda action may be
-//! queued offline, including `propose` — which is the point of accepting an
-//! invitation on a train.
+//! `ONLINE_ONLY_ACTIONS` names actions that must stay online, and Agenda has
+//! none. So every Agenda action may be queued offline, including `propose`
+//! — which is the point of accepting an invitation on a train.
 //!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
 //! §A0, two gates). **Agenda declares NONE of the first**, including on

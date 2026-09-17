@@ -297,7 +297,7 @@ test("a SHA-pinned rust-toolchain with `toolchain:` as a child key is clean", ()
 
 test("`toolchain:` is found in the `- name:` step form too, where `with:` is a sibling of `uses:`", () => {
   // `- name:` / `uses:` / `with:` puts `with:` at the SAME indent as `uses:`,
-  // not deeper — the shape `lane-release-gateway-npm.yml` uses. A scan that
+  // not deeper — the shape a release lane used. A scan that
   // stops at equal indent reports a false positive here.
   const source = clean.replace(
     "      - run: bun test\n",

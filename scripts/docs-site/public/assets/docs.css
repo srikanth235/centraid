@@ -18,7 +18,7 @@
 
    The one step beyond the product ramp is `--t-chapter-size`, which scales
    the display ROLE for a chapter opener; it is registered in
-   docs/design-divergences.md. The ontology route keeps its own sheet
+   docs/design-machinery.md. The ontology route keeps its own sheet
    (src/content/ontology-style.css) and drinks from the same tokens. */
 
 :root {
@@ -652,7 +652,7 @@ section.sec + section.sec {
   background: var(--line-strong);
 }
 /* One ramp, one face: the chapter opener is the display role scaled once
-   (docs/design-divergences.md); everything under it is a ramp role. Emphasis
+   (docs/design-machinery.md); everything under it is a ramp role. Emphasis
    inside a heading is a step on the ink ramp, never a hue. */
 h1,
 h2,

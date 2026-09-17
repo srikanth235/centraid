@@ -7,7 +7,7 @@ Lane G owns the shared files: `crates/xtask/src/{gate,rules}.rs`, the ledgers, `
 | `mobile-jvm-step.patch` | turns `Profile::MobileJvm` from a ledger placeholder into a real profile with one step, and widens `commonmain-no-platform-import` to `mobile/core` |
 | `device-lane-bodies.md` | the four `run:` bodies for `gate-nightly.yml`'s device lanes |
 | `release-yml.patch` | drops the two retired EAS secrets from `release.yml`'s call |
-| `findings.md` | what lane E found outside its own slice, each with a proposed patch |
+| `proposed-patches.md` | what lane E found outside its own slice, each with a proposed patch |
 | `measured.md` | the numbers `cargo xtask measure --write` should write |
 
 ## Apply it, or let E apply it

@@ -13,15 +13,13 @@
 //!
 //! * **The keyset is a row value.** `(rank, pk) > (?, ?)` is what SQLite turns
 //!   into one ordered walk of the match set; the equivalent disjunction is what
-//!   an optimiser has to be talked into (`packages/core/src/page/statement.ts:93`-`:98`).
-//!   The pk is in the key for the reason every other page has it there: two
-//!   documents can score identically, and keyed on the score alone a page
-//!   boundary silently repeats or drops one.
+//!   an optimiser has to be talked into. The pk is in the key for the reason
+//!   every other page has it there: two documents can score identically, and
+//!   keyed on the score alone a page boundary silently repeats or drops one.
 //! * **The rank is NEGATIVE and ascending is best-first.** FTS5's `rank` is bm25
 //!   negated, so `ORDER BY rank` puts the best match first — the order v0 keeps
-//!   and calls "vault order is rank order"
-//!   (`packages/blueprints/apps/notes/queries/search.ts:231`). A port that sorted
-//!   descending would answer the worst matches.
+//!   and calls "vault order is rank order" (v0's own comment). A port that
+//!   sorted descending would answer the worst matches.
 //! * **The soft-delete predicate is here as well as in the trigger.** A trashed
 //!   row leaves the index the moment it is trashed (#916, R11), so this is belt
 //!   and braces — but the braces were added *after* trashed profiles and
@@ -32,11 +30,11 @@
 //! v0's `searchEntity` walks four consent walls before the statement: the base
 //! entity's read decision, the read decision of every entity whose canonical
 //! text the index folds in, a field mask that hides an indexed column failing
-//! the search **closed**, and a receipt for the decision either way
-//! (`packages/vault/src/gateway/search.ts:74`-`:130`). This door takes the
-//! [`Principal`] it is handed and does none of that: it is the OWNER's view,
-//! which is the identity the parity fixtures are generated under and therefore
-//! the identity that makes them comparable. Wiring the consent pipeline is
+//! the search **closed**, and a receipt for the decision either way. This
+//! door takes the [`Principal`] it is handed and does none of that: it is
+//! the OWNER's view, which is the identity the parity fixtures are generated
+//! under and therefore the identity that makes them comparable. Wiring the
+//! consent pipeline is
 //! `crates/vault`'s paged-door work and is named as a hand-off in
 //! `crates/search/README.md` rather than stubbed here, because a stub that
 //! *looks* like a consent check is worse than an absence that is written down.

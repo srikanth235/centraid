@@ -1,12 +1,12 @@
 # `crates/apps/agenda` — the calendar, and the one recurrence engine
 
-Agenda is 7,818 lines of v0 TypeScript: **4 queries, 7 actions, 13 scopes** — the smallest scope set of any app, and the only one besides People that takes `read+act` over a whole schema (#1020, wave 4 census §A6).
+Agenda is **4 queries, 7 actions, 13 scopes** — the smallest scope set of any app, and the only one besides People that takes `read+act` over a whole schema ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 ## What is here
 
 | File | What it owns |
 | --- | --- |
-| `manifest.json` | `packages/blueprints/apps/agenda/app.json`, byte for byte |
+| `manifest.json` | the app's manifest: queries, actions and scopes |
 | `src/manifest.rs` | the parse, and the claims the manifest makes about itself |
 | `src/queries.rs` | the four queries: statements as data, and the folds over them |
 | `src/expansion.rs` | the recurrence FOLD — one row per occurrence, and the cap |
@@ -49,10 +49,4 @@ cargo test -p centraid-apps-agenda                     # unit + parity + year-3
 cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture
 ```
 
-The parity fixtures under `contracts/apps/agenda/` are **generated from v0** and never typed:
-
-```sh
-CENTRAID_WRITE_CONTRACTS=1 node node_modules/vitest/vitest.mjs run \
-  tests/quality/agenda-parity.contract.test.ts
-bun run format && git diff --exit-code contracts/apps/agenda
-```
+The parity fixtures under `contracts/apps/agenda/` are **frozen goldens** read by `tests/parity.rs`, captured from an independent implementation and never typed by hand — see [`contracts/README.md`](../../../contracts/README.md).

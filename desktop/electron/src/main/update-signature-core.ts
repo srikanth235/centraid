@@ -2,13 +2,9 @@
  * Updater signature custody, pure half (#842); fetching lives in
  * update-signature-gate.ts.
  *
- * CARRIED UNCHANGED from `apps/desktop/src/main/update-signature-core.ts`
- * (#1020 wave 3 lane F, D-1020-F7). Not rewritten and not narrowed: the twelve
- * refusal reasons below are deliberately not collapsible ("the operator's next
- * action differs"), the trust anchor is deliberately not the OS, and the module
- * is deliberately fail-closed. A seat process instead of a gateway daemon
- * changes none of that, and the one thing a port could do here is lose a
- * refusal reason. Trust rests on a detached ed25519 signature over a
+ * D-1020-F7: the twelve refusal reasons below are deliberately not collapsible
+ * ("the operator's next action differs"), the trust anchor is deliberately not
+ * the OS, and the module is deliberately fail-closed. Trust rests on a detached ed25519 signature over a
  * manifest pinning each artifact's SHA-512, never on OS code-signing (a no-op
  * on AppImage, skipped for block-maps). Keep this module pure and fail-closed:
  * an unrecognised shape is `trusted: false`.

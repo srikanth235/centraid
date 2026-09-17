@@ -1,11 +1,10 @@
 //! The manifest, embedded and parsed rather than restated — and the two fields
 //! deleted from it, with the deletion itself under test (D-1020-L7).
 //!
-//! `manifest.json` is `packages/blueprints/apps/locker/app.json` with exactly
-//! two keys removed. It is embedded with `include_str!` so a shipped binary
-//! carries the manifest it was built with and never looks for a repository path
-//! at runtime — the same reason `crates/ontology` embeds the registries
-//! (`contracts/README.md`).
+//! `manifest.json` has exactly two keys removed from v0's manifest. It is
+//! embedded with `include_str!` so a shipped binary carries the manifest it
+//! was built with and never looks for a repository path at runtime — the
+//! same reason `crates/ontology` embeds the registries (`contracts/README.md`).
 //!
 //! Two copies of "which tables does Locker write" is how the two answers drift,
 //! so nothing here restates a scope, an action or a query in Rust. What Rust
@@ -58,8 +57,8 @@ mod tests {
 
     // DELETED WITH ITS ORACLE (#1025 S4).
     // `the_manifest_differs_from_v0_by_exactly_the_two_dead_fields` applied
-    // D-1020-L7's two edits to `packages/blueprints/apps/locker/app.json` and
-    // asserted the result was byte-identical to ours. That file went with
+    // D-1020-L7's two edits to v0's manifest and asserted the result was
+    // byte-identical to ours. That file went with
     // `chore(retire): delete the v0 tree`, and freezing a copy of it under
     // `contracts/` to keep the diff alive would be re-importing the tree that
     // retirement deleted (v0-no-legacy). What D-1020-L7 RULED is asserted

@@ -1,8 +1,7 @@
 //! THE SIXTEEN ACTIONS, as command invocations.
 //!
 //! Every Docs action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app
-//! (`packages/blueprints/apps/_shared/action-kit.ts`). So this module is a
+//! projection lives in the command, not the app. So this module is a
 //! table, not logic.
 //!
 //! **ALL SIXTEEN ARE `core.*`** — Docs is the app whose whole command surface
@@ -22,11 +21,9 @@
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
 //!
 //! **`online_only` is empty for Docs, and that is a checked claim.** Locker
-//! declares `ONLINE_ONLY_ACTIONS` in `packages/blueprints/apps/locker/writes.ts`;
-//! `grep -rn ONLINE_ONLY packages/blueprints/apps/docs` finds none, and there is
-//! no `writes.ts` in that directory. So every Docs action may be queued
-//! offline, including `upload` — which is the point of filing a scan of a
-//! receipt in a car park.
+//! declares `ONLINE_ONLY_ACTIONS`; Docs declares none. So every Docs action
+//! may be queued offline, including `upload` — which is the point of filing
+//! a scan of a receipt in a car park.
 //!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
 //! §A0, two gates). Docs' one manifest-confirmed action is `empty-trash`; no

@@ -2,8 +2,7 @@
  * The Companion's service worker: one native port, no network (#1020 wave 4
  * lane extension).
  *
- * v0's worker starts a WASM iroh endpoint and dials the gateway
- * (`apps/extension/src/transport.ts`). This one does neither. It opens a
+ * It runs no network endpoint and dials nothing. It opens a
  * native-messaging port to `dev.centraid.host` — `centraid native-host`, the
  * same binary the desktop runs — and that host connects to the seat socket as
  * any other local client, passing the same peer check. The extension therefore

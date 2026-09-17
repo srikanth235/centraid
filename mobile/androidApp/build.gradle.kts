@@ -22,10 +22,8 @@ android {
 
     defaultConfig {
         applicationId = "dev.centraid"
-        // v0 never overrode Expo SDK 57's default of 24
-        // (`grep -rn minSdkVersion apps/mobile/android` finds only the
-        // reference to `rootProject.ext`), so the floor is carried over rather
-        // than raised on this lane's judgement.
+        // The shipped floor; raising it drops devices, so it moves only by a
+        // decision, not by a toolchain default.
         minSdk = 24
         targetSdk = 36
         versionCode = 1

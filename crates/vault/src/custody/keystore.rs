@@ -15,8 +15,8 @@
 //! *before* the read returns, so a successful open never leaves live raw
 //! material behind.
 //!
-//! Faithful to `packages/vault/src/schema/key-store.ts` (#555, #1014 X16),
-//! including the parts that look like rough edges and are not:
+//! The design keeps the parts that look like rough edges and are not (#555,
+//! #1014 X16):
 //!
 //! - An unprotected envelope found on a host that **has** custody is adopted,
 //!   rewrapped and **warned about** rather than refused. A `keys/` file is

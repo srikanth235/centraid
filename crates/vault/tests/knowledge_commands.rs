@@ -868,8 +868,7 @@ fn an_unknown_attachment_subject_is_refused_by_the_allow_list() {
 /// Rust replay — which reads the tokenised rows — ordered them by `note_id`
 /// while v0 had ordered them by microseconds nobody can reproduce.
 ///
-/// Fixed at source on both sides: this command carries `updated_at` through the
-/// repoint, and so does v0's (`packages/vault/src/commands/knowledge.ts`).
+/// Fixed at source: this command carries `updated_at` through the repoint.
 #[test]
 fn a_created_notes_updated_at_is_the_injected_clock() {
     let vault = Notebook::open("notes-clock");

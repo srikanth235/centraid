@@ -2,7 +2,7 @@
 
 Every Centraid app is a **manifest** plus two sets of pure functions: queries that hold statements as data, and actions that invoke one typed vault command each. This crate is everything those functions may import, and there is deliberately not much of it.
 
-It is a port of v0's read vocabulary — `packages/core/src/page`, `packages/core/src/money`, `packages/blueprints/apps/_shared/paged-reads.ts` and the grammar half of `packages/vault/src/gateway/paged-door.ts` — kept verbatim where v0 is right and fixed where porting it found it wrong. The fixes are listed at the end.
+It is the read vocabulary — pages, money, paged reads and the statement grammar — with the rules below, each listed with the defect it prevents.
 
 ## What the kit guarantees
 
@@ -24,9 +24,9 @@ It is a port of v0's read vocabulary — `packages/core/src/page`, `packages/cor
 | Not allowed | What stops it |
 | --- | --- |
 | Hold a SQL statement or a connection | `cargo xtask rules`' `sql-confinement`: SQL lives only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit`. It scans **tests too**, which is why `contract_vault.rs` and `testdoor.rs` are here rather than in each app's test |
-| Import a provider SDK | an app crate depends on this crate and `serde`; provider-backed judgment is the assistant's plane and there is no generic inference verb (v0's `ctx-primitives`) |
+| Import a provider SDK | an app crate depends on this crate and `serde`; provider-backed judgment is the assistant's plane and there is no generic inference verb |
 | Write from a query | a query holds `PageQuery` values and a `PageDoor`, whose one method reads |
-| Invoke a command without an `invoke_key` | the key is a required field on an app's invocation, not an option: v0's fallback is the call's **ordinal**, which is stable only for a handler that makes the same call sequence every time |
+| Invoke a command without an `invoke_key` | the key is a required field on an app's invocation, not an option: a fallback to the call's **ordinal** would be stable only for a handler that makes the same call sequence every time |
 | Turn a denial into an error | a denial is a value in the app's own payload; `KitError` has no denial variant |
 | Read an unbounded set | there is no API that takes no window |
 
@@ -35,18 +35,18 @@ It is a port of v0's read vocabulary — `packages/core/src/page`, `packages/cor
 `PageDoor` has one method. Three things implement it:
 
 - `crates/vault`'s paged door, which resolves entities, takes an access decision per table and compiles the manifest row filters in — the real one.
-- `testdoor::TestDoor`, over a plain `rusqlite` connection. It runs the same grammar, so a statement a test would pass and the real door would refuse never gets through, and it applies **no** access decision: it is the owner's view, which is the identity the parity fixtures were generated under.
+- `testdoor::TestDoor`, over a plain `rusqlite` connection. It runs the same grammar, so a statement a test would pass and the real door would refuse never gets through, and it applies **no** access decision: it is the owner's view, which is the identity the parity fixtures were captured under.
 - `contract_vault::open_contract_vault`, which rebuilds a fixture vault from `contracts/schema/vault-ddl.sql` and a `rows.json` bundle, for an app's parity tests.
 
-## Where the port deliberately differs from v0
+## Rules that each close a known defect
 
-Each of these is a v0 bug found while porting, recorded in `receipts/issue-1020-v1-platform.md` under wave 2 lane D3.
+Each was found in the independent implementation the parity fixtures were captured from, and is recorded in [`receipts/issue-1020-v1-platform.md`](../../../receipts/issue-1020-v1-platform.md).
 
-1. **A keyset page cannot be continued over a NULLABLE sort column.** SQLite compares a row value with a NULL operand to NULL, so v0's continuation silently drops rows in three of the four (direction, boundary) cases. The port refuses the continuation (`KitError::NullableSortKey`). Found by a property test, which is why `tests/keyset_properties.rs` is a property test and not a table of examples.
-2. **A fan-out bound reports the cap it can REACH.** `MAX_PAGE_ROWS` clamps a page to 500, so v0's `pageSize × fanOutPages` names a number twice the one it stops at whenever `pageSize` is over 500.
-3. **A stated window is walked.** v0 asks for a 2,000-row window as one page, gets 500, discards the cursor that says there are more, and folds a balance over it.
-4. **Formatting takes an explicit locale and a minor-unit table.** v0 divides minor units by 100 unconditionally and passes `undefined` as the locale, so JPY and KWD are wrong and the same vault renders differently on two devices.
+1. **A keyset page cannot be continued over a NULLABLE sort column.** SQLite compares a row value with a NULL operand to NULL, so a naive continuation silently drops rows in three of the four (direction, boundary) cases. The kit refuses the continuation (`KitError::NullableSortKey`). Found by a property test, which is why `tests/keyset_properties.rs` is a property test and not a table of examples.
+2. **A fan-out bound reports the cap it can REACH.** `MAX_PAGE_ROWS` clamps a page to 500, so a naive `pageSize × fanOutPages` names a number twice the one it stops at whenever `pageSize` is over 500.
+3. **A stated window is walked.** Asking for a 2,000-row window as one page gets 500, discards the cursor that says there are more, and folds a balance over the partial set.
+4. **Formatting takes an explicit locale and a minor-unit table.** Dividing minor units by 100 unconditionally gets JPY and KWD wrong, and an implicit locale renders the same vault differently on two devices.
 5. **A cursor over a column the projection never carried is refused** rather than stringified as `"undefined"`.
-6. **`writes` is required on every manifest action.** v0's schema has it optional and re-imposes it from outside with a shell script; a gate outside the type is a gate that can be forgotten. `[]` is still valid and still means "no database writes".
+6. **`writes` is required on every manifest action.** A gate outside the type is a gate that can be forgotten. `[]` is still valid and still means "no database writes".
 
-Two places the port keeps a v0 divergence rather than reconciling it, both unreachable for the values these types can hold, both documented at the code: the `MoneyBag` sort and the balance folds' tie-break use byte order where v0 uses `localeCompare`.
+Two places use byte order where the captured fixtures used `localeCompare`, both unreachable for the values these types can hold and both documented at the code: the `MoneyBag` sort and the balance folds' tie-break.

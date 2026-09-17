@@ -22,10 +22,10 @@
 //! - **Two recurrence-derived fields are not ported** and say so by name
 //!   ([`RECURRENCE_DEFERRED`]): `preview` and `next_start` come from
 //!   `ctx.time.describeRecurrence` / `expandRecurrence`, i.e. v0's 1,400-line
-//!   civil-time plane (`packages/core/src/time/`), which belongs to the
-//!   schedule lane. A minimal RRULE expander written here for one field would
-//!   be a SECOND recurrence engine, which is the thing the one-adapter ruling
-//!   (#996, R21; drift ONT-25) exists to prevent.
+//!   civil-time plane, which belongs to the schedule lane. A minimal RRULE
+//!   expander written here for one field would be a SECOND recurrence
+//!   engine, which is the thing the one-adapter ruling (#996, R21; drift
+//!   ONT-25) exists to prevent.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -86,7 +86,7 @@ fn bag_json(bag: &MoneyBag) -> Value {
     Value::Array(bag.entries().iter().map(money_json).collect())
 }
 
-/// A valuation, in v0's two shapes (`packages/core/src/money/index.ts:136-148`).
+/// A valuation, in v0's two shapes.
 ///
 /// `unavailable` carries the COMPONENTS, because the several amounts are what
 /// is true when no rate exists — never a sum nobody computed (#996, R22).
@@ -1240,9 +1240,9 @@ pub fn export_view(
                                 }))
                                 .collect(),
                         ),
-                        // No attachment plane in this port: Tally is
-                        // record-only (`docs/blueprint-seats.md` S2), and the
-                        // receipt's bytes are the media lane's.
+                        // No attachment plane here: Tally is record-only
+                        // (`docs/blueprint-seats.md`, "Two classes of app"),
+                        // and the receipt's bytes are the media lane's.
                         "has_receipt": false,
                     })
                 })

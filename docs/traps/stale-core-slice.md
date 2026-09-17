@@ -34,11 +34,11 @@ ls -l target/aarch64-apple-ios-sim/debug/libcentraid_core_ffi.a
 
 If it predates the change you are looking for, the app cannot contain it — stop debugging the Kotlin.
 
-**Android has the same shape**, through a different path: `mobile/androidApp/src/main/jniLibs/<abi>/libcentraid_core_ffi.so` is a **copied file**, so it is staler still — nothing updates it until `mobile/scripts/ android-core.sh` is run again.
+**Android has the same shape**, through a different path: `mobile/androidApp/src/main/jniLibs/<abi>/libcentraid_core_ffi.so` is a **copied file**, so it is staler still — nothing updates it until `mobile/scripts/android-core.sh` is run again.
 
 ## The same defect one layer out: Xcode links an XCFramework Gradle never assembled
 
-**The symptom.** You change Kotlin in `mobile/shared` — or a sub-agent does — run the Gradle task, build the app, run it, and the change is not there. The Gradle task succeeded. The Swift recompiled. The app installed. What runs is whatever Kotlin was last turned into an XCFramework, which on a fresh tree is *nothing*: the framework dependency simply does not resolve, and on a tree where it was assembled once it is as old as that assembly.
+**The symptom.** You change Kotlin in `mobile/shared` — or a sub-agent does — run the Gradle task, build the app, run it, and the change is not there. The Gradle task succeeded. The Swift recompiled. The app installed. What runs is whatever Kotlin was last turned into an XCFramework, which on a fresh tree is _nothing_: the framework dependency simply does not resolve, and on a tree where it was assembled once it is as old as that assembly.
 
 **The cause.** `mobile/iosApp/project.yml` names its framework dependency by path:
 

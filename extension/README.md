@@ -1,25 +1,25 @@
 # `extension/` — the Centraid browser Companion
 
-MV3, native messaging, **no network and no WASM**. Part of the v1 platform ([#1020](https://github.com/srikanth235/centraid/issues/1020): skeleton in wave 3 lane F, finished in wave 4 lane extension); `apps/extension/` is the pinned v0 oracle and is not edited.
+MV3, native messaging, **no network and no WASM** ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
-## What changed from v0
+## Shape
 
-v0's Companion runs a **WASM iroh endpoint in the service worker** and dials the gateway (`apps/extension/src/transport.ts`, and `'wasm-unsafe-eval'` in its CSP). This one talks to the Centraid app **on this machine** through `chrome.runtime.connectNative("dev.centraid.host")` — which is `centraid native-host`, the same binary the desktop spawns as its seat.
+The Companion talks to the Centraid app **on this machine** through `chrome.runtime.connectNative("dev.centraid.host")` — which is `centraid native-host`, the same binary the desktop spawns as its seat. It does not dial a gateway.
 
-| v0 | here |
+| Property | How |
 | --- | --- |
-| `host_permissions: http://*/*, https://*/*` | **no host permissions at all** — there is nothing for it to reach |
-| `'wasm-unsafe-eval'` in the extension CSP | `script-src 'self'` |
-| `tldts` + the Public Suffix List bundled, to decide registrable domains | **no third-party code at all**; the policy runs on the seat |
-| a fill served by the gateway, which held `K` | a fill served by the **seat**, which unwraps `K` behind the member's unlock |
+| **no host permissions at all** | there is nothing for it to reach |
+| `script-src 'self'` | no `'wasm-unsafe-eval'`, because there is no WASM |
+| **no third-party code at all** | registrable-domain policy runs on the seat, not in the extension |
+| a fill served by the **seat** | the seat unwraps `K` behind the member's unlock; the gateway never holds it |
 
-`src/bundle.test.ts` asserts the first three structurally, over the sources _and_ over the built tree: no `WebAssembly`, no `iroh`, no `fetch`/`XMLHttpRequest`/ `WebSocket`, no `indexedDB`, and no `crypto.subtle` key operation. `digest` and `getRandomValues` are allowed and named — the first hashes a screenshot so the host's handle can be checked, the second is v0's own password generator.
+`src/bundle.test.ts` asserts the first three structurally, over the sources _and_ over the built tree: no `WebAssembly`, no `iroh`, no `fetch`/`XMLHttpRequest`/ `WebSocket`, no `indexedDB`, and no `crypto.subtle` key operation. `digest` and `getRandomValues` are allowed and named — the first hashes a screenshot so the host's handle can be checked, the second is the password generator.
 
 ## The eighteen methods
 
-`contracts/extension/methods.json` is generated from v0's own two files by `contracts/tools/export-extension-methods.ts` and is the closed table on **three** sides: the native host compiles it in (`crates/centraid/src/cmd/native_host/methods.rs`, asserted against its enum), `src/methods.ts` re-exports the generated `src/methods-table.ts`, and `scripts/lint.mjs` checks every `type: "…"` this tree can send against it. A name that is not one of the eighteen is refused with a typed frame naming it, never answered with an empty value.
+`contracts/extension/methods.json` is the closed table on **three** sides: the native host compiles it in (`crates/centraid/src/cmd/native_host/methods.rs`, asserted against its enum), `src/methods.ts` re-exports `src/methods-table.ts` — a hand-maintained copy, because a service worker with no bundler cannot import JSON, and `src/methods.test.ts` asserts the two agree — and `scripts/lint.mjs` checks every `type: "…"` this tree can send against it. A name that is not one of the eighteen is refused with a typed frame naming it, never answered with an empty value.
 
-> **Eighteen, not seventeen.** Census §E2 calls this "the 17 companion methods" and then lists eighteen names; `handleCompanionRequest` has eighteen `case` arms. The generator asserts the count.
+> **Eighteen, not seventeen.** Census §E2 calls this "the 17 companion methods" and then lists eighteen names. `src/methods.test.ts` asserts the count.
 
 ## The fill, and where the credential lives
 
@@ -35,15 +35,15 @@ the gateway     writes the access receipt — and never sees the password
 
 Three things about that chain are worth stating because each is a refusal:
 
-- **A popup cannot ask a Locker question.** Every `locker:*` message is judged against the **active tab's own origin** (v0's `assertTopFramePage`), and a popup has no tab, so its claim has nothing to check it against. The picker is drawn in the page, where a click is a trusted gesture.
+- **A popup cannot ask a Locker question.** Every `locker:*` message is judged against the **active tab's own origin**, and a popup has no tab, so its claim has nothing to check it against. The picker is drawn in the page, where a click is a trusted gesture.
 - **The browser may lock the seat and may never unlock it.** _A door that can raise the passphrase prompt is a door that can be used to phish it._ The host refuses `unlock` and the seat refuses it again for `native-host` clients.
-- **The material does not survive the round trip.** `HostLink.fillInto` asks, hands the value on (which structured-clones it across the process boundary), then clears this process's copy. `host-link.test.ts` asserts both halves — census §E seam 4 recorded that v0 does the clearing and _nothing tests that it happened_.
+- **The material does not survive the round trip.** `HostLink.fillInto` asks, hands the value on (which structured-clones it across the process boundary), then clears this process's copy. `host-link.test.ts` asserts both halves, because a clearing nothing tests is a clearing nobody knows happened.
 
 ## Chunking, and where the bytes stop
 
 Native messaging has a **1 MiB ceiling per message and no streaming**. A capture larger than `MAX_INLINE_BYTES` is staged: `stage:begin` → n × `stage:chunk` (512 KiB of raw bytes each, about 683 KiB of base64) → `stage:end`, which answers a **content-addressed handle** — a sha256 and a size, the shape `crates/apps/docs::bytes::StagedBlob` has and what `core.add_document`'s `staged_sha` takes.
 
-Promoting that handle into the staging band is the **byte door**, which lane Docs landed as an app-crate trait with its implementation named as a hand-off. So `capture:document` carries the sha and the vault answers its own honest refusal until that door lands; `stage:end` says so in the frame (`claimed: false`, `pending: "bytes-door"`).
+Promoting that handle into the staging band is the **byte door**, an app-crate trait whose implementation is a hand-off. So `capture:document` carries the sha and the vault answers its own honest refusal until that door lands; `stage:end` says so in the frame (`claimed: false`, `pending: "bytes-door"`).
 
 ## The badge, and how stale it may be
 
@@ -53,7 +53,7 @@ The host pushes the approval count when the seat's state changes, and the one-mi
 
 ## One port, closed when idle
 
-Lane F opened a **native port per request** and gave a good reason: a native port holds a process. Two facts moved it (D-1020-X7): the seat's capability token is single-use, so one port per request means the shell minting a token per keystroke; and a pushed badge needs an open port. So the port is opened on first use and closed after 30 s of silence — the property lane F wanted, bounded by **use** rather than by request count.
+A native port holds a process, which argues for a port per request. Two facts rule it out (D-1020-X7): the seat's capability token is single-use, so one port per request means the shell minting a token per keystroke; and a pushed badge needs an open port. So the port is opened on first use and closed after 30 s of silence — a held process bounded by **use** rather than by request count.
 
 ## Setting it up
 
@@ -93,4 +93,3 @@ The Playwright run loads the unpacked build in Chromium, writes a native-messagi
 - **Registering the host with a real browser on a member's machine.** The verb prints the directories; which one an installer writes to (and whether the desktop installer should offer to) is a product decision.
 - **How the browser's host gets its capability token.** The seat mints one per-turn token for the renderer to hand a child in its environment (D-1020-F14), and a browser-launched host does not inherit that environment. Today the host reads `CENTRAID_SEAT_TOKEN`, which works for a shell-launched host and for the tests; the member-facing gesture — "allow the browser extension to connect" in the shell, writing a 0600 grant the host redeems once — is named in the receipt and is the next thing this surface needs.
 - **The Companion's icon.** The manifests name none, so browsers show a default; the mark is `packages/design`'s and a fabricated one would be worse than none.
-- **Retiring v0's `companion` release row** — `contracts/handoff/extension/release-fanout.md`.

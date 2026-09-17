@@ -1,7 +1,6 @@
 //! THE EIGHT QUERIES, as statements-as-data plus pure folds.
 //!
-//! Ported from `packages/blueprints/apps/locker/queries/*.ts`. Four facts run
-//! through all of them and are stated once, here:
+//! Four facts run through all of them and are stated once, here:
 //!
 //! 1. **[`ITEM_COLUMNS`] is the browsable half, and no sealed cell is on it.**
 //!    `password`, `otp_seed`, `card_number`, `cvv` and `content` are absent **by
@@ -80,10 +79,6 @@ pub const LOGIN_ROWS: usize = 2_000;
 /// `access.ts:20`-`:21` — the default and the ceiling of the audit window.
 pub const ACCESS_DEFAULT: usize = 200;
 pub const ACCESS_MAX: usize = 2_000;
-
-/// The vocabulary and tag joins are `(item, concept)` pairs over a window of at
-/// most 2,000 items: 500 × 32 = 16,000 rows, stated, and an error at the cap.
-pub const TAG_BOUND: FanOutBound = FanOutBound::new(500, 32);
 
 /// The two concept schemes, and the star's notation.
 ///

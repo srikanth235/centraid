@@ -9,8 +9,7 @@ package dev.centraid.shared.shell
  * of Home rather than a bottom-tab navigator — a tab bar would make every app a
  * peer of Home and there would be nowhere for a cover to come from.
  *
- * Ported from v0's `apps/mobile/src/screens/home/places.ts` and `band.ts`, whose
- * seam it keeps: this file decides WHICH destinations the band offers and in
+ * The seam: this file decides WHICH destinations the band offers and in
  * what order, and it never decides where a press goes — that is the navigator's.
  *
  * KEEP IT PURE. No storage, no platform, no clock: `bandTabs` takes the pinned

@@ -5,7 +5,7 @@
 //! writes a `-wal` sidecar beside whatever file it opened; a checkpoint then
 //! folds it back into the file itself (see `docs/traps/wal-checkpoint.md`). So
 //! the corpus is inflated into a scratch directory first and the copy is what
-//! gets opened, exactly as v0's `golden-vault.test.ts` does.
+//! gets opened.
 
 use std::fs::File;
 use std::io::{BufReader, Write as _};
@@ -54,19 +54,6 @@ pub fn contracts_golden_dir() -> PathBuf {
 #[must_use]
 pub fn contracts_golden_dir_for(label: &str) -> PathBuf {
     repo_root().join("contracts/golden").join(label)
-}
-
-/// The v0 copy of the baseline corpus, the pinned oracle's own path. It exists
-/// until wave 6 deletes the v0 tree; a caller must handle its absence.
-#[must_use]
-pub fn v0_golden_dir() -> PathBuf {
-    v0_golden_dir_for(GOLDEN_LABEL)
-}
-
-/// The v0 copy of any labelled corpus.
-#[must_use]
-pub fn v0_golden_dir_for(label: &str) -> PathBuf {
-    repo_root().join("packages/vault/tests/golden").join(label)
 }
 
 /// The manifest a release froze beside the file.

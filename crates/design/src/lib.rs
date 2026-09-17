@@ -204,7 +204,7 @@ pub fn identity_initials(name: &str) -> String {
     String::from_utf16_lossy(&identity_initials_units(name))
 }
 
-/// How a figure leaf is painted (`packages/blueprints/apps/tally/format.ts:20`).
+/// How a figure leaf is painted.
 ///
 /// `Net` is the `--net` token — the owner owes; `Owed` is plain ink — the owner
 /// is owed; `Settled` is the recessive rung. **Never a green**: a settled

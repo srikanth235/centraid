@@ -45,10 +45,10 @@
 //!
 //! ## What is deliberately absent
 //!
-//! `queueProviderWriteback` (`packages/vault/src/commands/provider-writeback.ts`)
-//! runs after `reschedule_event`, `cancel_event`, `edit_event` and the series
-//! branch of `edit_event_occurrence`, turning a local edit of a
-//! provider-owned row into an already-approved outbox artifact. It writes
+//! `queueProviderWriteback` runs after `reschedule_event`, `cancel_event`,
+//! `edit_event` and the series branch of `edit_event_occurrence`, turning a
+//! local edit of a provider-owned row into an already-approved outbox
+//! artifact. It writes
 //! `sync_*`, which is the connectors plane — **on the back burner by the
 //! owner's ruling (2026-09-12)** — so it is not ported here and is named in
 //! the receipt as a hand-off rather than left as a silent omission. Nothing in

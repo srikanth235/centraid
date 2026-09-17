@@ -16,10 +16,10 @@ use std::path::PathBuf;
 
 /// Why a seat's cursor cannot be served, in v0's closed vocabulary.
 ///
-/// Ten values wide on the wire (`packages/server/src/routes/replica-routes.ts:79-95`);
-/// the three a cursor can earn at the log door are here, plus `Initial` for a
-/// seat that has none. Anything a future reader does not recognise normalises
-/// to `InvalidCursor` — no raw error text ever reaches a peer.
+/// Ten values wide on the wire; the three a cursor can earn at the log door
+/// are here, plus `Initial` for a seat that has none. Anything a future
+/// reader does not recognise normalises to `InvalidCursor` — no raw error
+/// text ever reaches a peer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RebootstrapReason {
     /// The cursor names an epoch this vault is no longer in.

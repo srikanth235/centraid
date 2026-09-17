@@ -120,20 +120,6 @@ impl<'conn> Capture<'conn> {
         })
     }
 
-    /// Add a session for a table planted mid-transaction by DDL.
-    ///
-    /// ADDITIVELY, never by reopening the set: reopening would throw away every
-    /// change already recorded in this transaction.
-    pub fn watch(&mut self, connection: &'conn Connection, table: &str) -> Result<()> {
-        if self.sessions.iter().any(|(name, _)| name == table) {
-            return Ok(());
-        }
-        let mut session = Session::new(connection)?;
-        session.attach(Some(table))?;
-        self.sessions.push((table.to_owned(), session));
-        Ok(())
-    }
-
     /// Take every session's changeset and decode it, in one pass.
     ///
     /// Returns the decoded rows and the non-local tables this commit touched.
@@ -180,11 +166,6 @@ impl<'conn> Capture<'conn> {
     /// keeps the pair — see `log::guard`.)
     pub fn abandon(self) {
         drop(self);
-    }
-
-    #[must_use]
-    pub fn table_count(&self) -> usize {
-        self.sessions.len()
     }
 }
 

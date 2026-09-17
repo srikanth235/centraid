@@ -15,9 +15,8 @@
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
 //!
-//! **`online_only` is empty for Tasks, and that is a checked claim**: `grep -rn
-//! ONLINE_ONLY packages/blueprints/apps/tasks` finds none and there is no
-//! `writes.ts` in that directory. Filing a task in a tunnel is the point.
+//! **`online_only` is empty for Tasks, and that is a checked claim.** No
+//! Tasks action is online-only. Filing a task in a tunnel is the point.
 
 use std::collections::BTreeMap;
 

@@ -1,6 +1,6 @@
 //! The manifest, embedded and parsed rather than restated.
 //!
-//! `manifest.json` is `packages/blueprints/apps/photos/app.json` byte for byte.
+//! `manifest.json` matches v0's manifest byte for byte.
 //! It is embedded with `include_str!` so a shipped binary carries the manifest
 //! it was built with and never looks for a repository path at runtime — the
 //! same reason `crates/ontology` embeds the registries (`contracts/README.md`).

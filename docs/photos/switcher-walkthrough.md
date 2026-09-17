@@ -48,7 +48,7 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
 
 11. **Review faces, name people.**
     - "Is this the same person?" confirmation, never a wall of unlabelled clusters. Confirm a proposal onto a party, name an unnamed cluster, or forget a person entirely.
-    - **Status: SHIPPED** — on-ingest detection → embedding → party-anchored matching → stranger clustering on the bundled YuNet/SFace pair; `media.forget_person` provides the delete cascade required by [SECURITY.md](../../SECURITY.md). **Partial: People shelf wiring** ([`PhotosPeopleView.tsx`](../../apps/mobile/src/apps/photos/PhotosPeopleView.tsx)); the roster, review queue, and forget-person command work while shelf-wiring polish remains open.
+    - **Status: SHIPPED** — on-ingest detection → embedding → party-anchored matching → stranger clustering on the bundled YuNet/ArcFace pair; `media.forget_person` provides the delete cascade required by [SECURITY.md](../../SECURITY.md). **Partial: People shelf wiring**; the roster, review queue, and forget-person command work while shelf-wiring polish remains open.
 
 12. **Edit a photograph.**
     - Crop, rotate, straighten — non-destructive, round-tripping with desktop.

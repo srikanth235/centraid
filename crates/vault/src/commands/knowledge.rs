@@ -1,11 +1,10 @@
 //! THE `knowledge` SCHEMA — nine commands, and none of them stores a note.
 //!
 //! A note is a `knowledge.note` wrapper over a canonical, hash-deduped
-//! `core.content_item` body: rent the bytes, own the reference
-//! (`packages/vault/src/commands/knowledge.ts:1`-`:8`). A notebook is a surface
-//! view over `core_collection`, the one owner-curation mechanism (#274) — which
-//! is why a collection may also hold photos and documents, and why these
-//! commands keep their contracts while storage stays unified.
+//! `core.content_item` body: rent the bytes, own the reference. A notebook is
+//! a surface view over `core_collection`, the one owner-curation mechanism
+//! (#274) — which is why a collection may also hold photos and documents, and
+//! why these commands keep their contracts while storage stays unified.
 //!
 //! **Notebooks stay one-per-note in v1.** The entry table allows many-to-many
 //! and [`move_note`] keeps a single placement, until a real multi-notebook
@@ -55,13 +54,6 @@ use crate::error::{Result, VaultError};
 
 /// The note wrapper's logical entity type.
 pub const NOTE_TARGET_TYPE: &str = "knowledge.note";
-
-/// The trash grace window, in v0's arithmetic (#308).
-///
-/// Thirty days, the same window documents and assets carry — and the same
-/// helper, `super::core::purge_at`, so there is one answer to "when does this
-/// purge" rather than one per schema.
-pub const NOTE_PURGE_AFTER_DAYS: i64 = 30;
 
 /// What a note's `format` means in media-type terms.
 const MEDIA_TYPE: &[(&str, &str)] = &[

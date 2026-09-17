@@ -1,11 +1,10 @@
 //! ONE RRULE PARSER, THREE CALL SHAPES (#1020, D-1020-S1).
 //!
-//! v0's `packages/core/src/time/rrule-support.ts`, and its reason, verbatim:
-//! *every part outside the supported subset used to be read past in silence,
-//! so `FREQ=MONTHLY;BYSETPOS=-1` parsed as a plain monthly rule and a "last
-//! Friday of the month" reminder fired on the wrong date forever. A silently
-//! dropped part is worse than an unsupported one — the wrong answer wears the
-//! same face as the right one.*
+//! The reason: every part outside the supported subset used to be read past
+//! in silence, so `FREQ=MONTHLY;BYSETPOS=-1` parsed as a plain monthly rule
+//! and a "last Friday of the month" reminder fired on the wrong date forever.
+//! A silently dropped part is worse than an unsupported one — the wrong
+//! answer wears the same face as the right one.
 //!
 //! The three shapes, and which surface takes which:
 //!

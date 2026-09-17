@@ -67,8 +67,7 @@ pub use version_chain::{ChainWalk, MAX_CHAIN_STEPS, VersionChainError, note_vers
 /// Every v0 Notes query wraps its body and answers `{…empty, vaultDenied:
 /// {code, message}}` rather than throwing (`queries/library.ts:471`-`:479`, and
 /// the same in all six). `revoked_at` comes from the HOST, because a revoked
-/// app cannot read the consent tables to date its own revocation
-/// (`packages/server/src/engine/handlers/vault-bridge.ts:29`-`:36`) — so it is
+/// app cannot read the consent tables to date its own revocation — so it is
 /// an `Option` this crate never fills in.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Denial {

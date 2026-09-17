@@ -2,15 +2,11 @@ name: release
 
 # The single entry point for cutting a release (#557).
 #
-# Three workflows used to listen on the same `v*.*.*` tags independently —
-# release-desktop, release-gateway-image and npm-gateway-publish — plus a fourth
-# on `companion-v*`. Cutting a tag produced three or four unrelated runs with no
-# shared notion of whether "the release" succeeded: npm could publish while
-# desktop packaging failed, and nothing anywhere said the release was broken.
-# You had to know to check four places.
+# One tag produces one run, and `release-check` is the single red/green for it:
+# before #557 each surface listened on the tags itself, so a partial release
+# looked like several unrelated runs with no shared verdict.
 #
-# Now one tag produces one run, and `release-check` is the single red/green for
-# it. Each surface stays in its own `lane-release-*.yml` file and declares the
+# Each surface stays in its own `lane-release-*.yml` file and declares the
 # secrets it accepts, so a lane can only ever receive the credentials for its own
 # platform — stronger isolation than five peer workflows that could each read
 # every repo secret.
@@ -34,18 +30,9 @@ on:
         options:
           - all
           - desktop
-          - gateway-npm
           - gateway-image
           - mobile
           - companion
-      dry_run:
-        description: "npm: force dry-run even if NPM_TOKEN is set"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
       ref:
         description: "gateway-image: git ref to build (default: current)"
         required: false
@@ -97,10 +84,10 @@ jobs:
   # exercised, and nothing in the chain would have said so.
   #
   # Two ways to be a candidate, and both are checked because both are true: the
-  # tag is the CURRENT `refs/candidates/latest`, or it appears in the promotion
-  # history `candidate.yml` publishes to gh-pages at
-  # `test-report/candidates.json` (kept 200 deep). The second matters because
-  # cutting a release takes minutes and `main` keeps moving: a tag cut on
+  # tag is the CURRENT `refs/candidates/latest` (moved by `gate-nightly.yml`'s
+  # `promote-candidate` on a green nightly gate), or it appears in the
+  # promotion history on gh-pages at `test-report/candidates.json` (kept 200
+  # deep). The second matters because cutting a release takes minutes and `main` keeps moving: a tag cut on
   # yesterday's promoted candidate is exactly right, and requiring "equal to the
   # newest" would refuse it.
   #
@@ -136,7 +123,7 @@ jobs:
             echo "$TAG_SHA was promoted on $(jq -r --arg sha "$TAG_SHA" '.candidates[] | select(.sha == $sha) | .promotedAt' "$history")"
             exit 0
           fi
-          echo "::error title=Not a candidate::${TAG_SHA} was never promoted by candidate.yml. Releases ship promoted builds only — cut the tag on a SHA that appears in refs/candidates/latest or in the gh-pages promotion history (test-report/candidates.json). \`bun run release:prepare\` refuses the same SHA locally and says why."
+          echo "::error title=Not a candidate::${TAG_SHA} was never promoted by gate-nightly.yml. Releases ship promoted builds only — cut the tag on a SHA that appears in refs/candidates/latest or in the gh-pages promotion history (test-report/candidates.json). \`bun run release:prepare\` refuses the same SHA locally and says why."
           exit 1
 
   # Classifies what was cut, so each lane's `if:` reads as a sentence instead of
@@ -202,22 +189,6 @@ jobs:
       AZURE_CODE_SIGNING_ACCOUNT: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}
       AZURE_CERT_PROFILE: ${{ secrets.AZURE_CERT_PROFILE }}
       CENTRAID_RELEASE_SIGNING_KEY: ${{ secrets.CENTRAID_RELEASE_SIGNING_KEY }}
-
-  gateway-npm:
-    needs: plan
-    if: >
-      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-npm')
-    permissions:
-      contents: read
-      # OIDC for `npm publish --provenance` (#557). Job-level permissions
-      # REPLACE the workflow-level block, so `contents: read` is restated.
-      id-token: write
-    uses: ./.github/workflows/lane-release-gateway-npm.yml
-    with:
-      # A tag publishes for real; a manual run defaults to dry-run.
-      dry_run: ${{ github.event_name == 'push' && 'false' || (inputs.dry_run || 'true') }}
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   gateway-image:
     needs: plan
@@ -291,12 +262,12 @@ jobs:
       needs.plan.outputs.companion == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'companion')
     permissions:
       contents: read
-    uses: ./.github/workflows/lane-release-companion.yml
+    uses: ./.github/workflows/lane-release-extension.yml
 
   # The one signal for "did this release work". Before #557 there was none: four
-  # peer workflows each reported separately, so a partial release — npm shipped,
-  # desktop broken — looked like three greens and one red in four different
-  # places, with nothing naming the release itself as bad.
+  # peer workflows each reported separately, so a partial release looked like
+  # greens and a red in different places, with nothing naming the release
+  # itself as bad.
   #
   # `skipped` passes (a `companion-v*` tag legitimately skips every product
   # lane); `cancelled` fails.
@@ -306,7 +277,6 @@ jobs:
         require-candidate,
         plan,
         desktop,
-        gateway-npm,
         gateway-image,
         mobile,
         prebuilt-core,
@@ -323,7 +293,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "release $TAG lane results: $RESULTS"
-          # Fail closed — see the same guard in ci.yml's `check`.
+          # Fail closed — see the same guard in candidate.yml's `report`.
           if [ -z "${RESULTS//,/}" ]; then
             echo "::error::aggregator received no lane results — refusing to pass"
             exit 1

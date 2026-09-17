@@ -300,16 +300,6 @@ impl Principal {
             Self::Automation { manifest_ref, .. } => manifest_ref,
         }
     }
-
-    /// The provenance kind v0's `access_provenance` records.
-    #[must_use]
-    pub const fn provenance_kind(&self) -> &'static str {
-        match self {
-            Self::OwnerDevice { .. } => "owner",
-            Self::Agent { .. } => "ai_agent",
-            Self::Automation { .. } => "automation",
-        }
-    }
 }
 
 /// The answer.

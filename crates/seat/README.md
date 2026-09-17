@@ -1,6 +1,6 @@
 # `centraid-seat`
 
-The seat replica: the applier, the state tables, the outbox, the intent grammar. The other half of the plane whose authority half is [`crates/vault`](../vault) ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 2, lane D2).
+The seat replica: the applier, the state tables, the outbox, the intent grammar. The other half of the plane whose authority half is [`crates/vault`](../vault) ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 A seat holds a **copy** of the vault — every replicated table, none of the private ones — plus three tables the gateway never ships: `seat_state`, `seat_outbox` and `seat_outbox_settled`.
 

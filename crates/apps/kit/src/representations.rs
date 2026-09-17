@@ -7,9 +7,7 @@
 //! grid row and every drive row still ships a `media_type` FIELD — a tile on a
 //! phone has to say whether it is a photograph, a video or a PDF before it can
 //! decide what to paint — and this module is the only place that field is
-//! filled in, exactly as v0's
-//! `packages/blueprints/apps/_shared/representation-reads.ts` is the only place
-//! on its side.
+//! filled in.
 //!
 //! Three things the port keeps, because each one is a bug it would otherwise
 //! reintroduce:

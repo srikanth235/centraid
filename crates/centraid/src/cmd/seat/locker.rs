@@ -10,10 +10,10 @@
 //! ## Where the wrapped blob lives, and what is NOT beside it
 //!
 //! `<seat data dir>/locker/wrapped-key.json`, mode 0600, holding exactly one
-//! [`WrappedKey`] — *the wrapped blob is all that is ever at rest*
-//! (`packages/client/src/locker/locker-unlock.ts:13`–`:20`). The raw `K` is in
-//! the seat's member-key custody (`centraid_vault::custody::member_key`) and
-//! the two are deliberately different things: custody is what a recovery kit
+//! [`WrappedKey`] — *the wrapped blob is all that is ever at rest*. The raw
+//! `K` is in the seat's member-key custody
+//! (`centraid_vault::custody::member_key`) and the two are deliberately
+//! different things: custody is what a recovery kit
 //! restores, this is what a passphrase opens. Enrolment reads the first and
 //! writes the second; **it never deletes the first**, because a member who
 //! forgets a passphrase must still be able to re-enrol from the kit rather than

@@ -1,5 +1,5 @@
 //! One owner-visible policy for every backup clock and byte budget (#1020,
-//! D-1020-R5; v0 `packages/vault/src/backup-policy.ts`, #414).
+//! D-1020-R5, #414).
 //!
 //! Two things about the defaults worth stating, because a "reasonable" tweak to
 //! either is a product change:

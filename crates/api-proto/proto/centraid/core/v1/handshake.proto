@@ -1,9 +1,8 @@
 // The version window (#1020, D-1020-C6, Compatibility).
 //
-// v0 puts three numbers on the wire (`docs/protocol.md:143-161`): `version` is
-// the product semver and is DISPLAY ONLY — a client must not refuse to connect
-// on it; `protocolVersion` and `minSupportedProtocol` are the window. The rule
-// is symmetric and is copied verbatim:
+// Three numbers ride the wire (`docs/protocol.md`, "The version window"): the
+// product version is DISPLAY ONLY — a client must not refuse to connect on it;
+// `schema_version` and `min_supported` are the window. The rule is symmetric:
 //
 //   ok iff peer.schema_version >= local.min_supported
 //        && local.schema_version >= peer.min_supported
@@ -26,9 +25,8 @@ message Hello {
   // connection on it is the bug this comment exists to prevent.
   string product_version = 3;
   // Required feature flags. A peer that does not offer a capability this build
-  // requires is out of the window even when the numbers agree; v0's one
-  // absent-tolerant pair is `automations` / `connectors`
-  // (`docs/protocol.md:143-161`).
+  // requires is out of the window even when the numbers agree
+  // (`docs/protocol.md`, "Feature contract — per feature").
   repeated string capabilities = 4;
   // WHAT THIS BUILD IS ([#1020](https://github.com/srikanth235/centraid/issues/1020)
   // Artifacts, D-1020-G2). A prebuilt core the shell did not compile cannot be

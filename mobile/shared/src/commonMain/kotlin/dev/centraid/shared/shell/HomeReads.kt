@@ -11,12 +11,8 @@ import centraid.screen.v1.TileStatus
 /**
  * WHAT EACH HOME TILE READS, AND WHAT IT MAKES OF THE ROWS (#1020, wave A).
  *
- * The seam this file keeps is v0's: `tile-model.ts` answers "what does THIS
- * app's tile say" over rows and grows with the app roster, and
- * [SpringboardPolicy] never touches a row. Its v0 twin is
- * `apps/mobile/src/screens/home/useSpringboardTiles.ts` plus the selectors in
- * `tile-model.ts`; what ports is the part with no React in it, which is all of
- * the part that decides.
+ * The seam: this file answers "what does THIS app's tile say" over rows and
+ * grows with the app roster, and [SpringboardPolicy] never touches a row.
  *
  * ## The count is the read's own ceiling
  *

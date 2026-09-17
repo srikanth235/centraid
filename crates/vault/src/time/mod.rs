@@ -1,12 +1,10 @@
 //! CIVIL TIME AND RECURRENCE — one engine, in the vault (#1020, lane Schedule).
 //!
-//! v0 keeps this in `packages/core/src/time/` (1,400 lines plus a zone
-//! database). It lives in `crates/vault` here for one reason: **the task
-//! lifecycle is a vault operation** ([`crate::operations::task_lifecycle`]) and
-//! the recurrence rollover is part of it, so the engine sits beside the
-//! operations that call it rather than a crate away. It holds NO SQL — the
-//! module is pure — and the stored spellings it does know are named once, in
-//! [`occurrence`].
+//! It lives in `crates/vault` for one reason: **the task lifecycle is a vault
+//! operation** ([`crate::operations::task_lifecycle`]) and the recurrence
+//! rollover is part of it, so the engine sits beside the operations that call
+//! it rather than a crate away. It holds NO SQL — the module is pure — and
+//! the stored spellings it does know are named once, in [`occurrence`].
 //!
 //! ## The five modules, and the seam each one owns
 //!

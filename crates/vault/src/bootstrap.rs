@@ -16,9 +16,9 @@ use crate::file::Vault;
 ///
 /// **Relations are VOCABULARY, not caller text**: `core.link_entities` refuses a
 /// notation that is not already a concept in the relations scheme, which means
-/// the scheme has to exist before the first link — v0 seeds it here
-/// (`packages/vault/src/bootstrap.ts:33`-`:64`) and a create-on-demand path
-/// would turn "never caller-invented" into "invented on first use".
+/// the scheme has to exist before the first link — seeded here — and a
+/// create-on-demand path would turn "never caller-invented" into "invented on
+/// first use".
 ///
 /// **`revises` IS DELIBERATELY ABSENT** (#996 R20(a)). Version lineage was a
 /// content→content link asserted by the document and note edit commands — a
@@ -52,15 +52,12 @@ const SEED_RELATIONS: &[(&str, &str)] = &[
 /// THE DEFAULT CALENDAR, WITHOUT WHICH AGENDA CANNOT BE USED AT ALL.
 ///
 /// `schedule.propose_event` has a `calendar_exists` precondition and **no
-/// command mints a calendar** — in v0 this row came from bootstrap
-/// (`packages/vault/src/bootstrap.ts:150-158`, "Events require a calendar
-/// … but no command mints one — seed a private 'Personal' calendar so
-/// schedule works from first boot"). The port left it out, so every v1
-/// vault founded before this line refused every event with "That calendar
-/// doesn't exist." There is no other door: the app is inert without it.
+/// command mints a calendar** — events require a calendar, but no command
+/// mints one, so bootstrap seeds a private 'Personal' calendar here, or
+/// schedule cannot work from first boot. There is no other door: the app is
+/// inert without it.
 ///
-/// UTC, and not a guess at the owner's zone. v0 took a `defaultTz` option
-/// and defaulted it to UTC for the same reason — founding happens before
+/// UTC, and not a guess at the owner's zone — founding happens before
 /// anybody has said where they are, and a calendar stamped with the
 /// founding machine's zone is a wrong answer that looks like a right one.
 fn seed_default_calendar(

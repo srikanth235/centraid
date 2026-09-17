@@ -20,10 +20,6 @@
  * the page, silently, where nothing but a console anybody has to be looking at
  * says so. So `content.js` is bundled to one classic file. It is the only file
  * that is, and the bundle contains nothing but this tree's own modules.
- *
- * The one generated input is `src/methods-table.ts`, written by
- * `contracts/tools/export-extension-methods.ts` beside
- * `contracts/extension/methods.json`.
  */
 
 import { execFileSync } from "node:child_process";

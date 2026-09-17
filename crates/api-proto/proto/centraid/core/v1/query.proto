@@ -1,16 +1,12 @@
 // The paged read (#1020, D-1020-C4). Consumed by `crates/apps/kit` (lane D3).
 //
-// v0's shapes: `PageOrder` / `PageQuery` (`packages/core/src/page/statement.ts:36`,
-// `:50`) and `PageCursor` / `PageRequest` / `Page`
-// (`packages/core/src/page/window.ts:37`, `:46`, `:59`).
-//
 // Three v0 rules this file carries onto the wire, because each was a shipped
-// bug: `limit` is required with NO DEFAULT ("a default is how an unbounded read
-// gets written by accident", `window.ts:46-50`); the cursor is the SORT KEY
-// ITSELF, keyset and never an offset, so nothing handed to a caller can be
-// turned back into one (`:15-18`); and the primary key is part of the cursor
-// because the sort key is not unique — keyed on a timestamp alone, a page
-// boundary silently repeats or drops a row (`:20-24`).
+// bug: `limit` is required with NO DEFAULT ("a default is how an unbounded
+// read gets written by accident"); the cursor is the SORT KEY ITSELF, keyset
+// and never an offset, so nothing handed to a caller can be turned back into
+// one; and the primary key is part of the cursor because the sort key is not
+// unique — keyed on a timestamp alone, a page boundary silently repeats or
+// drops a row.
 
 syntax = "proto3";
 

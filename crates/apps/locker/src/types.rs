@@ -1,8 +1,7 @@
 //! THE FIFTEEN ITEM TYPES, and the degradation rule that keeps a sixteenth
 //! renderable.
 //!
-//! Ported from `packages/blueprints/apps/locker/queries/type-degradation.ts`
-//! and `types.ts`, whose list is pinned to the schema's own CHECK constraint by
+//! The list is pinned to the schema's own CHECK constraint by
 //! `locker-item-type.test.ts`.
 //!
 //! *A type is a set of sections and fields, so a type the vault does not have

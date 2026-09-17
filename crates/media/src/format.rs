@@ -1,6 +1,5 @@
-// Moved from `packages/tunnel/data-plane/src/format.rs` (first-party MIT code) when the
-// byte plane became a v1 crate (#1020, D-1020-R1). The v0 crate is retired and the
-// formats are this file's; the hash and the KDF are BLAKE3 (#1025 S4, D-1025-S4-1/-3).
+// First-party MIT code (#1020, D-1020-R1). The hash and the KDF are BLAKE3
+// (#1025 S4, D-1025-S4-1/-3).
 
 use aes_gcm::{
     Aes256Gcm, KeyInit,

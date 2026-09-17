@@ -7,11 +7,10 @@ import centraid.screen.v1.TallyListState
 /**
  * The navigation model (#1020, D-1020-E1, D-1020-E3).
  *
- * **One root stack, no bottom tabs — apps are covers over Home**
- * (`apps/mobile/src/navigation.ts:1-3`). That is the sentence the whole model
- * keeps, and it is why [Destination] is a flat sealed hierarchy rather than a
- * tree of tab graphs: a tab bar would make "which app am I in" a second piece
- * of state, and v0 deleted it on purpose.
+ * **One root stack, no bottom tabs — apps are covers over Home.** That is the
+ * sentence the whole model keeps, and it is why [Destination] is a flat sealed
+ * hierarchy rather than a tree of tab graphs: a tab bar would make "which app
+ * am I in" a second piece of state.
  *
  * Kotlin and not protobuf, deliberately: a destination never crosses the ABI.
  * The core answers reads and commands; where the member is standing is the

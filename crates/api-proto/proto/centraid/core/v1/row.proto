@@ -9,15 +9,13 @@ import "centraid/core/v1/value.proto";
 // One row, column name to value.
 //
 // A key that is ABSENT from the map is an absent column; a key mapped to
-// `Value{null}` is SQL NULL. v0 states the same contract over JSON at
-// `packages/core/src/protocol/row-json.ts:25-28`, and the distinction is what
-// makes the delta prior image below expressible at all.
+// `Value{null}` is SQL NULL, and the distinction is what makes the delta
+// prior image below expressible at all.
 message RowImage {
   map<string, Value> columns = 1;
 }
 
-// The OLD values of ONLY the columns an UPDATE touched (v0's `prior_json`,
-// `packages/vault/src/replica/log.ts:435-461`).
+// The OLD values of ONLY the columns an UPDATE touched.
 //
 // Three claims live here and a reader must keep them apart:
 //   * A column absent from `columns` was UNTOUCHED, so its old value is

@@ -36,4 +36,3 @@ Sort, key, compare and hash a `Value` by a **canonical normal form** you compute
 ## Related
 
 - [../coding-standards.md](../coding-standards.md)
-- [manifest-regeneration.md](manifest-regeneration.md)

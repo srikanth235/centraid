@@ -1,9 +1,8 @@
 // The request/response envelope (#1020, D-1020-C2).
 //
 // Every stream carries length-prefixed `Envelope`s: `u32BE(len) ‖ bytes`, with
-// `len <= MAX_FRAME_BYTES` (262144 — v0's `MAX_HEADER_FRAME_BYTES`,
-// `packages/tunnel/src/protocol.ts:82`) and bodies chunked at 64 KiB. The
-// framing itself lives in `crates/protocol`, which knows nothing about iroh.
+// `len <= MAX_FRAME_BYTES` (262144) and bodies chunked at 64 KiB. The framing
+// itself lives in `crates/protocol`, which knows nothing about iroh.
 //
 // **Request ids are per connection, monotonic, and never reused.** That is what
 // makes `Cancel{request_id}` unambiguous: an id that has been answered is an id

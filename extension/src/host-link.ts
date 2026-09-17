@@ -310,8 +310,7 @@ export class HostLink {
   /**
    * THE FILL, AND ITS CLEARING (census §E seam 4, D-1020-X2).
    *
-   * The order is the whole thing, and it is v0's
-   * (`apps/extension/src/worker.ts:28`–`:30`):
+   * The order is the whole thing:
    *
    * 1. ask the host, which asks the seat, which unwraps `K` behind the member's
    *    unlock and answers a value with a thirty-second life;

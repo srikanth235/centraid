@@ -1,9 +1,9 @@
 //! The manifest, embedded and parsed rather than restated.
 //!
-//! `manifest.json` is `packages/blueprints/apps/notes/app.json` byte for byte.
-//! It is embedded with `include_str!` so a shipped binary carries the manifest
-//! it was built with and never looks for a repository path at runtime — the
-//! same reason `crates/ontology` embeds the registries (`contracts/README.md`).
+//! `manifest.json` is embedded with `include_str!`, verbatim, so a shipped
+//! binary carries the manifest it was built with and never looks for a
+//! repository path at runtime — the same reason `crates/ontology` embeds the
+//! registries (`contracts/README.md`).
 
 use std::sync::OnceLock;
 

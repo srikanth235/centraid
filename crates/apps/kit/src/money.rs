@@ -1,10 +1,10 @@
 //! MONEY KEEPS ITS CURRENCY (#996 ruling R22, drift ONT-23; ported for #1020).
 //!
-//! v0's doctrine, verbatim from `packages/core/src/money/index.ts:1-14`:
-//! Tally's `pairwise` accumulated minor units into a map keyed by *party alone*
-//! and the dashboard labelled the sum with the vault's base currency, so a EUR
-//! 100 debt and a USD 100 debt read as one 200 — a number true in no currency,
-//! rendered as if it were. **The fix is a type, not a check.**
+//! v0's bug, in full: Tally's `pairwise` accumulated minor units into a map
+//! keyed by *party alone* and the dashboard labelled the sum with the vault's
+//! base currency, so a EUR 100 debt and a USD 100 debt read as one 200 — a
+//! number true in no currency, rendered as if it were. **The fix is a type,
+//! not a check.**
 //!
 //! Three things the Rust port fixes rather than reproduces, each a finding
 //! against v0 recorded in the receipt:
@@ -90,15 +90,7 @@ pub fn money(amount_minor: i64, currency: &str) -> Money {
     }
 }
 
-pub fn zero_money(currency: &str) -> Money {
-    money(0, currency)
-}
-
 impl Money {
-    pub fn is_zero(&self) -> bool {
-        self.amount_minor == 0
-    }
-
     pub fn negated(&self) -> Self {
         Self {
             amount_minor: -self.amount_minor,

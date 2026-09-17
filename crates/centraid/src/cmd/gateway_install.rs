@@ -16,13 +16,11 @@
 //!    (`scripts/install-gateway.mjs:5`–`:8`): a background service that starts
 //!    because a package was unpacked is a service nobody chose to run.
 //!
-//! ## Why this moved out of TypeScript
+//! ## Why the generators live in the binary
 //!
-//! v0's generators live in `packages/server`, which v1's gateway does not
-//! load, so the desktop seat and the VPS installer would have had to shell out
-//! to a node process to learn the shape of a unit for a Rust binary. The
-//! generators are now where the binary is (census §Cross-lane: the desktop
-//! consumes `centraid gateway install` as a CLI call).
+//! The desktop seat and the VPS installer learn the shape of a unit from the
+//! binary itself rather than from a separate process (census §Cross-lane: the
+//! desktop consumes `centraid gateway install` as a CLI call).
 
 use std::path::{Path, PathBuf};
 

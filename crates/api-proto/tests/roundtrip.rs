@@ -41,9 +41,7 @@ fn roundtrip<M: Message + Default + PartialEq + std::fmt::Debug>(message: &M) {
 }
 
 /// SQL NULL is a PRESENT value; an absent column is a key that is not in the
-/// map. v0 states the same contract over JSON at
-/// `packages/core/src/protocol/row-json.ts:25-28`, and census seam 2 is the
-/// warning that a port conflates them.
+/// map, and census seam 2 is the warning that a port conflates them.
 #[test]
 fn an_absent_column_and_sql_null_are_different_facts() {
     let mut row = RowImage::default();
@@ -65,9 +63,8 @@ fn an_absent_column_and_sql_null_are_different_facts() {
 }
 
 /// An i64 beyond ±2^53−1 needs no escape. v0 had to send it as
-/// `{i: "<decimal>"}` because JSON numbers are doubles
-/// (`packages/core/src/protocol/row-json.ts:92-98`), and census seam 2 is the
-/// warning that a Rust port must not emit that escape for every integer.
+/// `{i: "<decimal>"}` because JSON numbers are doubles, and census seam 2 is
+/// the warning that a Rust port must not emit that escape for every integer.
 #[test]
 fn a_wide_integer_survives_without_a_decimal_text_escape() {
     for number in [
@@ -135,8 +132,7 @@ fn the_prior_delta_keeps_absent_empty_and_populated_apart() {
     );
 }
 
-/// `actual_version == 0` means the row is gone
-/// (`packages/client/src/replica/types.ts:93-109`). A sentinel inside the field
+/// `actual_version == 0` means the row is gone. A sentinel inside the field
 /// only works because `row_version` starts at 1, so zero cannot be a real
 /// version; the test pins that the sentinel survives the encoder's default
 /// elision, which is the one way it could have been lost.

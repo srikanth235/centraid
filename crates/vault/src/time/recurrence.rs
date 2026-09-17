@@ -1,8 +1,7 @@
 //! THE EXPANDER — civil-time recurrence, and the DST policy it shares with
 //! cron (#1020, D-1020-S1, D-1020-S2).
 //!
-//! v0's `packages/core/src/time/recurrence.ts` plus `recurrence-collapse.ts`,
-//! with one rule and no second engine anywhere. What the expansion guarantees:
+//! One rule and no second engine anywhere. What the expansion guarantees:
 //!
 //! - **A zoned rule keeps its WALL CLOCK through an offset change.** A 09:00
 //!   series is a 09:00 series on both sides of a DST boundary, because every

@@ -7,8 +7,7 @@
 //! out of one cell and dropped into another fails to open, because the AAD it
 //! was sealed under names the cell it came from.
 //!
-//! Faithful to `packages/vault/src/schema/sealed.ts` (#298), including the one
-//! rule that reads like a bug and is not:
+//! The design keeps the one rule that reads like a bug and is not (#298):
 //!
 //! ## `is_sealed_value` is structural, not a prefix test
 //!
@@ -300,9 +299,9 @@ mod tests {
         assert!(open_value(&KEY, &aad, &damaged).is_err());
     }
 
-    /// v0 `packages/vault/src/schema/sealed.ts:207-220`, #298 item 8. The
-    /// predicate is structural, so a member password that merely *starts* with
-    /// the prefix is not sealed — and therefore gets sealed.
+    /// #298 item 8. The predicate is structural, so a member password that
+    /// merely *starts* with the prefix is not sealed — and therefore gets
+    /// sealed.
     #[test]
     fn a_password_that_merely_starts_with_the_prefix_is_not_sealed() {
         assert!(!is_sealed_value("sealed:v1:hunter2"));

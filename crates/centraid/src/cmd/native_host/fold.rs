@@ -45,7 +45,7 @@ use centraid_apps_locker::{MatchPolicy, matches_origin};
 
 use super::methods::Method;
 
-/// v0's module catalogue, verbatim (`apps/extension/src/types.ts:33`–`:40`).
+/// The Companion's module catalogue.
 ///
 /// Which modules the Companion *uses* is its own local preference (#996 R11);
 /// what the vault answers is whether the app is installed at all, which is the

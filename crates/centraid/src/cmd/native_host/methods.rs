@@ -1,19 +1,16 @@
 //! THE COMPANION'S METHOD TABLE — one closed enum, on both sides
 //! (#1020 wave 4 lane extension, D-1020-X2).
 //!
-//! v0's Companion answers a `switch` over eighteen message types
-//! (`apps/extension/src/companion-api.ts:189`–`:318`). Every one of them was an
-//! HTTP call over a WASM iroh endpoint in a service worker; every one of them is
-//! now a native-messaging frame to this process, which relays it to the local
-//! seat. The list is the same list, and keeping it the same list is the thing
-//! this module exists to make structural:
+//! The Companion speaks eighteen message types, each a native-messaging frame
+//! to this process, which relays it to the local seat. Keeping both sides on
+//! the same list is the thing this module exists to make structural:
 //!
 //! * [`Method`] is the closed enum here;
-//! * `contracts/extension/methods.json` is generated from v0's two files by
-//!   `contracts/tools/export-extension-methods.ts`;
+//! * `contracts/extension/methods.json` is the hand-maintained fixture;
 //! * [`tests::the_table_is_exactly_the_fixture`] asserts the two agree, name for
 //!   name and property for property;
-//! * `extension/src/methods.ts` reads the same fixture.
+//! * `extension/src/methods-table.ts` holds the same table for the service
+//!   worker, and `extension/src/methods.test.ts` asserts it equals the fixture.
 //!
 //! So a nineteenth method cannot be added on one side only, and — more usefully
 //! — a method cannot quietly stop being served: an unknown name is refused with
@@ -22,26 +19,23 @@
 //! ## Eighteen, and the census says seventeen
 //!
 //! Census §E2 calls this "the 17 companion methods" and then lists eighteen
-//! names; `handleCompanionRequest` has eighteen `case` arms. Eighteen is the
-//! number, the generator asserts it, and the census's count is a finding rather
-//! than something to reproduce.
+//! names. Eighteen is the number, the fixture test asserts it, and the census's
+//! count is a finding rather than something to reproduce.
 //!
 //! ## What `idempotent` means here, and why it is not "is it a read"
 //!
-//! v0's retry rule keys on the HTTP verb: *a revoked device is never retried,
-//! and a non-idempotent method retries only a clear connect failure*
-//! (`transport-core.ts:33`–`:52`). `appRead` is a `POST`
-//! (`transport.ts:198`), so `locker:candidates` and `locker:fill` are NOT
-//! idempotent even though both look like reads — and post-wave-4 that is load
-//! bearing rather than pedantic: a fill writes a reveal receipt, so a rule that
-//! retried it on any failure would receipt one gesture three times.
+//! The retry rule: *a revoked device is never retried, and a non-idempotent
+//! method retries only a clear connect failure*. `locker:candidates` and
+//! `locker:fill` are NOT idempotent even though both look like reads — and that
+//! is load bearing rather than pedantic: a fill writes a reveal receipt, so a
+//! rule that retried it on any failure would receipt one gesture three times.
 
 use std::sync::LazyLock;
 
 /// One Companion method.
 ///
-/// Ordered as v0's switch is, because the fixture is and a reordering would
-/// make the comparison meaningless.
+/// Ordered as the fixture is, because a reordering would make the comparison
+/// meaningless.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Method {
     Status,
@@ -64,7 +58,7 @@ pub enum Method {
     PageCapture,
 }
 
-/// Every method, in v0's own order.
+/// Every method, in the fixture's order.
 pub const ALL: [Method; 18] = [
     Method::Status,
     Method::Pair,
@@ -87,7 +81,7 @@ pub const ALL: [Method; 18] = [
 ];
 
 impl Method {
-    /// The name on the wire — v0's own message `type`.
+    /// The name on the wire — the frame's message `type`.
     #[must_use]
     pub const fn wire_name(self) -> &'static str {
         match self {
@@ -126,8 +120,7 @@ impl Method {
 
     /// Whether a failed attempt may be retried on any failure.
     ///
-    /// v0's classification, read off the fixture rather than restated, so the
-    /// two cannot drift.
+    /// Read off the fixture rather than restated, so the two cannot drift.
     #[must_use]
     pub fn idempotent(self) -> bool {
         fixture_row(self).idempotent
@@ -146,14 +139,14 @@ impl Method {
         fixture_row(self).stages_bytes
     }
 
-    /// The `app.action` v0's handler writes through, when it writes.
+    /// The `app.action` the method writes through, when it writes.
     #[must_use]
     pub fn writes(self) -> Option<&'static WriteTarget> {
         fixture_row(self).writes.as_ref()
     }
 }
 
-/// The generated fixture, as the host reads it.
+/// The hand-maintained fixture, as the host reads it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct MethodsFixture {
     pub version: u32,
@@ -180,7 +173,7 @@ pub struct WriteTarget {
     pub action: String,
 }
 
-/// One request field of a method, as v0's `CompanionRequest` declares it.
+/// One request field of a method, as the Companion's request declares it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct FieldRow {
     pub name: String,
@@ -199,7 +192,7 @@ static FIXTURE: LazyLock<MethodsFixture> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
         "../../../../../contracts/extension/methods.json"
     ))
-    .expect("contracts/extension/methods.json is generated and must parse")
+    .expect("contracts/extension/methods.json must parse")
 });
 
 /// The fixture as a whole.
@@ -230,7 +223,7 @@ mod tests {
             .iter()
             .map(|row| row.name.as_str())
             .collect();
-        assert_eq!(names, rows, "the host's table is v0's switch, in its order");
+        assert_eq!(names, rows, "the host's table is the fixture's, in its order");
         assert_eq!(ALL.len(), 18, "eighteen arms, not the census's seventeen");
         for method in ALL {
             let row = fixture_row(method);
@@ -275,10 +268,9 @@ mod tests {
             .map(|method| method.wire_name())
             .collect();
         assert_eq!(staging, ["capture:document"]);
-        // `page:capture` reads the page and does not itself stage in v0 — it is
-        // answered in the browser (`companion-api.ts:318` returns `undefined`).
-        // Here it carries a document, which is why the CHUNKING layer is keyed
-        // on the frame's size rather than on this flag.
+        // `page:capture` reads the page and does not itself stage; it carries a
+        // document, which is why the CHUNKING layer is keyed on the frame's size
+        // rather than on this flag.
         assert!(Method::PageCapture.reads_page());
     }
 
@@ -292,9 +284,9 @@ mod tests {
         );
     }
 
-    /// Every method's request fields came from v0's own union.
+    /// Every method's request fields are the Companion's request union.
     #[test]
-    fn the_fields_are_v0s_union_members() {
+    fn the_fields_are_the_request_union_members() {
         let fill = fixture_row(Method::LockerFill);
         let names: Vec<&str> = fill.fields.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, ["itemId", "pageUrl"]);
@@ -304,7 +296,7 @@ mod tests {
                 .fields
                 .iter()
                 .any(|field| field.name == "role" && field.optional),
-            "v0's `role` is optional and the fixture must say so"
+            "`role` is optional and the fixture must say so"
         );
     }
 }

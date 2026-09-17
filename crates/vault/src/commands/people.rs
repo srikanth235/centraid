@@ -3,8 +3,7 @@
 //! A person is a canonical `core.party` (`kind = 'person'`) plus a **1:1**
 //! `people_profile` holding the keep-in-touch facts — role, nickname, avatar
 //! hue, cadence, last-contacted, how you met. `add_person` mints the party and
-//! the profile in one stroke; everything else hangs off the party id
-//! (`packages/vault/src/commands/people.ts:1`-`:17`).
+//! the profile in one stroke; everything else hangs off the party id.
 //!
 //! ### The gestures the ontology already models are REUSED, never re-invented
 //!
@@ -33,13 +32,12 @@
 //!
 //! v0 names three commands `people.save_contact_channel`,
 //! `people.delete_contact_channel` and `people.undo_contact_channel` and
-//! declares `ownerSchema: "social"` on all three
-//! (`packages/vault/src/commands/people-organize.ts:50`, `:176`, `:252`). The
-//! gateway authorises by `ownerSchema` and the caller types the NAME, so the
-//! two halves of one command answer to two different schemas — and People's
-//! manifest grants BOTH (`{schema: "people", verbs: "read+act"}` and three
-//! narrow `{schema: "social", table: "…_contact_channel", verbs: "act"}`
-//! entries), which is why nothing has ever failed.
+//! declares `ownerSchema: "social"` on all three. The gateway authorises by
+//! `ownerSchema` and the caller types the NAME, so the two halves of one
+//! command answer to two different schemas — and People's manifest grants
+//! BOTH (`{schema: "people", verbs: "read+act"}` and three narrow
+//! `{schema: "social", table: "…_contact_channel", verbs: "act"}` entries),
+//! which is why nothing has ever failed.
 //!
 //! This registry refuses the split by construction: `Registry::register`
 //! requires `name` to start with `owner_schema.` (`commands/mod.rs`), because

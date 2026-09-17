@@ -1,7 +1,6 @@
 //! THE DOOR'S GRAMMAR (#996 ruling W4-D2, ported for #1020).
 //!
-//! Ported from `packages/vault/src/gateway/paged-door.ts:15-29`, which states
-//! why it is a grammar and not a sanitiser: a statement the door cannot take
+//! This is a grammar and not a sanitiser: a statement the door cannot take
 //! apart is a statement the door cannot check. To apply a field mask it must
 //! know which columns are projected; to apply a row filter it must know which
 //! tables are read. Escaping strings answers neither question.

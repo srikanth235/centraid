@@ -204,10 +204,7 @@ impl Vault {
     ///
     /// A vault file is rows. Text bodies stay in the row — the FTS triggers
     /// decode them in-transaction and cannot do I/O — and every other kind of
-    /// byte spills here, with the row keeping only `blob:blake3-<hex>`. That
-    /// is v0's split (`packages/vault/src/blob/mint.ts:88`-`:99`) and the port
-    /// kept the split while dropping the store, so `media.add_asset` refused
-    /// every photograph and `core.add_document` refused every PDF.
+    /// byte spills here, with the row keeping only `blob:blake3-<hex>`.
     ///
     /// **Optional, and honestly so.** A vault with no store refuses binary
     /// inline bytes rather than writing a `core_content_item` whose

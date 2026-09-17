@@ -71,8 +71,7 @@ pub use manifest::{APP_ID, manifest};
 /// Every v0 People query wraps its body and answers `{…empty, vaultDenied:
 /// {code, message}}` rather than throwing (`queries/people.ts:222`-`:230`, and
 /// the same in all seven). `revoked_at` comes from the HOST, because a revoked
-/// app cannot read the consent tables to date its own revocation
-/// (`packages/server/src/engine/handlers/vault-bridge.ts:29`-`:36`) — so it is
+/// app cannot read the consent tables to date its own revocation — so it is
 /// an `Option` this crate never fills in.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Denial {

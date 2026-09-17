@@ -148,12 +148,6 @@ pub fn classify(value: &str) -> Option<Kind> {
     None
 }
 
-/// True when `value` reads as one of `allowed`.
-#[must_use]
-pub fn is_temporal(value: &str, allowed: &[Kind]) -> bool {
-    classify(value).is_some_and(|kind| allowed.contains(&kind))
-}
-
 /// The owner-facing refusal. It says what arrived and what the field takes,
 /// because "invalid date" is the sentence that made ONT-31 survive three
 /// releases.

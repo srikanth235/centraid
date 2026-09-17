@@ -1,7 +1,7 @@
 //! THE ITEM PANE'S SIDECARS — the SHAPE of a secret, never the secret.
 //!
-//! Ported from `packages/blueprints/apps/locker/queries/item-sidecars.ts`. One
-//! rule runs through all of it: **a sealed cell never rides these payloads.**
+//! One rule runs through all of it: **a sealed cell never rides these
+//! payloads.**
 //! `value_sealed` and `private_key` are projected because their *presence* is
 //! what the pane draws, and what comes back is a boolean; a revision's
 //! `snapshot_json` is opened here and **never forwarded**.
@@ -45,7 +45,7 @@ use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::types::ITEM_ENTITY_TYPE;
 
-/// The vault's placeholder for a sealed cell (`packages/vault/src/schema/sealed.ts:201`).
+/// The vault's placeholder for a sealed cell.
 ///
 /// Round-tripped `«sealed»` is **unchanged, never a value** (#293): an edit
 /// that hands this back means "leave the secret alone", which is what lets the
@@ -316,27 +316,6 @@ pub fn fold_fields(rows: &[Row]) -> Vec<Field> {
     fields
 }
 
-/// Fold the address rows, in the member's own order.
-#[must_use]
-pub fn fold_addresses(rows: &[Row]) -> Vec<Address> {
-    let mut addresses: Vec<Address> = rows
-        .iter()
-        .map(|row| Address {
-            address_id: text_of(row, "address_id").unwrap_or_default(),
-            url: text_of(row, "url").unwrap_or_default(),
-            match_policy: text_of(row, "match_policy")
-                .unwrap_or_else(|| "registrable-domain".to_owned()),
-            position: integer_or_zero(row, "position"),
-        })
-        .collect();
-    addresses.sort_by(|left, right| {
-        left.position
-            .cmp(&right.position)
-            .then(left.address_id.cmp(&right.address_id))
-    });
-    addresses
-}
-
 /// Fold the passkey row. `private_key` becomes a boolean and nothing else.
 #[must_use]
 pub fn fold_passkey(rows: &[Row]) -> Option<Passkey> {
@@ -466,30 +445,6 @@ pub const ITEM_ATTACHMENT_OWNER: &str = "core.attachment";
 #[must_use]
 pub fn owner_key(owner_type: &str, owner_id: &str) -> String {
     format!("{owner_type}:{owner_id}")
-}
-
-/// Read one sidecar's rows, turning a **refused door** into a value and
-/// leaving a **ceiling** an error.
-///
-/// This is the one place the asymmetry in this module's doc comment is
-/// implemented, and it is implemented by matching on the error rather than by
-/// catching everything — v0's bare `catch` swallows a fan-out overflow too,
-/// which is how a pane silently loses half a card's fields and reports it as an
-/// item with no custom fields.
-///
-/// The kit's error type has **no denial variant**, on purpose: a denial is a
-/// value in the app's own payload. What reaches an app crate from a door that
-/// would not answer is therefore the door's own refusal sentence
-/// (`KitError::GrammarRefused`), and that is the one arm that becomes
-/// [`SidecarReading::Refused`]. Everything else — a ceiling, a broken cursor, a
-/// projection that does not carry its own sort column — is a bug in this crate
-/// or its caller and goes up.
-pub fn read_sidecar(door: &dyn PageDoor, query: &PageQuery) -> KitResult<SidecarReading<Row>> {
-    match read_pages(door, query, SIDECAR_BOUND) {
-        Ok(rows) => Ok(SidecarReading::Read(rows)),
-        Err(centraid_apps_kit::KitError::GrammarRefused { .. }) => Ok(SidecarReading::Refused),
-        Err(error) => Err(error),
-    }
 }
 
 #[cfg(test)]

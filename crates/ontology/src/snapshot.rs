@@ -1,4 +1,4 @@
-//! A faithful port of v0's `packages/vault/src/golden-snapshot.ts`.
+//! The golden-corpus snapshot: per-row digests over the frozen columns.
 //!
 //! The corpus is a map from primary key to a digest over THE COLUMNS THAT
 //! EXISTED AT FREEZE TIME, which is what makes three outcomes distinguishable:

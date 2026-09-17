@@ -5,10 +5,9 @@ import dev.centraid.design.CentraidCatalog
 
 /**
  * An app failing [SpringboardPolicy.earnsGrid] becomes a FIRST MOVE
- * (#1020, wave A; v0 `apps/mobile/src/screens/home/first-moves.ts`).
+ * (#1020).
  *
- * Deliberately absent, and v0 says so in its own words: dashed placeholder
- * cards. They scale to identical apologies and they open empty apps. Every move
+ * Deliberately absent: dashed placeholder cards. They scale to identical apologies and they open empty apps. Every move
  * here lands somewhere that can TAKE content.
  */
 public object FirstMoves {

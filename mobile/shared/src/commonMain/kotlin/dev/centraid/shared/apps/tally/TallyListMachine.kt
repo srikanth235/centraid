@@ -13,11 +13,9 @@ import dev.centraid.shared.screen.Step
 /**
  * The Tally list (#1020, D-1020-E3).
  *
- * v0 had a real store for this one — `apps/mobile/src/apps/tally/tally-store.ts`
- * — and its test pins the law this reducer is built around: **a failed read
- * never reads as an empty ledger.** Everything else on the screen (which band,
- * which page cursor, which pending-write overlay) v0 kept in React state, so
- * this machine invents it rather than porting it.
+ * The law this reducer is built around: **a failed read never reads as an
+ * empty ledger.** Everything else on the screen (which band, which page
+ * cursor, which pending-write overlay) is this machine's state too.
  */
 public object TallyListMachine : ScreenMachine<TallyListState, TallyListEvent> {
     public const val SCREEN_ID: String = "tally.list"
@@ -58,9 +56,8 @@ public object TallyListMachine : ScreenMachine<TallyListState, TallyListEvent> {
                 listOf(ScreenEffect.ReadPage(SCREEN_ID, event.next_page.after_cursor)),
             )
 
-            // A BAND DESTINATION IS A PARAMETER, NOT A SECOND SCREEN
-            // (`apps/mobile/src/navigation.ts:19-24`). The state machine is the
-            // same machine; only the parameter and the rows change.
+            // A BAND DESTINATION IS A PARAMETER, NOT A SECOND SCREEN. The state
+            // machine is the same machine; only the parameter and the rows change.
             event.destination != null -> firstLoad(
                 state.copy(destination = event.destination.destination),
             )

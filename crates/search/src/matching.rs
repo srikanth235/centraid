@@ -1,11 +1,10 @@
 //! COMPILING OWNER-TYPED WORDS INTO AN FTS5 EXPRESSION.
 //!
-//! Ported verbatim from `packages/vault/src/gateway/search.ts:25`-`:41`. Every
-//! word becomes a **quoted prefix phrase** (`"budg"*`) and the phrases join by
-//! FTS5's implicit AND. The quoting is the security half: unquoted, `AND`,
-//! `NEAR`, `OR` and a leading `-` are FTS5 *syntax*, so a member typing
-//! `dinner OR password` would be running a query they did not write. Quoted,
-//! they are words.
+//! Every word becomes a **quoted prefix phrase** (`"budg"*`) and the phrases
+//! join by FTS5's implicit AND. The quoting is the security half: unquoted,
+//! `AND`, `NEAR`, `OR` and a leading `-` are FTS5 *syntax*, so a member
+//! typing `dinner OR password` would be running a query they did not write.
+//! Quoted, they are words.
 //!
 //! Two refusals, and they are v0's:
 //!

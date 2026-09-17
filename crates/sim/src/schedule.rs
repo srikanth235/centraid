@@ -161,14 +161,6 @@ impl Schedule {
         })
     }
 
-    /// Whether this schedule ever crashes the gateway.
-    #[must_use]
-    pub fn crashes_gateway(&self) -> bool {
-        self.faults
-            .iter()
-            .any(|fault| matches!(fault, Fault::CrashGateway { .. }))
-    }
-
     /// The total number of writes across every seat.
     #[must_use]
     pub fn total_writes(&self) -> usize {

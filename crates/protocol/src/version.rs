@@ -1,7 +1,7 @@
 //! The version window (#1020, D-1020-C6, Compatibility).
 //!
-//! Two constants and one function. The function is v0's rule verbatim
-//! (`docs/protocol.md:152-157`):
+//! Two constants and one function. The function is the rule in
+//! `docs/protocol.md`, "The version window":
 //!
 //! ```text
 //! ok iff peer.schema_version >= local.min_supported
@@ -77,9 +77,9 @@ pub fn judge(local: &Hello, peer: &Hello) -> Result<(), UpgradeRequired> {
 /// Capabilities the peer requires and this build does not offer.
 ///
 /// A separate answer from `judge` on purpose: the numbers can agree while a
-/// required feature is missing, and v0 carries exactly one absent-tolerant pair
-/// (`automations` / `connectors`, `docs/protocol.md:143-161`) which is a policy
-/// about particular names and not a property of the handshake.
+/// required feature is missing, and which names are required is a policy about
+/// particular features (`docs/protocol.md`, "Feature contract — per feature")
+/// rather than a property of the handshake.
 pub fn missing_capabilities<'a>(local: &Hello, required: &'a [&'a str]) -> Vec<&'a str> {
     required
         .iter()

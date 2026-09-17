@@ -2,9 +2,8 @@
 //!
 //! Every variant here is a **member-visible outcome** in v0 — a `throw` out of
 //! `probeLimit`, `inList`, `readPages` or the paged door's `refuse` — and the
-//! port keeps them errors rather than short answers for the reason v0 states at
-//! `packages/blueprints/apps/_shared/paged-reads.ts:110-112`: returning what a
-//! walk had would be the truncation flag again, a short answer that reads as a
+//! port keeps them errors rather than short answers: returning what a walk
+//! had would be the truncation flag again, a short answer that reads as a
 //! whole one. A denial, by contrast, is never an error (#1020, census §3.1 and
 //! apps seam 10) — it is a value, and it lives in each app's payload.
 
@@ -31,9 +30,9 @@ pub enum KitError {
     ///
     /// **This is a live v0 bug the port refuses instead of reproducing**
     /// (D-1020-D3-10). v0 collapses a NULL sort key to `""` when it mints a
-    /// cursor (`packages/core/src/page/statement.ts:77`) and continues with
-    /// the row value `(sort, pk) < (?, ?)`. SQLite evaluates a row-value
-    /// comparison with a NULL operand to **NULL, not true** — verified:
+    /// cursor and continues with the row value `(sort, pk) < (?, ?)`. SQLite
+    /// evaluates a row-value comparison with a NULL operand to **NULL, not
+    /// true** — verified:
     /// `SELECT (NULL,'pk-4') > ('','pk-3')` answers NULL — so a page of a
     /// nullable sort column silently drops rows in three of the four cases:
     ///
@@ -49,8 +48,7 @@ pub enum KitError {
     /// cursor, which is filed as a finding rather than built in this lane. Until
     /// then a continued page orders by a NOT NULL column, and this is the
     /// refusal that says so — "a balance derived from a silently short ledger
-    /// is a WRONG NUMBER, not a slow screen"
-    /// (`packages/blueprints/apps/tally/queries/dashboard.ts:45-51`).
+    /// is a WRONG NUMBER, not a slow screen."
     ///
     /// Found by `crates/apps/kit/tests/keyset_properties.rs`, which is the
     /// reason that file is a property test and not a table of examples.

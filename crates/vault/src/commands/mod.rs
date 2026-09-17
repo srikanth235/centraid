@@ -152,8 +152,7 @@ impl<'conn> CommandCtx<'_, 'conn> {
     /// `object_type: "agent.command"`. That answers *which command ran*; it
     /// does not answer *which row was opened*, and the two are different
     /// audit questions — Locker's access history reads `object_type IN
-    /// ('locker.item', 'locker.auth')` and would never see a command receipt
-    /// (`packages/blueprints/apps/locker/queries/access.ts`).
+    /// ('locker.item', 'locker.auth')` and would never see a command receipt.
     ///
     /// So a command whose subject is a row, not itself, appends a second
     /// receipt naming that row. It goes through the same chained writer — same

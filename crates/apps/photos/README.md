@@ -1,13 +1,13 @@
 # `centraid-apps-photos` — the library as a projection
 
-Photos is the largest app in the product: 21,348 lines of v0 TypeScript, 8 queries, 18 actions, 38 scopes over five schemas and a 551-line demo seed. This crate is the read plane and the action table; the writes are `crates/vault`'s `media` schema, and the bytes are `crates/media`'s.
+Photos is the largest app in the product: 8 queries, 18 actions and 38 scopes over five schemas, plus a demo seed. This crate is the read plane and the action table; the writes are `crates/vault`'s `media` schema, and the bytes are `crates/media`'s.
 
 | Module | What it is |
 | --- | --- |
-| `manifest` | v0's `app.json`, byte for byte, parsed by the kit's parser at load time. Two copies of "which tables does Photos write" is how the two answers drift. |
+| `manifest` | The app's `manifest.json`, parsed by the kit's parser at load time. Two copies of "which tables does Photos write" is how the two answers drift. |
 | `queries` | `library` and `search`: the asset columns, the `IN`-bounded joins, the star derived from the flags scheme, and the keyset cursor. |
 | `storage` | The custody sweep as a **three-state** summary. `computed_at` and `buckets` are `Some` together or `None` together, so "not counted yet" cannot be printed as zeroes. |
-| `faces` | `faces`, `face-queue` and `people`, with the four traps ported as tests. |
+| `faces` | `faces`, `face-queue` and `people`, with the four traps held by tests. |
 | `duplicates` | A **read** over the cluster id a sweep computed. The clustering is `centraid_media::duplicates`. |
 | `enrichment` | A read-only mirror of `enrich.policy`, three-state over a closed `Tier`. |
 | `places` | The Places facet, inside Photos. A location is a phrase before it is a pin. |
@@ -16,7 +16,7 @@ Photos is the largest app in the product: 21,348 lines of v0 TypeScript, 8 queri
 
 ## Six rulings this crate is shaped by
 
-Every one of them is an answer to a way the port could have been wrong, and every one has a test named after it.
+Every one of them is an answer to a way this crate could be wrong, and every one has a test named after it.
 
 **D-1020-P1 — the storage answer is three states, not a number.** `blob_custody_rollup.computed_at` is `NOT NULL`, so a null `computedAt` means _no rows_, not a row with no timestamp — two facts that travel together and are one fact. `StorageSummary` makes that a type, and `an_unswept_vault_never_yields_zeroes` is the test. `local-unproven` is a type-level marker rather than a flag: `offerable_release` hands back a `Freeable`, and there is no constructor for one from the unproven bucket, because releasing an unproven original destroys the only copy.
 
@@ -28,14 +28,14 @@ Every one of them is an answer to a way the port could have been wrong, and ever
 
 **D-1020-P5 — the Places facet stays here.** There is no `crates/apps/places`. The phrase logic is the load-bearing half: in a **shared** context the relative rung is skipped, because "5.2 km NW of Home" hands a stranger a bearing to the member's house — and `printable_name` refuses a coordinate-shaped name at every rung, so a gazetteer that wrote digits into `name` cannot leak them.
 
-**D-1020-P11 — the library window is one page, and the port says so.** `media_asset.captured_at` is nullable, and the kit's door refuses a **continued** page over a nullable sort key because SQLite's row-value comparison puts every NULL on one side of the keyset and the walk silently drops them. So the declared 2,000-row window is unreachable by a walk. v0 arrives at the same place by accident — it asks for 2,000 as one page and the clamp gives it 500 — and the difference is the report: `window` says what was asked, `truncated` is the page's own cursor, and a surface continues with `before`. The remedy for the ceiling is a **typed cursor** on the app's `before` input, which is a manifest input-schema change and therefore the root's.
+**D-1020-P11 — the library window is one page, and the answer says so.** `media_asset.captured_at` is nullable, and the kit's door refuses a **continued** page over a nullable sort key because SQLite's row-value comparison puts every NULL on one side of the keyset and the walk silently drops them. So the declared 2,000-row window is unreachable by a walk. Asking for 2,000 as one page gets 500 from the clamp, and the answer reports it: `window` says what was asked, `truncated` is the page's own cursor, and a surface continues with `before`. The remedy for the ceiling is a **typed cursor** on the app's `before` input, which is a manifest input-schema change and therefore the owner's call.
 
 ## What stops this crate doing more
 
 | Not allowed | What stops it |
 | --- | --- |
 | SQL, in any form | `cargo xtask rules`' `sql-confinement` scans this crate and finds none; a statement here is a `PageQuery` — a projection, a `from`, a predicate and an order, as data |
-| A model, a codec or a hash | recognition is the automations lane's and the byte plane is `crates/media`'s; the dependencies are the kit and `serde` |
+| A model, a codec or a hash | recognition is not this crate's and the byte plane is `crates/media`'s; the dependencies are the kit and `serde` |
 | A write from a query | `queries` holds statements and a `PageDoor`, whose one method reads |
 | An invocation with no `invoke_key` | the field is required (D-1020-D3-5) |
 | A denial turned into an error | `Outcome::Denied` and `Reading::Denied` are states a surface renders |
@@ -47,7 +47,7 @@ The manifest's `confirmation: "required"` is what the **dispatching surface** as
 
 ## Fixtures
 
-- `crates/apps/photos/tests/parity.rs` folds all eight queries over a vault seeded by `centraid_apps_kit::fixtures::photos_demo` — v0's own nineteen-frame roll, transcribed as data — inside a database built from `contracts/schema/vault-ddl.sql`.
-- `contracts/apps/photos/sample/manifest.json` records every shipped frame's pixel dimensions and asserts the `THUMB_EDGE` coupling: every frame is ≤ 360 px on its long edge **on purpose**, so a tile paints the original instead of probing a `?variant=thumb` derivative the preview backstop has not generated. Nothing on either side tested that before.
-- `contracts/apps/photos/{rows,queries,commands,scenarios}.json` are **v0's own answers**, generated by `contracts/tools/export-photos-parity.ts` through the emitter-and-oracle at `tests/quality/photos-parity.contract.test.ts`. `parity.rs` compares all eight queries at 21 fixed inputs **ids and order included**, because the rows and the answers are canonicalised in one pass over one vault — so an id in `queries.json` names the same row as the same id in `rows.json`. Regeneration is idempotent and the command is in `contracts/apps/photos/README.md`.
-- `crates/apps/photos/tests/year3.rs` is the `year3-50k-assets` axis. Measured numbers and their provenance are in the lane's receipt section.
+- `crates/apps/photos/tests/parity.rs` folds all eight queries over a vault seeded by `centraid_apps_kit::fixtures::photos_demo` — the nineteen-frame demo roll, as data — inside a database built from `contracts/schema/vault-ddl.sql`.
+- `contracts/apps/photos/sample/manifest.json` records every shipped frame's pixel dimensions and asserts the `THUMB_EDGE` coupling: every frame is ≤ 360 px on its long edge **on purpose**, so a tile paints the original instead of probing a `?variant=thumb` derivative the preview backstop has not generated.
+- `contracts/apps/photos/{rows,queries,commands,scenarios}.json` are a **frozen golden** captured from an independent implementation's own answers. `parity.rs` compares all eight queries at 21 fixed inputs **ids and order included**, because the rows and the answers are canonicalised in one pass over one vault — so an id in `queries.json` names the same row as the same id in `rows.json`. See [`contracts/apps/photos/README.md`](../../../contracts/apps/photos/README.md).
+- `crates/apps/photos/tests/year3.rs` is the `year3-50k-assets` axis. Measured numbers and their provenance are in the receipt.

@@ -1,8 +1,7 @@
 /*
  * THE CREDENTIAL'S LIFETIME IN THIS PROCESS (#1020 wave 4 lane extension).
  *
- * Carried from v0 (`apps/extension/src/credential-gesture.ts`) with its
- * reasoning intact, because none of it was about the transport:
+ * Two rules, neither about the transport:
  *
  * - a **page-created event is never authority** to reveal, save or generate a
  *   secret, so the gesture must be trusted;
@@ -12,10 +11,9 @@
  *   secret-bearing properties — which is the difference between a credential
  *   that lives for one fill and one that lives until the worker is evicted.
  *
- * ## What is new, and it is the gap census §E seam 4 named
+ * ## The clearing is tested, not assumed
  *
- * v0 calls `clearFillMaterial` on the message response and *nothing tests that
- * it happened*. `host-link.test.ts` now does: it drives a real fill round trip
+ * `host-link.test.ts` drives a real fill round trip
  * against a fake native port and asserts the material is gone from the object
  * the worker held — and, separately, that the value the caller received is
  * still intact, because a clearing that also emptied the answer would pass a

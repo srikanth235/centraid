@@ -288,8 +288,7 @@ class SyncSchedulerSpec : StringSpec({
     }
 
     "an empty secret DELETES rather than storing an empty string" {
-        // `apps/mobile/src/lib/secure-storage.ts:39-43`. A stored empty secret
-        // reads back as a credential the app believes it has.
+        // A stored empty secret reads back as a credential the app believes it has.
         val store = FakePlatformServices().secureStore
         store.write("link.ticket", "abc")
         store.read("link.ticket") shouldBe "abc"

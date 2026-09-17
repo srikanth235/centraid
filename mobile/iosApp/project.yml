@@ -51,6 +51,28 @@ targets:
       # point of view it is one XCFramework either way.
       - framework: ../shared/build/XCFrameworks/debug/CentraidShared.xcframework
         embed: true
+    # WITHOUT THIS THE KEYCHAIN IS DEAD AND PAIRING CANNOT PERSIST (#1025).
+    #
+    # `IosSecureStore` is where this device's endpoint secret lives, and every
+    # `SecItem*` call from an app with NO entitlements fails `-34018` ("client
+    # has neither application-identifier nor keychain-access-groups
+    # entitlements"). The store then reads nothing and writes nothing, so the
+    # minted secret is lost the moment the pairing core closes: the next dial
+    # presents a key the gateway never enrolled, the gateway logs "an unenrolled
+    # peer did not pair", and the phone renders "this app and that gateway are
+    # too far apart in version to talk" — the exact sentence D-1025-S7-13 exists
+    # to prevent, arrived at from the shell rather than the core.
+    #
+    # A device build got the entitlement from its provisioning profile and hid
+    # this; a simulator build signed ad-hoc has no profile, so nothing supplied
+    # it and no local simulator run could ever prove pairing survives a close.
+    # `$(AppIdentifierPrefix)` is the team prefix on a provisioned build and
+    # empty on an ad-hoc one, which is what makes one declaration serve both.
+    entitlements:
+      path: Resources/Centraid.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(CFBundleIdentifier)
     # `Resources/Info.plist` IS XCODEGEN'S OUTPUT, NOT A SOURCE FILE (#1020).
     #
     # The keys below are the source; `xcodegen generate` writes the plist from

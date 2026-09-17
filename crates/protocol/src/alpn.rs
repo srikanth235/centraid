@@ -41,17 +41,10 @@
 //! second admission site and a reconnect between the only two things a phone
 //! does on its first day.
 //!
-//! Routing is still by ALPN alone, never by anything the caller says — v0's
-//! Rust relay states it in one line, "the ALPN, not anything the caller says,
-//! picks the lane" (`packages/tunnel/data-plane/src/iroh_relay.rs:486`). There
-//! is one lane to pick, so there is nothing left for a caller to influence.
-//!
-//! New and v1-only. v0's four are listed below as `V0_ALPNS` for exactly one
-//! purpose: a test asserts no v1 ALPN equals a v0 one, so a v1 endpoint can
-//! never negotiate with a v0 one by accident. Drift in an ALPN fails nowhere
-//! but at negotiation on a real network, which is why v0 pinned its own four
-//! with a parity test across two languages
-//! (`packages/tunnel/src/alpn-parity.test.ts:2-7`) and why this file pins ours.
+//! Routing is by ALPN alone, never by anything the caller says. There is one
+//! lane to pick, so there is nothing left for a caller to influence. Drift in
+//! an ALPN fails nowhere but at negotiation on a real network, which is why
+//! the tests below pin it.
 
 /// Device ↔ gateway. **The plane**, and the only one.
 ///
@@ -60,16 +53,6 @@
 /// an unenrolled peer's is provisional. A provisional connection may carry one
 /// `pair` stream and nothing else; redeeming promotes it in place.
 pub const PLANE: &[u8] = b"centraid/v1";
-
-/// v0's four, for the disjointness test only. Never advertised by a v1
-/// endpoint. Sources: `packages/tunnel/src/protocol.ts:7`, `:8`, `:11` and
-/// `packages/tunnel/src/gateway-endpoint.ts:51`.
-pub const V0_ALPNS: [&[u8]; 4] = [
-    b"centraid/tunnel/1",
-    b"centraid/pair/1",
-    b"centraid/gw-pair/1",
-    b"centraid/gw-link/1",
-];
 
 /// Every ALPN a v1 endpoint advertises. Exactly one.
 pub const ADVERTISED: [&[u8]; 1] = [PLANE];
@@ -104,25 +87,8 @@ mod tests {
         }
     }
 
-    /// #1020 takes no v0 compatibility, so a v1 endpoint meeting a v0 one must
-    /// fail at negotiation rather than speak a protocol neither implements.
-    #[test]
-    fn no_v1_alpn_equals_a_v0_one() {
-        for v1 in ADVERTISED {
-            for v0 in V0_ALPNS {
-                assert_ne!(
-                    v1,
-                    v0,
-                    "{} collides with a v0 ALPN — a v1 endpoint would negotiate with a v0 one",
-                    String::from_utf8_lossy(v1)
-                );
-            }
-        }
-    }
-
     /// `centraid/v1`: the product and its major version, and nothing about a
-    /// lane — because there is no lane to name. A reader can tell a v1 ALPN
-    /// from a v0 one by eye in a packet capture.
+    /// lane — because there is no lane to name.
     #[test]
     fn the_alpn_names_the_product_and_its_version_and_nothing_else() {
         let text = std::str::from_utf8(PLANE).expect("ascii");

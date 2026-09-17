@@ -2,36 +2,42 @@
 /**
  * Path-filter inverse lint (#892 Phase 3).
  *
- * THE LOAD-BEARING FACT: in `ci.yml`, `skipped` counts as a PASS. That is
- * correct — it is what lets a path-gated lane roll up into the single required
- * `check` (#557) — and it makes the `changes` filter table the thing that
- * decides whether a lane ever runs at all. A directory no filter mentions wakes
- * no lane, reports `skipped`, and merges green. Nothing announces it.
+ * THE LOAD-BEARING FACT: in a workflow whose lanes roll up into one required
+ * `check` (#557), `skipped` counts as a PASS, which makes a `changes` filter
+ * table the thing that decides whether a lane ever runs at all. A directory no
+ * filter mentions wakes no lane, reports `skipped`, and merges green. Nothing
+ * announces it.
  *
- * #890 W0 fixed one instance by hand: `tests/agent-e2e-mobile/**` was absent, so
- * editing a Maestro flow triggered NO mobile lane and the test layer of the
- * primary surface merged unexercised. This is the check that would have caught
- * it, and the one that catches the next one.
+ * #890 W0 fixed one instance by hand: a test tree was absent from the table, so
+ * editing it triggered no lane and merged unexercised. This is the check that
+ * would have caught it, and the one that catches the next one.
+ *
+ * WHERE THE TABLE LIVES. Every workflow under `.github/workflows/` is read, and
+ * any `filters: |` block in one is a table. Today there is none: gate.yml, the
+ * one pull-request entry point, is unfiltered by ruling (#1020), so every path
+ * is claimed by the ledger alone, with the always-on job that covers it. A
+ * filter table added to any workflow is held to all three sub-checks the day
+ * it lands.
  *
  * THREE SUB-CHECKS.
  *
- *   claimed     every workspace directory (`packages/*`, `apps/*`) and every
+ *   claimed     every workspace package (`packages/*`) and every
  *               tracked top-level directory is named by at least one filter, or
  *               is listed in the ledger with the always-on job that covers it.
  *               An unclaimed path fails; a ledger entry for a path that no
  *               longer exists ALSO fails, because a stale exemption reads like a
  *               reviewed decision and is not one.
  *   tidy        no filter lists the same glob twice. The table is hand-kept and
- *               already shows the wear — `packages/server/**` appeared five
- *               times and `packages/core/**` twice inside the `gateway` filter —
- *               which is exactly the state in which a real omission is invisible.
+ *               once showed the wear — one glob appeared five times inside a
+ *               single filter — which is exactly the state in which a real
+ *               omission is invisible.
  *   escape      every read of a filter output carries the `all` fallback. A
  *               `workflow_dispatch` run has no diff, so `changes` SKIPS the
  *               paths-filter step and every output is the empty string; `all` is
- *               what turns the lanes back on. `client-e2e` threaded it into its
- *               `if:` but not into its two `with:` inputs — the only reads in the
- *               file outside an `if:` — so the caller started, handed the lane
- *               `web: false, desktop: false`, and both inner jobs skipped. A
+ *               what turns the lanes back on. One lane threaded it into its
+ *               `if:` but not into its two `with:` inputs, so the caller
+ *               started, handed the lane `false` twice, and both inner jobs
+ *               skipped. A
  *               manual full run on `main` exercised nothing and reported green.
  *               That is the `skipped`-counts-as-PASS hazard again, one level
  *               down, and reached through the very control meant to defeat it.
@@ -40,11 +46,11 @@
  * `lint-workflow-pins.mjs`), ~30 ms.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
-const CI_PATH = path.join(root, ".github/workflows/ci.yml");
+const WORKFLOWS_DIR = path.join(root, ".github/workflows");
 const LEDGER_PATH = path.join(root, "tests/path-filter-ledger.json");
 
 /**
@@ -136,7 +142,7 @@ function scannableUnits(source) {
  * for was in a `with:`, and every previous reading of this table had assumed
  * `if:` was the only place an output could be consumed.
  */
-export function escapeHatchProblems(source) {
+export function escapeHatchProblems(source, file = "workflow") {
   const problems = [];
   for (const { line, text } of scannableUnits(source)) {
     const names = [...text.matchAll(OUTPUT_REF)].map(
@@ -145,7 +151,7 @@ export function escapeHatchProblems(source) {
     if (names.length === 0 || names.includes("all")) continue;
     const named = [...new Set(names)].map((name) => `\`${name}\``).join(", ");
     problems.push(
-      `ci.yml:${line} reads ${named} without \`|| needs.changes.outputs.all == 'true'\`. A \`workflow_dispatch\` run skips the paths-filter step, so that output is the empty string and the lane reports \`skipped\` — which \`check\` counts as a PASS. The one control that forces a full run would leave this lane unexercised and green.`
+      `${file}:${line} reads ${named} without \`|| needs.changes.outputs.all == 'true'\`. A \`workflow_dispatch\` run skips the paths-filter step, so that output is the empty string and the lane reports \`skipped\` — which \`check\` counts as a PASS. The one control that forces a full run would leave this lane unexercised and green.`
     );
   }
   return problems;
@@ -177,15 +183,15 @@ export function claimedPaths(filters) {
 }
 
 /**
- * The units a reader would expect a filter to name: each workspace package and
- * app, plus every tracked top-level directory.
+ * The units a reader would expect a filter to name: each workspace package,
+ * plus every tracked top-level directory.
  */
 export function pathsRequiringClaim(trackedFiles) {
   const required = new Set();
   for (const file of trackedFiles) {
     const parts = file.split("/");
     if (parts.length < 2) continue; // a root file, not a directory
-    if (parts[0] === "packages" || parts[0] === "apps") {
+    if (parts[0] === "packages") {
       if (parts.length >= 3) required.add(`${parts[0]}/${parts[1]}`);
       continue;
     }
@@ -207,7 +213,7 @@ export function lintPathFilters(filters, trackedFiles, ledger) {
     const reason = exempt.get(target);
     if (!reason) {
       errors.push(
-        `\`${target}\` is claimed by no \`changes\` filter and has no ledger entry. A path no filter names wakes no path-gated lane, and \`skipped\` counts as a PASS in ci.yml's \`check\` — so it would merge green, unexercised. Add it to a filter, or record the always-on job that covers it in tests/path-filter-ledger.json.`
+        `\`${target}\` is claimed by no \`changes\` filter and has no ledger entry. A path no filter names wakes no path-gated lane, and \`skipped\` counts as a PASS in a rolled-up \`check\` — so it would merge green, unexercised. Add it to a filter, or record the always-on job that covers it in tests/path-filter-ledger.json.`
       );
       continue;
     }
@@ -230,14 +236,19 @@ export function lintPathFilters(filters, trackedFiles, ledger) {
 }
 
 function main() {
-  const source = readFileSync(CI_PATH, "utf8");
-  const filters = parseFilters(source);
-  if (!filters || Object.keys(filters).length === 0) {
-    console.error(
-      "path-filters: could not read the `changes` filter table from ci.yml — refusing to pass without checking anything"
-    );
-    process.exitCode = 1;
-    return;
+  // Every workflow's filter table, merged. A filter name is scoped to its file
+  // so two workflows may each own a `web` filter without one hiding the other.
+  const workflows = readdirSync(WORKFLOWS_DIR)
+    .filter((name) => /\.ya?ml$/u.test(name))
+    .sort()
+    .map((name) => ({
+      name,
+      source: readFileSync(path.join(WORKFLOWS_DIR, name), "utf8"),
+    }));
+  const filters = {};
+  for (const { name, source } of workflows) {
+    for (const [filter, globs] of Object.entries(parseFilters(source) ?? {}))
+      filters[`${name}#${filter}`] = globs;
   }
   const tracked = execFileSync("git", ["ls-files", "-z"], {
     cwd: root,
@@ -246,11 +257,20 @@ function main() {
   })
     .split("\0")
     .filter(Boolean);
+  if (pathsRequiringClaim(tracked).size === 0) {
+    console.error(
+      "path-filters: found no tracked directory to hold against a filter or the ledger — refusing to pass without checking anything"
+    );
+    process.exitCode = 1;
+    return;
+  }
   const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8"));
 
   const errors = [
     ...lintPathFilters(filters, tracked, ledger),
-    ...escapeHatchProblems(source),
+    ...workflows.flatMap(({ name, source }) =>
+      escapeHatchProblems(source, name)
+    ),
   ];
   if (errors.length) {
     for (const error of errors) console.error(`path-filters: ${error}`);
@@ -259,7 +279,7 @@ function main() {
     return;
   }
   console.log(
-    `path-filters: ${Object.keys(filters).length} filter(s) cover every workspace and top-level path (${Object.keys(ledger.alwaysOn ?? {}).length} ledgered as always-on), and every read of one carries the \`all\` fallback`
+    `path-filters: ${Object.keys(filters).length} filter(s) across ${workflows.length} workflow(s) and ${Object.keys(ledger.alwaysOn ?? {}).length} always-on ledger entr(ies) cover every workspace and top-level path, and every read of a filter output carries the \`all\` fallback`
   );
 }
 

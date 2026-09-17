@@ -17,18 +17,13 @@
 //! Photos and Tally as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
-//! **This is a port, not an invention.** v0 shipped one `seed.js` per app under
-//! `packages/blueprints/apps/<app>/seed.js` — seven of them, agenda, docs,
-//! notes, people, photos, tally and tasks — reached through the gateway route
-//! `/centraid/_vault/demo`, and wave 6 deleted the lot without porting any of
-//! it. The scenario below is theirs: one weekend at Tahoe with Maya, Jake,
-//! Grandpa Ray and Chris, the same notes, the same packing list, the same
-//! uneven expense ledger. Re-writing the content would have thrown away the one
-//! thing a demo corpus is for, which is that it reads like somebody's life
-//! rather than like `Item 1, Item 2`.
+//! **One scenario across seven apps** — agenda, docs, notes, people, photos,
+//! tally and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! Chris, with notes, a packing list and an uneven expense ledger. A demo
+//! corpus is for reading like somebody's life rather than like
+//! `Item 1, Item 2`.
 //!
-//! **Locker has no seed and that is v0's own answer.** There were seven files
-//! for eight apps. A demo vault that fabricates a member's saved passwords is a
+//! **Locker has no seed.** A demo vault that fabricates a member's saved passwords is a
 //! demo vault nobody should trust, and Locker's tile has something true to say
 //! either way — its body is a STATE, not a query result.
 //!
@@ -520,7 +515,7 @@ struct Report {
 }
 
 // ---------------------------------------------------------------------------
-// People — v0 `packages/blueprints/apps/people/seed.js`.
+// People.
 //
 // "A small living circle — people with contact cadences, logged interactions,
 // birthdays, canonical gift tasks and one outstanding debt."
@@ -632,7 +627,7 @@ fn seed_people(seeder: &mut Seeder) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// Notes — v0 `packages/blueprints/apps/notes/seed.js`.
+// Notes.
 //
 // "Two notebooks and a handful of lived-in markdown notes, plus one loose
 // scratch note."
@@ -699,7 +694,7 @@ fn seed_notes(seeder: &mut Seeder) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// Docs — v0 `packages/blueprints/apps/docs/seed.js`.
+// Docs.
 //
 // "Two folders, three filed documents, a star, a tag, and one document with a
 // SECOND version so the history walk has something to walk." The bytes ride the
@@ -814,7 +809,7 @@ fn seed_docs(seeder: &mut Seeder, now: i64) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// Photos — v0 `packages/blueprints/apps/photos/seed.js`, the row half.
+// Photos — the row half.
 //
 // The frames' titles and capture times are v0's. The BYTES are not: that seed
 // generates eighteen JPEGs and stages face proposals over them, and nothing on
@@ -1346,7 +1341,7 @@ fn seed_album(seeder: &mut Seeder, asset_by_file: &std::collections::BTreeMap<&s
 }
 
 // ---------------------------------------------------------------------------
-// Tasks — v0 `packages/blueprints/apps/tasks/seed.js`.
+// Tasks.
 //
 // "A believable week on the board — overdue errands, a project with subtasks,
 // done items, a someday idea."
@@ -1431,7 +1426,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// Agenda — v0 `packages/blueprints/apps/agenda/seed.js`.
+// Agenda.
 //
 // "One lived-in week on the calendar — something small today so the brief is
 // never blank, dinner with a friend, a deadline, a weekly recurring run with a
@@ -1493,7 +1488,7 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// Tally — v0 `packages/blueprints/apps/tally/seed.js`.
+// Tally.
 //
 // "Three friends, one trip group and a lived-in expense ledger — uneven payers,
 // exact splits, one settlement." Balances stay DERIVED, never stored, so the

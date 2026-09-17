@@ -1,9 +1,7 @@
 /* Fetch half of updater signature custody (#842); the decision is in
  * update-signature-core.ts.
  *
- * CARRIED UNCHANGED from `apps/desktop/src/main/update-signature-gate.ts`
- * (#1020 wave 3 lane F, D-1020-F7), including the two things it would be
- * tempting to "fix" while porting:
+ * Two things here are tempting to "fix" and must not be (D-1020-F7):
  *
  * - `TRUSTED_RELEASE_KEYS` stays **empty**, so every packaged update refuses
  *   with `no-trust-anchor`. That is a deliberate fail-closed state and not an

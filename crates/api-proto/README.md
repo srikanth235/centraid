@@ -9,9 +9,9 @@ Two protobuf packages, two compatibility promises, one generator ([#1020](https:
 | `centraid.core.v1` | `proto/centraid/core/v1/*.proto` | the PR base **and every released `v*` tag inside the version window** (N = 3 minors) | A gateway's commitment to seats it does not control. A phone updates when the store lets it, so a field this package removes is a field some device in the field still sends. Rule category **FILE** — the strictest: a rename, a type change, a moved message and a deleted file are all refused. |
 | `centraid.screen.v1` | `proto/centraid/screen/v1/screen.proto` | the PR base only | Shell-internal. The KMP shared module, SwiftUI and Compose ship in one artifact with the core that produces these messages, so a rename costs a recompile. Rule category **WIRE_JSON** — the wire and its JSON mapping stay compatible, names may move. |
 
-The split is not cosmetic: it is why the gateway can promise stability to seats without freezing the shape of a screen that wave 3 has not written yet. `buf.yaml` at the repository root implements it as two modules over one import root, each excluding the other's subtree.
+The split is not cosmetic: it is why the gateway can promise stability to seats without freezing the shape of a screen. `buf.yaml` at the repository root implements it as two modules over one import root, each excluding the other's subtree.
 
-`centraid.screen.v1` may disappear entirely: open question 10 decides after wave 3 whether screen contracts stay protobuf or become Kotlin sealed classes plus SKIE, on the exit criterion written into the issue. Nothing in `centraid.core.v1` moves either way.
+`centraid.screen.v1` may disappear entirely: open question 10 decides whether screen contracts stay protobuf or become Kotlin sealed classes plus SKIE — one of its three exit criteria has tripped and a device measurement settles the other two ([D-1020-X3](../../docs/decisions.md)). Nothing in `centraid.core.v1` moves either way.
 
 ## The tree
 
@@ -29,9 +29,9 @@ The split is not cosmetic: it is why the gateway can promise stability to seats 
 | `admin.proto` | `DevicesList`, `DevicesRevoke`, `BackupNow` — command _inputs_, not a second envelope |
 | `error.proto` | `ErrorCode` (closed) and `Error` |
 | `envelope.proto` | `Envelope`, `Request`, `Response`, `Event`, `Cancel` |
-| `screen/v1/screen.proto` | `ScreenState`, `ScreenEvent` — a placeholder envelope for wave 3 lane E |
+| `screen/v1/screen.proto` | `ScreenState`, `ScreenEvent`, the per-screen states and `SeatState` — one file by design (D-1020-E3a) |
 
-Each file carries its own reasoning in comments, with the v0 `path:line` the shape came from. v0 is the executable specification, not code to migrate, so a comment that cites it is citing the spec.
+Each file carries its own reasoning in comments.
 
 ## How the Rust types are generated
 
@@ -59,4 +59,4 @@ Neither category lets you reuse a field number. That is the one rule that has no
 
 ## Unknown fields
 
-#1020 requires that unknown fields be preserved and unknown message types be answered with `Unsupported{type}`. **prost 0.14 does not retain unknown fields** — verified against the vendored sources, not assumed. The invariant is held one layer out, at the frame, and the reasoning is **D-1020-C13** in `src/lib.rs`'s module documentation. The short form: nothing in the v1 plane relays a _decoded_ message, every payload that crosses a version boundary is `bytes`, and `Unsupported` carries the type name. `tests/roundtrip.rs::prost_drops_unknown_fields_which_is_why_nothing_relays_a_decoded_message` is the test that keeps the premise honest, and it is written to turn red if prost ever gains the feature — which would be a welcome red, because the decision could then be re-made with evidence.
+#1020 requires that unknown fields be preserved and unknown message types be answered with `Unsupported{type}`. **prost 0.14 does not retain unknown fields** — verified against the vendored sources, not assumed. The invariant is held one layer out, at the frame, and the reasoning is **D-1020-C13** in `src/lib.rs`'s module documentation. The short form: nothing in the plane relays a _decoded_ message, every payload that crosses a version boundary is `bytes`, and `Unsupported` carries the type name. `tests/roundtrip.rs::prost_drops_unknown_fields_which_is_why_nothing_relays_a_decoded_message` is the test that keeps the premise honest, and it is written to turn red if prost ever gains the feature — which would be a welcome red, because the decision could then be re-made with evidence.

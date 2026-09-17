@@ -2,16 +2,11 @@ name: gate-nightly
 
 # THE NIGHTLY LANE for the v1 tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 #
-# `cargo xtask gate --profile nightly` — the `pr` profile plus the v0 ORACLE
-# SUITE and the device lanes. The oracle suite is the whole of what v0's CI
-# still owes a v1 commit: from wave 1 v0's own gates are off pull requests
-# (*Two trees, one CI bill*), and what survives is the v0 tests that read
-# `contracts/` files, run once a night against the pinned tree. v0's gates were
-# MOVED, not deleted — ci.yml still runs every one of its jobs on pushes to
-# `main` and on its own nightly schedule.
+# `cargo xtask gate --profile nightly` — the `pr` profile plus the nightly-only
+# steps and the device lanes (crates/xtask/src/gate.rs owns the list).
 #
-# 05:30 UTC: after hygiene.yml's Saturday 05:00 and before e2e.yml's 06:00
-# nightly, so a red v1 gate never competes with either for attention.
+# 05:30 UTC: after hygiene.yml's Saturday 05:00, so a red gate never competes
+# with it for attention.
 #
 # `schedule:` + `workflow_dispatch:` only — gate.yml is the one workflow allowed
 # to listen on `pull_request` (enforced by lint:workflow-pins rule 5).
@@ -38,18 +33,12 @@ jobs:
     steps:
       - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          # Same learning posture as gate.yml; this lane's destinations are a
-          # superset (it also builds the v0 package closure the oracle imports).
+          # Same learning posture as gate.yml.
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # turbo-cache because the oracle step builds the suite's package closure:
-      # the v0 suites import their workspace packages by published entry point,
-      # so they need `dist/` on disk, the same reason ci.yml's `verify` builds
-      # before it runs vitest.
       - uses: ./.github/actions/setup
         with:
           cargo-cache: v1
-          turbo-cache: "true"
       - id: channel
         run: |
           set -euo pipefail
@@ -77,9 +66,7 @@ jobs:
           fi
       - name: Install actionlint, gitleaks and osv-scanner
         env:
-          # actionlint: the version ci.yml's `static` job pins as a container
-          # action. gitleaks and osv-scanner: the same release pins ci.yml's
-          # `gitleaks` and `osv-scanner` jobs use. Those two steps are red on
+          # The same pins gate.yml uses. gitleaks and osv-scanner are red on
           # inherited tree state (D-1020-B1, #1020) and are here anyway: a PR
           # gate that stops reporting because its target is red today is a
           # weakening, and inherited red is named, never hidden.

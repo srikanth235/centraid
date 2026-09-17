@@ -1,7 +1,6 @@
 // Commands (#1020, D-1020-C4).
 //
-// A command is the one way anything changes. v0's shapes: `VaultInvokeRequest`
-// (`packages/blueprints/types/centraid.d.ts:74`) and `VaultOutcome` (`:38`).
+// A command is the one way anything changes.
 //
 // **The CLI is a client** (#1020 Decision): `centraid devices revoke` and every
 // other admin verb send THESE messages, the same ones an owner seat sends, and
@@ -31,8 +30,7 @@ message Command {
   // field (#1020 wave 2 lane D, per-command authorization).
   Principal principal = 4;
   // "This decorates the answer": a seat with no gateway settles it
-  // `FAILED` rather than refusing the whole run
-  // (`packages/blueprints/types/centraid.d.ts:77-84`). The gateway ignores it.
+  // `FAILED` rather than refusing the whole run. The gateway ignores it.
   bool optional = 5;
   // THE WINDOW THE SHELL WAS GIVEN, for `seat.sync` and nothing else
   // (#1025 S2). Absent means "as long as it takes", which is what a desktop
@@ -180,10 +178,9 @@ enum SyncBudget {
   SYNC_BUDGET_FOREGROUND = 3;
 }
 
-// A principal. v0's `authenticate` returns exactly two kinds
-// (`packages/vault/src/gateway/identity.ts:58-113`), and enrolment is full
-// trust (#996 R11): an enrolled device has a row whose public key matches, and
-// revoking deletes it — unknown and revoked are the SAME refusal.
+// A principal. Exactly two kinds, and enrolment is full trust (#996 R11): an
+// enrolled device has a row whose public key matches, and revoking deletes
+// it — unknown and revoked are the SAME refusal.
 message Principal {
   PrincipalKind kind = 1;
   // `access_device.device_id`, or `access_agent.agent_id` for an agent.
@@ -193,9 +190,8 @@ message Principal {
   // The named surface, when one is named; it becomes the caller id in v0
   // (`identity.ts:104-112`).
   string surface = 4;
-  // The agent is riding an acting owner. An agent can never exceed the owner it
-  // rides (`packages/vault/src/gateway/access.ts:174-184`), and the assistant
-  // holds NO standing answer of its own (`:205-216`).
+  // The agent is riding an acting owner. An agent can never exceed the owner
+  // it rides, and the assistant holds NO standing answer of its own.
   bool on_behalf_of_owner = 5;
 }
 
@@ -223,14 +219,14 @@ message CommandOutcome {
   bytes output = 2;
   // An OWNER-FACING SENTENCE. The author's words for a failed precondition, the
   // access plane's sentence for a denial. The raw predicate reaches the audit
-  // trail and never a member (`packages/vault/src/gateway/execution.ts:510-533`).
+  // trail and never a member.
   string reason = 3;
   // The audit-band ids, so a caller can point at its own evidence.
   string invocation_id = 4;
   string receipt_id = 5;
   // Set when the refusal was a revocation: a revoked app cannot read the
-  // consent tables to find out for itself, so the host attaches this
-  // (`packages/server/src/engine/handlers/vault-bridge.ts:36`). RFC 3339.
+  // consent tables to find out for itself, so the host attaches this.
+  // RFC 3339.
   optional string revoked_at = 6;
   // THE COMMIT THE EFFECT LANDED IN. Absent when the command wrote nothing a
   // session saw — an empty commit is not a commit.
@@ -238,12 +234,11 @@ message CommandOutcome {
   // Added in wave 2 lane D2 because the deterministic simulation found its
   // absence to be a liveness bug, not a cosmetic gap (#1020). A seat settles an
   // `EXECUTED` answer by waiting for its own applied commit seq to reach this
-  // number (`packages/client/src/replica/intent-settlement.ts:88-101`). Without
-  // it, an answer carried neither a commit seq nor an `answered_versions` set,
-  // so the intent parked at `awaiting-change` with nothing that could ever
-  // settle it — the overlay stayed on every screen for the life of the seat.
-  // `crates/vault`'s own `CommandOutcome` has carried this field all along; it
-  // was only the wire that dropped it.
+  // number. Without it, an answer carried neither a commit seq nor an
+  // `answered_versions` set, so the intent parked at `awaiting-change` with
+  // nothing that could ever settle it — the overlay stayed on every screen for
+  // the life of the seat. `crates/vault`'s own `CommandOutcome` has carried
+  // this field all along; it was only the wire that dropped it.
   //
   // Adding a field with a fresh number is not a `buf breaking` violation: an
   // older peer ignores it and the seat then falls back to the version-set path

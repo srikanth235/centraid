@@ -3,9 +3,9 @@
  *
  * Census §F seam 6 makes the case: `electron-builder.yml`'s `files:` list is a
  * RUNTIME DEPENDENCY, not packaging trivia — a file not on it is absent in the
- * built app with an empty tray icon as the only symptom — and the protocol
- * scheme lived in a *second* config file, so a lane that rewrote one lost
- * `centraid://`. Neither failure shows up in a unit run or a typecheck, and
+ * built app with an empty tray icon as the only symptom — and a protocol scheme
+ * split across two config files is lost by whoever rewrites one of them.
+ * Neither failure shows up in a unit run or a typecheck, and
  * both show up in a signed installer a week later. So they are tests.
  *
  * The YAML is read as text and matched, rather than parsed with a YAML library
@@ -27,22 +27,16 @@ const entitlements = fs.readFileSync(
   path.join(ROOT, "build/entitlements.mac.plist"),
   "utf8"
 );
-const appId = JSON.parse(
-  fs.readFileSync(path.join(ROOT, "electron-builder/app-id.json"), "utf8")
-) as { appId: string; protocols: Array<{ schemes: string[] }>; _note: string };
 
 describe("the `centraid://` registration", () => {
-  it("is in electron-builder.yml itself, not only in a second file", () => {
-    // The seam: v0's scheme lived in `electron-builder/app-id.json` alone.
+  it("is in electron-builder.yml, beside the appId", () => {
+    expect(builderYaml).toContain("appId: dev.centraid.desktop");
     expect(builderYaml).toMatch(/^protocols:/mu);
     expect(builderYaml).toMatch(/- centraid$/mu);
   });
 
-  it("agrees with the file that used to hold it, which now says it is not the source", () => {
-    expect(appId.appId).toBe("dev.centraid.desktop");
-    expect(appId.protocols[0]?.schemes).toStrictEqual(["centraid"]);
-    expect(appId._note).toContain("NOT the source of truth");
-    expect(builderYaml).toContain(`appId: ${appId.appId}`);
+  it("has no second config file to drift from", () => {
+    expect(fs.existsSync(path.join(ROOT, "electron-builder"))).toBe(false);
   });
 });
 

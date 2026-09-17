@@ -29,16 +29,15 @@ public interface PlatformServices {
 public expect fun platformServices(): PlatformServices
 
 /**
- * Keychain and Keystore (v0's `expo-secure-store` under the `centraid.v1.`
- * prefix, `apps/mobile/src/lib/secure-storage.ts`).
+ * Keychain and Keystore.
  *
- * Two rules carried over verbatim:
+ * Two rules:
  *
- * * **Setting `""` deletes the item** rather than storing an empty string
- *   (`:39-43`). An empty secret that reads back as present is a credential the
+ * * **Setting `""` deletes the item** rather than storing an empty string.
+ *   An empty secret that reads back as present is a credential the
  *   app believes it has.
  * * **[clear] drops every decrypted credential from memory when the app
- *   locks** (`:13-16`). It is a method and not a side effect of locking because
+ *   locks**. It is a method and not a side effect of locking because
  *   the lifecycle machine has to be able to name it as an effect.
  */
 public interface SecureStore {

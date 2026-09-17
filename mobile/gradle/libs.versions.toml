@@ -8,8 +8,7 @@
 # CURRENT STABLE, NOT WHAT THE CONTAINER HAPPENED TO HAVE (D-1020-E0-1).
 # The wrapper is Gradle 9.7.1 and the build runs with
 # `org.gradle.warning.mode=fail`, so a deprecated Gradle feature is a red
-# rather than a line in the log. `apps/mobile/android`'s wrapper (9.3.1) is a
-# prebuild output and is not a thing to reuse.
+# rather than a line in the log.
 kotlin = "2.4.20"
 coroutines = "1.11.0"
 # `com.android.kotlin.multiplatform.library` — AGP 9's KMP library plugin.

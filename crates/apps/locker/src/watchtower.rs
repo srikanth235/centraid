@@ -6,9 +6,8 @@
 //! In v0 `locker.watchtower` is a **vault command**: it unseals every secret
 //! inside the gateway's sealed boundary, derives the three facts, and returns
 //! them without a password ever leaving the gateway (`unseals:
-//! ["locker.item.password", "locker.item.card_number"]`,
-//! `packages/vault/src/commands/locker.ts`). That worked because the gateway
-//! held `K`.
+//! ["locker.item.password", "locker.item.card_number"]`). That worked because
+//! the gateway held `K`.
 //!
 //! After wave 4 it does not. `locker.watchtower` and `locker.totp_code` are the
 //! two `act` scopes in Locker's manifest that **need plaintext to compute**
@@ -34,10 +33,10 @@
 //!
 //! ## The derivation is v0's, score for score
 //!
-//! [`strength_score`] is `packages/vault/src/commands/locker.ts`'s five-point
-//! scale and **weak is `score <= 2`** — not a rewrite, because the number a
-//! member has been looking at must not change meaning when the code moves
-//! hosts. Three of v0's rules are load-bearing and easy to lose:
+//! [`strength_score`] is v0's five-point scale and **weak is `score <= 2`** —
+//! not a rewrite, because the number a member has been looking at must not
+//! change meaning when the code moves hosts. Three of v0's rules are
+//! load-bearing and easy to lose:
 //!
 //! 1. **Only a `login` is scored.** `wifi` and `password` items have their
 //!    passwords unsealed (they are in the row set) and are reported

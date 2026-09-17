@@ -1,6 +1,6 @@
 # `centraid-core-ffi`
 
-Five symbols and a contract ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 2, lane D2, ruling D-1020-D2-3).
+Five symbols and a contract ([#1020](https://github.com/srikanth235/centraid/issues/1020), ruling D-1020-D2-3).
 
 ```c
 int32_t centraid_open      (const uint8_t *config, size_t len, Handle **out);
@@ -69,4 +69,4 @@ cd spike/jna && CENTRAID_LIB_DIR=<target>/debug \
   CENTRAID_REQUEST=/tmp/spike/request.bin gradle -q run
 ```
 
-The spike fixes the ABI's **shape** before three shells are written against it. The numbers are `ci-linux-x64-4c` numbers and a floor; the device half (cinterop on iOS, JNA on Android, the Swift wrapper) is wave 3 lane E's and an owner hand-off. The measured numbers are in the receipt.
+The spike fixes the ABI's **shape** the shells are written against. The numbers are `ci-linux-x64-4c` numbers and a floor; the device bindings (cinterop on iOS, JNA on Android) live in `mobile/core` and `mobile/shared`, and on-device numbers are an owner hand-off. The measured numbers are in the receipt.

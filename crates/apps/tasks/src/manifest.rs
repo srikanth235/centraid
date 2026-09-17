@@ -1,6 +1,6 @@
 //! The manifest, embedded and parsed rather than restated.
 //!
-//! `manifest.json` is `packages/blueprints/apps/tasks/app.json` byte for byte.
+//! `manifest.json` is embedded verbatim, byte for byte.
 
 use std::sync::OnceLock;
 

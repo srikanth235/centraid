@@ -8,8 +8,7 @@
 //! What the kit guarantees:
 //!
 //! - **Every read is a window.** [`page::PageRequest`] has a required `limit`;
-//!   there is no unpaged variant and no default. `packages/core/src/page`'s
-//!   doctrine, ported verbatim.
+//!   there is no unpaged variant and no default.
 //! - **Every window continues by keyset**, `(sort_key, pk)` compared as a row
 //!   value, with the pk in the key because the sort key is not unique.
 //! - **One assembler.** [`statement::page_statement`] is the only thing in the

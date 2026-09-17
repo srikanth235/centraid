@@ -8,7 +8,6 @@ This directory is the current-state register for the Photos application. Each fi
 | [Places](places.md) | Member-named locations, one shared projection, geometry, and the no-basemap boundary |
 | [Dogfood](dogfood.md) | The real-library discovery ritual, release cadence, and known regression classes |
 | [Switcher walkthrough](switcher-walkthrough.md) | The day-one Google Photos refugee journey and the shipped/partial boundaries it exercises |
-| [Design notes](../design-divergences.md#photos--sanctioned-design-divergences) | Sanctioned copy, control, colour-role, and metric-perfect divergences (shared register) |
 
 ## The phone viewer's layout
 
@@ -56,7 +55,7 @@ The read is given two more computed columns beside `thumbnail_path`: `original_h
 
 Aspect ratio is preserved — the long edge is the bound, so a 4000×3000 original gives a 360×270 thumb and a portrait one gives 270×360. A source already smaller than the edge is re-encoded at its own size rather than skipped: a tier that is missing because the camera happened to be small would make the planner's first pass depend on the camera.
 
-**Upright, and stripped** ([D-1025-S7-51](../decisions.md#slice-s3--derivatives-at-the-gateway-1025)). The EXIF/`eXIf` orientation tag is read off the decoder and applied to the pixels *before* scaling, so a photograph shot with the camera turned is not a sideways thumbnail. Nothing else survives: a derivative is re-encoded from decoded pixels, so EXIF, XMP and ICC are gone by construction. That is a privacy property — `thumb` is the rendition that travels first, to every admitted device, ahead of any rule about originals, and one carrying the GPS of a member's home is worse than no thumbnail.
+**Upright, and stripped** ([D-1025-S7-51](../decisions.md#slice-s3--derivatives-at-the-gateway-1025)). The EXIF/`eXIf` orientation tag is read off the decoder and applied to the pixels _before_ scaling, so a photograph shot with the camera turned is not a sideways thumbnail. Nothing else survives: a derivative is re-encoded from decoded pixels, so EXIF, XMP and ICC are gone by construction. That is a privacy property — `thumb` is the rendition that travels first, to every admitted device, ahead of any rule about originals, and one carrying the GPS of a member's home is worse than no thumbnail.
 
 **A failure costs nothing.** Bytes that do not decode — an unsupported format, a corrupt or truncated file — produce no derivative rows and a `warn`. The original still commits, and the grid cell still draws, because `held_thumbnail` falls back `thumb` → `poster` → the original's own hash.
 
@@ -66,15 +65,15 @@ Aspect ratio is preserved — the long edge is the bound, so a 4000×3000 origin
 
 **No dimensions are stored on the row** ([D-1025-S7-54](../decisions.md#slice-s3--derivatives-at-the-gateway-1025)). `core_content_derivative` has no width or height column and this slice adds none — nothing reads them, and the DDL is unchanged.
 
-## The v1 port ([#1020](https://github.com/srikanth235/centraid/issues/1020))
+## The app's shape
 
-Photos is the largest app in the product — 21,348 lines of v0 TypeScript, 8 queries, 18 actions, 38 scopes over five schemas. Its v1 half is [`crates/apps/photos`](../../crates/apps/photos/README.md): the read plane and the action table, with the writes in `crates/vault`'s `media` schema and the bytes in [`crates/media`](../../crates/media/README.md). Four facts the documents above do not carry:
+Photos is the largest app in the product. It lives in [`crates/apps/photos`](../../crates/apps/photos/README.md): the read plane and the action table, with the writes in `crates/vault`'s `media` schema and the bytes in [`crates/media`](../../crates/media/README.md). Four facts the documents above do not carry:
 
-- **Places stays inside Photos.** There is no `crates/apps/places` and there should not be one: the phrase logic is the load-bearing half, a location is a phrase before it is a pin, and in a **shared** context the relative rung is skipped because "5.2 km NW of Home" hands a stranger a bearing to the member's house. `printable_name` refuses a coordinate-shaped name at every rung ([D-1020-P5](../decisions.md#wave-4-lane-rulings-1020)).
+- **Places stays inside Photos.** There is no separate Places app crate and there should not be one: the phrase logic is the load-bearing half, a location is a phrase before it is a pin, and in a **shared** context the relative rung is skipped because "5.2 km NW of Home" hands a stranger a bearing to the member's house. `printable_name` refuses a coordinate-shaped name at every rung ([D-1020-P5](../decisions.md#wave-4-lane-rulings-1020)).
 - **The library takes one page and does not walk its window**, which is the opposite of the drive's answer and is deliberate: the library's sort column is nullable, so a keyset walk would silently drop every undated asset ([D-1020-D3-10](../decisions.md#wave-2-lane-rulings-1020), [D-1020-DC10](../decisions.md#wave-4-lane-rulings-1020)). An undated asset rides the end of a newest-first page, where its real instant put it.
 - **Recognition placement is a fourth tier value, not a re-meaning** — `off < on-device < sealed-gateway < gateway`, with a stored `device` read forward as `sealed-gateway` and never written back. The device half of that plan (the derivation stamp's `site` and `device_id`, the ask, the submit command) is named scope and is **not built** ([D-1020-AU3-1](../decisions.md#wave-4-lane-rulings-1020), [recognition-automations.md](../recognition-automations.md)).
-- **Two v0 behaviours are reproduced and filed rather than quietly fixed.** `media.forget_person` deletes on `party_id` **or** `confirmed_by_party_id`, so in a single-member vault "forget me" erases every confirmed face of everyone; and it carries `confirm: true`, which parks a non-owner invocation while an owner credential — the only one a single-seat vault has — walks straight through. Both are owner questions in [release/v1-handoffs.md](../release/v1-handoffs.md), with recommendations.
+- **`media.forget_person` erases the party's own faces and clears the judgements the party made.** It deletes regions on `party_id` and nulls `confirmed_by_party_id` elsewhere, so in a single-member vault "forget me" does not erase everyone's confirmed faces ([R-1020-35](../decisions.md#decisions--lane-v-1020)). It carries `confirm: true`, which parks a non-owner invocation while an owner credential — the only one a single-seat vault has — walks straight through; whether the surface should ask is an owner question in [release/v1-handoffs.md](../release/v1-handoffs.md).
 
 The files describe current behaviour, deliberate absences, and the issue that settled each non-obvious boundary. Historical implementation sequences belong in the linked issues and receipts.
 
-Related current-state registers: [design divergences](../design-divergences.md), [blueprint seats](../blueprint-seats.md), [recognition automations](../recognition-automations.md), and [design machinery](../design-machinery.md).
+Related current-state registers: [blueprint seats](../blueprint-seats.md), [recognition automations](../recognition-automations.md), and [design machinery](../design-machinery.md).

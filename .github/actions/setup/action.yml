@@ -11,8 +11,7 @@ description: >-
 #
 # #637 — Cargo caches use restore on every ref and save only from `main`, so
 # PR branches stop re-saving multi-GB cargo-* duplicates into the 10 GB pool.
-# Turbo remote cache remains opt-in per job; `turbo.json` hashes `RUNNER_OS`
-# so Linux/macOS never share `native/*.node` artifacts.
+# Turbo remote cache remains opt-in per job.
 #
 # The version is read from package.json at run time with `sed` rather than
 # `node -p`, because this action runs BEFORE any toolchain is installed — the
@@ -43,7 +42,7 @@ inputs:
     default: "false"
   cargo-cache:
     description: >-
-      Which Cargo cache preset to restore — `none`, `data-plane`, `iroh-wasm`, `verify` (both v0 crates), or `v1` (the #1020 workspace at the repo root, whose target/ and cargo-deny binary the gate lanes reuse). The presets stay separate on purpose: one shared key would let jobs with different target/ contents overwrite each other's entry, which surfaces only as unexplained cold builds. Saves only on `main` (#637).
+      Which Cargo cache preset to restore — `none`, or `v1` (the #1020 workspace at the repo root, whose target/ and cargo-deny binary the gate lanes reuse). Saves only on `main` (#637).
     required: false
     default: "none"
 
@@ -82,9 +81,9 @@ runs:
       run: |
         set -euo pipefail
         case "$PRESET" in
-          none | data-plane | iroh-wasm | verify | v1) ;;
+          none | v1) ;;
           *)
-            echo "::error::setup: cargo-cache must be none|data-plane|iroh-wasm|verify|v1, got '$PRESET'"
+            echo "::error::setup: cargo-cache must be none|v1, got '$PRESET'"
             exit 1
             ;;
         esac
@@ -103,91 +102,7 @@ runs:
 
     # #637 Phase 0: restore always, save only from main. Per-ref cargo saves were
     # ~2.7 GB of duplicate waste in the 10 GB Actions cache pool.
-    - name: Restore Cargo (data-plane)
-      id: cargo-dataplane
-      if: inputs.cargo-cache == 'data-plane'
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          packages/tunnel/data-plane/target
-        key: cargo-dataplane-${{ runner.os }}-${{ hashFiles('packages/tunnel/data-plane/Cargo.lock') }}
-        restore-keys: |
-          cargo-dataplane-${{ runner.os }}-
-
-    - name: Save Cargo (data-plane)
-      if: >
-        inputs.cargo-cache == 'data-plane' && github.ref == 'refs/heads/main' && steps.cargo-dataplane.outputs.cache-hit != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          packages/tunnel/data-plane/target
-        key: ${{ steps.cargo-dataplane.outputs.cache-primary-key }}
-
-    - name: Restore Cargo (iroh-wasm)
-      id: cargo-iroh-wasm
-      if: inputs.cargo-cache == 'iroh-wasm'
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          ~/.cargo/bin
-          apps/web/iroh-wasm/target
-        key: cargo-iroh-wasm-${{ runner.os }}-${{ hashFiles('apps/web/iroh-wasm/Cargo.lock') }}
-        restore-keys: |
-          cargo-iroh-wasm-${{ runner.os }}-
-
-    - name: Save Cargo (iroh-wasm)
-      if: >
-        inputs.cargo-cache == 'iroh-wasm' && github.ref == 'refs/heads/main' && steps.cargo-iroh-wasm.outputs.cache-hit != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          ~/.cargo/bin
-          apps/web/iroh-wasm/target
-        key: ${{ steps.cargo-iroh-wasm.outputs.cache-primary-key }}
-
-    - name: Restore Cargo (data-plane + iroh-wasm)
-      id: cargo-verify
-      if: inputs.cargo-cache == 'verify'
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          ~/.cargo/bin
-          packages/tunnel/data-plane/target
-          apps/web/iroh-wasm/target
-        key: cargo-verify-${{ runner.os }}-${{ hashFiles('packages/tunnel/data-plane/Cargo.lock', 'apps/web/iroh-wasm/Cargo.lock') }}
-        restore-keys: |
-          cargo-verify-${{ runner.os }}-
-          cargo-dataplane-${{ runner.os }}-
-
-    - name: Save Cargo (data-plane + iroh-wasm)
-      if: >
-        inputs.cargo-cache == 'verify' && github.ref == 'refs/heads/main' && steps.cargo-verify.outputs.cache-hit != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          ~/.cargo/bin
-          packages/tunnel/data-plane/target
-          apps/web/iroh-wasm/target
-        key: ${{ steps.cargo-verify.outputs.cache-primary-key }}
-
+    #
     # #1020 — the v1 workspace at the repo root. `~/.cargo/bin` is in the path
     # set so `cargo-deny` survives between gate runs; the install step in
     # gate.yml is a no-op on a warm cache and a real install on a cold one.
@@ -220,7 +135,7 @@ runs:
         key: ${{ steps.cargo-v1.outputs.cache-primary-key }}
 
     # No Bun cache: a cold `bun install` is faster than restoring one (#538).
-    # Retry extract flakes (`pdfjs-dist` tarball) without unpinning the lockfile.
+    # Retry transient registry/extract flakes without unpinning the lockfile.
     - name: Install dependencies
       if: inputs.install == 'true'
       shell: bash

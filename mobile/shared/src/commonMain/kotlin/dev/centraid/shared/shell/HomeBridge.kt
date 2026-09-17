@@ -251,12 +251,48 @@ public class HomeBridge {
      * something closes it. This is what a shell calls when the app becomes
      * active — there is no timer to start beside it, and starting one would be
      * a second mechanism for the thing this one does.
+     *
+     * **AN ARRIVAL BEFORE THE SESSION EXISTS IS KEPT, NOT DROPPED** (#1025).
+     *
+     * This answered "No vault is open." and returned, and a COLD LAUNCH is
+     * exactly that race: [open] does `Shelf.load` first, which probes and opens
+     * every replica in turn, while the shell's own launch `task` calls this on
+     * the same tick. The scene is already `active`, so `onChange(of:scenePhase)`
+     * has no transition left to fire — the one arrival of the launch was thrown
+     * away, no tail was ever opened, and the header read "syncing" for ever
+     * until the member tapped Sync now or switched vaults. Every screen drew
+     * from the replica, so nothing looked broken; the phone was simply not
+     * connected.
+     *
+     * [waitingForSession] already exists for precisely this shape and is what
+     * runs it, so the arrival is replayed at the one moment there is a session
+     * to run it against. There is no window in which it can run twice: the
+     * waiters are invoked once and cleared, and a call after that takes the
+     * branch above.
      */
     public fun foreground(onOutcome: (SyncOutcome) -> Unit = {}) {
         val session = this.session
-            ?: return onOutcome(SyncOutcome(unreachable = true, sentence = "No vault is open."))
+        if (session == null) {
+            stillHere = true
+            onSession { opened ->
+                // THE MEMBER MAY HAVE LEFT WHILE THE REPLICAS WERE OPENING, and
+                // an arrival replayed then is a tail opened behind the app
+                // switcher — the one thing [leftTheForeground] exists to stop.
+                if (!stillHere) return@onSession
+                scope.launch { onOutcome(opened.foreground()) }
+            }
+            return
+        }
         scope.launch { onOutcome(session.foreground()) }
     }
+
+    /**
+     * Whether the arrival kept by [foreground] is still worth replaying.
+     *
+     * Only ever read by the waiter [foreground] registers: once there is a
+     * session both halves take their own branch and this says nothing.
+     */
+    private var stillHere: Boolean = false
 
     /**
      * THE MEMBER LEFT, and the OS gave this device a window (#1025 S2).
@@ -281,6 +317,10 @@ public class HomeBridge {
      * leave, and the next [foreground] is what resumes.
      */
     public fun leftTheForeground() {
+        // BEFORE THE EARLY RETURN, because the departure that matters most is
+        // the one with no session yet: it is what cancels the arrival
+        // [foreground] kept for the launch that is still opening its replicas.
+        stillHere = false
         val open = session ?: return
         scope.launch { open.leftTheForeground() }
     }

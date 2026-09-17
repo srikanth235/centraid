@@ -2,9 +2,9 @@
 //! # The FTS door — text search as the vault's own question (#1020, D-1020-N1)
 //!
 //! Matching happens **inside SQLite**. The alternative is what every app in v0
-//! stopped doing: pull a table and grep it, over data that has no upper bound
-//! (`packages/vault/src/gateway/search.ts:1`-`:5`). The FTS5 shadow tables are
-//! the vault's — one per text-bearing entity, kept in step by triggers the
+//! stopped doing: pull a table and grep it, over data that has no upper
+//! bound. The FTS5 shadow tables are the vault's — one per text-bearing
+//! entity, kept in step by triggers the
 //! baseline installs — and **this crate owns every `MATCH` statement in the
 //! workspace**. The app kit's grammar has no `MATCH` production at all
 //! ([`centraid_apps_kit::grammar`]), which is what makes "an app cannot search
@@ -33,14 +33,13 @@
 //!    at door construction ([`domains::assert_no_sealed_column`]), so a domain
 //!    that grew a sealed projection fails to open rather than answering.
 //! 2. **No sealed column is INDEXED.** v0 throws at DDL-build time for an FTS
-//!    spec naming a sealed column (`packages/vault/src/schema/fts.ts:404`-`:419`,
-//!    issue #293) — FTS exclusion is one of the six sealed-column enforcement
-//!    points (census §D2). [`SqliteDoor::open`] re-checks the live index columns
+//!    spec naming a sealed column (issue #293) — FTS exclusion is one of the
+//!    six sealed-column enforcement points (census §D2). [`SqliteDoor::open`]
+//!    re-checks the live index columns
 //!    against the same registry, so the DDL and this door cannot disagree.
 //! 3. **`locker.item` is not a domain.** The absence is structural: the powerbox
-//!    reaches seven domains and Locker is not one of them
-//!    (`packages/blueprints/apps/notes/link-targets-table.ts:1`-`:3`), so a
-//!    secret cannot become a link target by *adding a probe*. Asking for it is a
+//!    reaches seven domains and Locker is not one of them, so a secret
+//!    cannot become a link target by *adding a probe*. Asking for it is a
 //!    typed [`SearchError::NotADomain`].
 //!
 //! `crates/search/tests/door.rs` plants a secret in every sealed column the
@@ -72,7 +71,7 @@ use centraid_apps_kit::page::{Page, PageRequest};
 
 /// The most rows one MATCH can return, whatever a caller asks for.
 ///
-/// v0 clamps to 1,000 (`packages/vault/src/gateway/search.ts:127`) on top of
+/// v0 clamps to 1,000 on top of
 /// the window's own `MAX_PAGE_ROWS` of 500. Both clamps are kept: this one is
 /// the door's, the kit's is the page's, and [`Answer::window`] reports the one
 /// that actually applied — a bound that names a number it cannot reach is worse
@@ -145,7 +144,7 @@ impl SearchRequest {
 /// The same shape every app's payload carries: a code, a sentence and the
 /// instant the grant was revoked — which comes from the HOST, because an app
 /// whose grant was revoked cannot read the consent tables to date its own
-/// revocation (`packages/server/src/engine/handlers/vault-bridge.ts:29`-`:36`).
+/// revocation.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Denial {
     pub code: Option<String>,
@@ -197,9 +196,8 @@ impl Answer {
 /// `extra: serde_json::Value`, no byte field — so there is no shape a sealed
 /// cell could arrive in even if a domain grew one, and
 /// [`domains::assert_no_sealed_column`] is what stops a domain growing one at
-/// all. This is v0's `LinkTarget`
-/// (`packages/blueprints/apps/notes/types.ts`), which the powerbox already
-/// treats as its whole vocabulary.
+/// all. This is v0's `LinkTarget`, which the powerbox already treats as its
+/// whole vocabulary.
 ///
 /// `snippet` is the index's own highlight (`snippet(fts, -1, '⟦', '⟧', '…',
 /// 12)`), and it is a projection of the SAME indexed columns — a sealed column

@@ -42,14 +42,15 @@ export const RELEASE_SURFACES = [
     notes: "latest tag only for non-beta (D5).",
   },
   {
-    id: "gateway-npm",
-    title: "Gateway npm graph",
+    id: "prebuilt-core",
+    title: "Prebuilt core (binaries, Android ABIs, iOS XCFramework)",
     cadence: "tag",
     defaultOnProductTag: true,
-    workflow: "lane-release-gateway-npm.yml",
+    workflow: "lane-prebuilt-core.yml",
     tagPattern: "v*",
-    secretGroups: ["gateway-npm"],
-    notes: "Multi-OS tunnel NAPI (#511). Dry-run without NPM_TOKEN.",
+    secretGroups: [],
+    notes:
+      "Rides `all`: it submits nothing to anybody, and a release whose core was never built for a required triple is a partial release (D-1020-G2).",
   },
   {
     id: "mobile",
@@ -60,25 +61,6 @@ export const RELEASE_SURFACES = [
     secretGroups: ["mobile"],
     notes:
       "release.yml dispatch with surfaces: mobile only (J7) — never implied by a tag. Same product version stamp; ship is opt-in.",
-  },
-  {
-    id: "web",
-    title: "Web PWA (app.centraid.dev)",
-    cadence: "continuous",
-    defaultOnProductTag: false,
-    workflow: "web.yml",
-    secretGroups: ["web"],
-    notes: "Path-filtered main deploy — not part of v* publish checklist.",
-  },
-  {
-    id: "docs",
-    title: "Docs / marketing site",
-    cadence: "continuous",
-    defaultOnProductTag: false,
-    workflow: "ci.yml",
-    secretGroups: ["web"],
-    notes:
-      "Continuous on docs paths — the `docs` lane of ci.yml; Cloudflare Git integration deploys.",
   },
   {
     id: "oauth-worker",
@@ -95,7 +77,7 @@ export const RELEASE_SURFACES = [
     title: "Browser companion extension",
     cadence: "sideline",
     defaultOnProductTag: false,
-    workflow: "lane-release-companion.yml",
+    workflow: "lane-release-extension.yml",
     tagPattern: "companion-v* | product v* (prefer product stamp)",
     secretGroups: [],
     notes:

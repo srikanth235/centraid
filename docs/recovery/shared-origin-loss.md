@@ -19,7 +19,7 @@ Nothing here needs an operator. A returning origin resumes on the next sweep.
 
 ## If the origin is gone for good
 
-The container cannot be re-founded in place: the audience's rows are claimed by the shape, and releasing a claim removes the rows rather than adopting them (`releaseShapeRows`, `packages/vault/src/share/subscription-seat.ts`). What a group does instead is start again from a copy that is already on someone's machine:
+The container cannot be re-founded in place: the audience's rows are claimed by the shape, and releasing a claim removes the rows rather than adopting them. What a group does instead is start again from a copy that is already on someone's machine:
 
 1. **Pick the new origin.** Any member who holds the projection can be it.
 2. **Make it theirs.** Create the container in that vault — a new album, folder or group — and put the copies in it. This is ordinary authoring, not a transfer: the new rows are the new origin's own.
@@ -27,10 +27,4 @@ The container cannot be re-founded in place: the audience's rows are claimed by 
 
 Ledger history (Tally expenses, document revisions) travels with the rows the members already hold, so nothing is reconstructed from an op log — there is none.
 
-## Verify
-
-```
-bun run --cwd packages/vault test src/share
-```
-
-`subscription-sim.test.ts` is the standing proof of the invariants above: a delivered projection survives a host that loses reach mid-life, and a revocation still severs.
+The shape and its lineage are `share_subscription` and `share_subscription_lineage` in [`contracts/schema/vault-ddl.sql`](../../contracts/schema/vault-ddl.sql); Docs reads them in [`crates/apps/docs/src/origins.rs`](../../crates/apps/docs/src/origins.rs).

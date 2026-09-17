@@ -18,10 +18,8 @@ centraid-apps-kit = { path = "../kit" }
 # and the occurrence key, and for nothing else. A second expander in an app
 # crate is the drift ONT-25 already is.
 centraid-vault = { path = "../../vault" }
-serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-centraid-ontology = { path = "../../ontology" }
 rusqlite.workspace = true

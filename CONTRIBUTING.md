@@ -15,8 +15,8 @@ Centraid is a **solo-maintained** project. Review bandwidth is the bottleneck. T
 | **One focused change** | One concern per PR. No drive-by refactors. |
 | **Linked issue** | `Fixes #N` / `Refs #N` in the description. |
 | **Testing evidence** | Commands run and results (or why not). Follow [TESTING.md](TESTING.md). |
-| **Screenshots** | For UI changes: each affected platform you claim (desktop / web / mobile). |
-| **Green local gates** | **v1** (`crates/`, `contracts/`, `mobile/`, `desktop/`, `extension/`, `deploy/`): `cargo xtask gate --profile local` while iterating and `--profile pr` before you push — that one command is the only entrypoint CI runs for those trees. **v0** (`apps/`, `packages/`, `scripts/`): `bun run check:push`, which the pre-push hook runs for you. |
+| **Screenshots** | For UI changes: each affected platform you claim (desktop / iOS / Android / extension). |
+| **Green local gates** | `cargo xtask gate --profile local` while iterating and `--profile pr` before you push — that one command is the entrypoint CI runs. A change under `mobile/` should also pass `cargo xtask gate --profile mobile-jvm`, which CI runs nightly. |
 
 Low-effort, fully generated PRs with no issue link, no tests, and no evidence the author ran the app will be closed.
 
@@ -33,18 +33,17 @@ Low-effort, fully generated PRs with no issue link, no tests, and no evidence th
 Rough ladder (not a bureaucracy — signal only):
 
 1. **Good citizen** — small, linked, tested PRs that match house style ([docs/coding-standards.md](docs/coding-standards.md)).
-2. **Area regular** — repeated solid work in one package; reviews get lighter.
+2. **Area regular** — repeated solid work in one area; reviews get lighter.
 3. **Delegate** — maintainer may ask you to drive a follow-up issue; still solo-merge by default.
 
 There is no guaranteed commit bit. Response cadence: see [README.md](README.md).
 
-## The v1 tree, and what it refuses
+## What the tree refuses
 
-The repository holds two implementations of one product: **v1** under `crates/`, `contracts/`, `mobile/`, `desktop/`, `extension/`, `design/`, `copy/` and `deploy/`, and **v0** under `apps/`, `packages/` and `scripts/`, pinned as a read-only oracle until wave 6 deletes it ([#1020](https://github.com/srikanth235/centraid/issues/1020), [ARCHITECTURE.md](ARCHITECTURE.md#two-trees-one-repository-1020)). Three rules bite hardest on a first v1 change:
+The product is one Rust core under `crates/`, with `contracts/`, `mobile/`, `desktop/`, `extension/`, `design/`, `copy/` and `deploy/` around it ([ARCHITECTURE.md](ARCHITECTURE.md)). Two rules bite hardest on a first change:
 
 - **The gate is one command.** `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>`, each profile a concatenation of the one before. Budgets live in `contracts/ledgers/` and **only fall**; `cargo xtask measure --write` is the only writer and only ever lowers a number. A raise needs an owner ruling, not a flag. Give every worktree its own `CARGO_TARGET_DIR` ([docs/traps/shared-cargo-target.md](docs/traps/shared-cargo-target.md)).
-- **`sql-confinement`.** SQL string literals appear only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit` — an app crate holds no SQL and never sees a `Connection`. The rule has moved real APIs rather than being widened for them, and widening it to go green is the case the next bullet is about.
-- **The v0 tree is an oracle, not code to edit.** The only permitted edits are fixture-adapter changes under `packages/*/test/**` and `tests/**` that make v0 suites read `contracts/` files, and — under [R-1020-35](docs/decisions.md#decisions--lane-v-1020) — a narrow, fixture-proven fix for a **wrong answer** the port surfaced, in its own commit, with the red test quoted in the receipt. Not a refactor, not a style edit, not a performance change. An oracle edit with no red test in front of it is out of scope: what makes it safe is the fixture, not the argument.
+- **`sql-confinement`.** SQL string literals appear only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit` — an app crate holds no SQL and never sees a `Connection`. The rule has moved real APIs rather than being widened for them, and widening it to go green is weakening a gate.
 
 Every user-facing gate lands with a **demonstrated red** recorded in the receipt, and a claim of absence names the grep that establishes it.
 
@@ -53,7 +52,7 @@ Every user-facing gate lands with a **demonstrated red** recorded in the receipt
 - Conventional Commits + issue suffix: `type(scope): subject (#123)`
 - One receipt per substantive issue under `receipts/`
 - Docs write-back: if you learn a gotcha, update `docs/` ([AGENTS.md](AGENTS.md)) — and a footgun that cost you an hour earns a doc under [docs/traps/](docs/traps/README.md)
-- Tools via repo scripts only — never raw `npx <tool>` for the toolchain; the v1 half runs through `cargo xtask`
+- Tools via repo entrypoints only — `cargo xtask` for the gate and repo scripts for the TypeScript toolchain; never raw `npx <tool>`
 
 Receipts are **append-only**: a multi-PR issue keeps one receipt and each PR adds one section at the end, because `doc-integrity` requires the trunk's copy to stay a byte-prefix of yours. The root `.gitattributes` marks `receipts/*.md merge=union`, so two branches appending to the same receipt rebase cleanly with the upstream section first instead of conflicting. The driver cannot tell an append from an edit, so the rule it does not replace still stands: never change text above your own section — `doc-integrity` enforces that. Details and limits: [docs/dev-environment.md](docs/dev-environment.md#receipts-are-append-only-and-sibling-appends-merge-by-union).
 

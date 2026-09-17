@@ -4,7 +4,7 @@ The discovery and regression-detection pattern for the Photos application, and w
 
 ## Why dogfood matters
 
-Centraid ships no telemetry — no event logging, no crash reporting service, no aggregate usage heuristics. The local crash/anomaly ledger and the owner-shared support bundle ([external-review-scope.md](../external-review-scope.md), `packages/server/src/serve/support-bundle.ts`, #842 W8.1) are not a counter-example: nothing uploads, and sharing is an explicit owner act. A maintainer importing their real camera roll and living in it side-by-side with native iOS Photos is therefore the **only discovery channel** for Photos defects. This is not a nice-to-have ritual; it is the quality gate.
+Centraid ships no telemetry — no event logging, no crash reporting service, no aggregate usage heuristics; local logs ([logs](../logs.md)) never upload. A maintainer importing their real camera roll and living in it side-by-side with native iOS Photos is therefore the **only discovery channel** for Photos defects. This is not a nice-to-have ritual; it is the quality gate.
 
 The pattern is a written checklist so that every maintainer and release lead follows the same motion and catches the same class of bugs. Findings live in `QUALITY.md` under `## Open` (per [AGENTS.md](../../AGENTS.md) convention).
 
@@ -50,7 +50,7 @@ Run this motion:
    - [ ] Key photo appears on the Collection tile.
    - [ ] Offline, the cached key photo still renders.
 
-9. **Recognition automations.** Install the optional local model runtime and weights (`bun run --cwd packages/model-runtime setup`), then run the gateway normally. Verify:
+9. **Recognition automations.** With the local model weights pinned in `models.lock.json` in place ([recognition automations](../recognition-automations.md)), run the gateway normally. Verify:
    - [ ] OCR an image of a receipt or sign, then search for a word from it — the text hit appears once the OCR automation has run.
    - [ ] OCR a PDF with embedded text and a scanned PDF; both become searchable, with rendered-page OCR used only where a text layer is absent.
    - [ ] Missing assets or an OCR model error produces a visible failed automation turn rather than a stuck spinner.
@@ -62,7 +62,7 @@ Run this motion:
 10. **Check four known stuck-state classes**:
 
 - [ ] **Stuck sync bar:** a sync-in-progress indicator that never clears. Check mobile background sync — a hung upload queue or unreachable-gateway loop makes this visible. `docs/logs.md` → gateway and mobile logs should show steady progress or a clear "offline" message, never silent hangs.
-- [ ] **Quadruple offline announcements:** the offline banner appeared four times in one session. Check system notifications; background push should deliver once, not repeated. Mobile's `kit/replica/mount-plan.ts` prevents waiting for the network before opening local data — if the offline line repeats, the banner logic has drifted.
+- [ ] **Quadruple offline announcements:** the offline banner appeared four times in one session. Check system notifications; background push should deliver once, not repeated. If the offline line repeats, the banner logic has drifted.
 - [ ] **Undiscoverable grain control:** the slider exists but scrolls past the bottom of the screen. Check mobile portrait orientation; the Media Viewer must keep the slider in the safe area. Desktop may scroll; phone must not.
 - [ ] **Cold start hangs on a populated local DB:** when no gateway is reachable, the timeline must open from local rows. The replica mount starts with disk-only planning and must not wait on the network.
 

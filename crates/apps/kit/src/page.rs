@@ -1,8 +1,7 @@
 //! THE PAGE (#996 ruling R8, ported verbatim for #1020).
 //!
 //! One shape, used by every app on every seat, and there is no unpaged variant
-//! of it. Ported from `packages/core/src/page/window.ts`, which states the three
-//! rules this module keeps:
+//! of it. This module keeps three rules:
 //!
 //! 1. **`limit` is required, no default.** "A default is how an unbounded read
 //!    gets written by accident" (`window.ts:43-44`). It replaced roughly two

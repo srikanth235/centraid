@@ -1,6 +1,6 @@
 # `crates/net` — the iroh endpoint
 
-The only crate in the workspace that names an iroh type ([#1020](https://github.com/srikanth235/centraid/issues/1020)). `crates/protocol` is written over a transport trait so that lane D2's `turmoil` simulation can be the primary sync proof; this crate is that trait's production implementation.
+The only crate in the workspace that names an iroh type ([#1020](https://github.com/srikanth235/centraid/issues/1020)). `crates/protocol` is written over a transport trait so that `crates/sim`'s `turmoil` simulation can be the primary sync proof; this crate is that trait's production implementation.
 
 ## The three ALPNs, and what each lane admits
 
@@ -8,7 +8,7 @@ The only crate in the workspace that names an iroh type ([#1020](https://github.
 | --- | --- | --- |
 | `centraid/v1/seat` | seat ↔ gateway | The remote EndpointId must be an **enrolled, unrevoked device**. An unenrolled or revoked peer is closed with QUIC application code `401` **before any stream is accepted**, so no byte it sent is ever parsed. Unknown and revoked are the same refusal. |
 | `centraid/v1/pair` | ticket redemption | Accepts an unenrolled peer — that is what it is for. The **ticket** is the admission, and it is checked inside one store call that burns it and enrols the device together. |
-| `centraid/v1/peer` | gateway ↔ gateway (wave 4) | **Not advertised.** No link policy means the plane is never negotiated; a connection on it is refused. |
+| `centraid/v1/peer` | gateway ↔ gateway | **Not advertised.** No link policy means the plane is never negotiated; a connection on it is refused. |
 
 Routing is by ALPN alone, never by anything the caller says.
 
@@ -44,7 +44,7 @@ Every one of them is also emitted as a `ConnectivityEvent`, which is the only wa
 
 ## Where the durable allowlist is
 
-**Not here.** The natural design is a small SQLite file owned by this crate, with `devices` and `tickets` written in one transaction. #1020's `sql-confinement` invariant puts SQL only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, and widening it to fit a design would be weakening a gate. So the design moved instead (**D-1020-C8**): this crate defines the `AllowlistStore` trait and ships `MemoryAllowlist`, and `crates/vault` (lane D1) lands the durable implementation behind the same trait.
+**Not here.** The natural design is a small SQLite file owned by this crate, with `devices` and `tickets` written in one transaction. #1020's `sql-confinement` invariant puts SQL only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, and widening it to fit a design would be weakening a gate. So the design moved instead (**D-1020-C8**): this crate defines the `AllowlistStore` trait and ships `MemoryAllowlist`, and `crates/vault/src/devices.rs` holds the durable implementation behind the same trait.
 
 The trait is written to stay implementable transactionally: `redeem` burns the ticket and enrols the device in **one call**, so no caller has to sequence two writes and leave a window where a crash half-pairs a phone.
 
@@ -52,4 +52,4 @@ Only a **hash** of a ticket secret is stored. The secret travels in a QR, is rea
 
 ## No listening TCP socket
 
-iroh is QUIC over UDP. The only listener this product may ever have is the wave 3 blob door, off by default until the iPhone measurement rules on it (#1020 open question 3). Two things hold it: the xtask `no-listening-socket` rule scans this crate on every gate run, and `crates/centraid`'s test spawns the real binary and asserts through `/proc/net/tcp*` that the process owns no LISTEN socket.
+iroh is QUIC over UDP. The only listener this product may ever have is the HTTPS blob door, off by default until the iPhone measurement rules on it (#1020 open question 3). Two things hold it: the xtask `no-listening-socket` rule scans this crate on every gate run, and `crates/centraid`'s test spawns the real binary and asserts through `/proc/net/tcp*` that the process owns no LISTEN socket.

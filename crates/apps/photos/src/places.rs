@@ -93,16 +93,6 @@ pub fn places_statement() -> PageQuery {
     )
 }
 
-/// Read the place list.
-pub fn read_places(door: &dyn PageDoor) -> KitResult<Vec<PlaceRow>> {
-    Ok(
-        read_pages(door, &places_statement(), crate::queries::ASSET_JOIN_BOUND)?
-            .iter()
-            .filter_map(PlaceRow::of)
-            .collect(),
-    )
-}
-
 /// `core_place.address_json` → `{ gazetteer: { name } }`.
 ///
 /// `{ none: true }` is a RESULT, not a name — the gazetteer looked and found

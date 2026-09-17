@@ -1,7 +1,5 @@
-// Moved from `packages/tunnel/data-plane/src/cbsf.rs` (first-party MIT code) when the
-// byte plane became a v1 crate (#1020, D-1020-R1). The v0 crate is retired and the
-// format is this file's; the content address and the nonce MAC are BLAKE3
-// (#1025 S4, D-1025-S4-1/-2). The header still carries 32 bytes and the frame
+// First-party MIT code (#1020, D-1020-R1). The content address and the nonce MAC
+// are BLAKE3 (#1025 S4, D-1025-S4-1/-2). The header still carries 32 bytes and the frame
 // layout is untouched — what changed is which function produced those bytes.
 
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};

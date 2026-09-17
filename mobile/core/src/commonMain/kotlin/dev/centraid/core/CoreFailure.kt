@@ -10,8 +10,7 @@ package dev.centraid.core
  * as `null` — which is the same value as "no rows", which is the bug the law
  * exists to prevent.
  *
- * A DISCRIMINATED UNION AND NOT A BAG OF OPTIONALS, the same rule v0's
- * navigation params follow (`apps/mobile/src/navigation.ts:43`): a
+ * A DISCRIMINATED UNION AND NOT A BAG OF OPTIONALS: a
  * `CoreFailure(code, message?, diagnosticId?, expected?, actual?)` would make
  * every reader ask which fields its case populated.
  */

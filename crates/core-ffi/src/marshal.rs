@@ -279,6 +279,8 @@ fn secret_from(hex: &str) -> Result<Option<[u8; 32]>, CoreError> {
 /// When `len > 0`, `data` must point to `len` initialised bytes that stay valid
 /// and unmutated for the returned slice's lifetime. The slice is **borrowed**:
 /// this library keeps nothing past the call that made it.
+// SAFETY: `unsafe` because the caller must uphold the `# Safety` contract
+// above; the one unsafe operation in the body carries its own note.
 #[must_use]
 pub unsafe fn slice_of<'bytes>(data: *const u8, len: usize) -> Option<&'bytes [u8]> {
     if len == 0 {
@@ -298,6 +300,8 @@ pub unsafe fn slice_of<'bytes>(data: *const u8, len: usize) -> Option<&'bytes [u
 ///
 /// `handle` must be null, or a pointer `centraid_open` produced that has not
 /// been passed to `centraid_close`.
+// SAFETY: `unsafe` because the caller must uphold the `# Safety` contract
+// above; the one unsafe operation in the body carries its own note.
 #[must_use]
 pub unsafe fn handle_of<'handle>(handle: *mut Handle) -> Option<&'handle Handle> {
     if handle.is_null() {
@@ -322,6 +326,8 @@ pub unsafe fn handle_of<'handle>(handle: *mut Handle) -> Option<&'handle Handle>
 /// `out_buf` and `out_len` must be non-null and point to writable storage for a
 /// pointer and a `usize`. The caller owns the buffer afterwards and must release
 /// it with `centraid_free`, and with nothing else.
+// SAFETY: `unsafe` because the caller must uphold the `# Safety` contract
+// above; the one unsafe operation in the body carries its own note.
 pub unsafe fn hand_over(mut bytes: Vec<u8>, out_buf: *mut *mut u8, out_len: *mut usize) {
     bytes.shrink_to_fit();
     let len = bytes.len();
@@ -348,6 +354,8 @@ pub unsafe fn hand_over(mut bytes: Vec<u8>, out_buf: *mut *mut u8, out_len: *mut
 ///
 /// `buf` must be non-null and a pointer [`hand_over`] produced, with the exact
 /// `len` it reported, not yet reclaimed.
+// SAFETY: `unsafe` because the caller must uphold the `# Safety` contract
+// above; the one unsafe operation in the body carries its own note.
 pub unsafe fn reclaim(buf: *mut u8, len: usize) {
     // SAFETY: `hand_over` shrank the capacity to the length (or reserved
     // exactly one byte for an empty buffer), so rebuilding with

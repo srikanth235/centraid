@@ -3,8 +3,7 @@
 // **No free-text reason reaches a member from this message.** A member-facing
 // sentence is either the author's (a precondition's, `CommandOutcome.reason`) or
 // the shell's, rendered from `code`. `detail` here is for logs and support
-// bundles only; v0 makes the same refusal explicitly — no raw `Error.message`
-// reaches the wire (`packages/server/src/routes/replica-routes.ts:100-108`).
+// bundles only.
 //
 // The enum is closed on purpose. A shell switches on a value; a shell that
 // switches on a string is a shell that breaks when the string is reworded.
@@ -18,7 +17,7 @@ enum ErrorCode {
 
   // --- transport and admission ---
   // The remote endpoint is not an enrolled, unrevoked device. Unknown and
-  // revoked are the SAME refusal (`packages/vault/src/gateway/identity.ts:27-35`).
+  // revoked are the SAME refusal.
   ERROR_CODE_UNAUTHORIZED = 1;
   // The version window does not admit the peer; an `UpgradeRequired` rides
   // with it.
@@ -75,16 +74,15 @@ enum ErrorCode {
   // The same intent id was already admitted with a different payload.
   ERROR_CODE_INTENT_ID_REUSED = 41;
   // The outcome aged past the idempotency window; the remedy is to RESUBMIT AS
-  // A NEW INTENT, never a silent retry
-  // (`packages/client/src/replica/offline-chain.ts:431-448`).
+  // A NEW INTENT, never a silent retry.
   ERROR_CODE_INTENT_OUTCOME_EXPIRED = 42;
   // The declared read-set did not version every row the operation reads.
   ERROR_CODE_READ_SET_INCOMPLETE = 43;
   // The action is `online_only` and this seat has no gateway.
   ERROR_CODE_ONLINE_ONLY = 44;
-  // The access plane returned a deny. A deny is an OUTCOME, not an exception
-  // (`packages/vault/src/gateway/access.ts:1`), so the member-facing sentence
-  // is on the outcome and this code is what the shell branches on.
+  // The access plane returned a deny. A deny is an OUTCOME, not an exception,
+  // so the member-facing sentence is on the outcome and this code is what the
+  // shell branches on.
   ERROR_CODE_DENIED = 45;
   // THE GATEWAY DOES NOT YET HOLD THE BYTES THIS INTENT NAMES (#1025 S3).
   //

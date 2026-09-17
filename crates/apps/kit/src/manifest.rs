@@ -1,9 +1,9 @@
 //! THE APP MANIFEST (`app.json`), and the three cross-cuts a schema cannot
 //! express.
 //!
-//! Ported from `packages/server/src/engine/registry/manifest.ts`. `MANIFEST_VERSION`
-//! is 1 and is checked **before** anything else (`manifest.ts:436-449`), so a
-//! future incompatible manifest fails loudly rather than reading as an old one.
+//! `MANIFEST_VERSION` is 1 and is checked **before** anything else, so a
+//! future incompatible manifest fails loudly rather than reading as an old
+//! one.
 //!
 //! What Ajv did there, serde's types do here. What only a second pass can say is
 //! kept as a second pass:
@@ -35,7 +35,6 @@ use serde_json::Value;
 use crate::error::{KitError, KitResult};
 
 pub const MANIFEST_VERSION: u64 = 1;
-pub const APP_MANIFEST_FILE: &str = "app.json";
 pub const RESERVED_HANDLER_PREFIX: &str = "_";
 
 /// Facts about the vault/replica plane, never per-app inventions (#839). The
@@ -65,8 +64,8 @@ pub struct ActionEntry {
     pub input: Value,
     pub output: Option<Value>,
     /// Required here; `[]` means "no database writes". Carried verbatim to the
-    /// change bus for per-table query invalidation, and NOT the share doorbell
-    /// (`packages/server/src/engine/handlers/handler-runner.ts:145-150`).
+    /// change bus for per-table query invalidation, and NOT the share
+    /// doorbell.
     pub writes: Vec<String>,
 }
 

@@ -1,10 +1,10 @@
 // SQLite's five storage classes on the wire (#1020, D-1020-C3).
 //
-// v0 carried them as JSON: `null | string | number | boolean | {i} | {b64}`
-// (`packages/core/src/protocol/row-json.ts:30-40`), where an integer beyond
-// ±2^53−1 had to escape into `{i: "<decimal>"}` and a BLOB into a hand-rolled
-// base64 alphabet. Protobuf has an int64 and a bytes field, so both escapes and
-// the `Number.MAX_SAFE_INTEGER` boundary they were built around disappear.
+// v0 carried them as JSON: `null | string | number | boolean | {i} | {b64}`,
+// where an integer beyond ±2^53−1 had to escape into `{i: "<decimal>"}` and a
+// BLOB into a hand-rolled base64 alphabet. Protobuf has an int64 and a bytes
+// field, so both escapes and the `Number.MAX_SAFE_INTEGER` boundary they were
+// built around disappear.
 //
 // Two v0 distinctions are NOT dropped, because they are semantics and not
 // encoding:
@@ -42,9 +42,8 @@ message Value {
 }
 
 // A record key. A single-column key carries exactly one entry; a composite key
-// carries one entry per key column IN DECLARED KEY ORDER, which is the order
-// v0's `packages/vault/src/replica/change-log.ts:420-442` serialises a composite
-// row id in. Order is load-bearing: the list is the identity of the row.
+// carries one entry per key column IN DECLARED KEY ORDER. Order is
+// load-bearing: the list is the identity of the row.
 message RecordKey {
   repeated Value values = 1;
 }

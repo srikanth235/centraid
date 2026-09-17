@@ -104,10 +104,8 @@ fn ddl_blocks(ddl: &str) -> Vec<DdlBlock> {
 /// An FTS5 shadow table, which the virtual table creates for itself.
 ///
 /// `sqlite_master` lists them, so the generated DDL lists them, and replaying
-/// one after its virtual table exists is "table already exists". v0 has the
-/// same problem from the other side and answers it the same way: its snapshot
-/// pipeline identifies FTS objects by the `fts_…` shape rather than by name
-/// (`packages/vault/src/replica/seat-snapshot.ts:8-37`).
+/// one after its virtual table exists is "table already exists". This
+/// function identifies FTS objects by the `fts_…` shape rather than by name.
 fn is_fts_shadow(name: &str) -> bool {
     name.starts_with("fts_")
         && ["_config", "_content", "_data", "_docsize", "_idx"]

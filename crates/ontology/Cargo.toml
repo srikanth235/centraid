@@ -22,7 +22,6 @@ name = "export-golden-manifest"
 path = "src/bin/export-golden-manifest.rs"
 
 [dependencies]
-anyhow.workspace = true
 flate2.workspace = true
 hex.workspace = true
 rusqlite.workspace = true

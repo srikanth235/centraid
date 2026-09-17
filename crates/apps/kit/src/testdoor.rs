@@ -170,7 +170,7 @@ impl PageDoor for TestDoor<'_> {
         // THE PROBE ROW IS THE HOST'S ON THIS SIDE TOO: the statement asked for
         // one row more than the window, and that row must be dropped here
         // rather than handed to a handler, which would report a full set as a
-        // short one (`packages/vault/src/gateway/gateway.ts:666-672`).
+        // short one.
         page_of(fetched, request, |row| {
             page_cursor_boundary(&query.name, row, &query.order)
         })

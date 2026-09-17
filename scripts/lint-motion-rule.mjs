@@ -11,17 +11,12 @@
 // file scanned that still restates the media query is a regression back to
 // the per-component pattern issue #708 closed.
 //
-// One JS exception: `atlasOrreryMotion.ts` queries `matchMedia` at runtime to
-// gate a canvas/requestAnimationFrame loop — a CSS media query cannot reach
-// into JS-driven animation, so this is not the same category of violation as
-// a second `@media (prefers-reduced-motion: reduce) { … }` block. It is
-// allowlisted explicitly, not exempted by file-type.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-const TARGETS = ["packages/client/src", "packages/design/src"];
+const TARGETS = ["packages/design/src"];
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 const EXTENSIONS = /\.(?:css|ts|tsx)$/u;
 // Test files assert the sanctioned sources' own content (e.g.
@@ -29,14 +24,12 @@ const EXTENSIONS = /\.(?:css|ts|tsx)$/u;
 // DESIGN.md mention the rule) — they don't declare a new rule of their own.
 const SKIP_FILE = /\.test\.[jt]sx?$/u;
 
-// The two real CSS emitters for the global rule, plus the one legitimate
-// JS/matchMedia use a CSS rule structurally cannot replace. Dated so a
-// future addition to this list needs a reason, not just a path.
+// The two real CSS emitters for the global rule. Dated so a future addition
+// to this list needs a reason, not just a path.
 // 2026-08-03 — issue #708 motion-grammar consolidation.
 const SANCTIONED = new Set([
   "packages/design/src/css.ts",
   "packages/design/src/blueprint.ts",
-  "packages/client/src/react/screens/atlasOrreryMotion.ts",
 ]);
 
 function walk(dir, out = []) {

@@ -15,7 +15,6 @@ path = "src/lib.rs"
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
-centraid-ontology = { path = "../ontology" }
 centraid-protocol = { path = "../protocol" }
 centraid-seat = { path = "../seat" }
 centraid-vault = { path = "../vault" }
@@ -32,3 +31,4 @@ turmoil.workspace = true
 [dev-dependencies]
 centraid-vault = { path = "../vault" }
 serde_json.workspace = true
+centraid-ontology = { path = "../ontology" }

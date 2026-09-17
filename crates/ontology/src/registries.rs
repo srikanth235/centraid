@@ -1,15 +1,11 @@
 //! The v0 registries, embedded.
 //!
-//! `contracts/schema/v0-registries.json` is transcribed from
-//! `packages/vault/src/schema` by `contracts/tools/export-v0-registries.ts`.
-//! This module EMBEDS it with `include_str!` rather than reading it from disk,
+//! `contracts/schema/v0-registries.json` is the frozen transcription of the
+//! v0 registries and has no generator: the file is the source. This module EMBEDS it with `include_str!` rather than reading it from disk,
 //! for two reasons: a shipped binary must not depend on a repository path, and
 //! a registry that is compiled in cannot drift from the crate that was built
-//! with it. The regeneration step is a source edit, not a runtime concern.
-//!
-//! The registries are still v0's to change until wave 6
-//! ([#1020](https://github.com/srikanth235/centraid/issues/1020)); nothing here
-//! re-decides them.
+//! with it. A change is a source edit, not a runtime concern
+//! ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;

@@ -1,6 +1,6 @@
 # `mobile/` — the KMP shared module and the two native shells
 
-One Kotlin Multiplatform shared module over the five-function C ABI, with a Compose shell and a SwiftUI shell that render finished state messages and own nothing ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E).
+One Kotlin Multiplatform shared module over the five-function C ABI, with a Compose shell and a SwiftUI shell that render finished state messages and own nothing ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 ```
 mobile/
@@ -8,14 +8,14 @@ mobile/
 ├── shared/      the shell, the apps, the screen contract, navigation, sync
 ├── androidApp/  Compose. Gated on -Pcentraid.android=true + ANDROID_HOME
 ├── iosApp/      SwiftUI + XcodeGen + SPM. Needs a macOS host
-└── maestro/     device flows, and the iOS transfer experiment's protocol
+└── maestro/     the Home device flow, and the iOS transfer experiment's protocol
 ```
 
 ## What runs here, and what is a hand-off
 
 This is the most important table in this file. **Nothing in the right-hand column reads green in CI**: there is no Android SDK, no Xcode, no simulator and no device on the machines that run `cargo xtask gate`, and every claim that needs one is an owner hand-off with a command below.
 
-**WAVE A CASHED SEVERAL OF THEM, AND BOTH SHELLS HAVE NOW BEEN SEEN.** On an owner's Mac with Xcode 26.6 the iOS shell compiles, links the XCFramework, runs `swift test` green, and runs on a simulator drawing Home from the real `HomeMachine` over the real Rust core. **Android now does the same** on an `sdk_gphone64_arm64` emulator: same seeded vault, same tiles, same thumbnails, same vault switcher. The rows below say so where it is true.
+**SEVERAL HAVE BEEN CASHED, AND BOTH SHELLS HAVE BEEN SEEN.** On an owner's Mac with Xcode 26.6 the iOS shell compiles, links the XCFramework, runs `swift test` green, and runs on a simulator drawing Home from the real `HomeMachine` over the real Rust core. **Android now does the same** on an `sdk_gphone64_arm64` emulator: same seeded vault, same tiles, same thumbnails, same vault switcher. The rows below say so where it is true.
 
 | Provable on this machine (JVM) | An owner hand-off |
 | --- | --- |
@@ -34,7 +34,7 @@ This is the most important table in this file. **Nothing in the right-hand colum
 cd mobile && ./gradlew mobileJvm
 ```
 
-`:shared:jvmTest`, `:core:jvmTest` and `:shared:koverXmlReport`. It is the `mobile-jvm` step of `cargo xtask gate`; the patch that splices it in is `contracts/handoff/E/`.
+`:shared:jvmTest`, `:core:jvmTest` and `:shared:koverXmlReport`. It is the `mobile-jvm` step of `cargo xtask gate --profile mobile-jvm`, which `gate-nightly.yml` runs.
 
 **`:core:jvmTest` builds two Rust things first** and fails loudly if `cargo` is not there, because a binding test that skipped would read green on a machine where the ABI does not work at all:
 
@@ -62,8 +62,6 @@ Current stable, pinned, and **not** the container's preinstalled versions (D-102
 | Kotest / Turbine / kover / Konsist / JNA | 6.2.5 / 1.2.1 / 0.9.9 / 0.17.3 / 5.19.1 |
 
 **`org.gradle.warning.mode=fail`**: a deprecated Gradle feature is a red, not a line in the log. A Gradle or plugin upgrade therefore reds here first, which is the point. `mobile/gradle/libs.versions.toml` is the one place a version lives.
-
-`apps/mobile/android`'s wrapper asks for Gradle 9.3.1 and is an `expo prebuild` output. **Do not reuse it.**
 
 ## Building the Android app
 
@@ -110,7 +108,7 @@ protoc --proto_path=../../crates/api-proto/proto \
     $(find ../../crates/api-proto/proto -name '*.proto')
 
 # 3. The Xcode project. `project.yml` is the source; the `.xcodeproj` is NOT
-#    committed (mobile/.gitignore), which is the rule v0 broke. Re-run it after
+#    committed (mobile/.gitignore). Re-run it after
 #    ADDING a source file: the target globs a directory, and a new
 #    `Sources/**.swift` is invisible until the project is regenerated.
 brew install xcodegen
@@ -138,8 +136,8 @@ cd mobile/iosApp && swift test
 
 | What | The command | The evidence it should produce |
 | --- | --- | --- |
-| The iOS transfer experiment | `mobile/maestro/ios-transfer-experiment.md` — 5 states × 2 transports, 4 measurements | four JSON files under `receipts/experiments/ios-transfer/`, and one line saying which decision row they land in |
-| Maestro flows | `maestro test mobile/maestro/flows` with `MAESTRO_VERSION=2.6.1` | a run ledger per flow. **Add the `testTag`/`accessibilityIdentifier` values from `flows/selectors.md` first** — seventeen strings, paired with the run that proves each selects exactly one thing |
+| The iOS transfer experiment | `mobile/maestro/ios-transfer-experiment.md` — 5 states × 2 transports, 4 measurements | four JSON files the run writes under `receipts/experiments/ios-transfer/` (the path the `ios-transfer-experiment` device lane reads), and one line saying which decision row they land in |
+| The Maestro flow | `maestro test mobile/maestro/flows` (one flow, `home.yaml`) with `MAESTRO_VERSION=2.6.1` — see [`maestro/README.md`](maestro/README.md) | a run ledger. **Add the `testTag`/`accessibilityIdentifier` values from `flows/selectors.md` first**, paired with the run that proves each selects exactly one thing |
 | Android Macrobenchmark | `./gradlew -Pcentraid.android=true :androidApp:connectedBenchmarkAndroidTest` | the numbers that promote `tests/journeys.json`'s parked Android ceilings (R-1020-20: a named device, never an emulator) |
 | Store enrolment | `docs/enrollment.md` + `.github/workflows/lane-release-mobile.yml` | an App Store Connect key and a Play service account, per `docs/release.md`'s per-lane secret rule |
 | Swift snapshots | `swift test --filter Snapshot` after adding `swift-snapshot-testing` | committed reference images, one per screen per scheme |
@@ -148,7 +146,7 @@ cd mobile/iosApp && swift test
 
 `dev.centraid.core.CentraidCore` is the only thing above `mobile/core` that knows the ABI exists. It opens, runs the handshake, checks the artifact identity, and hands up `CoreOutcome<Envelope>` — an answer or a typed refusal, never `null`. Every buffer the library allocates is copied into a Kotlin `ByteArray` and freed in the same `finally`, on every path including the timeout; `buffersHandedOver == buffersFreed` is asserted after two hundred calls. `call` is `suspend` and hops to the core dispatcher before it touches the ABI, and it asserts it is not on the UI thread **after** the hop — because the realistic bug is a shell that passed `Dispatchers.Main` as the core dispatcher, and that is the case the assertion has to catch. Read [`crates/core-ffi/CONTRACT.md`](../crates/core-ffi/CONTRACT.md) before touching any of it: ten clauses, each with a Rust test, and a shell's memory safety depends on claims that are not visible in the signatures.
 
-`crates/core-ffi/spike/jna` was wave 2's throwaway measurement of the same binding (D-1020-D2-7). **`mobile/core` supersedes it**; the spike stays where it is as the record of the numbers that fixed the ABI's shape.
+`crates/core-ffi/spike/jna` is a throwaway measurement of the same binding (D-1020-D2-7). **`mobile/core` supersedes it**; the spike stays where it is as the record of the numbers that fixed the ABI's shape.
 
 ## Generated files — do not edit
 
@@ -158,16 +156,15 @@ cd mobile/iosApp && swift test
 | `shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt` | `contracts/tools/export-native-catalog.ts`, called by the above | the same |
 | `iosApp/Design/{Theme,Catalog}.swift` | the same two | the same |
 | `design/native-{theme,catalog}.json` | the same two | the same |
-| `shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`, `copy/*.json` | **nothing — its generator retired with the v0 tree.** See the banner in `contracts/tools/export-native-theme.ts`: `export-copy.ts` read `packages/blueprints/apps/*/…-copy.ts` and wave 6 deleted them. These files are now the SOURCE, not an artifact. | none |
+| `shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`, `copy/*.json` | **nothing — hand-maintained.** These files are the SOURCE, not an artifact; see the banner in `contracts/tools/export-native-theme.ts`. | none |
 | `contracts/screens/**/*.bin` | `contracts/tools/build-screen-fixtures.ts` | `git diff --exit-code contracts/screens` |
 | the Wire and SwiftProtobuf types | `crates/api-proto/proto` | `buf lint` / `buf breaking` |
 
-One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue or icon set, which is why wave A extended the emitter rather than typing eight app names and 139 silhouettes into two languages.
+One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue or icon set, which is why the emitter carries the catalogue and the silhouettes rather than eight app names and 139 silhouettes being typed into two languages.
 
 ## How `shared/commonMain` is laid out
 
-One shell, many apps — the same shape as `crates/apps`, `copy` and
-`contracts/apps` (#1025 S5, D-1025-S5-1):
+One shell, many apps — the same shape as `crates/apps`, `copy` and `contracts/apps` (#1025 S5, D-1025-S5-1):
 
 ```
 dev/centraid/shared/
@@ -181,27 +178,21 @@ dev/centraid/shared/
 └── platform/   the expect/actual seam
 ```
 
-Two Konsist rules make the shape load-bearing rather than decorative
-(`PerAppLayoutSpec`):
+Two Konsist rules make the shape load-bearing rather than decorative (`PerAppLayoutSpec`):
 
-1. **An `apps.<x>` package imports no other `apps.<y>`.** Two apps meet in the
-   VAULT, as rows, and never in a reducer.
-2. **Nothing outside `apps` imports from inside it.** The shell drives a screen
-   through `ScreenMachine`/`ScreenHost`, which is what lets it host a screen it
-   knows nothing else about; a `shell/` file naming `apps.tally.TallyListState`
-   would be a shell that has to be edited to add an app.
+1. **An `apps.<x>` package imports no other `apps.<y>`.** Two apps meet in the VAULT, as rows, and never in a reducer.
+2. **Nothing outside `apps` imports from inside it.** The shell drives a screen through `ScreenMachine`/`ScreenHost`, which is what lets it host a screen it knows nothing else about; a `shell/` file naming `apps.tally.TallyListState` would be a shell that has to be edited to add an app.
 
-A third assertion says `screen` holds exactly two files, because a screen that
-moved back into it is a screen rule 2 can no longer say anything about.
+A third assertion says `screen` holds exactly two files, because a screen that moved back into it is a screen rule 2 can no longer say anything about.
 
 ## Home, and the pattern the fan-out follows
 
-Home is built (#1020, wave A). It is the hardest single screen — a graded springboard over eight unlike tile bodies — and it was built alone so its pattern is settled before the other screens fan out. Four rules came out of it, and they are the ones a later screen should copy:
+Home is built (#1020). It is the hardest single screen — a graded springboard over eight unlike tile bodies — and its pattern is the one other screens follow. Four rules came out of it, and they are the ones a later screen should copy:
 
 1. **THE VIEWS DECIDE NOTHING, including layout.** `earns_grid`, `springboard`, `things`, `every_tile_unreadable` AND `grid_rows` are all computed in `HomeMachine` and written onto the state. `grid_rows` is there because the first build let each renderer pack the grid and they disagreed immediately: Compose's `LazyVerticalGrid` honours a span and SwiftUI's `LazyVGrid` **silently ignores `.gridCellColumns`**, so one shell drew Photos full width and the other drew it at a half. Two packers for one grid was the defect; one packer in the machine is the fix.
 2. **EVERY VALUE IS A TOKEN OR A STATED GEOMETRY.** No `.secondary`, no `.quaternary`, no SF Symbols, no Material icons. The first build of Home used all four and looked like a SwiftUI sample rather than the product; the token table and the emitted silhouettes are what make the two shells draw one thing.
 3. **ONE ICON SET.** `Catalog.kt`/`Catalog.swift` carry the same 24×24 path data the web renderer draws. Compose reads it with `PathParser`; iOS has `Sources/Icon.swift`, a small path reader, and `Tests/IconSilhouetteTests.swift` asserts every emitted silhouette parses — written after a greedy number scan made the Settings gear vanish with nothing failing.
-4. **THE FRAME IS PART OF THE SCREEN.** The vault lockup (which vault, and how that vault stands on this device — and the mark IS the switch), the title row and the floating band are v0's chrome, not decoration, and a Home without them is a grid rather than a shell. The second fact is the VAULT's and never a gateway's name: `VaultLockup.State` has three cases — syncing, synced, offline — every one of them derived from the last pass's outcome and whether a pass is in flight, and none of them a state a gateway is probed for ([D-1025-S7-9](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
+4. **THE FRAME IS PART OF THE SCREEN.** The vault lockup (which vault, and how that vault stands on this device — and the mark IS the switch), the title row and the floating band are the product's chrome, not decoration, and a Home without them is a grid rather than a shell. The second fact is the VAULT's and never a gateway's name: `VaultLockup.State` has three cases — syncing, synced, offline — every one of them derived from the last pass's outcome and whether a pass is in flight, and none of them a state a gateway is probed for ([D-1025-S7-9](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
 
 ### Seeing it with real data: pair with a gateway
 
@@ -221,56 +212,17 @@ cargo run -p centraid --bin seed-demo-vault -- /tmp/gw/vault/<id> --file vault.d
 #    device -> Sync now.
 ```
 
-**The vault is PAIRED, not placed** (#1025 S1, S5). `Shelf.admit` opens a FRESH
-core at `Replicas.PAIRING_FILE` (`centraid-pairing.sqlite3`) and redeems the
-ticket there — `Core::open` on a missing seat path answers a handle whose reads
-are refused `Unpaired`, which is a screen a member can read, and `Request::Pair`
-takes the first copy into that file. **Every vault already held keeps its core
-open through this**; the only handle closed is the one on the pairing file
-itself, which is the file about to be paired into. The shell then settles TWO
-things under the vault id the gateway named — the replica (`Replicas.settle`) and
-the one `Enrolments` record — because before that moment there was no id to name
-either after. It was three settles until #1025 S7-13, and three renames with no
-transaction over them is three chances to settle by halves
-([D-1025-S7-14](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
+**The vault is PAIRED, not placed** (#1025 S1, S5). `Shelf.admit` opens a FRESH core at `Replicas.PAIRING_FILE` (`centraid-pairing.sqlite3`) and redeems the ticket there — `Core::open` on a missing seat path answers a handle whose reads are refused `Unpaired`, which is a screen a member can read, and `Request::Pair` takes the first copy into that file. **Every vault already held keeps its core open through this**; the only handle closed is the one on the pairing file itself, which is the file about to be paired into. The shell then settles TWO things under the vault id the gateway named — the replica (`Replicas.settle`) and the one `Enrolments` record — because before that moment there was no id to name either after. It was three settles until #1025 S7-13, and three renames with no transaction over them is three chances to settle by halves ([D-1025-S7-14](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
 
-**A device proves who it is at open** ([D-1025-S7-15](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
-`PairOk` carries the public key the gateway enrolled, derived there from the
-connection iroh's TLS proved; it goes into the enrolment record beside the
-secret, and every later open compares the endpoint that came up against it. A
-mismatch refuses the open with `ERROR_CODE_IDENTITY_MISMATCH` and dials nothing:
-a seat whose Keychain item is gone would otherwise present a fresh key, be closed
-by its own gateway as an unenrolled peer, and render "this app and that gateway
-are too far apart in version to talk" over a lost credential.
+**A device proves who it is at open** ([D-1025-S7-15](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). `PairOk` carries the public key the gateway enrolled, derived there from the connection iroh's TLS proved; it goes into the enrolment record beside the secret, and every later open compares the endpoint that came up against it. A mismatch refuses the open with `ERROR_CODE_IDENTITY_MISMATCH` and dials nothing: a seat whose Keychain item is gone would otherwise present a fresh key, be closed by its own gateway as an unenrolled peer, and render "this app and that gateway are too far apart in version to talk" over a lost credential.
 
-**A pairing never rides the live core** ([D-1025-S7-10](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
-`Handle::pair` bootstraps its first copy into whatever file the handle is open
-on, so redeeming a ticket down the core holding vault A wrote vault B over vault
-A — a member who had a vault a second earlier read "No vault yet". The first
-vault and the Nth take the identical path, with no branch on "does this device
-already hold one", and the core refuses to bootstrap into a replica that already
-holds a vault with `ERROR_CODE_VAULT_ALREADY_HELD`, checked BEFORE the ticket is
-redeemed so a refusal burns nothing ([D-1025-S7-11](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
-One ticket admits one vault, the one `PairOk.vault_id` names.
+**A pairing never rides the live core** ([D-1025-S7-10](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). `Handle::pair` bootstraps its first copy into whatever file the handle is open on, so redeeming a ticket down the core holding vault A wrote vault B over vault A — a member who had a vault a second earlier read "No vault yet". The first vault and the Nth take the identical path, with no branch on "does this device already hold one", and the core refuses to bootstrap into a replica that already holds a vault with `ERROR_CODE_VAULT_ALREADY_HELD`, checked BEFORE the ticket is redeemed so a refusal burns nothing ([D-1025-S7-11](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). One ticket admits one vault, the one `PairOk.vault_id` names.
 
-**A name off a ticket is a placeholder** ([D-1025-S7-12](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)).
-The gateway answers `PairOk.vault_name` from the vault's own
-`core_vault.display_name`, and the shell still re-reads it from the replica
-(`VaultRoster.identify`) the moment there is a file to ask: a vault's name lives
-inside the vault, which is why the seeded fixture above is "Tahoe" in the roster
-and not whatever the gateway's `--vault-name` flag last said.
+**A name off a ticket is a placeholder** ([D-1025-S7-12](../docs/decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). The gateway answers `PairOk.vault_name` from the vault's own `core_vault.display_name`, and the shell still re-reads it from the replica (`VaultRoster.identify`) the moment there is a file to ask: a vault's name lives inside the vault, which is why the seeded fixture above is "Tahoe" in the roster and not whatever the gateway's `--vault-name` flag last said.
 
-`mobile/scripts/demo-vault.sh` is the old way and its seat path is dead. What it
-places is a GATEWAY-role artifact: a vault with every private table and the
-device's own authority over rows it is supposed to be a copy of.
+**Pairing is the only way a vault reaches a shell.** `mobile/scripts/demo-vault.sh` still seeds two GATEWAY-role vaults (`demo-vault.db`, `work-vault.db`) and copies them into the app's storage, but neither shell reads them: the roster is only `centraid-replica-*.sqlite3` files (`Replicas`), and a placed gateway file would be a vault with every private table and the device's own authority over rows it is supposed to be a copy of. Use the three steps above.
 
-**The byte store travels with the replica.** `centraid-replica-<vaultId>.sqlite3` has
-`centraid-replica-<vaultId>.bytes` beside it — `replica.with_extension("bytes")` in
-`crates/seat-link`, the last extension REPLACED and not appended. A replica
-without its store is a library of rows pointing at nothing
-([D-1025-S3-1](../docs/decisions.md#slice-s3--bytes-both-ways-one-store-1025)),
-and it renders as placeholders rather than as an error — which is how the first
-draft of `Replicas.settle` got it wrong and why `ReplicasSpec` pins the name.
+**The byte store travels with the replica.** `centraid-replica-<vaultId>.sqlite3` has `centraid-replica-<vaultId>.bytes` beside it — `replica.with_extension("bytes")` in `crates/seat-link`, the last extension REPLACED and not appended. A replica without its store is a library of rows pointing at nothing ([D-1025-S3-1](../docs/decisions.md#slice-s3--bytes-both-ways-one-store-1025)), and it renders as placeholders rather than as an error — which is how the first draft of `Replicas.settle` got it wrong and why `ReplicasSpec` pins the name.
 
 Four things about the switcher are worth knowing before you touch it:
 
@@ -302,7 +254,7 @@ A cell stays a placeholder when the door says the bytes are not here, when it re
 ```sh
 mobile/scripts/android-core.sh                                   # the Rust core, first
 cd mobile && ./gradlew -Pcentraid.android=true :androidApp:installDebug
-mobile/scripts/demo-vault.sh android                             # seed and place both vaults
+# then pair it with a seeded gateway — "Seeing it with real data" above
 ```
 
 **JNA is one library in two packages and the package is the extension.** Same group, name and version — `net.java.dev.jna:jna` — published both as a jar and as an `.aar`. The jar bundles `libjnidispatch` for DESKTOP ABIs as ordinary resources; the aar carries the Android ones as real `lib/<abi>/libjnidispatch.so` entries, which is the only shape a packager installs and `System.loadLibrary` finds. Getting it wrong fails two ways and both were seen:

@@ -27,8 +27,7 @@ pub enum ConnectError {
     PeerUnreachable,
 
     /// The remote endpoint is not an enrolled, unrevoked device. Unknown and
-    /// revoked are the same refusal
-    /// (`packages/vault/src/gateway/identity.ts:27-35`).
+    /// revoked are the same refusal.
     #[error("this device is not enrolled on that gateway, or its enrolment was revoked")]
     Unauthorized,
 

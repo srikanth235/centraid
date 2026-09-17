@@ -185,31 +185,6 @@ export function workspaceDirs(workspaces, listDir) {
 function main() {
   const source = readFileSync(path.join(root, "turbo.json"), "utf8");
   const config = JSON.parse(stripJsonComments(source));
-  // A workspace whose own turbo.json extends the root one can re-introduce the
-  // overlap locally, so walk those too rather than trusting the root file alone.
-  const configs = [["turbo.json", config]];
-  for (const workspace of ["packages", "apps"]) {
-    let entries = [];
-    try {
-      entries = readdirSync(path.join(root, workspace));
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const rel = path.join(workspace, entry, "turbo.json");
-      try {
-        configs.push([
-          rel,
-          JSON.parse(
-            stripJsonComments(readFileSync(path.join(root, rel), "utf8"))
-          ),
-        ]);
-      } catch {
-        // No per-package turbo.json is the normal case.
-      }
-    }
-  }
-
   const tracked = trackedPaths();
   const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
   const packageDirs = workspaceDirs(pkg.workspaces ?? [], (dir) => {
@@ -219,6 +194,23 @@ function main() {
       return [];
     }
   });
+  // A workspace whose own turbo.json extends the root one can re-introduce the
+  // overlap locally, so walk those too rather than trusting the root file alone.
+  const configs = [["turbo.json", config]];
+  for (const dir of packageDirs) {
+    const rel = path.join(dir, "turbo.json");
+    try {
+      configs.push([
+        rel,
+        JSON.parse(
+          stripJsonComments(readFileSync(path.join(root, rel), "utf8"))
+        ),
+      ]);
+    } catch {
+      // No per-package turbo.json is the normal case.
+    }
+  }
+
   const errors = [];
   for (const [file, cfg] of configs) {
     errors.push(

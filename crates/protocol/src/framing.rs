@@ -1,11 +1,9 @@
 //! One framing, for every stream (#1020, D-1020-C2).
 //!
-//! `u32BE(len) ‖ bytes`, and nothing else. v0 framed a JSON header the same way
-//! (`encodeHeaderFrame`, `packages/tunnel/src/protocol.ts:139-145`) with the
-//! same 256 KiB ceiling, so the bound below is not a new number — it is v0's,
-//! kept because it is the one that has been run against real phones.
+//! `u32BE(len) ‖ bytes`, and nothing else. The 256 KiB bound below is the one
+//! that has been run against real phones.
 //!
-//! Three refusals, each of which was reachable in v0 and is a test here:
+//! Three refusals, each of which is a test here:
 //!
 //! * `len == 0` is a refusal, not an empty message. An empty `Envelope` encodes
 //!   to zero bytes, so a zero prefix and "a message with every field at its
@@ -27,13 +25,10 @@ use tokio::io::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 
 use crate::error::{ProtocolError, Result};
 
-/// The control-frame ceiling: 256 KiB, v0's `MAX_HEADER_FRAME_BYTES`
-/// (`packages/tunnel/src/protocol.ts:82`, mirrored in Rust at
-/// `packages/tunnel/data-plane/src/lib.rs:19`).
+/// The control-frame ceiling: 256 KiB.
 pub const MAX_FRAME_BYTES: usize = 262_144;
 
-/// Bodies are chunked at 64 KiB — v0's `READ_CHUNK_BYTES`
-/// (`packages/tunnel/src/protocol.ts:86`). A body is a sequence of frames, so
+/// Bodies are chunked at 64 KiB. A body is a sequence of frames, so
 /// the ceiling above still applies to each one; this is the size a producer
 /// aims for, not a second bound.
 pub const CHUNK_BYTES: usize = 65_536;

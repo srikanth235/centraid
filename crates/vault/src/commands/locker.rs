@@ -97,10 +97,6 @@ use crate::error::{Result, VaultError};
 pub const ITEM_TYPE: &str = "locker.item";
 /// The logical name of a custom field.
 pub const FIELD_TYPE: &str = "locker.item_field";
-/// The logical name of the passkey slot.
-pub const PASSKEY_TYPE: &str = "locker.item_passkey";
-/// The logical name of an additional address.
-pub const ADDRESS_TYPE: &str = "locker.item_address";
 /// What an unlock is receipted under, beside `locker.item`.
 pub const AUTH_TYPE: &str = "locker.auth";
 
@@ -1669,13 +1665,10 @@ fn edit_item() -> CommandDefinition {
 
             // EDIT REWRITES THE TYPE'S FIELDS; IT DOES NOT PATCH THEM.
             //
-            // v0's own test is named *"edit_item rewrites the type fields and
-            // replaces tags"* (`packages/vault/src/commands/locker.test.ts`),
-            // and `fieldValues` is what makes it true: it returns **every**
-            // column of the item's type, `null` for the ones the input omits,
-            // and the handler writes all of them. So an edit carrying only a
-            // password clears the username, the url, the OTP seed and the
-            // notes.
+            // `fieldValues` returns **every** column of the item's type, `null`
+            // for the ones the input omits, and the handler writes all of them.
+            // So an edit carrying only a password clears the username, the url,
+            // the OTP seed and the notes.
             //
             // Reproduced, not improved, and the hazard is a finding rather
             // than a silent divergence (receipt, lane Locker). The UI always

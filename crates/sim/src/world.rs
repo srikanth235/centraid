@@ -9,9 +9,9 @@
 //! What turmoil provides is the network and the clock.
 //!
 //! That matters because the alternative — a simulation over mocks — proves that
-//! the mocks agree. v0 could not run this at all: its seat was a phone, a
-//! browser worker and a Bun process, and there was no way to put three of them
-//! in one deterministic process.
+//! the mocks agree. Every seat here, whatever shell hosts it in production
+//! (the native mobile apps, the desktop sidecar), runs the same Rust core, so
+//! all of them fit in one deterministic process.
 //!
 //! ## One file per host, and the files outlive the hosts
 //!

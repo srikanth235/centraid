@@ -180,8 +180,7 @@ pub enum ClientMessage {
     /// Set the member's local Locker passphrase, wrapping `K` under it
     /// (D-1020-X6). **Renderer only.**
     ///
-    /// v0's gesture, carried: *the wrapped blob is all that is ever at rest*
-    /// (`packages/client/src/locker/locker-unlock.ts:13`–`:20`). The seat
+    /// *The wrapped blob is all that is ever at rest.* The seat
     /// already holds `K` in its own custody, so enrolment is the step that
     /// turns "a key on this disk" into "a key behind something the member
     /// knows".

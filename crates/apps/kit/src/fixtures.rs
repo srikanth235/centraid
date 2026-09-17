@@ -688,13 +688,12 @@ mod tests {
 //
 // **THE `THUMB_EDGE` COUPLING IS EXPLICIT HERE** (census seam A3). v0's seed
 // ships real PNGs beside itself and every one is <= 360 px on its long edge ON
-// PURPOSE: that is the grid's `THUMB_EDGE` "known small" ceiling
-// (`packages/blueprints/apps/photos/media.ts:16-28`), so a tile paints the
-// original instead of probing a `?variant=thumb` derivative the gateway's
-// preview backstop has not generated yet. Nothing on either side tested it. In
-// the port the dimensions are an INPUT — [`SampleFrame`] — read from
-// `contracts/apps/photos/sample/manifest.json`, and
-// `THUMB_EDGE` is a named constant the caller checks them against.
+// PURPOSE: that is the grid's `THUMB_EDGE` "known small" ceiling, so a tile
+// paints the original instead of probing a `?variant=thumb` derivative the
+// gateway's preview backstop has not generated yet. Nothing on either side
+// tested it. In the port the dimensions are an INPUT — [`SampleFrame`] — read
+// from `contracts/apps/photos/sample/manifest.json`, and `THUMB_EDGE` is a
+// named constant the caller checks them against.
 // ===========================================================================
 
 /// The grid's "known small" ceiling. **Not a resize target**: it is the edge at
@@ -1948,11 +1947,10 @@ pub fn owner_party_id(connection: &Connection) -> KitResult<Option<String>> {
 // ===========================================================================
 // THE DOCS DEMO SEED, AS A GENERATOR (#1020, D-1020-DC5).
 //
-// v0's `packages/blueprints/apps/docs/seed.js` is 82 lines and writes through
-// the real commands: two folders, three filed documents, a star, a label, and
-// one document with a SECOND version so the history walk has something to walk.
-// This is that scenario as a generator, and the two differences are the reason
-// it is a generator rather than a port of the script:
+// This generator reproduces v0's docs demo seed scenario: two folders, three
+// filed documents, a star, a label, and one document with a SECOND version so
+// the history walk has something to walk. The two differences from that
+// scenario are the reason it is a generator rather than a port of a script:
 //
 // * **it holds no bytes and no path.** A document's body arrives as a
 //   [`DemoDocument`] fact — a title, a folder and the markdown — so the sample

@@ -2,9 +2,9 @@
 //!
 //! Two engine-level questions, and deliberately only two:
 //! `PRAGMA integrity_check` for the pages, `PRAGMA foreign_key_check` for the
-//! keys. v0's `packages/vault/src/doctor.ts` asks a third — blob custody, the
-//! pointers no foreign key covers — and this crate does NOT, because v1 has no
-//! content-addressed store yet. Custody arrives with `crates/vault`'s CAS and
+//! keys. Blob custody — the pointers no foreign key covers — is a third
+//! question this crate does NOT ask, because v1 has no content-addressed store
+//! yet. Custody arrives with `crates/vault`'s CAS and
 //! this report gains a third section then; until it does, a clean report here
 //! is a claim about pages and keys and nothing more.
 

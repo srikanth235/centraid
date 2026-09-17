@@ -28,11 +28,10 @@
 //! It was registered with its real schema, idempotency and risk, and its
 //! handler refused every call with a sentence naming the missing seam: moving
 //! bytes needs a blob door on [`CommandCtx`], and `CommandCtx` had none. The
-//! port had carried v0's text-versus-binary split
-//! (`packages/vault/src/blob/mint.ts:88`-`:99`) without the store behind it,
-//! so a vault could hold a note and not a photograph. `FsBlobStore` existed
-//! the whole time, for the backup plane, and was simply not wired to a command
-//! context.
+//! text-versus-binary split — binary bytes spill to the store, text stays in
+//! the row — existed without the store behind it, so a vault could hold a
+//! note and not a photograph. `FsBlobStore` existed the whole time, for the
+//! backup plane, and was simply not wired to a command context.
 //!
 //! [`Vault::with_blobs`](crate::file::Vault::with_blobs) is that wiring and
 //! this command is real. What did NOT change is the rule the refusal was
@@ -61,8 +60,8 @@ const PURGE_AFTER_DAYS: i64 = 30;
 /// **An `https` URI, not a `urn:`, and that is not drift**: flag SQL fragments
 /// are interpolated into condition SQL, where `:flags` reads as a NAMED
 /// PARAMETER (#258, the colon-literal trap) and no parameter name can start
-/// with a slash (`packages/vault/src/commands/flags.ts:11-15`). The tags
-/// scheme, which is never interpolated, is `centraid:tags:v1`.
+/// with a slash. The tags scheme, which is never interpolated, is
+/// `centraid:tags:v1`.
 const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
 const STARRED_NOTATION: &str = "starred";
 
@@ -539,8 +538,7 @@ fn derive_missing() -> CommandDefinition {
 /// a gateway start; the next one continues.
 pub const DERIVE_SWEEP_LIMIT: usize = 200;
 
-/// v0's six gates, plus the one this build adds
-/// (`packages/vault/src/commands/media.ts:344`-`:395`).
+/// Six ported preconditions, plus the one this build adds for the blob door.
 const ADD_ASSET_PRE: &[CommandCondition] =
     &[
         CommandCondition {
@@ -613,8 +611,7 @@ fn sha_of_input(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(Some(crate::content::content_digest(&bytes)))
 }
 
-/// The `kind` bytes imply, when the caller does not say
-/// (`packages/vault/src/commands/media.ts:71`-`:76`).
+/// The `kind` bytes imply, when the caller does not say.
 fn asset_kind_for(media_type: &str) -> &'static str {
     if media_type.starts_with("video/") {
         "video"
@@ -659,7 +656,7 @@ fn is_coordinate_label(name: &str) -> bool {
 
 /// Find-or-create a place: a NAMED one within ~170m, else the rounded identity
 /// rung at ~11m, else a new coordinate-labelled row. The stored coordinates
-/// stay precise either way (`packages/vault/src/commands/media.ts:97`-`:147`).
+/// stay precise either way.
 fn find_or_create_place(ctx: &CommandCtx<'_, '_>, lat: f64, lng: f64) -> Result<String> {
     // The box is divided by cos(lat) so it stays roughly square as it moves
     // away from the equator — SQLite has no trigonometry, so the shaping
@@ -778,8 +775,8 @@ fn adopt_asset_for_content(
     Ok(Some(asset_id))
 }
 
-/// EXIF as this command stores it: everything the staging band read, minus the
-/// extracted text (`packages/vault/src/commands/media.ts:149`-`:155`).
+/// EXIF as this command stores it: everything the staging band read, minus
+/// the extracted text.
 ///
 /// The text is excluded because it belongs in the search index rather than in a
 /// JSON blob nothing queries, and because an OCR pass over a page of a passport
@@ -812,14 +809,14 @@ fn text_of(ctx: &CommandCtx<'_, '_>, meta: &serde_json::Value, key: &str) -> Opt
 }
 
 /// ONE PHOTOGRAPH ENTERS THE LIBRARY
-/// (`packages/vault/src/commands/media.ts:414`-`:549`).
 ///
-/// The order is v0's and each step depends on the one before it: the bytes are
-/// minted or claimed FIRST, because an asset is meaning over bytes and there is
-/// nothing to mean without them; the adopt check comes next, because
-/// `media_asset.content_id` is unique and a second wrapper over one sha is the
-/// same photograph; and the asset's own id is minted before anything hangs off
-/// it, which is what makes `produced_ids[0]` the asset for the postcondition.
+/// Each step depends on the one before it: the bytes are minted or claimed
+/// FIRST, because an asset is meaning over bytes and there is nothing to mean
+/// without them; the adopt check comes next, because
+/// `media_asset.content_id` is unique and a second wrapper over one sha is
+/// the same photograph; and the asset's own id is minted before anything
+/// hangs off it, which is what makes `produced_ids[0]` the asset for the
+/// postcondition.
 fn add_asset_handler(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let meta = staged_meta(ctx);
     let minted = minted_bytes(ctx)?;

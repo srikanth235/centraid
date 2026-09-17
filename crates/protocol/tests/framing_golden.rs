@@ -1,7 +1,6 @@
 //! `contracts/protocol/framing-golden.json` — the byte-level facts, as data.
 //!
-//! v0 has the same fixture for the same reason
-//! (`packages/tunnel/fixtures/wire-golden.json`): a framing rule stated only in
+//! A framing rule stated only in
 //! one language's source is a rule the other two implementations can disagree
 //! with, and the disagreement surfaces at a page boundary on a real network. So
 //! the frame bytes for named messages live in `contracts/`, where a Rust test,
@@ -148,6 +147,7 @@ fn vectors() -> Vec<(&'static str, &'static str, Vec<u8>)> {
                             seq: 2,
                         }),
                         limit: 1_000,
+                        tail: false,
                     })),
                 },
             )

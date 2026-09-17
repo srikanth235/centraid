@@ -1,10 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
-
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   EVIDENCE_SCHEMA_VERSION,
@@ -12,7 +6,6 @@ import {
   VERDICTS,
   validateEvidence,
 } from "./evidence-schema.mjs";
-import { readEvidenceDir } from "./read-evidence.mjs";
 import {
   buildEvidence,
   lookupPark,
@@ -198,35 +191,5 @@ describe("the writer CLI", () => {
     );
     expect(evidence.durationMs).toBe(300_000);
     expect(evidence.tags.qualities).toEqual(["correctness", "contracts"]);
-  });
-});
-
-describe("readEvidenceDir", () => {
-  it("reads valid files and reports malformed ones instead of dropping them", () => {
-    const dir = tempDirSync("centraid-evidence-");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      path.join(dir, "static.json"),
-      JSON.stringify(sample({ lane: "static", platform: "any", rung: 2 }))
-    );
-    writeFileSync(path.join(dir, "broken.json"), "{ not json");
-    writeFileSync(
-      path.join(dir, "wrong-name.json"),
-      JSON.stringify(sample({ lane: "static2" }))
-    );
-
-    const { lanes, errors } = readEvidenceDir(dir);
-    expect([...lanes.keys()]).toEqual(["static"]);
-    expect(errors).toHaveLength(2);
-    expect(errors.join("\n")).toMatch(/broken\.json/u);
-    expect(errors.join("\n")).toMatch(/should be named static2\.json/u);
-  });
-
-  it("treats an absent directory as no evidence, not as an error", () => {
-    const { lanes, errors } = readEvidenceDir(
-      path.join(tmpdir(), "centraid-no-such-dir-915")
-    );
-    expect(lanes.size).toBe(0);
-    expect(errors).toEqual([]);
   });
 });

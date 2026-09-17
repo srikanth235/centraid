@@ -58,10 +58,8 @@ pub struct WallClock {
 
 /// A CIVIL CLOCK VALUE — never an instant.
 ///
-/// v0's `WallTime` (`packages/core/src/time/timezone.ts:1`-`:9`). A rule
-/// expands in wall clock, so this is what identifies an occurrence, and
-/// re-anchoring a series must not orphan its exceptions
-/// (`packages/core/src/time/occurrence.ts:28`-`:32`).
+/// A rule expands in wall clock, so this is what identifies an occurrence,
+/// and re-anchoring a series must not orphan its exceptions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WallTime {
     pub year: i64,
@@ -290,12 +288,6 @@ pub const fn sunday_zero(weekday: Weekday) -> i8 {
         Weekday::Friday => 5,
         Weekday::Saturday => 6,
     }
-}
-
-/// Is `value` an IANA name this build knows?
-#[must_use]
-pub fn is_iana_time_zone(value: &str) -> bool {
-    FireZone::named(value).is_ok()
 }
 
 // ---------------------------------------------------------------------------

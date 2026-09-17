@@ -1,7 +1,7 @@
 //! The digest's value encoding, which is a JAVASCRIPT fact.
 //!
-//! v0 froze the golden corpus with `packages/vault/src/golden-snapshot.ts`,
-//! whose per-value contribution is
+//! The golden corpus was frozen by a JavaScript snapshotter whose per-value
+//! contribution is
 //!
 //! ```text
 //! value === null ? "\0null" : `${typeof value}:${String(value)}`

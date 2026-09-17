@@ -10,17 +10,8 @@ import java.io.File
  * AN ICON-ONLY CONTROL CARRIES A LABEL — on both native surfaces
  * (#1020, D-1020-E7; census §E seam 12).
  *
- * **This gate is net-new and it has no v0 ancestor to inherit.** v0 has two
- * source-scanning accessibility gates, `scripts/lint-aria-labels.mjs` and
- * `scripts/accessibility-contract.test.mjs`, and **both are web-shaped**:
- * neither reaches React Native, there is no `accessibilityLabel` lint over
- * `apps/mobile/src` at all, and `docs/platform-gating.md`'s design-enforcement
- * parity section is where that asymmetry was supposed to be argued. Claiming
- * parity by citing `lint-aria-labels.mjs` would be citing a web-only lint.
- *
- * So this is the mobile half, written from scratch and deliberately shaped like
- * its web sibling: an icon-only control must carry a description, and a
- * decorative glyph must say it is decorative.
+ * An icon-only control must carry a description, and a decorative glyph must
+ * say it is decorative.
  *
  * ## Why a regex and not Konsist
  *

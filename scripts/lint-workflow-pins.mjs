@@ -41,10 +41,9 @@
  *      input — but a SHA has no ref name to read, and the action then exits 1
  *      with "'toolchain' is a required input" before installing anything. This
  *      is rule (1) creating rule (7): pinning is right, and it silently turned
- *      two working steps into failing ones. `security.yml`'s rust job failed on
- *      `main` this way, and `lane-release-gateway-npm.yml` carried the same
- *      shape into a release-only lane where nobody would have seen it until a
- *      release.
+ *      two working steps into failing ones. A rust job failed on `main` this
+ *      way, and a release-only lane carried the same shape where nobody would
+ *      have seen it until a release.
  *
  *   6. `release.yml` is the ONLY workflow that may listen on `push: tags`. Same
  *      shape, different trigger: four workflows watched the release tags

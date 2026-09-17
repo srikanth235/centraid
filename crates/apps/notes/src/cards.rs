@@ -1,11 +1,11 @@
 //! REFERENCE CARDS — how a note renders the far end of a link it points at.
 //!
-//! Ported from `packages/vault/src/gateway/cards.ts` (#272). A `[[wikilink]]`
-//! compiles to a `core.link`, and the shelf has to draw the thing it points at:
-//! a person's name, an event's start, a document's title. **Resolvable-if-linked
-//! is the consent rule**: a LIVE link touching the ref authorises rendering the
-//! far end even when the caller has no read scope on that entity, and a ref with
-//! neither is `denied` per ref rather than a failed screen.
+//! A `[[wikilink]]` compiles to a `core.link` (#272), and the shelf has to
+//! draw the thing it points at: a person's name, an event's start, a
+//! document's title. **Resolvable-if-linked is the consent rule**: a LIVE
+//! link touching the ref authorises rendering the far end even when the
+//! caller has no read scope on that entity, and a ref with neither is
+//! `denied` per ref rather than a failed screen.
 //!
 //! ## Why the fold is here and the decision is not (#1020, D-1020-N9)
 //!

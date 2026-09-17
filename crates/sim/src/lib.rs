@@ -63,8 +63,6 @@ pub use world::{SimOutcome, run_schedule};
 
 /// How many seeds a `pr`-profile run covers.
 pub const DEFAULT_SEEDS: u64 = 25;
-/// How many a `nightly` run covers.
-pub const NIGHTLY_SEEDS: u64 = 250;
 
 /// The seed count for this run: `SIM_SEEDS`, or [`DEFAULT_SEEDS`].
 #[must_use]

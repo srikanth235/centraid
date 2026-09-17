@@ -1,7 +1,6 @@
 //! THE PROMOTION RULE, as a pure fold (#1020, D-1020-S5).
 //!
-//! `packages/blueprints/apps/tasks/when.ts:109`-`:164`, and the sentence that
-//! is the whole of it: *an unfinished child of a completed or released parent
+//! The rule, in full: *an unfinished child of a completed or released parent
 //! is a root of its own — completing the parent must not hide remaining work.*
 //!
 //! Three cases, and the third is the one a port gets wrong:

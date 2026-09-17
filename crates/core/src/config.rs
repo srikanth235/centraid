@@ -225,13 +225,6 @@ impl CoreConfig {
         }
     }
 
-    /// Name the shell's UI thread, so `call` can assert it is not on it.
-    #[must_use]
-    pub fn with_ui_thread(mut self, name: impl Into<String>) -> Self {
-        self.ui_thread_name = Some(name.into());
-        self
-    }
-
     /// Give this core the enrolment the shell kept for this vault.
     ///
     /// The identity, the address and the relay decision all ride on it, because

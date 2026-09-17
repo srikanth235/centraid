@@ -1,10 +1,9 @@
 //! TOTP — RFC 6238, split so the hash is not in an app crate (D-1020-L6).
 //!
 //! v0 computes this twice: once in the vault command `locker.totp_code`
-//! (`createHmac("sha1", …)`, `packages/vault/src/commands/locker.ts`) and once
-//! in the app for the live countdown (`crypto.subtle`,
-//! `packages/blueprints/apps/locker/totp.ts`). Both unseal the seed and emit
-//! six digits; neither logs the seed or the code.
+//! (`createHmac("sha1", …)`) and once in the app for the live countdown
+//! (`crypto.subtle`). Both unseal the seed and emit six digits; neither logs
+//! the seed or the code.
 //!
 //! After wave 4 the gateway cannot unseal, so the command's half moves to the
 //! seat. What stays here is everything about RFC 6238 **except the HMAC**:

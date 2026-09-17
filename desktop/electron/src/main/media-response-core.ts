@@ -9,9 +9,8 @@
  * the authorisation, because only this window's main process can answer it —
  * and the whole class of "did the injector match this URL" bugs disappears.
  *
- * The **representation** rules are ported verbatim from the gateway's
- * `packages/server/src/routes/blob-read-route.ts`, because they are security
- * decisions about attacker-authored bytes and not transport plumbing:
+ * The **representation** rules below are security decisions about
+ * attacker-authored bytes, not transport plumbing:
  * `Accept-Ranges`, the immutable private cache policy, `nosniff`, the `sandbox`
  * CSP, and the three media types that are never inline (issue #865).
  *

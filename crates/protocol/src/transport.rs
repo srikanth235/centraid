@@ -5,9 +5,7 @@
 //! traits below, `crates/net` implements them over iroh 1.x, and lane D2's
 //! `turmoil` simulation implements them over turmoil's streams. Deterministic
 //! simulation is #1020's primary sync proof, and a protocol that named iroh
-//! could not be simulated — it would need a real network to be tested at all,
-//! which is exactly the position v0 was in across Bun, Hermes and a browser
-//! worker.
+//! could not be simulated — it would need a real network to be tested at all.
 //!
 //! The traits use `impl Future` in return position rather than `async fn` in a
 //! `dyn`-compatible shape, because nothing here needs a trait object: the seat,

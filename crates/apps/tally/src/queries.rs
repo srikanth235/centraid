@@ -1,9 +1,8 @@
 //! `loadTally` — THE ONE READ, ported statement for statement.
 //!
-//! From `packages/blueprints/apps/tally/queries/dashboard.ts:191`. Its doctrine
-//! at `:45-51` is the reason every window here is stated and every walk errors
-//! at its ceiling: **a balance derived from a silently short ledger is a WRONG
-//! NUMBER — not a slow screen.**
+//! Its doctrine is the reason every window here is stated and every walk
+//! errors at its ceiling: **a balance derived from a silently short ledger
+//! is a WRONG NUMBER — not a slow screen.**
 //!
 //! Fourteen statements that do not depend on each other, then three that do
 //! (the parties an id list names, the receipt contents, their
@@ -178,9 +177,8 @@ impl TallyData {
     ///
     /// **Only live expenses.** A trashed expense keeps its splits — the sweep
     /// cascades them at purge — and the fold ignores them once the row leaves
-    /// the `deleted_at IS NULL` window (`packages/vault/src/commands/tally.ts`'s
-    /// `delete_expense` note). Folding a trashed expense is how a cancelled
-    /// order stays on a balance.
+    /// the `deleted_at IS NULL` window (`delete_expense`'s own note). Folding
+    /// a trashed expense is how a cancelled order stays on a balance.
     pub fn balance_data(&self) -> BalanceData {
         BalanceData {
             members_by_group: self.members_by_group.clone(),
@@ -482,7 +480,7 @@ pub fn recurring_statement() -> PageQuery {
 /// with `recurrence_semantics`, and **the spelling is the trap**: three readers
 /// spelled it `original_start` and one spelled the zone `time_zone`, so each
 /// read nothing and a skipped occurrence silently came back on three surfaces
-/// (`packages/core/src/time/occurrence.ts:1-16`; #1020 apps seam 8).
+/// (#1020 apps seam 8).
 pub fn recurring_exceptions_statement() -> PageQuery {
     query(
         "tally.dashboard.recurringExceptions",

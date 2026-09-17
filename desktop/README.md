@@ -1,6 +1,6 @@
 # `desktop/` — the Centraid desktop seat
 
-One Electron window, one `centraid seat` child process, one local socket between them. Part of the v1 platform ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3, lane F); the v0 desktop under `apps/desktop/` is the pinned oracle this was ported from and is not edited.
+One Electron window, one `centraid seat` child process, one local socket between them ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 ```
 desktop/
@@ -22,7 +22,7 @@ desktop/
 
 The shell picks with `CENTRAID_SEAT_THIN=1`. What differs between them is not the API but the **four states** below, and the shell draws those.
 
-> The thin _forwarding_ itself is `crates/core`'s (`Role::Seat { kind: Thin }` answers `Unavailable` for anything the local file cannot serve until the gateway is dialled, which is wave 4's lane). This tree chooses the role and reports the state honestly rather than claiming a forward that does not happen yet.
+> The thin _forwarding_ itself is `crates/core`'s (`Role::Seat { kind: Thin }` answers `Unavailable` for anything the local file cannot serve, because a thin seat does not dial the gateway yet). This tree chooses the role and reports the state honestly rather than claiming a forward that does not happen yet.
 
 ## The four states
 
@@ -40,13 +40,13 @@ Two things about that table are deliberate:
 - **`unconfigured` is not `offline`.** On first run the member has not chosen a gateway; telling them they are offline sends them looking for a network problem they do not have.
 - **`unavailable` is not an empty list.** A thin seat that has lost its gateway knows _nothing_ about what the vault holds, so the screen says so with a reason. Every list here has three states — starting, nothing-to-show, rows — and `readState` is the only thing that decides which, so there is no `empty` branch to fall into.
 
-v0 broadcast **connectivity only**, from a 5 s health poll in main. Durability and pending work have no v0 broadcast to extend, and they do not get a poll either: they are facts the core already tells us, and a poll would be a third source of truth for something the writer already said.
+None of the four comes from a poll in main: they are facts the core already tells us, and a poll would be a third source of truth for something the writer already said.
 
 ## The socket contract
 
-`<userData>/seat.sock` — a Unix domain socket, **mode 0600 in a 0700 directory**, with a **peer-uid check on every accepted connection** ([R-1020-26](../docs/decisions.md)). On Windows the door is a named pipe with a DACL for the current user, and that is an **owner hand-off**: there is no Windows machine in this lane, and `centraid seat --socket` refuses to run there rather than opening an unprotected pipe.
+`<userData>/seat.sock` — a Unix domain socket, **mode 0600 in a 0700 directory**, with a **peer-uid check on every accepted connection** ([R-1020-26](../docs/decisions.md)). On Windows the door is a named pipe with a DACL for the current user, and that is an **owner hand-off**: no Windows run has been made, and `centraid seat --socket` refuses to run there rather than opening an unprotected pipe.
 
-**There is no bearer token.** v0's renderer carried one, which is why `SETTINGS_GET` had to strip it and `GATEWAY_AUTH_GET` had to be its single crossing. Here the socket _is_ the credential and main holds it, so the renderer is handed no credential at all and that rule cannot be broken.
+**There is no bearer token.** The socket _is_ the credential and main holds it, so the renderer is handed no credential at all — there is nothing for a settings read to strip and no single crossing to guard.
 
 ### Frames
 
@@ -87,12 +87,12 @@ A socket path that already exists may be **live and somebody else's**. It is pro
 
 ## What quit does
 
-**Quit stops the seat.** v0 deliberately leaves a detached gateway running, because a gateway is a daemon with other clients; a seat process whose only client is this window is _owned_. The sequence is a list, and the order is the content:
+**Quit stops the seat.** A gateway is a daemon with other clients and is left running; a seat process whose only client is this window is _owned_. The sequence is a list, and the order is the content:
 
 1. **dispose** the supervisor — first, so a mid-teardown auto retry cannot resurrect a closing seat.
 2. the protocol's **terminal command**, so the seat closes the core deliberately.
 3. **await** the seat's `closing`. This is where the vault's last write lands; signalling first would be the process-death case on purpose instead of by accident.
-4. `SIGTERM` → 5 s → `SIGKILL` — v0's escalation, unchanged. A bare pid, not a process group: this child is not `detached`, so `-pid` would signal the shell's own group.
+4. `SIGTERM` → 5 s → `SIGKILL`. A bare pid, not a process group: this child is not `detached`, so `-pid` would signal the shell's own group.
 5. **await the exit**, before anything reuses the socket path.
 6. **unlink** the socket, last.
 
@@ -100,7 +100,7 @@ A socket path that already exists may be **live and somebody else's**. It is pro
 
 ## `centraid://` — the media door
 
-`centraid://blob/<sha256>` , answered by `protocol.handle` in main out of the seat's blob store. Local-only and in-process: there is no loopback port and nothing on the network, which is what replaces v0's `webRequest` `Authorization` injector — a subresource load needs no header when the scheme itself is only answerable inside this window.
+`centraid://blob/<sha256>` , answered by `protocol.handle` in main out of the seat's blob store. Local-only and in-process: there is no loopback port and nothing on the network, and no `Authorization` header to inject — a subresource load needs no header when the scheme itself is only answerable inside this window.
 
 - `Accept-Ranges: bytes`, `206` with `Content-Range`, `ETag` = the blob digest.
 - `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, and `text/html`, `application/xhtml+xml` and `image/svg+xml` are **never inline**: blob bytes may be attacker-authored.
@@ -132,11 +132,11 @@ cargo xtask gate --profile pr        # `desktop-unit`
 cargo xtask gate --profile nightly   # `desktop-e2e`
 ```
 
-`desktop/**` is deliberately **not** a member of the bun workspace or of the repository-wide vitest project list: that list drives the v0 coverage run scored against `tests/floors.json`, and adding a new tree to it would move coverage numbers for reasons that have nothing to do with the v0 oracle it measures. The v1 gate entrypoint is `cargo xtask gate`, which runs both suites by name.
+`desktop/electron` is a bun workspace member, but `desktop/**` is deliberately **not** in the repository-wide vitest project list (`vitest.config.ts`): that list drives the coverage run scored against `tests/floors.json`, and the Electron seat's cores carry no floor there. `cargo xtask gate` runs both desktop suites by name.
 
 ## Owner hand-offs
 
 - **macOS and Windows runs.** Everything above is proven on Linux under Xvfb. The commands are the ones in _Running it_; on Windows `centraid seat --socket` exits 3 with the named-pipe hand-off until its DACL door is written and observed to refuse somebody.
 - **Signing and notarisation** stay enrolment-gated (`.github/workflows/lane-release-desktop.yml`, `docs/enrollment.md`), and the updater's trusted-key set stays **empty** — so every packaged update refuses with `no-trust-anchor`, which is the fail-closed state and not a gap.
 - **The browser host manifest** is written by `centraid native-host install --browser chrome|firefox --extension-id <id> --out <path>` and **copied by a person** into the directory the browser reads. A file that appeared under a browser's configuration because something was unpacked is a capability nobody chose to grant.
-- **Mounting the v0 app UIs.** `packages/blueprints/apps/{tally,photos}/ app-inline` take v0's `@centraid/client` context — a gateway HTTP client, an SSE change feed, a design-token provider — so mounting them is adapting that context rather than a data source. This tree ships the screens over the same named reads; the parity claim is kept by `desktop/renderer/src/apps/tally/fold.test.ts`, which compares this dashboard's fold against `contracts/apps/tally/queries.json` case 0 field by field.
+- **The other app screens.** The renderer ships Tally's dashboard over the named reads (`desktop/renderer/src/apps/tally`); no other app has a desktop screen here yet. The parity claim is kept by `desktop/renderer/src/apps/tally/fold.test.ts`, which compares the Tally dashboard's fold against `contracts/apps/tally/queries.json` case 0 field by field.

@@ -4,10 +4,8 @@
 //! as an owner hand-off "for whichever lane ports the second caller", because
 //! `crates/apps/kit` was another lane's file that slot (census §Cross-lane).
 //! Docs is that second caller (#1020 wave 4 slot 4b), so the fold now lives in
-//! [`centraid_apps_kit::representations`] — where v0 keeps its own copy
-//! (`packages/blueprints/apps/_shared/representation-reads.ts`) — and this
-//! module is what is left: the owner type Photos keys on, and a fold narrowed
-//! to it.
+//! [`centraid_apps_kit::representations`], and this module is what is left:
+//! the owner type Photos keys on, and a fold narrowed to it.
 //!
 //! Nothing this module exported changed name or meaning. What the lift ADDED is
 //! the content index the kit now carries: Photos never needed it, and Docs'

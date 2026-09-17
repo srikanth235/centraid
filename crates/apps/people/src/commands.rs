@@ -1,8 +1,7 @@
 //! THE TWENTY-NINE ACTIONS, as command invocations.
 //!
 //! Every People action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app
-//! (`packages/blueprints/apps/_shared/action-kit.ts`). So this module is a
+//! projection lives in the command, not the app. So this module is a
 //! table, not logic. Twenty-nine actions over twenty-nine commands —
 //! **twenty-eight `people.*` and one `core.merge_party`** — which is the
 //! largest action surface in the tree and the reason the census calls People
@@ -25,15 +24,14 @@
 //! `{…, "delete_contact_channel"}` and `{…, "undo_contact_channel"}` as its
 //! three narrow `act` scopes. **No such commands exist.** The `social` schema's
 //! four commands are `resolve_identity`, `draft_message`, `send_message` and
-//! `mark_thread_read` (`packages/vault/src/commands/social.ts`); the three
-//! contact-channel commands are `people.save_contact_channel`,
-//! `people.delete_contact_channel` and `people.undo_contact_channel`
-//! (`packages/vault/src/commands/people-organize.ts:49`, `:175`, `:251`). The
-//! three actions work today only because `{schema: "people", verbs:
-//! "read+act"}` covers the whole schema, so the narrow scopes are never
-//! consulted. [`act_scope_schemas`] is derived from this table rather than
-//! transcribed, and `the_three_social_act_scopes_name_no_social_command`
-//! is the red that states it.
+//! `mark_thread_read`; the three contact-channel commands are
+//! `people.save_contact_channel`, `people.delete_contact_channel` and
+//! `people.undo_contact_channel`. The three actions work today only because
+//! `{schema: "people", verbs: "read+act"}` covers the whole schema, so the
+//! narrow scopes are never consulted. [`act_scope_schemas`] is derived from
+//! this table rather than transcribed, and
+//! `the_three_social_act_scopes_name_no_social_command` is the red that
+//! states it.
 //!
 //! ### Two gates, never one (census §A0)
 //!
@@ -54,14 +52,11 @@
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
 //!
 //! **`online_only` is empty for People, and that is a checked claim.** Locker
-//! declares `ONLINE_ONLY_ACTIONS` in
-//! `packages/blueprints/apps/locker/writes.ts`; `grep -rn ONLINE_ONLY
-//! packages/blueprints/apps/people` finds none, and `people/writes.ts` is the
-//! shell's write door rather than a policy list. So every People action may be
-//! queued offline — including `merge-people`, which is worth stating: the merge
-//! is irreversible, and it is still durable in the outbox rather than refused,
-//! because a member on a plane who has just noticed two cards for their
-//! grandfather is not doing anything the vault should lose.
+//! declares `ONLINE_ONLY_ACTIONS`; People declares none. So every People
+//! action may be queued offline — including `merge-people`, which is worth
+//! stating: the merge is irreversible, and it is still durable in the outbox
+//! rather than refused, because a member on a plane who has just noticed two
+//! cards for their grandfather is not doing anything the vault should lose.
 
 use std::collections::BTreeMap;
 

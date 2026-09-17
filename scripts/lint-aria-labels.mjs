@@ -26,7 +26,7 @@ import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-const TARGETS = ["packages/client/src/react", "packages/design/src/elements"];
+const TARGETS = ["packages/design/src/elements"];
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 const EXTENSIONS = /\.(?:tsx|ts|jsx|js|html)$/u;
 // Test files exercise both correct and deliberately-wrong markup as fixtures;
@@ -37,18 +37,8 @@ const SKIP_FILE = /\.test\.[jt]sx?$/u;
 // convention this follows). Add an entry only with a comment explaining why
 // it is legitimate rather than a bug, and only in a file this gate's owner
 // (packages/design) does not also own outright.
-// 2026-08-03 — packages/client/src/react/screens/BuilderChatMessages.tsx:77.
-// The change-summary card button's visible content is a multi-part layout
-// (icon + title + subtitle + version), and its `aria-label` intentionally
-// gives a SHORTER, cleaner accessible name ("N files updated — toggle
-// details") than reading all four spans literally would produce, appending
-// the control's action ("toggle details") that no visible span states. That
-// is a legitimate custom accessible name for a rich/composite control, not a
-// duplicate-label bug — shrink this list if the card's content is
-// simplified enough that the visible text alone can serve as the name.
-const ALLOWLIST = new Set([
-  "packages/client/src/react/screens/BuilderChatMessages.tsx",
-]);
+// Currently empty.
+const ALLOWLIST = new Set();
 
 // Rule 1 (aria-label only on icon-only CONTROLS) is scoped to elements that
 // are actually controls in the accessibility-tree sense — button, link,

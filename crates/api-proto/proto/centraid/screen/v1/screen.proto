@@ -34,8 +34,7 @@
 //    are different screens".
 // 2. **A band destination is a parameter, not a screen.** `PhotosGridState`
 //    carries a destination; there is no second message per destination. And
-//    `more` is a sheet, never a destination
-//    (`apps/mobile/src/navigation.ts:19-24`).
+//    `more` is a sheet, never a destination.
 // 3. **A discriminated union, not a bag of optionals.** A photo state view is a
 //    oneof, not `{mode, party_id?, person_name?}` (`navigation.ts:43-46`).
 // 4. **An OS permission is a state, not a route.** "No `PhotoPermission` route
@@ -375,8 +374,8 @@ message PhotoCell {
   int32 captured_utc_offset_minutes = 4;
   Kind kind = 5;
   bool favorite = 6;
-  // A Live Photo's still and its paired movie share one capture group; the grid
-  // shows one cell (`apps/mobile/NATIVE_V0.md:11-19`).
+  // A Live Photo's still and its paired movie share one capture group; the
+  // grid shows one cell.
   optional string capture_group_id = 7;
   // WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH (#1025 S5, D-1025-S7-62).
   //
@@ -719,12 +718,11 @@ message NotesEditorEvent {
 
 // HOW MUCH THIS APP HAS TO SAY, and how sure we are (#1020, wave A).
 //
-// FOUR states, not three, and the fourth is the point. v0's own words
-// (`apps/mobile/src/screens/home/tile-model.ts`): "empty != not-loaded". A
-// tile that read nothing because this seat has no copy yet is `UNKNOWN`, and
-// only a tile whose read LANDED and returned nothing is `EMPTY`. Collapsing
-// them is how a springboard tells a member their vault is empty when the truth
-// is that it has not looked.
+// FOUR states, not three, and the fourth is the point. v0's own words:
+// "empty != not-loaded". A tile that read nothing because this seat has no
+// copy yet is `UNKNOWN`, and only a tile whose read LANDED and returned
+// nothing is `EMPTY`. Collapsing them is how a springboard tells a member
+// their vault is empty when the truth is that it has not looked.
 enum TileStatus {
   TILE_STATUS_UNSPECIFIED = 0;
   TILE_STATUS_LOADING = 1;

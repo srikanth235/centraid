@@ -10,10 +10,7 @@ import XCTest
 /// `mobile/shared/src/jvmTest/.../ScreenFixtureSpec.kt` decodes
 /// `contracts/screens/**.bin` with Wire and asserts the screen laws. **This
 /// file decodes the same bytes with SwiftProtobuf and asserts the same laws**,
-/// which is the pattern v0 already uses for its tunnel wire format
-/// (`apps/mobile/modules/centraid-tunnel/.../TunnelWireConformanceTest.kt` and
-/// `ios/Tests/TunnelWireConformanceTests.swift` over one golden file) and the
-/// reason is the same: a fixture each is two fixtures.
+/// because a fixture each is two fixtures.
 ///
 /// ## THIS TEST HAS NEVER RUN
 ///

@@ -227,9 +227,9 @@ fn the_catalogue_is_v0s_twenty_plus_the_two_custody_adds() {
 /// `confirm` on a definition parks a NON-OWNER invocation regardless of risk.
 /// v0 carries it on exactly two of the twenty, and the census's own tally says
 /// three — which is this lane's finding: the third
-/// (`locker.import_secret`/`locker.rogue_probe`) exists only in
-/// `packages/vault/src/gateway/sealed.test.ts` as a test fixture and is not a
-/// product command. `locker.rotate_key` is the wave-4 third.
+/// (`locker.import_secret`/`locker.rogue_probe`) existed only as a test
+/// fixture and was never a product command. `locker.rotate_key` is the
+/// wave-4 third.
 #[test]
 fn exactly_two_of_v0s_twenty_park_a_non_owner_and_rotate_key_is_the_third() {
     let definitions = centraid_vault::commands::locker::definitions();

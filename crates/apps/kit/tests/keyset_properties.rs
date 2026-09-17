@@ -1,12 +1,11 @@
 //! THE PROPERTY THE KEYSET EXISTS FOR: a walk repeats nothing and drops
 //! nothing, whatever the window and whatever the ties.
 //!
-//! v0 states the failure this guards in prose and pins it with examples
-//! (`packages/core/src/page/window.ts:20-24`): two rows can share a sort key,
-//! and keyed on the sort key alone a page boundary that falls between them
-//! either repeats one or drops one, **depending on which way the comparison is
-//! written, and both are silent**. An example test finds that only when the
-//! boundary happens to land there; a property test lands it on purpose.
+//! The failure this guards: two rows can share a sort key, and keyed on the
+//! sort key alone a page boundary that falls between them either repeats one
+//! or drops one, **depending on which way the comparison is written, and both
+//! are silent**. An example test finds that only when the boundary happens to
+//! land there; a property test lands it on purpose.
 //!
 //! Three shapes the generators make sure to produce, because each one broke
 //! something in v0:

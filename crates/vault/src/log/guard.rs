@@ -61,20 +61,6 @@ impl<'conn> CommitTx<'_, 'conn> {
     pub fn set_producer(&self, producer: impl Into<String>) {
         *self.producer.borrow_mut() = producer.into();
     }
-
-    /// Start watching a table this commit planted with DDL.
-    ///
-    /// Additive: the existing sessions keep everything they have recorded.
-    /// Without this an ext band's first rows would never replicate, because
-    /// the table did not exist when the sessions opened.
-    pub fn watch_table(&self, table: &str) -> Result<()> {
-        match self.capture {
-            Some(capture) => capture.borrow_mut().watch(self.connection, table),
-            // A nested commit shares the outer pair's sessions; the outer
-            // guard is where a new table is attached.
-            None => Ok(()),
-        }
-    }
 }
 
 /// A row this commit produced, with the version it landed at.

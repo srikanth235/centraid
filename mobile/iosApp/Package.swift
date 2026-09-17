@@ -20,8 +20,7 @@
 //      command rather than an Xcode scheme.
 //
 // THE DEPLOYMENT FLOOR IS READ FROM ONE FILE. `mobile/ios-deployment-target`
-// holds `17.5` — v0's own number (`apps/mobile/app.config.ts:63`), not this
-// lane's judgement. SPM's manifest cannot read a file at manifest time, so the
+// holds `17.5`, the shipped floor. SPM's manifest cannot read a file at manifest time, so the
 // literal below is checked against it by `mobile/README.md`'s hand-off command
 // and by the XcodeGen project, which CAN read it.
 

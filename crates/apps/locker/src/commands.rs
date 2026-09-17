@@ -2,22 +2,20 @@
 //! queue.
 //!
 //! Every Locker action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app
-//! (`packages/blueprints/apps/_shared/action-kit.ts`). So this module is a
+//! projection lives in the command, not the app. So this module is a
 //! table, not logic.
 //!
 //! ## `online_only` is exactly v0's five, and the list is the point
 //!
 //! `ONLINE_ONLY_ACTIONS = [add-item, edit-item, set-field, set-passkey,
-//! export]` (`packages/blueprints/apps/locker/writes.ts:33`-`:39`), and the
-//! rule the file exists to make structural is: **creating or editing a secret
-//! is online only**, because a secret value must never enter the durable
-//! offline queue. Two halves of that, stated where v0 states them:
+//! export]`, and the rule the file exists to make structural is: **creating
+//! or editing a secret is online only**, because a secret value must never
+//! enter the durable offline queue. Two halves of that:
 //!
 //! - `add-item`, `edit-item`, `set-field` and `set-passkey` carry a sealed
 //!   value in the payload. The flag is set **at the point the payload is
-//!   built**, not at the call site (`writes.ts`'s own comment), which is why it
-//!   is a property of the action table here rather than of a caller.
+//!   built**, not at the call site, which is why it is a property of the
+//!   action table here rather than of a caller.
 //! - `export` carries **nothing into** the vault and its *result* is every
 //!   secret the locker holds. A mass reveal is the one thing that must never be
 //!   queued for later, replayed, or answered from a device's durable store, so

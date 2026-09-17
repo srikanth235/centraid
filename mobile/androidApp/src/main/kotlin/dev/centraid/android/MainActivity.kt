@@ -56,8 +56,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * The composition root, and the only file allowed to name screens from every
- * app (#1020; v0's `apps/mobile/navigators.tsx:1-6` rule, enforced there by
- * `scripts/check-import-boundaries.ts`).
+ * app (#1020).
  *
  * ONE ROOT STACK, NO BOTTOM TABS — apps are covers over Home.
  */

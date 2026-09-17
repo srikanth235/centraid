@@ -3,11 +3,11 @@
  * D2 publish half — only after maintainer authorization (docs/release.md D1).
  *
  *   node scripts/release/publish.mjs --version 0.2.1 --issue 501 \
- *     [--surfaces desktop,gateway-image,gateway-npm] [--dry-run] [--beta] [--push]
+ *     [--surfaces desktop,gateway-image] [--dry-run] [--beta] [--push]
  *
  * - Requires --issue N (governance commit suffix; refuse #0)
- * - Bumps the monorepo version via sync-versions.mjs (every workspace package;
- *   the mobile native numbers derive from it at prebuild, app.config.ts)
+ * - Bumps the monorepo version via sync-versions.mjs (every workspace package
+ *   that tracked it; the store build number is derived, never written)
  * - Records ship surface set (does not invent surface-local versions)
  * - Moves CHANGELOG Unreleased into the versioned section
  * - Creates annotated tag vX.Y.Z (or vX.Y.Z-beta.N with --beta)
@@ -83,7 +83,7 @@ if (continuousOnly && resolvedShip.length > 0) {
   );
   if (allContinuous) {
     console.error(
-      "refusing publish that only lists continuous surfaces (web/docs/oauth-worker) — deploy from main, not v* tags"
+      "refusing publish that only lists continuous surfaces (oauth-worker) — deploy from main, not v* tags"
     );
     process.exit(2);
   }
@@ -158,7 +158,7 @@ if (dryRun) {
         bodyPath,
         bodyPreview: body.slice(0, 200),
         mobileHint: resolvedShip.includes("mobile")
-          ? "gh workflow run release-mobile.yml -f profile=preview -f platform=all -f submit=false"
+          ? "gh workflow run release.yml -f surfaces=mobile -f mobile_profile=preview -f mobile_platform=all -f mobile_submit=false"
           : undefined,
       },
       null,
@@ -170,7 +170,7 @@ if (dryRun) {
 
 const commitMsg = `chore(release): ${version} (#${issue})`;
 execSync(
-  "git add package.json packages/*/package.json apps/*/package.json CHANGELOG.md",
+  "git add package.json packages/*/package.json desktop/electron/package.json extension/package.json CHANGELOG.md",
   { cwd: root, stdio: "inherit", shell: true }
 );
 execSync(`git commit -m ${JSON.stringify(commitMsg)}`, {
@@ -194,7 +194,7 @@ if (doPush) {
 if (resolvedShip.includes("mobile")) {
   console.error(
     "mobile is in the ship set — after tag push, dispatch:\n" +
-      "  gh workflow run release-mobile.yml -f profile=preview -f platform=all -f submit=false"
+      "  gh workflow run release.yml -f surfaces=mobile -f mobile_profile=preview -f mobile_platform=all -f mobile_submit=false"
   );
 }
 

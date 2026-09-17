@@ -30,7 +30,6 @@ clap.workspace = true
 flate2.workspace = true
 prost.workspace = true
 serde = { workspace = true }
-blake3.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
 # `net` for the seat's Unix socket (and `UnixStream::peer_cred`, which is what

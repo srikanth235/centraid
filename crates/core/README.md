@@ -1,6 +1,6 @@
 # `centraid-core`
 
-The message loop: one handle, four entry points, three roles ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 2, lane D2).
+The message loop: one handle, four entry points, three roles ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 Everything a shell can ask for goes through `call` and everything the core volunteers comes back through `next_event`. There is no third surface, and that is the point: a shell that could reach the vault directly would be a second gateway.
 
@@ -33,15 +33,15 @@ A stall that happens with the queue full of change events is **reported late**, 
 
 All three expose the same `Request` surface, which is what makes "gateway anywhere" a deployment choice rather than a fork.
 
-## The `VaultApi` v1 twin
+## The `VaultApi` verbs
 
 `api.rs` holds eight verbs and the honest state of each. A stub is a **typed refusal**, never an empty answer: an empty page reads as "no data" and the truth is "this build cannot answer yet".
 
-`page` `invoke` `describe` `parked` are live. `search` and `resolve` land in wave 4; `content` in wave 3. `reveal` is **online-only, always** — a mass reveal must never be queued, replayed or answered from a durable store.
+`page` `invoke` `describe` `parked` are live. `search`, `resolve` and `content` are typed `NotYetAvailable` refusals in this module (content addresses are minted by `content_urls` instead). `reveal` is **online-only, always** — a mass reveal must never be queued, replayed or answered from a durable store.
 
-## One mutex over the vault, in wave 2 (D-1020-D2-9)
+## One mutex over the vault (D-1020-D2-9)
 
-`Vault` keeps its commit-guard depth in a `Cell` and is therefore `!Sync`. Real concurrent reads need a pool of read connections, which needs `PRAGMA` statements, which is SQL — and `sql-confinement` confines SQL to five crates this is not one of. So wave 2 serialises every call through one mutex, and the reader pool is an owner hand-off to `crates/vault`. See `handle.rs`'s module docs for the three options and what option 3 costs.
+`Vault` keeps its commit-guard depth in a `Cell` and is therefore `!Sync`. Real concurrent reads need a pool of read connections, which needs `PRAGMA` statements, which is SQL — and `sql-confinement` confines SQL to five crates this is not one of. So every call is serialised through one mutex, and the reader pool is an owner hand-off to `crates/vault`. See `handle.rs`'s module docs for the three options and what option 3 costs.
 
 ## The `call` budget
 

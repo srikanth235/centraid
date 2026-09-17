@@ -1,8 +1,7 @@
 //! ORIGIN MATCHING — one policy, now three implementations and one spec.
 //!
-//! `apps/extension/src/origin-matching.ts` (the Companion's) and
-//! `packages/blueprints/apps/locker/queries/origin-matching.ts` (the app's)
-//! are two implementations of one policy with one committed spec between them,
+//! The Companion's origin matching and the app's own v0 implementation were
+//! two implementations of one policy with one committed spec between them,
 //! and this is the third. The spec is promoted to
 //! `contracts/origin-matching-v1.json` **byte-identical** (census §Cross-lane),
 //! and [`tests`] runs all of its vectors here while
@@ -266,7 +265,7 @@ mod tests {
 
     // DELETED WITH ITS SECOND COPY (#1025 S4).
     // `the_promoted_spec_is_byte_identical_to_the_extensions` compared
-    // `contracts/origin-matching-v1.json` against `apps/extension/spec/` —
+    // `contracts/origin-matching-v1.json` against the Companion's copy —
     // "a fixture nobody may edit is a fixture whose two copies must be one
     // file's worth of bytes". There is one copy now: `chore(retire): delete the
     // v0 tree` removed the other, and the promotion under `contracts/` is the

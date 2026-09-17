@@ -30,9 +30,8 @@
 //!
 //! ## What this port does NOT do, and refuses rather than fakes (D-1020-T3b)
 //!
-//! Three commands read v0's civil-time plane — `expandRecurrence` over a
-//! series' own zone (`packages/core/src/time/`, 1,400 lines with a timezone
-//! database behind it):
+//! Three commands read the civil-time plane — `expandRecurrence` over a
+//! series' own zone (1,400 lines with a timezone database behind it):
 //!
 //! | Command | What it needs | What happens here |
 //! |---|---|---|
@@ -2817,7 +2816,7 @@ fn recurrence_plane_missing(command: &str) -> VaultError {
 }
 
 /// `describeRecurrence`, ported: the one part of the recurrence plane with no
-/// zone and no expansion in it (`packages/core/src/time/recurrence-summary.ts`).
+/// zone and no expansion in it.
 ///
 /// It is what `save_recurring_expense` REFUSES on: a rule the summariser cannot
 /// phrase is a rule the product does not support, and accepting it would store

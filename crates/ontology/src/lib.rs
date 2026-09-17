@@ -4,10 +4,8 @@
 //! ([#1020](https://github.com/srikanth235/centraid/issues/1020)) and it is
 //! deliberately narrow. It can OPEN a vault, describe its shape, reproduce v0's
 //! golden-corpus digests, and answer two engine-level soundness questions. It
-//! cannot yet migrate one, emit its DDL, or run the ladder — the v0 registries
-//! under `packages/vault/src/schema` remain the source of the model until wave
-//! 6, and this crate reaches them through the transcribed fixture in
-//! `contracts/schema/v0-registries.json`.
+//! cannot migrate one or run the ladder; it reaches the registries through the
+//! transcribed fixture in `contracts/schema/v0-registries.json`.
 //!
 //! Wave 1's checkpoint is one sentence: **the ontology crate opens the v0
 //! golden vault**, and `tests/golden_vault.rs` is that sentence as a test.

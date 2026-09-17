@@ -370,10 +370,9 @@ fn the_four_queries_answer_what_v0_answered() {
                 // owner included: the gateway's paged door serves only tables
                 // registered as ENTITIES, and `access_provenance` declares no
                 // `FOREIGN KEY (prov_id) REFERENCES core_entity(entity_id)`, so
-                // the plan is refused at
-                // `packages/vault/src/gateway/paged-door.ts:436` before any
-                // access decision is taken. Docs' activity rail has therefore
-                // never shown an event on any surface.
+                // the plan is refused before any access decision is taken.
+                // Docs' activity rail has therefore never shown an event on
+                // any surface.
                 //
                 // The port's answer is not empty — the trail is right there, and
                 // `the_activity_rail_the_gateways_door_refuses` below is what

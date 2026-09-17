@@ -36,8 +36,8 @@ message DeviceRow {
   // RFC 3339.
   string enrolled_at = 5;
   // PRESENT means revoked. A tombstone rather than a deletion, because a
-  // revoked device that re-presents its key must be refused for the same reason
-  // twice, not treated as new (`packages/server/src/serve/enrollment-store.ts:474-483`).
+  // revoked device that re-presents its key must be refused for the same
+  // reason twice, not treated as new.
   optional string revoked_at = 6;
 }
 

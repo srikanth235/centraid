@@ -16,11 +16,10 @@ import {
 
 describe("the closed method table", () => {
   /*
-   * EIGHTEEN, AND THE CENSUS SAYS SEVENTEEN. `handleCompanionRequest` has
-   * eighteen `case` arms; census §E2 calls them "the 17 companion methods" and
-   * then lists eighteen. The generator asserts the count, and so does this.
+   * EIGHTEEN, AND THE CENSUS SAYS SEVENTEEN. Census §E2 calls them "the 17
+   * companion methods" and then lists eighteen. This asserts the count.
    */
-  it("is v0's eighteen, in v0's order", () => {
+  it("is the eighteen, in table order", () => {
     expect(METHOD_NAMES).toStrictEqual([
       "status",
       "pair",
@@ -110,8 +109,8 @@ describe("the closed method table", () => {
   /*
    * TWO FILES, ONE FACT. The contract is what the native host compiles in and
    * what the lint reads; `methods-table.ts` is the shipped copy a bundler-free
-   * service worker can import. Both are written by one generator run, and this is
-   * what makes that a claim rather than a hope.
+   * service worker can import. Both are edited by hand, and this is what makes
+   * their agreement a claim rather than a hope.
    */
   it("is byte-equal in content to the contract the host compiles in", () => {
     const contract = JSON.parse(

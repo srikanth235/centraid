@@ -1711,13 +1711,6 @@ impl Handle {
         }
     }
 
-    /// Whether a request has been cancelled. An unbounded operation polls this
-    /// at its own checkpoints.
-    #[must_use]
-    pub fn is_cancelled(&self, request_id: u64) -> bool {
-        self.lock_cancelled().contains(&request_id)
-    }
-
     /// Wait for the next event, up to `timeout`.
     ///
     /// Returns `Ok(None)` on a timeout — not an error, because a shell polls

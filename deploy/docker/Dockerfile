@@ -4,7 +4,7 @@
 # Vault/data: bind-mount a host path or a named volume at /data — a bare run
 # LOSES STATE when the container is removed. There is deliberately no anonymous
 # `VOLUME` here: an anonymous volume is not durable, it just makes the loss
-# quieter (the same reason gateway-v0.Dockerfile says so at its top).
+# quieter.
 #
 # WHAT CHANGED FROM v0. The runtime is the `centraid` binary, so the image no
 # longer carries bun, node, rustup, a napi artifact or a package tree: the build

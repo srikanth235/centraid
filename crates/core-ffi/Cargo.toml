@@ -36,7 +36,6 @@ centraid-core = { path = "../core" }
 # the process builder for every phone.
 centraid-seat-link = { path = "../seat-link" }
 centraid-vault = { path = "../vault" }
-rusqlite.workspace = true
 prost.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
@@ -49,5 +48,3 @@ centraid-ontology = { path = "../ontology" }
 libloading = "0.8"
 cbindgen = "0.29"
 centraid-protocol = { path = "../protocol" }
-centraid-core = { path = "../core" }
-rusqlite.workspace = true

@@ -3,12 +3,9 @@ name: lane-release-extension
 # A `release.yml` lane, not an independently-triggered workflow (#557) — the
 # `lane-` prefix marks that.
 #
-# #1020 wave 4 lane extension — this lane packages `extension/` (the v1 MV3
-# Companion over native messaging), where `lane-release-companion.yml` packages
-# `apps/extension` (the v0 oracle, WASM iroh in the service worker). The two
-# coexist until v0 retires; the fan-out row that switches `release.yml` from one
-# to the other is a release-cadence decision and is handed off rather than taken
-# here (`contracts/handoff/extension/release-fanout.md`).
+# #1020 wave 4 lane extension — this lane packages `extension/`, the MV3
+# Companion over native messaging. `release.yml`'s `companion` job calls it on a
+# `companion-v*` tag or a manual `companion` run.
 #
 # ## Why the extension id is the artifact this lane is really about
 #

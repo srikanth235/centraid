@@ -1,7 +1,6 @@
 /*
- * Popup pure helpers, carried from v0 (`apps/extension/src/popup-core.ts`,
- * `popup-state.ts`) — error text, module availability and envelope unwrapping
- * with no DOM.
+ * Popup pure helpers — error text, module availability and envelope
+ * unwrapping with no DOM.
  */
 
 /** What a member reads when something threw. */

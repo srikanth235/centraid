@@ -406,14 +406,7 @@ mod tests {
         }
     }
 
-    // DELETED WITH ITS ORACLE (#1025 S4). The test that stood here parsed
-    // `packages/model-runtime/models.lock.json`, which the v0 retirement removed
-    // from the repository. There is no lock file under `contracts/` to promote it
-    // to — v1 ships none, because a lock pins release assets and that release has
-    // not been cut — so it had no oracle and could not be made honest. What it
-    // asserted about SHAPE is covered without a file by the two refusal tests
-    // below; what it asserted about the v0 manifest's CONTENTS was a fact about a
-    // file that no longer exists.
+    // A lock file's SHAPE is asserted by the two refusal tests below (#1025 S4).
 
     #[test]
     fn a_schema_version_this_build_does_not_read_is_refused() {

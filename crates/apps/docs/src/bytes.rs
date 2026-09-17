@@ -25,8 +25,7 @@
 //! ## THE NEVER-INLINE RULE, and it is not this lane's to soften
 //!
 //! [`NEVER_INLINE`] is lane F's list, verbatim
-//! (`crates/centraid/src/cmd/seat/blob.rs:48`, from v0's
-//! `packages/server/src/routes/blob-read-route.ts:23`-`:27`, issue #865). Blob
+//! (`crates/centraid/src/cmd/seat/blob.rs:48`, issue #865). Blob
 //! bytes can be attacker-authored — an imported attachment, a **shared
 //! document**, which is precisely Docs' case — so a stored `text/html` served
 //! inline is a stored XSS against the shell. In a desktop seat the shell origin
@@ -49,10 +48,9 @@ pub const NEVER_INLINE: [&str; 3] = ["text/html", "application/xhtml+xml", "imag
 
 /// How much text a quick-look may pull through the door.
 ///
-/// 64 KiB, the same number `core.edit_document` enforces on an inline body
-/// (`packages/vault/src/commands/inline-body-guard.ts:13`), so the popover can
-/// show the whole of anything the app itself could have written and says so
-/// rather than truncating silently.
+/// 64 KiB, the same number `core.edit_document` enforces on an inline body,
+/// so the popover can show the whole of anything the app itself could have
+/// written and says so rather than truncating silently.
 pub const MAX_QUICK_LOOK_BYTES: usize = 64 * 1024;
 
 /// The media type with its parameters stripped and lowercased.

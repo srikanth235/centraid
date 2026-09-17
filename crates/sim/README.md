@@ -1,6 +1,6 @@
 # `centraid-sim`
 
-The deterministic simulation: one gateway, N seats, a scripted network. **#1020's primary sync proof** (wave 2 lane D2, D-1020-D2-4).
+The deterministic simulation: one gateway, N seats, a scripted network. **#1020's primary sync proof** (D-1020-D2-4).
 
 Test-only (`publish = false`). Nothing links it; it is the proof, not the product.
 
@@ -8,7 +8,7 @@ Test-only (`publish = false`). Nothing links it; it is the proof, not the produc
 
 The gateway host opens a real `centraid_vault::Vault` on a real file and answers through the real `centraid_core::Handle::call`. Each seat host opens a real seat file cut from a real snapshot and runs the real `centraid_seat::sync::pass` over the real applier and the real outbox. What turmoil provides is the **network and the clock**.
 
-That matters because a simulation over mocks proves the mocks agree. v0 could not run this at all: its seat was a phone, a browser worker and a Bun process, and there was no way to put three of them in one deterministic process.
+That matters because a simulation over mocks proves the mocks agree.
 
 ## Why UDP and not TCP (D-1020-D2-11)
 
@@ -48,4 +48,4 @@ And two harness findings that taught the product something now written down in i
 
 ## Termination
 
-A seat polls to **quiescence**, not to `behind == 0`, behind a shared barrier: nobody stops until every seat has emptied its queue and several passes have passed with no submission anywhere. In production a change event wakes a seat that has gone quiet; there is no change feed to a seat in wave 2, so the simulation needs the barrier instead.
+A seat polls to **quiescence**, not to `behind == 0`, behind a shared barrier: nobody stops until every seat has emptied its queue and several passes have passed with no submission anywhere. In production a change event wakes a seat that has gone quiet; the simulated seats are driven by polling and have no change feed, so the simulation needs the barrier instead.

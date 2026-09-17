@@ -6,8 +6,8 @@ import SwiftUI
 /// and forwards events; the state machines are in `CentraidShared`, and this
 /// file is the only one that knows the stack.
 ///
-/// ONE ROOT STACK, NO TAB BAR — apps are covers over Home, which is v0's own
-/// ruling (`apps/mobile/src/navigation.ts:1-3`) and not a SwiftUI preference.
+/// ONE ROOT STACK, NO TAB BAR — apps are covers over Home. That is a product
+/// ruling, not a SwiftUI preference.
 // THE ENTRY POINT IS THE iOS APP'S, NOT THE TEST HOST'S (#1020).
 //
 // `Sources` is a LIBRARY target, so an unguarded `@main` emits `_main` into it

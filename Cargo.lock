@@ -678,7 +678,6 @@ name = "centraid"
 version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
- "blake3",
  "centraid-api-proto",
  "centraid-apps-kit",
  "centraid-apps-locker",
@@ -721,10 +720,8 @@ name = "centraid-apps-agenda"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
- "centraid-ontology",
  "centraid-vault",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror 2.0.20",
 ]
@@ -739,7 +736,6 @@ dependencies = [
  "centraid-vault",
  "proptest",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror 2.0.20",
 ]
@@ -765,7 +761,6 @@ dependencies = [
  "centraid-apps-kit",
  "psl",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror 2.0.20",
  "url",
@@ -778,9 +773,7 @@ dependencies = [
  "centraid-api-proto",
  "centraid-apps-kit",
  "centraid-media",
- "centraid-ontology",
  "centraid-search",
- "centraid-vault",
  "prost",
  "rusqlite",
  "serde",
@@ -794,8 +787,6 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
  "centraid-design",
- "centraid-ontology",
- "centraid-vault",
  "rusqlite",
  "serde",
  "serde_json",
@@ -833,10 +824,8 @@ name = "centraid-apps-tasks"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
- "centraid-ontology",
  "centraid-vault",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror 2.0.20",
 ]
@@ -904,7 +893,6 @@ dependencies = [
  "centraid-protocol",
  "centraid-seat",
  "centraid-vault",
- "flate2",
  "prost",
  "rusqlite",
  "serde_json",
@@ -925,7 +913,6 @@ dependencies = [
  "centraid-vault",
  "libloading",
  "prost",
- "rusqlite",
  "serde_json",
  "tracing",
 ]
@@ -934,7 +921,6 @@ dependencies = [
 name = "centraid-design"
 version = "1.0.0-alpha.0"
 dependencies = [
- "serde",
  "serde_json",
 ]
 
@@ -977,7 +963,6 @@ dependencies = [
 name = "centraid-ontology"
 version = "1.0.0-alpha.0"
 dependencies = [
- "anyhow",
  "blake3",
  "flate2",
  "hex",
@@ -998,7 +983,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
- "tracing",
 ]
 
 [[package]]

@@ -41,7 +41,7 @@ use super::methods::Method;
 /// How many rows a Companion read may pull.
 ///
 /// 100 for the badge's four sources, because `approvalBadgeText` caps the badge
-/// at 99 (`apps/extension/src/worker-core.ts:7`–`:10`) — a hundredth row is
+/// at 99 — a hundredth row is
 /// already "99+", so a wider window would buy a number nobody renders.
 pub const BADGE_ROWS: u32 = 100;
 
@@ -118,9 +118,8 @@ fn required<'a>(
 
 /// Lower one method and its input.
 ///
-/// `input` is the frame's own object — v0's `CompanionRequest` minus its `type`
-/// — and the field names are v0's, because `contracts/extension/methods.json`
-/// carries them and the extension sends them.
+/// `input` is the frame's own object minus its `type`, and the field names are
+/// the ones `contracts/extension/methods.json` carries and the extension sends.
 pub fn lower(method: Method, input: &serde_json::Value) -> Result<Lowering, LowerError> {
     Ok(match method {
         Method::Status | Method::Pair | Method::SelectVault => {
@@ -145,8 +144,7 @@ pub fn lower(method: Method, input: &serde_json::Value) -> Result<Lowering, Lowe
             limit: BADGE_ROWS,
         },
         Method::BlockingCount => Lowering::Page {
-            // v0's four sources, in v0's order
-            // (`packages/server/src/serve/vault-plane.ts:1254`–`:1292`).
+            // The four sources, in badge order.
             statements: vec![
                 "companion.outbox",
                 "companion.connections",

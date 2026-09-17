@@ -1,7 +1,6 @@
 //! Perceptual-hash similarity: Hamming distance over hex digests.
 //!
-//! Three rules, ported from `packages/vault/src/enrich/similarity.ts:1-22`,
-//! and every one of them is a decision about what "not comparable" means:
+//! Three rules, and every one of them is a decision about what "not comparable" means:
 //!
 //! 1. **Unequal lengths are NOT COMPARABLE**, never distance `0` and never an
 //!    error. A 16-hex dHash and a 64-hex pHash are two different measurements;

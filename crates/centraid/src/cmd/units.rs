@@ -1,8 +1,6 @@
-//! The service-unit generators, ported from v0 (#1020, D-1020-G1).
+//! The service-unit generators (#1020, D-1020-G1).
 //!
-//! **Pure.** No fs, no `Command`, no `std::env` — the same rule the v0 module
-//! this replaces states in its first two lines
-//! (`packages/server/src/cli/service-unit.ts:1`). Everything impure lives in
+//! **Pure.** No fs, no `Command`, no `std::env`. Everything impure lives in
 //! [`super::gateway_install`], so the bytes of a unit can be tested without a
 //! home directory, a platform or a running systemd.
 //!

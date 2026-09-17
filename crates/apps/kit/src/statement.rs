@@ -2,9 +2,9 @@
 //!
 //! A handler holds neither a closure nor a pre-assembled string, because the
 //! same shape is executed by three things — the seat in process, the shell
-//! across a message seam, and the gateway through the paged door — and a closure
-//! survives none of them while a string survives the first two but cannot be
-//! checked at the third (`packages/core/src/page/statement.ts:14-19`).
+//! across a message seam, and the gateway through the paged door — and a
+//! closure survives none of them while a string survives the first two but
+//! cannot be checked at the third.
 //!
 //! **One assembler for all three ends.** Three assemblers would be three keyset
 //! dialects, and the one that drifted would drift silently at a page boundary

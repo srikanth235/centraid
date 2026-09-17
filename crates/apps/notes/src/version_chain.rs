@@ -15,8 +15,7 @@
 //! ## The one place this port does NOT reproduce v0
 //!
 //! v0's walk `break`s on a revision it has already seen and returns what it
-//! has; so does `revisionChainOf` on the command side
-//! (`packages/vault/src/commands/revisions.ts:120`-`:122`), and so does the
+//! has; so does `revisionChainOf` on the command side, and so does the
 //! `MAX_CHAIN_STEPS` cap. **A truncated list is indistinguishable from a short
 //! history**: the screen draws four versions and the note has forty, or a
 //! cycle, and nothing says which. `parent_revision_id` has no constraint that

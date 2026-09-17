@@ -1,11 +1,10 @@
 //! THE SEVEN DOMAINS, and the one that is missing on purpose.
 //!
-//! v0's `LINK_TARGET_KINDS`
-//! (`packages/blueprints/apps/notes/link-targets-table.ts:23`-`:71`) is the
-//! powerbox's whole vocabulary: what `[[` may point at. It is ported here rather
-//! than into `crates/apps/notes` because the door is where the *columns* are,
-//! and the columns are what the sealed check has to run over — a table of column
-//! names in an app crate is a table nothing checks.
+//! v0's `LINK_TARGET_KINDS` is the powerbox's whole vocabulary: what `[[` may
+//! point at. It is ported here rather than into `crates/apps/notes` because
+//! the door is where the *columns* are, and the columns are what the sealed
+//! check has to run over — a table of column names in an app crate is a
+//! table nothing checks.
 //!
 //! **Locker is not a kind.** The file it comes from says why, and the reason is
 //! the shape of the list and not a filter inside it: "LOCKER IS NOT A KIND: the

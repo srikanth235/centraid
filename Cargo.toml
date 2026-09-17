@@ -17,13 +17,7 @@ members = [
   "crates/apps/tasks",
   "crates/apps/tally",
 ]
-exclude = [
-  "crates/apps",
-  # The v0 byte plane stays where it is as the pinned oracle until wave 6 (#1020).
-  "packages/tunnel/data-plane",
-  "packages/tunnel/native",
-  "apps/web/iroh-wasm",
-]
+exclude = ["crates/apps"]
 
 [workspace.package]
 version = "1.0.0-alpha.0"

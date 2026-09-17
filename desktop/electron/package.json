@@ -13,5 +13,20 @@
     "start": "electron .",
     "test": "vitest run --config \"$PWD/../vitest.config.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p ../renderer/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "~1.62.0",
+    "@types/node": "^26.1.2",
+    "@types/react": "~19.2.17",
+    "@types/react-dom": "~19.2.3",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.0.12",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "typescript": "catalog:",
+    "vitest": "4.1.10"
   }
 }

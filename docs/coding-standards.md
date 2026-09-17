@@ -54,7 +54,7 @@ Scattered branches for the same axis are how behavior drifts between call sites.
 | `*-utils.ts` / `*-helpers.ts` | Grab-bag with no ownership | Name the **domain** (`consent-parse.ts`, `wal-segment-key.ts`) |
 | `*-manager.ts` / `*-service.ts` without a seam | God object that grows forever | Narrow verbs (`openVault`, `fireAutomation`) or a real port interface |
 
-Shared test helpers live in `@centraid/test-kit`, not another `test-utils.ts` per package.
+The same holds for Rust modules (`utils.rs`, `helpers.rs`) and Kotlin files. Shared TypeScript test helpers live in `@centraid/test-kit`, not another `test-utils.ts` per package.
 
 ## Fallible-action contract
 
@@ -66,9 +66,8 @@ User-visible or IPC/HTTP-facing work that can fail must expose failure to the UI
 
 ## Prefer existing seams
 
-- Handlers use `ctx.vault` / `ctx.*` — no provider SDKs in handler files (constitution).
-- Import package **barrels**, not deep internals (governance `no-deep-imports`).
-- Tools and checks: **repo scripts only** — `bun run …` / workspace scripts, never raw `npx <tool>` so the pinned toolchain always applies (issue #468 B2).
+- Import package **barrels**, not deep internals (governance `no-deep-imports`); in Rust, go through a crate's public API rather than reaching into a sibling crate's modules.
+- Tools and checks: **repo entrypoints only** — `cargo xtask …`, `cargo test -p <crate>`, `mobile/gradlew …`, `bun run …` / workspace scripts, never raw `npx <tool>` so the pinned toolchain always applies (issue #468 B2).
 - Quality ownership and safe-fix policy live in [toolchain.md](toolchain.md). Fix code before suppressing a diagnostic; never weaken policy only to make a gate green.
 
 ## Test seams (mechanically enforced)
@@ -77,7 +76,7 @@ Three hand-rolled test constructs are **oxlint errors** inside vitest test files
 
 | Banned in tests | Use | Why it is a rule and not advice |
 | --- | --- | --- |
-| `mkdtemp` / `mkdtempSync` (called or imported from `node:fs*`) | `tempDir()` / `tempDirSync()` from `@centraid/test-kit/temp-dir` | The kit registers removal at creation, so a throwing test cannot leak the directory. `photos-asset-key.test.ts` leaked one per run from module top level. |
+| `mkdtemp` / `mkdtempSync` (called or imported from `node:fs*`) | `tempDir()` / `tempDirSync()` from `@centraid/test-kit/temp-dir` | The kit registers removal at creation, so a throwing test cannot leak the directory. A leak from module top level recurs on every run. |
 | `vi.useFakeTimers` / `vi.useRealTimers` / `vi.setSystemTime` | `useFakeClock()` from `@centraid/test-kit/fake-clock` | A fake clock installed by a test that then throws stays installed for the rest of the file, and the later failures report as timeouts, not as the leak. `useFakeClock` registers the restore at install time. |
 | `Math.random()` | `seededRandom(<literal>)` from `@centraid/test-kit/random` | A failure found from an unseeded draw is not reproducible from the failing run's own output. |
 
@@ -86,11 +85,11 @@ Two things to know about `useFakeClock`:
 - It uses `onTestFinished`, so it is callable from a test body or `beforeEach` — **not** from `beforeAll` or a bare `describe` body. A file-lifetime clock is out of scope by design; if you think you need one, the fixture probably belongs in `beforeEach`.
 - The `use` prefix makes `react-hooks/rules-of-hooks` treat it as a React hook, so it must be called directly in the test body, never from a lowercase-named local helper. Inline the helper rather than renaming the kit export.
 
-`bootstrappedVault()` from `@centraid/test-kit/vault` is the same idea for vault fixtures: it opens, bootstraps, and registers the close in one call, and it takes `{ openVaultDb, bootstrapVault }` by injection so `packages/vault`'s own suites (which import `../db.js` relatively) can use it without a package cycle.
+`bootstrappedVault()` from `@centraid/test-kit/vault` is the same idea for vault fixtures: it opens, bootstraps, and registers the close in one call, and it takes `{ openVaultDb, bootstrapVault }` by injection so a caller supplies its own opener without a package cycle.
 
-**Not** banned: `Date.now()`. oxlint 1.76 has no `no-restricted-syntax`, so the shape that actually hurts — wall clock read inside an assertion's expected value — is not expressible; only a blanket ban is, and the sampled majority of the repo's 162 call sites are relative offsets, unique-id suffixes, and elapsed measurement, which a fake clock makes wrong rather than better. Prefer `clock.now()` where a clock is already installed.
+**Not** banned: `Date.now()`. oxlint 1.76 has no `no-restricted-syntax`, so the shape that actually hurts — wall clock read inside an assertion's expected value — is not expressible; only a blanket ban is, and the sampled majority of call sites are relative offsets, unique-id suffixes, and elapsed measurement, which a fake clock makes wrong rather than better. Prefer `clock.now()` where a clock is already installed.
 
-Playwright's `apps/*/tests/e2e/**` are exempt: different runner, no `onTestFinished`, none of these helpers exist there.
+The Playwright specs under `desktop/e2e` and `extension/e2e` (`*.e2e.ts`) are exempt: different runner, no `onTestFinished`, none of these helpers exist there.
 
 ## One law, one home (mechanically enforced)
 
@@ -100,7 +99,7 @@ A named product law gets a machine-readable tag in its test title:
 test("[law:backup-no-change] no-change run registers nothing", async () => { … });
 ```
 
-`bun run lint:law-registry` (in `check:pr`) fails when the same tag appears in more than one file. Several tests in the **owning** file are fine — that is one home. A second file asserting the same law is a restatement, and Layer 1D of #656 deleted a batch of exactly those; the tag is what stops them coming back.
+`bun run lint:law-registry` (in the `lint:product` bundle that `check:push` runs) fails when the same tag appears in more than one file. Several tests in the **owning** file are fine — that is one home. A second file asserting the same law is a restatement, and Layer 1D of #656 deleted a batch of exactly those; the tag is what stops them coming back.
 
 The registry lives in `tests/claims.json#laws` as `{ [tag]: { statement, owner, flow? } }`. Once a tag is registered the linter also fails an unregistered tag, an owner file that does not exist, and a registered law whose owner carries no such tag.
 
@@ -110,7 +109,7 @@ A source file stops at **625 lines**. `max-lines` in [oxlint.config.ts](../oxlin
 
 The ceiling lived in governance-kit's `repo-hygiene` directive until audit 0.11.0 retired that pack upstream. It came back under oxlint rather than as a repo-local directive because oxlint already reads every source file: same raw-line count, ~0.4s against the directive's 51.2s.
 
-The 131 files that predate the rule are exempt **by name**, in `tests/inventory.json#fileSize`, not by an inline `oxlint-disable`. That is the whole point of the design: a suppression comment is free to add and invisible in review, whereas a row in that section has to survive its down-only `_budget` in [check-ledgers.mjs](../scripts/check-ledgers.mjs) — splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation` note. [lint-oversized-files.mjs](../scripts/lint-oversized-files.mjs) reads the section and refuses to build the list at all if the budget and the rows disagree.
+Files that predate the rule are exempt **by name**, in `tests/inventory.json#fileSize`, not by an inline `oxlint-disable`. That is the whole point of the design: a suppression comment is free to add and invisible in review, whereas a row in that section has to survive its down-only `_budget` in [check-ledgers.mjs](../scripts/check-ledgers.mjs) — splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation` note. [lint-oversized-files.mjs](../scripts/lint-oversized-files.mjs) reads the section and refuses to build the list at all if the budget and the rows disagree.
 
 A new file gets no row and no door.
 
@@ -123,7 +122,7 @@ A new file gets no row and no door.
 | `const j = read(); j.x = 1; write(j)` in a route | `store.setX(1)` / `store.update(…)` that locks and writes |
 | Two handlers each rewriting the same JSON | One store method with a single persist path |
 
-**Mechanical vs judgment:** judgment-only in review; prefer existing store methods in `packages/server/src/serve/*-store.ts`.
+**Mechanical vs judgment:** judgment-only in review; prefer the owning store's existing methods.
 
 ## Nothing O(vault-size) on the request path
 
@@ -131,8 +130,8 @@ The constitution's performance principle, as a diff rule: work whose cost grows 
 
 | Shape | Why it bites |
 | --- | --- |
-| `better-sqlite3` / `node:sqlite` sync query over an unbounded table inside a handler | The loop is blocked for every other connection, SSE subscriber, and automation tick — the vault owner sees one slow list freeze the whole gateway |
-| `scryptSync`, `gzipSync`, `createHash` over a whole blob | CPU-bound and unyielding; a 512 MB blob is a multi-second stall, not a slow response |
+| A blocking SQLite query over an unbounded table on an async task or a request path | The runtime thread is blocked for every other connection, change-stream subscriber, and scheduled tick — the vault owner sees one slow list freeze the whole gateway |
+| A synchronous hash, compress, or key-derivation pass over a whole blob | CPU-bound and unyielding; a 512 MB blob is a multi-second stall, not a slow response |
 | A sweep, reindex, or clustering pass triggered from a request or a timer that scans everything | Cost is invisible at 50 rows and quadratic at 50,000 — the audit's worst find was an hourly O(n²) perceptual-hash clustering pass |
 
 Bounded work is fine — a `LIMIT`ed query, a keyed lookup, a fixed-size digest. Unbounded work belongs off the loop: a worker, a cursor-paged job, or an async streaming API, with a cap on what a single pass may touch.
@@ -152,19 +151,17 @@ When N consumers need the same derived value, derive it once and fan the result 
 
 The failure mode is that it is _correct_ — every subscriber gets the right bytes — so it survives review and only shows up as a load curve that bends with connection count.
 
-## Client reads go through the shared cache
-
-Client data reads use `useCachedQuery` from `packages/client/src/react/shell/queryCache.ts`; mutations go through `packages/client/src/react/shell/optimisticUpdate.ts`. Do not hand-roll `useEffect` + `useState` + `fetch` per screen.
+## Client reads serve stale, never blank
 
 - **Blanking on refetch is a defect.** A mutation that clears the rendered data and re-shows a spinner throws away a correct frame the user was already reading. Serve stale, revalidate behind it, swap when the new data lands.
-- Multiple components asking for the same key must share one in-flight request, not race N identical fetches on mount.
-- Keying follows [client-keying.md](client-keying.md) — vault path, gateway, conversation. A cache keyed too coarsely leaks another vault's data across a switch; too finely and it never hits.
+- Multiple consumers asking for the same read must share one in-flight request, not race N identical reads on mount.
+- A cached read is keyed by the vault it came from. A cache keyed too coarsely leaks another vault's data across a switch; too finely and it never hits.
 
 ## Every poller is visibility-gated
 
 A `setInterval` that keeps firing on a hidden tab or a backgrounded app is spending someone's battery to render nothing.
 
-- Gate on `document.visibilityState` (web/desktop) or `AppState` (native); stop on hidden, refetch once on resume.
+- Gate on `document.visibilityState` (desktop renderer, extension) or the platform lifecycle (Android, iOS); stop on hidden, refetch once on resume.
 - A poller must also stop on unmount — an interval that outlives its screen is a leak that compounds per navigation.
 - **New pollers need a justification over push.** The gateway already has a change-stream; "polling was easier to wire" is not one. If push genuinely cannot carry it, say why in the PR and pick the longest interval the feature tolerates.
 
@@ -197,7 +194,7 @@ Code comments are the State layer (AGENTS.md: "code-level facts live in code com
 
 ### Mechanical surrogates
 
-These find _surrogates_ of rot, never verdicts — a green run proves nothing about information content, and the deletion test cannot be regexed. Warn-only: `bun scripts/lint-comment-file-refs.mjs` finds dangling file references; `bun scripts/lint-comment-narration.mjs` (fuzzy) flags past-tense narration for review; `node scripts/lint-comment-blocks.mjs` flags over-long blocks. The one blocking gate is the density ratchet below (`bun run test:comment-density`). `node scripts/comment-only-diff.mjs [<ref>]` is not a gate at all — it reprints both sides of a diff with comments removed and proves a sweep changed no code, which is the evidence a doctrine-sweep PR cites.
+These find _surrogates_ of rot, never verdicts — a green run proves nothing about information content, and the deletion test cannot be regexed. Warn-only: `node scripts/lint-comment-blocks.mjs` flags over-long blocks. The one blocking gate is the density ratchet below (`bun run test:comment-density`). `node scripts/comment-only-diff.mjs [<ref>]` is not a gate at all — it reprints both sides of a diff with comments removed and proves a sweep changed no code, which is the evidence a doctrine-sweep PR cites.
 
 **The tense test.** A sentence about the past — _was, used to, until #N, replaced, retired, previously_ — either restates a present obligation (rewrite it forward-facing) or it doesn't (delete it, keeping at most a bare `(#N)` on a surviving sentence). Tense is the surrogate: a changelog conjugated into present tense still fails the deletion test.
 
@@ -210,7 +207,7 @@ These find _surrogates_ of rot, never verdicts — a green run proves nothing ab
 
 **File references must be live; prefer symbols.** Name another file in a comment only if it exists; prefer the exported _symbol_ (greppable, visible to rename tooling) over the filename. A comment asserting a call relationship ("X calls this") names the actual current caller or asserts nothing.
 
-**Long invariant blocks use capitalized headings** — `// WHY THE HEAD IS NOT JUST THE OLDEST.` — one heading per named invariant, prose under it. Models: `packages/design/src/elements/attachments.ts`, `packages/vault/src/schema/fts.ts`, `packages/server/src/enrich/semantic-search.ts`.
+**Long invariant blocks use capitalized headings** — `// WHY THE HEAD IS NOT JUST THE OLDEST.` — one heading per named invariant, prose under it. Models: `packages/design/src/elements/attachments.ts`, `crates/centraid/src/run.rs`, `crates/xtask/src/gate.rs`.
 
 **Section banners** use the box-drawing form `// ─── name ─────` (one style repo-wide). No new banners are required anywhere; a file that needs many is usually a module-size smell.
 
@@ -220,9 +217,9 @@ These find _surrogates_ of rot, never verdicts — a green run proves nothing ab
 
 Doctrine governs what a comment may say; the budget governs how much ([#861](https://github.com/srikanth235/centraid/issues/861)).
 
-- **The metric is character share** — non-whitespace comment characters over non-whitespace file characters, comment ranges taken from the TypeScript parser. Line counts are gameable: fuse three comment lines into one wrapped sentence and the count falls while the prose is unchanged.
+- **The metric is character share** — non-whitespace comment characters over non-whitespace file characters, comment ranges taken from the TypeScript parser. The ratchet covers TypeScript files; the doctrine above covers every language. Line counts are gameable: fuse three comment lines into one wrapped sentence and the count falls while the prose is unchanged.
 - **Per-file cap 15%** for files of 40 non-blank lines or more; **global target ≤10%**, printed on every run.
-- **Enforcement is a per-file ratchet** — `tests/inventory.json#commentDensity`, `bun run test:comment-density`. Any rise fails CI. Downward re-pins are free (`--write` recomputes, and refuses to raise a pin). A deliberate raise is a hand edit to the baseline carrying an approved-deviation note in the receipt.
+- **Enforcement is a per-file ratchet** — `tests/inventory.json#commentDensity`, `bun run test:comment-density`, run weekly by `hygiene.yml`. Any rise fails that lane. Downward re-pins are free (`--write` recomputes, and refuses to raise a pin). A deliberate raise is a hand edit to the baseline carrying an approved-deviation note in the receipt.
 - **Blocks over 10 lines warn** — 15 for a file-top orientation header — via `scripts/lint-comment-blocks.mjs`.
 - **The allowlist is by name, with a reason**, for registries where the prose _is_ the payload. Never delete load-bearing rationale to hit a number; the allowlist is that pressure valve.
 
@@ -240,4 +237,3 @@ Deliberate non-goal of this rule: **no JSDoc tag vocabulary** — prose JSDoc is
 - [CONSTITUTION.md](../CONSTITUTION.md) — mechanical directives
 - [protocol.md](protocol.md) — COMPAT tagging, no-fallback features
 - [glossary.md](glossary.md) — vocabulary
-- [scripts/perf/README.md](../scripts/perf/README.md) — the PWA fast-path perf rig and its budgets

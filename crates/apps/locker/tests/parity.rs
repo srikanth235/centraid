@@ -529,7 +529,7 @@ fn the_manifests_query_list_is_the_apps_query_list() {
 
 // DELETED WITH THE TREE IT WALKED (#1025 S4).
 // `locker_has_no_demo_seed_and_the_manifest_says_so` listed
-// `packages/blueprints/apps/*` looking for a `seed.js` beside each app, to say
+// every v0 app directory looking for a `seed.js` beside each app, to say
 // that Locker is the one without one. That directory went with
 // `chore(retire): delete the v0 tree`. The FACT it established — the corpus is a
 // scripted command set rather than a seed — is what every case in this file

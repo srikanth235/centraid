@@ -1,8 +1,7 @@
-//! `copy/<app>.json` — the emitted sentences, and the route-id claim.
+//! `copy/<app>.json` — the sentences, and the route-id claim.
 //!
-//! A copy leaf in v0 is a module of named strings, import-free where both the
-//! shell and the mobile kit read it. `contracts/tools/export-copy.ts` emits one
-//! `copy/<app>.json` per app from those leaves, and this module loads one.
+//! A copy leaf is a file of named strings per app. `copy/<app>.json` is the
+//! source — no generator writes it — and this module loads one.
 //!
 //! **No formatting logic lives here.** A leaf's `export function` sentences —
 //! `routeStatus`, `moreMeta` — are decisions about how a sentence is composed

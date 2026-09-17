@@ -2,8 +2,8 @@
  * THE BADGE, AND WHAT A FRAME MEANS FOR IT (#1020 wave 4 lane extension,
  * D-1020-X4).
  *
- * v0's badge has one clock: a `chrome.alarms` entry at `periodInMinutes: 1`
- * (`apps/extension/src/worker.ts:85`–`:90`). MV3 evicts service workers
+ * The badge's fallback clock is a `chrome.alarms` entry at `periodInMinutes: 1`.
+ * MV3 evicts service workers
  * aggressively, so the alarm is the only thing that wakes the worker to ask
  * again — and an alarm's floor in Chrome is a minute, so the badge is up to a
  * minute stale by construction.

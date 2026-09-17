@@ -11,5 +11,11 @@
     "round-trip": "node scripts/native-round-trip.mjs",
     "test": "vitest run --config ../desktop/vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "~1.62.0",
+    "@types/node": "^26.1.2",
+    "typescript": "catalog:",
+    "vitest": "4.1.10"
   }
 }

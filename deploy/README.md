@@ -1,11 +1,10 @@
 # `deploy/` — every way a gateway gets onto a machine
 
-One home for the artifacts that put a Centraid gateway on a host: the container image, the OS service units, and the VPS installer. Before this directory existed they were a root `Dockerfile`, a pair of TypeScript generators inside `packages/server`, and two scripts under `scripts/` ([#1020][issue], wave 3).
+One home for the artifacts that put a Centraid gateway on a host: the container image, the OS service units, and the VPS installer ([#1020][issue]).
 
 | Path | What it is |
 | --- | --- |
-| `docker/Dockerfile` | The **v1** gateway image: a Rust build stage on the pinned toolchain, a debian-slim runtime carrying one stripped `centraid` binary. |
-| `docker/gateway-v0.Dockerfile` | The **v0** bun/node gateway image, moved here unchanged. It is still what `lane-release-gateway-image.yml` builds and ships, and it retires with v0 — not before. |
+| `docker/Dockerfile` | The gateway image: a Rust build stage on the pinned toolchain, a debian-slim runtime carrying one stripped `centraid` binary. `lane-release-gateway-image.yml` builds and ships it. |
 | `systemd/centraid-gateway.service` | The per-**user** unit: a desktop or a laptop, where somebody logs in. |
 | `systemd/system/centraid-gateway@.service` | The templated **system** unit: `DynamicUser`, `StateDirectory`, `multi-user.target`. **This is the VPS default.** |
 | `launchd/dev.centraid.gateway.plist` | The macOS LaunchAgent. |
@@ -32,7 +31,7 @@ The keystore secret is in **neither** unit file. A unit file is world-readable a
 
 The unit files in this directory are **byte-identical copies** of what `centraid gateway install` emits — `crates/centraid/src/cmd/units.rs`'s `the_deploy_tree_copies_are_the_generator_output` test is what keeps them that way. Two copies of a unit, one documented and one installed, is how the documented one stops being true.
 
-The generator itself is a port of v0's `packages/server/src/cli/service-unit.ts`, proved by bytes rather than by reading: `contracts/deploy/units/` holds fixtures produced by **v0's own generator** and the Rust tests reproduce them exactly. See `contracts/deploy/units/README.md` for the command.
+The generator is proved by bytes rather than by reading: `contracts/deploy/units/` holds frozen goldens produced by an independent generator, and the Rust tests reproduce them exactly. See [`contracts/deploy/units/README.md`](../contracts/deploy/units/README.md).
 
 ## Installing, and the one thing this tree never does
 

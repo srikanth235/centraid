@@ -1,9 +1,9 @@
 //! PAGED READS, AS AN APP WRITES THEM (#996 rulings R8 and W4-D2).
 //!
-//! Ported from `packages/blueprints/apps/_shared/paged-reads.ts`. A door hands
-//! back ONE page, because a handler that could ask for everything is a handler
-//! somebody eventually will. What an app wants on top of that is one of two
-//! things, and both are here so neither is re-invented per app:
+//! A door hands back ONE page, because a handler that could ask for
+//! everything is a handler somebody eventually will. What an app wants on
+//! top of that is one of two things, and both are here so neither is
+//! re-invented per app:
 //!
 //! - **A join over a set already bounded.** The set is bounded by the window,
 //!   not by the table, so the read is finite and the only honest way to fetch it
@@ -104,9 +104,8 @@ impl FanOutBound {
 
     /// The rows a page of this bound actually returns.
     ///
-    /// `MAX_PAGE_ROWS` is a ceiling that **clamps** rather than refusing
-    /// (`packages/core/src/page/window.ts:64-78`), so a bound asking for more
-    /// per page silently gets 500.
+    /// `MAX_PAGE_ROWS` is a ceiling that **clamps** rather than refusing, so a
+    /// bound asking for more per page silently gets 500.
     pub const fn reachable_page_size(&self) -> usize {
         if self.page_size < MAX_PAGE_ROWS {
             self.page_size

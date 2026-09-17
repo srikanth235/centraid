@@ -10,14 +10,12 @@ import centraid.screen.v1.TileStatus
 /**
  * SPRINGBOARD POLICY — one page's layout law (#1020, wave A).
  *
- * Ported from v0's `apps/mobile/src/screens/home/springboard-policy.ts`, whose
- * seam this file keeps: **it never touches a row.** `HomeMachine` folds arriving
- * tiles; this decides where they sit, which earned the grid, and what the
- * springboard as a whole is doing. v0 kept the two apart because the first grows
- * with the app roster and the second does not, and because a layout law with no
- * renderer in it is a law a test can reach — which is how `#905`'s defect (the
- * grid membership rule living inline in `Home.tsx`) came to have no test at any
- * tier until it was moved out.
+ * The seam: **it never touches a row.** `HomeMachine` folds arriving tiles;
+ * this decides where they sit, which earned the grid, and what the springboard
+ * as a whole is doing. The two stay apart because the first grows with the app
+ * roster and the second does not, and because a layout law with no renderer in
+ * it is a law a test can reach — a grid membership rule inline in a view has no
+ * test at any tier (#905).
  *
  * KEEP IT PURE. No coroutines, no clock, no I/O, no platform import — the same
  * contract [ScreenMachine] states, for the same reason.
@@ -74,10 +72,9 @@ public object SpringboardPolicy {
      *
      * Mixed sizes leave a HOLE whenever a 1x1 is followed by a full-width tile:
      * the small takes one of two seats and the wide cannot start beside it, so
-     * the row ends half empty. v0's answer
-     * (`apps/mobile/src/screens/home/grid-packing.ts`) is to pull the next small
-     * FORWARD past the wides between them, and never to resize, drop or demote a
-     * tile to make a row come out even — a grid that resized tiles to fill
+     * the row ends half empty. The answer is to pull the next small FORWARD past
+     * the wides between them, and never to resize, drop or demote a tile to
+     * make a row come out even — a grid that resized tiles to fill
      * itself would let layout overrule the body rule that chose the size. A lone
      * small at the END is not a hole.
      *

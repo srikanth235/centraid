@@ -52,7 +52,7 @@ class NavigationAndMountSpec : StringSpec({
     }
 
     "names ride along the route, so an app bar has something to say at once" {
-        // Doctrine 2 (`apps/mobile/src/navigation.ts:63-69`).
+        // A route carries its display name, so the app bar never waits on a read.
         val folder = Destination.DocsFolder(folderId = "fld-1", folderName = "Taxes")
         folder.folderName shouldBe "Taxes"
         Destination.NotesEditor(noteId = "note-1", title = "Winter plans").title shouldBe

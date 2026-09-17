@@ -5,8 +5,7 @@ name: lane-release-desktop
 # other workflows watching the same tags with no shared notion of whether the
 # release as a whole succeeded.
 #
-# #1020 wave 3 lane F — this lane now packages `desktop/` (the v1 seat), not
-# `apps/desktop` (the v0 oracle). Three things changed and nothing else:
+# #1020 wave 3 lane F — this lane packages `desktop/`, the v1 seat:
 #   * each package job builds the `centraid` binary first and stages it as the
 #     app's `extraResources`, because the seat is a SEPARATE PROCESS the shell
 #     spawns. When lane G's prebuilt-core artifacts land, the `cargo build` step

@@ -245,7 +245,7 @@ jobs:
 
   # THE FOUR ANDROID ABIs, in one AAR-shaped artifact. `x86_64` is not optional
   # padding: it is what lets the KVM emulator load the library at all
-  # (census §G5, `apps/mobile/modules/centraid-tunnel/android/build.gradle:28`).
+  # (census §G5).
   android:
     needs: [probe]
     if: needs.probe.outputs.ffi == 'true' && !inputs.binary-only

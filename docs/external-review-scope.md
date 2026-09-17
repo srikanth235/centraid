@@ -12,22 +12,22 @@ An external reviewer's time is worth more than re-running gates. These already e
 
 | Covered | Where |
 | --- | --- |
-| Sealed-column confidentiality across storage, SQL, export, ledger, FTS, replica, backup and provider context | T3 canary in `tests/quality/user-facing-qualities.test.ts` |
-| Every HTTP prefix classified fail-closed at boot | T4 in the same file, `packages/server/src/routes/route-security.ts` |
-| Bundled-manifest scope denial, including a closed refusal grammar and property fuzz | `packages/server/src/serve/manifest-scope-denial.*.test.ts` |
-| Bearer tokens and seal keys never echoed on error paths | `packages/server/src/serve/secret-log.smoke.test.ts` |
-| Diagnostics/support-bundle redaction against a seeded multi-class sentinel corpus | `tests/quality/diagnostics-redaction-canary.test.ts` |
-| Prompt-injection corpus, hostile-peer harness, DAST sweep, parser fuzz | the #842 adversary lanes, [TESTING.md](../TESTING.md) |
+| Sealed-cell AEAD with the cell-address AAD, and the structural sealed-value predicate | [`crates/vault/src/custody/seal.rs`](../crates/vault/src/custody/seal.rs) and its tests; [custody README](../crates/vault/src/custody/README.md) |
+| The gateway holds no Locker member key: every byte-returning door, the seat snapshot, the backup base and the vault file searched for planted plaintext | [`crates/vault/tests/member_key_gate.rs`](../crates/vault/tests/member_key_gate.rs) |
+| The authority plane: deny as an outcome, enrollment as full trust, unknown and revoked as one refusal | [`crates/vault/src/access.rs`](../crates/vault/src/access.rs) |
+| No TCP listener on the gateway process | [`crates/centraid/tests/no_listener.rs`](../crates/centraid/tests/no_listener.rs) |
+| The seat's local socket: mode 0600, a peer-uid check, an instance nonce | [`crates/centraid/tests/seat_socket.rs`](../crates/centraid/tests/seat_socket.rs) |
+| Committed-secret scan, prompt-injection corpus, fault injection through the call boundary | the `secrets`, `prompt-injection` and `fault-door` steps of `cargo xtask gate --profile pr`, [TESTING.md](../TESTING.md) |
 
 ## Review A — cryptography and peer protocol
 
-**Why this first.** It is the only area where being wrong is unrecoverable. A route-authorization bug is a patch; a key-custody or AEAD-construction bug silently invalidates every vault already written, and there is no server-side re-encryption to fix it with, because there is no server. It is also the area where in-repo testing is structurally weakest: a test can confirm that `sealValue`/`unsealValue` round-trip and that ciphertext is not plaintext, and cannot confirm that the construction resists an adversary who was not imagined by the person who wrote the test.
+**Why this first.** It is the only area where being wrong is unrecoverable. A route-authorization bug is a patch; a key-custody or AEAD-construction bug silently invalidates every vault already written, and there is no server-side re-encryption to fix it with, because there is no server. It is also the area where in-repo testing is structurally weakest: a test can confirm that `seal_value`/`open_value` round-trip and that ciphertext is not plaintext, and cannot confirm that the construction resists an adversary who was not imagined by the person who wrote the test.
 
 **Scope.**
 
-- The sealed-column construction end to end: key derivation, the AAD binding (`sealAad(entity, column, rowId)`), nonce discipline and reuse resistance under row updates and restores, and whether the AAD binding actually prevents cross-row and cross-column ciphertext substitution.
-- Seal-key and identity-seed custody: the `keys/` sibling directory, the OS keystore envelopes, what a backup or a `centraid-gateway recover` moves and what it deliberately does not, and the failure mode when custody and database disagree.
-- The peer plane: Iroh `EndpointId` binding, the pairing ceremony, ticket lifetime and replay, and what a malicious peer can cause a host to do. The in-repo hostile-peer harness models a peer that misbehaves within the protocol; a reviewer should model one that does not.
+- The sealed-column construction end to end: key derivation, the AAD binding (`seal_aad(physical, column, row_id)`), nonce discipline and reuse resistance under row updates and restores, and whether the AAD binding actually prevents cross-row and cross-column ciphertext substitution.
+- Seal-key and identity-seed custody: the `keys/` sibling directory, the OS keystore envelopes, what a backup, an export or a `centraid recover` moves and what it deliberately does not, and the failure mode when custody and database disagree.
+- The peer plane: iroh `EndpointId` binding, the pairing ticket (one-shot, hash-only at rest, 15-minute lifetime) and replay, the provisional connection a redeeming device gets, and what a malicious peer can cause a host to do.
 - Share-grant revocation as a _security_ property rather than a liveness one, including the pinned defect D1 (see [decisions.md](decisions.md#adversary-lanes-and-provisional-evidence-839)).
 
 **Questions the engagement must answer in writing.** Can a nonce repeat under any sequence of updates, restores and merges? Does the AAD binding survive a schema migration that renames an entity or column? Can a paired peer that is later revoked recover any plaintext it did not already hold? Is there any construction here that would fail a standard misuse-resistance review, independent of whether an exploit is demonstrated?
@@ -40,24 +40,24 @@ An external reviewer's time is worth more than re-running gates. These already e
 
 **Why.** The gate this repo runs is a denial _sweep_: it enumerates declared scopes and asserts the undeclared ones refuse. That proves the policy is enforced as written. It cannot find the case where the policy as written is the wrong policy, or where two correct-in-isolation surfaces compose into an authorization bypass — the class that needs somebody hostile and unfamiliar.
 
-**Scope.** The gateway HTTP surface as a whole, with the route-security registry handed over as the intended policy and the reviewer asked to break it: control vs device session isolation, the owner-tier recovery doors, the web PWA's cookie and origin binding, service-worker wake paths, the extension's message channel, and the assistant turn stream. Explicitly including the _composition_ question — can a device-tier caller reach an owner-tier effect by chaining two individually-correct endpoints.
+**Scope.** Every door into the vault, with the access plane ([`crates/vault/src/access.rs`](../crates/vault/src/access.rs)) handed over as the intended policy and the reviewer asked to break it: the `centraid/v1` iroh plane a paired device speaks, the seat's local socket the desktop speaks, the browser Companion's native-messaging host (`centraid native-host`), the MCP stdio child (`centraid mcp`), and the seat-mediated Locker fill. Explicitly including the _composition_ question — can a read-only or agent principal reach an owner effect by chaining two individually-correct calls.
 
 **Questions.** Is there a path from an unauthenticated or device-tier position to any vault read the tier does not own? Does any error, timing or length side channel distinguish "absent" from "refused" where the design says it must not (the roster topology-hiding rule)? Does the experimental feature gate hold on every surface it claims?
 
-**Unblock condition.** A pentest engagement against a maintainer-hosted instance with real data volume, one to two weeks, with the route-security registry and threat model supplied up front so the time goes to breaking rather than mapping.
+**Unblock condition.** A pentest engagement against a maintainer-hosted instance with real data volume, one to two weeks, with the access plane and threat model supplied up front so the time goes to breaking rather than mapping.
 
 ## Review C — privacy and egress
 
-**Why.** This is the review that maps to the product's actual promise. The sovereign-vault claim is not a cryptographic claim; it is a claim about where bytes go. Three surfaces can move bytes off-device — the enrichment cascade's `provider` egress class, the mobile real-map basemap traffic, and the support bundle this slice built — and each is governed by different machinery. Nobody outside this repo has checked that the three stories add up to the one sentence the product tells users.
+**Why.** This is the review that maps to the product's actual promise. The sovereign-vault claim is not a cryptographic claim; it is a claim about where bytes go. The surfaces that can move bytes off-device — the enrichment cascade's `provider` egress class, an assistant turn routed to a third-party harness, and the relay a paired device dials through — are each governed by different machinery. Nobody outside this repo has checked that those stories add up to the one sentence the product tells users.
 
 **Scope.**
 
 - The egress cascade: whether the E-ceiling rule (only the vault-default layer sets the ceiling; no rule, profile or per-item choice can widen it) actually holds in the implementation, and whether the consent receipts are what a data-protection reviewer would accept as a record.
-- The support bundle: whether the redaction model in `packages/server/src/serve/diagnostics-redaction.ts` is adequate for an artifact a user may attach to a public issue, and specifically the two residuals its own header records — a short low-entropy unquoted value in a log line, and a credential stored under a key whose name is not secret-shaped.
+- Derivative renditions: that `thumb` and `preview` carry no EXIF, XMP or ICC ([`crates/media/src/renditions.rs`](../crates/media/src/renditions.rs)), since `thumb` is the rendition that travels first to every admitted device.
 - The Assist OAuth worker's Analytics Engine dataset and the surrounding "keep logs off" rules in [logs.md](logs.md), which are operational discipline rather than an enforced property.
 - Store-facing privacy declarations for iOS and Android against what the app actually does.
 
-**Unblock condition.** A privacy counsel or data-protection reviewer, one week, handed this document, `SECURITY.md`, the decisions file's enrichment and cartography sections, and a generated support bundle from a real vault.
+**Unblock condition.** A privacy counsel or data-protection reviewer, one week, handed this document, `SECURITY.md`, and the decisions file's enrichment sections.
 
 ## Formal-model note
 
@@ -87,12 +87,12 @@ A formal model is worth building for exactly the invariants where the failure is
 
 **The invariant.** Every read path yields either the placeholder or a receipted reveal; there is no third outcome, and no path yields plaintext without a receipt.
 
-**Why a model, and why it ranks third.** The T3 canary already enumerates the declared surfaces and enforcement points, and the registry-parity assertions make a new surface fail the suite rather than slip past. The model's marginal value is limited to proving the _enumeration_ is complete — that the set of read paths is closed — which is a code-structure question a model expressed over an abstract path set cannot answer honestly. Build it only after M1 and M2, and only if a surface is ever found that the registry missed.
+**Why a model, and why it ranks third.** The member-key gate already searches every byte-returning door for planted plaintext, and a reveal is built only through `evaluate_reveal` over a `SealedSubject`. The model's marginal value is limited to proving the _enumeration_ is complete — that the set of read paths is closed — which is a code-structure question a model expressed over an abstract path set cannot answer honestly. Build it only after M1 and M2, and only if a surface is ever found that the registry missed.
 
 ### Explicitly not worth modelling
 
-- **Redaction.** The property is "no sensitive substring appears in the output", which is a property of string data and pattern rules, not of reachable states. The adversarial sentinel sweep is the right adversary and it already found four real weaknesses in the rules it tests. A model would restate the rules, not challenge them.
-- **Route classification.** Already a closed enumeration checked at boot; a model would encode the same list twice.
+- **Redaction.** The property is "no sensitive substring appears in the output", which is a property of string data and pattern rules, not of reachable states. A model would restate the rules, not challenge them.
+- **Door enumeration.** The seat catalogue and the native-host methods table are closed enumerations; a model would encode the same list twice.
 - **Protocol version refusal.** One comparison, no state space.
 
 ## Sequencing

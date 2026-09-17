@@ -1,23 +1,19 @@
-# electron-builder for the desktop seat (#1020 wave 3 lane F, D-1020-F7).
+# electron-builder for the desktop seat (#1020, D-1020-F7).
 #
-# Carried from `apps/desktop/electron-builder.yml` with three deliberate
-# differences, each named:
+# Three rules, each asserted by `src/main/packaging.test.ts`:
 #
 #  1. `files:` lists every runtime asset EXPLICITLY, because a file that is not
-#     listed is simply absent in the built app with no error — v0's symptom was
-#     an empty menu-bar icon (census §F seam 6). Here the renderer's own
-#     `index.html`, `styles.css` and bundle live under `dist/renderer/`, and
-#     `dist/**/*` covers them; the tray assets v0 had to list separately do not
-#     exist yet, and when they do they go on this list and not into a comment.
+#     listed is simply absent in the built app with no error — the symptom is an
+#     empty menu-bar icon. The renderer's own `index.html`, `styles.css` and
+#     bundle live under `dist/renderer/`, and `dist/**/*` covers them; tray
+#     assets, when they exist, go on this list and not into a comment.
 #  2. `extraResources` carries the `centraid` BINARY. The seat is a separate
 #     process, not a dylib, which is why the mac entitlements below drop
 #     `disable-library-validation` — nothing unsigned is loaded into this
 #     process.
-#  3. The protocol registration is HERE, in this file, and not in a second one.
-#     v0 keeps it in `electron-builder/app-id.json`, so a lane that rewrote one
-#     config silently lost `centraid://` (census §F seam 6). One file, one
-#     place; `electron-builder/app-id.json` beside this one is kept as a
-#     pointer at it so the old path does not read as the source of truth.
+#  3. The protocol registration is HERE, in this file, and not in a second one:
+#     a scheme split across two configs is silently lost by whoever rewrites
+#     one of them. One file, one place.
 
 appId: dev.centraid.desktop
 productName: Centraid

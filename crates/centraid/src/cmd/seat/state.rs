@@ -1,8 +1,7 @@
 //! The four visible states, folded in one place (#1020, D-1020-F4).
 //!
-//! v0 broadcasts **connectivity only**, from a 5 s health poll in main
-//! (`apps/desktop/src/main/gateway-monitor.ts:45`, census §F seam 10). Two of
-//! the four states #1020 requires have no v0 broadcast to extend at all:
+//! A health poll can only broadcast **connectivity** (census §F seam 10). Two
+//! of the four states #1020 requires are not connectivity at all:
 //! *durability* ("is what I wrote safe") and *pending work* ("how far behind am
 //! I"). Both are facts the core already knows — the outbox depth, the log
 //! watermark, the bounded event queue's stall flag — so they come from the

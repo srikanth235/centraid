@@ -16,94 +16,109 @@ struct PhotosGridView: View {
     var state: PhotosGridStateView { PhotosGridStateView(data: shell.photosState) }
 
     var body: some View {
-        VStack(alignment: .leading) {
-            HStack {
-                ForEach(state.bands, id: \.self) { band in
-                    Button(band.label) { shell.send(screen: "photos.grid", event: band.event) }
+        // A SCROLLVIEW, LIKE EVERY OTHER COVER (R-PHOTOS-2, #1025).
+        //
+        // This was a bare `VStack`, and a `NavigationStack` destination that
+        // does not scroll is laid out under the bar rather than below it: the
+        // band row, "Camera roll backup is off." and "Back up now" all drew
+        // ON TOP of the back chevron and the "Photos" title, and the grid's
+        // last row was cut off at the tab bar with no way to reach it. Nineteen
+        // photographs in a view that cannot scroll is the same defect twice.
+        //
+        // The scroll view is also what makes the inset correct, which is why
+        // the hand-rolled `.safeAreaPadding(.top)` + 44pt that stood here is
+        // gone rather than moved: SwiftUI insets scrollable content below the
+        // bar itself, and a screen that adds its own offset on top of that is
+        // the compensation R-PHOTOS-2 set out to delete, not keep.
+        ScrollView {
+            VStack(alignment: .leading) {
+                HStack {
+                    ForEach(state.bands, id: \.self) { band in
+                        Button(band.label) { shell.send(screen: "photos.grid", event: band.event) }
+                    }
+                    Button {
+                        // `more` IS A SHEET, NEVER A DESTINATION. It sends a sheet
+                        // event; there is no band value it could send.
+                        shell.send(screen: "photos.grid", event: state.moreSheetEvent)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .accessibilityLabel("More")
+                    }
                 }
-                Button {
-                    // `more` IS A SHEET, NEVER A DESTINATION. It sends a sheet
-                    // event; there is no band value it could send.
-                    shell.send(screen: "photos.grid", event: state.moreSheetEvent)
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .accessibilityLabel("More")
-                }
-            }
 
-            // THE OTHER PLANE, IN ITS OWN VIEW (#1025 S6). See `BackupStatus`.
-            BackupStatus(shell: shell, state: state)
+                // THE OTHER PLANE, IN ITS OWN VIEW (#1025 S6). See `BackupStatus`.
+                BackupStatus(shell: shell, state: state)
 
-            switch state.content {
-            case .loading:
-                ProgressView()
-            case let .failure(sentence, remedy):
-                VStack(alignment: .leading) {
-                    Text(sentence)
-                    if !remedy.isEmpty { Text(remedy) }
-                }
-            case let .data(cells, packAbsent):
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96))]) {
-                    ForEach(cells, id: \.identifier) { cell in
-                        if let path = cell.thumbnailPath, !path.isEmpty {
-                            // THE SAME RENDERER AS HOME'S MOSAIC
-                            // (D-1025-S7-20). This drew `Image(systemName:
-                            // "photo")` — an SF Symbol — over a real path, so
-                            // a device holding nineteen photographs showed
-                            // nineteen identical glyphs, and the one place in
-                            // the product that drew a vault's own bytes was a
-                            // four-cell tile on Home. One path, one view.
-                            // A SQUARE CELL, and the ground is what holds it.
-                            // `ContentImage` fills and deliberately overflows
-                            // its frame, so an image asked for its own size
-                            // grows the row: the ground states the geometry and
-                            // the clip keeps the overflow off the neighbour,
-                            // which is what Home's mosaic does with a fixed
-                            // rectangle.
-                            Color.clear
-                                .aspectRatio(1, contentMode: .fit)
-                                .overlay { ContentImage(path: path) }
-                                // WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH, ON
-                                // TOP OF IT (#1025 S5, D-1025-S7-62). A
-                                // thumbnail is drawn under every one of these:
-                                // the grid is the product and it is full under
-                                // every rule there is, and what the overlay
-                                // says is whether the FULL-SIZE file is here,
-                                // moving, or waiting on the member's own rule.
-                                .overlay(alignment: .bottomTrailing) {
-                                    cellState(cell)
-                                }
-                                .clipped()
-                                .accessibilityIdentifier(path)
-                        } else {
-                            // TWO DIFFERENT EMPTY-CELL SENTENCES. A member with
-                            // no pack at all and a member whose pack has evicted
-                            // these must not read the same words. Same square
-                            // ground as a held thumbnail so the label cannot
-                            // spill into a neighbour.
-                            Color.clear
-                                .aspectRatio(1, contentMode: .fit)
-                                .overlay {
-                                    Text(
-                                        packAbsent
-                                            ? "Preview not downloaded to this device"
-                                            : "Preview no longer on this device"
-                                    )
-                                    .multilineTextAlignment(.center)
-                                    .font(.caption2)
-                                    .padding(4)
-                                }
-                                .clipped()
+                switch state.content {
+                case .loading:
+                    ProgressView()
+                case let .failure(sentence, remedy):
+                    VStack(alignment: .leading) {
+                        Text(sentence)
+                        if !remedy.isEmpty { Text(remedy) }
+                    }
+                case let .data(cells, packAbsent):
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 96))]) {
+                        ForEach(cells, id: \.identifier) { cell in
+                            if let path = cell.thumbnailPath, !path.isEmpty {
+                                // THE SAME RENDERER AS HOME'S MOSAIC
+                                // (D-1025-S7-20). This drew `Image(systemName:
+                                // "photo")` — an SF Symbol — over a real path, so
+                                // a device holding nineteen photographs showed
+                                // nineteen identical glyphs, and the one place in
+                                // the product that drew a vault's own bytes was a
+                                // four-cell tile on Home. One path, one view.
+                                // A SQUARE CELL, and the ground is what holds it.
+                                // `ContentImage` fills and deliberately overflows
+                                // its frame, so an image asked for its own size
+                                // grows the row: the ground states the geometry and
+                                // the clip keeps the overflow off the neighbour,
+                                // which is what Home's mosaic does with a fixed
+                                // rectangle.
+                                Color.clear
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .overlay { ContentImage(path: path) }
+                                    // WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH, ON
+                                    // TOP OF IT (#1025 S5, D-1025-S7-62). A
+                                    // thumbnail is drawn under every one of these:
+                                    // the grid is the product and it is full under
+                                    // every rule there is, and what the overlay
+                                    // says is whether the FULL-SIZE file is here,
+                                    // moving, or waiting on the member's own rule.
+                                    .overlay(alignment: .bottomTrailing) {
+                                        cellState(cell)
+                                    }
+                                    .clipped()
+                                    .accessibilityIdentifier(path)
+                            } else {
+                                // TWO DIFFERENT EMPTY-CELL SENTENCES. A member with
+                                // no pack at all and a member whose pack has evicted
+                                // these must not read the same words. Same square
+                                // ground as a held thumbnail so the label cannot
+                                // spill into a neighbour.
+                                Color.clear
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .overlay {
+                                        Text(
+                                            packAbsent
+                                                ? "Preview not downloaded to this device"
+                                                : "Preview no longer on this device"
+                                        )
+                                        .multilineTextAlignment(.center)
+                                        .font(.caption2)
+                                        .padding(4)
+                                    }
+                                    .clipped()
+                            }
                         }
                     }
                 }
             }
         }
-        // The screen owns inset (R-PHOTOS-2): safe area + nav bar once for
-        // band, backup banner, and grid. Child views do not pad for the bar.
-        .safeAreaPadding(.top)
-        .padding(.top, CentraidGeometry.targetMinCoarse)
-        .padding(.horizontal, CentraidGeometry.pageMargin)
+        // THE HORIZONTAL MARGIN STAYS ON THE SCREEN, ONCE (R-PHOTOS-2). It is
+        // outside the scroll view so the page margin does not scroll with the
+        // grid, and `BackupStatus` still carries none of its own.
+        .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
         .navigationTitle("Photos")
     }
 

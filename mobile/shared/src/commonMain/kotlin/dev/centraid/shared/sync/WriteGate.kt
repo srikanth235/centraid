@@ -9,10 +9,9 @@ import dev.centraid.shared.screen.ScreenEffect
  *
  * **An online-only write never enqueues.** "Falling back to the outbox is
  * exactly what the flag forbids" — the flag's whole meaning is that a gateway
- * it cannot reach is a FAILURE, not a delay. v0's list is
- * `packages/blueprints/apps/locker/writes.ts`'s `ONLINE_ONLY_ACTIONS`; the
- * reason a verb is on it is that its answer cannot be reconstructed later
- * (a secret revealed, a session opened, an id the canonical engine mints).
+ * it cannot reach is a FAILURE, not a delay. A verb is online-only because its
+ * answer cannot be reconstructed later (a secret revealed, a session opened, an
+ * id the canonical engine mints).
  *
  * This is a gate and not a branch inside each screen for the reason the
  * `ScreenEffect.SubmitWrite` comment gives: a rule that lives in every reducer

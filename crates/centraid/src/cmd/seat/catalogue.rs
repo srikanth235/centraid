@@ -1,13 +1,11 @@
 //! The statement catalogue: **named** reads, never composed ones
 //! (#1020, D-1020-F2, D-1020-F5).
 //!
-//! v0's renderer is an HTTP client that sends the read it wants
-//! (`packages/core/src/page/statement.ts` shapes travel from the renderer). On
-//! a socket where the peer check has already proven the uid, that would still
-//! be wrong for a different reason: the renderer is the part of this product
-//! that runs third-party-authored JSX from `packages/blueprints`, and a read it
-//! can *compose* is a read an app can compose. So the wire carries a **name**
-//! and the sidecar holds the shapes.
+//! A renderer that sends the read it wants would be wrong even on a socket
+//! where the peer check has already proven the uid: the renderer is the part
+//! of this product that runs app-authored UI, and a read it can *compose* is a
+//! read an app can compose. So the wire carries a **name** and the sidecar
+//! holds the shapes.
 //!
 //! Every Tally statement here is `crates/apps/tally`'s own — the same functions
 //! `crates/apps/tally/tests/parity.rs` compares against
@@ -66,10 +64,9 @@ pub fn statement(name: &str) -> Option<wire::PageQuery> {
 /// `companion.apps` — which apps this vault has installed (#1020 wave 4 lane
 /// extension, D-1020-X10).
 ///
-/// v0's `GET /_vault/apps` answers the same question and the Companion asks it
-/// for exactly one reason: *`unavailable` means the app is not installed on the
-/// paired vault, which is the one fact still worth asking the gateway for*
-/// (`apps/extension/src/companion-api.ts:127`–`:131`). Which modules the
+/// The Companion asks it for exactly one reason: *`unavailable` means the app
+/// is not installed on the paired vault, which is the one fact still worth
+/// asking the gateway for*. Which modules the
 /// Companion uses is its own local preference (#996 R11) and is never read
 /// from here.
 fn companion_apps() -> PageQuery {
@@ -82,7 +79,7 @@ fn companion_apps() -> PageQuery {
 }
 
 /// `companion.outbox` — the queue's pending half, one of `blocking-count`'s
-/// four sources (`packages/server/src/serve/vault-plane.ts:1254`–`:1292`).
+/// four sources.
 fn companion_outbox() -> PageQuery {
     PageQuery::new(
         "companion.outbox",
@@ -123,7 +120,7 @@ fn companion_parked() -> PageQuery {
 
 /// `companion.scopeRequests` — grants an agent has asked for and not been
 /// answered about. *A refusal is an ANSWER*, so `decided_at IS NULL` is the
-/// open set (`packages/vault/src/grant/authority-request.ts:78`–`:82`).
+/// open set.
 fn companion_scope_requests() -> PageQuery {
     PageQuery::new(
         "companion.scopeRequests",

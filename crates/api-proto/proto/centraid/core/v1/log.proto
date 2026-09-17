@@ -15,10 +15,8 @@
 // concepts — "up to date" means current within one round trip whenever this
 // device is connected.
 //
-// v0's shape is `SeatLogRowWire` / `SeatLogPageWire`
-// (`packages/core/src/protocol/seat-log.ts:27-55`). The wire is deliberately not
-// the storage shape: `epoch` is carried ONCE per page, not per row, and the
-// flags that are false are simply not set.
+// The wire is deliberately not the storage shape: `epoch` is carried ONCE per
+// page, not per row, and the flags that are false are simply not set.
 
 syntax = "proto3";
 
@@ -33,8 +31,7 @@ enum LogOp {
   LOG_OP_INSERT = 1;
   LOG_OP_UPDATE = 2;
   LOG_OP_DELETE = 3;
-  // A schema statement. Never deferrable, whatever the commit says
-  // (`packages/client/src/replica/seat/applier.ts:184-195`).
+  // A schema statement. Never deferrable, whatever the commit says.
   LOG_OP_DDL = 4;
 }
 
@@ -65,8 +62,7 @@ message LogRow {
   // `indirect` flag).
   bool indirect = 10;
   // The commit was over the defer threshold. The flag is a property of the
-  // COMMIT and rides on every row of it, never on the page
-  // (`packages/vault/src/replica/log-retention.test.ts:203`).
+  // COMMIT and rides on every row of it, never on the page.
   bool deferred = 11;
   string producer = 12;
   // RFC 3339, as v0 stores it.
@@ -75,10 +71,9 @@ message LogRow {
 
 // One page of the log.
 message LogPage {
-  // Which vault answered. v0 makes this optional on the wire so an older
-  // gateway that says nothing does not brick a compatible pair
-  // (`packages/core/src/protocol/seat-log.ts:126-137`); here an empty string is
-  // that same "this door did not say".
+  // Which vault answered. Absence does not brick a compatible pair with an
+  // older gateway that says nothing; here an empty string is that same "this
+  // door did not say".
   string vault_id = 1;
   string epoch = 2;
   uint32 schema_epoch = 3;
@@ -88,7 +83,7 @@ message LogPage {
   uint64 floor = 5;
   uint64 watermark = 6;
   // The cursor to send next: the last SERVED seq when `has_more`, else the
-  // watermark (`packages/vault/src/replica/log.ts:848`).
+  // watermark.
   uint64 next = 7;
   bool has_more = 8;
   // Whole commits only — a page never ends mid-commit, and the tail of the last
@@ -96,19 +91,16 @@ message LogPage {
   repeated LogRow rows = 9;
 }
 
-// A cursor a seat sends. v0's wire form is the string `<epoch>:<seq>`
-// (`packages/vault/src/replica/cursor.ts:21-64`); two fields need no escaping
-// rule about colons in the epoch.
+// A cursor a seat sends. The wire form is two fields rather than the string
+// `<epoch>:<seq>`, so colons in the epoch need no escaping rule.
 message LogCursor {
   string epoch = 1;
   uint64 seq = 2;
 }
 
-// Why a seat must throw its file away and start from a snapshot. v0's verdict
-// vocabulary is closed and ten values wide
-// (`packages/server/src/routes/replica-routes.ts:79-95`); anything unrecognised
-// there normalises to `invalid-cursor`, and `REBOOTSTRAP_REASON_UNSPECIFIED`
-// is that same normalisation here.
+// Why a seat must throw its file away and start from a snapshot. The verdict
+// vocabulary is closed and ten values wide; anything unrecognised normalises
+// to `REBOOTSTRAP_REASON_UNSPECIFIED`.
 enum RebootstrapReason {
   REBOOTSTRAP_REASON_UNSPECIFIED = 0;
   REBOOTSTRAP_REASON_EPOCH_MISMATCH = 1;
@@ -145,9 +137,7 @@ message RebootstrapRequired {
 message LogRequest {
   // Where the seat is. Absent means "from the floor".
   optional LogCursor since = 1;
-  // Rows per page. Required and validated > 0 by the reader; v0 defaults 1,000
-  // and ceilings at `SEAT_LOG_MAX_PAGE = 10_000`
-  // (`packages/core/src/protocol/seat-log.ts:141`).
+  // Rows per page. Required and validated > 0 by the reader.
   uint32 limit = 2;
   // STAY OPEN (#1025 S2, D-1025-S7-40).
   //

@@ -2,12 +2,9 @@
  * THE CLOSED METHOD TABLE, READ FROM THE CONTRACT (#1020 wave 4 lane
  * extension, D-1020-X2).
  *
- * `contracts/extension/methods.json` and its shipped twin `methods-table.ts` are
- * generated from v0's own two files —
- * `apps/extension/src/types.ts`'s `CompanionRequest` union and
- * `companion-api.ts`'s switch — by
- * `contracts/tools/export-extension-methods.ts`. The native host compiles the
- * same file in (`crates/centraid/src/cmd/native_host/methods.rs`) and asserts
+ * `contracts/extension/methods.json` and its shipped twin `methods-table.ts`
+ * hold the table, and `methods.test.ts` asserts they agree. The native host
+ * compiles the contract in (`crates/centraid/src/cmd/native_host/methods.rs`) and asserts
  * its enum against it. This module is the third reader, and the reason all three
  * read one file rather than agreeing by convention is that the failure mode is
  * silent: a method one side knows and the other does not is a button that does
@@ -16,8 +13,7 @@
  * ## Eighteen, and the census says seventeen
  *
  * Census §E2 calls this "the 17 companion methods" and lists eighteen names.
- * `handleCompanionRequest` has eighteen `case` arms. Eighteen is the number and
- * the generator asserts it.
+ * Eighteen is the number, and `methods.test.ts` asserts it.
  *
  * ## The host is the authority on retryability, not this file
  *

@@ -2,18 +2,14 @@
  * Pure backoff, crash-loop and revival bookkeeping for the seat sidecar
  * (#1020, D-1020-F1). No `child_process`, no `electron`.
  *
- * **The arithmetic is v0's, carried verbatim** from
- * `apps/desktop/src/main/gateway-supervisor-core.ts`: the backoff schedule, the
- * crash-loop window and threshold, the revival budget and the manual-retry
- * floor. Those numbers were tuned against a shipped product and nothing about a
- * seat process makes them wrong, so they are copied rather than re-derived —
- * and the v0 unit suite's cases are carried with them.
+ * The backoff schedule, the crash-loop window and threshold, the revival
+ * budget and the manual-retry floor were tuned against a shipped product; they
+ * are not re-derived here, and the unit suite pins them.
  *
- * What is NEW here is [`quitSequence`], because the product decision changed:
- * v0's quit deliberately leaves a detached gateway running (census §F seam 1,
- * `local-gateway.ts:336`–`:348`), and a seat process whose only client is this
- * window is OWNED — quit stops it. The sequence below is the ordering that
- * makes that safe, and its steps are asserted rather than described.
+ * [`quitSequence`] encodes ownership: a seat process whose only client is this
+ * window is OWNED — quit stops it, rather than leaving a detached process
+ * running. The sequence below is the ordering that makes that safe, and its
+ * steps are asserted rather than described.
  */
 
 export interface SupervisorState {
