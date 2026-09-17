@@ -26,11 +26,20 @@ public interface ScreenMachine<S, E> {
      * A ROW MOVED IN THE VAULT. What does this screen make of it?
      * (#1025 S5, D-1025-S5-3.)
      *
-     * The core's change stream (`next_event`) says `(table, keys, commit_seq)`
-     * and nothing else — it never carries values, which is what makes
-     * coalescing lossless in `crates/core`'s event queue. So each screen turns
-     * that into its OWN event, here, and `null` means "not mine": a table this
-     * screen does not read, or keys it is not showing.
+     * The core's change stream (`next_event`) says `(table, keys)` and nothing
+     * else — it never carries values, which is what makes coalescing lossless
+     * in `crates/core`'s event queue. So each screen turns that into its OWN
+     * event, here, and `null` means "not mine": a table this screen does not
+     * read, or keys it is not showing.
+     *
+     * **`commitSeq` IS GONE** (#1029 §1). It was the position a SEAT's overlay
+     * settled against — `ChangeEvent`'s commit-seq field, allocated by
+     * `replica_meta` in the log plane — and no machine ever read it: every one of
+     * the four named it and none of them used it, because a screen re-reads its
+     * own page and has nothing to compare a commit number to. The overlay, the
+     * log plane and `replica_meta` are deleted; the field stays on the wire for
+     * a moment longer because `crates/api-proto` is another lane's, and it
+     * leaves with its producers there.
      *
      * **One declaration and not two.** The first draft of this had a `tables`
      * set beside a translator, and the two are a pair that can disagree — a
@@ -43,19 +52,18 @@ public interface ScreenMachine<S, E> {
      * key is, and a screen that cannot recognise its own ids in a list of
      * strings has a bigger problem than this signature.
      */
-    public fun rowsChanged(table: String, keys: List<String>, commitSeq: ULong): E?
+    public fun rowsChanged(table: String, keys: List<String>): E?
 
     /**
      * WHAT THIS SEAT CAN SAY ABOUT ITSELF, CHANGED (#1025 S5, D-1025-S5-6).
      *
      * Every screen's event already has a `SeatChanged` case and every machine
-     * already reduces it — and **nothing in the product ever sent one**, so
-     * `SeatState` was null on every screen for ever. That is not cosmetic:
-     * [dev.centraid.shared.sync.WriteGate] reads the seat off the screen, a
-     * null seat is not reachable, and the consequence is that an `onlineOnly`
-     * write was **refused on every device, always**, while an ordinary write
-     * queued even with a healthy gateway one hop away. A gate handed a constant
-     * is not a gate.
+     * already reduces it — and for two waves **nothing in the product ever sent
+     * one**, so `SeatState` was null on every screen for ever. What it decided
+     * then was the write gate, and that gate is gone with the gateway it was
+     * choosing between (#1029 §1). What is left is what a screen RENDERS:
+     * availability, durability and the radio, which are still four facts a
+     * member reads off a screen.
      *
      * `null` from a machine means the screen does not render the seat, which is
      * a real answer — Home draws its own status line and needs no seat.
@@ -88,16 +96,17 @@ public sealed interface ScreenEffect {
     /**
      * Submit a write.
      *
-     * `onlineOnly` is carried here and honoured by the write gate, not by the
-     * reducer: **falling back to the outbox is exactly what the flag forbids**
-     * (`docs/mobile-offline.md:259`), and a reducer that decided for itself
-     * would be a second place the rule lives.
+     * **`onlineOnly` LEFT WITH THE OUTBOX IT FORBADE** (#1029 §1). The flag
+     * meant "a gateway this device cannot reach is a FAILURE, not a delay",
+     * and it was read by `WriteGate` to refuse rather than enqueue. The phone
+     * is the vault: a write commits here or it does not, there is no outbox to
+     * fall back to, and a flag forbidding a fallback that cannot happen is a
+     * field every caller has to fill in and nothing reads.
      */
     public data class SubmitWrite(
         public val command: String,
         public val inputJson: String,
         public val invokeKey: String,
-        public val onlineOnly: Boolean,
     ) : ScreenEffect
 
     /**
@@ -135,14 +144,14 @@ public sealed interface ScreenEffect {
      * FETCH ONE ORIGINAL THE MEMBER TAPPED (#1025 S5, D-1025-S7-63).
      *
      * WhatsApp's download arrow. An effect and not a write: it commits
-     * nothing, has no intent and no outbox entry — it is a `seat.bytes.fetch`
-     * command, which is `seat.sync` with a one-item window, and the bytes it
-     * lands redraw the cell through the ordinary `RowsChanged` every other
-     * arriving blob uses (D-1025-S7-21).
+     * nothing.
      *
-     * **Not `SubmitWrite`.** A write gate would queue this offline, and a
-     * queued download is a promise nobody can keep: the member wants the file
-     * now or they want to be told the gateway is away.
+     * **NOTHING SERVES IT RIGHT NOW** (#1029 §1). It rode `seat.bytes.fetch`,
+     * which left with the seat plane — `grep -rn 'seat.bytes.fetch' crates/`
+     * is empty — so `ScreenRuntime` no longer answers it. The affordance and
+     * this effect are kept rather than deleted because the phone's own byte
+     * plane is #1029 W6's, and that is the wave that gives this a server
+     * again.
      */
     public data class FetchOriginal(
         public val screenId: String,

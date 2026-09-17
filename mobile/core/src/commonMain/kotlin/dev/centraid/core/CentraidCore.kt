@@ -24,65 +24,58 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.jvm.JvmStatic
 
-/** Where the shell believes the core's own file lives, and who it is. */
+/**
+ * WHERE THE SHELL BELIEVES THE VAULT LIVES, AND NOTHING ELSE (#1029 §1).
+ *
+ * It carried a `CoreRole` and a `PairingRecord`, and both left with the seat
+ * plane. The role — `gateway`, `seat-replicated`, `seat-thin` — was the core
+ * branching on which kind of host it was running in, and the phone is the only
+ * host that opens a vault now, so there is one kind of core and a word naming
+ * which would be a word nothing reads. The record was this device's
+ * relationship with a GATEWAY: the endpoint secret it dialled with, the public
+ * half that gateway said it had enrolled, where the vault was reached and
+ * whether that deployment had relays. There is nothing to dial.
+ *
+ * `crates/core-ffi`'s `config_from_json` reads exactly what is left — `path`,
+ * `create`, `uiThreadName`, `expectedIdentity` — and IGNORES a `role` an older
+ * shell still sends rather than refusing the open, which is the version-skew
+ * case the handshake exists for.
+ */
 public data class CoreConfiguration(
     /**
-     * The replica file. Named after the VAULT by
-     * `dev.centraid.shared.shell.MountKey` — and after nothing else
-     * ([D-1025-S1-1], #1025 S5): a gateway id is an address a vault is reachable
-     * at, never a name a copy is filed under.
+     * The vault file.
+     *
+     * Named by the shell and by nothing else. It used to be named after the
+     * VAULT — `centraid-replica-<vaultId>.sqlite3` — so that a device could
+     * find a vault's enrolment record before opening the file; there is no
+     * record, so the name is a label and `dev.centraid.shared.shell.Shelf`
+     * asks each file which vault it is instead.
      */
     public val databasePath: String,
-    public val role: CoreRole,
-    public val create: Boolean = false,
+    /**
+     * FOUND A VAULT HERE IF THERE IS NONE (#1029 §1).
+     *
+     * The phone is the vault, so a shell can make one — and `crates/core`'s
+     * `CoreConfig::create` defaults to TRUE for exactly that reason: a caller
+     * that named a path and said nothing else is founding a vault there. This
+     * binding keeps the same default so the two sides cannot disagree about
+     * what an unqualified open means.
+     *
+     * The shelf passes `false` for every open but a founding one. A file that
+     * is not there is then a vault this device does not hold — answered as
+     * "there is nothing here" rather than as a silently empty product.
+     */
+    public val create: Boolean = true,
     /**
      * The digest this shell's own build recorded for the core it intends to
      * use. [ArtifactIdentity.DEV] means "not checked, and say so".
      */
     public val expectedDigest: String = ArtifactIdentity.DEV,
-    /**
-     * THE ENROLMENT THIS SHELL KEPT FOR THIS VAULT (#1025 S7-13).
-     *
-     * ONE RECORD, and everything about this device's relationship with one
-     * vault rides on it: the secret half of the identity the gateway enrolled,
-     * the public half the gateway said it enrolled, where the vault is reached,
-     * and whether that deployment has relays.
-     *
-     * It was three secure-store entries — an endpoint key, a pairing record and
-     * a replica — settled one at a time under three names, and a settle that
-     * half-ran left a device with an identity for a vault whose address it had
-     * lost. There is one name now (`dev.centraid.shared.shell.Enrolments`), and
-     * it moves in one rename.
-     *
-     * `null` is a core opened over a vault this device has no enrolment for,
-     * which is a local vault or a probe. It is NOT the "after the copy lands"
-     * case: the replica holds its own copy of the address by then and the core
-     * asks the file first, but the SECRET is never in the file and always
-     * comes from here.
-     */
-    public val pairing: PairingRecord? = null,
 ) {
     internal fun toJson(uiThreadName: String): String = buildString {
         append('{')
         append("\"path\":").append(quote(databasePath))
-        append(",\"role\":").append(quote(role.wire))
         append(",\"create\":").append(create)
-        if (pairing != null) {
-            append(",\"pairing\":{")
-            append("\"secret\":").append(quote(pairing.secret))
-            append(",\"enrolledPublicKey\":").append(quote(pairing.enrolledPublicKey))
-            append(",\"gatewayAddress\":").append(quote(pairing.gatewayAddress))
-            append(",\"vaultId\":").append(quote(pairing.vaultId))
-            append(",\"vaultName\":").append(quote(pairing.vaultName))
-            // THE KEY'S PRESENCE IS THE STATEMENT. Absent means "not told".
-            pairing.relayUrl?.let { append(",\"relayUrl\":").append(quote(it)) }
-            append(",\"directAddrs\":[")
-            pairing.directAddrs.forEachIndexed { index, hint ->
-                if (index > 0) append(',')
-                append(quote(hint))
-            }
-            append("]}")
-        }
         append(",\"uiThreadName\":").append(quote(uiThreadName))
         append('}')
     }
@@ -105,61 +98,6 @@ public data class CoreConfiguration(
     }
 }
 
-/**
- * Where a gateway is, as this shell persisted it (#1025 S7, item 3).
- *
- * Every field comes off a `PairOk`. [gatewayAddress] is the only one that is
- * PROVED — iroh's TLS proves it and nothing else here is proved by anything —
- * which is what makes the rest safe to keep beside it: a stale or tampered hint
- * reaches the right gateway or nothing at all.
- */
-public data class PairingRecord(
-    /**
-     * THIS DEVICE'S ENDPOINT SECRET FOR THIS VAULT — 32 bytes as 64 lowercase
-     * hex, out of the shell's [dev.centraid.shared.platform.SecureStore]
-     * (#1025 S5, folded in here by S7-13).
-     *
-     * Empty means the store had nothing, and the core mints a fresh keypair —
-     * a device its gateway has not enrolled. After a pairing that is caught at
-     * open by [enrolledPublicKey]; before one it is the ordinary first run.
-     */
-    public val secret: String = "",
-    /** The gateway's endpoint id, 64 lowercase hex. */
-    public val gatewayAddress: String,
-    public val vaultId: String,
-    public val vaultName: String,
-    /**
-     * WHERE THE GATEWAY IS REACHED THROUGH, AND THE RELAY DECISION — with
-     * three states, because there genuinely are three (#1025 S7-13).
-     *
-     * A url is a deployment reached through that relay. `""` is a deployment
-     * that STATED it has none, and the endpoint comes up with relay mode
-     * disabled. `null` is a record that has not been told — the transient one
-     * this device holds while redeeming a ticket — and relays stay ON, because
-     * a device that guessed them off could not pair over the internet at all.
-     */
-    public val relayUrl: String? = null,
-    public val directAddrs: List<String> = emptyList(),
-    /**
-     * THE PUBLIC KEY THE GATEWAY SAID IT ENROLLED, 64 lowercase hex
-     * (#1025 S7-13).
-     *
-     * Off the `PairOk`, derived by the gateway from the connection its TLS
-     * proved — never from anything this device asserted. At every later open
-     * the core compares the endpoint that came up against it and refuses an
-     * `ERROR_CODE_IDENTITY_MISMATCH` rather than dialling as a stranger.
-     *
-     * Empty on the transient record a device holds while redeeming a ticket.
-     */
-    public val enrolledPublicKey: String = "",
-)
-
-public enum class CoreRole(internal val wire: String) {
-    GATEWAY("gateway"),
-    SEAT_REPLICATED("seat-replicated"),
-    SEAT_THIN("seat-thin"),
-}
-
 /** Where the handle is. There is no fourth state. */
 public sealed interface CoreLifecycle {
     public data object Open : CoreLifecycle
@@ -174,14 +112,17 @@ public sealed interface CoreLifecycle {
 /**
  * The core, as the shell holds it (#1020, D-1020-E2).
  *
- * ## One core per device process (R-1020-24)
+ * ## One core per VAULT FILE, not one per process (R-1020-24, re-keyed by
+ * #1025 S7-13)
  *
- * [open] refuses a second handle in the same process. In v0 the rule was a
- * `<seat>.lease.json` sidecar plus `useNewConnection: true`, and **both halves
- * were needed and neither was enough** (census §E seam 1). With the core owning
- * the file the two mechanisms collapse into one — but only if nothing else in
- * the process opens a second one, which is why Share, Autofill and Widget
- * extensions never open the vault and never start iroh.
+ * [open] refuses a second handle on the same file, and admits one on another
+ * vault — which is what lets the shelf hold every vault this device has open at
+ * once. The header on [SingleHandleGuard] has the whole argument. In v0 the rule
+ * was a `<seat>.lease.json` sidecar plus `useNewConnection: true`, and **both
+ * halves were needed and neither was enough** (census §E seam 1). With the core
+ * owning the file the two mechanisms collapse into one — but only if nothing
+ * else in the process opens a second handle on it, which is why Share, Autofill
+ * and Widget extensions never open the vault.
  *
  * ## Threading
  *
@@ -203,11 +144,11 @@ public sealed interface CoreLifecycle {
 public class CentraidCore private constructor(
     private val abi: CentraidAbi,
     /**
-     * The replica this handle holds, which is the key [SingleHandleGuard] filed
-     * it under. Empty for a core built over an injected ABI in a test, which
-     * never took the guard.
+     * The vault file this handle holds, which is the key [SingleHandleGuard]
+     * filed it under. Empty for a core built over an injected ABI in a test,
+     * which never took the guard.
      */
-    private val replicaPath: String,
+    private val vaultPath: String,
     private val dispatcher: CoroutineDispatcher,
     private val uiThreadName: String,
     /** Set when [open] ran the identity check and it did not run. */
@@ -342,7 +283,7 @@ public class CentraidCore private constructor(
         abi.close()
         _lifecycle.value = CoreLifecycle.Closed
         supervisor.cancel()
-        openHandles.release(replicaPath)
+        openHandles.release(vaultPath)
     }
 
     private fun interpret(answer: AbiAnswer): CoreOutcome<Envelope> {
@@ -461,7 +402,7 @@ public class CentraidCore private constructor(
             uiThreadName: String,
         ): CentraidCore = CentraidCore(
             abi = abi,
-            replicaPath = "",
+            vaultPath = "",
             dispatcher = dispatcher,
             uiThreadName = uiThreadName,
             identityWarning = null,
@@ -505,11 +446,10 @@ public class CentraidCore private constructor(
         /**
          * Open the core, run the handshake, and check the artifact identity.
          *
-         * THE HANDSHAKE IS PART OF OPENING. `Hello` is the one request a thin
-         * seat answers locally (`crates/core`'s `answerable_locally`), so it is
-         * the only request that is safe to make before the shell knows what it
-         * is talking to — and the identity check has to happen before the first
-         * real read, not after it.
+         * THE HANDSHAKE IS PART OF OPENING. `Hello` is the one request that is
+         * safe to make before the shell knows what build it is talking to, and
+         * the identity check has to happen before the first real read rather
+         * than after it.
          */
         @JvmStatic
         public suspend fun open(
@@ -521,8 +461,8 @@ public class CentraidCore private constructor(
             if (!openHandles.acquire(configuration.databasePath)) {
                 return@withContext CoreOutcome.Failed(
                     CoreFailure.BadArgument(
-                        "a core is already open on that replica in this process. ONE HANDLE PER " +
-                            "REPLICA (R-1020-24): app extensions never open the vault.",
+                        "a core is already open on that vault in this process. ONE HANDLE PER " +
+                            "VAULT FILE (R-1020-24): app extensions never open the vault.",
                     ),
                 )
             }
@@ -559,10 +499,24 @@ public class CentraidCore private constructor(
                     CoreOutcome.Failed(verdict.failure)
                 }
                 is IdentityVerdict.Matched -> CoreOutcome.Answered(
-                    CentraidCore(abi, configuration.databasePath, dispatcher, uiThreadName, null, reported),
+                    CentraidCore(
+                        abi,
+                        configuration.databasePath,
+                        dispatcher,
+                        uiThreadName,
+                        null,
+                        reported,
+                    ),
                 )
                 is IdentityVerdict.NotChecked -> CoreOutcome.Answered(
-                    CentraidCore(abi, configuration.databasePath, dispatcher, uiThreadName, verdict.warning, reported),
+                    CentraidCore(
+                        abi,
+                        configuration.databasePath,
+                        dispatcher,
+                        uiThreadName,
+                        verdict.warning,
+                        reported,
+                    ),
                 )
             }
         }
@@ -609,7 +563,7 @@ public class CentraidCore private constructor(
 }
 
 /**
- * ONE HANDLE PER REPLICA PATH PER PROCESS (#1025 S7-13, re-keying R-1020-24).
+ * ONE HANDLE PER VAULT FILE PER PROCESS (#1025 S7-13, re-keying R-1020-24).
  *
  * ## What the rule protects, and what it was read as
  *
@@ -620,10 +574,10 @@ public class CentraidCore private constructor(
  *
  * This guard was keyed on the process, which made "one core per process" the
  * rule, and that reading was over-broad in exactly one direction: it also
- * refused two handles on two DIFFERENT vaults, which share no file, no outbox
- * and no endpoint. It cost the shelf a close-and-reopen on every vault switch
- * and made `D-1020-HOME8`'s survey-before-open dance necessary — every replica
- * had to be opened and closed one at a time just to read its own name.
+ * refused two handles on two DIFFERENT vaults, which share no file. It cost the
+ * shelf a close-and-reopen on every vault switch and made `D-1020-HOME8`'s
+ * survey-before-open dance necessary — every file had to be opened and closed
+ * one at a time just to read its own name.
  *
  * The rule is unchanged for the case it exists for. An extension opening the
  * main app's vault is still two handles on one path, and still refused; an
@@ -635,7 +589,7 @@ public class CentraidCore private constructor(
  *
  * Not canonicalised, because `commonMain` has no filesystem and the shell hands
  * one absolute path per vault, built in one place
- * (`dev.centraid.shared.shell.Replicas`). A guard that pretended to canonicalise
+ * (`dev.centraid.shared.shell.Shelf`). A guard that pretended to canonicalise
  * would be claiming a property it cannot check.
  */
 internal class SingleHandleGuard {

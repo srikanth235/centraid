@@ -1,7 +1,6 @@
 package dev.centraid.shared.platform
 
 import centraid.screen.v1.MediaPermission
-import dev.centraid.shared.sync.WakeReason
 
 /**
  * Everything `commonMain` cannot do for itself (#1020, D-1020-E4).
@@ -85,50 +84,16 @@ public interface SecureRandom {
 public interface BackgroundTasks {
     public suspend fun register(): Registration
 
-    /**
-     * THE WINDOW THIS PLATFORM ALLOWS A PASS WOKEN THIS WAY (#1025 S5).
-     *
-     * `LifecycleState.BUDGET_MS = 20_000` used to answer this, and a constant
-     * cannot: a foreground "sync now" has no expiry at all, an iOS
-     * `BGAppRefreshTask` has one iOS chose, and an Android `ListenableWorker`
-     * is stopped when WorkManager's own budget runs out. The answer is per
-     * [dev.centraid.shared.sync.WakeReason] for that reason — a foreground
-     * pass must not be handed a background number.
-     *
-     * **IT IS A STATEMENT, NOT A MEASUREMENT**, and [PlatformWindow.source]
-     * says whose. [platformExpired] is the authority; see there.
-     */
-    public suspend fun window(wake: WakeReason): PlatformWindow
-
-    /**
-     * Hear the platform's OWN expiry signal.
-     *
-     * Registered here and not in each shell because the two signals —
-     * `BGAppRefreshTask.expirationHandler` on iOS, `ListenableWorker`'s stop
-     * on Android — say one thing, and a listener per shell is a listener one
-     * shell forgets. The runner turns each call into
-     * `LifecycleEvent.PlatformExpirationWarning`, which `SyncScheduler`
-     * already honours as a second, independent trigger.
-     */
-    public fun onPlatformExpiration(listener: () -> Unit)
-
-    /**
-     * THE CALL THE APP'S TASK HANDLER MAKES. Named, and on the interface, so
-     * that the seam is one symbol on both platforms:
-     *
-     * * **iOS** — the app registers the launch handler (`shared` cannot:
-     *   `BGTaskScheduler.register(forTaskWithIdentifier:using:launchHandler:)`
-     *   must run before the app finishes launching, from the app delegate).
-     *   Inside it, `task.expirationHandler = { backgroundTasks.platformExpired() }`.
-     * * **Android** — the `ListenableWorker` running the pass calls it from
-     *   `onStopped()`, where `getStopReason()` is also available.
-     *
-     * Either call is the OS speaking about the time it actually has left, and
-     * on iOS it is the ONLY such statement: there is no API for the remaining
-     * time on a `BGAppRefreshTask`, so [window]'s number is the documented
-     * duration of the class and never a reading off a clock the OS owns.
-     */
-    public fun platformExpired()
+    // THE WINDOW, THE EXPIRY SIGNAL AND THE WAKE REASON LEFT WITH THE PASS
+    // (#1029 §1, §6). `window(WakeReason)` existed to bound one `seat.sync`
+    // call — its answer became the `SyncWindow` on the command, and
+    // `onPlatformExpiration`/`platformExpired` were the second trigger
+    // `SyncScheduler` honoured. There is no gateway, no pass and no scheduler,
+    // so all three named a shape of work this device no longer does.
+    //
+    // `register` stays: whether the OS will wake this app at all is a fact a
+    // member reads, and it is what W5's background transfers and W10's
+    // reminders will register against.
 
     public data class Registration(
         public val registered: Boolean,
@@ -136,21 +101,6 @@ public interface BackgroundTasks {
         public val sentence: String,
         /** Why it refused, when it did. Empty when it did not. */
         public val refusal: String = "",
-    )
-
-    /**
-     * How long this platform says a pass woken this way has.
-     *
-     * [source] is carried beside the number because the two platforms know it
-     * differently and a reader deciding whether to trust the number needs to
-     * be told which: iOS's is Apple's documented duration for the task class,
-     * Android's is WorkManager's ten-minute execution window, and a foreground
-     * window is bounded only by the member closing the app.
-     */
-    public data class PlatformWindow(
-        public val deadlineMs: Long,
-        /** Where the number came from. Never "measured" on iOS. */
-        public val source: String,
     )
 }
 

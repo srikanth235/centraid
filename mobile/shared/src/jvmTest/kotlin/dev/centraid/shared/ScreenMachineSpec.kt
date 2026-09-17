@@ -314,7 +314,6 @@ class ScreenMachineSpec : StringSpec({
         val write = saving.effects.single() as ScreenEffect.SubmitWrite
         write.command shouldBe NotesEditorMachine.SAVE_COMMAND
         write.invokeKey shouldBe "notes.save:note-0001:rev-0007"
-        write.onlineOnly.shouldBeFalse()
         // THE BASE REVISION IS THE INVOKE KEY'S SECOND HALF AND NOT AN INPUT
         // (#1025 S5). `knowledge.edit_note`'s schema is
         // `additionalProperties: false`, so sending it would be refused — and

@@ -870,3 +870,276 @@ no adapter, no server.
 | 8 `bun run check:push:static` | **4/4 green** (`bun install` first) |
 | 9 `node scripts/check-ledgers.mjs --base 2a0a1f0a` | **ok — 19 sections across 5 ledgers hold** |
 | 10 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
+## W2 — the mobile half (lane M)
+
+Branch `claude/1029-w2m-mobile`, base `2a0a1f0a`. **Nothing was deleted. The lane is
+blocked on the same wall W2 hit, re-confirmed with fresh evidence, and this section is
+the hand-up.** One commit, this section.
+
+The lane was dispatched on the premise that Maven Central had recovered — a re-probe of
+`kotlin-stdlib-2.1.0.pom` answered `200`. **That probe was not representative.** Maven
+Central is rate-limiting this container's egress *intermittently and per-request*, and a
+single serial `curl` is the one shape of request that gets through.
+
+### The blocker, measured
+
+`./gradlew :shared:jvmTest :core:jvmTest` was run three times from
+`/home/user/centraid-w2m/mobile`. All three failed in configuration, before a single
+line of Kotlin was compiled:
+
+| Run | Shape | Result |
+| --- | --- | --- |
+| 1 | default | `BUILD FAILED` — `Could not resolve com.squareup.wire:wire-kotlin-generator:7.0.1`, `429 Too Many Requests`, "23 more failures with identical causes" |
+| 2 | default, retry (the brief's one permitted retry) | `BUILD FAILED` — same, on `wire-swift-generator` and `com.charleskorn.kaml:kaml:0.104.0`, "16 more failures" |
+| 3 | `--max-workers=1 --no-parallel` | `BUILD FAILED` — same. Serializing the resolve does not clear it |
+
+The failing requests are all `Could not HEAD 'https://repo.maven.apache.org/...'`.
+Probing that exact distinction is what named the cause:
+
+```
+HEAD=200 GET=200  .../com/charleskorn/kaml/kaml/0.104.0/kaml-0.104.0.pom
+HEAD=429 GET=200  .../com/squareup/wire/wire-swift-generator/7.0.1/wire-swift-generator-7.0.1.pom
+```
+
+**The same URL answers `429` to `HEAD` and `200` to `GET` in the same second.** This is a
+flapping upstream limiter, not an outage and not a proxy fault —
+`$HTTPS_PROXY/__agentproxy/status` reports `enabled: true`,
+`bundleCoversEveryHost: true`, and one stale `plugins.gradle.org` relay drop already
+named in the brief. Gradle's resolver does not retry a `429`, and it needs ~24
+consecutive successes to configure the root project.
+
+Gradle caches what does resolve, so repeated runs converge in principle. They do not
+converge in practice here: after three runs `/root/.gradle/caches/modules-2` is **2.3 MB**
+and holds **no wire artefact at all** (`find … -path '*wire*' -name '*.jar'` → empty).
+The tree needs the whole Kotlin 2.4.0 and Wire 7.0.1 toolchains.
+
+**So the compiler never ran, and the lane stopped.** Deleting `Replicas`, `GatewayLink`,
+`CoreRole` and the sync surface reaches ten files that reference those symbols by name
+(`grep -rln 'SEAT_REPLICATED\|SeatKind\|Replicas\|GatewayLink' mobile/` → `Replicas.kt`,
+`Shelf.kt`, `HomeSession.kt`, `HomeBridge.kt`, `Enrolments.kt`, `ReplicasSpec.kt`,
+`ShellModel.swift`, `MainActivity.kt`, `README.md`, `CentraidCore.kt`) — W2's estimate of
+eleven, confirmed. `Shelf` alone takes its entire file layer from `Replicas`
+(`list`, `pathOf`, `vaultIdOf`, `pairingPath`, `settle`), so the deletion is a rewrite of
+`Shelf`, not an import removal. **A blind refactor of ten interdependent Kotlin and Swift
+files with no compiler is how a tree ends up broken with nobody able to tell**, which is
+the judgement W2 made and this lane re-makes on the same evidence.
+
+The worktree is unmodified apart from this section: `git status --short` shows only the
+untracked brief.
+
+### Two defects in the brief, which the next attempt must resolve before it starts
+
+1. **W2M-3 cannot be obeyed as written.** It orders `ChangeEvent.commit_seq` removed
+   "from the proto **and** from its Kotlin readers, in one commit". That field lives in
+   `crates/api-proto/proto/centraid/core/v1/change.proto:28` — and the brief's own header
+   says **"never touch `crates/api-proto`"**, with a sibling lane live in it. The two
+   instructions are not reconcilable by a worker. Worse, the field is *produced* on the
+   Rust side by `crates/core/src/events.rs` (`:312`, `:349`, `:398`, `:446`) and
+   `crates/apps/kit/src/changes.rs` (its own `ChangeEvent.commit_seq`, `:33`), and asserted
+   by `crates/api-proto/tests/roundtrip.rs:122` and `crates/core-ffi/tests/{spike,contract}.rs`.
+   Removing wire field 3 is a multi-crate Rust change inside the area this lane was told to
+   stay out of. **Owner question: does W2M-3 belong to the mobile lane at all, or to
+   whichever lane owns `crates/api-proto`?** Recommend the latter, with the Kotlin readers
+   handed to it as a dependency, since the atomicity the slice demands is only achievable
+   from inside that crate.
+2. **Exit item 4 is unsatisfiable and always was.**
+   `grep -rn 'commit_seq' … crates/ --include=*.rs` cannot go empty: `crates/vault/src/intents.rs`
+   carries `commit_seq` as a **column on the intents ledger** (`:272`, `:291`, `:407`,
+   `:427`, `:439`) — a different thing from `ChangeEvent.commit_seq`, with its own writers,
+   untouched by W1 and W2 and not this lane's subject. `crates/vault/src/{log/mod,log/guard,error,intents}.rs`
+   and `crates/ontology/src/{snapshot,registries}.rs` also name it in prose about why the
+   log plane left. The exit item needs narrowing to `ChangeEvent`'s field, or it will read
+   as a red on a lane that did its job.
+
+### Found, and not this lane's slice
+
+1. **W2M-1's designed-states trim is a Rust change, not a mobile one.** The brief points
+   at "the kit `manifest.rs:44`" to keep `offline` and drop `pending`, `stale`, `conflict`,
+   `parked`. That is `crates/apps/kit/src/manifest.rs:42`,
+   `CANONICAL_DESIGNED_STATES: [&str; 7]` — and `manifest.rs:450` requires **every**
+   canonical state to be declared by every app, so the array's consumers are
+   `crates/apps/{agenda,tasks,notes,…}/src/manifest.rs`, each asserting
+   `states.designed.len() == CANONICAL_DESIGNED_STATES.len()`. Trimming it is a change
+   across every app crate and its manifest tests, inside `crates/`. It does not belong in a
+   Kotlin lane.
+2. **`mobile/maestro/flows/cold-start-and-relaunch.yaml` still does not exist**, as W2
+   recorded. `mobile/maestro/flows/` holds `home.yaml` only. Reference A's inventory is
+   stale on this row for the second wave running.
+3. **The stale comments W2M-2 names are real and were left in place**, because touching
+   them means touching files this lane could not compile: `CentraidAbi.kt:68` documents a
+   removed open key, and `HomeSession.kt:123` says "one core per process" where `Shelf`
+   holds one core per *vault* (`Shelf.kt:60-96` describes the cap's removal in full). They
+   are a two-line doc fix for whoever next opens the tree with a working compiler.
+
+### What a successor needs
+
+The Gradle cache is **cold** for this tree (170 MB total, 2.3 MB of modules, no Wire). The
+first thing to establish is whether Maven answers `HEAD` reliably — not `GET`, and not
+`kotlin-stdlib-2.1.0`, which is cached and proves nothing. If it does not, the options are
+an internal mirror, a pre-seeded `~/.gradle` from a host that can reach Maven, or a vendored
+dependency set; none is a worker's call. **Nothing on this lane should be attempted without
+a compiler**, and that includes the parts that look like pure deletions: `Shelf` is the
+counter-example.
+
+## W2 — the mobile half (lane M), second attempt: the cut lands
+
+Branch `claude/1029-w2m-mobile`, base `2a0a1f0a` + the blocked-lane receipt `e44f859e`.
+Five commits, **55 files, +1,763 / −5,048** over the receipt commit.
+
+The blocker above is lifted by a **container-local** Gradle init script at
+`~/.gradle/init.gradle.kts` that puts Google's Maven Central mirror first on every
+resolution path. It is not a repository change and is not committed. The measurement in
+the section above stands: Maven Central answers `429` to `HEAD` and `200` to `GET` for the
+same URL in the same second, and Gradle uses `HEAD`.
+
+| Commit | What |
+| --- | --- |
+| `f88ba062` | a write is a COMMAND, not an intent queued for a gateway — the Kotlin readers of the deleted `intent.proto` follow it |
+| `a53e15b9` | **the cut**: the sync plane, the replica plane and the seat roles leave the shell. −4,297 |
+| `a43268ed` | the shell stops reading `ChangeEvent`'s commit seq |
+| `ea998a80` | `VAULT_MOVED` freezes a vault read-only and keeps its spool |
+| `471a702d` | `mobile/README.md` stops describing the pairing plane it no longer has |
+
+### Every deleted path, with the grep
+
+| Path | Nothing reads it |
+| --- | --- |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/TailResume.kt` | `grep -rn 'TailResume' mobile/` → empty |
+| `.../sync/RadioResume.kt` | `grep -rn 'RadioResume' mobile/` → empty |
+| `.../sync/SyncWindowPolicy.kt` | `grep -rn 'SyncWindowPolicy' mobile/` → empty |
+| `.../sync/WriteGate.kt` | `grep -rn 'WriteGate\|onlineOnly' mobile/ --include=*.kt` → 4 prose lines, no code |
+| `.../sync/Lifecycle.kt` | `WakeReason`, `SyncScheduler`, `LifecycleState`, `PassReport`, `SyncEffect`, `Stage` → all empty |
+| `.../shell/GatewayLink.kt` | `SyncOutcome`, `StageReport`, `PairOutcome`, `SEAT_{SYNC,TAIL_STOP,BYTES_FETCH}_COMMAND` → all empty. The three command names name nothing in Rust either: `grep -rn 'seat\.sync\|seat\.tail\.stop\|seat\.bytes\.fetch' crates/` → one doc sentence |
+| `.../shell/Replicas.kt` | `grep -rn 'Replicas' mobile/` → 3 prose lines in `Shelf.kt` naming what replaced it |
+| `.../shell/Enrolments.kt` | `grep -rn 'Enrolments\|PairingRecord' mobile/ --include=*.kt` → 2 prose lines, no code |
+| `mobile/androidApp/.../kit/GatewaySheet.kt`, `mobile/iosApp/Sources/GatewaySheet.swift` | became `MakeVaultSheet`; `grep -rn 'GatewaySheet' mobile/` → 2 supersession lines |
+| `.../jvmTest/{TailResumeSpec,RadioResumeSpec,SyncWindowPolicySpec,SyncSchedulerSpec,ReplicasSpec}.kt` | subject deleted above |
+
+**Trimmed, not deleted, and which case went where.** `WriteRunnerSpec` lost its six
+`WriteGate` cases (the gate is gone) and kept every case about the editor rendering an
+answer. `PendingWriteSpec` lost "an enrolment is kept before there is a replica" and "a
+pass that is still copying says so" (both halves of a pairing) and kept "files landing are
+a row change". `ShelfSpec` lost eleven state-derivation cases whose inputs were the pass,
+the tail, the bootstrap and reachability, and gained three over the derivation that is
+left. `ShellCommandsExistSpec` lost the seat-command block only. Each is said in the
+file's own header with its grep. **No test was deleted to go green.**
+
+### The three things that changed shape rather than left
+
+1. **One way to open a vault.** `CoreConfiguration` is now a path, a `create` flag and an
+   expected digest — exactly what `crates/core-ffi`'s `config_from_json` reads, which also
+   *ignores* a `role` an older shell sends rather than refusing the open. `CoreRole` and
+   `PairingRecord` are deleted. `Shelf.openCore(path, create)` is the only open.
+2. **The vault id left the file name.** `centraid-replica-<vaultId>.sqlite3` existed so the
+   shelf could fetch an enrolment record *before* opening the file and file a just-paired
+   copy under the id a gateway named. Neither exists, so a phone founding its own vault
+   would have had to write under a provisional name and rename — `Replicas.settle` again,
+   the rename that can half-happen. `Shelf` lists every `.sqlite3`, asks each which vault
+   it is, and names a new one `centraid-vault-<16 random bytes>.sqlite3`. **Files under the
+   old spelling still open**, because the listing matches no prefix.
+3. **`VAULT_MOVED` is cooperation.** `Shelf.freeze` refuses writes with one sentence, shows
+   the unacked spool as "N changes since `<date>`", and keeps everything. No `thaw`;
+   `VaultMovedSpec` asserts the surface offers none.
+
+### Verification, item by item
+
+| Exit item | Result |
+| --- | --- |
+| 1 `./gradlew :shared:jvmTest` | **191 tests, 0 failed** |
+| 2 `./gradlew :core:jvmTest` | 16 tests, **1 failure, pre-existing and proved so** — see below |
+| 3 `cargo xtask gate --profile mobile-jvm` | **FAIL, on the same `:core:jvmTest` case and nothing else.** `314.7s of 420s — BUDGET ok`, on a cold tree. `cargo build -p centraid-core-ffi`, `:shared:jvmTest` and `:shared:koverXmlReport` all green inside it |
+| 3a the gate's drift check | the gate exits on the Gradle failure and never reaches it, so it was run by hand: `bun contracts/tools/export-native-theme.ts` + `bun run format` + `git diff --exit-code -- design copy mobile contracts/screens` → **clean**. `contracts/tools/build-screen-fixtures.ts` **cannot run in this container** — it shells out to `buf`, which is not installed (`ENOENT`). Environmental, and the screen fixtures were not touched by this lane |
+| 4 `grep -rn 'commit_seq' mobile/ --include=*.kt --include=*.swift` | **empty** |
+| 5 `grep -rn 'SEAT_REPLICATED\|SeatKind\|Replicas\|GatewayLink' mobile/` | **no code**; 7 prose lines, each a supersession marker naming what replaced the symbol |
+| 6 `cargo build --workspace` | not run whole. `git diff --stat 2a0a1f0a HEAD -- crates/ contracts/` is **empty** — this lane touched no Rust — and the gate's own `cargo build -p centraid-core-ffi` compiled from cold and succeeded, which is 22 of the 23 members' dependency closure |
+| 7 `cargo test --workspace` | same — no Rust delta from a base lane B already verified at 1,452 green |
+| 8 `bun run check:push:static` | **4/4 green** (`bun install` first) |
+| 9 `node scripts/check-ledgers.mjs --base 2a0a1f0a` | **ok — 19 sections across 5 ledgers** |
+| 10 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
+
+**The `:core:jvmTest` failure is not this lane's.** `AbiRoundTripSpec` > "open, call,
+next_event, free and close, against the real library" asserts `buffersHandedOver` does not
+move over a 150 ms drain of a quiet core, and it moves 3 → 8: the core now *emits* change
+events on an idle handle (W1's `update_hook`). Proved by `git checkout HEAD --
+mobile/core/src` and re-running — identical failure with none of this lane's edits
+present. It has never been run in a container that could resolve Maven, which is why it
+was not caught when it landed. One environmental note for whoever runs the gate:
+`:core:abiFixture` builds the fixture **binary** and not the cdylib the spec dlopens, so
+`cargo build -p centraid-core-ffi` is needed once.
+
+### What could not be verified, and why
+
+- **Neither shell was compiled.** The Android SDK is absent from this container
+  (`./gradlew :shared:tasks` lists no Android compile target), and a Kotlin/Native link for
+  iOS downloads a toolchain this lane was told not to spend disk on. `MainActivity.kt`,
+  `HomeScreen.kt`, `ShellModel.swift`, `HomeView.swift`, `CentraidApp.swift` and both
+  `MakeVaultSheet`s were changed **by hand against the compiled shared API** and checked by
+  grepping every bridge method each shell calls against `HomeBridge`'s surface. That is the
+  weakest evidence in this section and it is the first thing a device lane should re-run.
+- **`androidMain` and `iosMain`** of `shared` are in the same position, for the same
+  reason. Both were edited (the `BackgroundTasks.window` cut, the secure-store comment).
+
+### Two things fixed that were not this lane's subject
+
+1. **`ShellModel.masked` had no writer.** `grep -n 'masked' mobile/iosApp/Sources/` on the
+   commit before the cut finds one line — the declaration — so the app-switcher privacy
+   mask (`docs/mobile-offline.md:253`) could never paint and a member's rows went into
+   every snapshot iOS took. It was reachable only through the scene phase, and the scene
+   phase spent both its cases opening and closing the gateway tail. Deleting the tail left
+   it as the only thing scenePhase does, so it is wired rather than left as a flag nothing
+   sets.
+2. **`CameraRoll.pass` read the core before the freeze**, so a frozen *and resting* vault
+   would have answered "No vault is open on this device" over a vault the member was
+   looking at. Found by `VaultMovedSpec` while it was being written.
+
+### Handed up — owner decisions this lane could not take
+
+1. **The shell cannot found a vault, and the missing half is Rust.** `Core::open` with
+   `create` calls `Vault::create`, which lays down the migrations; **nothing over the ABI
+   writes the `core_vault` row** that makes them a vault. `Vault::found` has no registered
+   command (`grep -rn 'with_system_commands' crates/vault/src/commands/mod.rs:265`, and no
+   `vault.found` anywhere in `crates/vault/src/commands`) and there is no founding arm in
+   `envelope.proto`. `Shelf.found` is complete and correct the day that door lands; until
+   then it deletes the file it made and answers `NOT_FOUNDED`. **Which lane adds it?**
+2. **`ERROR_CODE_VAULT_MOVED` does not exist.** `error.proto` has 25 codes and none is it,
+   and `crates/api-proto` is another lane's. `Shelf.freeze` is the shell-side state and its
+   caller today is W5's restore client; when the code is minted the mapping goes beside its
+   siblings in `sync/ReadFailures.kt` and calls the same function. **Recommend minting it
+   with the lease in W5** rather than in an api-proto sweep, so the producer and the code
+   land together.
+3. **`VaultLockup` has no slot for a frozen vault.** Three states — syncing, synced,
+   offline — all of them a gateway's vocabulary, and since this cut the shell reaches only
+   `STATE_ONLINE`. There is no state for "moved" and no string field for its line, so the
+   freeze reaches a member through the write refusal (which every screen renders) and
+   through `HomeBridge.frozenLine()`. **Recommend the api-proto lane trim the enum and add
+   the slot in one act**, since both are the same message.
+4. **`ChangeEvent`'s field 3 now has no reader on the phone**, which is what W2 left it on
+   the wire for. It can leave with its Rust producers whenever that crate's lane runs.
+5. **`Copy.kt` carries 14 app sentences naming a gateway** — Locker's offline notice,
+   Tally's "materialises on the gateway", Photos' "On this phone only until the gateway
+   answers" and others. It is GENERATED from `copy/<app>.json` by
+   `contracts/tools/export-copy.ts`, so the fix is in those leaves and belongs with each
+   app's own lane, not here. `grep -n -i 'gateway' mobile/shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`.
+
+### Found, not this lane's slice
+
+1. **`Mount.kt` is dead product code.** `Mount.Waiting`, `Mount.Mounted`, `Mount.Revoked`
+   and `remount()` have no caller outside `NavigationAndMountSpec`, and `Waiting.Reason`
+   still spells `NOT_PAIRED` and `BOOTSTRAPPING`. `MountKey` lost its last caller with the
+   file-name change. The law the spec pins — the vault is a MOUNT and never a navigation
+   parameter — is real and worth keeping; the types under it are not currently used to keep
+   it.
+2. **`AndroidBackgroundTasks` registers WorkManager under `"centraid-sync-pass"`**, a
+   periodic `androidx.work.Worker` with an empty body. The pass it was named for is gone.
+   The name is persisted unique-work state, so renaming it orphans what is already
+   scheduled on a device — an owner call, not a worker's.
+3. **`ScreenEffect.FetchOriginal` is emitted and nothing serves it.** The Photos grid's
+   download arrow rode `seat.bytes.fetch`, which left with the seat plane. The effect and
+   the affordance are kept because the phone's byte plane is W6's; `ScreenRuntime` says so
+   where it used to serve it. This is the exact "emitted with no producer" shape #1025 S5
+   was written to close, and it is open again until W6 runs.
+4. **`TransferRule` and its sheet survive with nothing to govern.** The rule decides when
+   ORIGINALS may cross a metered link from a gateway. Both shells still offer "Download
+   settings". W6's, with the byte plane.
+5. **`mobile/maestro/flows/cold-start-and-relaunch.yaml` still does not exist.** Third
+   wave running that Reference A's inventory names it.

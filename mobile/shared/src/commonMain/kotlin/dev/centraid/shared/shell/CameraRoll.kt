@@ -1,8 +1,7 @@
 package dev.centraid.shared.shell
 
+import centraid.core.v1.Command
 import centraid.core.v1.Envelope
-import centraid.core.v1.Intent
-import centraid.core.v1.NeededBytes
 import centraid.core.v1.Request
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
@@ -19,7 +18,7 @@ import okio.ByteString.Companion.encodeUtf8
  * THE CAMERA ROLL, GOING UP (#1025 S6, D-1025-S7-73).
  *
  * The half of the product that was missing entirely. `MediaLibrary` could
- * describe a roll, `Staging` could hand bytes to the core, `WriteGate` could
+ * describe a roll, `Staging` could hand bytes to the core, the runtime could
  * decide where a write goes, `ScreenEffect.Backup` could be emitted and
  * `BackupState` could be drawn — and **nothing joined any of them**. There was
  * no caller of `Staging` on any platform, no producer of a `BackupState` other
@@ -77,6 +76,17 @@ public class CameraRoll(
     private val services: PlatformServices,
     /** The open core, read at each use. See `ScreenRuntime`'s own note on this. */
     private val core: () -> CentraidCore?,
+    /**
+     * WHY THIS VAULT REFUSES WRITES, OR NULL (#1029 F1).
+     *
+     * A backup is a WRITE — every photograph it offers commits a
+     * `media.add_asset` — so a vault that moved to the member's other phone
+     * refuses one exactly as it refuses a note save. A supplier and not a flag
+     * for the same reason [core] is one: a pass runs for minutes and a value
+     * captured at construction would keep uploading into a vault frozen
+     * halfway through it.
+     */
+    private val readOnly: () -> String? = { null },
 ) {
     /** What one pass did, and what the screen should now say. */
     public data class Report(
@@ -126,6 +136,25 @@ public class CameraRoll(
             )
             onState(idle)
             return Report(state = idle)
+        }
+
+        // A FROZEN VAULT TAKES NO PHOTOGRAPHS (#1029 F1). IDLE and not parked:
+        // parked is a device out of disk, which resumes when space is freed,
+        // and this does not resume — the vault moved. The cursor is left where
+        // it is, so a member who takes this vault back later resumes from the
+        // photograph this pass stopped at rather than re-walking the roll.
+        //
+        // **BEFORE THE CORE IS ASKED FOR**, and the order is the sentence: a
+        // frozen holding that is also RESTING has no handle, and reading the
+        // core first would answer "No vault is open on this device" over a
+        // vault the member is looking at. What happened is that it moved.
+        readOnly()?.let { sentence ->
+            val frozen = BackupState(
+                phase = BackupState.Phase.PHASE_IDLE,
+                paused_reason = sentence,
+            )
+            onState(frozen)
+            return Report(state = frozen)
         }
 
         val handle = core() ?: return Report(
@@ -292,28 +321,24 @@ public class CameraRoll(
                 val answer = handle.call(
                     Envelope(
                         request = Request(
-                            intent = Intent(
-                                // THE HASH IS THE ID. See the class comment on
-                                // why it is not the local identifier.
-                                intent_id = "$ACTION:$hash",
-                                app_id = APP,
-                                action = ACTION,
+                            command = Command(
+                                name = ACTION,
+                                // THE HASH IS THE INVOKE KEY. See the class
+                                // comment on why it is not the local
+                                // identifier. It was `Intent.intent_id` and it
+                                // does the same job: the same photograph
+                                // re-offered is the same key, so the re-walk
+                                // that follows a reinstall commits once.
+                                invoke_key = "$ACTION:$hash",
                                 input = inputFor(asset, hash).encodeUtf8(),
-                                // THE DECLARATION THE GATEWAY PULLS ON. Without
-                                // it the gateway would execute a command naming
-                                // bytes it does not hold, and the row would
-                                // point at nothing on every other device.
-                                needs = listOf(
-                                    NeededBytes(
-                                        hash = hash,
-                                        byte_size = staged.staged.byteSize,
-                                        media_type = original.mediaType,
-                                    ),
-                                ),
-                                // A PHOTOGRAPH IS NEVER ONLINE-ONLY. Its whole
-                                // point is that it survives being taken in a
-                                // basement.
-                                online_only = false,
+                                // NO `needs` AND NO `online_only` (#1029 §1).
+                                // `NeededBytes` was the declaration a GATEWAY
+                                // pulled the bytes on, and `online_only` was
+                                // the flag that forbade the outbox. There is no
+                                // gateway and no outbox: the bytes are already
+                                // staged in THIS vault's own store by the call
+                                // above, and the command commits the row beside
+                                // them.
                             ),
                         ),
                     ),
@@ -384,7 +409,7 @@ public class CameraRoll(
      * MAY AN ORIGINAL MOVE ON THIS LINK RIGHT NOW? Null means yes.
      *
      * The member's one setting, against the platform's real answer. A refused
-     * platform reading counts as expensive, matching `SyncWindowPolicy`'s own
+     * platform reading counts as expensive, matching the deleted window policy's
      * asymmetry: a guess wrong towards cheap spends a data plan, a guess wrong
      * towards expensive delays a photograph.
      */

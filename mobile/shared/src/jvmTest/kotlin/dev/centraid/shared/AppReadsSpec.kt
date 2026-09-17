@@ -92,8 +92,8 @@ class AppReadsSpec : StringSpec({
                 // The machine answers an event for its own table and null for
                 // any other, which is the only way to ask it what its table is
                 // without it declaring it twice.
-                machine.rowsChanged(reads.table, listOf("k"), 1uL).shouldNotBeNull()
-                machine.rowsChanged(reads.table + "_other", listOf("k"), 1uL) shouldBe null
+                machine.rowsChanged(reads.table, listOf("k")).shouldNotBeNull()
+                machine.rowsChanged(reads.table + "_other", listOf("k")) shouldBe null
             }
         }
     }

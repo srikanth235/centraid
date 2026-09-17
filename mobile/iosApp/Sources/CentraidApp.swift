@@ -18,13 +18,16 @@ import SwiftUI
 @main
 struct CentraidApp: App {
     @StateObject private var shell = ShellModel()
-    /// THE ONLY THING THAT OPENS AND CLOSES A TAIL ON THIS PLATFORM
-    /// (#1025 S2, D-1025-S7-40).
+    /// WHAT THE SCENE PHASE STILL DECIDES (#1029 §1).
     ///
-    /// `active` opens it, `inactive` and `background` close it. There is no
-    /// timer beside this and none anywhere in the shell: a seat becomes current
-    /// by connecting and staying on the log stream, so "the member is looking
-    /// at the app" is the whole of the schedule.
+    /// It used to open and close the TAIL: `active` connected to the gateway's
+    /// log stream and held it, `inactive` and `background` closed it. There is
+    /// no gateway and no stream — the vault is on this phone and it is already
+    /// current — so arriving and leaving are no longer sync occasions.
+    ///
+    /// What is left is the SWITCHER MASK, which was never about the network:
+    /// a phone in the app switcher must not show a member's rows in a snapshot
+    /// the OS keeps (`docs/mobile-offline.md:253`).
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -53,28 +56,21 @@ struct CentraidApp: App {
                         .task { shell.opened(route) }
                     }
             }
-            // THE SWITCHER MASK. Leaving the foreground clears the decrypted
-            // cache, unmounts replica sessions and paints an opaque mask
-            // (`docs/mobile-offline.md:253`) — the mask is not cosmetic, it is
-            // the visible half of a lock that has already happened.
+            // THE SWITCHER MASK. Leaving the foreground paints an opaque mask
+            // (`docs/mobile-offline.md:253`) — not cosmetic: it is the visible
+            // half of a lock that has already happened.
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
-            // THE FIRST ACTIVATION IS NOT A CHANGE (#1025 S2, D-1025-S7-40).
-            // `onChange` fires on transitions and a cold launch arrives already
-            // `active`, so the first foreground would open no tail at all —
-            // which is the one launch a member is most likely to be watching.
-            .task { shell.foreground() }
-            // THE TAIL FOLLOWS THE MEMBER (#1025 S2, D-1025-S7-40).
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
+                // `inactive` IS ALREADY LEAVING: a phone in the app switcher is
+                // not a phone the member is looking at, and the snapshot the OS
+                // takes is of whatever is on screen at that moment.
                 case .active:
-                    shell.foreground()
-                // `inactive` IS ALREADY LEAVING. The switcher mask is painted
-                // here for the same reason the tail closes here: a phone in the
-                // app switcher is not a phone the member is looking at.
+                    shell.unmask()
                 case .inactive, .background:
-                    shell.leftTheForeground()
+                    shell.mask()
                 @unknown default:
-                    shell.leftTheForeground()
+                    shell.mask()
                 }
             }
         }

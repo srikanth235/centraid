@@ -405,7 +405,11 @@ class AbiRoundTripSpec : StringSpec({
             }
             return CoreConfiguration(
                 databasePath = vault.path,
-                role = CoreRole.GATEWAY,
+                // `role = CoreRole.GATEWAY` WENT WITH THE ROLES (#1029 §1).
+                // There is one kind of core; the fixture is a vault file like
+                // any other, and `create = false` is still the right answer
+                // because a missing fixture must be the check above rather than
+                // a silently founded empty vault.
                 create = false,
                 expectedDigest = ArtifactIdentity.DEV,
             )

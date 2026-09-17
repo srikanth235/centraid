@@ -165,7 +165,6 @@ public object TallyListMachine : ScreenMachine<TallyListState, TallyListEvent> {
     override fun rowsChanged(
         table: String,
         keys: List<String>,
-        commitSeq: ULong,
     ): TallyListEvent? = if (table == TABLE) {
         TallyListEvent(rows_changed = TallyListEvent.RowsChanged(expense_ids = keys))
     } else {

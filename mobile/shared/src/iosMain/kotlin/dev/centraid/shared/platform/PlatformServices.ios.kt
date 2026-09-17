@@ -3,7 +3,6 @@
 package dev.centraid.shared.platform
 
 import centraid.screen.v1.MediaPermission
-import dev.centraid.shared.sync.WakeReason
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
@@ -228,18 +227,19 @@ public class IosSecureStore : SecureStore {
             // A WRITE THAT FAILED MUST NOT BE SILENT (#1025 S7-13).
             //
             // This status was discarded, and what it discarded was the only
-            // signal that a CREDENTIAL had not been kept. The shape it produces
-            // is the worst one in the product: `Enrolments` mints a secret, the
-            // gateway enrols its public half, the store keeps nothing, and the
-            // next open mints a different key — so the device dials its own
-            // gateway as a stranger and is refused as an unenrolled peer, which
-            // the seat then renders as a version-window sentence. Hours were
-            // spent on the wrong layer for want of this line.
+            // signal that something the shell had to keep had not been kept.
+            // The shape it produced then was the worst one in the product:
+            // `Enrolments` minted this device's endpoint secret, the gateway
+            // enrolled its public half, the store kept nothing, and the next
+            // open minted a different key — so the device dialled its own
+            // gateway as a stranger. That plane is deleted (#1029 §1) and this
+            // line is not: the store still holds `Shelf.FOREGROUND_KEY` and the
+            // member's transfer rule, and a silent failure is still a silent
+            // failure. It is what W5's restore credentials will land on.
             //
-            // It is a log and not a throw: a member cannot act on it, the core
-            // catches the consequence at open with
-            // `ERROR_CODE_IDENTITY_MISMATCH`, and a store that threw would take
-            // out a launch over a preference as readily as over a key.
+            // It is a log and not a throw: a member cannot act on it, and a
+            // store that threw would take out a launch over a preference as
+            // readily as over a key.
             if (status != errSecSuccess) {
                 NSLog("centraid: the secure store refused a write (OSStatus %d)", status)
             }
@@ -297,7 +297,6 @@ public class IosSecureStore : SecureStore {
 }
 
 public class IosBackgroundTasks : BackgroundTasks {
-    private val listeners = mutableListOf<() -> Unit>()
 
     override suspend fun register(): BackgroundTasks.Registration {
         val request = BGAppRefreshTaskRequest(TASK_IDENTIFIER)
@@ -320,72 +319,10 @@ public class IosBackgroundTasks : BackgroundTasks {
         )
     }
 
-    /**
-     * WHAT APPLE DOCUMENTS, AND NOTHING MORE (#1025 S5).
-     *
-     * **iOS publishes no API for the time remaining on a `BGAppRefreshTask`.**
-     * There is no `timeRemaining` the way `UIApplication`'s expiring background
-     * task once suggested; a refresh task learns it is out of time exactly once
-     * — when `expirationHandler` fires. So this number is Apple's documented
-     * duration for the class (about thirty seconds for an app refresh task),
-     * it is a STATEMENT rather than a measurement, and
-     * [platformExpired] is the authority that overrides it. A reader must not
-     * take `deadlineMs` for a reading off a clock the OS owns: it is not one,
-     * and a pass that trusted it over the expiration handler would be killed
-     * mid-stage with no report, which is the failure `SyncScheduler` exists to
-     * avoid.
-     *
-     * A foreground pass has no platform deadline at all — what bounds it is
-     * the member closing the app.
-     */
-    override suspend fun window(wake: WakeReason): BackgroundTasks.PlatformWindow =
-        if (wake == WakeReason.FOREGROUND) {
-            BackgroundTasks.PlatformWindow(
-                deadlineMs = Long.MAX_VALUE,
-                source = "the foreground: bounded by the member closing the app",
-            )
-        } else {
-            BackgroundTasks.PlatformWindow(
-                deadlineMs = REFRESH_WINDOW_MS,
-                source = "Apple's documented ~30 s for BGAppRefreshTask; NOT a measurement",
-            )
-        }
-
-    override fun onPlatformExpiration(listener: () -> Unit) {
-        listeners += listener
-    }
-
-    /**
-     * THE CALL THE APP MUST MAKE, and `shared` cannot make for it.
-     *
-     * `BGTaskScheduler.register(forTaskWithIdentifier:using:launchHandler:)`
-     * has to run from the app delegate before launching finishes, and the
-     * `BGAppRefreshTask` only exists inside that handler — so the app owns
-     * both. What the app owes this class is one line inside it:
-     *
-     * ```swift
-     * BGTaskScheduler.shared.register(
-     *     forTaskWithIdentifier: "dev.centraid.sync-pass", using: nil
-     * ) { task in
-     *     task.expirationHandler = { backgroundTasks.platformExpired() }
-     *     // …run the pass, then task.setTaskCompleted(success:)
-     * }
-     * ```
-     *
-     * Without it the pass has only the documented duration above, which iOS
-     * never promised to honour.
-     */
-    override fun platformExpired() {
-        listeners.forEach { it() }
-    }
-
     private companion object {
         /** Declared in `Info.plist`'s `BGTaskSchedulerPermittedIdentifiers`. */
         const val TASK_IDENTIFIER = "dev.centraid.sync-pass"
         const val EARLIEST_SECONDS = 15.0 * 60.0
-
-        /** Apple's documented duration for a `BGAppRefreshTask`. */
-        const val REFRESH_WINDOW_MS = 30L * 1_000L
     }
 }
 
@@ -395,8 +332,9 @@ public class IosBackgroundTasks : BackgroundTasks {
  * THE CINTEROP THIS ALSO ASKED FOR ALREADY SHIPS: `platform.Network` is a
  * default Kotlin/Native platform library, exactly like `platform.Security`.
  * Before this, `current()` returned a hard-coded
- * `online = false, platformRefused = true`, and because `WriteGate` treats an
- * unknown answer as not-reachable, EVERY write on iOS was refused forever. A
+ * `online = false, platformRefused = true`, and because the write gate of the
+ * day treated an unknown answer as not-reachable, EVERY write on iOS was
+ * refused forever. A
  * placeholder that is a true statement about an unasked platform stops being
  * true the moment it is the only thing the platform is ever asked.
  *

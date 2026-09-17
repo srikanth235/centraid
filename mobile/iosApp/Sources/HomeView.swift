@@ -29,7 +29,7 @@ struct HomeView: View {
             // drawn above the three-branch switch on purpose: a Home that
             // failed to read still has to say which vault failed.
             VaultHeader(vault: home.vault, shell: shell)
-            HomeTitleRow { shell.gatewaySheetOpen = true }
+            HomeTitleRow { shell.vaultSheetOpen = true }
             StatusRibbon(status: home.data.status, shell: shell)
 
             // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
@@ -63,8 +63,8 @@ struct HomeView: View {
         // at the notch and the home indicator and the window's own black shows
         // through — which reads as the app sitting in a letterbox.
         .background(Theme.color("bg", scheme).ignoresSafeArea())
-        .sheet(isPresented: $shell.gatewaySheetOpen) {
-            GatewaySheet(shell: shell)
+        .sheet(isPresented: $shell.vaultSheetOpen) {
+            MakeVaultSheet(shell: shell)
         }
         // THE TRANSFER RULES (#1025 S4). Reached from the header's own
         // "N originals waiting for Wi-Fi" line, because the control a member
@@ -125,7 +125,7 @@ private let mosaicCellHeight: CGFloat = 88
 
 private let hairline = CentraidGeometry.hairline
 
-/// The vault at a glance, and whether the gateway holding it is answering.
+/// The vault at a glance, and how it stands on this device.
 ///
 /// The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
 /// red dot. `quiet` is deliberately ignorable and earns no rule; the other two
@@ -861,8 +861,10 @@ private struct VaultSheet: View {
                 .padding(.bottom, 12)
 
             // ZERO IS NOT ONE (R-SHELL-3). An empty device is an onboarding
-            // surface and must offer Pair; one vault keeps the existing sentence
-            // (switching is not a choice of one, but Forget still is).
+            // surface and must offer a way out of it; one vault keeps the
+            // existing sentence (switching is not a choice of one, but Forget
+            // still is). The way out was PAIR and is now MAKE — the phone is
+            // the vault (#1029 §1), so there is nothing to pair with.
             if vaults.isEmpty {
                 Text("This device holds no vault.")
                     .centraidType("small")
@@ -870,14 +872,15 @@ private struct VaultSheet: View {
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                 Button {
                     // ONE SHEET AT A TIME: dismiss the switcher first, then open
-                    // Gateway on the next turn — iOS drops a second present over
-                    // a sheet that is still up (same rule as openTransferRules).
+                    // the vault sheet on the next turn — iOS drops a second
+                    // present over a sheet that is still up (same rule as
+                    // openTransferRules).
                     shell.send(screen: "home", event: HomeEvents.vaultPicked(""))
                     DispatchQueue.main.async {
-                        shell.gatewaySheetOpen = true
+                        shell.vaultSheetOpen = true
                     }
                 } label: {
-                    Text("Pair")
+                    Text("Make a vault")
                         .centraidType("smallStrong")
                         .foregroundStyle(Theme.color("link", scheme))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -886,8 +889,8 @@ private struct VaultSheet: View {
                         .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Pair with a gateway")
-                .accessibilityIdentifier("vault-sheet-pair")
+                .accessibilityLabel("Make a vault on this phone")
+                .accessibilityIdentifier("vault-sheet-make")
             } else if vaults.count == 1 {
                 Text("This device holds one vault.")
                     .centraidType("small")
@@ -965,12 +968,14 @@ private struct VaultSheet: View {
         }
         .background(Theme.color("bg", scheme).ignoresSafeArea())
         .accessibilityIdentifier("home-vault-sheet")
-        // THE ALERT NAMES THE VAULT, because "Forget" deletes this device's
-        // copy — the replica, its bytes, the pairing record and the endpoint
-        // key — and the only way back is to pair again with a fresh ticket.
-        // The gateway keeps this device enrolled: forgetting is local, which
-        // is why the sentence says what it removes and not that the vault is
-        // gone.
+        // THE ALERT NAMES THE VAULT, and what it says changed with the
+        // product (#1029 §1). Forgetting used to delete this device's COPY —
+        // the replica and its bytes — and the gateway kept the vault and kept
+        // this device enrolled, so the sentence could truthfully say the way
+        // back was a fresh ticket. **The phone is the vault.** There is no
+        // copy elsewhere and no ticket, so Forget destroys the vault, and an
+        // alert that still offered a way back would be the one place this
+        // shell lies about what a destructive button does.
         .alert(
             "Forget \(forgetting?.vaultName.isEmpty == false ? forgetting!.vaultName : "this vault")?",
             isPresented: Binding(
@@ -985,7 +990,7 @@ private struct VaultSheet: View {
             }
             Button("Cancel", role: .cancel) { forgetting = nil }
         } message: { _ in
-            Text("This device deletes its copy. Nothing on your gateway changes, and you can pair again with a new ticket.")
+            Text("This deletes the vault and everything in it. There is no copy anywhere else.")
         }
     }
 }

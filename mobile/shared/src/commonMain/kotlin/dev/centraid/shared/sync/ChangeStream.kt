@@ -77,8 +77,8 @@ public class ChangeStream {
     public val health: StateFlow<Health> = _health.asStateFlow()
 
     private class Route<S, E>(val host: ScreenHost<S, E>) {
-        suspend fun deliver(table: String, keys: List<String>, commitSeq: ULong) {
-            host.machine.rowsChanged(table, keys, commitSeq)?.let { host.send(it) }
+        suspend fun deliver(table: String, keys: List<String>) {
+            host.machine.rowsChanged(table, keys)?.let { host.send(it) }
         }
 
         suspend fun deliver(seat: SeatState) {
@@ -104,10 +104,10 @@ public class ChangeStream {
      * TELL EVERY ROUTED SCREEN WHAT THIS SEAT IS (#1025 S5, D-1025-S5-6).
      *
      * Nothing sent a `SeatChanged` before this, on either shell, so every
-     * screen held a null `SeatState` for its whole life — and
-     * [WriteGate] reads the seat off the screen. A null seat is not reachable,
-     * so an `onlineOnly` write was refused on every device always, and an
-     * ordinary one queued with a healthy gateway in the same room.
+     * screen held a null `SeatState` for its whole life. What that broke was
+     * the write gate, which is gone with the gateway it chose between
+     * (#1029 §1); what it still decides is what a screen DRAWS about this
+     * device.
      *
      * It is published here rather than by each screen's runtime because it is
      * ONE fact about the device and not one per screen: two screens disagreeing
@@ -147,7 +147,11 @@ public class ChangeStream {
         val keys = change.pk_set.mapNotNull(::textKeyOf)
         // A COPY, BECAUSE DELIVERY SUSPENDS. `host.send` takes a reduce lock and
         // a screen's own effect runner may route another screen while it waits.
-        routes.toList().forEach { it.deliver(change.table, keys, change.commit_seq.toULong()) }
+        // `ChangeEvent`'s COMMIT-SEQ FIELD IS NOT READ (#1029 §1). It was the
+        // position a seat's overlay settled against, and the overlay is deleted
+        // with the log plane; the field stays on the wire until
+        // `crates/api-proto`'s own lane retires it with its producers.
+        routes.toList().forEach { it.deliver(change.table, keys) }
     }
 
     /**

@@ -17,7 +17,6 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import centraid.screen.v1.MediaPermission
-import dev.centraid.shared.sync.WakeReason
 import java.util.concurrent.TimeUnit
 
 /**
@@ -138,7 +137,6 @@ public class AndroidSecureStore(private val context: Context) : SecureStore {
 }
 
 public class AndroidBackgroundTasks(private val context: Context) : BackgroundTasks {
-    private val listeners = mutableListOf<() -> Unit>()
 
     override suspend fun register(): BackgroundTasks.Registration = try {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
@@ -167,48 +165,8 @@ public class AndroidBackgroundTasks(private val context: Context) : BackgroundTa
         )
     }
 
-    /**
-     * WorkManager's own execution window (#1025 S5).
-     *
-     * **Ten minutes is Android's number, not Centraid's**: WorkManager stops a
-     * `ListenableWorker` after roughly ten minutes of execution, and there is
-     * no API that reports the remainder — `getStopReason()` says why it was
-     * stopped, once it has been. So this is the documented duration of the
-     * class and [platformExpired] is the authority over it, exactly as on iOS.
-     *
-     * A foreground pass gets no deadline at all: nothing but the member
-     * closing the app bounds it, and a background number handed to a
-     * foreground pass would cut a sync the member is watching.
-     */
-    override suspend fun window(wake: WakeReason): BackgroundTasks.PlatformWindow =
-        if (wake == WakeReason.FOREGROUND) {
-            BackgroundTasks.PlatformWindow(
-                deadlineMs = Long.MAX_VALUE,
-                source = "the foreground: bounded by the member closing the app",
-            )
-        } else {
-            BackgroundTasks.PlatformWindow(
-                deadlineMs = WORK_MANAGER_WINDOW_MS,
-                source = "WorkManager's documented ~10 minute execution window",
-            )
-        }
-
-    override fun onPlatformExpiration(listener: () -> Unit) {
-        listeners += listener
-    }
-
-    /**
-     * THE CALL THE WORKER MAKES. The `ListenableWorker` that runs the pass
-     * calls this from `onStopped()` — which is where `getStopReason()` is
-     * meaningful — and that is the OS speaking rather than the timer guessing.
-     */
-    override fun platformExpired() {
-        listeners.forEach { it() }
-    }
-
     private companion object {
         const val WORK_NAME = "centraid-sync-pass"
-        const val WORK_MANAGER_WINDOW_MS = 10L * 60L * 1_000L
     }
 }
 

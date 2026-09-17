@@ -136,8 +136,6 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
                                 // replayed intent re-executes a command that
                                 // already committed.
                                 invokeKey = "notes.save:${state.note_id}:${draft.base_revision_id}",
-                                // R-NOTES-3: a note save is never onlineOnly.
-                                onlineOnly = false,
                             ),
                         ),
                     )
@@ -261,7 +259,6 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
     override fun rowsChanged(
         table: String,
         keys: List<String>,
-        commitSeq: ULong,
     ): NotesEditorEvent? = if (table == TABLE) {
         NotesEditorEvent(rows_changed = NotesEditorEvent.RowsChanged(note_ids = keys))
     } else {
