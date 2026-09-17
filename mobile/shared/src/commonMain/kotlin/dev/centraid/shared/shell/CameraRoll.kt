@@ -409,7 +409,7 @@ public class CameraRoll(
      * MAY AN ORIGINAL MOVE ON THIS LINK RIGHT NOW? Null means yes.
      *
      * The member's one setting, against the platform's real answer. A refused
-     * platform reading counts as expensive, matching `SyncWindowPolicy`'s own
+     * platform reading counts as expensive, matching the deleted window policy's
      * asymmetry: a guess wrong towards cheap spends a data plan, a guess wrong
      * towards expensive delays a photograph.
      */

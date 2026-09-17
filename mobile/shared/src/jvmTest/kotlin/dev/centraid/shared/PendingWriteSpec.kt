@@ -18,9 +18,9 @@ import io.kotest.matchers.shouldBe
  * * *"an enrolment is kept before there is a replica to write it into"* —
  *   `Enrolments` held one record per vault: this device's endpoint secret, the
  *   public half a gateway said it had enrolled, where that gateway was reached
- *   and whether it had relays. There is no gateway to enrol with. The object is
- *   deleted, and `grep -rn 'Enrolments|PairingRecord' mobile/ --include=*.kt`
- *   finds nothing.
+ *   and whether it had relays. There is no gateway to enrol with. The object
+ *   and the record are deleted, and no line of this shell names either outside
+ *   a note like this one.
  * * *"a pass that is still copying the vault says so"* — `SyncOutcome.copying`
  *   narrated a bootstrap's progress as a percentage, and a bootstrap is a copy
  *   taken from a gateway. `SyncOutcome` is deleted with `GatewayLink`.

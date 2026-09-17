@@ -55,7 +55,7 @@ public enum class TransferRule(
      * same one.
      *
      * A rule spelled in each shell is a rule one shell gets wrong, which is
-     * the same reason [SyncWindowPolicy] is not a branch per platform. These
+     * the same reason the window policy was not a branch per platform. These
      * are plain sentences and never a label plus a footnote: a member choosing
      * how their phone spends money is owed a sentence they can act on.
      */

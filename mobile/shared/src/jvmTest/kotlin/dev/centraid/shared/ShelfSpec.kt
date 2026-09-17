@@ -21,10 +21,10 @@ import kotlinx.coroutines.Dispatchers
  * the ORDER was the whole definition.
  *
  * Every input to that table was a fact about a GATEWAY: the pass, the tail, the
- * bootstrap, reachability. #1029 deletes all four — `grep -rn
- * 'SyncOutcome|tailing|passInFlight' mobile/ --include=*.kt` is empty — so the
- * branches are not failing, they have nothing to branch on. These are cases
- * whose subject is gone.
+ * bootstrap, reachability. #1029 deletes all four — the outcome type, the
+ * tailing mark and the in-flight flag are gone from the shell — so the branches
+ * are not failing, they have nothing to branch on. These are cases whose subject
+ * is gone.
  *
  * ## What is left, and why it is still worth pinning
  *

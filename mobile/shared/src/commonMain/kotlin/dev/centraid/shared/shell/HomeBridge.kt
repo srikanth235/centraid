@@ -229,8 +229,8 @@ public class HomeBridge {
      * a member reads.
      *
      * FROM THE SHELL'S ONE COPY SOURCE (`TransferRule`), so iOS and Android
-     * cannot word the same choice two ways — the reason `SyncWindowPolicy`
-     * lives in `commonMain` and not in each shell.
+     * cannot word the same choice two ways — the reason every rule both shells
+     * read lives in `commonMain` and not once per shell.
      */
     public fun transferRuleChoices(): List<TransferRuleChoice> =
         TransferRule.entries.map { TransferRuleChoice(it.stored, it.sentence) }

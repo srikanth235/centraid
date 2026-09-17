@@ -836,3 +836,165 @@ an internal mirror, a pre-seeded `~/.gradle` from a host that can reach Maven, o
 dependency set; none is a worker's call. **Nothing on this lane should be attempted without
 a compiler**, and that includes the parts that look like pure deletions: `Shelf` is the
 counter-example.
+
+## W2 — the mobile half (lane M), second attempt: the cut lands
+
+Branch `claude/1029-w2m-mobile`, base `2a0a1f0a` + the blocked-lane receipt `e44f859e`.
+Five commits, **55 files, +1,763 / −5,048** over the receipt commit.
+
+The blocker above is lifted by a **container-local** Gradle init script at
+`~/.gradle/init.gradle.kts` that puts Google's Maven Central mirror first on every
+resolution path. It is not a repository change and is not committed. The measurement in
+the section above stands: Maven Central answers `429` to `HEAD` and `200` to `GET` for the
+same URL in the same second, and Gradle uses `HEAD`.
+
+| Commit | What |
+| --- | --- |
+| `f88ba062` | a write is a COMMAND, not an intent queued for a gateway — the Kotlin readers of the deleted `intent.proto` follow it |
+| `a53e15b9` | **the cut**: the sync plane, the replica plane and the seat roles leave the shell. −4,297 |
+| `a43268ed` | the shell stops reading `ChangeEvent`'s commit seq |
+| `ea998a80` | `VAULT_MOVED` freezes a vault read-only and keeps its spool |
+| `471a702d` | `mobile/README.md` stops describing the pairing plane it no longer has |
+
+### Every deleted path, with the grep
+
+| Path | Nothing reads it |
+| --- | --- |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/TailResume.kt` | `grep -rn 'TailResume' mobile/` → empty |
+| `.../sync/RadioResume.kt` | `grep -rn 'RadioResume' mobile/` → empty |
+| `.../sync/SyncWindowPolicy.kt` | `grep -rn 'SyncWindowPolicy' mobile/` → empty |
+| `.../sync/WriteGate.kt` | `grep -rn 'WriteGate\|onlineOnly' mobile/ --include=*.kt` → 4 prose lines, no code |
+| `.../sync/Lifecycle.kt` | `WakeReason`, `SyncScheduler`, `LifecycleState`, `PassReport`, `SyncEffect`, `Stage` → all empty |
+| `.../shell/GatewayLink.kt` | `SyncOutcome`, `StageReport`, `PairOutcome`, `SEAT_{SYNC,TAIL_STOP,BYTES_FETCH}_COMMAND` → all empty. The three command names name nothing in Rust either: `grep -rn 'seat\.sync\|seat\.tail\.stop\|seat\.bytes\.fetch' crates/` → one doc sentence |
+| `.../shell/Replicas.kt` | `grep -rn 'Replicas' mobile/` → 3 prose lines in `Shelf.kt` naming what replaced it |
+| `.../shell/Enrolments.kt` | `grep -rn 'Enrolments\|PairingRecord' mobile/ --include=*.kt` → 2 prose lines, no code |
+| `mobile/androidApp/.../kit/GatewaySheet.kt`, `mobile/iosApp/Sources/GatewaySheet.swift` | became `MakeVaultSheet`; `grep -rn 'GatewaySheet' mobile/` → 2 supersession lines |
+| `.../jvmTest/{TailResumeSpec,RadioResumeSpec,SyncWindowPolicySpec,SyncSchedulerSpec,ReplicasSpec}.kt` | subject deleted above |
+
+**Trimmed, not deleted, and which case went where.** `WriteRunnerSpec` lost its six
+`WriteGate` cases (the gate is gone) and kept every case about the editor rendering an
+answer. `PendingWriteSpec` lost "an enrolment is kept before there is a replica" and "a
+pass that is still copying says so" (both halves of a pairing) and kept "files landing are
+a row change". `ShelfSpec` lost eleven state-derivation cases whose inputs were the pass,
+the tail, the bootstrap and reachability, and gained three over the derivation that is
+left. `ShellCommandsExistSpec` lost the seat-command block only. Each is said in the
+file's own header with its grep. **No test was deleted to go green.**
+
+### The three things that changed shape rather than left
+
+1. **One way to open a vault.** `CoreConfiguration` is now a path, a `create` flag and an
+   expected digest — exactly what `crates/core-ffi`'s `config_from_json` reads, which also
+   *ignores* a `role` an older shell sends rather than refusing the open. `CoreRole` and
+   `PairingRecord` are deleted. `Shelf.openCore(path, create)` is the only open.
+2. **The vault id left the file name.** `centraid-replica-<vaultId>.sqlite3` existed so the
+   shelf could fetch an enrolment record *before* opening the file and file a just-paired
+   copy under the id a gateway named. Neither exists, so a phone founding its own vault
+   would have had to write under a provisional name and rename — `Replicas.settle` again,
+   the rename that can half-happen. `Shelf` lists every `.sqlite3`, asks each which vault
+   it is, and names a new one `centraid-vault-<16 random bytes>.sqlite3`. **Files under the
+   old spelling still open**, because the listing matches no prefix.
+3. **`VAULT_MOVED` is cooperation.** `Shelf.freeze` refuses writes with one sentence, shows
+   the unacked spool as "N changes since `<date>`", and keeps everything. No `thaw`;
+   `VaultMovedSpec` asserts the surface offers none.
+
+### Verification, item by item
+
+| Exit item | Result |
+| --- | --- |
+| 1 `./gradlew :shared:jvmTest` | **191 tests, 0 failed** |
+| 2 `./gradlew :core:jvmTest` | 16 tests, **1 failure, pre-existing and proved so** — see below |
+| 3 `cargo xtask gate --profile mobile-jvm` | red on the same `:core:jvmTest` case; every other step green |
+| 4 `grep -rn 'commit_seq' mobile/ --include=*.kt --include=*.swift` | **empty** |
+| 5 `grep -rn 'SEAT_REPLICATED\|SeatKind\|Replicas\|GatewayLink' mobile/` | **no code**; 7 prose lines, each a supersession marker naming what replaced the symbol |
+| 6 `cargo build --workspace` | not re-run: `git diff --stat 2a0a1f0a HEAD -- crates/ contracts/` is **empty**. This lane touched no Rust |
+| 7 `cargo test --workspace` | same — no Rust delta from a base lane B already verified at 1,452 green |
+| 8 `bun run check:push:static` | **4/4 green** (`bun install` first) |
+| 9 `node scripts/check-ledgers.mjs --base 2a0a1f0a` | **ok — 19 sections across 5 ledgers** |
+| 10 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
+
+**The `:core:jvmTest` failure is not this lane's.** `AbiRoundTripSpec` > "open, call,
+next_event, free and close, against the real library" asserts `buffersHandedOver` does not
+move over a 150 ms drain of a quiet core, and it moves 3 → 8: the core now *emits* change
+events on an idle handle (W1's `update_hook`). Proved by `git checkout HEAD --
+mobile/core/src` and re-running — identical failure with none of this lane's edits
+present. It has never been run in a container that could resolve Maven, which is why it
+was not caught when it landed. One environmental note for whoever runs the gate:
+`:core:abiFixture` builds the fixture **binary** and not the cdylib the spec dlopens, so
+`cargo build -p centraid-core-ffi` is needed once.
+
+### What could not be verified, and why
+
+- **Neither shell was compiled.** The Android SDK is absent from this container
+  (`./gradlew :shared:tasks` lists no Android compile target), and a Kotlin/Native link for
+  iOS downloads a toolchain this lane was told not to spend disk on. `MainActivity.kt`,
+  `HomeScreen.kt`, `ShellModel.swift`, `HomeView.swift`, `CentraidApp.swift` and both
+  `MakeVaultSheet`s were changed **by hand against the compiled shared API** and checked by
+  grepping every bridge method each shell calls against `HomeBridge`'s surface. That is the
+  weakest evidence in this section and it is the first thing a device lane should re-run.
+- **`androidMain` and `iosMain`** of `shared` are in the same position, for the same
+  reason. Both were edited (the `BackgroundTasks.window` cut, the secure-store comment).
+
+### Two things fixed that were not this lane's subject
+
+1. **`ShellModel.masked` had no writer.** `grep -n 'masked' mobile/iosApp/Sources/` on the
+   commit before the cut finds one line — the declaration — so the app-switcher privacy
+   mask (`docs/mobile-offline.md:253`) could never paint and a member's rows went into
+   every snapshot iOS took. It was reachable only through the scene phase, and the scene
+   phase spent both its cases opening and closing the gateway tail. Deleting the tail left
+   it as the only thing scenePhase does, so it is wired rather than left as a flag nothing
+   sets.
+2. **`CameraRoll.pass` read the core before the freeze**, so a frozen *and resting* vault
+   would have answered "No vault is open on this device" over a vault the member was
+   looking at. Found by `VaultMovedSpec` while it was being written.
+
+### Handed up — owner decisions this lane could not take
+
+1. **The shell cannot found a vault, and the missing half is Rust.** `Core::open` with
+   `create` calls `Vault::create`, which lays down the migrations; **nothing over the ABI
+   writes the `core_vault` row** that makes them a vault. `Vault::found` has no registered
+   command (`grep -rn 'with_system_commands' crates/vault/src/commands/mod.rs:265`, and no
+   `vault.found` anywhere in `crates/vault/src/commands`) and there is no founding arm in
+   `envelope.proto`. `Shelf.found` is complete and correct the day that door lands; until
+   then it deletes the file it made and answers `NOT_FOUNDED`. **Which lane adds it?**
+2. **`ERROR_CODE_VAULT_MOVED` does not exist.** `error.proto` has 25 codes and none is it,
+   and `crates/api-proto` is another lane's. `Shelf.freeze` is the shell-side state and its
+   caller today is W5's restore client; when the code is minted the mapping goes beside its
+   siblings in `sync/ReadFailures.kt` and calls the same function. **Recommend minting it
+   with the lease in W5** rather than in an api-proto sweep, so the producer and the code
+   land together.
+3. **`VaultLockup` has no slot for a frozen vault.** Three states — syncing, synced,
+   offline — all of them a gateway's vocabulary, and since this cut the shell reaches only
+   `STATE_ONLINE`. There is no state for "moved" and no string field for its line, so the
+   freeze reaches a member through the write refusal (which every screen renders) and
+   through `HomeBridge.frozenLine()`. **Recommend the api-proto lane trim the enum and add
+   the slot in one act**, since both are the same message.
+4. **`ChangeEvent`'s field 3 now has no reader on the phone**, which is what W2 left it on
+   the wire for. It can leave with its Rust producers whenever that crate's lane runs.
+5. **`Copy.kt` carries 14 app sentences naming a gateway** — Locker's offline notice,
+   Tally's "materialises on the gateway", Photos' "On this phone only until the gateway
+   answers" and others. It is GENERATED from `copy/<app>.json` by
+   `contracts/tools/export-copy.ts`, so the fix is in those leaves and belongs with each
+   app's own lane, not here. `grep -n -i 'gateway' mobile/shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`.
+
+### Found, not this lane's slice
+
+1. **`Mount.kt` is dead product code.** `Mount.Waiting`, `Mount.Mounted`, `Mount.Revoked`
+   and `remount()` have no caller outside `NavigationAndMountSpec`, and `Waiting.Reason`
+   still spells `NOT_PAIRED` and `BOOTSTRAPPING`. `MountKey` lost its last caller with the
+   file-name change. The law the spec pins — the vault is a MOUNT and never a navigation
+   parameter — is real and worth keeping; the types under it are not currently used to keep
+   it.
+2. **`AndroidBackgroundTasks` registers WorkManager under `"centraid-sync-pass"`**, a
+   periodic `androidx.work.Worker` with an empty body. The pass it was named for is gone.
+   The name is persisted unique-work state, so renaming it orphans what is already
+   scheduled on a device — an owner call, not a worker's.
+3. **`ScreenEffect.FetchOriginal` is emitted and nothing serves it.** The Photos grid's
+   download arrow rode `seat.bytes.fetch`, which left with the seat plane. The effect and
+   the affordance are kept because the phone's byte plane is W6's; `ScreenRuntime` says so
+   where it used to serve it. This is the exact "emitted with no producer" shape #1025 S5
+   was written to close, and it is open again until W6 runs.
+4. **`TransferRule` and its sheet survive with nothing to govern.** The rule decides when
+   ORIGINALS may cross a metered link from a gateway. Both shells still offer "Download
+   settings". W6's, with the byte plane.
+5. **`mobile/maestro/flows/cold-start-and-relaunch.yaml` still does not exist.** Third
+   wave running that Reference A's inventory names it.

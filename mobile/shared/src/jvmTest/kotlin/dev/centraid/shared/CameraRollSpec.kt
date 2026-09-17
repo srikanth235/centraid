@@ -100,7 +100,7 @@ class CameraRollSpec : StringSpec({
 
     "a platform that would not say counts as expensive" {
         runTest {
-            // `SyncWindowPolicy`'s own asymmetry, kept here: a guess wrong
+            // The deleted window policy's own asymmetry, kept here: a guess wrong
             // towards cheap spends a member's data plan, a guess wrong towards
             // expensive delays a photograph by one pass.
             rollOf(FakePlatformServices()).mayMove(
