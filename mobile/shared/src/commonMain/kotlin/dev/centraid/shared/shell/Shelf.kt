@@ -244,17 +244,18 @@ public class Shelf(
         /**
          * THE FILE OPENED AND NO VAULT WAS FOUNDED IN IT.
          *
-         * `Core::open` with `create` calls `Vault::create`, which lays down the
-         * migrations — and **nothing over the ABI writes the `core_vault` row**
-         * that makes those tables a vault: `Vault::found` has no registered
-         * command (`Registry::with_system_commands`, `crates/vault/src/commands`)
-         * and no `Request` arm (`envelope.proto`). So a create answers a file
-         * that cannot say which vault it is, and this refusal is that fact
-         * rather than a holding pointing at one.
+         * **The door exists now** (#1029 W5, hand-off 1): `envelope.proto`
+         * carries a `FoundRequest` arm and `crates/core`'s `api::found` writes
+         * `core_vault` and the owner's `core_party` in one commit. This refusal
+         * is no longer the standing state of the build — it is what remains
+         * when that write is REFUSED: a file that already holds a vault
+         * (`ERROR_CODE_VAULT_ALREADY_HELD`), or a core that answered the found
+         * and then could not name what it made.
          *
          * The file is deleted on this path. A `.sqlite3` in the directory that
          * names no vault would be listed by every later [load], refused by
-         * [identify] every time, and invisible to the member who made it.
+         * `VaultRoster.identify` every time, and invisible to the member who
+         * made it.
          */
         NOT_FOUNDED,
 
@@ -376,16 +377,34 @@ public class Shelf(
      * is what makes this one act rather than the write-then-rename `Replicas`
      * had to do.
      *
-     * **The core does not found the row yet, and this refuses honestly when it
-     * does not.** See [FoundRefusal.NOT_FOUNDED]: `Core::open` lays the
-     * migrations down and nothing over the ABI writes `core_vault`. When that
-     * door lands this function is already correct; until then it deletes the
-     * file it made rather than leaving one the shelf can never name.
+     * **THE DOOR LANDED** (#1029 W5, hand-off 1). `Core::open` with `create`
+     * lays the migrations down and [VaultRoster.found] writes the two rows that
+     * make them a vault. The order is open → found → identify, and the identify
+     * is not redundant: the NAME on the holding must come out of the vault and
+     * never off the string this function sent ([VaultRoster.identify]).
+     *
+     * A refusal on either step deletes the file rather than leaving one the
+     * shelf can never name.
+     *
+     * @param name what `core_vault.display_name` is set to. Empty is a real
+     *   state — a vault with no name draws "No vault yet" — and the member
+     *   renames it inside the vault afterwards.
+     * @param ownerName what the owner's `core_party` is called. A DISPLAY NAME
+     *   and nothing else: there is no email address, no phone number and no
+     *   account anywhere on this path.
      */
-    public suspend fun found(): FoundOutcome = gate.withLock {
+    public suspend fun found(
+        name: String = DEFAULT_VAULT_NAME,
+        ownerName: String = DEFAULT_OWNER_NAME,
+    ): FoundOutcome = gate.withLock {
         val path = freshVaultFile()
         val core = openCore(path, create = true)
             ?: return@withLock FoundOutcome.Refused(FoundRefusal.NO_CORE)
+        if (!VaultRoster.found(core, displayName = name, ownerName = ownerName)) {
+            core.close()
+            deleteVault(path)
+            return@withLock FoundOutcome.Refused(FoundRefusal.NOT_FOUNDED)
+        }
         val named = VaultRoster.identify(core)
         if (named == null || named.vault_id.isEmpty()) {
             core.close()
@@ -756,6 +775,33 @@ public class Shelf(
          */
         public const val MOVED_SENTENCE: String =
             "This vault moved to your other phone. Everything here is still readable."
+
+        /**
+         * WHAT A VAULT IS CALLED WHEN NOBODY NAMED IT (#1029 W5).
+         *
+         * The make-vault sheet on both shells is a button and no text field, so
+         * the found has to carry a string and this is it. It lives here rather
+         * than in `CentraidCopy` because that table is GENERATED from `copy/`
+         * and hand-editing it is what the mobile-jvm gate's clean-tree
+         * assertion refuses; a name a member can change from inside the vault
+         * is also not app copy in the sense that table holds.
+         *
+         * **A DEFAULT AND NOT A PLACEHOLDER.** It is written to
+         * `core_vault.display_name`, the one place a vault's name lives, so a
+         * member who never renames it reads this on the header — which is why
+         * it is a sentence-case thing a person would say and not `Vault 1`.
+         */
+        public const val DEFAULT_VAULT_NAME: String = "My vault"
+
+        /**
+         * WHAT THE OWNER PARTY IS CALLED WHEN NOBODY NAMED THEM (#1029 W5).
+         *
+         * A display name on a `core_party` of kind `person`, and the only party
+         * in a fresh vault. There is no email address, no phone number and no
+         * account here and nowhere for one to arrive — the same rule
+         * `lease.proto` states for the gateway plane.
+         */
+        public const val DEFAULT_OWNER_NAME: String = "Me"
 
         private val SIDECARS = listOf("-wal", "-shm")
     }

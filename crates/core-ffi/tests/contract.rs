@@ -42,8 +42,10 @@ impl Opened {
         assert!(!handle.is_null());
         let opened = Self { dir, handle };
         // A founded vault, so the command and page doors have something to
-        // answer about. Through the Rust surface, because founding is not part
-        // of the ABI.
+        // answer about. Through the Rust surface: founding IS part of the ABI
+        // now (#1029 W5, `envelope.proto`'s `FoundRequest`), and driving it
+        // here would make every clause below depend on that door rather than
+        // on its own.
         // SAFETY: the handle is live and this thread is the only user.
         unsafe { &*opened.handle }
             .with_vault(|vault| Ok(vault.found("Contract", "Owner")?))
@@ -642,4 +644,52 @@ fn a_panic_in_open_hands_back_no_handle() {
         unsafe { centraid_open(config.as_ptr(), config.len(), std::ptr::null_mut()) },
         CENTRAID_BAD_ARGUMENT
     );
+}
+
+/// `open` NEVER ANSWERS `OK` WITHOUT A HANDLE — over an ordinary refusal, not
+/// a malformed configuration (#1029 W5).
+///
+/// The neighbour above drives a config the JSON reader itself rejects. This one
+/// drives a configuration that is perfectly well formed and names a file that is
+/// **not a Centraid vault**, which is the case a phone reaches by itself: a
+/// `.db` copied away from its `-wal` sidecar carries `application_id 0`, and
+/// `Vault::open` refuses it with `NotAVault`.
+///
+/// That refusal went through `code_for`, whose last arm is `_ => CENTRAID_OK`
+/// because a `call`'s reason travels in the out-buffer — and `open` has no
+/// out-buffer. So the shell was handed `OK` and a null handle: JNA's binding
+/// reported "centraid_open returned OK and a null handle", iOS's would have
+/// reported the same, and both are a contract violation `code_for`'s own
+/// comment names in those words. See `code_for_open`.
+#[test]
+fn an_open_that_refuses_an_ordinary_file_never_answers_ok() {
+    let dir = centraid_ontology::golden::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    let path = dir.join("not-a-vault.db");
+    // A REAL SQLITE FILE AND NOT RANDOM BYTES: `application_id 0` is what a
+    // half-copied vault looks like, and it is the shape that produced the bug.
+    std::fs::write(&path, {
+        let mut header = Vec::from(&b"SQLite format 3\0"[..]);
+        header.resize(4096, 0);
+        header
+    })
+    .expect("the file is written");
+
+    let config = format!(
+        r#"{{"path":{:?},"create":false}}"#,
+        path.display().to_string()
+    );
+    let sentinel = 0x1234_usize as *mut centraid_core::Handle;
+    let mut handle = sentinel;
+    // SAFETY: live config bytes and a live out-pointer.
+    let code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+    assert_eq!(
+        code, CENTRAID_BAD_ARGUMENT,
+        "an open that produces no handle answers a negative code"
+    );
+    assert!(
+        std::ptr::eq(handle, sentinel),
+        "a failed open wrote a handle the caller would then close"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }

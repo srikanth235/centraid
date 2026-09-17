@@ -156,10 +156,13 @@ val abiFixtureDir: java.io.File = layout.buildDirectory.dir("abi-fixture").get()
 // The vault and the request bytes the ABI round trip reads.
 //
 // A REAL VAULT FROM THE REAL CORE, made by the binary `crates/core-ffi` already
-// ships for its own spike. Founding a vault is the core's job and not a shell's
-// — there is no wire verb for it, deliberately — so a Kotlin test that wanted a
-// founded vault without cargo would have to commit a binary `.db` and let it
-// rot against the ontology's version window.
+// ships for its own spike. There IS a wire verb for founding now (#1029 W5:
+// `envelope.proto`'s `FoundRequest`, which is how the phone makes its own
+// vault) — but the fixture still comes from cargo, because it carries the
+// SEEDED ROWS the round trip's page read expects and a Kotlin test that founded
+// its own would be asserting against whatever it had just written. The
+// alternative is still the wrong one: a committed binary `.db` rots against the
+// ontology's version window.
 val abiFixture = tasks.register<Exec>("abiFixture") {
     group = "verification"
     description = "Build the vault + request fixture the ABI round trip reads."

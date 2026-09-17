@@ -304,6 +304,34 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 // connectors. `SealedSubject` still has no Locker representation, so the
 // structural half of the rule is where it always was — in `crates/vault`.
 
+/// MAKE THIS FILE A VAULT (#1029 W5, hand-off 1).
+///
+/// The door `Core::open` with `create` left missing. `Vault::create` lays the
+/// migrations down; `Vault::found` writes the two rows that make those tables a
+/// vault — `core_vault` and the owner's `core_party` — inside one commit, and
+/// until this function existed nothing over the C ABI could reach it. A phone
+/// could create a file that could never say which vault it was, which is
+/// exactly what `Shelf.FoundRefusal.NOT_FOUNDED` was refusing honestly.
+///
+/// **A SECOND FOUND IS REFUSED, AND THE VAULT THAT IS HERE IS LEFT ALONE.**
+/// `Vault::found` mints a fresh id and inserts unconditionally, so running it
+/// twice would leave two `core_vault` rows in one file — and `Vault::vault_id`
+/// reads `ORDER BY vault_id LIMIT 1`, so the file would answer whichever id
+/// sorted first. That is a vault whose identity depends on a random draw. The
+/// refusal carries `ERROR_CODE_VAULT_ALREADY_HELD` and names the id already
+/// here, so a shell that raced itself can tell "I founded it" from "something
+/// is wrong".
+pub fn found(vault: &Vault, request: &wire::FoundRequest) -> Result<wire::FoundResponse> {
+    if let Some(vault_id) = vault.vault_id()? {
+        return Err(CoreError::VaultAlreadyHeld { vault_id });
+    }
+    let founded = vault.found(&request.display_name, &request.owner_name)?;
+    Ok(wire::FoundResponse {
+        vault_id: founded.vault_id,
+        owner_party_id: founded.owner_party_id,
+    })
+}
+
 /// Mint a path for content. **Stub**: wave 3.
 pub fn content(_content_id: &str) -> Result<String> {
     Err(CoreError::NotYetAvailable {
@@ -393,6 +421,97 @@ mod tests {
         )
         .expect_err("a query with no order is refused");
         assert!(matches!(error, CoreError::InvalidRequest { .. }));
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// HAND-OFF 1: THE DOOR EXISTS AND IT WRITES THE ROW THE SHELF READS.
+    ///
+    /// The whole defect in one test: `Vault::create` lays the migrations down
+    /// and leaves a file that cannot say which vault it is, and after
+    /// [`found`] the same file answers its own id and its own name through the
+    /// one statement `VaultRoster.identify` uses.
+    #[test]
+    fn founding_turns_a_created_file_into_a_vault_that_can_name_itself() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("the directory is made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
+
+        // BEFORE: the migrations are laid and there is no vault in them.
+        assert_eq!(vault.vault_id().expect("read"), None);
+
+        let answer = found(
+            &vault,
+            &wire::FoundRequest {
+                display_name: "Tahoe".to_owned(),
+                owner_name: "Me".to_owned(),
+            },
+        )
+        .expect("the found is answered");
+        assert!(!answer.vault_id.is_empty());
+        assert!(!answer.owner_party_id.is_empty());
+
+        // AFTER: the file names itself, and the name is the one that was sent.
+        assert_eq!(
+            vault.vault_id().expect("read"),
+            Some(answer.vault_id.clone())
+        );
+        assert_eq!(
+            vault.display_name().expect("read").as_deref(),
+            Some("Tahoe")
+        );
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// A SECOND FOUND IS REFUSED AND THE FIRST VAULT IS LEFT ALONE.
+    ///
+    /// `Vault::found` inserts unconditionally, so without this guard one file
+    /// would hold two `core_vault` rows and `Vault::vault_id`'s
+    /// `ORDER BY vault_id LIMIT 1` would answer whichever id sorted first —
+    /// a vault whose identity depends on a random draw.
+    #[test]
+    fn a_second_found_is_refused_and_the_vault_already_here_is_untouched() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("the directory is made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
+        let first = found(
+            &vault,
+            &wire::FoundRequest {
+                display_name: "First".to_owned(),
+                owner_name: "Me".to_owned(),
+            },
+        )
+        .expect("the first found is answered");
+
+        let refusal = found(
+            &vault,
+            &wire::FoundRequest {
+                display_name: "Second".to_owned(),
+                owner_name: "Me".to_owned(),
+            },
+        )
+        .expect_err("a second found is refused");
+        assert_eq!(refusal.code(), wire::ErrorCode::VaultAlreadyHeld);
+        assert!(refusal.to_string().contains(&first.vault_id), "{refusal}");
+
+        // Nothing moved: the id and the name are the first found's.
+        assert_eq!(vault.vault_id().expect("read"), Some(first.vault_id));
+        assert_eq!(
+            vault.display_name().expect("read").as_deref(),
+            Some("First")
+        );
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// An empty name is a REAL STATE, not a validation failure: the shell draws
+    /// "No vault yet" over it and the member renames the vault from inside it.
+    #[test]
+    fn an_empty_display_name_founds_a_vault_that_is_simply_unnamed() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("the directory is made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
+        let answer = found(&vault, &wire::FoundRequest::default()).expect("founded");
+        assert!(!answer.vault_id.is_empty());
+        assert_eq!(vault.display_name().expect("read").as_deref(), Some(""));
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

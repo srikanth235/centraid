@@ -165,8 +165,11 @@ public class HomeSession private constructor(
      * showed a member a Rust error's `Display` — and a sentence a member reads
      * is the shell's to write.
      */
-    public suspend fun found(): FoundResult =
-        when (val outcome = shelf.found()) {
+    public suspend fun found(
+        name: String = Shelf.DEFAULT_VAULT_NAME,
+        ownerName: String = Shelf.DEFAULT_OWNER_NAME,
+    ): FoundResult =
+        when (val outcome = shelf.found(name = name, ownerName = ownerName)) {
             is Shelf.FoundOutcome.Founded -> {
                 rebind()
                 FoundResult.Made(outcome.holding.name)
@@ -175,11 +178,15 @@ public class HomeSession private constructor(
                 when (outcome.because) {
                     Shelf.FoundRefusal.NO_CORE ->
                         "Centraid could not make a vault on this device."
-                    // THE SENTENCE NAMES THE GAP RATHER THAN BLAMING THE
-                    // DEVICE. See [Shelf.FoundRefusal.NOT_FOUNDED]: the file
-                    // is made and nothing over the ABI founds the vault in it.
+                    // THE SENTENCE NO LONGER NAMES A MISSING DOOR (#1029 W5).
+                    // It said "this build cannot make a new vault yet", which
+                    // was true while nothing over the ABI wrote `core_vault`
+                    // and is a lie now that `FoundRequest` does. What reaches
+                    // this arm today is a found the CORE refused, and the
+                    // remedy a member has is to try again — the shelf picks a
+                    // different fresh file each time.
                     Shelf.FoundRefusal.NOT_FOUNDED ->
-                        "This build of Centraid cannot make a new vault yet."
+                        "Centraid made the file and could not make it a vault. Try again."
                     Shelf.FoundRefusal.ALREADY_HELD ->
                         "This device already holds that vault."
                 },
