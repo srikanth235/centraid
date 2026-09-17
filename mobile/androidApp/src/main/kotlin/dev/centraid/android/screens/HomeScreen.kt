@@ -95,10 +95,13 @@ public fun HomeScreen(
      */
     onDownloadSettings: () -> Unit = {},
     /**
-     * Open the existing Gateway / pair sheet (#1025 live-shell, R-SHELL-3).
-     * Empty-device switcher is an onboarding surface and must offer Pair.
+     * Open the vault sheet (#1025 live-shell, R-SHELL-3; #1029 §1).
+     *
+     * It was "open the Gateway / pair sheet", and the empty-device switcher is
+     * still an onboarding surface — what it offers now is MAKING a vault
+     * rather than pairing with one, because there is nothing to pair with.
      */
-    onPair: () -> Unit = {},
+    onMakeVault: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -115,7 +118,7 @@ public fun HomeScreen(
             },
             onDownloadSettings = onDownloadSettings,
         )
-        HomeTitleRow(onSettings = onPair)
+        HomeTitleRow(onSettings = onMakeVault)
         StatusRibbon(state.data_?.status, onEvent)
         val failure = state.failure
         val data = state.data_
@@ -153,7 +156,7 @@ public fun HomeScreen(
                 onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = id)))
             },
             onForget = onForget,
-            onPair = onPair,
+            onMakeVault = onMakeVault,
         )
     }
 }
@@ -173,12 +176,16 @@ public fun HomeScreen(
  * [stateLine] — the header's own table, called and not restated — so the lockup
  * and the row a member compares it against cannot word one `State` two ways.
  *
- * **AND EVERY ROW CAN BE FORGOTTEN.** Forgetting DELETES the local copy: the
- * replica, its byte store, its sidecars and this device's endpoint key for that
- * vault. That is why it is one tap behind a dialog that NAMES the vault rather
- * than a bare icon — a destructive act that a mis-hit thumb can complete is a
- * destructive act that will be completed by mis-hit thumbs. The gateway keeps
- * this device enrolled, so this is a local removal and not a departure.
+ * **AND EVERY ROW CAN BE FORGOTTEN.** Forgetting DELETES the vault: the file,
+ * its byte store and its sidecars. That is why it is one tap behind a dialog
+ * that NAMES the vault rather than a bare icon — a destructive act that a
+ * mis-hit thumb can complete is a destructive act that will be completed by
+ * mis-hit thumbs.
+ *
+ * **It used to be a LOCAL removal** — the gateway kept the vault and kept this
+ * device enrolled, so a forget cost a copy and a re-pair got it back. The phone
+ * is the vault (#1029 §1). There is no copy anywhere else, so the dialog has to
+ * say what it now does.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -187,7 +194,7 @@ private fun VaultSheet(
     active: VaultLockup?,
     onPick: (String) -> Unit,
     onForget: (String) -> Unit,
-    onPair: () -> Unit = {},
+    onMakeVault: () -> Unit = {},
 ) {
     // WHICH VAULT THE MEMBER IS BEING ASKED ABOUT, held by the sheet and not by
     // the row: a dialog owned by a row would be unmounted the instant the
@@ -207,8 +214,8 @@ private fun VaultSheet(
                 color = centraidColor("text"),
                 modifier = Modifier.padding(horizontal = PAGE_MARGIN, vertical = 8.dp),
             )
-            // ZERO IS NOT ONE (R-SHELL-3). Empty device → honest copy + Pair
-            // into the existing Gateway sheet; one vault keeps the old sentence.
+            // ZERO IS NOT ONE (R-SHELL-3). Empty device → honest copy and a
+            // way out of it; one vault keeps the old sentence.
             when {
                 vaults.isEmpty() -> {
                     Text(
@@ -218,19 +225,19 @@ private fun VaultSheet(
                         modifier = Modifier.padding(horizontal = PAGE_MARGIN),
                     )
                     Text(
-                        text = "Pair",
+                        text = "Make a vault",
                         style = centraidType("smallStrong"),
                         color = centraidColor("link"),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
                                 onPick("")
-                                onPair()
+                                onMakeVault()
                             }
                             .padding(horizontal = PAGE_MARGIN, vertical = 12.dp)
                             .heightIn(min = 44.dp)
-                            .testTag("vault-sheet-pair")
-                            .semantics { contentDescription = "Pair with a gateway" },
+                            .testTag("vault-sheet-make")
+                            .semantics { contentDescription = "Make a vault on this phone" },
                     )
                 }
                 vaults.size == 1 -> {
@@ -328,9 +335,8 @@ private fun VaultSheet(
             title = { Text("Forget $spoken?") },
             text = {
                 Text(
-                    "This deletes this device's copy of $spoken — the replica, " +
-                        "its files and its pairing key. The vault itself is not " +
-                        "deleted, and you can pair this device again.",
+                    "This deletes $spoken and everything in it — its rows and " +
+                        "its files. There is no copy anywhere else.",
                 )
             },
             confirmButton = {
@@ -361,7 +367,7 @@ private fun VaultSheet(
 }
 
 /**
- * The vault at a glance, and whether the gateway holding it is answering.
+ * The vault at a glance, and how it stands on this device.
  *
  * The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
  * red dot. `QUIET` is deliberately ignorable and earns no rule; the other two

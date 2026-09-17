@@ -4,7 +4,6 @@ import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.sync.TransferRule
-import dev.centraid.shared.sync.WakeReason
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -72,7 +71,7 @@ public class HomeBridge {
     }
 
     /**
-     * OPEN THIS DEVICE'S REPLICAS, AND START PUBLISHING.
+     * OPEN THIS DEVICE'S VAULTS, AND START PUBLISHING.
      *
      * Not in the constructor: opening a core is I/O that asserts it is not on
      * the UI thread, and a Swift `let` that blocked the main thread on SQLite
@@ -80,16 +79,16 @@ public class HomeBridge {
      *
      * A DIRECTORY, not a list of paths (#1025 S5). Wave A took a list because
      * the shell enumerated whatever `.db` files had been PLACED in its
-     * container; a device makes its own replicas now, so what the shell knows
-     * is where they go and [Replicas] knows what they are called. The empty
-     * directory — a phone that has never paired — is the ordinary first run and
-     * not an error: the core opens unpaired, Home draws, and the member's next
-     * move is the gateway sheet.
+     * container; a device makes its own vaults now, so what the shell knows is
+     * where they go and [Shelf] is what reads them. The empty directory — a
+     * phone that has not made a vault yet — is the ordinary first run and not
+     * an error: Home draws the empty shelf, and the member's next move is
+     * [found].
      */
-    public fun open(replicaDir: String) {
+    public fun open(vaultDir: String) {
         scope.launch {
             val opened = HomeSession.open(
-                replicaDir = replicaDir,
+                vaultDir = vaultDir,
                 services = platformServices(),
                 dispatcher = Dispatchers.Default,
                 uiThreadName = "main",
@@ -131,46 +130,31 @@ public class HomeBridge {
     }
 
     /**
-     * Redeem a pairing ticket, and call back with what happened (#1020,
-     * D-1020-B7).
+     * MAKE A VAULT ON THIS PHONE, and call back with what happened (#1029 §1).
+     *
+     * What replaces `pair`, which took a ticket, a device name and a platform
+     * string and redeemed them against a gateway. None of the three has a
+     * reader any more: a vault is founded here, so the only input is the tap.
      *
      * Not `suspend`, for the same reason [send] is not: a SwiftUI button cannot
      * await. The callback fires on the main dispatcher because its only caller
      * is a `@Published` setter.
-     *
-     * A session with no core answers [PairOutcome.NoCore] rather than throwing.
-     * That is the state a device is in before a vault is placed on it, and it
-     * is not an error.
-     *
-     * The answer has THREE shapes and not two (#1025 S7-9): a vault that was
-     * admitted and could be asked its own name, a vault that was admitted and
-     * whose copy has not landed yet ([PairOutcome.Copying]), and a refusal. The
-     * middle one exists because the ticket's `vault_name` is the gateway's CLI
-     * flag and not the vault's `display_name`, so there is nothing truthful to
-     * print until a replica can answer for itself.
      */
-    public fun pair(
-        ticket: String,
-        deviceName: String,
-        platform: String,
-        onOutcome: (PairOutcome) -> Unit,
-    ) {
-        val session = this.session ?: return onOutcome(PairOutcome.NoCore)
-        scope.launch { onOutcome(session.pair(ticket, deviceName, platform)) }
+    public fun found(onOutcome: (FoundResult) -> Unit) {
+        val session = this.session ?: return onOutcome(FoundResult.NoSession)
+        scope.launch { onOutcome(session.found()) }
     }
 
     /**
      * FORGET A VAULT (#1025 S7-9).
      *
-     * The inverse of [pair], and the same shape for the same reason: a SwiftUI
-     * button cannot await. [onDone] fires when the shelf has closed the core,
-     * deleted the replica and its byte store, dropped the pairing record and
-     * the endpoint key, and rebound the session onto whatever came forward.
+     * The inverse of [found], and the same shape for the same reason: a
+     * SwiftUI button cannot await. [onDone] fires when the shelf has closed
+     * the core, deleted the file and its byte store, and rebound the session
+     * onto whatever came forward.
      *
-     * **The gateway keeps this device enrolled.** Forgetting is local — it says
-     * "this phone is not holding that vault any more", not "that vault should
-     * stop trusting this phone", which is a decision for whoever holds the
-     * vault to take on the gateway. See `Shelf.forget`.
+     * **On a phone that IS the vault this destroys the member's rows**, and
+     * there is no copy on a gateway to fall back to. See `Shelf.forget`.
      */
     public fun forget(vaultId: String, onDone: () -> Unit = {}) {
         val session = this.session ?: return onDone()
@@ -178,20 +162,6 @@ public class HomeBridge {
             session.forget(vaultId)
             onDone()
         }
-    }
-
-    /**
-     * Run one sync ROUND — one pass per vault this device holds, foreground
-     * first, under one shared window (#1025 S7-9).
-     *
-     * The pass BLOCKS the core's dispatcher for its duration — it is network
-     * I/O — which is why it is launched rather than awaited and why nothing
-     * here touches the UI thread beyond the callback.
-     */
-    public fun syncNow(wake: WakeReason = WakeReason.FOREGROUND, onOutcome: (SyncOutcome) -> Unit) {
-        val session = this.session
-            ?: return onOutcome(SyncOutcome(unreachable = true, sentence = "No vault is open."))
-        scope.launch { onOutcome(session.syncNow(wake)) }
     }
 
     /**
@@ -244,99 +214,6 @@ public class HomeBridge {
     public fun transferRuleChoices(): List<TransferRuleChoice> =
         TransferRule.entries.map { TransferRuleChoice(it.stored, it.sentence) }
 
-    /**
-     * THE MEMBER ARRIVED (#1025 S2, D-1025-S7-40).
-     *
-     * One round, then a tail on the foreground holding that stays open until
-     * something closes it. This is what a shell calls when the app becomes
-     * active — there is no timer to start beside it, and starting one would be
-     * a second mechanism for the thing this one does.
-     *
-     * **AN ARRIVAL BEFORE THE SESSION EXISTS IS KEPT, NOT DROPPED** (#1025).
-     *
-     * This answered "No vault is open." and returned, and a COLD LAUNCH is
-     * exactly that race: [open] does `Shelf.load` first, which probes and opens
-     * every replica in turn, while the shell's own launch `task` calls this on
-     * the same tick. The scene is already `active`, so `onChange(of:scenePhase)`
-     * has no transition left to fire — the one arrival of the launch was thrown
-     * away, no tail was ever opened, and the header read "syncing" for ever
-     * until the member tapped Sync now or switched vaults. Every screen drew
-     * from the replica, so nothing looked broken; the phone was simply not
-     * connected.
-     *
-     * [waitingForSession] already exists for precisely this shape and is what
-     * runs it, so the arrival is replayed at the one moment there is a session
-     * to run it against. There is no window in which it can run twice: the
-     * waiters are invoked once and cleared, and a call after that takes the
-     * branch above.
-     */
-    public fun foreground(onOutcome: (SyncOutcome) -> Unit = {}) {
-        val session = this.session
-        if (session == null) {
-            stillHere = true
-            onSession { opened ->
-                // THE MEMBER MAY HAVE LEFT WHILE THE REPLICAS WERE OPENING, and
-                // an arrival replayed then is a tail opened behind the app
-                // switcher — the one thing [leftTheForeground] exists to stop.
-                if (!stillHere) return@onSession
-                scope.launch { onOutcome(opened.foreground()) }
-            }
-            return
-        }
-        scope.launch { onOutcome(session.foreground()) }
-    }
-
-    /**
-     * Whether the arrival kept by [foreground] is still worth replaying.
-     *
-     * Only ever read by the waiter [foreground] registers: once there is a
-     * session both halves take their own branch and this says nothing.
-     */
-    private var stillHere: Boolean = false
-
-    /**
-     * THE MEMBER LEFT, and the OS gave this device a window (#1025 S2).
-     *
-     * The tail is closed first — a stream parked on a quiet gateway would spend
-     * the whole window waiting — and then one bounded round runs inside it.
-     */
-    public fun background(
-        wake: WakeReason = WakeReason.SCHEDULED,
-        onOutcome: (SyncOutcome) -> Unit = {},
-    ) {
-        val session = this.session ?: return onOutcome(SyncOutcome(unreachable = true))
-        scope.launch { onOutcome(session.background(wake)) }
-    }
-
-    /**
-     * THE MEMBER LEFT THE FOREGROUND (#1025, R-SHELL-4).
-     *
-     * Closes the tail and stops a radio-up from reopening it while the app
-     * is in the switcher. Lock and suspend still call [stopTail]: those leave
-     * the process without a member looking, but they are not a scene-phase
-     * leave, and the next [foreground] is what resumes.
-     */
-    public fun leftTheForeground() {
-        // BEFORE THE EARLY RETURN, because the departure that matters most is
-        // the one with no session yet: it is what cancels the arrival
-        // [foreground] kept for the launch that is still opening its replicas.
-        stillHere = false
-        val open = session ?: return
-        scope.launch { open.leftTheForeground() }
-    }
-
-    /**
-     * CLOSE THE TAIL AND NOTHING ELSE. What locking and suspending do.
-     *
-     * No round follows: a device that is locked is a device whose decrypted
-     * material is being cleared, and a pass would be work started at the moment
-     * everything else is stopping.
-     */
-    public fun stopTail() {
-        val open = session ?: return
-        scope.launch { open.stopTail() }
-    }
-
     /** The current state, for a view that needs one before it subscribes. */
     public fun current(): ByteArray =
         (session?.state?.value ?: HomeMachine.initial()).encode()
@@ -366,7 +243,7 @@ public class HomeBridge {
      *
      * From iOS's `didReceiveMemoryWarning` and Android's `onTrimMemory`. Every
      * background vault's core is closed and the foreground's is kept; a rested
-     * vault reopens on the next tap or the next sync round.
+     * vault reopens on the next tap.
      */
     public fun rest() {
         val open = session ?: return

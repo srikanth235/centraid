@@ -1,7 +1,6 @@
 package dev.centraid.shared.platform
 
 import centraid.screen.v1.MediaPermission
-import dev.centraid.shared.sync.WakeReason
 
 /**
  * The JVM's platform services: IN-MEMORY FAKES, and they say so
@@ -61,36 +60,13 @@ public class FakeBackgroundTasks(
         registered = true,
         sentence = "Centraid catches up in the background.",
     ),
-    /**
-     * What this fake platform says its windows are. A `var` per wake reason so
-     * a test can hand a pass any deadline it likes — which is the point of the
-     * deadline arriving from here rather than from a constant (#1025 S5).
-     */
-    public var windows: Map<WakeReason, BackgroundTasks.PlatformWindow> = emptyMap(),
 ) : BackgroundTasks {
     public var registrations: Int = 0
         private set
 
-    private val listeners = mutableListOf<() -> Unit>()
-
     override suspend fun register(): BackgroundTasks.Registration {
         registrations += 1
         return answer
-    }
-
-    override suspend fun window(wake: WakeReason): BackgroundTasks.PlatformWindow =
-        windows[wake] ?: BackgroundTasks.PlatformWindow(
-            deadlineMs = if (wake == WakeReason.FOREGROUND) Long.MAX_VALUE else 30_000,
-            source = "the JVM fake, standing in for a cooperative platform",
-        )
-
-    override fun onPlatformExpiration(listener: () -> Unit) {
-        listeners += listener
-    }
-
-    /** A test's OS, running out of time. */
-    override fun platformExpired() {
-        listeners.forEach { it() }
     }
 }
 

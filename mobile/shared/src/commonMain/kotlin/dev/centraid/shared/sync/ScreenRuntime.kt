@@ -8,16 +8,12 @@ import centraid.core.v1.PageQuery
 import centraid.core.v1.PageRequest
 import centraid.core.v1.Request
 import centraid.core.v1.Row
-import centraid.core.v1.SyncWindow
 import centraid.screen.v1.ReadFailure
-import centraid.screen.v1.SeatState
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
-import dev.centraid.shared.shell.SEAT_BYTES_FETCH_COMMAND
-import dev.centraid.shared.shell.boolField
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -77,27 +73,16 @@ public interface ScreenReads<S, E> {
  * screen had to implement with a stub would be four stubs standing for "this
  * screen does not write", which is a thing an absence already says.
  *
- * ## The gate is not in here, and not in the reducer either
+ * ## THERE IS NO GATE ANY MORE, BECAUSE THERE IS NOWHERE ELSE FOR A WRITE TO GO
  *
- * [dev.centraid.shared.sync.WriteGate] decides send-now / enqueue / refuse, and
- * it decided it for nobody until this ran: it had tests, three verdicts and no
- * caller in the product, because `Request::Intent` refused on a seat and there
- * was nothing for it to gate. `ScreenEffect.SubmitWrite`'s own comment says why
- * the rule may not live in each screen — "a rule that lives in every reducer is
- * a rule one reducer will get wrong" — and `onlineOnly` is the case that makes
- * it matter: falling back to the outbox is exactly what that flag forbids.
+ * `WriteGate` chose between send-now, the durable outbox and a refusal, and all
+ * three were answers to "can this device reach its gateway right now". The
+ * phone is the vault (#1029 §1): a write commits here or it does not commit,
+ * and there is no second destination to route it to. The gate, the `seat(state)`
+ * reading it consulted and `SubmitWrite.onlineOnly` all leave with the plane
+ * they were choosing between.
  */
 public interface ScreenWrites<S, E> {
-    /**
-     * This seat's state, as the screen is holding it.
-     *
-     * Read off the SCREEN and not off the session, because the screen's state
-     * is what the member is looking at when they press the button — a gate that
-     * consulted a fresher connectivity reading would refuse or queue on a fact
-     * the screen never showed them.
-     */
-    public fun seat(state: S): SeatState?
-
     /**
      * The app the write belongs to.
      *
@@ -117,29 +102,6 @@ public interface ScreenWrites<S, E> {
      * made its own from a peer's words would be the hole in that rule.
      */
     public fun settled(status: CommandStatus, sentence: String): E?
-}
-
-/**
- * A SCREEN THAT CAN ASK FOR ONE ORIGINAL (#1025 S5, D-1025-S7-63).
- *
- * Beside [ScreenWrites] and shaped like it, because it is the same kind of
- * thing: a member action this screen can take that is not a read. It is NOT a
- * write — nothing commits and there is no outbox entry — and it must
- * not go through the write gate, because a queued download is a promise nobody
- * can keep: the member wants the file now or wants to be told the gateway is
- * away.
- */
-public interface ScreenFetches<E> {
-    /**
-     * The answer, as this screen's own event. Null for a screen that draws
-     * nothing for it.
-     *
-     * [sentence] is the core's own, from its table of codes, and is empty when
-     * there is nothing worth saying. Nothing here composes one: `Error.detail`
-     * is logs-only and a shell that made a sentence out of a peer's words would
-     * be the hole in that rule.
-     */
-    public fun fetchSettled(assetId: String, fetched: Boolean, sentence: String): E?
 }
 
 /**
@@ -197,20 +159,6 @@ public class ScreenRuntime<S, E>(
     private val scope: CoroutineScope,
     /** Null for a screen with no write. See [ScreenWrites]. */
     private val writes: ScreenWrites<S, E>? = null,
-    /** Null for a screen with no download affordance. See [ScreenFetches]. */
-    private val fetches: ScreenFetches<E>? = null,
-    /**
-     * The window a tapped fetch rides, from the shell's own policy.
-     *
-     * **The shell states the window, here as everywhere** (#1025 S2, S5): the
-     * deadline is the OS's number and `metered`/`originals` are the radio's and
-     * the member's. Neither can change this window's outcome — `Budget::only`
-     * is checked before the rule is consulted at all (D-1025-S7-63) — so what
-     * carrying them buys is an HONEST ECHO in the core's answer rather than a
-     * decision. Null means the core's own default window, which is what a test
-     * driving this class without a platform gets.
-     */
-    private val window: (suspend () -> SyncWindow)? = null,
 ) {
     /**
      * Collect this host's effects and serve the ones that are this screen's.
@@ -232,16 +180,13 @@ public class ScreenRuntime<S, E>(
             if (effect is ScreenEffect.SubmitWrite && writes != null) {
                 scope.launch { submit(effect, writes) }
             }
-            if (effect is ScreenEffect.FetchOriginal &&
-                effect.screenId == reads.screenId &&
-                fetches != null
-            ) {
-                // LAUNCHED, like a read and unlike nothing else here: a fetch
-                // is a whole foreground window over a multi-megabyte file, and
-                // a collector that awaited it would stop serving this screen's
-                // reads for the length of a download.
-                scope.launch { fetch(effect, fetches) }
-            }
+            // `ScreenEffect.FetchOriginal` IS NOT SERVED HERE ANY MORE
+            // (#1029 §1). It rode `seat.bytes.fetch` — `seat.sync` with a
+            // one-item window — and `grep -rn 'seat.bytes.fetch' crates/` is
+            // now empty: the command left with the seat plane. The affordance
+            // stays on the Photos grid and the effect stays in the contract;
+            // what serves it is the phone's own byte plane, which #1029 W6
+            // builds.
         }
     }
     private suspend fun serve(afterCursor: String?) {
@@ -353,22 +298,6 @@ public class ScreenRuntime<S, E>(
      * required for that reason.
      */
     private suspend fun submit(write: ScreenEffect.SubmitWrite, writes: ScreenWrites<S, E>) {
-        when (val verdict = WriteGate.verdict(write, writes.seat(host.state.value))) {
-            is WriteGate.Verdict.Refuse -> {
-                // REFUSED, AND SAID SO. Not queued and not silently dropped:
-                // the member is told the write did not happen, with the
-                // sentence that says why.
-                writes.settled(CommandStatus.COMMAND_STATUS_DENIED, verdict.sentence)
-                    ?.let { host.send(it) }
-                return
-            }
-            // The two go down the same door and differ in what the CORE does
-            // with them, not in what this sends: a seat enqueues, a gateway
-            // executes, and the answer's status is which happened. A shell that
-            // branched here would be a second opinion about a decision the core
-            // makes from its own role.
-            WriteGate.Verdict.SendNow, WriteGate.Verdict.Enqueue -> Unit
-        }
         val handle = core()
         if (handle == null) {
             writes.settled(
@@ -403,60 +332,6 @@ public class ScreenRuntime<S, E>(
                     // reaches the audit trail only.
                     writes.settled(answered.status, answered.reason)
                 }
-            }
-        }
-        event?.let { host.send(it) }
-    }
-
-    /**
-     * FETCH ONE ORIGINAL THE MEMBER TAPPED (#1025 S5, D-1025-S7-63).
-     *
-     * `seat.bytes.fetch` — `seat.sync` with a one-item window — and NOT a
-     * write: no gate and no outbox entry. A queued download is a promise nobody
-     * can keep.
-     *
-     * **A settle event goes out on every path, the failures included.** The
-     * success path's bytes redraw the cell through the ordinary `RowsChanged`
-     * (D-1025-S7-21), so `fetched` is not what draws the photograph — what it
-     * does is take the cell OUT of `HELD_FETCHING`, and a cell left spinning
-     * because nobody said "it did not happen" is a state a member cannot get
-     * out of.
-     *
-     * Every sentence is the CORE's, off `reason`, which the core makes from
-     * its own closed table of codes. Nothing here composes one out of an
-     * error: `Error.detail` is logs-only.
-     */
-    private suspend fun fetch(tap: ScreenEffect.FetchOriginal, fetches: ScreenFetches<E>) {
-        val handle = core()
-        if (handle == null) {
-            fetches.fetchSettled(tap.assetId, false, "No vault is open on this device.")
-                ?.let { host.send(it) }
-            return
-        }
-        val request = Envelope(
-            request_id = 0,
-            request = Request(
-                command = Command(
-                    name = SEAT_BYTES_FETCH_COMMAND,
-                    invoke_key = "shell",
-                    // THE HASH ADDRESSES THE BYTES; the asset id is what a log
-                    // line needs to say WHICH photograph was tapped, and what
-                    // comes back names the cell to settle.
-                    input = (
-                        """{"contentHash":"${tap.contentHash}",""" +
-                            """"ownerRef":"${tap.assetId}"}"""
-                        ).encodeUtf8(),
-                    sync_window = window?.invoke(),
-                ),
-            ),
-        )
-        val event = when (val outcome = handle.call(request)) {
-            is CoreOutcome.Failed ->
-                fetches.fetchSettled(tap.assetId, false, outcome.failure.sentence)
-            is CoreOutcome.Answered -> {
-                val answered = outcome.value.response?.command
-                val fetched = answered?.output?.utf8()?.boolField("fetched") ?: false
-                fetches.fetchSettled(tap.assetId, fetched, answered?.reason.orEmpty())
             }
         }
         event?.let { host.send(it) }

@@ -136,8 +136,6 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
                                 // replayed intent re-executes a command that
                                 // already committed.
                                 invokeKey = "notes.save:${state.note_id}:${draft.base_revision_id}",
-                                // R-NOTES-3: a note save is never onlineOnly.
-                                onlineOnly = false,
                             ),
                         ),
                     )

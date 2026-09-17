@@ -9,7 +9,6 @@ import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.ReadFailure
-import centraid.screen.v1.SeatState
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenWrites
@@ -164,8 +163,6 @@ public object NotesReads :
     private const val BODY: Int = 6
 
     override val appId: String = "notes"
-
-    override fun seat(state: NotesEditorState): SeatState? = state.seat
 
     /**
      * The save's outcome, as the editor's own settle event.

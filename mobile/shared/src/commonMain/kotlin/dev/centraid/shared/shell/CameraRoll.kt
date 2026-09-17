@@ -18,7 +18,7 @@ import okio.ByteString.Companion.encodeUtf8
  * THE CAMERA ROLL, GOING UP (#1025 S6, D-1025-S7-73).
  *
  * The half of the product that was missing entirely. `MediaLibrary` could
- * describe a roll, `Staging` could hand bytes to the core, `WriteGate` could
+ * describe a roll, `Staging` could hand bytes to the core, the runtime could
  * decide where a write goes, `ScreenEffect.Backup` could be emitted and
  * `BackupState` could be drawn — and **nothing joined any of them**. There was
  * no caller of `Staging` on any platform, no producer of a `BackupState` other

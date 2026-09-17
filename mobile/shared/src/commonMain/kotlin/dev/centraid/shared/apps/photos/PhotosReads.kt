@@ -263,32 +263,3 @@ public object PhotosReads : ScreenReads<PhotosGridState, PhotosGridEvent> {
 
     private fun Row.integer(index: Int): Long = values.getOrNull(index)?.integer ?: 0L
 }
-
-/**
- * WHAT THE GRID DOES WITH A FETCH'S ANSWER (#1025 S5, D-1025-S7-63).
- *
- * Its own object beside [PhotosReads] for the reason `NotesReads` implements
- * both halves on one: this is a different question — a member action's outcome,
- * not a page of rows — and keeping it separate is what stops a screen with no
- * download affordance from having to answer it.
- *
- * **A LANDED FETCH IS NOT REPORTED HERE.** Bytes that arrive write
- * `seat_blob_held` and the core names the asset rows they belong to, so the
- * cell redraws through the ordinary `RowsChanged` (D-1025-S7-21). What this
- * exists for is the other two outcomes — a gateway that was not reached, and a
- * refusal by code — because a cell left spinning is the state a member cannot
- * get out of.
- */
-public object PhotosFetches : dev.centraid.shared.sync.ScreenFetches<PhotosGridEvent> {
-    override fun fetchSettled(
-        assetId: String,
-        fetched: Boolean,
-        sentence: String,
-    ): PhotosGridEvent = PhotosGridEvent(
-        fetch_settled = PhotosGridEvent.FetchSettled(
-            asset_id = assetId,
-            fetched = fetched,
-            sentence = sentence,
-        ),
-    )
-}

@@ -1,16 +1,9 @@
 package dev.centraid.shared.shell
 
-import centraid.core.v1.Envelope
-import centraid.core.v1.ErrorCode
-import centraid.core.v1.PairRequest
-import centraid.core.v1.Request
 import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
-import dev.centraid.core.CoreFailure
 import dev.centraid.core.CoreOutcome
-import dev.centraid.core.CoreRole
-import dev.centraid.core.PairingRecord
 import dev.centraid.shared.platform.PlatformServices
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,136 +11,108 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import okio.ByteString.Companion.toByteString
 import okio.FileSystem
+import okio.Path
 import okio.Path.Companion.toPath
 
 /**
  * EVERY VAULT THIS DEVICE HOLDS, AND THE ONE OBJECT THAT ADDS OR REMOVES ONE
- * (#1025 S7-9).
+ * (#1025 S7-9, reshaped by #1029 §1).
  *
- * ## What was wrong, stated plainly
+ * ## THE PHONE IS THE VAULT
  *
- * **Pairing a second gateway onto a device that already held a vault DESTROYED
- * the first one.** Reproduced on the iPhone 17 Pro simulator, and the chain is
- * short enough to state in full: [HomeSession.pair] sent `Request::Pair` down
- * the LIVE core — the one open on vault A's replica — `Handle::pair` called
- * `bootstrap` into that same file with no guard, and vault A's rows were
- * replaced by vault B's. Then [Replicas.settle] looked for a
- * `centraid-pairing.sqlite3` that had never been created, answered null, the
- * session fell back to a path with no file and opened it with `create = false`,
- * and the member — who a second earlier had a vault — read **"No vault yet"**.
+ * This class used to be the phone's half of a pairing: [admit] redeemed a
+ * ticket against a gateway, the gateway named a vault, the copy came down as a
+ * bootstrap, a per-vault endpoint identity was minted and kept, and the file a
+ * member's rows lived in was a REPLICA of an authority somewhere else. #1029
+ * deletes that whole plane. There is no gateway to pair with, no ticket to
+ * redeem, no endpoint to enrol and no copy to take: **a vault is a file on this
+ * phone, and this is the set of them.**
  *
- * Two separate objects each held one true fact and neither held the set:
- * `Replicas` knew which files existed and `Pairings`/`EndpointKeys` knew which
- * vaults had a record and an identity, and `VaultRoster.survey` read all of it
- * ONCE at launch and never again. A vault admitted afterwards was invisible
- * until the app was relaunched. Those two objects are now one — [Enrolments],
- * one record per vault — and this class is the set.
+ * What is left is smaller and says the same thing it always said. The shelf
+ * holds [Holding]s — a vault id, the file it lives in, what it is called, and
+ * its OPEN CORE — and [found] and [forget] are the only things that add or
+ * remove one. Every membership change publishes [roster], so the switcher's
+ * rows and the header's second line stay two renderings of one stream.
  *
- * ## What this is
+ * ## ONE WAY TO OPEN A VAULT (#1029 §1)
  *
- * The shelf holds [Holding]s. A holding is a vault id, the file it lives in,
- * what it is called, its OPEN CORE, the last pass's [SyncOutcome] and whether a
- * pass is in flight — from which its [VaultLockup.State] is DERIVED, never
- * stored. **[admit] and [forget] are the only things that add or remove an
- * entry.**
- *
- * Every membership or state change publishes [roster]. The switcher's rows and
- * the header's second line are two renderings of that one stream, which is what
- * stops them disagreeing the way the survey and the session's `link` did.
+ * Every vault opens identically: the file, no role, and `create` false for one
+ * that is already there. There is no `SEAT_REPLICATED`, no `GATEWAY` and no
+ * enrolment record to open ON — `CoreConfiguration` carries a path and a
+ * create flag, and `crates/core-ffi`'s `config_from_json` reads exactly those.
+ * A `role` an older shell still sent is ignored rather than refused, which is
+ * that crate's own note and the reason this could stop sending one on its own.
  *
  * ## A HELD VAULT'S CORE IS OPEN (#1025 S7-13, ruling F)
  *
- * Every holding's core is open — the file and the endpoint — from the moment it
- * is admitted or the shelf launches. **A switch is a pure rebind**: [HomeSession]
- * points its runtime and change reader at the foreground holding's core, and
- * nothing is closed, nothing is reopened, nothing is re-identified. Where the
- * previous wave spent a SQLite close-and-open on every tap of the switcher,
- * this spends nothing.
+ * Every holding's core is open — the file — from the moment it is founded or
+ * the shelf launches, and it STAYS open. A switch is a pure rebind:
+ * [HomeSession] points its runtime and change reader at the foreground
+ * holding's core, and nothing is closed, nothing is reopened.
  *
- * "Open" means the file and the endpoint, and it does **not** mean an active
- * dial. Dialling stays the sync round's decision — foreground first, and the
- * metered rule unchanged — so a background vault's endpoint is a bound socket
- * doing nothing until a round reaches it.
- *
- * ### What the cap was, and why it is gone
- *
- * `OPEN_CORES = 1` cited R-1020-24, and the citation was the whole argument.
- * R-1020-24 is that **app extensions never open the vault**: two handles on ONE
- * FILE is the hazard, because that is two writers and two endpoints for one
- * vault. Two handles on two different vaults share no file, no outbox and no
- * endpoint, and refusing them bought nothing. `SingleHandleGuard` is keyed on
- * the replica path now and the rule it enforces is unchanged for the case it
- * exists for; `D-1020-HOME8`'s survey-before-open dance is no longer needed,
- * because the roster is read off the cores that are already open.
+ * `OPEN_CORES = 1` cited R-1020-24, and R-1020-24 is that **app extensions
+ * never open the vault**: two handles on ONE FILE is the hazard, because that is
+ * two writers for one vault. Two handles on two different files share nothing
+ * and refusing them bought nothing. `SingleHandleGuard` is keyed on the vault
+ * path and the rule it enforces is unchanged for the case it exists for.
  *
  * ### The only two things that close a background core
  *
  * 1. [forget], which is the member removing the vault.
- * 2. [rest], the OS asking for memory back — iOS's
- *    `didReceiveMemoryWarning` and Android's `onTrimMemory`. It closes every
- *    core but the foreground's; a rested holding reopens on the next touch or
- *    the next sync round.
+ * 2. [rest], the OS asking for memory back — iOS's `didReceiveMemoryWarning`
+ *    and Android's `onTrimMemory`. It closes every core but the foreground's; a
+ *    rested holding reopens on the next touch.
  *
- * There is deliberately **no idle timeout**. If one is ever wanted, the shape
- * is a per-vault timer on the [Holding] — not a global number of cores — for
- * the same reason [rest] is per holding: "how many may be open" is a question
- * about a device, and every other question here is about a vault.
+ * There is deliberately **no idle timeout**. If one is ever wanted, the shape is
+ * a per-vault timer on the [Holding] — not a global number of cores — because
+ * "how many may be open" is a question about a device and every other question
+ * here is about a vault.
  *
- * ## A device pairs with a VAULT
+ * ## THE DIRECTORY IS THE ROSTER, AND A FILE NAME IS NOT AN IDENTITY
  *
- * Two vaults behind one gateway is a coincidence this device never surfaces and
- * never acts on, which is why nothing here is keyed by a gateway: a holding is
- * keyed by vault id, and so are its replica, its byte store, its endpoint, its
- * core and its one [Enrolments] record. **"Gateway" is not a noun this device
- * has** (#1025 S7-13, ruling A).
+ * Every vault this device holds is a `*.sqlite3` file in one directory, and
+ * that is the whole index. There is no manifest beside them, for the reason
+ * [VaultRoster] gives: a vault's name lives inside the vault, and an index
+ * would be a second place it lives that nothing keeps true.
+ *
+ * **The vault id is no longer in the file name, and losing it from there is
+ * what deleted `Replicas.settle`.** `centraid-replica-<vaultId>.sqlite3` existed
+ * so the shelf could fetch a vault's ENROLMENT RECORD before opening the file,
+ * and so a device could file a just-paired copy under the id the gateway had
+ * just named. Neither exists now — there is no record, and no gateway names
+ * anything — so a device that founds its own vault would have had to write the
+ * file under a provisional name and rename it the moment the core answered. A
+ * rename that can half-happen, to buy a fact the file itself already answers,
+ * is the defect `Enrolments` was built to end. So the name is opaque, [identify]
+ * asks each file what vault it is, and a file that will not say is not a
+ * holding.
+ *
+ * Files written under the old spelling still open: the listing takes every
+ * `.sqlite3` in the directory and asks it, rather than matching a prefix.
+ * SQLite's `-wal` and `-shm` sidecars are excluded by the suffix.
  */
 public class Shelf(
-    /** Where every replica this device holds lives. See [Replicas]. */
-    private val replicaDir: String,
+    /** Where every vault this device holds lives. */
+    private val vaultDir: String,
     private val services: PlatformServices,
     private val dispatcher: CoroutineDispatcher,
     private val uiThreadName: String,
 ) {
-    /**
-     * ONE VAULT, AS THIS DEVICE HOLDS IT.
-     *
-     * [outcome] is the LAST pass's report and null before any pass has run.
-     * [passInFlight] is the shelf's own bookkeeping. Neither is a state; [state]
-     * is computed from both, every time it is asked.
-     */
+    /** ONE VAULT, AS THIS DEVICE HOLDS IT. */
     public data class Holding(
         public val vaultId: String,
-        /** The replica file. Resolving an id to a path is the shell's business. */
+        /** The vault file. Resolving an id to a path is the shell's business. */
         public val path: String,
         /**
          * What to call it.
          *
-         * Read out of the replica's own `core_vault.display_name` the moment
-         * there is a file to read it from ([VaultRoster.identify]). A name that
-         * came off a pairing TICKET is a placeholder and nothing more: the
-         * gateway mints its ticket with its `--vault-name` flag, which on a
-         * seeded demo said "Centraid" over a vault called "Tahoe Demo". A
-         * vault's name lives inside the vault.
+         * Read out of the vault's own `core_vault.display_name` the moment
+         * there is a file to read it from ([VaultRoster.identify]). A vault's
+         * name lives inside the vault.
          */
         public val name: String,
         public val color: String = "",
-        public val outcome: SyncOutcome? = null,
-        public val passInFlight: Boolean = false,
-        /**
-         * A TAIL IS OPEN ON THIS HOLDING (#1025 S2, D-1025-S7-40).
-         *
-         * The foreground holding's ordinary state while a member is looking at
-         * the app: one stream to the gateway, held open, carrying every page
-         * the vault commits. **A receiving tail over a reachable last pass IS
-         * a gateway that is reached** — which is why it decides [state] ahead
-         * of a successful last pass, and why a quiet vault does not drift
-         * towards "offline" after an hour of nobody writing anything. A mark
-         * set when the stream is merely asked for does not outrank a
-         * just-recorded unreachable (R-SHELL-1).
-         */
-        public val tailing: Boolean = false,
         /**
          * THIS VAULT'S OPEN CORE, or null while the holding is RESTING
          * (#1025 S7-13, ruling F).
@@ -156,7 +121,7 @@ public class Shelf(
          * many may be open" is a question about a device, and every other
          * question on this class is about a vault. A holding rests only when
          * [rest] is called — the OS asking for memory back — and wakes on the
-         * next touch or the next sync round.
+         * next touch.
          *
          * Compared by IDENTITY, which is what a data class does with a type
          * that has no `equals`, and which is the right comparison: a holding
@@ -169,48 +134,28 @@ public class Shelf(
         public val resting: Boolean get() = core == null
 
         /**
-         * THE STATE, DERIVED (#1025 S7-9; R-SHELL-1).
+         * THE STATE, AND ON THIS DEVICE THERE IS ONE (#1029 §1).
          *
-         * Cases, in this order, and the order is the whole definition:
+         * It was a function of the last pass's outcome and whether a pass was
+         * in flight, and it had three answers because there were three things a
+         * gateway could be doing. **The phone is the vault.** There is no pass,
+         * no gateway and no copy still coming, so a vault this shelf holds is a
+         * file on this device whose core opened — which is `STATE_ONLINE`, the
+         * one value of the three whose own wording is a PAST-TENSE fact
+         * ("synced") rather than a claim about a live link.
          *
-         * 1. A pass IN FLIGHT is syncing, whatever the last one said.
-         * 2. A just-recorded unreachable is OFFLINE — even if [tailing] was
-         *    marked true when the stream was asked for. Marking the ask must
-         *    not outrank a failed pass or a dead tail (trap unreachable-vault).
-         * 3. A receiving / asked-for tail over a reachable last pass is ONLINE
-         *    (#1025 S2, D-1025-S7-40).
-         * 4. A bootstrap that ran and has not fetched the whole copy is
-         *    syncing — "paired, no file yet" and "the copy is 40% here".
-         * 5. Otherwise the last pass decides: it reached the gateway, or it did
-         *    not.
+         * A RESTING holding is `STATE_ONLINE` too, and that is not a guess: the
+         * file is whole and [rest] closed its handle to give the OS memory back.
+         * Nothing about the vault changed.
          *
-         * **A holding that has never run a pass is [VaultLockup.State.STATE_SYNCING]
-         * and not "online".** It is a vault nothing has reported on yet, and
-         * the honest thing to say is that Centraid is working on it — claiming
-         * "synced" over a pass nobody ran is exactly the guess that put "not
-         * connected to a gateway" over a synced device for two waves.
+         * **`VaultLockup.State` is a gateway's vocabulary that has outlived its
+         * gateway.** `STATE_SYNCING` and `STATE_OFFLINE` are now unreachable
+         * from this shell, and the enum lives in `crates/api-proto`, which this
+         * lane does not touch. What the shelf owes until that crate's lane trims
+         * it is the honest value, which is this one.
          */
         public val state: VaultLockup.State
-            get() {
-                if (passInFlight) return VaultLockup.State.STATE_SYNCING
-                val last = outcome
-                // UNREACHABLE OUTRANKS A PENDING TAIL MARK (R-SHELL-1).
-                // `openTail` sets `tailing` when the stream is asked for, before
-                // any byte arrives. That mark alone must not say ONLINE over a
-                // pass (or closed tail) that already reported unreachable.
-                if (last != null && last.unreachable) {
-                    return VaultLockup.State.STATE_OFFLINE
-                }
-                // A TAIL OVER A REACHABLE LAST PASS IS ONLINE (#1025 S2,
-                // D-1025-S7-40). Quiet vaults move nothing for hours and are
-                // not offline for a second of it.
-                if (tailing) return VaultLockup.State.STATE_ONLINE
-                if (last == null) return VaultLockup.State.STATE_SYNCING
-                if (last.bootstrap.ran && last.copyFetched < last.copyTotal) {
-                    return VaultLockup.State.STATE_SYNCING
-                }
-                return VaultLockup.State.STATE_ONLINE
-            }
+            get() = VaultLockup.State.STATE_ONLINE
 
         /** This holding as a row the switcher and the header both draw. */
         public fun lockup(): VaultLockup = VaultLockup(
@@ -218,56 +163,43 @@ public class Shelf(
             vault_name = name,
             color = color,
             state = state,
-            // THE LAST PASS'S OWN NUMBER (#1025 S4). Not computed here and not
-            // remembered across passes: `withheld` is a fact about the window
-            // that just ran, and a stale count would tell a member photographs
-            // are waiting after the Wi-Fi window that brought them.
-            originals_withheld = (outcome?.originalsWithheld ?: 0L)
-                .coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            // `originals_withheld` IS LEFT AT ITS PROTO ZERO (#1029 §1). It
+            // carried the last pass's `withheld` — originals a TRANSFER RULE
+            // held back on a metered link — and a vault whose originals are on
+            // the device that took them withholds nothing from itself.
         )
     }
 
-    /** Why an [admit] did not add a holding. A CODE; the sentence is the shell's. */
-    public enum class AdmitRefusal {
-        /**
-         * THIS DEVICE ALREADY HOLDS THAT VAULT.
-         *
-         * Refused before the ticket is redeemed, so nothing is burned and no
-         * second endpoint key is minted — a second key would enrol this device
-         * twice on one gateway, and revoking one of the two would leave a
-         * holding that dials with an identity its gateway has never seen.
-         *
-         * **A matching display NAME is not this.** Names are labels: two
-         * households may both call a vault "Home", and merging them on a string
-         * would put one member's rows under another's authority. Two vaults
-         * with one name are two rows, told apart by colour.
-         */
-        ALREADY_HELD,
-
-        /** The gateway was not reached. Come back in range; the code is still good. */
-        UNREACHABLE,
-
-        /** The ticket expired, or was never one. Mint another. */
-        BAD_TICKET,
-
-        /** The core would not open, or the pairing answered nothing usable. */
+    /** Why a [found] did not add a holding. A CODE; the sentence is the shell's. */
+    public enum class FoundRefusal {
+        /** The core would not open the new file at all. */
         NO_CORE,
+
+        /**
+         * THE FILE OPENED AND NO VAULT WAS FOUNDED IN IT.
+         *
+         * `Core::open` with `create` calls `Vault::create`, which lays down the
+         * migrations — and **nothing over the ABI writes the `core_vault` row**
+         * that makes those tables a vault: `Vault::found` has no registered
+         * command (`Registry::with_system_commands`, `crates/vault/src/commands`)
+         * and no `Request` arm (`envelope.proto`). So a create answers a file
+         * that cannot say which vault it is, and this refusal is that fact
+         * rather than a holding pointing at one.
+         *
+         * The file is deleted on this path. A `.sqlite3` in the directory that
+         * names no vault would be listed by every later [load], refused by
+         * [identify] every time, and invisible to the member who made it.
+         */
+        NOT_FOUNDED,
+
+        /** This device already holds the vault that file turned out to be. */
+        ALREADY_HELD,
     }
 
-    public sealed interface AdmitOutcome {
-        /**
-         * Admitted. [holding] carries the vault's REAL name when the copy
-         * landed inside the pair call, and the ticket's placeholder when it did
-         * not — [copyLanded] is how a caller tells which, so the pair sheet can
-         * say "Paired with Tahoe Demo" or "…and your vault is being copied"
-         * rather than confidently naming a gateway's CLI flag.
-         */
-        public data class Admitted(
-            public val holding: Holding,
-            public val copyLanded: Boolean,
-        ) : AdmitOutcome
+    public sealed interface FoundOutcome {
+        public data class Founded(public val holding: Holding) : FoundOutcome
 
-        public data class Refused(public val because: AdmitRefusal) : AdmitOutcome
+        public data class Refused(public val because: FoundRefusal) : FoundOutcome
     }
 
     private val holdings = MutableStateFlow<List<Holding>>(emptyList())
@@ -275,35 +207,24 @@ public class Shelf(
     private val rosterFlow = MutableStateFlow<List<VaultLockup>>(emptyList())
 
     /**
-     * The roster, republished on every membership or state change.
+     * The roster, republished on every membership change.
      *
      * A `StateFlow` and not a one-shot answer, because the one-shot answer is
      * precisely what was wrong: `VaultRoster.survey` ran at launch, and a vault
-     * admitted a minute later did not exist to any screen until the next
-     * relaunch.
+     * added a minute later did not exist to any screen until the next relaunch.
      */
     public val roster: StateFlow<List<VaultLockup>> get() = rosterFlow.asStateFlow()
 
     private var foregroundId: String? = null
 
     /**
-     * THE CORE A DEVICE HOLDING NO VAULT PAIRS FROM.
-     *
-     * Not a holding: it is open on [Replicas.PAIRING_FILE], which names no
-     * vault and cannot, and it exists because pairing rides `Request::Pair`
-     * through a handle — a core has to be OPEN before it can pair. It is closed
-     * the moment a real holding exists, and [admit] opens its own.
-     */
-    private var pairingCore: CentraidCore? = null
-
-    /**
      * ONE STRUCTURAL CHANGE AT A TIME.
      *
-     * [admit], [forget], [bringToFront] and [rest] each open or close cores,
-     * and two of them interleaved would leave the process holding a handle
-     * nobody owns — `SingleHandleGuard` is acquired by one open and released by
-     * the other's close. A member double-tapping two rows in the switcher is
-     * exactly that race.
+     * [found], [forget], [bringToFront] and [rest] each open or close cores, and
+     * two of them interleaved would leave the process holding a handle nobody
+     * owns — `SingleHandleGuard` is acquired by one open and released by the
+     * other's close. A member double-tapping two rows in the switcher is exactly
+     * that race.
      */
     private val gate = Mutex()
 
@@ -316,7 +237,7 @@ public class Shelf(
     public fun foregroundHolding(): Holding? =
         holdings.value.firstOrNull { it.vaultId == foregroundId }
 
-    /** Every holding, foreground first. The order [syncRound] walks. */
+    /** Every holding, foreground first. */
     public fun all(): List<Holding> {
         val held = holdings.value
         val front = held.firstOrNull { it.vaultId == foregroundId } ?: return held
@@ -326,225 +247,102 @@ public class Shelf(
     /**
      * The core the foreground holding is open on, or null.
      *
-     * A device holding no vault answers the pairing core, which is what
-     * [HomeSession.pair] rides on a first run. It does **not** wake a resting
-     * holding — waking is a suspending act and this is read from a property on
-     * the session's hot path; [bringToFront] and [syncRound] are what wake.
+     * It does **not** wake a resting holding — waking is a suspending act and
+     * this is read from a property on the session's hot path; [bringToFront] and
+     * [awaken] are what wake. Null is a device holding no vault, which is a
+     * state of the device and shows the empty shelf rather than an error.
      */
-    public fun core(): CentraidCore? = foregroundHolding()?.core ?: pairingCore
+    public fun core(): CentraidCore? = foregroundHolding()?.core
 
     // -----------------------------------------------------------------------
     // Launch
     // -----------------------------------------------------------------------
 
     /**
-     * OPEN EVERY REPLICA THIS DEVICE HOLDS (#1025 S7-9, reshaped by S7-13).
+     * OPEN EVERY VAULT THIS DEVICE HOLDS (#1025 S7-9, reshaped by #1029 §1).
      *
-     * Every file in [Replicas.list] is opened as the seat it is — with its own
-     * [Enrolments] record, so its own endpoint identity and its own relay
-     * decision — and it STAYS open. The previous wave opened each one with a
-     * `GATEWAY`-role probe, read one row and closed it again before the next,
-     * because one core per process meant it could hold none of them; the probe
-     * is gone with the cap, and a holding's name is now read off the core it
-     * already has (#1025 S7-13, ruling H).
+     * Every `.sqlite3` in the directory is opened — one way, with no role and
+     * without creating anything — and it STAYS open. A file that will not open,
+     * or that will not say which vault it is, is simply not a holding: a row
+     * that fails on tap is a door that does not open, and a file the shelf
+     * cannot name is a blank the member could tap.
      *
-     * A file that will not open is simply not a holding: a vault whose bytes
-     * are corrupt or mid-copy cannot be switched to, and a row that fails on
-     * tap is a door that does not open. **An identity mismatch is one of those
-     * refusals** — a vault whose secret is gone opens no core, so no dial is
-     * made with a stranger's key.
-     *
-     * Then the FOREGROUND is chosen: the vault the member last had in front,
-     * kept beside the enrolment records.
+     * Then the FOREGROUND is chosen: the vault the member last had in front.
      */
     public suspend fun load(): Unit = gate.withLock {
         val found = mutableListOf<Holding>()
-        for (path in Replicas.list(replicaDir)) {
-            val core = openCore(path, Replicas.vaultIdOf(path)) ?: continue
-            val named = VaultRoster.identify(core)
-            if (named == null || named.vault_id.isEmpty()) {
-                core.close()
+        for (path in vaultFiles(vaultDir)) {
+            val holding = adopt(path) ?: continue
+            // TWO FILES, ONE VAULT, is a thing a directory can hold — a copy
+            // taken by hand, a restore written beside the original — and two
+            // holdings under one id would give the switcher two rows that
+            // cannot be told apart and the session two cores on one vault's
+            // rows. The first file wins because the listing is sorted, so the
+            // same device picks the same one twice running.
+            if (found.any { it.vaultId == holding.vaultId }) {
+                holding.core?.close()
                 continue
             }
-            found += Holding(
-                vaultId = named.vault_id,
-                path = path,
-                name = named.vault_name,
-                color = named.color,
-                core = core,
-            )
+            found += holding
         }
         holdings.value = found
         val remembered = services.secureStore.read(FOREGROUND_KEY)
         foregroundId = found.firstOrNull { it.vaultId == remembered }?.vaultId
             ?: found.firstOrNull()?.vaultId
-        // A DEVICE HOLDING NO VAULT STILL NEEDS A CORE TO PAIR THROUGH.
-        if (found.isEmpty()) openPairingCore()
         publish()
     }
 
     // -----------------------------------------------------------------------
-    // Admit — the pairing action
+    // Found — the phone making itself a vault
     // -----------------------------------------------------------------------
 
     /**
-     * REDEEM A TICKET, AND ADD WHAT IT NAMED (#1025 S7-9).
+     * MAKE A VAULT ON THIS PHONE (#1029 §1).
      *
-     * **Always into a fresh file at [Replicas.PAIRING_FILE], and never down the
-     * live core.** That single sentence is the fix for the defect this class's
-     * header describes: `Handle::pair` bootstraps its first copy into whatever
-     * file the core it rides is open on, so pairing down a core holding vault A
-     * writes vault B over vault A. The first vault and the Nth take the
-     * identical path — there is no branch on "does this device already hold
-     * one" — which is what stops the Nth being the one that was never tested.
+     * The inverse of [forget] and the replacement for `admit`, which redeemed a
+     * pairing ticket against a gateway. **The shell can create a vault**: it
+     * names a fresh file, opens it with `create`, and the core founds the vault
+     * inside it.
      *
-     * The order is load-bearing:
+     * The file is named by [freshVaultFile] and the name is arbitrary — the
+     * vault's own id is read back off the file afterwards ([identify]) and the
+     * two are never reconciled, because the file name is not an identity. That
+     * is what makes this one act rather than the write-then-rename `Replicas`
+     * had to do.
      *
-     * 1. Refuse a vault already held, if the ticket names one this device has.
-     *    This cannot be checked before the redemption in general — a ticket
-     *    does not reliably name its vault — so it is checked again after, and
-     *    that path un-does nothing: see [AdmitRefusal.ALREADY_HELD].
-     * 2. The PAIRING core is closed if one is open — it is on the very file
-     *    this is about to pair into, which is the one collision the path-keyed
-     *    `SingleHandleGuard` does refuse. Every HOLDING's core stays open:
-     *    pairing a second vault does not disturb the first (#1025 S7-13).
-     * 3. A fresh core opens at the pairing file, on the identity
-     *    [Enrolments.minted] kept under [Enrolments.PAIRING].
-     * 4. The ticket is redeemed; the core takes the first copy into that file.
-     * 5. **Two** moves settle under the vault id: the replica, and the one
-     *    enrolment record. It was three, and three renames is three chances to
-     *    settle by halves.
-     * 6. The holding is appended with its own core REOPENED on the settled
-     *    path — the file moved out from under the pairing core, so that one
-     *    handle cannot be carried over — made foreground, and published.
+     * **The core does not found the row yet, and this refuses honestly when it
+     * does not.** See [FoundRefusal.NOT_FOUNDED]: `Core::open` lays the
+     * migrations down and nothing over the ABI writes `core_vault`. When that
+     * door lands this function is already correct; until then it deletes the
+     * file it made rather than leaving one the shelf can never name.
      */
-    public suspend fun admit(
-        ticket: String,
-        deviceName: String,
-        platform: String,
-    ): AdmitOutcome = gate.withLock {
-        closePairingCore()
-        val pairingPath = Replicas.pairingPath(replicaDir)
-        // A PAIRING FILE LEFT OVER FROM AN ATTEMPT THAT DID NOT SETTLE is not a
-        // vault — it has no id to be filed under — and pairing into it would
-        // hit the core's own guard, which refuses a replica already holding
-        // rows. It is cleared rather than reused.
-        clearPairingFile()
-        val core = openWith(pairingPath, Enrolments.minted(services))
-        if (core == null) {
-            openPairingCore()
-            return@withLock AdmitOutcome.Refused(AdmitRefusal.NO_CORE)
-        }
-        val answer = core.call(
-            Envelope(
-                request = Request(
-                    pair = PairRequest(
-                        // THE ENCODED TICKET THE CAMERA READ, not a redemption.
-                        // `Handle::pair` mints the real one: the secret, the
-                        // ticket id and this device's public key are all things
-                        // the core knows or derives, and a shell that assembled
-                        // them would be a second place they live.
-                        code = ticket.encodeToByteArray().toByteString(),
-                        device_name = deviceName,
-                        platform = platform,
-                    ),
-                ),
-            ),
-        )
-        val ok = when (answer) {
-            is CoreOutcome.Failed -> {
-                core.close()
-                openPairingCore()
-                val failure = answer.failure
-                val unreachable = failure is CoreFailure.Refused &&
-                    (
-                        failure.code == ErrorCode.ERROR_CODE_PEER_UNREACHABLE.value ||
-                            failure.code == ErrorCode.ERROR_CODE_NO_RELAY_REACHABLE.value ||
-                            failure.code == ErrorCode.ERROR_CODE_TIMEOUT.value
-                        )
-                return@withLock AdmitOutcome.Refused(
-                    if (unreachable) AdmitRefusal.UNREACHABLE else AdmitRefusal.BAD_TICKET,
-                )
-            }
-            // WIRE FLATTENS A `oneof` INTO NULLABLE FIELDS. At most one is set.
-            is CoreOutcome.Answered -> answer.value.response?.pair?.ok
-        }
-        // THE GATEWAY'S VOCABULARY IS THREE CODES AND CARRIES NO TEXT, and
-        // expired and never-existed answer the SAME refusal here: a member
-        // holding a screenshot of an old QR must not learn from the answer
-        // whether that ticket ever existed. The case is read anyway, so that
-        // the log line can say which, and so a future sheet that wants to
-        // distinguish them has somewhere to start.
-        if (ok == null || ok.vault_id.isEmpty()) {
+    public suspend fun found(): FoundOutcome = gate.withLock {
+        val path = freshVaultFile()
+        val core = openCore(path, create = true)
+            ?: return@withLock FoundOutcome.Refused(FoundRefusal.NO_CORE)
+        val named = VaultRoster.identify(core)
+        if (named == null || named.vault_id.isEmpty()) {
             core.close()
-            openPairingCore()
-            return@withLock AdmitOutcome.Refused(AdmitRefusal.BAD_TICKET)
+            deleteVault(path)
+            return@withLock FoundOutcome.Refused(FoundRefusal.NOT_FOUNDED)
         }
-        // ALREADY HELD, CHECKED WHERE IT CAN BE CHECKED.
-        //
-        // The ticket is burned by now — the gateway enrolled this device and
-        // there is nothing to un-burn — so this is not a "burn nothing" path
-        // and does not pretend to be. What it protects is the FILE: the vault
-        // this device is already holding keeps its replica, its outbox and its
-        // endpoint key, and the duplicate copy that just landed in the pairing
-        // file is discarded. The member is told to stop, not silently merged.
-        if (holdings.value.any { it.vaultId == ok.vault_id }) {
+        if (holdings.value.any { it.vaultId == named.vault_id }) {
             core.close()
-            clearPairingFile()
-            openPairingCore()
-            return@withLock AdmitOutcome.Refused(AdmitRefusal.ALREADY_HELD)
+            deleteVault(path)
+            return@withLock FoundOutcome.Refused(FoundRefusal.ALREADY_HELD)
         }
-        // WHAT THE GATEWAY SAID, KEPT — before there is a replica to write it
-        // into. A device that paired and could not take its copy used to lose
-        // the pairing entirely: the record goes in the transaction that adopts
-        // the copy, so a bootstrap that did not land left a burned ticket and a
-        // member minting another for nothing.
-        //
-        // AND THE KEY THE GATEWAY SAYS IT ENROLLED (#1025 S7-13). It is the
-        // only thing on this device that can tell "the secret is gone" from
-        // "the gateway is unreachable", and without it the first is reported as
-        // a version-window refusal — a member sent to update an app that is
-        // working correctly.
-        val answered = PairingRecord(
-            gatewayAddress = ok.gateway_address,
-            vaultId = ok.vault_id,
-            vaultName = ok.vault_name,
-            relayUrl = ok.relay_url,
-            directAddrs = ok.direct_addrs,
-            enrolledPublicKey = hex(ok.enrolled_public_key),
-        )
-        // IDENTITY OUT OF THE VAULT, WHILE THE FILE IS STILL OPEN. If the copy
-        // landed inside the pair call the replica can name itself, and that
-        // name beats the ticket's — which is the gateway's `--vault-name` flag
-        // and not the vault's `display_name`.
-        val identified = VaultRoster.identify(core)
-        val landed = identified != null && identified.vault_id == ok.vault_id
-        core.close()
-
-        // ONE RENAME FOR THE RECORD, ONE FOR THE FILE. The enrolment carries
-        // this device's minted secret across, which is the key the gateway just
-        // enrolled — see [Enrolments.settle] for why the destination is
-        // overwritten rather than protected.
-        Enrolments.settle(services, ok.vault_id, answered)
-        val settled = Replicas.settle(replicaDir, ok.vault_id)
-            ?: Replicas.pathOf(replicaDir, MountKey(ok.vault_id))
         val holding = Holding(
-            vaultId = ok.vault_id,
-            path = settled,
-            // THE TICKET'S NAME IS A PLACEHOLDER AND ONLY THAT. It stands in
-            // until a copy lands and the replica can say what it is called.
-            name = if (landed) identified.vault_name else ok.vault_name,
-            color = identified?.color.orEmpty(),
-            // OPENED ON THE SETTLED PATH, with the settled enrolment — so this
-            // vault's endpoint comes up on the identity the gateway enrolled
-            // and with the relay decision its record states.
-            core = openCore(settled, ok.vault_id),
+            vaultId = named.vault_id,
+            path = path,
+            name = named.vault_name,
+            color = named.color,
+            core = core,
         )
         holdings.value = holdings.value + holding
         foregroundId = holding.vaultId
         services.secureStore.write(FOREGROUND_KEY, holding.vaultId)
         publish()
-        AdmitOutcome.Admitted(holding = holding, copyLanded = landed)
+        FoundOutcome.Founded(holding)
     }
 
     // -----------------------------------------------------------------------
@@ -554,39 +352,29 @@ public class Shelf(
     /**
      * REMOVE A VAULT FROM THIS DEVICE (#1025 S7-9).
      *
-     * The exact inverse of [admit], and it removes every one of the things
-     * admit created: THIS vault's core is closed — every other holding's stays
-     * open — the holding drops off the shelf, and the replica, its byte store,
-     * its SQLite sidecars and its one enrolment record are deleted. A
-     * half-forget — the file gone and the identity left — is a credential
-     * nothing will ever use again that every reader of the store has to step
-     * over.
+     * THIS vault's core is closed — every other holding's stays open — the
+     * holding drops off the shelf, and the file, its byte store and its SQLite
+     * sidecars are deleted.
      *
-     * **THE GATEWAY KEEPS THIS DEVICE ENROLLED.** Forgetting is local: it says
-     * "this phone is not holding that vault any more", not "that vault should
-     * stop trusting this phone". Revoking an enrolment is the gateway's act,
-     * taken on the gateway, by whoever holds the vault — a phone that could
-     * revoke itself from a household's gateway by tapping a row on its own
-     * screen would be a phone that can lock a member out of their own vault.
-     * #1025 builds no revocation; `crates/net`'s allowlist is where it would
-     * live when it is built.
+     * **This is the one thing on this class that destroys a member's rows.** On
+     * a phone that IS the vault there is no copy anywhere else to fall back to:
+     * `forget` used to mean "this phone is not holding that gateway's vault any
+     * more", and it now means the vault is gone. Whatever calls it owes the
+     * member a confirmation and a backup; this function is not the place for
+     * either, and #1029 W5 owns the restore that makes the trade survivable.
      *
      * The next foreground is the first remaining holding, or none — a device
-     * holding zero vaults is an UNPAIRED DEVICE, which is a state of the device
-     * and shows the pair flow.
+     * holding zero vaults is a state of the device and shows the empty shelf.
      */
     public suspend fun forget(vaultId: String): Unit = gate.withLock {
         val going = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return@withLock
         going.core?.close()
         holdings.value = holdings.value.filter { it.vaultId != vaultId }
-        deleteReplica(going.path)
-        Enrolments.forget(services, vaultId)
+        deleteVault(going.path)
         if (foregroundId == vaultId) {
             foregroundId = holdings.value.firstOrNull()?.vaultId
             services.secureStore.write(FOREGROUND_KEY, foregroundId.orEmpty())
-            // A DEVICE THAT NOW HOLDS NOTHING IS AN UNPAIRED DEVICE, and needs
-            // a core to pair through again.
-            if (holdings.value.isEmpty()) openPairingCore() else wake(foregroundId)
+            wake(foregroundId)
         }
         publish()
     }
@@ -599,22 +387,17 @@ public class Shelf(
      * BRING A HOLDING TO THE FRONT. A REBIND, NOT A REOPEN (#1025 S7-13).
      *
      * The core it answers is the one that has been open since this holding was
-     * admitted or the shelf launched. Nothing is closed and nothing is opened —
+     * founded or the shelf launched. Nothing is closed and nothing is opened —
      * [HomeSession] re-points its runtime and change reader and the switch is a
-     * pointer move. The previous wave closed one SQLite file and opened another
-     * on every tap, and cited a cap that did not mean what it was read to mean.
+     * pointer move.
      *
      * The one case that does open a core is a RESTING holding: [rest] closed it
      * to give the OS its memory back, and a tap is exactly the touch that wakes
      * it.
      *
-     * Answers null when the id names no holding, or when a rested holding's
-     * file will not reopen — in which case the shelf STAYS where it was, still
+     * Answers null when the id names no holding, or when a rested holding's file
+     * will not reopen — in which case the shelf STAYS where it was, still
      * showing something real.
-     *
-     * The choice is remembered beside the enrolment records, so the next launch
-     * opens the vault the member was last in rather than whichever file sorted
-     * first.
      */
     public suspend fun bringToFront(vaultId: String): CentraidCore? = gate.withLock {
         val next = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return@withLock null
@@ -622,10 +405,6 @@ public class Shelf(
         if (foregroundId != next.vaultId) {
             foregroundId = next.vaultId
             services.secureStore.write(FOREGROUND_KEY, next.vaultId)
-            // THE PAIRING CORE GOES when a real vault comes forward: it is open
-            // on a file that is not a vault, and keeping it would leave a
-            // handle nothing reads.
-            closePairingCore()
             publish()
         }
         core
@@ -634,12 +413,6 @@ public class Shelf(
     /**
      * The core for [vaultId], reopening a RESTING holding, WITHOUT moving the
      * foreground (#1025 S7-13).
-     *
-     * What the sync round walks with. The round used to call [bringToFront] on
-     * every holding in turn and then switch back at the end, because there was
-     * only ever one open core — which meant an ordinary "Sync now" moved the
-     * whole app onto each vault and back, and a round that ended early left the
-     * member somewhere they had not asked to be.
      */
     public suspend fun awaken(vaultId: String): CentraidCore? = gate.withLock { wake(vaultId) }
 
@@ -650,7 +423,6 @@ public class Shelf(
     public suspend fun closeAll(): Unit = gate.withLock {
         holdings.value.forEach { it.core?.close() }
         holdings.value = holdings.value.map { it.copy(core = null) }
-        closePairingCore()
     }
 
     // -----------------------------------------------------------------------
@@ -660,20 +432,15 @@ public class Shelf(
     /**
      * CLOSE EVERY CORE BUT THE FOREGROUND'S (#1025 S7-13, ruling F).
      *
-     * Wired from iOS's `UIApplication.didReceiveMemoryWarningNotification` /
-     * `didReceiveMemoryWarning` and Android's `onTrimMemory`. **It is the only
-     * thing besides [forget] that closes a background core**, and that is the
-     * whole lifecycle: a held vault's core is open, an OS under pressure gets
-     * the memory back, and the next touch or sync round reopens what it needs.
+     * Wired from iOS's `UIApplication.didReceiveMemoryWarningNotification` and
+     * Android's `onTrimMemory`. **It is the only thing besides [forget] that
+     * closes a background core**, and that is the whole lifecycle: a held
+     * vault's core is open, an OS under pressure gets the memory back, and the
+     * next touch reopens what it needs.
      *
-     * A per-vault state and not a global cap. "How many cores may be open" is a
-     * question about a device; every other question this class answers is about
-     * a vault, and a number would make the answer to "is this vault open"
-     * depend on how recently some other vault was touched.
-     *
-     * The foreground is kept because closing it would tear the screen the
-     * member is looking at out from under them — a memory warning is not a
-     * reason to show someone an empty vault.
+     * The foreground is kept because closing it would tear the screen the member
+     * is looking at out from under them — a memory warning is not a reason to
+     * show someone an empty vault.
      */
     public suspend fun rest(): Unit = gate.withLock {
         var changed = false
@@ -693,55 +460,7 @@ public class Shelf(
     // State
     // -----------------------------------------------------------------------
 
-    /**
-     * A TAIL OPENED ON [vaultId] (#1025 S2, D-1025-S7-40; R-SHELL-1).
-     *
-     * Called when the stream is asked for, not when the first page lands. The
-     * round runs a bounded catch-up first; [Holding.state] still refuses ONLINE
-     * when the last outcome is unreachable, so marking the ask alone cannot
-     * claim "synced" over a gateway that just failed to answer.
-     */
-    public fun tailOpened(vaultId: String) {
-        update(vaultId) { it.copy(tailing = true) }
-    }
-
-    /**
-     * The tail on [vaultId] closed, with what it moved before it did.
-     *
-     * Every close is ORDINARY: the deadline, the member leaving, the lock, a
-     * dropped connection. The cursor is durable at every page boundary, so the
-     * outcome is recorded exactly like a pass's and the state falls back to
-     * what it says.
-     */
-    public fun tailClosed(vaultId: String, outcome: SyncOutcome) {
-        update(vaultId) {
-            it.copy(tailing = false, passInFlight = false, outcome = outcome)
-        }
-    }
-
-    /** Mark a pass started on [vaultId], so its state reads `SYNCING`. */
-    public fun passStarted(vaultId: String) {
-        update(vaultId) { it.copy(passInFlight = true) }
-    }
-
-    /**
-     * Record what a pass did, and with it the vault's state.
-     *
-     * The NAME is refreshed from the replica's own row whenever a caller has
-     * one to give: a vault whose copy landed after the pairing is a vault whose
-     * placeholder name can finally be replaced by its real one.
-     */
-    public fun passSettled(vaultId: String, outcome: SyncOutcome, name: String? = null) {
-        update(vaultId) {
-            it.copy(
-                outcome = outcome,
-                passInFlight = false,
-                name = name?.takeIf { given -> given.isNotEmpty() } ?: it.name,
-            )
-        }
-    }
-
-    /** Re-read a holding's identity from its replica. */
+    /** Re-read a holding's identity from its own file. */
     public fun rename(vaultId: String, name: String, color: String) {
         if (name.isEmpty()) return
         update(vaultId) { it.copy(name = name, color = color) }
@@ -765,8 +484,8 @@ public class Shelf(
 
     private fun publishFrom(held: List<Holding>) {
         // FOREGROUND FIRST, and otherwise the shelf's own order, which is the
-        // directory's. A roster that re-sorted itself as states moved would
-        // move the row under a member's thumb.
+        // directory's. A roster that re-sorted itself as states moved would move
+        // the row under a member's thumb.
         val front = held.firstOrNull { it.vaultId == foregroundId }
         val ordered = if (front == null) {
             held
@@ -784,7 +503,7 @@ public class Shelf(
     private suspend fun wake(vaultId: String?): CentraidCore? {
         val holding = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return null
         holding.core?.let { return it }
-        val opened = openCore(holding.path, holding.vaultId) ?: return null
+        val opened = openCore(holding.path, create = false) ?: return null
         holdings.value = holdings.value.map {
             if (it.vaultId == holding.vaultId) it.copy(core = opened) else it
         }
@@ -792,53 +511,43 @@ public class Shelf(
         return opened
     }
 
-    /**
-     * The core a device holding NO vault pairs through.
-     *
-     * It opens at the pairing path, holds no file, refuses reads by name, and
-     * the member's next move is the pair flow. It carries the minted identity
-     * so that the endpoint this device pairs with is the endpoint whose secret
-     * it has already written down — the key the gateway is about to enrol.
-     */
-    private suspend fun openPairingCore() {
-        if (pairingCore != null) return
-        pairingCore = openWith(Replicas.pairingPath(replicaDir), Enrolments.minted(services))
+    /** Open a file and ask it which vault it is. Null for either refusal. */
+    private suspend fun adopt(path: String): Holding? {
+        val core = openCore(path, create = false) ?: return null
+        val named = VaultRoster.identify(core)
+        if (named == null || named.vault_id.isEmpty()) {
+            core.close()
+            return null
+        }
+        return Holding(
+            vaultId = named.vault_id,
+            path = path,
+            name = named.vault_name,
+            color = named.color,
+            core = core,
+        )
     }
 
-    private fun closePairingCore() {
-        pairingCore?.close()
-        pairingCore = null
-    }
-
     /**
-     * `SEAT_REPLICATED`, on the enrolment this device holds for [vaultId].
+     * THE ONE OPEN (#1029 §1).
      *
-     * A holding with NO record opens with none, and the core mints a fresh
-     * endpoint. That is a vault this device holds a copy of and has no identity
-     * for — it can read offline and cannot dial — and it is reported by the
-     * pass rather than hidden, because there is no key here to invent.
-     */
-    private suspend fun openCore(path: String, vaultId: String): CentraidCore? =
-        openWith(path, if (vaultId.isEmpty()) null else Enrolments.of(services, vaultId))
-
-    /**
-     * `create = false`: a replica is a COPY, and a fresh empty vault founded in
-     * its place would be a silently empty product standing in for one that has
-     * not synced yet.
+     * A path and whether this call may found a vault there, and nothing else.
+     * It carried a `role` — `SEAT_REPLICATED`, always, hard-coded — and the
+     * enrolment record this device held for the vault; the first named a plane
+     * that is deleted and the second a relationship that no longer exists.
      *
-     * A refusal is a null holding, and the loudest of them is
-     * `ERROR_CODE_IDENTITY_MISMATCH` — the endpoint that came up is not the one
-     * this vault's gateway enrolled, so the core refuses rather than dialling
-     * as a stranger (#1025 S7-13).
+     * `create` is FALSE for every open but [found]'s, and that is the same rule
+     * it always kept for the opposite reason: it used to be false because a
+     * replica is a COPY and founding an empty vault in its place would stand a
+     * silently empty product in for one that had not synced. It is false now
+     * because a file that is not there is a vault this device does not hold, and
+     * `crates/core`'s own note says the same — a shell opening a vault a restore
+     * is about to write is answered "there is nothing here" rather than handed
+     * an empty one.
      */
-    private suspend fun openWith(path: String, enrolment: PairingRecord?): CentraidCore? = when (
+    private suspend fun openCore(path: String, create: Boolean): CentraidCore? = when (
         val outcome = CentraidCore.open(
-            CoreConfiguration(
-                databasePath = path,
-                role = CoreRole.SEAT_REPLICATED,
-                create = false,
-                pairing = enrolment,
-            ),
+            CoreConfiguration(databasePath = path, create = create),
             dispatcher,
             uiThreadName,
         )
@@ -847,30 +556,80 @@ public class Shelf(
         is CoreOutcome.Failed -> null
     }
 
-    /** 32 raw bytes as 64 lowercase hex, which is how a record spells a key. */
-    private fun hex(bytes: okio.ByteString): String = bytes.hex()
+    // -----------------------------------------------------------------------
+    // The file layer — `Replicas`, as it survives the deletion
+    // -----------------------------------------------------------------------
 
-    /** The replica, its byte store and SQLite's sidecars, together. */
-    private fun deleteReplica(path: String) {
+    /**
+     * Every vault file in the directory, sorted by name.
+     *
+     * Sorted so the same device picks the same foreground twice running rather
+     * than whichever file the filesystem happened to enumerate first. `-wal` and
+     * `-shm` are excluded by the suffix: they are SQLite's sidecars, not vaults,
+     * and opening one as a vault fails at the door.
+     *
+     * **It matches no prefix**, which is what lets files written under the old
+     * `centraid-replica-<vaultId>.sqlite3` spelling keep opening beside the ones
+     * [freshVaultFile] makes. A vault says what it is; a file name does not.
+     */
+    private fun vaultFiles(directory: String): List<String> {
+        val dir = directory.toPath()
+        if (!fs.exists(dir)) return emptyList()
+        return fs.list(dir)
+            .filter { it.name.endsWith(SUFFIX) }
+            .map { it.toString() }
+            .sorted()
+    }
+
+    /**
+     * A file name no vault in this directory is using.
+     *
+     * The middle is random rather than a counter: a counter would have to be
+     * stored somewhere, and a second place to keep it is a second thing that can
+     * be wrong. `SecureRandom` is used because it is the RNG this module has —
+     * `kotlin.random.Random` is seeded from the clock, and two vaults founded in
+     * the same tick is exactly the collision it would produce.
+     */
+    private fun freshVaultFile(): String {
+        val dir = vaultDir.toPath()
+        while (true) {
+            val name = PREFIX + hex(services.secureRandom.bytes(NAME_BYTES)) + SUFFIX
+            val candidate = dir.resolve(name)
+            if (!fs.exists(candidate)) return candidate.toString()
+        }
+    }
+
+    /** The vault file, its byte store and SQLite's sidecars, together. */
+    private fun deleteVault(path: String) {
         val file = path.toPath()
         runCatching { fs.delete(file, mustExist = false) }
         SIDECARS.forEach { suffix ->
             runCatching { fs.delete(file.parent!!.resolve(file.name + suffix), mustExist = false) }
         }
-        val bytes = file.parent!!.resolve(
-            file.name.substringBeforeLast('.', file.name) + ".bytes",
-        )
-        runCatching { fs.deleteRecursively(bytes, mustExist = false) }
+        runCatching { fs.deleteRecursively(byteStoreOf(file), mustExist = false) }
     }
 
-    private fun clearPairingFile() {
-        deleteReplica(Replicas.pairingPath(replicaDir))
-    }
+    /**
+     * `<stem>.sqlite3` -> `<stem>.bytes`.
+     *
+     * THE LAST EXTENSION IS REPLACED, NOT APPENDED. This was `name + ".bytes"`
+     * for one simulator run, and the run is how it was found: a file's store
+     * stayed behind while the vault beside it opened a fresh, empty one. Every
+     * photograph was orphaned and nothing failed — a library of rows pointing at
+     * nothing renders as a grid of placeholders rather than as an error.
+     */
+    private fun byteStoreOf(file: Path): Path =
+        file.parent!!.resolve(file.name.substringBeforeLast('.', file.name) + ".bytes")
+
+    private fun hex(bytes: ByteArray): String =
+        bytes.joinToString("") { byte ->
+            val value = byte.toInt() and 0xff
+            HEX[value shr 4].toString() + HEX[value and 0x0f]
+        }
 
     public companion object {
         /**
-         * Which vault the member last had in front, kept in the secure store
-         * beside the pairing records.
+         * Which vault the member last had in front, kept in the secure store.
          *
          * Not a preference file: it is cleared with the vault data, it survives
          * a launch, and a second mechanism for "things that must survive a
@@ -878,6 +637,16 @@ public class Shelf(
          * remember. It is not a secret and does not claim to be.
          */
         public const val FOREGROUND_KEY: String = "shelf.foreground"
+
+        /** What [freshVaultFile] writes. A label on a file, never an identity. */
+        internal const val PREFIX: String = "centraid-vault-"
+
+        internal const val SUFFIX: String = ".sqlite3"
+
+        /** 128 bits of file name. Enough that a collision is not a case. */
+        private const val NAME_BYTES: Int = 16
+
+        private const val HEX: String = "0123456789abcdef"
 
         private val SIDECARS = listOf("-wal", "-shm")
     }

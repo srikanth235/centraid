@@ -23,7 +23,7 @@ import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.TallyListEvent
 import android.os.Build
-import dev.centraid.android.kit.GatewaySheet
+import dev.centraid.android.kit.MakeVaultSheet
 import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.HomeScreen
 import dev.centraid.android.screens.NotesEditorScreen
@@ -36,7 +36,6 @@ import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.notes.NotesReads
-import dev.centraid.shared.apps.photos.PhotosFetches
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.apps.photos.PhotosReads
 import dev.centraid.shared.screen.ScreenHost
@@ -44,10 +43,9 @@ import dev.centraid.shared.apps.tally.TallyListMachine
 import dev.centraid.shared.apps.tally.TallyReads
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.CameraRoll
-import dev.centraid.shared.shell.PairOutcome
+import dev.centraid.shared.shell.FoundResult
 import dev.centraid.shared.shell.TransferRuleChoice
 import dev.centraid.shared.sync.TransferRule
-import dev.centraid.shared.sync.WakeReason
 import dev.centraid.shared.shell.CameraRollRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,41 +99,15 @@ public class MainActivity : ComponentActivity() {
      * A phone the member is not looking at is exactly when giving the memory
      * back costs nothing.
      */
-    /**
-     * THE MEMBER ARRIVED: catch up, then hold the log open (#1025 S2,
-     * D-1025-S7-40).
-     *
-     * **There is no timer here and none anywhere else in this shell.** A seat
-     * becomes current by connecting and staying on the log stream, so "the
-     * member is looking at the app" is the whole of the schedule. A page
-     * committed on the gateway is on this device within one round trip.
-     *
-     * Android's persistent foreground service — a tail that survives the
-     * activity — is deliberately not here; it is Slice 7's, and a tail that
-     * lives and dies with the activity is the honest shape until it is.
-     */
-    override fun onResume() {
-        super.onResume()
-        val open = session ?: return
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.foreground() }
-    }
-
-    /**
-     * THE MEMBER LEFT: close the tail (#1025 S2, D-1025-S7-40, R-SHELL-4).
-     *
-     * `onPause` and not `onStop`, for the same reason iOS closes on `inactive`:
-     * a phone in the recents switcher is not a phone the member is looking at,
-     * and a stream held open by a process about to be frozen is a socket nobody
-     * reads. The next `onResume` reopens it from the durable cursor. While
-     * still resumed, airplane mode off is the same opener — so leaving has to
-     * mark the member gone, or a path-up would reopen the tail in the recents
-     * switcher.
-     */
-    override fun onPause() {
-        super.onPause()
-        val open = session ?: return
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.leftTheForeground() }
-    }
+    // `onResume` AND `onPause` ARE GONE FROM THIS ACTIVITY (#1029 §1). They
+    // ran `HomeSession.foreground()` and `leftTheForeground()`: catch every
+    // holding up and hold the foreground one's log stream open while the member
+    // is looking, close it when they leave. There is no gateway, no log stream
+    // and no pass, so arriving and leaving are not occasions this shell acts
+    // on. The vault is on the phone and it is already current.
+    //
+    // `onTrimMemory` STAYS, and it is now the only lifecycle hook here: giving
+    // the OS its memory back is a fact about a device, not about a link.
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
@@ -191,13 +163,13 @@ public class MainActivity : ComponentActivity() {
                 android.util.Log.w("Centraid", "could not place $name: ${it.message}")
             }
         }
-        // WHERE THIS DEVICE'S REPLICAS LIVE, as a DIRECTORY and not a list of
+        // WHERE THIS DEVICE'S VAULTS LIVE, as a DIRECTORY and not a list of
         // paths (#1025 S5). The shell used to enumerate whatever `.db` files
         // had been placed in `filesDir` and hand the list over; a device makes
-        // its own replicas now, so what it knows is where they go and
-        // `Replicas` knows what they are called. An empty directory is the
-        // ordinary first run.
-        val replicaDir = filesDir.absolutePath
+        // its own vaults now, so what it knows is where they go and `Shelf`
+        // opens every file it finds. An empty directory is the ordinary first
+        // run.
+        val vaultDir = filesDir.absolutePath
         setContent {
             CentraidTheme {
                 // The stack is shell state, not a library's: `NavStack` is
@@ -218,14 +190,14 @@ public class MainActivity : ComponentActivity() {
                 // runs on the IO dispatcher exactly once.
                 val homeSession by androidx.compose.runtime.produceState<HomeSession?>(null) {
                     value = HomeSession.open(
-                        replicaDir = replicaDir,
+                        vaultDir = vaultDir,
                         services = platformServices(),
                         dispatcher = Dispatchers.IO,
                         uiThreadName = Thread.currentThread().name,
                     ).also { opened ->
                         session = opened
                         // THE APP SCREENS GO ON THE SAME CORE (#1025 S5, lane
-                        // L5). R-1020-24 is one core per process, so Tally,
+                        // L5). R-1020-24 is one core per VAULT FILE, so Tally,
                         // Photos and Notes read through the handle this session
                         // holds rather than opening their own — and until this
                         // existed nothing served their `ReadPage` effects at
@@ -236,7 +208,7 @@ public class MainActivity : ComponentActivity() {
                         // stream, so a row that arrives from sync moves the
                         // screen without a tap.
                         opened.attachScreen(tally, TallyReads)
-                        opened.attachScreen(photos, PhotosReads, fetches = PhotosFetches)
+                        opened.attachScreen(photos, PhotosReads)
                         opened.attachScreen(notes, NotesReads, NotesReads)
                         // THE PHOTOS SCREEN'S OTHER PLANE (#1025 S6). The grid
                         // reads the vault; this reads the CAMERA ROLL. Nothing
@@ -344,13 +316,15 @@ public class MainActivity : ComponentActivity() {
                         // launch is one a restore may have moved underneath.
                         var rulesOpen by remember { mutableStateOf(false) }
                         var rule by remember { mutableStateOf("") }
-                        // GATEWAY / PAIR SHEET (#1025 live-shell). Same door as
-                        // iOS Settings → Gateway; empty-roster Pair opens it.
-                        var gatewayOpen by remember { mutableStateOf(false) }
-                        var gatewayWorking by remember { mutableStateOf(false) }
-                        // R-SHELL-2: member-visible pairing sentences name the
+                        // THE VAULT SHEET (#1029 §1). Same door as iOS
+                        // Settings → Vault; the empty roster's button opens it.
+                        // It was the GATEWAY sheet and it pairs with nothing
+                        // now: the one act it offers is founding a vault here.
+                        var vaultSheetOpen by remember { mutableStateOf(false) }
+                        var vaultWorking by remember { mutableStateOf(false) }
+                        // R-SHELL-2: member-visible sentences name the
                         // foreground holding. Cleared on forget / switch.
-                        var gatewayStatus by remember { mutableStateOf("") }
+                        var vaultStatus by remember { mutableStateOf("") }
                         HomeScreen(
                             state = state,
                             onEvent = { event ->
@@ -372,7 +346,7 @@ public class MainActivity : ComponentActivity() {
                                     vaultPick.vault_id.isNotEmpty() &&
                                     vaultPick.vault_id != state.vault?.vault_id
                                 ) {
-                                    gatewayStatus = ""
+                                    vaultStatus = ""
                                 }
                                 live?.send(event)
                             },
@@ -390,7 +364,7 @@ public class MainActivity : ComponentActivity() {
                             onForget = { vaultId ->
                                 scope.launch(Dispatchers.IO) {
                                     live?.forget(vaultId)
-                                    withContext(Dispatchers.Main) { gatewayStatus = "" }
+                                    withContext(Dispatchers.Main) { vaultStatus = "" }
                                 }
                             },
                             onDownloadSettings = {
@@ -398,90 +372,41 @@ public class MainActivity : ComponentActivity() {
                                     rule = TransferRule.read(
                                         platformServices().secureStore,
                                     ).stored
-                                    gatewayOpen = false
+                                    vaultSheetOpen = false
                                     rulesOpen = true
                                 }
                             },
-                            onPair = { gatewayOpen = true },
+                            onMakeVault = { vaultSheetOpen = true },
                         )
-                        if (gatewayOpen) {
-                            ModalBottomSheet(onDismissRequest = { gatewayOpen = false }) {
-                                GatewaySheet(
-                                    status = gatewayStatus,
-                                    working = gatewayWorking,
-                                    onPair = { ticket, done ->
+                        if (vaultSheetOpen) {
+                            ModalBottomSheet(onDismissRequest = { vaultSheetOpen = false }) {
+                                MakeVaultSheet(
+                                    status = vaultStatus,
+                                    working = vaultWorking,
+                                    onFound = { done ->
                                         val open = live
                                         if (open == null) {
-                                            gatewayStatus = "This build has no core."
+                                            vaultStatus = "This build has no core."
                                             done()
-                                            return@GatewaySheet
+                                            return@MakeVaultSheet
                                         }
-                                        gatewayWorking = true
+                                        vaultWorking = true
+                                        // ON IO, for the reason `open` is:
+                                        // `centraid_open` asserts it is not on
+                                        // the main thread, and founding a vault
+                                        // opens one.
                                         scope.launch(Dispatchers.IO) {
-                                            val outcome = open.pair(
-                                                ticket = ticket,
-                                                deviceName = Build.MODEL,
-                                                platform = "android",
-                                            )
+                                            val outcome = open.found()
                                             withContext(Dispatchers.Main) {
-                                                gatewayStatus = when (outcome) {
-                                                    is PairOutcome.Paired ->
-                                                        "Paired with ${outcome.vaultName}."
-                                                    is PairOutcome.Copying ->
-                                                        "Paired. Your vault is being copied."
-                                                    is PairOutcome.Refused ->
+                                                vaultStatus = when (outcome) {
+                                                    is FoundResult.Made ->
+                                                        "Made ${outcome.vaultName}."
+                                                    is FoundResult.Refused ->
                                                         outcome.sentence
-                                                    is PairOutcome.NoCore ->
-                                                        "There is no vault open on this device yet."
+                                                    FoundResult.NoSession ->
+                                                        "Centraid is still opening."
                                                 }
-                                                gatewayWorking = false
-                                                done()
-                                            }
-                                            open.foreground()
-                                        }
-                                    },
-                                    onSyncNow = { done ->
-                                        val open = live
-                                        if (open == null) {
-                                            gatewayStatus = "This build has no core."
-                                            done()
-                                            return@GatewaySheet
-                                        }
-                                        gatewayWorking = true
-                                        scope.launch(Dispatchers.IO) {
-                                            val outcome = open.syncNow(WakeReason.FOREGROUND)
-                                            withContext(Dispatchers.Main) {
-                                                gatewayStatus = when {
-                                                    outcome.copying != null ->
-                                                        outcome.copying!!
-                                                    outcome.unreachable ->
-                                                        outcome.sentence.ifEmpty {
-                                                            "Centraid could not reach your gateway."
-                                                        }
-                                                    outcome.blocked != null ->
-                                                        outcome.blocked!!
-                                                    outcome.stale != null ->
-                                                        outcome.stale!!
-                                                    else -> {
-                                                        var line =
-                                                            "Synced: ${outcome.rowsApplied} changes, " +
-                                                                "${outcome.blobsCompleted} files."
-                                                        if (outcome.originalsWithheld > 0) {
-                                                            line += " ${outcome.originalsWithheld} waiting for Wi-Fi."
-                                                        }
-                                                        outcome.bytesStalled?.let {
-                                                            line += " $it"
-                                                        }
-                                                        line += " [${outcome.budget}" +
-                                                            if (outcome.metered) {
-                                                                ", metered]"
-                                                            } else {
-                                                                "]"
-                                                            }
-                                                        line
-                                                    }
-                                                }
-                                                gatewayWorking = false
+                                                vaultWorking = false
                                                 done()
                                             }
                                         }
@@ -491,7 +416,7 @@ public class MainActivity : ComponentActivity() {
                                             rule = TransferRule.read(
                                                 platformServices().secureStore,
                                             ).stored
-                                            gatewayOpen = false
+                                            vaultSheetOpen = false
                                             rulesOpen = true
                                         }
                                     },

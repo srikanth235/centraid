@@ -2,9 +2,6 @@ package dev.centraid.shared
 
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.tally.TallyListMachine
-import dev.centraid.shared.shell.SEAT_BYTES_FETCH_COMMAND
-import dev.centraid.shared.shell.SEAT_SYNC_COMMAND
-import dev.centraid.shared.shell.SEAT_TAIL_STOP_COMMAND
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -95,31 +92,19 @@ class ShellCommandsExistSpec : StringSpec({
         ) { missing shouldBe emptyMap() }
     }
 
-    "the seat's own command names match `crates/core`'s constants" {
-        // `seat.sync`, `seat.tail.stop` and `seat.bytes.fetch` are NOT vault
-        // commands — no handler, no registered schema, no row — so the oracle
-        // above cannot see them, and a typo in one of them fails exactly the
-        // way `knowledge.save_note` did: the core answers `UnknownCommand` and
-        // a member reads "that request does not make sense to this build".
-        //
-        // The oracle here is `crates/core/src/handle.rs`, which declares all
-        // three as `pub const`, scanned rather than linked for the reason the
-        // registry scan gives: this module cannot link Rust.
-        val handle = repositoryRoot.resolve("crates/core/src/handle.rs")
-        withClue("crates/core/src/handle.rs is where the seat's commands are declared") {
-            handle.isFile.shouldBeTrue()
-        }
-        val source = handle.readText()
-        for (command in listOf(
-            SEAT_SYNC_COMMAND,
-            SEAT_TAIL_STOP_COMMAND,
-            SEAT_BYTES_FETCH_COMMAND,
-        )) {
-            withClue("the shell sends \"$command\" and no `pub const` in handle.rs is it") {
-                source.contains("= \"$command\";").shouldBeTrue()
-            }
-        }
-    }
+    // THE SEAT'S THREE COMMAND NAMES ARE NOT CHECKED HERE ANY MORE, because
+    // there are none (#1029 §1). This spec's second case asserted that
+    // `SEAT_SYNC_COMMAND`, `SEAT_TAIL_STOP_COMMAND` and
+    // `SEAT_BYTES_FETCH_COMMAND` were spelled the same in `crates/core`'s
+    // `handle.rs` as in `GatewayLink.kt`, for the same reason the case above
+    // exists: they are not vault commands, so the registry oracle cannot see
+    // them, and a typo in one reads to a member as "that request does not make
+    // sense to this build".
+    //
+    // `grep -rn 'seat.sync|seat.tail.stop|seat.bytes.fetch' crates/ mobile/`
+    // now finds one line, and it is a sentence in a doc comment. Both the
+    // constants and the `pub const`s they mirrored are deleted, so this is a
+    // case whose SUBJECT is gone rather than a check removed to go green.
 
     "the oracle is not empty — a check over nothing always passes" {
         // The failure mode this repository has met before, and the reason the

@@ -1,6 +1,6 @@
 package dev.centraid.shared
 
-import centraid.core.v1.IntentStatus
+import centraid.core.v1.CommandStatus
 import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
@@ -8,82 +8,58 @@ import centraid.screen.v1.SeatState
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.notes.NotesReads
 import dev.centraid.shared.screen.ScreenEffect
-import dev.centraid.shared.sync.WriteGate
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 
 /**
- * A WRITE HAS SOMEWHERE TO GO (#1025 S5).
+ * A WRITE HAS SOMEWHERE TO GO (#1025 S5, narrowed by #1029 §1).
  *
- * `WriteGate` had three verdicts, a test file and **no caller in the product**,
- * because `Request::Intent` refused on a seat role and there was nothing for it
- * to gate: a shell could not queue a write at all. Everything downstream of the
- * outbox — `IntentRecord`, `seat_outbox`, S2's live `IntentSink`,
- * `Outbox::overlaid()`'s paint, `settle_at_commit_seq` — operated on a row
- * nothing in the product ever wrote.
+ * ## What left, and what that leaves
  *
- * The simulator is what said so: with the gateway stopped, pressing Save left
- * the screen on "Saving" for ever and `seat_outbox` held zero rows. These
- * assert the shell's half of the join — the gate is consulted, and every answer
- * the core can give becomes a state the editor renders.
+ * **Every `WriteGate` case is deleted here because the gate is deleted.** It
+ * chose between sending now, the durable outbox and a refusal, and all three
+ * were answers to "can this device reach its gateway right now": an
+ * `onlineOnly` write was one whose answer could not be reconstructed later, and
+ * `Enqueue` put the write in `seat_outbox` for a pass to submit. The phone is
+ * the vault (#1029 §1). A write commits here or it does not commit, there is no
+ * outbox and no gateway, and `grep -rn 'WriteGate|onlineOnly|seat_outbox'
+ * mobile/ crates/` finds nothing. Those are tests whose SUBJECT is gone.
+ *
+ * What is left is the half that always mattered on its own and still does:
+ * **every answer the core can give becomes a state the editor renders**, the
+ * sentence a member reads is the CORE's and never one this shell composed, and
+ * one `SeatState` reaches every screen rather than each screen guessing. The
+ * statuses are `CommandStatus` now — the `Intent` plane's enum went with
+ * `intent.proto` — and they still map to the same three save states, because
+ * "somewhere durable, not yet committed" is still a thing a commit can be.
  */
 class WriteRunnerSpec : StringSpec({
 
     fun seat(connectivity: SeatState.Connectivity, durability: SeatState.Durability) =
         SeatState(connectivity = connectivity, durability = durability)
 
-    val offline = seat(
-        SeatState.Connectivity.CONNECTIVITY_OFFLINE,
-        SeatState.Durability.DURABILITY_LOCAL_ONLY,
-    )
-
-    "an ordinary write with no gateway in reach is ENQUEUED, never refused" {
-        // The outbox is the point. A note save is not online-only.
-        val save = ScreenEffect.SubmitWrite(
-            command = "knowledge.save_note",
-            inputJson = "{}",
-            invokeKey = "notes.save:note-1:rev-1",
-            onlineOnly = false,
-        )
-        WriteGate.verdict(save, offline) shouldBe WriteGate.Verdict.Enqueue
-    }
-
-    "an online-only write NEVER falls back to the outbox" {
-        // `docs/mobile-offline.md:259`, census §E seam 7. The flag's whole
-        // meaning is that a gateway it cannot reach is a FAILURE, not a delay —
-        // the answer cannot be reconstructed later.
-        val verdict = WriteGate.verdict(
-            ScreenEffect.SubmitWrite("locker.reveal", "{}", "k", onlineOnly = true),
-            offline,
-        )
-        (verdict is WriteGate.Verdict.Refuse).shouldBeTrue()
-    }
-
     "queued is its own state, and it is not clean" {
-        // `SAVE_STATE_QUEUED` — "written to this device's outbox; the gateway
-        // has not confirmed". Collapsing it into CLEAN would be the shell
-        // claiming a confirmation the gateway has not given, which is exactly
-        // the badge a member reads to know a write is still owed. The iOS
-        // shell renders it "Waiting for your gateway".
-        NotesReads.settled(IntentStatus.INTENT_STATUS_QUEUED, "")
+        // `SAVE_STATE_QUEUED` — durable here, not yet committed. Collapsing it
+        // into CLEAN would be the shell claiming a commit that has not
+        // happened, which is exactly the badge a member reads to know a write
+        // is still owed.
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_QUEUED, "")
             .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
-        NotesReads.settled(IntentStatus.INTENT_STATUS_SENDING, "")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_IN_FLIGHT, "")
             .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
-        NotesReads.settled(IntentStatus.INTENT_STATUS_PARKED, "")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_PARKED, "")
             .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
     }
 
-    "only an executed intent is clean, and every refusal is refused" {
-        NotesReads.settled(IntentStatus.INTENT_STATUS_EXECUTED, "")
+    "only an executed command is clean, and every refusal is refused" {
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "")
             .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_CLEAN
         listOf(
-            IntentStatus.INTENT_STATUS_DENIED,
-            IntentStatus.INTENT_STATUS_FAILED,
-            IntentStatus.INTENT_STATUS_CONFLICT,
-            IntentStatus.INTENT_STATUS_UNSPECIFIED,
+            CommandStatus.COMMAND_STATUS_DENIED,
+            CommandStatus.COMMAND_STATUS_FAILED,
+            CommandStatus.COMMAND_STATUS_UNSPECIFIED,
         ).forEach { status ->
             NotesReads.settled(status, "")
                 .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
@@ -91,28 +67,14 @@ class WriteRunnerSpec : StringSpec({
     }
 
     "a refusal carries the core's sentence, and silence carries none" {
-        // `Outcome.reason` is the author's words for a denial or a failed
+        // `CommandOutcome.reason` is the author's words for a denial or a failed
         // precondition — never the raw predicate, which reaches the audit trail
         // only. A shell that composed one would be the hole in that rule.
-        NotesReads.settled(IntentStatus.INTENT_STATUS_DENIED, "That note was removed.")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "That note was removed.")
             .save_settled?.failure.shouldNotBeNull()
             .sentence shouldBe "That note was removed."
-        NotesReads.settled(IntentStatus.INTENT_STATUS_DENIED, "")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "")
             .save_settled?.failure shouldBe null
-    }
-
-    "a parked seat refuses rather than pretending to queue" {
-        // Parked means out of disk: a queued write needs a durable row and
-        // there is nowhere to put it. Pretending would lose the write on the
-        // next launch, which is worse than saying so.
-        val verdict = WriteGate.verdict(
-            ScreenEffect.SubmitWrite("knowledge.save_note", "{}", "k", onlineOnly = false),
-            seat(
-                SeatState.Connectivity.CONNECTIVITY_OFFLINE,
-                SeatState.Durability.DURABILITY_PARKED_LOW_DISK,
-            ),
-        )
-        (verdict is WriteGate.Verdict.Refuse).shouldBeTrue()
     }
 
     "a save that would blank the note is refused, not sent" {
@@ -155,7 +117,7 @@ class WriteRunnerSpec : StringSpec({
     "a title-only save while the body is unavailable still queues" {
         // End state (#1025 live-notes): omit `body_text` (already) and still
         // queue — must not blank the note and must not drop the edit. R-NOTES-3:
-        // a note save is never onlineOnly; queue is the product.
+        // the edit must reach the vault, not be thrown away.
         val opened = NotesEditorMachine.reduce(
             NotesEditorMachine.initial(),
             NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
@@ -183,7 +145,6 @@ class WriteRunnerSpec : StringSpec({
         )
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
         write.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        write.onlineOnly shouldBe false
         write.inputJson.contains("body_text").shouldBe(false)
         write.inputJson.contains("\"title\":\"Groceries and wine\"").shouldBe(true)
         saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
@@ -222,7 +183,6 @@ class WriteRunnerSpec : StringSpec({
             NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
         )
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.onlineOnly shouldBe false
         write.inputJson.contains("\"body_text\":\"milk\"").shouldBe(true)
         saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
     }
@@ -260,38 +220,6 @@ class WriteRunnerSpec : StringSpec({
         saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
     }
 
-    "a reachable seat SENDS NOW, so the gate is a gate and not a rubber stamp" {
-        // #1025 S5, D-1025-S5-6. Nothing in the product ever sent a
-        // `SeatChanged`, so every screen held a null `SeatState` for its whole
-        // life and `WriteGate` never saw a reachable seat. The consequences
-        // both ways: an `onlineOnly` write was refused on EVERY device always,
-        // and an ordinary write queued with a healthy gateway in the same room.
-        // A gate handed a constant is not a gate.
-        val reachable = seat(
-            SeatState.Connectivity.CONNECTIVITY_ONLINE_UNMETERED,
-            SeatState.Durability.DURABILITY_AUTHORITATIVE,
-        )
-        WriteGate.verdict(
-            ScreenEffect.SubmitWrite("knowledge.save_note", "{}", "k", onlineOnly = false),
-            reachable,
-        ) shouldBe WriteGate.Verdict.SendNow
-        // And the case that was impossible before: an online-only write that is
-        // ALLOWED, because the gateway is actually there.
-        WriteGate.verdict(
-            ScreenEffect.SubmitWrite("locker.reveal", "{}", "k", onlineOnly = true),
-            reachable,
-        ) shouldBe WriteGate.Verdict.SendNow
-        // A METERED link is still reachable: metering governs uploads, not
-        // writes.
-        WriteGate.verdict(
-            ScreenEffect.SubmitWrite("locker.reveal", "{}", "k", onlineOnly = true),
-            seat(
-                SeatState.Connectivity.CONNECTIVITY_ONLINE_METERED,
-                SeatState.Durability.DURABILITY_AUTHORITATIVE,
-            ),
-        ) shouldBe WriteGate.Verdict.SendNow
-    }
-
     "every screen turns a seat into its own event, so one fact reaches all of them" {
         // The seat is ONE fact about the device. Two screens disagreeing about
         // whether it can reach its gateway is not a state the product has, so
@@ -309,11 +237,13 @@ class WriteRunnerSpec : StringSpec({
             .seat_changed?.seat shouldBe reachable
     }
 
-    "a seat that reaches its gateway stops withholding Tally's recurring verb" {
+    "an authoritative seat stops withholding Tally's recurring verb" {
         // The other thing a null seat got wrong. `Reads.isLocalOnly(null)` is
         // true, so Tally's `materialize-recurring-expense` was WITHHELD on every
         // device for ever — a verb a member could never reach, with a sentence
-        // explaining an outage that was not happening.
+        // explaining an outage that was not happening. On a phone that IS the
+        // vault the seat is ALWAYS authoritative (`HomeSession.publishSeat`), so
+        // this is the only case left and it had better be the reachable one.
         val reduced = dev.centraid.shared.apps.tally.TallyListMachine.reduce(
             dev.centraid.shared.apps.tally.TallyListMachine.initial(),
             dev.centraid.shared.apps.tally.TallyListMachine.seatChanged(

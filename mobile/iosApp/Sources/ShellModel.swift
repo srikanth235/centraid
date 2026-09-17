@@ -38,8 +38,24 @@ final class ShellModel: ObservableObject {
 
     @Published var path: [Route] = []
     @Published var masked = false
-    /// Whether the gateway sheet is up.
-    @Published var gatewaySheetOpen = false
+
+    /// PAINT THE SWITCHER MASK, and take it down (`docs/mobile-offline.md:253`).
+    ///
+    /// **`masked` had no writer.** `grep -n 'masked' mobile/iosApp/Sources/` on
+    /// the commit before this one finds one line — this declaration — so the
+    /// overlay in `CentraidApp` could never appear and a member's rows went
+    /// into every app-switcher snapshot iOS took. It was reachable only through
+    /// the scene phase, and the scene phase spent both of its cases opening and
+    /// closing the gateway tail. With the tail gone this is the only thing left
+    /// for it to do, so it is wired rather than left as a flag nothing sets.
+    ///
+    /// Not this lane's subject and stated here rather than hidden: found while
+    /// deleting the tail that was standing in front of it.
+    func mask() { masked = true }
+
+    func unmask() { masked = false }
+    /// Whether the vault sheet is up.
+    @Published var vaultSheetOpen = false
     /// Whether the transfer-rules sheet is up (#1025 S4).
     @Published var transferRulesOpen = false
     /// THE MEMBER'S TRANSFER RULE, as the STORE's own word.
@@ -52,7 +68,7 @@ final class ShellModel: ObservableObject {
     @Published var transferRule = ""
     /// The three choices, each a plain sentence from the shell's copy source.
     @Published var transferRuleChoices: [(stored: String, sentence: String)] = []
-    /// The last thing pairing or a sync said, in a member's words.
+    /// The last thing the vault sheet said, in a member's words.
     ///
     /// A SENTENCE THE CORE ALREADY DECIDED WAS SHOWABLE. Nothing here composes
     /// one out of an error: `Error.detail` is logs-only, and a shell that made
@@ -112,16 +128,16 @@ final class ShellModel: ObservableObject {
             self.photos.attach(session: session)
             self.notes.attach(session: session)
         }
-        // THE DEVICE MAKES ITS OWN REPLICA (#1025 S5).
+        // THE DEVICE MAKES ITS OWN VAULT (#1025 S5; #1029 §1).
         //
         // This used to hand over every `.db` file that had been PLACED in the
         // container by `mobile/scripts/demo-vault.sh`, because there was no way
-        // for a phone to get a vault of its own. There is now: open unpaired,
-        // pair, and the pairing takes the copy ([D-1025-S1-1]). So what crosses
-        // is the DIRECTORY replicas live in, and an empty one is the ordinary
-        // first run — Home draws, its reads are refused `Unpaired`, and the
-        // member's next move is the gateway sheet.
-        home.open(replicaDir: Self.replicaDirectory)
+        // for a phone to get a vault of its own. S5 made that a pairing and
+        // #1029 makes it a FOUNDING: the phone is the vault. So what crosses is
+        // the DIRECTORY vaults live in, and an empty one is the ordinary first
+        // run — Home draws the empty shelf and the member's next move is the
+        // vault sheet.
+        home.open(vaultDir: Self.vaultDirectory)
         // THE OS ASKING FOR MEMORY BACK IS THE ONLY THING THAT CLOSES A
         // BACKGROUND VAULT'S CORE (#1025 S7-13, ruling F).
         //
@@ -130,7 +146,7 @@ final class ShellModel: ObservableObject {
         // cores — that would make "is this vault open" depend on how recently
         // some other vault was touched — it is this notification: under
         // pressure, every core but the foreground's closes, and a rested vault
-        // reopens on the next tap or the next sync round.
+        // reopens on the next tap.
         memoryWarning = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
@@ -149,7 +165,7 @@ final class ShellModel: ObservableObject {
     /// The memory-warning observer, held so it can be removed.
     private var memoryWarning: NSObjectProtocol?
 
-    /// WHERE THIS DEVICE'S REPLICAS LIVE.
+    /// WHERE THIS DEVICE'S VAULTS LIVE.
     ///
     /// Documents and not Caches: a vault is the member's data, and the one
     /// directory iOS promises not to evict under pressure is this one.
@@ -157,53 +173,39 @@ final class ShellModel: ObservableObject {
     /// The DIRECTORY is the roster — there is no manifest beside it, because a
     /// manifest would be a second place a vault's name and existence live, and
     /// the two would disagree the moment one was renamed from another device.
-    /// What each file is CALLED is read out of the file itself; see
-    /// `VaultRoster`, and `Replicas` for what they are NAMED.
-    static var replicaDirectory: String {
+    /// What each file is CALLED is read out of the file itself (`VaultRoster`),
+    /// and so is which VAULT it holds: the file name is a label the shelf
+    /// minted and never an identity.
+    static var vaultDirectory: String {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
     }
 
     #endif
 
-    /// Redeem a pairing ticket (#1020, D-1020-B7).
+    /// MAKE A VAULT ON THIS PHONE (#1029 §1).
     ///
-    /// The ticket goes over UNCHANGED — the core mints the redemption from it.
-    /// A shell that pulled the secret and the ticket id out and sent those
-    /// would be a second place they live, and the device's public key is the
-    /// endpoint's to state, not this class's.
-    func pair(ticket: String, done: @escaping () -> Void) {
+    /// What `pair(ticket:)` became. It took a pasted ticket, this device's name
+    /// and a platform string and redeemed them against a gateway; none of the
+    /// three has a reader now. The phone is the vault, so the only input is the
+    /// tap.
+    func found(done: @escaping () -> Void) {
         #if canImport(CentraidShared)
-        home.pair(
-            ticket: ticket.trimmingCharacters(in: .whitespacesAndNewlines),
-            deviceName: UIDevice.current.name,
-            platform: "ios"
-        ) { [weak self] outcome in
+        home.found { [weak self] outcome in
             // KOTLIN'S NESTED CLASSES FLATTEN IN OBJECTIVE-C. A sealed
-            // interface's members export as `PairOutcomePaired` and
-            // `PairOutcomeRefused`, not as nested types — so `PairOutcome.Paired`
+            // interface's members export as `FoundResultMade` and
+            // `FoundResultRefused`, not as nested types — so `FoundResult.Made`
             // does not exist on this side and the compiler says so.
             switch outcome {
-            case let paired as PairOutcomePaired:
-                self?.gatewayStatus = "Paired with \(paired.vaultName)."
-                // A DEVICE THAT JUST PAIRED IS A DEVICE IN THE FOREGROUND
-                // (#1025 S2, D-1025-S7-40). The scene never changed — the
-                // member has been looking at this sheet the whole time — so
-                // nothing else would open the tail until they left and came
-                // back.
-                self?.foreground()
-            // THE TICKET'S NAME IS NOT THE VAULT'S NAME (#1025 S7-9). A
-            // ticket carries the gateway CLI's `--vault-name` flag and not
-            // the vault's own `display_name`, so between redeeming one and
-            // holding a replica that can answer for itself there is nothing
-            // truthful to print — which is exactly this case, and why it
-            // carries no name to interpolate.
-            case is PairOutcomeCopying:
-                self?.gatewayStatus = "Paired. Your vault is being copied."
-                self?.foreground()
-            case let refused as PairOutcomeRefused:
+            case let made as FoundResultMade:
+                // THE NAME COMES OUT OF THE VAULT (#1025 S7-9). A ticket used
+                // to carry the gateway CLI's `--vault-name` flag and the sheet
+                // printed it as fact; this one is `core_vault.display_name`,
+                // read off the file that was just founded.
+                self?.gatewayStatus = "Made \(made.vaultName)."
+            case let refused as FoundResultRefused:
                 self?.gatewayStatus = refused.sentence
             default:
-                self?.gatewayStatus = "There is no vault open on this device yet."
+                self?.gatewayStatus = "Centraid is still opening."
             }
             done()
         }
@@ -213,119 +215,35 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
-    /// FORGET A VAULT — the inverse of [pair] (#1025 S7-9).
+    /// FORGET A VAULT — the inverse of [found] (#1025 S7-9).
     ///
-    /// The shelf closes the core, deletes the replica and its byte store,
-    /// drops the pairing record and the endpoint key, and rebinds the session
-    /// onto whatever came forward; the roster the switcher is drawing arrives
-    /// as the ordinary `RosterChanged`, so nothing here removes a row by hand.
+    /// The shelf closes the core, deletes the file and its byte store, and
+    /// rebinds the session onto whatever came forward; the roster the switcher
+    /// is drawing arrives as the ordinary `RosterChanged`, so nothing here
+    /// removes a row by hand.
     ///
-    /// **Forgetting is LOCAL.** The gateway keeps this device enrolled —
-    /// "this phone is not holding that vault any more" is not "that vault
-    /// should stop trusting this phone", which is a decision for whoever holds
-    /// the vault to take there. The confirmation in `VaultSheet` says so.
+    /// **ON A PHONE THAT IS THE VAULT THIS DESTROYS THE MEMBER'S ROWS**
+    /// (#1029 §1). It used to be local and reversible — the gateway kept this
+    /// device enrolled and a re-pair took the copy again — and there is no
+    /// gateway and no copy. The confirmation in `VaultSheet` has to say so.
     func forget(vaultID: String) {
         #if canImport(CentraidShared)
         home.forget(vaultId: vaultID) {}
-        // R-SHELL-2: pairing sentences name the FOREGROUND holding, not the
-        // last successful pair() call. Forgetting (or switching away from) a
-        // vault must not leave "Paired with Fresh Vault." over Tahoe Weekend.
+        // R-SHELL-2: member-visible sentences name the FOREGROUND holding,
+        // not the last successful found() call. Forgetting (or switching away
+        // from) a vault must not leave "Made Fresh Vault." over Tahoe Weekend.
         gatewayStatus = ""
         #else
         gatewayStatus = "This build has no core."
         #endif
     }
 
-    /// Clear member-visible gateway copy that named a vault no longer in front.
+    /// Clear member-visible copy that named a vault no longer in front.
     ///
-    /// Called when the switcher picks another vault. Sync / pair outcomes that
-    /// land afterwards rewrite the line for the vault now open.
+    /// Called when the switcher picks another vault. Outcomes that land
+    /// afterwards rewrite the line for the vault now open.
     func clearStaleGatewayStatus() {
         gatewayStatus = ""
-    }
-
-    /// THE MEMBER ARRIVED: catch up, then hold the log open (#1025 S2,
-    /// D-1025-S7-40).
-    ///
-    /// Called from the scene phase and from nowhere else. **There is no timer
-    /// here.** A foreground interval is a deleted concept: the tail stays open
-    /// for as long as the app is active, and a page written on the gateway is
-    /// on this device within one round trip.
-    func foreground() {
-        #if canImport(CentraidShared)
-        home.foreground { _ in }
-        #endif
-    }
-
-    /// THE MEMBER LEFT: close the tail.
-    ///
-    /// Both halves of leaving — the app switcher and a real background — do the
-    /// same thing here, because a stream held open by a process the OS is about
-    /// to suspend is a socket nobody is reading. What resumes it is the next
-    /// `active`, from the durable cursor — or, while still `active`, the radio
-    /// coming back (airplane mode off, R-SHELL-4). Leaving must tell the
-    /// session the member is gone, or a path-up would reopen the tail behind
-    /// the app switcher.
-    func leftTheForeground() {
-        #if canImport(CentraidShared)
-        home.leftTheForeground()
-        #endif
-    }
-
-    /// Run one sync pass and report what moved.
-    func syncNow(done: @escaping () -> Void) {
-        #if canImport(CentraidShared)
-        // THE WAKE IS NAMED, and a Kotlin default does not cross this
-        // boundary — Objective-C export has no default arguments, so the shell
-        // states which window it is asking for. This one is the member holding
-        // the phone, which is a foreground window: nothing is held back and
-        // what bounds it is them closing the app.
-        home.syncNow(wake: .foreground) { [weak self] outcome in
-            // AN UNREACHABLE GATEWAY IS A STATE, NOT A FAILURE. A phone in a
-            // lift is not a broken phone, and the sentence the core supplies
-            // says so without a red banner.
-            // THE COPY, WHILE IT IS STILL COMING (#1025 S7, item 3). "Paired,
-            // no file yet" is a real state and it used to read "Synced: 0
-            // changes, 0 files" — the sentence that makes a working device look
-            // broken. It is first because it is what is happening: a seat that
-            // has no vault yet has nothing else to say.
-            if let copying = outcome.copying {
-                self?.gatewayStatus = copying
-            } else if outcome.unreachable {
-                self?.gatewayStatus = outcome.sentence.isEmpty
-                    ? "Centraid could not reach your gateway."
-                    : outcome.sentence
-            } else if let blocked = outcome.blocked {
-                // WHY A PASS MOVED NOTHING, when something stopped it (#1025
-                // S5). This drew "Synced: 0 changes, 0 files" over a queued
-                // write whose attempt count was climbing — the reason existed
-                // in the pass's report and had no field to travel in, which is
-                // the same way the `query_only` defect hid for three slices.
-                // The sentence is the core's; nothing here composes one.
-                self?.gatewayStatus = blocked
-            } else if let stale = outcome.stale {
-                self?.gatewayStatus = stale
-            } else {
-                // The byte plane's own two, because "0 files" alone is the
-                // sentence that made a working byte plane look broken (#1025
-                // S5). `budget`/`metered` are the window the core ACTUALLY ran
-                // under, echoed back, so which plan a pass took is answerable
-                // from the device rather than inferable.
-                var line = "Synced: \(outcome.rowsApplied) changes, "
-                    + "\(outcome.blobsCompleted) files."
-                if outcome.originalsWithheld > 0 {
-                    line += " \(outcome.originalsWithheld) waiting for Wi-Fi."
-                }
-                if let stalled = outcome.bytesStalled { line += " " + stalled }
-                line += " [\(outcome.budget)\(outcome.metered ? ", metered" : "")]"
-                self?.gatewayStatus = line
-            }
-            done()
-        }
-        #else
-        gatewayStatus = "This build has no core."
-        done()
-        #endif
     }
 
     /// Forward an event. The shared module reduces; nothing here decides.
@@ -371,7 +289,7 @@ final class ShellModel: ObservableObject {
         // this one, and iOS will not present a second sheet over a sheet that
         // is still up — it drops the request silently, which reads as a button
         // that does nothing.
-        gatewaySheetOpen = false
+        vaultSheetOpen = false
         transferRulesOpen = true
     }
 

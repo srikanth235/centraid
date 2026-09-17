@@ -82,7 +82,7 @@ public class PhotosBridge {
          */
         services: PlatformServices,
     ) {
-        session.attachScreen(host, PhotosReads, fetches = PhotosFetches)
+        session.attachScreen(host, PhotosReads)
         // THE OTHER PLANE ON THIS SCREEN. The grid reads the vault; this reads
         // the camera roll. Until #1025 S6 nothing collected `Backup` or
         // `RequestMediaPermission` at all, so "Allow photo access" emitted an

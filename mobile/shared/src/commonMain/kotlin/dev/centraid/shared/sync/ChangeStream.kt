@@ -104,10 +104,10 @@ public class ChangeStream {
      * TELL EVERY ROUTED SCREEN WHAT THIS SEAT IS (#1025 S5, D-1025-S5-6).
      *
      * Nothing sent a `SeatChanged` before this, on either shell, so every
-     * screen held a null `SeatState` for its whole life — and
-     * [WriteGate] reads the seat off the screen. A null seat is not reachable,
-     * so an `onlineOnly` write was refused on every device always, and an
-     * ordinary one queued with a healthy gateway in the same room.
+     * screen held a null `SeatState` for its whole life. What that broke was
+     * the write gate, which is gone with the gateway it chose between
+     * (#1029 §1); what it still decides is what a screen DRAWS about this
+     * device.
      *
      * It is published here rather than by each screen's runtime because it is
      * ONE fact about the device and not one per screen: two screens disagreeing

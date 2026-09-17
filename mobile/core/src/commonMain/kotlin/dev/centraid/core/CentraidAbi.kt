@@ -65,10 +65,16 @@ internal sealed interface AbiOpen {
  * `centraid_open`, per platform.
  *
  * `config` is the UTF-8 JSON the ABI documents:
- * `{"path":…,"role":…,"gateway":…?,"create":…?,"uiThreadName":…?}`. JSON and
+ * `{"path":…,"create":…?,"uiThreadName":…?,"expectedIdentity":…?}`. JSON and
  * not protobuf because a configuration is read once at startup by a
  * human-written call site and being able to log it verbatim is worth more than
  * the encoding (`crates/core-ffi/README.md`).
+ *
+ * **`role` and `gateway` are gone** (#1029 §1). This comment documented a
+ * `gateway` key that `crates/core-ffi` never read — it was removed from the ABI
+ * before this line was written and the line was not — and `role` named the
+ * plane #1029 deletes. A shell that still sends either is ignored rather than
+ * refused, which is that crate's own note.
  */
 internal expect fun openCentraidAbi(config: String, uiThreadName: String): AbiOpen
 
