@@ -324,7 +324,6 @@ fn next_event_surfaces_bounded_queue_backpressure_as_a_health_event() {
                 kind: Some(wire::event::Kind::Change(wire::ChangeEvent {
                     table: format!("t{index}"),
                     pk_set: Vec::new(),
-                    commit_seq: index as u64,
                 })),
             }),
             "slot {index} was refused early"
@@ -336,7 +335,6 @@ fn next_event_surfaces_bounded_queue_backpressure_as_a_health_event() {
             kind: Some(wire::event::Kind::Change(wire::ChangeEvent {
                 table: "one-too-many".to_owned(),
                 pk_set: Vec::new(),
-                commit_seq: 9_999,
             })),
         }),
         "a full queue refuses rather than dropping"
@@ -418,7 +416,6 @@ fn close_unblocks_next_event_with_a_terminal_answer() {
         kind: Some(wire::event::Kind::Change(wire::ChangeEvent {
             table: "note".to_owned(),
             pk_set: Vec::new(),
-            commit_seq: 1,
         })),
     });
 

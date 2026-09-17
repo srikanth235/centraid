@@ -172,28 +172,35 @@ public class Shelf(
             }
 
         /**
-         * THE STATE, AND ON THIS DEVICE THERE IS ONE (#1029 §1).
+         * THE STATE, AND ON THIS DEVICE THERE ARE TWO (#1029 §1, F1).
          *
          * It was a function of the last pass's outcome and whether a pass was
          * in flight, and it had three answers because there were three things a
          * gateway could be doing. **The phone is the vault.** There is no pass,
          * no gateway and no copy still coming, so a vault this shelf holds is a
-         * file on this device whose core opened — which is `STATE_ONLINE`, the
-         * one value of the three whose own wording is a PAST-TENSE fact
-         * ("synced") rather than a claim about a live link.
+         * file on this device whose core opened — `STATE_ONLINE`, whose own
+         * wording is a PAST-TENSE fact ("synced") rather than a claim about a
+         * live link.
          *
          * A RESTING holding is `STATE_ONLINE` too, and that is not a guess: the
          * file is whole and [rest] closed its handle to give the OS memory back.
          * Nothing about the vault changed.
          *
-         * **`VaultLockup.State` is a gateway's vocabulary that has outlived its
-         * gateway.** `STATE_SYNCING` and `STATE_OFFLINE` are now unreachable
-         * from this shell, and the enum lives in `crates/api-proto`, which this
-         * lane does not touch. What the shelf owes until that crate's lane trims
-         * it is the honest value, which is this one.
+         * **AND THE SECOND ONE IS THE FREEZE** (#1029 W5, hand-off 3).
+         * `STATE_SYNCING` and `STATE_OFFLINE` were facts about a pass and are
+         * reserved in `screen.proto` now, by number and by name;
+         * [VaultLockup.State.STATE_FROZEN] took their place. Until W5 this shelf
+         * could only say `STATE_ONLINE` about a vault that had MOVED, and a
+         * switcher row that said "synced" over a vault refusing every write is
+         * the shape the umbrella's UI invariant forbids — the phone claiming a
+         * backup the gateway never acked.
          */
         public val state: VaultLockup.State
-            get() = VaultLockup.State.STATE_ONLINE
+            get() = if (moved == null) {
+                VaultLockup.State.STATE_ONLINE
+            } else {
+                VaultLockup.State.STATE_FROZEN
+            }
 
         /** This holding as a row the switcher and the header both draw. */
         public fun lockup(): VaultLockup = VaultLockup(
@@ -201,6 +208,11 @@ public class Shelf(
             vault_name = name,
             color = color,
             state = state,
+            // THE LINE RIDES THE LOCKUP (#1029 W5, hand-off 3). Empty for a
+            // vault that has not moved, which is the proto zero and a real
+            // state. It was a door on `HomeBridge` because there was no slot;
+            // there is one, so there is one source.
+            frozen_line = frozenLine.orEmpty(),
             // `originals_withheld` IS LEFT AT ITS PROTO ZERO (#1029 §1). It
             // carried the last pass's `withheld` — originals a TRANSFER RULE
             // held back on a metered link — and a vault whose originals are on

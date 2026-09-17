@@ -195,6 +195,15 @@ impl CoreError {
             detail: self.to_string(),
             diagnostic_id: self.diagnostic_id().unwrap_or_default().to_owned(),
             sentence: self.sentence(),
+            // NONE, AND NOT BECAUSE IT IS UNIMPLEMENTED (#1029 W5). `moved`
+            // carries `lease.proto`'s `VaultMoved` on an
+            // `ERROR_CODE_VAULT_MOVED`, and that code is a GATEWAY's refusal:
+            // it means "you held this vault and a higher epoch took it", which
+            // is a statement about a lease this core neither holds nor hears
+            // about. `CoreError` has no variant that maps to it, so there is no
+            // arm here that could fill it in — and a core that invented an
+            // epoch and a date would be the second mechanism F1 forbids.
+            moved: None,
         }
     }
 }

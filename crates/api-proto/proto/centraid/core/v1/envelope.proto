@@ -24,7 +24,6 @@ import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
-import "centraid/core/v1/pair.proto";
 import "centraid/core/v1/query.proto";
 import "centraid/core/v1/vault.proto";
 

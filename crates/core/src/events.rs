@@ -17,11 +17,10 @@
 //! ## Coalescing is lossless
 //!
 //! Two changes to the same `(table, pk)` are one redraw, so while a change
-//! event waits its `pk_set` absorbs later keys for the same table and its
-//! `commit_seq` rises to the highest it covers. Nothing is lost, because a
-//! change event never carried the *values* — it carries the keys a screen
-//! re-reads. That is what makes coalescing safe here and not safe for, say, a
-//! health event, which is a sample rather than a set.
+//! event waits its `pk_set` absorbs later keys for the same table. Nothing is
+//! lost, because a change event never carried the *values* — it carries the
+//! keys a screen re-reads. That is what makes coalescing safe here and not
+//! safe for, say, a health event, which is a sample rather than a set.
 
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex};
@@ -300,57 +299,33 @@ impl ChangeFeed {
     /// `pk_set` reads as "re-read this table", which is what a screen does
     /// with a key set it did not recognise anyway.
     ///
-    /// `commit_seq: 0` for the same reason it is zero for arriving bytes:
-    /// there is no commit position any more (#1029 §1), and the queue's
-    /// coalescing takes the maximum so a zero never lowers a waiting event.
+    /// **AND THERE IS NO COMMIT POSITION TO CARRY** (#1029 W5, hand-off 4).
+    /// `ChangeEvent.commit_seq` was written as a literal zero from here, for
+    /// every change in the vault's life, because the hook knows the tables and
+    /// no position at all. The field is deleted; see `change.proto`.
     pub fn tables_changed(&self, tables: &[String]) {
         for table in tables {
             self.offer(Event {
                 kind: Some(event::Kind::Change(ChangeEvent {
                     table: table.clone(),
                     pk_set: Vec::new(),
-                    commit_seq: 0,
                 })),
             });
         }
     }
 
-    /// Rows landed and are durable. `touched` is one `(table, primary key)`
-    /// per changed row, in the order they changed; `commit_seq` is the commit
-    /// they landed in, because an overlay clears against a commit seq and the
-    /// lower of two would leave paint on the screen.
-    ///
-    /// Called AFTER the transaction commits. A shell told about rows that then
-    /// rolled back would be a screen redrawn from a file that never had them.
-    pub fn rows_applied(
-        &self,
-        touched: &[(String, Vec<centraid_vault::value::Value>)],
-        commit_seq: i64,
-    ) {
-        // ONE EVENT PER TABLE, in the order the tables were first touched. The
-        // queue coalesces per table anyway, so a push per row would be correct
-        // and would also be a thousand lock acquisitions for one page — and the
-        // grouping is free here, where the page is already in hand.
-        let mut tables: Vec<(&str, Vec<RecordKey>)> = Vec::new();
-        for (table, key) in touched {
-            let wire = crate::convert::key_to_wire(key);
-            match tables.iter_mut().find(|(seen, _)| *seen == table) {
-                Some((_, keys)) => keys.push(wire),
-                None => tables.push((table, vec![wire])),
-            }
-        }
-        for (table, pk_set) in tables {
-            self.offer(Event {
-                kind: Some(event::Kind::Change(ChangeEvent {
-                    table: table.to_owned(),
-                    pk_set,
-                    // A COMMIT SEQ AND NEVER A ROW SEQ: a seat's overlay clears
-                    // against the commit, and the two are different numbers.
-                    commit_seq: u64::try_from(commit_seq).unwrap_or(0),
-                })),
-            });
-        }
-    }
+    // `rows_applied` STOOD HERE, AND IT LEFT WITH `commit_seq` (#1029 W5,
+    // hand-off 4). It took `(table, primary key)` per changed row plus the
+    // commit they landed in, and its caller was the SEAT APPLIER — the thing
+    // that held the page it had just applied and so knew both. #1029 §1 deletes
+    // the applier, and the method has had no caller since; what replaced it is
+    // [`Self::tables_changed`], fed by a rusqlite `update_hook` that is handed
+    // a ROWID rather than a declared primary key and no commit position at all.
+    //
+    // It is deleted rather than kept for a future caller because the shape is
+    // the thing that is wrong: a producer that could fill it would have to be
+    // inside the commit, translating rowids into keys with a read per changed
+    // row, and that is the cost `tables_changed`'s own header refuses.
 
     /// BYTES LANDED FOR THESE ASSET ROWS (#1025 S7, D-1025-S7-20).
     ///
@@ -360,10 +335,8 @@ impl ChangeFeed {
     /// files that were on the device, until something else happened to make it
     /// re-read.
     ///
-    /// Its own method rather than a `rows_applied` with an invented commit
-    /// seq: a blob arriving is not a commit and clears no overlay, and handing
-    /// it a commit number would be a number a settlement could later be
-    /// compared against.
+    /// Its own method rather than one shared with row changes: a blob arriving
+    /// is not a commit and clears no overlay.
     pub fn blobs_arrived(&self, asset_ids: &[String]) {
         // THE SAME `ChangeEvent`, AND ONE OF THEM (#1025 S5/S7). A screen's
         // question is "do I need to re-read?", and for a thumbnail that has
@@ -372,13 +345,11 @@ impl ChangeFeed {
         // the queue's per-table coalescing makes a window that completed
         // nineteen files ONE redraw rather than nineteen.
         //
-        // `commit_seq: 0` AND THAT IS THE HONEST NUMBER. No commit happened:
-        // bytes arriving is not a commit, it settles no intent and clears no
-        // overlay. A real commit seq here would be a number a settlement could
-        // later be compared against, which is why this is its own method on
-        // the sink rather than a `rows_applied` with an invented one. The
-        // coalescing takes the MAXIMUM, so a zero never lowers a waiting
-        // event's position.
+        // NO COMMIT POSITION RIDES ALONG, and there is no longer a field for
+        // one (#1029 W5): bytes arriving is not a commit, it settles no intent
+        // and clears no overlay. That is the argument that made this its own
+        // method rather than a `rows_applied` with an invented number, and
+        // deleting `ChangeEvent.commit_seq` settles it for every producer.
         if asset_ids.is_empty() {
             return;
         }
@@ -395,7 +366,6 @@ impl ChangeFeed {
                         }],
                     })
                     .collect(),
-                commit_seq: 0,
             })),
         });
     }
@@ -440,10 +410,6 @@ fn coalesce_into(queue: &mut VecDeque<Event>, change: &ChangeEvent) -> bool {
                 existing.pk_set.push(key.clone());
             }
         }
-        // The HIGHEST commit this event now covers. An overlay clears against a
-        // commit seq, so a coalesced event that reported the lower of the two
-        // would leave paint on the screen.
-        existing.commit_seq = existing.commit_seq.max(change.commit_seq);
         return true;
     }
     false
@@ -471,12 +437,11 @@ mod tests {
         }
     }
 
-    fn change(table: &str, keys: &[&str], commit_seq: u64) -> Event {
+    fn change(table: &str, keys: &[&str]) -> Event {
         Event {
             kind: Some(event::Kind::Change(ChangeEvent {
                 table: table.to_owned(),
                 pk_set: keys.iter().map(|text| key(text)).collect(),
-                commit_seq,
             })),
         }
     }
@@ -495,10 +460,10 @@ mod tests {
     #[test]
     fn an_event_offered_is_an_event_returned() {
         let queue = EventQueue::new();
-        assert!(queue.push(change("note", &["n1"], 1)));
+        assert!(queue.push(change("note", &["n1"])));
         assert_eq!(
             queue.next(Duration::from_millis(10)),
-            Next::Event(change("note", &["n1"], 1))
+            Next::Event(change("note", &["n1"]))
         );
     }
 
@@ -511,8 +476,8 @@ mod tests {
     #[test]
     fn two_changes_to_one_table_coalesce_into_one_redraw() {
         let queue = EventQueue::new();
-        queue.push(change("note", &["n1"], 1));
-        queue.push(change("note", &["n2"], 4));
+        queue.push(change("note", &["n1"]));
+        queue.push(change("note", &["n2"]));
         assert_eq!(queue.depth(), 1, "one slot, two keys");
         let Next::Event(Event {
             kind: Some(event::Kind::Change(merged)),
@@ -521,16 +486,13 @@ mod tests {
             panic!("a change event comes back");
         };
         assert_eq!(merged.pk_set.len(), 2);
-        // THE HIGHEST commit: an overlay clears against a commit seq, and the
-        // lower of the two would leave paint on the screen.
-        assert_eq!(merged.commit_seq, 4);
     }
 
     #[test]
     fn the_same_key_twice_is_one_key() {
         let queue = EventQueue::new();
-        queue.push(change("note", &["n1"], 1));
-        queue.push(change("note", &["n1"], 2));
+        queue.push(change("note", &["n1"]));
+        queue.push(change("note", &["n1"]));
         let Next::Event(Event {
             kind: Some(event::Kind::Change(merged)),
         }) = queue.next(Duration::from_millis(10))
@@ -543,8 +505,8 @@ mod tests {
     #[test]
     fn changes_to_different_tables_do_not_coalesce() {
         let queue = EventQueue::new();
-        queue.push(change("note", &["n1"], 1));
-        queue.push(change("party", &["p1"], 2));
+        queue.push(change("note", &["n1"]));
+        queue.push(change("party", &["p1"]));
         assert_eq!(queue.depth(), 2);
     }
 
@@ -555,13 +517,13 @@ mod tests {
         // One event per table, so nothing coalesces.
         for index in 0..EVENT_QUEUE_CAP {
             assert!(
-                queue.push(change(&format!("t{index}"), &["k"], index as u64)),
+                queue.push(change(&format!("t{index}"), &["k"])),
                 "slot {index} was refused early"
             );
         }
         assert_eq!(queue.depth(), EVENT_QUEUE_CAP);
         assert!(
-            !queue.push(change("one-too-many", &["k"], 9_999)),
+            !queue.push(change("one-too-many", &["k"])),
             "the push is REFUSED, which is the stall"
         );
         assert!(queue.is_stalled());
@@ -576,9 +538,9 @@ mod tests {
         let queue = EventQueue::new();
         queue.push(health(false));
         for index in 0..(EVENT_QUEUE_CAP - 1) {
-            queue.push(change(&format!("t{index}"), &["k"], index as u64));
+            queue.push(change(&format!("t{index}"), &["k"]));
         }
-        assert!(!queue.push(change("one-too-many", &["k"], 1)));
+        assert!(!queue.push(change("one-too-many", &["k"])));
         // The health event at the head is now the STALLED one, and every change
         // event behind it survived.
         let Next::Event(Event {
@@ -598,9 +560,9 @@ mod tests {
     fn a_stall_clears_only_once_the_queue_is_genuinely_below_its_cap() {
         let queue = EventQueue::new();
         for index in 0..EVENT_QUEUE_CAP {
-            queue.push(change(&format!("t{index}"), &["k"], index as u64));
+            queue.push(change(&format!("t{index}"), &["k"]));
         }
-        assert!(!queue.push(change("over", &["k"], 1)));
+        assert!(!queue.push(change("over", &["k"])));
         assert!(queue.is_stalled());
 
         let _ = queue.next(Duration::from_millis(10));
@@ -618,9 +580,9 @@ mod tests {
         queue.set_behind(4_000);
         queue.push(health(false));
         for index in 0..(EVENT_QUEUE_CAP - 1) {
-            queue.push(change(&format!("t{index}"), &["k"], index as u64));
+            queue.push(change(&format!("t{index}"), &["k"]));
         }
-        assert!(!queue.push(change("over", &["k"], 1)));
+        assert!(!queue.push(change("over", &["k"])));
         let Next::Event(Event {
             kind: Some(event::Kind::Health(reported)),
         }) = queue.next(Duration::from_millis(10))
@@ -639,9 +601,9 @@ mod tests {
         let queue = EventQueue::new();
         queue.set_behind(77);
         for index in 0..EVENT_QUEUE_CAP {
-            queue.push(change(&format!("t{index}"), &["k"], index as u64));
+            queue.push(change(&format!("t{index}"), &["k"]));
         }
-        assert!(!queue.push(change("over", &["k"], 1)));
+        assert!(!queue.push(change("over", &["k"])));
         assert!(queue.is_stalled());
 
         // The first drain frees a slot; the deferred stall report takes it.
@@ -689,7 +651,7 @@ mod tests {
     #[test]
     fn a_close_hands_out_the_events_it_already_accepted_first() {
         let queue = EventQueue::new();
-        queue.push(change("note", &["n1"], 1));
+        queue.push(change("note", &["n1"]));
         queue.close();
         // The event first, THEN the close. A close is not a discard.
         assert!(matches!(
@@ -703,7 +665,7 @@ mod tests {
     fn a_closed_queue_accepts_nothing_new() {
         let queue = EventQueue::new();
         queue.close();
-        assert!(!queue.push(change("note", &["n1"], 1)));
+        assert!(!queue.push(change("note", &["n1"])));
         assert!(queue.is_closed());
     }
 }

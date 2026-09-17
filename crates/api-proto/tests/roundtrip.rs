@@ -119,7 +119,6 @@ fn every_envelope_body_round_trips() {
                 pk_set: vec![RecordKey {
                     values: vec![text("exp_1")],
                 }],
-                commit_seq: 3,
             })),
         }),
         envelope::Body::Cancel(core::Cancel {}),
@@ -128,6 +127,21 @@ fn every_envelope_body_round_trips() {
             detail: "not enrolled".to_owned(),
             diagnostic_id: String::new(),
             sentence: "This device is not enrolled on that vault.".to_owned(),
+            moved: None,
+        }),
+        // THE REFUSAL THAT CARRIES A COMPANION (#1029 W5). `VAULT_MOVED` is
+        // the one code with a message riding beside it, and a round trip that
+        // only ever encoded the companion-less shape would not notice a field
+        // number collision on the day a second companion is added.
+        envelope::Body::Error(Error {
+            code: core::ErrorCode::VaultMoved as i32,
+            detail: "gateway: vault moved".to_owned(),
+            diagnostic_id: String::new(),
+            sentence: "This vault moved to your other phone.".to_owned(),
+            moved: Some(core::VaultMoved {
+                current_epoch: 7,
+                moved_at_ms: 1_773_500_000_000,
+            }),
         }),
     ];
     for (index, body) in bodies.into_iter().enumerate() {

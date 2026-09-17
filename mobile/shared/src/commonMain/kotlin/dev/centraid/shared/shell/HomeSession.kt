@@ -206,11 +206,12 @@ public class HomeSession private constructor(
      *
      * ## Its one caller
      *
-     * Whatever learns the vault moved, which is #1029 W5's restore client: it
-     * holds the lease and hears the supersession. There is no typed error to
-     * key this on yet — `error.proto` has no `ERROR_CODE_VAULT_MOVED` and
-     * `crates/api-proto` is another lane's — and when there is, the mapping
-     * calls this and nothing else changes. [Shelf.freeze] has the whole note.
+     * Whatever learns the vault moved, which is the gateway client: it holds
+     * the lease and hears the supersession. **The typed error exists now**
+     * (#1029 W5, hand-off 2) — `ERROR_CODE_VAULT_MOVED = 25`, with
+     * `lease.proto`'s `VaultMoved` riding beside it — and
+     * `dev.centraid.shared.sync.movedFrom` is the ONE place that reads a
+     * refusal and answers these two arguments. [Shelf.freeze] has the note.
      */
     public suspend fun vaultMoved(vaultId: String, atIso: String, unacked: Long) {
         shelf.freeze(vaultId, atIso, unacked)
@@ -220,12 +221,15 @@ public class HomeSession private constructor(
     /**
      * "N changes since <date>" for the vault in front, or null (#1029 F1).
      *
-     * Read by the chrome on both shells. It is NOT on `VaultLockup`, and that
-     * is a gap rather than a choice: the screen contract has three vault states
-     * and no slot for a frozen one or for its line, and the message lives in
-     * `crates/api-proto` — another lane's. Until it has one, the freeze reaches
-     * a member through the write refusal (which every screen already renders)
-     * and through this.
+     * **It is on `VaultLockup` now** (#1029 W5, hand-off 3): every row the
+     * roster publishes carries `frozen_line` and `STATE_FROZEN`, so the
+     * switcher's caption and the header's second line are two renderings of one
+     * stream, which is the rule this shelf keeps about everything else.
+     *
+     * This property stays because a shell asking about THE VAULT IN FRONT
+     * without subscribing to the roster is a real call site (chrome outside the
+     * screen contract), and it is not a second source: both it and the lockup
+     * read [Shelf.Holding.frozenLine], which is the one derivation.
      */
     public val frozenLine: String? get() = shelf.foregroundHolding()?.frozenLine
 
