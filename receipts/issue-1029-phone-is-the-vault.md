@@ -903,10 +903,11 @@ file's own header with its grep. **No test was deleted to go green.**
 | --- | --- |
 | 1 `./gradlew :shared:jvmTest` | **191 tests, 0 failed** |
 | 2 `./gradlew :core:jvmTest` | 16 tests, **1 failure, pre-existing and proved so** — see below |
-| 3 `cargo xtask gate --profile mobile-jvm` | red on the same `:core:jvmTest` case; every other step green |
+| 3 `cargo xtask gate --profile mobile-jvm` | **FAIL, on the same `:core:jvmTest` case and nothing else.** `314.7s of 420s — BUDGET ok`, on a cold tree. `cargo build -p centraid-core-ffi`, `:shared:jvmTest` and `:shared:koverXmlReport` all green inside it |
+| 3a the gate's drift check | the gate exits on the Gradle failure and never reaches it, so it was run by hand: `bun contracts/tools/export-native-theme.ts` + `bun run format` + `git diff --exit-code -- design copy mobile contracts/screens` → **clean**. `contracts/tools/build-screen-fixtures.ts` **cannot run in this container** — it shells out to `buf`, which is not installed (`ENOENT`). Environmental, and the screen fixtures were not touched by this lane |
 | 4 `grep -rn 'commit_seq' mobile/ --include=*.kt --include=*.swift` | **empty** |
 | 5 `grep -rn 'SEAT_REPLICATED\|SeatKind\|Replicas\|GatewayLink' mobile/` | **no code**; 7 prose lines, each a supersession marker naming what replaced the symbol |
-| 6 `cargo build --workspace` | not re-run: `git diff --stat 2a0a1f0a HEAD -- crates/ contracts/` is **empty**. This lane touched no Rust |
+| 6 `cargo build --workspace` | not run whole. `git diff --stat 2a0a1f0a HEAD -- crates/ contracts/` is **empty** — this lane touched no Rust — and the gate's own `cargo build -p centraid-core-ffi` compiled from cold and succeeded, which is 22 of the 23 members' dependency closure |
 | 7 `cargo test --workspace` | same — no Rust delta from a base lane B already verified at 1,452 green |
 | 8 `bun run check:push:static` | **4/4 green** (`bun install` first) |
 | 9 `node scripts/check-ledgers.mjs --base 2a0a1f0a` | **ok — 19 sections across 5 ledgers** |
