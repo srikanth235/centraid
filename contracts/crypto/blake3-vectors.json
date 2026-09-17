@@ -1,8 +1,4 @@
 {
-  "cbsfFrameNonce": {
-    "bodyTagHex": "011ce170ca46733185edc966e9f0697c4872a977df2eb5b9cbca89c54969449b",
-    "nonceHex": "97f88c91462028a6aabab70a"
-  },
   "deriveKey": [
     {
       "context": "centraid-backup:data:00000000-0000-7000-8000-000000000456",
@@ -43,6 +39,10 @@
       "tagHex": "c7a3926db10e3652f623faaea3308f227b37feba07b4cfcc45da2c187e7bb4e8"
     }
   ],
+  "objectKeyWrapKey": {
+    "context": "centraid-object/1 vault-root key wrap",
+    "keyHex": "328b06c34aca5c478a0dd48444f5510a0cb21b30a1adfbff6be2784f599237e0"
+  },
   "schema": "centraid-blake3-vectors/1",
   "why": "The keyed MAC and the KDF are format decisions (#1025 S4, D-1025-S4-2/-3). A round trip cannot see a changed derivation; these bytes can."
 }

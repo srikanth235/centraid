@@ -1,8 +1,5 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
-use centraid_media::{
-    cbsf,
-    format::{self, WalAddress},
-};
+use centraid_media::format::{self, WalAddress};
 use serde_json::Value;
 
 fn fixture_path() -> std::path::PathBuf {
@@ -17,53 +14,6 @@ fn fixture() -> Value {
 
 fn bytes32(hex_value: &str) -> [u8; 32] {
     hex::decode(hex_value).unwrap().try_into().unwrap()
-}
-
-#[test]
-fn a_sealed_cbsf_object_round_trips_and_reseals_to_the_golden_bytes() {
-    let fixture = fixture();
-    let vector = &fixture["cbsf"];
-    let key = bytes32(vector["keyHex"].as_str().unwrap());
-    let plain = STANDARD
-        .decode(vector["plainBase64"].as_str().unwrap())
-        .unwrap();
-    let sealed = STANDARD
-        .decode(vector["sealedBase64"].as_str().unwrap())
-        .unwrap();
-    assert_eq!(cbsf::open_object(&key, &sealed).unwrap(), plain);
-    assert_eq!(
-        cbsf::seal_stored_object(&key, &plain, vector["frameSize"].as_u64().unwrap() as usize)
-            .unwrap(),
-        sealed
-    );
-}
-
-#[test]
-fn every_compression_algorithm_round_trips_through_the_golden() {
-    let fixture = fixture();
-    let key = bytes32(fixture["cbsf"]["keyHex"].as_str().unwrap());
-    for name in ["zstd", "deflate"] {
-        let vector = &fixture["cbsfCompressed"][name];
-        let plain = STANDARD
-            .decode(vector["plainBase64"].as_str().unwrap())
-            .unwrap();
-        let sealed = STANDARD
-            .decode(vector["sealedBase64"].as_str().unwrap())
-            .unwrap();
-        assert_eq!(cbsf::open_object(&key, &sealed).unwrap(), plain, "{name}");
-        // The SEAL half too, since #1025 S4 gave the port one: a compressed
-        // object this build writes is the object the golden holds.
-        let frame_size = vector["frameSize"].as_u64().unwrap() as usize;
-        let algorithm = match name {
-            "zstd" => cbsf::Algorithm::Zstd,
-            _ => cbsf::Algorithm::Deflate,
-        };
-        assert_eq!(
-            cbsf::seal_object(&key, &plain, frame_size, algorithm).unwrap(),
-            sealed,
-            "{name}"
-        );
-    }
 }
 
 #[test]
@@ -161,47 +111,18 @@ fn the_committed_golden_is_what_this_build_seals() {
 
 /// Re-seal every vector from the committed file's own INPUTS.
 ///
-/// Inputs in, outputs recomputed: `keyHex`, `plainBase64`, `frameSize`, the WAL
-/// address and the snapshot envelope and payload are read back out of the
-/// fixture and written through unchanged, so regenerating can never quietly
-/// change what the golden is ABOUT — only what this build makes of it.
+/// Inputs in, outputs recomputed: the WAL address and the snapshot envelope and
+/// payload are read back out of the fixture and written through unchanged, so
+/// regenerating can never quietly change what the golden is ABOUT — only what
+/// this build makes of it.
+///
+/// **The sealed-frame vectors are gone with the module that produced them**
+/// (#1029 §4). They pinned a format whose header carried the plaintext hash and
+/// whose nonce came off an address (Reference A, B9), and D-1020-R1 — the ruling
+/// that made those bytes normative — was dropped pre-release, so no artefact any
+/// member holds has to keep opening. `centraid-object/1`'s vectors live in
+/// `contracts/crypto/object-vectors.json`.
 fn regenerate(committed: &Value) -> Value {
-    let cbsf_key = bytes32(committed["cbsf"]["keyHex"].as_str().unwrap());
-    let frame_size = committed["cbsf"]["frameSize"].as_u64().unwrap() as usize;
-    let plain = STANDARD
-        .decode(committed["cbsf"]["plainBase64"].as_str().unwrap())
-        .unwrap();
-
-    let mut compressed = serde_json::Map::new();
-    for (name, algorithm) in [
-        ("zstd", cbsf::Algorithm::Zstd),
-        ("deflate", cbsf::Algorithm::Deflate),
-    ] {
-        let vector = &committed["cbsfCompressed"][name];
-        let plain = STANDARD
-            .decode(vector["plainBase64"].as_str().unwrap())
-            .unwrap();
-        // 256 bytes over a ~1 KiB plaintext is FOUR frames, each compressed on
-        // its own — a one-frame vector would not prove that a compressed
-        // object's directory and content address are still over the PLAINTEXT.
-        // v0's fixture never wrote this number down; the regenerated one does.
-        let frame_size = vector
-            .get("frameSize")
-            .and_then(Value::as_u64)
-            .unwrap_or(256) as usize;
-        compressed.insert(
-            name.to_owned(),
-            serde_json::json!({
-                "algorithm": vector["algorithm"],
-                "frameSize": frame_size,
-                "plainBase64": vector["plainBase64"],
-                "sealedBase64": STANDARD.encode(
-                    cbsf::seal_object(&cbsf_key, &plain, frame_size, algorithm).unwrap(),
-                ),
-            }),
-        );
-    }
-
     let wal = &committed["wal"];
     let master = bytes32(wal["masterKeyHex"].as_str().unwrap());
     let vault_id = wal["vaultId"].as_str().unwrap();
@@ -232,15 +153,6 @@ fn regenerate(committed: &Value) -> Value {
 
     serde_json::json!({
         "schema": committed["schema"],
-        "cbsf": {
-            "keyHex": committed["cbsf"]["keyHex"],
-            "plainBase64": committed["cbsf"]["plainBase64"],
-            "frameSize": frame_size,
-            "sealedBase64": STANDARD.encode(
-                cbsf::seal_stored_object(&cbsf_key, &plain, frame_size).unwrap(),
-            ),
-        },
-        "cbsfCompressed": Value::Object(compressed),
         "wal": {
             "masterKeyHex": wal["masterKeyHex"],
             "dataKeyHex": hex::encode(data_key),

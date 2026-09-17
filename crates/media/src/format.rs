@@ -1,5 +1,24 @@
 // First-party MIT code (#1020, D-1020-R1). The hash and the KDF are BLAKE3
 // (#1025 S4, D-1025-S4-1/-3).
+//
+// SUPERSEDED IN PART BY `centraid-object/1` (#1029 §4).
+//
+// `content_hash_hex`, `canonical_json`, `derive_bytes` and `derive_data_key`
+// are live and stay. The four seals below — `seal_wal_segment`,
+// `open_wal_segment`, `seal_snapshot_manifest`, `open_snapshot_manifest`, and
+// the `derive_nonce`/`seal_aes_gcm`/`open_aes_gcm` primitives they are built
+// from — are the WAL-segment seal and the manifest seal that `crate::object`
+// replaces, and they carry the defect it exists to close: `derive_nonce`
+// derives an AES-GCM nonce from an ADDRESS, which is safe only if one address
+// always maps to one set of bytes. It does not (Reference A, B9), so these
+// have nonce reuse under a single key and must not acquire a new caller.
+//
+// They are still here for one reason: their only callers are
+// `crates/vault/src/backup/{wal,manifest}.rs`, which the capture lane owns and
+// is rewriting onto `centraid-object/1`. Deleting them from under that lane
+// would be an edit to its files. They go when its rewrite lands; nothing else
+// in the workspace calls them (`grep -rn 'seal_wal_segment\|seal_snapshot_manifest'
+// crates/ --include=*.rs`).
 
 use aes_gcm::{
     Aes256Gcm, KeyInit,

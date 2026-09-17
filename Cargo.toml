@@ -131,6 +131,18 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # `hkdf` and `hmac`, both over SHA-256 — are gone: ONE HASH (#1025 S4,
 # D-1025-S4-1), and `blake3` carries `derive_key` and `keyed_hash` itself.
 aes-gcm = "0.11"
+# XChaCha20-Poly1305, the AEAD `centraid-object/1` is built from (#1029 §4).
+#
+# It sits BESIDE `aes-gcm` rather than replacing it: `aes-gcm` still serves the
+# v0-derived seals `crates/vault/src/backup` has not yet been moved off, and a
+# crate that is only half-retired is a crate that is still declared. What this
+# one buys is the 24-byte nonce. `centraid-object/1` draws every nonce from the
+# operating system and never from an address (the defect B9 names), and a
+# 96-bit random nonce has a birthday bound worth arguing about while a 192-bit
+# one does not — "draw it at random" becomes a design rather than a budget.
+# Like `aes-gcm`, a major bump here is a re-keying event to be proven against
+# `contracts/crypto/object-vectors.json`, never routine housekeeping.
+chacha20poly1305 = "0.11"
 ryu-js = "1.0.3"
 scrypt = "0.12"
 subtle = "2"
