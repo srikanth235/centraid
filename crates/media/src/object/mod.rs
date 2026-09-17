@@ -721,7 +721,7 @@ fn open_body(
                     reason: "chunk length",
                 }
             })?) as usize;
-        if length < TAG_BYTES || length > CHUNK_BYTES + TAG_BYTES {
+        if !(TAG_BYTES..=CHUNK_BYTES + TAG_BYTES).contains(&length) {
             return Err(ObjectError::Malformed {
                 reason: "a chunk claims a length no chunk can have",
             });

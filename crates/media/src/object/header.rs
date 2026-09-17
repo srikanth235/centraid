@@ -194,8 +194,10 @@ pub struct Header {
     /// AAD — different even when they share a key.
     pub salt: [u8; SALT_BYTES],
     /// BLAKE3 of the zstd dictionary the body was compressed against, all-zero
-    /// when `compressed` is false. **BLAKE3 and not SHA-256**: a dictionary id
-    /// is a name this repository defines, so ONE HASH binds it.
+    /// when `compressed` is false. **BLAKE3**, like every other name this
+    /// repository defines for itself: a dictionary id is one of those, so ONE
+    /// HASH binds it and `W0.5-R1`'s carve-out for somebody else's protocol
+    /// does not reach here.
     pub dictionary_id: [u8; 32],
     /// The AEAD-wrapped content key, empty when the key lives in the vault's
     /// blob-custody row instead.
