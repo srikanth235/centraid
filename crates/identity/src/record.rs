@@ -203,7 +203,9 @@ pub enum RecordError {
         source: CertificateError,
     },
     /// An entry does not fit in one DNS character string.
-    #[error("the `{entry}=` entry is {bytes} bytes and a DNS character string holds {MAX_CHARACTER_STRING}")]
+    #[error(
+        "the `{entry}=` entry is {bytes} bytes and a DNS character string holds {MAX_CHARACTER_STRING}"
+    )]
     EntryTooLong {
         /// The entry.
         entry: &'static str,
@@ -478,7 +480,11 @@ fn entries(packet: &SignedPacket) -> Vec<(String, String)> {
 }
 
 /// Exactly one value for `entry`, or a typed refusal naming the key.
-fn one(entries: &[(String, String)], key: &str, entry: &'static str) -> Result<String, RecordError> {
+fn one(
+    entries: &[(String, String)],
+    key: &str,
+    entry: &'static str,
+) -> Result<String, RecordError> {
     let mut matching = entries.iter().filter(|(name, _)| name == entry);
     let first = matching.next().ok_or_else(|| RecordError::MissingEntry {
         key: key.to_owned(),
@@ -646,7 +652,10 @@ mod tests {
         trust.accept(new.certificate()).expect("the restore");
         assert_eq!(
             trust.accept(read.certificate()),
-            Err(CertificateError::Superseded { offered: 4, seen: 5 }),
+            Err(CertificateError::Superseded {
+                offered: 4,
+                seen: 5
+            }),
             "the record layer reads it; DeviceTrust is what refuses it"
         );
         assert_eq!(trust.trusted_device(), Some(&new_device.public()));
