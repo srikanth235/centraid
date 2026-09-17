@@ -76,10 +76,18 @@ serde = { version = "1", features = ["derive"] }
 # are parsed back on every apply, so a drifting REAL is a seat whose latitude,
 # or exchange rate, is quietly not the gateway's.
 serde_json = { version = "1", features = ["float_roundtrip"] }
-# SHA-256 SURVIVES IN EXACTLY ONE PLACE (#1025 S4, D-1025-S4-5): `crates/xtask`,
-# whose artifact key feeds GitHub Actions' cache and whose CI lint reads
-# Subresource Integrity attributes. Both are somebody else's protocol. No crate
-# under `crates/` other than `xtask` may depend on this.
+# SHA-256/SHA-512 SURVIVE IN EXACTLY TWO PLACES (#1025 S4, D-1025-S4-5; W0.5-R1,
+# #1029): `crates/xtask`, whose artifact key feeds GitHub Actions' cache and
+# whose CI lint reads Subresource Integrity attributes, and `crates/identity`,
+# whose BIP39 seed (PBKDF2-HMAC-SHA512), SLIP-0010 derivation (HMAC-SHA512) and
+# HPKE base mode (RFC 9180's HKDF-SHA256) are fixed by their own specifications
+# and cannot be respelled in BLAKE3 without leaving the standard. Both are
+# somebody else's protocol; `blake3` remains ONE HASH for everything this repo
+# defines itself. No crate under `crates/` other than `xtask` and `identity`
+# may depend on `sha2` or `hmac`. W0.5-R1 is a ruling put to the owner with a
+# recommendation, not yet a `docs/decisions.md` supersession of D-1025-S4-5
+# (that entry is W9's).
+hmac = "0.13"
 sha2 = "0.11"
 thiserror = "2"
 tracing = "0.1"
@@ -169,6 +177,51 @@ url = "2.5"
 # be the one place "one hash" bought an attacker throughput. v0's
 # PBKDF2-SHA-256 at 600,000 rounds is superseded; `pbkdf2` leaves the graph.
 argon2 = "0.6"
+
+# Wave 0.5 lane A — `crates/identity`: the 24-word phrase, SLIP-0010 hardened
+# derivation, device certificates and HPKE base mode (#1029 §0, §4).
+#
+# `bip39` mints and validates the 24-word recovery phrase and derives its
+# 64-byte seed (PBKDF2-HMAC-SHA512, BIP39's own spec — W0.5-R1). Default
+# features only: this crate reaches for the seed and the English wordlist, not
+# `bip39`'s own `rand` convenience (a version-mismatched `rand_core` next to
+# the workspace's `rand 0.9`), so entropy is drawn from `rand` and handed in as
+# bytes.
+bip39 = "3"
+# `ed25519-dalek` signs the account key, the vault identity key and device
+# certificates. Default features (`fast`, `zeroize`) are enough: every key
+# here is built from 32 bytes this crate already derived or generated, never
+# from `SigningKey::generate`, so the optional `rand_core` feature (pinned to
+# `rand_core 0.10`, a second major version next to the workspace's `rand 0.9`)
+# is never reached for.
+ed25519-dalek = "3"
+# `x25519-dalek` is the box key's own type — SLIP-0010 derives its 32 raw
+# bytes as an independent leaf (never a conversion of the Ed25519 identity
+# key, Reference B "Keys and crypto"). `static_secrets` is the feature gate
+# `StaticSecret` lives behind; `precomputed-tables` (the default's speed/size
+# trade for repeated scalar multiplication) is skipped because sealing a
+# mailbox is not a hot path.
+x25519-dalek = { version = "3", default-features = false, features = [
+  "static_secrets",
+  "zeroize",
+] }
+# `hpke` is HPKE base mode over DHKEM(X25519, HKDF-SHA256) (RFC 9180,
+# W0.5-R1's third carve-out). Feature set is pared to the one ciphersuite this
+# product uses — `x25519` (the KEM; it pulls in `hkdfsha2`, the RFC's own
+# KDF), `aes` (AES-128-GCM, RFC 9180's `aead_id = 0x0001`), `alloc` (the
+# `Vec`-returning seal/open this crate calls) and `getrandom` (the ephemeral
+# encapsulation key, drawn once per seal — the one place this crate lets a
+# dependency touch the system RNG directly rather than going through
+# `rand`, because `hpke`'s convenience entry point is what keeps its
+# `rand_core 0.10` off this crate's own call sites entirely). The crate's
+# defaults additionally pull in `mlkem`, `chacha` and `shake` (a post-quantum
+# KEM, a second AEAD, three more hash families) that no ciphersuite here uses.
+hpke = { version = "0.14", default-features = false, features = [
+  "x25519",
+  "aes",
+  "alloc",
+  "getrandom",
+] }
 
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).
