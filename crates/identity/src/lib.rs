@@ -10,6 +10,7 @@
 //! | [`safety_number`] | the digits two people read to each other to confirm they hold each other's real key |
 //! | [`sealed_box`] | HPKE base mode to a box key — the primitive sealed mail and share invites are built from |
 //! | [`certificate`] | "identity key K certifies device D at epoch E", and the verifier that refuses a superseded one |
+//! | [`account`] | "vault V belongs to account A", and the signed listing a fresh phone restores from |
 //! | [`record`] | the signed pkarr record that makes a key findable: `mailbox=` and `cert=` under the identity key, `gateway=` under the account key |
 //!
 //! ## WHY THREE HASH FAMILIES LIVE IN THIS CRATE AND NOWHERE ELSE (W0.5-R1)
@@ -27,6 +28,7 @@
 //! **Do not spend this carve-out on anything else.** A digest inside this crate
 //! that is not pinned by a published specification is `blake3`.
 
+pub mod account;
 pub mod certificate;
 pub mod derive;
 pub mod phrase;
@@ -34,16 +36,20 @@ pub mod record;
 pub mod safety_number;
 pub mod sealed_box;
 
+pub use account::{
+    AccountError, VAULT_CLAIM_BYTES, VAULT_CLAIM_CONTEXT, VAULT_LISTING_CONTEXT, VaultClaim,
+    VaultListing,
+};
 pub use certificate::{
     CERTIFICATE_CONTEXT, CertificateError, DeviceCertificate, DeviceKey, DeviceTrust, Epoch,
-};
-pub use record::{
-    AccountRecord, CERT_ENTRY, GATEWAY_ENTRY, GatewayUrl, IdentityRecord, MAILBOX_ENTRY,
-    RECORD_NAME, RECORD_TTL_SECONDS, RecordError,
 };
 pub use derive::{
     AccountKey, BoxKey, DeriveError, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey,
 };
 pub use phrase::{PhraseError, RecoveryPhrase, Seed};
+pub use record::{
+    AccountRecord, CERT_ENTRY, GATEWAY_ENTRY, GatewayUrl, IdentityRecord, MAILBOX_ENTRY,
+    RECORD_NAME, RECORD_TTL_SECONDS, RecordError,
+};
 pub use safety_number::{SAFETY_NUMBER_DIGITS, SAFETY_NUMBER_GROUP, SafetyNumber, safety_number};
 pub use sealed_box::{AssociatedData, SealError, SealedBox};
