@@ -253,6 +253,13 @@ impl Vault {
         // The busy timeout has to be set on every connection or a second writer
         // fails instantly instead of waiting.
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
+        // `SQLITE_FCNTL_PERSIST_WAL`, WHEN A HOST HAS INSTALLED IT (#1029 W5,
+        // hand-off 5). A file control and not a pragma, so it needs
+        // `sqlite3_file_control` and therefore unsafe, which this crate
+        // forbids: the call lives in `crates/core-ffi` and plugs in here.
+        // `crate::wal_persistence` has the whole argument, including what it
+        // adds over `NO_CKPT_ON_CLOSE` above and what W5 measured.
+        crate::wal_persistence::apply(connection);
         Ok(())
     }
 

@@ -38,6 +38,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod marshal;
+pub mod wal;
 
 use std::panic::AssertUnwindSafe;
 
@@ -133,6 +134,14 @@ pub unsafe extern "C" fn centraid_open(
     let Some(bytes) = (unsafe { marshal::slice_of(config, len) }) else {
         return CENTRAID_BAD_ARGUMENT;
     };
+    // THE `-wal` SIDECAR PERSISTS, AND THE C CALL FOR IT LIVES IN THIS CRATE
+    // (#1029 W5, hand-off 5). Installed on the way in rather than at library
+    // load: there is no load hook in a `cdylib` a shell dlopens, and `open` is
+    // the one door every vault on this device comes through. Idempotent — the
+    // second call answers `false` and changes nothing. See
+    // `centraid_vault::wal_persistence` for what it adds over
+    // `SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE` and what W5 measured.
+    centraid_vault::wal_persistence::install(wal::persist);
     // The panic barrier is OUTSIDE every allocation this call makes, so a panic
     // in the middle leaks nothing the caller was told about: `out` is written
     // only on the success path.
