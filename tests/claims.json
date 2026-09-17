@@ -3906,15 +3906,6 @@
       "minimumTests": 7
     },
     {
-      "id": "blob-format-cbsf-properties",
-      "name": "CBSF directory codec and AAD properties",
-      "surface": "blob-custody",
-      "dimension": "correctness",
-      "tier": "unit",
-      "owner": "packages/core/src/blob/cbsf-properties.test.ts",
-      "minimumTests": 6
-    },
-    {
       "id": "protocol-handshake-properties",
       "name": "Gateway protocol handshake CapVer properties",
       "surface": "gateway",

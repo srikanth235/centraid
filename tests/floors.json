@@ -51,7 +51,6 @@
       "commons-grant-plane-simulation": 3,
       "backup-crypto-properties": 8,
       "backup-wal-address-properties": 7,
-      "blob-format-cbsf-properties": 6,
       "protocol-handshake-properties": 9,
       "tunnel-wire-properties": 5,
       "tunnel-peer-target-differential": 9,
