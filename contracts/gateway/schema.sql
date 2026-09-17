@@ -112,6 +112,46 @@ CREATE TABLE IF NOT EXISTS generation (
   PRIMARY KEY (vault_key, generation)
 ) STRICT;
 
+-- ------------------------------------------------------------------ bases --
+--
+-- THE BASE IS THE UNIT OF RETENTION (F10), and a base is SEVERAL objects — the
+-- `base`-kind 4 MiB page ranges one commit brought. The floor, the coverage
+-- window and the size guard are all defined over the group, not over its
+-- members, so the group has to be a row: `object.generation` cannot stand in
+-- for it, because a phone may commit many bases under one generation id (the
+-- retention abuse run in `gateway-core`'s conformance suite lands fifty of
+-- them under one) and a generation is an open-ended append stream rather than
+-- a point in time.
+--
+-- `base_id` is the commit's manifest head, which is already a unique name: a
+-- counter invented for this would be a second id to keep in step.
+-- `received_at_ms` is the GATEWAY'S OWN receipt time, which is the whole of
+-- F10's defence, and `padded_size` is the summed padded size of the group — the
+-- only census a blind store can take (F4).
+CREATE TABLE IF NOT EXISTS base (
+  vault_key      BLOB NOT NULL REFERENCES vault(vault_key) ON DELETE CASCADE,
+  base_id        BLOB NOT NULL,
+  generation     TEXT NOT NULL,
+  received_at_ms INTEGER NOT NULL,
+  padded_size    INTEGER NOT NULL,
+  tombstoned     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (vault_key, base_id)
+) STRICT;
+
+-- Which objects one base is made of. `ordinal` keeps the group's order stable
+-- across adapters, so two gateways answering the same restore hand the phone
+-- the same list rather than whichever order their store iterates in.
+CREATE TABLE IF NOT EXISTS base_object (
+  vault_key   BLOB NOT NULL,
+  base_id     BLOB NOT NULL,
+  object_name BLOB NOT NULL,
+  ordinal     INTEGER NOT NULL,
+  PRIMARY KEY (vault_key, base_id, object_name)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS base_object_by_object
+  ON base_object (vault_key, object_name);
+
 -- ---------------------------------------------------------- delete ledger --
 --
 -- AT MOST ONE CLIENT-DIRECTED BASE TOMBSTONE PER VAULT PER DAY (F4). A stolen
@@ -123,6 +163,18 @@ CREATE TABLE IF NOT EXISTS client_delete (
   kind         TEXT NOT NULL,
   deleted_at_ms INTEGER NOT NULL,
   PRIMARY KEY (vault_key, object_name)
+) STRICT;
+
+-- The rate limit's own memory, and it is a SEPARATE row from the ledger above
+-- on purpose: `StateStore::record_client_base_delete(vault, at)` carries no
+-- object name, because the rule does not need one — what it asks is "when did
+-- this vault last tombstone a base", once per vault. `client_delete` is the
+-- per-object audit ledger and is keyed by name; this is the counter the rule
+-- reads. Folding them would mean either inventing a name the port never sent,
+-- or making the rule scan a growing table for a MAX on every delete.
+CREATE TABLE IF NOT EXISTS client_base_delete (
+  vault_key     BLOB PRIMARY KEY NOT NULL REFERENCES vault(vault_key) ON DELETE CASCADE,
+  deleted_at_ms INTEGER NOT NULL
 ) STRICT;
 
 -- --------------------------------------------------------------- mailbox --

@@ -339,6 +339,20 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          is BLAKE3 because THAT digest is ours",
     ),
     (
+        "gateway-server/src/bytes/sigv4.rs",
+        "AWS SIGNATURE VERSION 4 (#1029 §3), in the entry above's shape and with \
+         the same boundary. An object store's API is not ours: SigV4 is defined \
+         as an HMAC-SHA256 chain over a canonical request whose payload is \
+         identified by its SHA-256, and a signature restated in BLAKE3 would not \
+         open a bucket — it would be a protocol no store implements. The BOUNDARY \
+         is the point: this is the ONLY module in `crates/gateway-server` that \
+         names the function; the two header names it spells \
+         (`x-amz-content-sha256`, `x-amz-checksum-sha256`) are the store's own \
+         and are declared here so that no other file has to spell them; every \
+         object NAME this server handles is BLAKE3; and the request body digest \
+         it verifies is BLAKE3 because THAT digest is ours",
+    ),
+    (
         "xtask/src/artifact.rs",
         "`cargo xtask artifact-key` hashes the tree into a GitHub Actions cache \
          key. It names nothing inside a vault and GitHub's cache is not ours",

@@ -306,6 +306,48 @@ fn function_name(signature: &str) -> Option<String> {
 // Rule 3 — no crate opens a listening TCP socket
 // ---------------------------------------------------------------------------
 
+/// THE ONE FILE THAT IS ALLOWED TO BIND, AND WHY.
+///
+/// The rule as #1020 wrote it said the blob door was "the only listener the
+/// product may ever have". That was true of the product #1020 described — a
+/// phone, a desktop shell and a browser Companion, all of them clients over
+/// iroh QUIC. #1029 §3 adds something #1020 had no word for: **a gateway
+/// anyone can self-host**, whose entire job is to be the thing a phone dials.
+/// A gateway that did not listen would not be a gateway, so the rule's subject
+/// grew and its wording had to say so.
+///
+/// **The rule was not weakened, it was pointed.** It still scans every crate,
+/// it still scans every other file inside `crates/gateway-server`, and the
+/// exemption is ONE FILE rather than a crate or a directory — a second
+/// listener, in this crate or any other, is still a finding. That is a tighter
+/// statement than "no crate listens" was, because it names where the socket is
+/// instead of only asserting there is none.
+///
+/// A file lands here only with a reason, and
+/// [`tests::the_listener_allowlist_has_no_dead_entries`] fails if an entry
+/// stops binding — an exemption nobody is looking at is how the next one gets
+/// added quietly.
+const LISTENER_ALLOWED: &[(&str, &str)] = &[
+    (
+        "crates/gateway-server/src/serve.rs",
+        "THE STANDALONE GATEWAY'S LISTENER (#1029 §3). One protocol, two \
+         deployments: the hosted one is a Cloudflare Worker and this one is a \
+         server a household runs, and a phone cannot tell which it is talking \
+         to. The bind is confined to this file, which accepts connections and \
+         hands them to `crates/gateway-server/src/http.rs` — it decides nothing \
+         about a request, and every rule it serves is `crates/gateway-core`'s",
+    ),
+    (
+        "crates/gateway-server/tests/common/mod.rs",
+        "A TEST DOUBLE FOR AN S3 BUCKET, in a `tests/` tree that ships in no \
+         artifact. The conformance suite runs against the S3 code path — the \
+         SigV4 signature, the attestation header, the HEAD that carries one and \
+         the GET that does not — and a mock `ByteStore` would exercise the enum \
+         arm and skip the protocol, which is exactly where the two checksum \
+         modes differ. That is only meaningful over a real socket (#1029 §3)",
+    ),
+];
+
 pub fn no_listening_socket(root: &Path) -> RuleReport {
     const NAME: &str = "no-listening-socket";
     let crates = root.join("crates");
@@ -315,11 +357,16 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
     let files = source_files(&crates, "rs");
     let mut scanned = 0usize;
     let mut exempt = 0usize;
+    let mut allowed = 0usize;
     let mut findings = Vec::new();
     for file in &files {
         let rel = relative(root, file);
         if rel.starts_with(RULE_RUNNER) {
             exempt += 1;
+            continue;
+        }
+        if LISTENER_ALLOWED.iter().any(|(path, _)| *path == rel) {
+            allowed += 1;
             continue;
         }
         scanned += 1;
@@ -328,12 +375,18 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
         };
         for (line, pattern) in listener_hits(&source) {
             findings.push(format!(
-                "{rel}:{line}: `{pattern}` outside a `#[cfg(feature = \"blob-door\")]` block. iroh QUIC is the transport and the blob door is the only listener the product may ever have, off by default until wave 3 rules on it (#1020)"
+                "{rel}:{line}: `{pattern}` outside a `#[cfg(feature = \"blob-door\")]` block. iroh QUIC is the transport, and the only listeners this product has are the blob door (off by default) and the standalone gateway's, which is confined to {} (#1020, #1029 §3)",
+                LISTENER_ALLOWED
+                    .iter()
+                    .map(|(path, _)| *path)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
     }
-    RuleReport::applied(NAME, scanned, findings)
-        .with_note(format!(" ({exempt} in the rule runner)"))
+    RuleReport::applied(NAME, scanned, findings).with_note(format!(
+        " ({exempt} in the rule runner, {allowed} named in the listener allowlist)"
+    ))
 }
 
 /// Listener constructions that are NOT inside a `blob-door`-gated item.
@@ -747,6 +800,49 @@ fn door() {
         let report = no_listening_socket(&root);
         assert_eq!(report.findings.len(), 1);
         assert!(report.findings[0].contains("crates/net/src/lib.rs:2"));
+    }
+
+    /// THE ALLOWLIST IS ONE FILE, NOT A CRATE. A second listener inside
+    /// `crates/gateway-server` is still a finding, which is the property that
+    /// makes this a pointed rule rather than a relaxed one.
+    #[test]
+    fn a_second_listener_in_the_gateway_crate_is_still_caught() {
+        let root = fixture_dir("listener-gateway");
+        write(
+            &root,
+            "crates/gateway-server/src/serve.rs",
+            "fn serve() {\n    let _ = tokio::net::TcpListener::bind(\"0.0.0.0:1\");\n}\n",
+        );
+        write(
+            &root,
+            "crates/gateway-server/src/sneaky.rs",
+            "fn other() {\n    let _ = TcpListener::bind(\"0.0.0.0:2\");\n}\n",
+        );
+        let report = no_listening_socket(&root);
+        assert_eq!(report.findings.len(), 1, "{:?}", report.findings);
+        assert!(
+            report.findings[0].contains("crates/gateway-server/src/sneaky.rs:2"),
+            "{:?}",
+            report.findings
+        );
+    }
+
+    /// An allowlisted file that stopped binding is an exemption nobody is
+    /// looking at, which is how the next one gets added quietly.
+    #[test]
+    fn the_listener_allowlist_has_no_dead_entries() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("the workspace root resolves");
+        for (path, reason) in LISTENER_ALLOWED {
+            let source = fs::read_to_string(root.join(path))
+                .unwrap_or_else(|error| panic!("{path} is allowlisted and unreadable: {error}"));
+            assert!(
+                !listener_hits(&source).is_empty(),
+                "{path} no longer opens a listener; drop its allowlist entry ({reason})"
+            );
+        }
     }
 
     #[test]
