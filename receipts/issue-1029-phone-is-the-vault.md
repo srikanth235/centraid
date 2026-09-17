@@ -227,3 +227,205 @@ and `crates/core-ffi/tests/symbols.rs::exactly_five_symbols_are_exported` passes
 - `node .governance/law/run.mjs --brief-digest d58a237d3db1` → 10 rules, no findings
 - `node scripts/check-ledgers.mjs --base c48251ac` → only the expired quarantine row (`cargo xtask gate --lane ledgers` cannot run in a worktree: "no merge base found")
 - `cargo xtask gate --profile local` → FAIL on fmt, clippy, test, rules, ledgers, every one of them a base failure in the table above. Budget line: `BUDGET cold ok — 207.0s of the 3200s coldLocalProfileSeconds ceiling in contracts/ledgers/compile-time.json`
+
+## W2 — the seat plane leaves
+
+Branch `claude/1029-w2-deletions`, base `7a618ef4`. Six commits,
+**358 files, +1,750 / −154,113**.
+
+W1's worker was right and its finding decided this lane's shape: `crates/seat-link`
+exists only to implement `centraid_core::link::SeatNetwork`, whose signatures name
+`centraid_seat` types, so core could not stop naming the seat while that trait lived in
+core and that crate was in the workspace. The deletion and the seat cut are one act, and
+W1-1, W1-2 and W1-4 are folded in here.
+
+| Commit | What |
+| --- | --- |
+| `d30f32c5` | `abi-five-symbols` counted the SAFETY comment as an attribute — a detector bug, fixed with a regression test |
+| `28381e1d` | **the atom**: `crates/{seat,seat-link,sim}`, the iroh half of `crates/net`, `centraid_core::{link,intent}`, `Role`, and `crates/centraid`'s seat lane. −43,342 |
+| `132b3170` | the log plane, the ledger, the assistant, the automations, `enrich.*`; the `update_hook` and the census. −28,673 |
+| `3fe8faf5` | `desktop/`, `extension/`, their release lanes, eight gate steps, `Principal::{Agent,Automation}`. −79,823 |
+| `61c5273e` | `log.proto`, `intent.proto`, thirteen envelope arms, `crates/protocol` cut to three modules |
+| `2683e9f2` | the `clippy` lane, red on the base commit in four layers |
+
+### Every deleted path
+
+**Crates, whole:** `crates/seat`, `crates/seat-link`, `crates/sim`, `crates/assist`,
+`crates/automations` — with `crates/net` reduced to `src/lib.rs` + `src/ticket.rs`
+(`allowlist.rs`, `endpoint.rs`, `error.rs`, `pairing.rs`, `tests/pair_and_stream.rs`) and
+`crates/protocol` reduced to `error`, `session`, `version` (`alpn.rs`, `framing.rs`,
+`handshake.rs`, `transport.rs`, `wire.rs`, `tests/framing_golden.rs`,
+`tests/framing_properties.rs`).
+
+**`crates/core`:** `src/link.rs`, `src/intent.rs`.
+
+**`crates/vault`:** `src/log/{apply,capture,door,store}.rs`, `src/ledger/` in full
+(`archive`, `automation_cursor`, `automation_ingress`, `automation_state`, `consent`,
+`health`, `mod`, `schema`, `sql_guard`, `store`), `src/converge.rs`,
+`src/custody/rotation_scenario.rs`, `src/commands/enrich.rs`;
+`tests/{automation_plane,doors,gates,ledger,log_plane,prediction_parity}.rs`.
+
+**`crates/centraid`:** `src/allowlist.rs`, `src/seat_lane.rs`, `src/snapshots.rs`,
+`src/tails.rs`, `src/cmd/{assist,automations,capture,mcp}.rs`, `src/cmd/native_host.rs`
++ `src/cmd/native_host/{fold,methods,relay,stage}.rs`, `src/cmd/seat/`
+(`blob`, `catalogue`, `core_link`, `local`, `locker`, `mod`, `peer`, `server`, `state`);
+`tests/{byte_lane,bytes_upward,mcp_stdio,native_host,no_listener,seat_bootstrap,
+seat_identity,seat_lane,seat_offline,seat_queue_write,seat_socket,seat_tail,
+walking_skeleton}.rs`.
+
+**Elsewhere:** `crates/blobs/src/lane.rs`, `crates/blobs/tests/windows.rs`,
+`crates/xtask/src/smoke.rs`,
+`crates/api-proto/proto/centraid/core/v1/{intent,log}.proto`, `desktop/` (53 files),
+`extension/` (36 files), `contracts/{applier,assist,automations,desktop,extension}/*`,
+`contracts/protocol/framing-golden.json`, `contracts/sim/failing-seeds.json`,
+`docs/cron-timezone.md`,
+`.github/workflows/{lane-release-desktop,lane-release-extension,oauth-worker}.yml`.
+
+### The greps that proved them dead
+
+| Claim | Command and answer |
+| --- | --- |
+| core no longer names the seat | `grep -rn 'centraid_seat' crates/core/src crates/core-ffi/src` → **1 hit, a comment** (`events.rs:231`, explaining what `ChangeSink` was) |
+| `Role` is gone | `grep -rn 'enum Role\|Role::' crates/ --include=*.rs` → **1 hit, a comment** (`config.rs:9`) |
+| `attach_network` is gone | `grep -rn 'attach_network' --include=*.rs crates/` → **1 hit, a comment** (`core-ffi/src/lib.rs:141`) |
+| `ChangeSink` had one implementor | `grep -rn 'ChangeSink for'` → `seat/src/sync.rs` (`NoChanges`, a test double) and `core/src/events.rs` (`ChangeFeed`). Every `&dyn ChangeSink` call site was in `seat-link/src/seat.rs`, `sim/src/world.rs`, `core/src/link.rs` or a seat test |
+| `crates/protocol`'s transport half is unused | `grep -rn 'protocol::framing\|protocol::wire\|protocol::alpn\|protocol::handshake\|protocol::transport' --include=*.rs crates/` outside the crate → **empty**. `session` and `version` are read by `crates/core`'s call door |
+| `core::intent` had two consumers | both deleted: `handle.rs`'s `submit_intent` and `centraid/src/seat_lane.rs:642` |
+| `blobs::{fetch,serve_stream}` had two consumers | `seat_lane.rs:331,682` and `centraid/tests/byte_lane.rs` |
+| `WalCapture::tick` had one driver | `run::gateway`'s capture task. `backup.rs`'s `pending_tail`/`retire_pending` were the readers, and read a spool nothing would write |
+| `api::reveal`, `api::parked`, `Handle::devices_list` | `grep -rn 'api::reveal\|api::parked\|RevealRoute'` outside `api.rs` → **empty** |
+| the nine `enrich.*` commands | one caller each, the enrichment worker in `crates/automations` over `crates/assist`; the Photos action `request-enrichment` queued a row for it |
+| `standing_answer_id` | its `principal_kind = 'automation'` predicate matched only `Principal::Automation`, whose producer is deleted |
+
+### The three re-judgments (decisions, not deferrals)
+
+**1. `crates/seat/src/bytes.rs` — DELETED.** Its public surface is `needed_blobs`, `holds`,
+`knows`, `asset_rows_for`. `grep -rn 'seat::bytes\|asset_rows_for'` outside `crates/seat`
+found exactly three hits: `core/src/handle.rs:959,960` (`holds`/`knows`, inside
+`seat_bytes_fetch` — the seat-only "fetch this one now" command, deleted) and one comment
+in `core/src/events.rs`. `needed_blobs` fed `centraid_blobs::plan` over the seat's window,
+which is deleted. Reference A marked it "re-judge in W6"; W6 rewrites blob naming against
+the object plane and will write its own query, so keeping a dead one would only be
+something to disprove.
+
+**2. `crates/vault/src/devices.rs` and the `access_device*` rows — SPLIT.** The two
+SURFACES are deleted here: `Request::DevicesList` and `Request::DevicesRevoke` leave the
+wire and `Handle::devices_list` goes with them. `devices.rs` itself STAYS for now, and the
+reason is a live consumer rather than deference: `backup/drill.rs:133,368` uses
+`enrol_device` to build the drill's corpus, and `backup/base.rs`'s custody test asserts
+`access_device_secret` survives a base copy — which is #1029's B1 and the property W3
+seals. The rows are on the schema band W2-5 did not land (below), and the honest place to
+delete file and rows together is that slice.
+
+**3. `crates/vault/src/commands/enrich.rs` (question 9) — DELETED IN FULL.** By consumer:
+`request_enrichment` queued a row for a worker; `record_consent` recorded a harness's
+egress consent; `mark_requests_drained` and `record_target_failure` were the worker's
+bookkeeping; `upsert_embedding`, `upsert_faces` and `rebuild_face_clusters` were its
+writes; `regenerate`/`regenerate_all` re-queued it. The worker is `crates/automations` over
+`crates/assist`, both deleted. The Photos action `request-enrichment` — "the only action in
+any app that writes to `enrich`" by its own comment — went with it. **This leaves a reader
+with no writer, and it is filed below rather than hidden.**
+
+### What was parked, and for whom
+
+- **`crates/net/src/ticket.rs` → W8.** Reference A moves it into `crates/identity`; a
+  sibling lane held that crate open for this lane's whole run. It is left where it is with
+  its crate reduced to it, documented in `net/src/lib.rs` as a park. `PairTicket` stays in
+  `pair.proto` for the same reason — it is the parent of the §7 link ticket.
+- **The capture hook seam → W3.** `log/guard.rs` is `BEGIN IMMEDIATE` → body → `COMMIT`
+  and no spool is built.
+- **The share tables → W8**, per the ruling.
+
+### Rulings spent
+
+- **D-1020-B7** (`attach_network`, "the core is handed a network") — there is no network.
+- **D-1020-C1/C8** (the transport trait, the durable allowlist) — no transport, no allowlist.
+- **D-1020-D1-5** survives in shape: the commit pair is still a guard whose ordering cannot
+  be forgotten; steps 2, 4 and 5 of it are gone.
+- **D-1020-D1-7** ("one snapshot, three uses") — one use left, and `backup/base.rs`'s
+  contradiction of it resolves by the two builders becoming the same function. W3 merges them.
+- **D-1020-D2-4** (the simulation is the primary sync proof) — no sync to prove.
+- **D-1020-CL9** (`local` excludes `crates/sim`) — no `crates/sim`.
+- **D-1020-AS3/AS6/AS7** (the ledger band, the prompt-injection gate, the harness surface),
+  **D-1020-AU5** (the automations client) — assistant and automations deleted.
+- **D-1020-F8/F10, D-1020-X11** (the desktop's pure cores, the Companion's programs) — §6.
+- **D-1020-G5** (the VPS release smoke) — its container ran `centraid gateway`.
+- **D-1020-L2/L3** (the reveal router) — the structural half survives in `SealedSubject`.
+- **D-1025-S1-1, S2-2, S2-4, S4-6, S5, S7-9, S7-13, S7-20, S7-40, S7-63** — every one is
+  about a seat's identity, window, overlay, tail or fetch.
+
+### Found, and not this lane's slice
+
+1. **`crates/apps/photos`'s face surfaces now read tables nothing writes.**
+   `faces.rs` and `photos.people.clusters` read `media_face_region` and
+   `media_face_cluster`, whose only writers were `enrich.upsert_faces` and
+   `enrich.rebuild_face_clusters`. **Question to the owner:** (a) delete the face surfaces
+   too, or (b) re-propose on-device face detection as their writer. **Recommendation: (b)
+   as a proposal**; deleting a whole product surface is past a deletion lane's remit.
+2. **The phone has no content store over the C ABI.** `SeatLink` opened `<vault>.bytes`
+   and handed it to `attach_bytes`; `centraid_open` no longer does, because `ByteStore::open`
+   is async and `ContentBytes` holds a tokio runtime handle that must outlive the core.
+   A core opened over the ABI holds text and refuses binary bytes, by name. **W6's**, and
+   `core-ffi/src/lib.rs` says so where `attach_network` used to be.
+3. **`backup/base.rs` and `snapshot.rs` now build the same artefact.** The sanitisation
+   that distinguished them existed for a phone ADOPTING a replica. **W3's**, with the seal.
+4. **`crates/vault/src/log/` is a stale module name** — it holds the commit guard and
+   `PRAGMA table_info` helpers. Renaming it is ~40 call sites of pure churn; **W9's**.
+5. **`Principal` is a one-variant enum**; collapsing it to a struct is a rename across every
+   `match` in `crates/vault`. **W9's.**
+6. **`tests/floors.json` still carries v0 desktop and automation journey floors.** Estate
+   file; a separate commit by rule, and not this lane's subject.
+
+### Not landed, and why
+
+- **W2-6's MOBILE HALF.** `TailResume`, `RadioResume`, `SyncWindowPolicy`, `WriteGate`,
+  `Replicas`, `GatewayLink`, `CoreRole` and the iOS replica states are untouched. The cut
+  reaches `HomeSession.kt`, `CameraRoll.kt`, `HomeBridge.kt`, `ScreenMachine.kt`,
+  `ChangeStream.kt`, `ScreenRuntime.kt`, `Shelf.kt`, `Enrolments.kt`, `MainActivity.kt`,
+  `ShellModel.swift` and `CentraidCore.kt`, and **this container cannot build the mobile
+  tree**: `./gradlew :shared:jvmTest` fails to resolve
+  `org.jetbrains.kotlin.multiplatform:2.4.20` and `com.squareup.wire:7.0.1` — Maven Central
+  answers `429 Too Many Requests` through the proxy, and `--offline` has no cache. A blind
+  Kotlin refactor of eleven files with no compiler is how a tree ends up broken with nobody
+  able to tell. `ChangeEvent.commit_seq` is deliberately left on the wire for the same
+  reason: the field leaves in the same act as its Kotlin and Swift readers.
+  `mobile/maestro/flows/cold-start-and-relaunch.yaml` does not exist on this base.
+- **W2-5's SCHEMA BAND.** `contracts/migrations/001_baseline.sql` is 6,914 lines and 139
+  tables, frozen, and checked against the v0 golden corpus by `baseline.rs` and
+  `baseline_corpus.rs`; the band Reference A names also reaches `contracts/schema/v0-registries.json`
+  and every app's readers. The protocol half of W2-5 landed; the schema half is a slice of
+  its own and is handed up rather than started. The `locker_item.connection_id` fix and
+  `commands/locker.rs:611,958` go with it — they depend on `sync_connection` leaving.
+
+### Verification
+
+`export CARGO_TARGET_DIR=/home/user/.cargo-target-w2` throughout.
+
+| Exit item | Result |
+| --- | --- |
+| 1 `cargo build --workspace` | **clean** |
+| 2 `cargo test -p centraid-core` | **74 + 2 + 1 green.** New: `a_command_that_writes_pushes_a_change_event_naming_the_table` |
+| 3 `cargo test -p centraid-vault` | **250 lib + every integration green except `one_hash`** (below). New: `tests/change_census.rs` (3), `log/guard.rs`'s shadow-table test, `log/identifiers.rs`'s two |
+| 4 `cargo test -p centraid-core-ffi` | **green**, `exactly_five_symbols_are_exported` included |
+| 5 `cargo test -p centraid --tests` | **green** |
+| 6 `grep -rn 'centraid_seat' crates/core/src crates/core-ffi/src` | 1 comment |
+| 7 `grep -rn 'enum Role\|Role::' crates/ --include=*.rs` | 1 comment |
+| 8 `grep -rn 'outbox\|replica_log\|automation\|assistant\|connector'` | only SQL against tables the schema band still carries, `backup/policy.rs`'s retention words, and prose. No Rust plane is left |
+| 9 `cargo xtask gate --lane fmt` | **PASS** |
+| 10 `cargo xtask gate --lane clippy` | **PASS** (it was red on base; `2683e9f2`) |
+| 11 `cargo xtask gate --lane rules` | **PASS**, `abi-five-symbols` clean |
+| 12 `cargo xtask gate --profile local` | FAIL on `test` (`one_hash`, below) and `ledgers` (cannot run in a worktree: "no merge base found"). Budget: 152.1 s warm against 120 s, **all of it `test`** at 124.8 s |
+| 13 `bun run check:push:static` | **4/4 green** |
+| 14 `node scripts/check-ledgers.mjs --base 7a618ef4` | **clean** — 19 sections across 5 ledgers |
+| 15 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
+
+**`one_hash`'s two remaining failures are red on `7a618ef4`**, verified by `git stash`:
+`vault/src/page.rs` writes a hash column and is not in `HASH_COLUMN_WRITERS`, and
+`crates/identity` names SHA-256 (RFC 9180's HKDF, in a crate a sibling lane held open all
+lane). This lane removed the SEVEN stale entries its own deletions created — six writers
+and `xtask/src/smoke.rs`'s exemption — which is what those tests ask for by name.
+
+**The `local` budget is over.** 152.1 s against 120 s, 124.8 s of it `test`. `run_tests`
+used to exclude `crates/sim` locally (D-1020-CL9) and now runs one unqualified
+`--workspace`; the crate is deleted, so the exclusion could not stay. The ledger row is
+`contracts/ledgers/gate-budgets.json` and moving it is the owner's call, not this lane's.
