@@ -187,7 +187,7 @@ pub enum ClientMessage {
     LockerEnrol { id: u64, passphrase: String },
     /// Open the Locker session. **Renderer only** — *a door that can raise the
     /// passphrase prompt is a door that can be used to phish it*
-    /// (`crates/seat/src/locker/mod.rs`), and the browser is the one caller
+    /// (`crates/core/src/locker/mod.rs`), and the browser is the one caller
     /// that must never be able to ask.
     LockerUnlock { id: u64, passphrase: String },
     /// Close it now, without waiting for the five-minute session to lapse.
@@ -200,7 +200,7 @@ pub enum ClientMessage {
     /// process that holds `K` behind the member's unlock and handed over with a
     /// 30-second life and a receipt. `page_origin` is the caller's claim and is
     /// **re-normalised and re-matched against the row's own stored policy** by
-    /// `centraid_seat::locker::fill_grant`, which is what makes a forged origin
+    /// `centraid_core::locker::fill_grant`, which is what makes a forged origin
     /// useless rather than merely discouraged.
     RevealForFill {
         id: u64,

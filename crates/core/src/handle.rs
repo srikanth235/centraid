@@ -346,7 +346,11 @@ fn window_from_wire(window: Option<&wire::SyncWindow>) -> crate::link::SyncWindo
 fn wrote(request: &wire::Request) -> bool {
     matches!(
         request.kind,
-        Some(wire::request::Kind::Command(_) | wire::request::Kind::Intent(_) | wire::request::Kind::Stage(_))
+        Some(
+            wire::request::Kind::Command(_)
+                | wire::request::Kind::Intent(_)
+                | wire::request::Kind::Stage(_)
+        )
     )
 }
 
@@ -2124,11 +2128,9 @@ impl Handle {
                     },
                 )))
             }
-            K::Command(command) => Ok(response(wire::response::Kind::Command(
-                self.with_vault(|vault| {
-                    crate::api::invoke(vault, &self.registry, &self.owner(), command)
-                })?,
-            ))),
+            K::Command(command) => Ok(response(wire::response::Kind::Command(self.with_vault(
+                |vault| crate::api::invoke(vault, &self.registry, &self.owner(), command),
+            )?))),
             K::Pair(pair) => Ok(response(wire::response::Kind::Pair(self.pair(pair)?))),
             // A SEAT QUEUES IT; A GATEWAY REFUSES IT (#1025 S5).
             //
@@ -2454,9 +2456,8 @@ impl Handle {
                 detail: "an intent needs the enrolled device it was submitted by".to_owned(),
             });
         }
-        let ran = self.with_vault(|vault| {
-            crate::intent::submit(vault, &self.registry, device_id, intent)
-        });
+        let ran = self
+            .with_vault(|vault| crate::intent::submit(vault, &self.registry, device_id, intent));
         // THE WATERMARK MOVED, AND A TAILING SEAT IS PARKED ON THIS (#1025 S2).
         // Rung even for a refused intent: a `conflict` answer is decided
         // against rows that were read, and a `denied` one writes an audit row
@@ -3144,7 +3145,10 @@ mod tests {
         let asked = std::time::Instant::now();
         let answer = handle.call(&log_request(10));
         let took = asked.elapsed();
-        assert!(answer.is_ok(), "a read during a tail was refused: {answer:?}");
+        assert!(
+            answer.is_ok(),
+            "a read during a tail was refused: {answer:?}"
+        );
         assert!(
             took < Duration::from_millis(500),
             "a read during an open tail took {took:?}; the tail is holding the vault"

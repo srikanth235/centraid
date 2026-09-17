@@ -871,7 +871,7 @@ impl FillRefusal {
 /// the app's half. The origin match runs here — defence in depth, over the
 /// vault's own stored policy, so a forged `page_origin` is refused by the row
 /// rather than by the caller — and the answer is an **address**, which
-/// `crates/seat::locker`'s `reveal_for_fill` turns into a value with a 30-second
+/// `crates/core::locker`'s `reveal_for_fill` turns into a value with a 30-second
 /// life and a receipt. An app crate that could return the password would be an
 /// app crate holding a secret, which is the thing W6-D2 forbids.
 #[derive(Debug, Clone, PartialEq, Eq)]

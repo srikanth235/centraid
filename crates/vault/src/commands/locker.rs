@@ -2552,7 +2552,7 @@ fn totp_code() -> CommandDefinition {
             //
             // The digits are computed by `crates/apps/locker::totp` over the
             // replica's own `otp_seed` cell, unwrapped by
-            // `crates/seat::locker` inside the reveal window.
+            // `crates/core::locker` inside the reveal window.
             let receipt_id = ctx.write_subject_receipt(
                 "reveal locker.totp_code",
                 ITEM_TYPE,

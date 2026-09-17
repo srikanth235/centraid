@@ -334,8 +334,6 @@ mod tests {
         );
     }
 
-
-
     #[test]
     fn every_rebootstrap_reason_has_a_wire_value_that_is_not_unspecified() {
         for reason in [

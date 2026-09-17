@@ -10,7 +10,7 @@
 //! base32, the counter, the dynamic truncation and the remaining-seconds
 //! arithmetic. A hash in an app crate is a hash whose collision behaviour
 //! nobody owns (this crate's own rule), so the primitive is injected —
-//! `crates/seat::locker` passes HMAC-SHA-1 — and the part ports actually get
+//! `crates/core::locker` passes HMAC-SHA-1 — and the part ports actually get
 //! wrong is the part that is under test here, against RFC 6238's own published
 //! vectors.
 //!
@@ -163,7 +163,7 @@ mod tests {
     /// RFC 4231's HMAC-SHA-1 is not available here, so the vectors below use a
     /// digest the test computes itself for the truncation, and a *fixed*
     /// digest for the RFC 6238 shape. The real primitive is wired and tested in
-    /// `crates/seat::locker`.
+    /// `crates/core::locker`.
     #[test]
     fn base32_accepts_both_v0_spellings_and_refuses_a_non_seed() {
         // `JBSWY3DPEHPK3PXP` is the canonical `Hello!\xDE\xAD\xBE\xEF`.

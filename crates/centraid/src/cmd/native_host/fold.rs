@@ -20,7 +20,7 @@
 //! with `tldts` and the Public Suffix List bundled into the extension. That is a
 //! third implementation of a security policy shipped inside the least trusted
 //! process in the chain, and it buys nothing now: the fill's decision is the
-//! **seat's** (`crates/seat::locker::fill_grant` matches against the row's own
+//! **seat's** (`crates/core::locker::fill_grant` matches against the row's own
 //! stored policy), so a candidate list the extension filtered differently would
 //! only ever show a login that then refuses to fill.
 //!

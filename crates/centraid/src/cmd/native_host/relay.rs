@@ -19,7 +19,7 @@
 //!
 //! `centraid native-host` may lock a seat and may never unlock one. *A door
 //! that can raise the passphrase prompt is a door that can be used to phish it*
-//! (`crates/seat/src/locker/mod.rs`), and a browser extension is the exact
+//! (`crates/core/src/locker/mod.rs`), and a browser extension is the exact
 //! caller that sentence is about. The seat enforces it too — `locker_unlock` is
 //! renderer-only there — so this refusal is the host being honest early rather
 //! than the boundary.

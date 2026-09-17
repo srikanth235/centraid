@@ -329,7 +329,7 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 /// | [`Role::Gateway`] | anything else | judged and revealed — a connector
 ///   token is host-readable **by design** (W6-D1) |
 /// | `Role::Seat` | `locker` | unwrapped **locally**, by
-///   `centraid_seat::locker`, behind the member's unlock |
+///   `crate::locker`, behind the member's unlock |
 ///
 /// A reveal is still **online-only** on a seat for the reason it always was: a
 /// mass reveal must never be queued, replayed, or answered from a durable

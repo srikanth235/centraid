@@ -1,5 +1,21 @@
-//! THE SEAT IS THE UNLOCK BOUNDARY — and the only place `K` becomes plaintext
-//! (#1020, D-1020-L3).
+//! THE DEVICE IS THE UNLOCK BOUNDARY — and the only place `K` becomes plaintext
+//! (#1020, D-1020-L3, restated by #1029 §1).
+//!
+//! ## Why this lives in `crates/core` now
+//!
+//! D-1020-L3 put it in `crates/seat` because the boundary was "not the
+//! gateway": a host that served other people's reads must never hold `K`, and
+//! the seat was the side of that split with a member in front of it. **The
+//! split is gone.** There is one host — the phone the vault is on (#1029 §6) —
+//! so "the seat, not the gateway" no longer names anything, and leaving this in
+//! a crate about mirroring someone else's log would have been the last thing
+//! keeping that vocabulary alive.
+//!
+//! What the rule PROTECTS is unchanged, and is the half worth stating: `K`
+//! becomes plaintext only on a device whose owner has just proved they are
+//! present, and only for as long as [`REVEAL_WINDOW_MS`]. That is a claim about
+//! presence, not about which of two roles is asking — which is why what
+//! enforces it below is a passphrase and a clock, and never a role check.
 //!
 //! ## Storage is not authorization
 //!

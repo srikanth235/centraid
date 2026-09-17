@@ -184,7 +184,7 @@ A device's vault files live in the app's own replica directory — Android's `fi
 
 These files survive OS cache eviction and disappear on uninstall. Centraid does not add SQLCipher or field encryption to the replica: that keeps the seat's own SQLite/FTS read plane and its cold/search budgets, and relies on the platform's at-rest encryption. A future stronger scheme must preserve seat-local search and publish measured costs before replacing this decision.
 
-Locker is stricter in ONE direction: the secret half. The seat is the unlock boundary and the only place the vault's Locker key becomes plaintext ([`crates/seat/src/locker`](../crates/seat/src/locker/mod.rs), D-1020-L3); sealed columns never reach a replica read, and the secret-bearing writes are marked `online_only` on the intent, so they are refused rather than queued when the gateway cannot be reached.
+Locker is stricter in ONE direction: the secret half. The seat is the unlock boundary and the only place the vault's Locker key becomes plaintext ([`crates/core/src/locker`](../crates/core/src/locker/mod.rs), D-1020-L3); sealed columns never reach a replica read, and the secret-bearing writes are marked `online_only` on the intent, so they are refused rather than queued when the gateway cannot be reached.
 
 ## Performance guardrails
 

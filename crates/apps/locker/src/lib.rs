@@ -24,7 +24,7 @@
 //! - **The plaintext is the seat's, and it is not in this crate at all.** An
 //!   app crate gets *one row's plaintext per receipt* through `crates/core`'s
 //!   reveal (W6-D2, `docs/decisions.md:909`); it never holds the member key
-//!   `K`. `crates/seat::locker` is where the unwrap runs.
+//!   `K`. `crates/core::locker` is where the unwrap runs.
 //! - **`access` is ONLINE-ONLY by construction, with two walls.**
 //!   `access.receipt` lives in the audit band and not the replica, so the run
 //!   is marked online-only and the gateway serves it. The declared `rowFilter`
