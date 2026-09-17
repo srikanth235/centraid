@@ -223,6 +223,30 @@ hpke = { version = "0.14", default-features = false, features = [
   "getrandom",
 ] }
 
+# Wave 0.5 lane B — discovery: the signed pkarr record, publish and resolve
+# (#1029 §0, "Resolution: iroh's discovery, pkarr").
+#
+# `pkarr` is the signed-DNS record format, and the relay client that puts one
+# on an `iroh-dns-server` and reads it back. **`default-features = false` here
+# is the umbrella invariant, not a size trim** (#1029 §6): `pkarr`'s defaults
+# enable `dht`, whose mainline client binds a UDP socket and joins a gossip
+# overlay. The phone opens no listening socket, so the DHT half never enters
+# the graph, and `relays` — outbound HTTP to the configured server, nothing
+# else — is the whole client. `signed_packet` is the record type itself, which
+# encodes and decodes with no client at all.
+pkarr = { version = "8", default-features = false, features = [
+  "signed_packet",
+  "relays",
+] }
+# `iroh-dns-server` is n0's own server, a DEV-DEPENDENCY ONLY: the
+# publish-and-resolve exit runs one in-process on a free port, so the round
+# trip is proven against the implementation #1029 §0 names as the default
+# rather than against a mock of ours. It pulls `iroh-base`, `iroh-dns` and
+# `iroh-metrics`; it does NOT pull `iroh` proper, so no endpoint, no ALPN and
+# no QUIC listener reaches even the test graph. `ring` is its one default
+# feature, the rustls provider its self-signed HTTPS listener wants.
+iroh-dns-server = "1.2"
+
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).
 #
