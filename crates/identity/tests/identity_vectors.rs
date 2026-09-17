@@ -22,7 +22,7 @@
 
 use std::path::{Path, PathBuf};
 
-use centraid_identity::{AccountKey, RecoveryPhrase, VaultMint};
+use centraid_identity::{AccountKey, RecoveryPhrase, VaultMint, safety_number};
 use serde_json::{Value, json};
 
 fn fixture_path() -> PathBuf {
@@ -62,6 +62,13 @@ fn generated() -> Value {
         })
         .collect();
 
+    // The safety number two contacts read to each other. It is a rendering
+    // decision as much as a derivation one — a moved grouping is as visible to
+    // a person as a moved digit, and neither is visible to a round trip.
+    let mut pair = VaultMint::fresh();
+    let first = pair.mint(&seed, 0).expect("vault 0").identity.public();
+    let second = pair.mint(&seed, 1).expect("vault 1").identity.public();
+
     json!({
         "schema": "centraid-identity-vectors/1",
         "why": "SLIP-0010 paths, domain tags and indices are format decisions (#1029 §0, W0.5-R1). A vault identity public key IS its address; a round trip cannot see it move, these bytes can.",
@@ -69,6 +76,7 @@ fn generated() -> Value {
         "seedHex": hex::encode(phrase.seed().as_bytes()),
         "accountPublicHex": hex::encode(AccountKey::derive(&seed).public().to_bytes()),
         "vaults": vaults,
+        "safetyNumber": safety_number(&first, &second).grouped(),
     })
 }
 

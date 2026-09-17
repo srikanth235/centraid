@@ -7,6 +7,7 @@
 //! | --- | --- |
 //! | [`phrase`] | the BIP39 24-word phrase and the 64-byte [`phrase::Seed`] it derives |
 //! | [`derive`] | SLIP-0010 hardened derivation: the account key, and each vault's identity, box and root keys |
+//! | [`safety_number`] | the digits two people read to each other to confirm they hold each other's real key |
 //! | [`sealed_box`] | HPKE base mode to a box key — the primitive sealed mail and share invites are built from |
 //! | [`certificate`] | "identity key K certifies device D at epoch E", and the verifier that refuses a superseded one |
 //!
@@ -28,6 +29,7 @@
 pub mod certificate;
 pub mod derive;
 pub mod phrase;
+pub mod safety_number;
 pub mod sealed_box;
 
 pub use certificate::{
@@ -37,4 +39,5 @@ pub use derive::{
     AccountKey, BoxKey, DeriveError, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey,
 };
 pub use phrase::{PhraseError, RecoveryPhrase, Seed};
+pub use safety_number::{SAFETY_NUMBER_DIGITS, SAFETY_NUMBER_GROUP, SafetyNumber, safety_number};
 pub use sealed_box::{AssociatedData, SealError, SealedBox};
