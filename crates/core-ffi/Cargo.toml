@@ -34,7 +34,6 @@ centraid-core = { path = "../core" }
 # declares the `SeatNetwork` seam and cannot depend on the implementation — the
 # implementation depends on it — so the process builder closes the loop. This is
 # the process builder for every phone.
-centraid-seat-link = { path = "../seat-link" }
 centraid-vault = { path = "../vault" }
 prost.workspace = true
 serde_json.workspace = true

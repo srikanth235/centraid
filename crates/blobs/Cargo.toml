@@ -22,14 +22,12 @@ centraid-vault = { path = "../vault" }
 blake3.workspace = true
 bytes.workspace = true
 hex.workspace = true
-iroh.workspace = true
 iroh-blobs.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
 tracing.workspace = true
 
 [dev-dependencies]
-centraid-net = { path = "../net" }
 tempfile.workspace = true
 tokio = { workspace = true, features = [
   "rt",

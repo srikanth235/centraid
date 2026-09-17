@@ -97,7 +97,7 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
     // ABI.
     let vault_path = scratch.join("spike-vault.db");
     {
-        let handle = centraid_core::Core::open(centraid_core::CoreConfig::gateway(&vault_path))
+        let handle = centraid_core::Core::open(centraid_core::CoreConfig::new(&vault_path))
             .expect("a core opens");
         handle
             .with_vault(|vault| {

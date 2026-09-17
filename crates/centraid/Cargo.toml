@@ -19,9 +19,7 @@ centraid-apps-locker = { path = "../apps/locker" }
 centraid-apps-tally = { path = "../apps/tally" }
 centraid-core = { path = "../core" }
 centraid-blobs = { path = "../blobs" }
-centraid-net = { path = "../net" }
 centraid-protocol = { path = "../protocol" }
-centraid-seat = { path = "../seat" }
 centraid-assist = { path = "../assist" }
 centraid-automations = { path = "../automations" }
 centraid-vault = { path = "../vault" }
@@ -41,19 +39,9 @@ url.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
-# THE WALKING SKELETON DRIVES THE C ABI'S BYTES (#1025 S7). The test lives here
-# and not in `crates/core-ffi/tests` because it needs the shipped gateway
-# binary, and `CARGO_BIN_EXE_centraid` is only set for this package's tests.
 centraid-core-ffi = { path = "../core-ffi" }
-centraid-seat-link = { path = "../seat-link" }
 rusqlite.workspace = true
-# The no-listener test parses the ticket the binary printed, which is the
-# ticket codec's job and not the CLI's.
-centraid-net = { path = "../net" }
-# The seat-lane test is a REAL SEAT: it redeems a ticket off the running
-# binary and then asks it for a log page over QUIC.
 centraid-api-proto = { path = "../api-proto" }
-centraid-protocol = { path = "../protocol" }
 prost.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tempfile.workspace = true

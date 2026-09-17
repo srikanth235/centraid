@@ -22,14 +22,14 @@ pub enum CoreError {
     #[error("this core is poisoned by a caught panic ({diagnostic_id}); restart it")]
     Poisoned { diagnostic_id: String },
 
-    /// THIS SEAT HOLDS NO COPY OF THE VAULT YET (#1025 S1).
+    /// THERE IS NO VAULT AT THIS PATH YET (#1025 S1, restated by #1029 §1).
     ///
-    /// A state and not a fault: it is where every phone starts, and where a
-    /// seat sits for the length of a re-bootstrap. The remedy is the one
-    /// `ErrorCode::REBOOTSTRAP_REQUIRED` already names — take a fresh copy —
-    /// which is why it carries that code rather than a new one nothing on any
-    /// shell would branch on differently.
-    #[error("this seat holds no copy of the vault yet; pair it, or let it bootstrap")]
+    /// A state and not a fault: it is where a phone sits between installing
+    /// the app and founding or restoring its first vault. The remedy is the
+    /// one `ErrorCode::REBOOTSTRAP_REQUIRED` already names — get a copy — which
+    /// is why it carries that code rather than a new one nothing on any shell
+    /// would branch on differently.
+    #[error("there is no vault at this path yet; create one, or restore one")]
     Unpaired,
 
     /// THIS REPLICA ALREADY HOLDS A VAULT, AND A PAIRING WOULD REPLACE IT
@@ -107,9 +107,6 @@ pub enum CoreError {
     Vault(#[from] centraid_vault::VaultError),
 
     #[error(transparent)]
-    Seat(#[from] centraid_seat::SeatError),
-
-    #[error(transparent)]
     Protocol(#[from] centraid_protocol::ProtocolError),
 
     #[error(transparent)]
@@ -155,7 +152,6 @@ impl CoreError {
             Self::OnlineOnly { .. } => ErrorCode::OnlineOnly,
             Self::Cancelled { .. } => ErrorCode::Cancelled,
             Self::Vault(vault) => vault_code(vault),
-            Self::Seat(seat) => seat_code(seat),
             Self::Protocol(_) => ErrorCode::MalformedFrame,
         }
     }
@@ -203,79 +199,11 @@ impl CoreError {
 
 /// THE OWNER-FACING SENTENCE for a code.
 ///
-/// One table, reached by `CoreError::sentence` and by the seat and transport
-/// paths that produce a code without a `CoreError` variant of their own. A
-/// shell may render it verbatim or branch on the code and use its own words;
+/// One table, reached by `CoreError::sentence` and by any path that produces a
+/// code without a `CoreError` variant of its own. A shell may render it
+/// verbatim or branch on the code and use its own words;
 /// what it must not do is render `Error.detail`, which is where the raw
 /// predicate lives (#1020 wave 3, lane E finding 2).
-/// WHAT A PARKED SEAT IS TOLD (#1025 S2, D-1025-S2-4).
-///
-/// Not an error code, because parking is not a failure of the request that
-/// discovered it — the pass ran and reported honestly. It is a STATE, carried
-/// on `SyncOutcome::sentence`, and it is here rather than in a shell so that
-/// every shell says the same thing.
-///
-/// It names what happened and what is safe, in that order, and it never
-/// suggests a remedy the member cannot perform. "Delete and re-pair" would be a
-/// remedy, and it would be the wrong one: the queue is what re-pairing costs.
-pub const PARKED_SENTENCE: &str = "This device keeps falling too far behind to catch up, so Centraid has stopped \
-     re-downloading. Everything already here — including anything you have written \
-     but not yet sent — is safe.";
-
-/// WHAT A MEMBER READS WHEN A STAGE OF A PASS DID NOT RUN (#1025 S7).
-///
-/// A TABLE KEYED BY CODE, like every other sentence this core produces: the
-/// reason is one of `SkipReason`'s closed set, and no database text, no path
-/// and no peer's words can reach a member through it. The transport's own
-/// words go to a `tracing` line where they arise, which is where a developer
-/// wanted them anyway.
-///
-/// `None` for the ORDINARY reasons — a seat that already holds its copy, an
-/// empty queue, a device that wants no files. Those are the shape of a healthy
-/// pass, and a status line that narrated them would be noise a member learns
-/// to ignore. The sentence is for the three that are worth saying.
-#[must_use]
-pub fn skip_sentence(reason: centraid_seat::sync::SkipReason) -> Option<&'static str> {
-    use centraid_seat::sync::SkipReason as R;
-    match reason {
-        R::NotRun | R::AlreadyHeld | R::NothingQueued | R::NothingWanted => None,
-        R::NotPaired => Some("This device is not paired with a gateway yet."),
-        R::Unreachable => Some(
-            "Centraid could not reach your gateway, so this device is showing what it already \
-             has.",
-        ),
-        // THE WINDOW RAN OUT BEFORE THE GATEWAY ANSWERED, which is the
-        // ordinary shape of a thirty-second background refresh on a slow link.
-        // Nothing is wrong and the next window continues, so there is nothing
-        // a member needs to do — but it is not silence either, because a pass
-        // that moved nothing and said nothing is what this report deletes.
-        R::CutBeforeReaching => Some("Centraid ran out of time this round and will try again."),
-        R::HandshakeRefused => Some(
-            "This app and that gateway are too far apart in version to talk. Update the one the \
-             diagnostics screen names.",
-        ),
-        R::NoRoom => Some(
-            "There is not enough free space on this device for a copy of your vault. Free some \
-             space and Centraid will try again.",
-        ),
-        R::BootstrapRefused => {
-            Some("Centraid could not finish copying your vault. It will try again.")
-        }
-        R::RebootstrapRequired => {
-            Some("This device has to take a fresh copy of the vault before it can catch up.")
-        }
-        R::LogUnreadable => Some(
-            "Centraid could not get this device's updates from your gateway. It will try again.",
-        ),
-        R::WritesUnreachable => {
-            Some("Your changes are saved on this device and are waiting to reach your gateway.")
-        }
-        R::BytesUnreachable | R::StoreUnreadable => {
-            Some("Some photos have not finished downloading yet. Centraid will keep trying.")
-        }
-    }
-}
-
 #[must_use]
 pub fn sentence_for_code(code: ErrorCode) -> &'static str {
     use ErrorCode as C;
@@ -387,26 +315,6 @@ fn intent_refusal_code(refusal: centraid_vault::IntentRefusal) -> ErrorCode {
     }
 }
 
-fn seat_code(error: &centraid_seat::SeatError) -> ErrorCode {
-    use centraid_seat::SeatError as S;
-    match error {
-        // AN ARTIFACT FOR ANOTHER VAULT IS A FRESH COPY OWED, not an internal
-        // fault: the seat still has no copy it may use, and the remedy — ask
-        // the gateway for one again — is the same remedy this code names. It
-        // is deliberately NOT its own wire code, because that would be a
-        // proto/enum change this slice does not need and a shell would branch
-        // on it exactly as it branches on this one (#1025 S1).
-        S::Drift { .. }
-        | S::EpochGate { .. }
-        | S::RebootstrapRequired { .. }
-        | S::WrongVault { .. } => ErrorCode::RebootstrapRequired,
-        S::OnlineOnly { .. } => ErrorCode::OnlineOnly,
-        S::OutcomeExpired { .. } => ErrorCode::IntentOutcomeExpired,
-        S::IntentIdReused { .. } => ErrorCode::IntentIdReused,
-        _ => ErrorCode::Internal,
-    }
-}
-
 pub type Result<T> = std::result::Result<T, CoreError>;
 
 #[cfg(test)]
@@ -434,11 +342,8 @@ mod tests {
     }
 
     #[test]
-    fn a_rebootstrap_from_either_side_carries_the_same_code() {
-        assert_eq!(
-            CoreError::Seat(centraid_seat::SeatError::Drift { ours: 4, theirs: 5 }).code(),
-            ErrorCode::RebootstrapRequired
-        );
+    fn a_vault_that_must_be_replaced_carries_the_rebootstrap_code() {
+        assert_eq!(CoreError::Unpaired.code(), ErrorCode::RebootstrapRequired);
         assert_eq!(
             CoreError::Vault(centraid_vault::VaultError::RebootstrapRequired {
                 reason: centraid_vault::RebootstrapReason::EpochMismatch,

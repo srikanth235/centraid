@@ -21,7 +21,6 @@ use centraid_vault::Vault;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::page::KeysetPage;
 
-use crate::config::Role;
 use crate::convert::value_from_wire;
 use crate::error::{CoreError, Result};
 
@@ -317,75 +316,53 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
     })
 }
 
-/// Reveal a sealed value — **answered by ROLE**, and the `locker` schema is
-/// not answerable on the gateway at all (#1020, D-1020-L2, D-1020-L3).
+/// Reveal a sealed value — **answered by SCHEMA** (#1020, D-1020-L2,
+/// D-1020-L3; restated by #1029 §1).
 ///
-/// Three answers, and the split is the trust premise:
+/// It used to be answered by ROLE, and the role was the trust premise: a
+/// gateway could open a sealed COLUMN and could not open a Locker cell,
+/// because a Locker key must never be on a host the member does not hold.
+/// With the phone the only host (#1029 §6) there is no non-phone host left to
+/// keep the key off, so what is left of the rule is the half that was always
+/// about the DATA: a Locker cell is unwrapped locally, behind the member's
+/// unlock, by `crate::locker`; a sealed column is opened under the vault's own
+/// DEK for a principal the authority plane allowed.
 ///
-/// | Role | Schema | Answer |
-/// |---|---|---|
-/// | [`Role::Gateway`] | `locker` | **refused**, structurally: the value the
-///   judgement needs cannot be built (`centraid_vault::SealedSubject::new`) |
-/// | [`Role::Gateway`] | anything else | judged and revealed — a connector
-///   token is host-readable **by design** (W6-D1) |
-/// | `Role::Seat` | `locker` | unwrapped **locally**, by
-///   `crate::locker`, behind the member's unlock |
-///
-/// A reveal is still **online-only** on a seat for the reason it always was: a
-/// mass reveal must never be queued, replayed, or answered from a durable
-/// store, and the receipt the gateway owes has to land before the plaintext
-/// exists. `export` carries nothing in and its result is every secret, which
-/// is why that refusal is structural rather than a policy somebody can relax.
-pub fn reveal(
-    role: &Role,
-    schema: &str,
-    table: &str,
-    app_id: &str,
-    action: &str,
-) -> Result<RevealRoute> {
-    match role {
-        Role::Gateway => {
-            // THE KEY DOOR'S DELETION, AT THIS LAYER. The subject is what the
-            // authority plane judges, and it has no representation for
-            // Locker — so this arm cannot be written to succeed.
-            let subject = centraid_vault::SealedSubject::new(schema, table).map_err(|refusal| {
-                CoreError::InvalidRequest {
-                    detail: refusal.to_string(),
-                }
-            })?;
-            Ok(RevealRoute::Gateway { subject })
-        }
-        Role::Seat { .. } => {
-            if schema == centraid_vault::BLIND_SCHEMA {
-                // A SEAT UNWRAPS LOCALLY — and it still needs the gateway,
-                // for the receipt and for nothing else.
-                return Ok(RevealRoute::Seat {
-                    schema: schema.to_owned(),
-                    table: table.to_owned(),
-                });
-            }
-            // The sealed-column class lives on the host, so a seat asking for
-            // one is asking the gateway.
-            Err(CoreError::OnlineOnly {
-                app_id: app_id.to_owned(),
-                action: action.to_owned(),
-            })
-        }
+/// The structural refusal stays where it was. `centraid_vault::SealedSubject`
+/// has no representation for Locker, so the sealed-column arm CANNOT be
+/// written to open a Locker cell — the two routes cannot be confused by a
+/// later edit, which is the property that made this a type and not a policy.
+pub fn reveal(schema: &str, table: &str) -> Result<RevealRoute> {
+    if schema == centraid_vault::BLIND_SCHEMA {
+        return Ok(RevealRoute::Local {
+            schema: schema.to_owned(),
+            table: table.to_owned(),
+        });
     }
+    // THE KEY DOOR'S DELETION, AT THIS LAYER. The subject is what the
+    // authority plane judges, and it has no representation for Locker — so
+    // this arm cannot be written to succeed for one.
+    let subject = centraid_vault::SealedSubject::new(schema, table).map_err(|refusal| {
+        CoreError::InvalidRequest {
+            detail: refusal.to_string(),
+        }
+    })?;
+    Ok(RevealRoute::SealedColumn { subject })
 }
 
-/// Who performs a reveal. There is no arm in which the gateway performs a
-/// Locker one.
+/// How a reveal is performed. There is no arm in which a sealed-column route
+/// opens a Locker cell.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RevealRoute {
-    /// The gateway unseals a sealed **column** — a connector token — under its
+    /// A sealed **column** — a connector token — unsealed under the vault's
     /// own DEK, for a principal the authority plane allowed.
-    Gateway {
+    SealedColumn {
         subject: centraid_vault::SealedSubject,
     },
-    /// The seat unwraps `K` and opens the cell itself; the gateway's only part
-    /// is the receipt (`locker.reveal_receipt`).
-    Seat { schema: String, table: String },
+    /// A Locker cell: `K` is unwrapped and the cell opened here, behind the
+    /// member's unlock, with a receipt written beside it
+    /// (`locker.reveal_receipt`).
+    Local { schema: String, table: String },
 }
 
 /// Mint a path for content. **Stub**: wave 3.
@@ -504,54 +481,35 @@ mod tests {
 
     /// THE KEY DOOR IS DELETED AT THIS LAYER TOO (#1020, D-1020-L2).
     ///
-    /// A gateway asked for a Locker cell cannot be written to succeed: the
-    /// subject the authority plane judges has no Locker representation, so
-    /// this is the refusal rather than a policy check. A gateway asked for a
-    /// **sealed column** still answers, because a connector token is
-    /// host-readable by design (W6-D1) — and that asymmetry is the premise.
+    /// A Locker cell routes to the local unwrap and can never reach the
+    /// sealed-column arm: the subject the authority plane judges has no Locker
+    /// representation, so that arm is a refusal by construction rather than a
+    /// policy check. A sealed column still routes, because a connector token
+    /// is host-readable by design (W6-D1).
     #[test]
-    fn a_gateway_cannot_route_a_locker_reveal_and_can_route_a_connector_token() {
-        let refusal = reveal(&Role::Gateway, "locker", "item", "locker", "reveal")
-            .expect_err("a gateway has no Locker reveal");
-        assert_eq!(refusal.code(), wire::ErrorCode::InvalidRequest);
-        assert!(
-            refusal.to_string().contains("unwrapped only on the seat"),
-            "{refusal}"
-        );
-
-        let route = reveal(
-            &Role::Gateway,
-            "sync",
-            "connection_credential",
-            "connectors",
-            "refresh",
-        )
-        .expect("a connector token is the gateway's to open");
-        assert!(matches!(route, RevealRoute::Gateway { .. }));
-    }
-
-    /// A SEAT UNWRAPS A LOCKER CELL ITSELF, and asks the gateway for a sealed
-    /// column — which is online-only, exactly as it was.
-    #[test]
-    fn a_seat_unwraps_a_locker_cell_and_forwards_a_sealed_column() {
-        let seat = Role::Seat {
-            kind: crate::config::SeatKind::Replicated,
-        };
+    fn a_locker_cell_unwraps_locally_and_a_sealed_column_routes_to_the_dek() {
         assert_eq!(
-            reveal(&seat, "locker", "item", "locker", "reveal").expect("routed"),
-            RevealRoute::Seat {
+            reveal("locker", "item").expect("routed"),
+            RevealRoute::Local {
                 schema: "locker".to_owned(),
                 table: "item".to_owned()
             }
         );
-        let refusal = reveal(
-            &seat,
-            "sync",
-            "connection_credential",
-            "connectors",
-            "refresh",
-        )
-        .expect_err("a sealed column is the gateway's");
-        assert!(matches!(refusal, CoreError::OnlineOnly { .. }));
+        let route =
+            reveal("sync", "connection_credential").expect("a connector token is openable here");
+        assert!(matches!(route, RevealRoute::SealedColumn { .. }));
+    }
+
+    /// AND THE SEALED-COLUMN ARM CANNOT BE ASKED FOR A LOCKER CELL. The
+    /// `BLIND_SCHEMA` gate above is what routes it away; `SealedSubject` is
+    /// what makes the other arm impossible even if that gate were removed.
+    #[test]
+    fn the_sealed_subject_has_no_locker_representation() {
+        let refusal =
+            centraid_vault::SealedSubject::new("locker", "item").expect_err("no such subject");
+        assert!(
+            refusal.to_string().contains("unwrapped only on the seat"),
+            "{refusal}"
+        );
     }
 }

@@ -319,7 +319,7 @@ fn main() {
     let bytes_dir = vault_path.with_extension("bytes");
     let _ = std::fs::remove_dir_all(&bytes_dir);
 
-    let handle = centraid_core::Core::open(centraid_core::CoreConfig::gateway(&vault_path))
+    let handle = centraid_core::Core::open(centraid_core::CoreConfig::new(&vault_path))
         .expect("a core opens");
 
     // THE ONE CONTENT STORE, SEEDED DIRECTLY (#1025 S3, D-1025-S3-1).

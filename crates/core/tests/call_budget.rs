@@ -92,7 +92,7 @@ fn the_p95_of_a_bounded_read_is_inside_the_budget() {
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let _scratch = Scratch { dir: dir.clone() };
 
-    let handle = Core::open(CoreConfig::gateway(dir.join("vault.db"))).expect("a core opens");
+    let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("a core opens");
     handle
         .with_vault(|vault| Ok(vault.found("Budget", "Owner")?))
         .expect("it founds");

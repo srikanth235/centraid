@@ -398,18 +398,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "attohttpc"
-version = "0.30.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16e2cdb6d5ed835199484bb92bb8b3edd526effe995c61732580439c1a67e2e9"
-dependencies = [
- "base64 0.22.1",
- "http",
- "log",
- "url",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -707,10 +695,7 @@ dependencies = [
  "centraid-blobs",
  "centraid-core",
  "centraid-core-ffi",
- "centraid-net",
  "centraid-protocol",
- "centraid-seat",
- "centraid-seat-link",
  "centraid-vault",
  "clap",
  "flate2",
@@ -891,11 +876,9 @@ dependencies = [
  "blake3",
  "bytes",
  "centraid-api-proto",
- "centraid-net",
  "centraid-protocol",
  "centraid-vault",
  "hex",
- "iroh",
  "iroh-blobs",
  "tempfile",
  "thiserror 2.0.20",
@@ -915,7 +898,6 @@ dependencies = [
  "centraid-blobs",
  "centraid-ontology",
  "centraid-protocol",
- "centraid-seat",
  "centraid-vault",
  "prost",
  "rand 0.9.5",
@@ -935,7 +917,6 @@ dependencies = [
  "centraid-core",
  "centraid-ontology",
  "centraid-protocol",
- "centraid-seat-link",
  "centraid-vault",
  "libloading",
  "prost",
@@ -993,16 +974,10 @@ name = "centraid-net"
 version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
- "blake3",
  "centraid-api-proto",
- "centraid-protocol",
- "iroh",
  "prost",
  "qrcode",
  "rand 0.9.5",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -1042,66 +1017,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
-]
-
-[[package]]
-name = "centraid-seat"
-version = "1.0.0-alpha.0"
-dependencies = [
- "blake3",
- "centraid-ontology",
- "centraid-vault",
- "flate2",
- "proptest",
- "rand 0.9.5",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.20",
- "tracing",
-]
-
-[[package]]
-name = "centraid-seat-link"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-api-proto",
- "centraid-blobs",
- "centraid-core",
- "centraid-net",
- "centraid-ontology",
- "centraid-protocol",
- "centraid-seat",
- "centraid-vault",
- "flate2",
- "fs4",
- "iroh",
- "rusqlite",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "centraid-sim"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-api-proto",
- "centraid-core",
- "centraid-ontology",
- "centraid-protocol",
- "centraid-seat",
- "centraid-vault",
- "flate2",
- "prost",
- "rand 0.9.5",
- "rand_chacha",
- "rusqlite",
- "serde_json",
- "tokio",
- "turmoil",
 ]
 
 [[package]]
@@ -1906,16 +1821,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs4"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8640e34b88f7652208ce9e88b1a37a2ae95227d84abec377ccd3c5cfeb141ed4"
-dependencies = [
- "rustix",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "futures"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2185,25 +2090,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "h2"
-version = "0.4.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef8e5e5a340588f4452631496976cf8636d4a7ecf600239fdc27615d2530bc16"
-dependencies = [
- "atomic-waker",
- "bytes",
- "fnv",
- "futures-core",
- "futures-sink",
- "http",
- "indexmap 2.14.2",
- "slab",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
 name = "hash32"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2397,7 +2283,6 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-core",
- "h2",
  "http",
  "http-body",
  "httparse",
@@ -2588,26 +2473,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "igd-next"
-version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de7238d487a9aff61f81b5ab41c0a841532a115a398b5fa92a2fadd0885e2581"
-dependencies = [
- "attohttpc",
- "bytes",
- "futures",
- "http",
- "http-body-util",
- "hyper",
- "hyper-util",
- "log",
- "rand 0.10.2",
- "tokio",
- "url",
- "xmltree",
-]
-
-[[package]]
 name = "image"
 version = "0.25.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2736,7 +2601,6 @@ dependencies = [
  "papaya",
  "pin-project",
  "portable-atomic",
- "portmapper",
  "rand 0.10.2",
  "reqwest 0.13.5",
  "rustc-hash",
@@ -3875,7 +3739,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
- "libm",
 ]
 
 [[package]]
@@ -4286,35 +4149,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "portmapper"
-version = "0.19.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca97242f016e090a25330613bc2382aab65eb22f9149dbe84d8f8e711d49a530"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "derive_more",
- "hyper-util",
- "igd-next",
- "iroh-metrics",
- "libc",
- "n0-error",
- "n0-future",
- "netwatch",
- "num_enum",
- "rand 0.10.2",
- "serde",
- "smallvec",
- "socket2",
- "time",
- "tokio",
- "tokio-util",
- "tower-layer",
- "tracing",
- "url",
-]
-
-[[package]]
 name = "positioned-io"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4656,16 +4490,6 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
-
-[[package]]
-name = "rand_distr"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8615d50dcf34fa31f7ab52692afec947c4dd0ab803cc87cb3b0b4570ff7463"
-dependencies = [
- "num-traits",
- "rand 0.9.5",
-]
 
 [[package]]
 name = "rand_pcg"
@@ -5821,7 +5645,6 @@ dependencies = [
  "http",
  "httparse",
  "rand 0.10.2",
- "ring",
  "rustls-pki-types",
  "sha1_smol",
  "simdutf8",
@@ -6002,21 +5825,6 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
-
-[[package]]
-name = "turmoil"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0061c28f1469e94771bb8aa626ce6b29265c2fb5034115046a170b0cba2e33d2"
-dependencies = [
- "bytes",
- "indexmap 2.14.2",
- "rand 0.9.5",
- "rand_distr",
- "scoped-tls",
- "tokio",
- "tracing",
-]
 
 [[package]]
 name = "typenum"
@@ -6484,15 +6292,6 @@ dependencies = [
 
 [[package]]
 name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
 version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
@@ -6718,21 +6517,6 @@ dependencies = [
  "rusticata-macros",
  "thiserror 2.0.20",
  "time",
-]
-
-[[package]]
-name = "xml-rs"
-version = "0.8.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
-
-[[package]]
-name = "xmltree"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7d8a75eaf6557bb84a65ace8609883db44a29951042ada9b393151532e41fcb"
-dependencies = [
- "xml-rs",
 ]
 
 [[package]]

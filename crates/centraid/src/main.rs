@@ -21,12 +21,8 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-mod allowlist;
 mod cmd;
 mod run;
-mod seat_lane;
-mod tails;
-mod snapshots;
 
 /// The exit codes, stated once. A script that wraps this binary branches on
 /// these numbers, so they are as much of an interface as the subcommands.
@@ -48,12 +44,12 @@ pub mod exit {
 #[derive(Parser)]
 #[command(
     name = "centraid",
-    about = "Centraid: one program, two roles, one gateway anywhere (#1020)",
+    about = "Centraid: the operator-facing verbs over a vault directory (#1029)",
     version,
     long_about = None
 )]
 struct Cli {
-    /// Log filter, e.g. `centraid_net=debug`. Diagnostics go to stderr and
+    /// Log filter, e.g. `centraid=debug`. Diagnostics go to stderr and
     /// nothing else does, so a caller can parse stdout.
     #[arg(long, env = "CENTRAID_LOG", global = true)]
     log: Option<String>,
@@ -64,75 +60,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Run the vault's authority: the iroh endpoint, the device allowlist and
-    /// the pairing lane. Headless — a gateway has no admin UI.
+    /// Write an OS service unit for a gateway and print the command that
+    /// enables it.
+    ///
+    /// **The gateway no longer RUNS from here** (#1029 §6). `centraid gateway`
+    /// served the iroh endpoint, the allowlist and the pairing lane to paired
+    /// seats; there are none. What survives is the service install, and it
+    /// moves to `crates/gateway-server` when that exists (#1029 W4b).
     Gateway {
-        /// Where the vault and the allowlist live. Without it the gateway runs
-        /// entirely in memory and says so: every pairing is lost on exit.
-        #[arg(long)]
-        data_dir: Option<PathBuf>,
-        /// Mint pair tickets at startup and print their QR codes.
-        ///
-        /// A COUNT, defaulting to one when the flag is given with no value
-        /// (#1025 S3). A ticket is one-shot — redemption burns it — so a member
-        /// pairing a phone and a tablet from one startup needs two.
-        #[arg(long, num_args = 0..=1, default_missing_value = "1", default_value = "0")]
-        print_qr: u8,
-        /// The name a pairing member sees on the confirm screen.
-        #[arg(long, default_value = "Centraid")]
-        vault_name: String,
-        /// A self-hosted relay url. Omit for n0's public relays; pass
-        /// `--no-relay` for direct paths only.
-        #[arg(long)]
-        relay: Option<String>,
-        /// Direct paths only. A LAN or loopback deployment; a symmetric NAT
-        /// then means no connection at all.
-        #[arg(long, conflicts_with = "relay")]
-        no_relay: bool,
-        /// With no subcommand, `gateway` RUNS the gateway. `gateway install`
-        /// writes an OS service unit for it and never enables it.
         #[command(subcommand)]
-        command: Option<GatewayCommand>,
-    },
-    /// Run a seat: a full replica, the applier, the outbox and every app's
-    /// queries and commands.
-    Seat {
-        #[arg(long)]
-        data_dir: Option<PathBuf>,
-        /// The local socket this seat serves. Unix domain socket, mode 0600,
-        /// with a peer-uid check on every connection (R-1020-26). The desktop
-        /// passes `<userData>/seat.sock`.
-        #[arg(long)]
-        socket: Option<PathBuf>,
-        /// The file holding the instance nonce a shell proves. NEVER a flag:
-        /// a flag is in the shell history and in every `ps` listing.
-        #[arg(long)]
-        nonce_file: Option<PathBuf>,
-        /// No local copy: forward every call to the gateway and run it under
-        /// the caller's principal.
-        #[arg(long)]
-        thin: bool,
-        /// Print the statement catalogue this seat serves and exit.
-        #[arg(long)]
-        print_catalogue: bool,
-        #[command(subcommand)]
-        command: Option<SeatCommand>,
-    },
-    /// Mint a pair ticket and print it.
-    Pair {
-        #[arg(long)]
-        mint: bool,
-        #[arg(long)]
-        data_dir: Option<PathBuf>,
-        #[arg(long, default_value = "Centraid")]
-        vault_name: String,
-        #[arg(long)]
-        no_relay: bool,
-    },
-    /// Devices: list and revoke. Sends the same commands an owner seat sends.
-    Devices {
-        #[command(subcommand)]
-        command: DevicesCommand,
+        command: GatewayCommand,
     },
     /// Backup.
     Backup {
@@ -183,12 +120,6 @@ enum Command {
         /// The passphrase to wrap the bundle's recovery kit with, from a file.
         #[arg(long)]
         password_file: Option<PathBuf>,
-    },
-    /// The browser extension's native-messaging host. Launched by the browser,
-    /// never by a person.
-    NativeHost {
-        #[command(subcommand)]
-        command: Option<NativeHostCommand>,
     },
     /// The harness surface: what is registered, what is reachable, and where
     /// the two ACP adapters are (#1020, D-1020-AS7). Replaces v0's
@@ -279,27 +210,6 @@ enum AssistCommand {
 }
 
 #[derive(Subcommand)]
-enum NativeHostCommand {
-    /// Write the host manifest a browser reads, with its extension-id
-    /// allowlist. It never copies it into a browser's directory: a capability
-    /// that appeared because something was unpacked is a capability nobody
-    /// chose to grant (D-1020-G1's precedent).
-    Install {
-        /// Which browser's manifest shape.
-        #[arg(long, value_parser = ["chrome", "firefox"])]
-        browser: String,
-        /// An extension id this host will talk to. Repeatable, and at least
-        /// one is required.
-        #[arg(long = "extension-id", required = true)]
-        extension_id: Vec<String>,
-        /// Where to write it. Without it the manifest is printed and nothing
-        /// is written.
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
-}
-
-#[derive(Subcommand)]
 enum GatewayCommand {
     /// Write an OS service unit for this gateway and print the command that
     /// enables it. It never enables it: a background service that starts
@@ -319,24 +229,6 @@ enum GatewayCommand {
         /// The `%i` in `centraid-gateway@%i`, for `--system`.
         #[arg(long, default_value = "default")]
         instance: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum SeatCommand {
-    /// Redeem a pair ticket.
-    Pair {
-        /// The `base64url` ticket, scanned or pasted.
-        ticket: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum DevicesCommand {
-    List,
-    Revoke {
-        /// A device id, or the device's endpoint id in hex.
-        device: String,
     },
 }
 
@@ -398,20 +290,13 @@ fn main() -> ExitCode {
 
     let code = runtime.block_on(async move {
         match cli.command {
-            Command::Gateway {
-                data_dir,
-                print_qr,
-                vault_name,
-                relay,
-                no_relay,
-                command,
-            } => match command {
-                Some(GatewayCommand::Install {
+            Command::Gateway { command } => match command {
+                GatewayCommand::Install {
                     data_dir,
                     dry_run,
                     system,
                     instance,
-                }) => cmd::gateway_install::run(cmd::gateway_install::InstallArgs {
+                } => cmd::gateway_install::run(cmd::gateway_install::InstallArgs {
                     data_dir,
                     dry_run,
                     flavour: if system {
@@ -421,52 +306,6 @@ fn main() -> ExitCode {
                     },
                     instance,
                 }),
-                None => {
-                    run::gateway(run::GatewayArgs {
-                        data_dir,
-                        print_qr,
-                        vault_name,
-                        relay,
-                        no_relay,
-                    })
-                    .await
-                }
-            },
-            Command::Pair {
-                mint,
-                data_dir,
-                vault_name,
-                no_relay,
-            } => run::pair_mint(mint, data_dir, vault_name, no_relay).await,
-            Command::Seat {
-                data_dir,
-                socket,
-                nonce_file,
-                thin,
-                print_catalogue,
-                command,
-            } => match command {
-                Some(SeatCommand::Pair { ticket }) => run::seat_pair(&ticket).await,
-                None => {
-                    cmd::seat::run(cmd::seat::SeatArgs {
-                        data_dir,
-                        socket,
-                        nonce_file,
-                        thin,
-                        print_catalogue,
-                    })
-                    .await
-                }
-            },
-            Command::Devices { command } => match command {
-                DevicesCommand::List => run::not_yet_available(
-                    "devices list",
-                    "the command plane needs crates/vault's authority and receipts, wave 2 lane D1",
-                ),
-                DevicesCommand::Revoke { .. } => run::not_yet_available(
-                    "devices revoke",
-                    "the command plane needs crates/vault's authority and receipts, wave 2 lane D1",
-                ),
             },
             Command::Backup { command } => match command {
                 BackupCommand::Now { data_dir, force } => {
@@ -502,25 +341,6 @@ fn main() -> ExitCode {
                 out,
                 password_file,
             }),
-            Command::NativeHost { command } => match command {
-                Some(NativeHostCommand::Install {
-                    browser,
-                    extension_id,
-                    out,
-                }) => cmd::native_host::install(cmd::native_host::InstallArgs {
-                    browser: if browser == "firefox" {
-                        cmd::native_host::Browser::Firefox
-                    } else {
-                        cmd::native_host::Browser::Chrome
-                    },
-                    allowed: extension_id,
-                    out,
-                }),
-                // The host itself. stdout IS the protocol, so nothing else may
-                // print on it — which is why `install_tracing` writes to
-                // stderr for every verb in this binary.
-                None => cmd::native_host::run(),
-            },
             Command::Assist { command } => match command {
                 AssistCommand::Harnesses { json } => {
                     cmd::assist::run(cmd::assist::Args::Harnesses { json })
