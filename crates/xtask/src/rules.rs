@@ -327,15 +327,26 @@ fn function_name(signature: &str) -> Option<String> {
 /// [`tests::the_listener_allowlist_has_no_dead_entries`] fails if an entry
 /// stops binding — an exemption nobody is looking at is how the next one gets
 /// added quietly.
-const LISTENER_ALLOWED: &[(&str, &str)] = &[(
-    "crates/gateway-server/src/serve.rs",
-    "THE STANDALONE GATEWAY'S LISTENER (#1029 §3). One protocol, two \
-     deployments: the hosted one is a Cloudflare Worker and this one is a \
-     server a household runs, and a phone cannot tell which it is talking to. \
-     The bind is confined to this file, which accepts connections and hands \
-     them to `crates/gateway-server/src/http.rs` — it decides nothing about a \
-     request, and every rule it serves is `crates/gateway-core`'s",
-)];
+const LISTENER_ALLOWED: &[(&str, &str)] = &[
+    (
+        "crates/gateway-server/src/serve.rs",
+        "THE STANDALONE GATEWAY'S LISTENER (#1029 §3). One protocol, two \
+         deployments: the hosted one is a Cloudflare Worker and this one is a \
+         server a household runs, and a phone cannot tell which it is talking \
+         to. The bind is confined to this file, which accepts connections and \
+         hands them to `crates/gateway-server/src/http.rs` — it decides nothing \
+         about a request, and every rule it serves is `crates/gateway-core`'s",
+    ),
+    (
+        "crates/gateway-server/tests/common/mod.rs",
+        "A TEST DOUBLE FOR AN S3 BUCKET, in a `tests/` tree that ships in no \
+         artifact. The conformance suite runs against the S3 code path — the \
+         SigV4 signature, the attestation header, the HEAD that carries one and \
+         the GET that does not — and a mock `ByteStore` would exercise the enum \
+         arm and skip the protocol, which is exactly where the two checksum \
+         modes differ. That is only meaningful over a real socket (#1029 §3)",
+    ),
+];
 
 pub fn no_listening_socket(root: &Path) -> RuleReport {
     const NAME: &str = "no-listening-socket";
