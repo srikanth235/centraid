@@ -17,10 +17,20 @@ use std::process::Command;
 
 use centraid_media::object::{
     self, Custody, Dictionary, Header, Kind, MAX_OBJECT_BYTES, MAX_PLAINTEXT_BYTES, NONCE_BYTES,
-    ObjectName, Role, SealOptions,
+    ObjectError, ObjectName, Role, SealOptions,
 };
 
 const ROOT: [u8; 32] = [0x2a; 32];
+
+/// The vault these objects are sealed for — §4's `(vault identity key, kind)`
+/// AAD binding. The key is never written into an object; it is associated data
+/// on both the key wrap and every body chunk.
+const VAULT_KEY: [u8; 32] = [0x33; 32];
+
+fn vault() -> object::VaultId<'static> {
+    object::VaultId::new(&VAULT_KEY)
+}
+
 const FILE_KEY: [u8; 32] = [0x5b; 32];
 
 /// The env var that turns this test binary into a nonce probe for the restart
@@ -85,6 +95,7 @@ fn nonces_of(sealed: &[u8]) -> Vec<[u8; NONCE_BYTES]> {
 
 fn seal_one(plaintext: &[u8]) -> Vec<u8> {
     object::seal(
+        vault(),
         Custody::Wrapped(&ROOT),
         &SealOptions {
             kind: Kind::Blob,
@@ -188,6 +199,7 @@ fn the_cap_holds_for_the_worst_case_input() {
     let dictionary = dictionary();
     let plain = incompressible(MAX_PLAINTEXT_BYTES, b"the worst case");
     let sealed = object::seal(
+        vault(),
         Custody::Wrapped(&ROOT),
         &SealOptions {
             kind: Kind::Base,
@@ -207,7 +219,13 @@ fn the_cap_holds_for_the_worst_case_input() {
         "the filler compressed, so this did not test the worst case"
     );
     assert_eq!(
-        object::open(Custody::Wrapped(&ROOT), &sealed.bytes, Some(&dictionary)).expect("opens"),
+        object::open(
+            vault(),
+            Custody::Wrapped(&ROOT),
+            &sealed.bytes,
+            Some(&dictionary)
+        )
+        .expect("opens"),
         plain
     );
 }
@@ -222,7 +240,7 @@ fn an_oversized_input_becomes_a_list_of_objects() {
         dictionary: None,
     };
     let (parts, list) =
-        object::seal_list(Custody::FileKey(&FILE_KEY), &options, &plain).expect("splits");
+        object::seal_list(vault(), Custody::FileKey(&FILE_KEY), &options, &plain).expect("splits");
     assert_eq!(parts.len(), 3, "14 MiB parts over a 28 MiB + 1 KiB input");
     assert_eq!(list.parts.len(), 3);
     assert_eq!(list.plaintext_bytes, plain.len() as u64);
@@ -232,19 +250,22 @@ fn an_oversized_input_becomes_a_list_of_objects() {
 
     let bytes: Vec<&[u8]> = parts.iter().map(|part| part.bytes.as_slice()).collect();
     assert_eq!(
-        object::open_list(Custody::FileKey(&FILE_KEY), &list, &bytes, None).expect("reassembles"),
+        object::open_list(vault(), Custody::FileKey(&FILE_KEY), &list, &bytes, None)
+            .expect("reassembles"),
         plain
     );
 
     // Order is the whole of the structure, so a swapped pair is caught by the
     // list and not by luck.
     let swapped: Vec<&[u8]> = vec![bytes[1], bytes[0], bytes[2]];
-    assert!(object::open_list(Custody::FileKey(&FILE_KEY), &list, &swapped, None).is_err());
+    assert!(
+        object::open_list(vault(), Custody::FileKey(&FILE_KEY), &list, &swapped, None).is_err()
+    );
 
     // An input that already fits is a one-part list, so no caller branches on
     // size.
-    let (_, small) =
-        object::seal_list(Custody::FileKey(&FILE_KEY), &options, b"one part").expect("splits");
+    let (_, small) = object::seal_list(vault(), Custody::FileKey(&FILE_KEY), &options, b"one part")
+        .expect("splits");
     assert_eq!(small.parts.len(), 1);
 }
 
@@ -272,14 +293,15 @@ fn a_pack_is_addressable_by_range_and_its_headers_do_not_transplant() {
             plaintext,
         })
         .collect();
-    let pack = object::pack::build(&ROOT, &items, None).expect("packs");
+    let pack = object::pack::build(vault(), &ROOT, &items, None).expect("packs");
     assert!(pack.bytes.len() <= object::pack::MAX_PACK_BYTES);
 
     // The read path a restored phone uses: one row, one byte range, no table.
     for (entry, (_, expected)) in pack.entries.iter().zip(&bodies) {
         let range = &pack.bytes[entry.offset as usize..(entry.offset + entry.length) as usize];
         assert_eq!(
-            object::open(Custody::FileKey(&FILE_KEY), range, None).expect("opens from its range"),
+            object::open(vault(), Custody::FileKey(&FILE_KEY), range, None)
+                .expect("opens from its range"),
             *expected
         );
     }
@@ -293,13 +315,13 @@ fn a_pack_is_addressable_by_range_and_its_headers_do_not_transplant() {
     let mut transplanted = first[..first_body_at].to_vec();
     transplanted.extend_from_slice(&second[second_body_at..]);
     assert!(
-        object::open(Custody::FileKey(&FILE_KEY), &transplanted, None).is_err(),
+        object::open(vault(), Custody::FileKey(&FILE_KEY), &transplanted, None).is_err(),
         "a header transplanted onto another item's body opened"
     );
 
     // And the table rebuilds exactly the rows the vault holds.
     assert_eq!(
-        object::pack::read_table(&ROOT, &pack.bytes, None).expect("reads the table"),
+        object::pack::read_table(vault(), &ROOT, &pack.bytes, None).expect("reads the table"),
         pack.entries
     );
 
@@ -307,6 +329,7 @@ fn a_pack_is_addressable_by_range_and_its_headers_do_not_transplant() {
     let live: BTreeSet<String> = bodies.iter().take(4).map(|(id, _)| id.clone()).collect();
     assert!(object::pack::should_repack(&pack.entries, &live));
     let repacked = object::pack::repack(
+        vault(),
         &ROOT,
         &pack.bytes,
         &pack.entries,
@@ -319,6 +342,7 @@ fn a_pack_is_addressable_by_range_and_its_headers_do_not_transplant() {
     assert!(repacked.bytes.len() < pack.bytes.len());
     assert_eq!(
         object::open(
+            vault(),
             Custody::FileKey(&FILE_KEY),
             &repacked.bytes[repacked.entries[3].offset as usize..]
                 [..repacked.entries[3].length as usize],
@@ -346,6 +370,7 @@ fn padme_collapses_neighbouring_sizes_onto_one_object_size() {
     };
     let sealed_length = |length: usize| {
         object::seal(
+            vault(),
             Custody::FileKey(&FILE_KEY),
             &options,
             &incompressible(length, b"padme"),
@@ -376,4 +401,87 @@ fn padme_collapses_neighbouring_sizes_onto_one_object_size() {
             "{length} → {sealed} is more than Padmé's bound plus the fixed framing"
         );
     }
+}
+
+/// **§4's AAD binds `(vault identity key, kind)`.** Two vaults, the same root
+/// key, the same file key, the same plaintext: neither vault's objects open as
+/// the other's.
+///
+/// The shared key is the whole point, and it is not contrived. A vault restored
+/// from a member's 24 words derives the same root key as every other vault under
+/// that phrase, and one blind store holds all of them. Without the identity key
+/// in the AAD, a store could move a sealed `base` range from one of a member's
+/// vaults into another's manifest and it would open — and for a
+/// [`Custody::FileKey`] object, which carries no key wrap at all, nothing else
+/// in the format binds a vault.
+#[test]
+fn an_object_sealed_for_one_vault_does_not_open_as_another() {
+    const OTHER_KEY: [u8; 32] = [0x44; 32];
+    let other = object::VaultId::new(&OTHER_KEY);
+    let dictionary = dictionary();
+
+    // A wrapped-key object: the key wrap carries the binding.
+    let wrapped = object::seal(
+        vault(),
+        Custody::Wrapped(&ROOT),
+        &SealOptions {
+            kind: Kind::Segment,
+            role: Role::Whole,
+            dictionary: Some(&dictionary),
+        },
+        b"pages from the household's vault",
+    )
+    .expect("seals");
+    assert_eq!(
+        object::open(
+            other,
+            Custody::Wrapped(&ROOT),
+            &wrapped.bytes,
+            Some(&dictionary)
+        ),
+        Err(ObjectError::Open),
+        "the same root key must not unwrap another vault's segment"
+    );
+    assert!(
+        object::open(
+            vault(),
+            Custody::Wrapped(&ROOT),
+            &wrapped.bytes,
+            Some(&dictionary)
+        )
+        .is_ok()
+    );
+
+    // A file-key object: there is no wrap, so the per-chunk AAD is the only
+    // place the vault can be bound — and it is.
+    let blob = object::seal(
+        vault(),
+        Custody::FileKey(&FILE_KEY),
+        &SealOptions {
+            kind: Kind::Blob,
+            role: Role::Original,
+            dictionary: None,
+        },
+        b"a photograph",
+    )
+    .expect("seals");
+    assert_eq!(
+        object::open(other, Custody::FileKey(&FILE_KEY), &blob.bytes, None),
+        Err(ObjectError::Open),
+        "a blob's body must not open as another vault's"
+    );
+    assert_eq!(
+        object::open(vault(), Custody::FileKey(&FILE_KEY), &blob.bytes, None).expect("opens"),
+        b"a photograph"
+    );
+
+    // And the identity key is NOT in the object: a blind store must not be able
+    // to tell which vault a ciphertext belongs to.
+    assert!(
+        !wrapped
+            .bytes
+            .windows(32)
+            .any(|window| window == VAULT_KEY || window == OTHER_KEY),
+        "the vault identity key must never appear in the sealed bytes"
+    );
 }

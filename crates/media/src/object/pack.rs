@@ -39,7 +39,8 @@ use std::collections::BTreeSet;
 
 use super::header::{FORMAT_VERSION, HEADER_MAGIC};
 use super::{
-    Custody, Dictionary, Kind, ObjectError, ObjectName, ObjectResult, Role, SealOptions, seal,
+    Custody, Dictionary, Kind, ObjectError, ObjectName, ObjectResult, Role, SealOptions, VaultId,
+    seal,
 };
 
 /// A pack is one object and wears the object cap (F6).
@@ -119,6 +120,7 @@ impl LiveShareIndex for NoLiveShares {
 /// [`ObjectError::TooLarge`] if the items do not fit under [`MAX_PACK_BYTES`],
 /// otherwise whatever sealing an item refused.
 pub fn build(
+    vault: VaultId<'_>,
     root: &[u8; super::KEY_BYTES],
     items: &[PackItem<'_>],
     dictionary: Option<&Dictionary>,
@@ -131,7 +133,7 @@ pub fn build(
             role: item.role,
             dictionary,
         };
-        let sealed = seal(item.custody, &options, item.plaintext)?;
+        let sealed = seal(vault, item.custody, &options, item.plaintext)?;
         entries.push(PackEntry {
             id: item.id.to_owned(),
             name: sealed.name,
@@ -140,17 +142,19 @@ pub fn build(
         });
         bytes.extend_from_slice(&sealed.bytes);
     }
-    finish(root, bytes, entries, dictionary)
+    finish(vault, root, bytes, entries, dictionary)
 }
 
 /// Write the table and the trailer onto item bytes that are already laid out.
 fn finish(
+    vault: VaultId<'_>,
     root: &[u8; super::KEY_BYTES],
     mut bytes: Vec<u8>,
     entries: Vec<PackEntry>,
     dictionary: Option<&Dictionary>,
 ) -> ObjectResult<Pack> {
     let table = seal(
+        vault,
         Custody::Wrapped(root),
         &SealOptions {
             kind: Kind::Pack,
@@ -181,6 +185,7 @@ fn finish(
 /// [`ObjectError::PackTable`] for a trailer or table that does not describe
 /// these bytes, otherwise whatever opening the table refused.
 pub fn read_table(
+    vault: VaultId<'_>,
     root: &[u8; super::KEY_BYTES],
     pack: &[u8],
     dictionary: Option<&Dictionary>,
@@ -204,6 +209,7 @@ pub fn read_table(
                 reason: "the table runs past the front of the pack",
             })?;
     let plain = super::open(
+        vault,
         Custody::Wrapped(root),
         &pack[table_start..pack.len() - TRAILER_BYTES],
         dictionary,
@@ -237,6 +243,7 @@ pub fn read_table(
 /// [`ObjectError::ReadBackMismatch`] when the bytes at that range are not the
 /// item the row names, otherwise whatever opening refused.
 pub fn open_range(
+    vault: VaultId<'_>,
     custody: Custody<'_>,
     pack: &[u8],
     entry: &PackEntry,
@@ -260,7 +267,7 @@ pub fn open_range(
     if ObjectName::of(item) != entry.name {
         return Err(ObjectError::ReadBackMismatch);
     }
-    super::open(custody, item, dictionary)
+    super::open(vault, custody, item, dictionary)
 }
 
 /// Whether this pack has enough dead bytes to be worth rewriting.
@@ -288,6 +295,7 @@ pub fn should_repack(entries: &[PackEntry], live: &BTreeSet<String>) -> bool {
 /// cannot be reached past a partially built replacement. Otherwise
 /// [`ObjectError::PackTable`] for a row that does not describe these bytes.
 pub fn repack(
+    vault: VaultId<'_>,
     root: &[u8; super::KEY_BYTES],
     pack: &[u8],
     entries: &[PackEntry],
@@ -329,7 +337,7 @@ pub fn repack(
         });
         bytes.extend_from_slice(item);
     }
-    finish(root, bytes, kept, dictionary)
+    finish(vault, root, bytes, kept, dictionary)
 }
 
 /// `count ‖ (id_len ‖ id ‖ offset ‖ length)*`, all big-endian.
@@ -406,6 +414,12 @@ mod tests {
 
     const ROOT: [u8; 32] = [4_u8; 32];
     const FILE_KEY: [u8; 32] = [12_u8; 32];
+    /// The vault every object in these tests is sealed for — §4's AAD binding.
+    const VAULT_KEY: [u8; 32] = [33_u8; 32];
+
+    fn vault() -> VaultId<'static> {
+        VaultId::new(&VAULT_KEY)
+    }
 
     fn items<'a>(bodies: &'a [(&'a str, &'a [u8])]) -> Vec<PackItem<'a>> {
         bodies
@@ -426,7 +440,7 @@ mod tests {
             ("thumb-b", b"the second thumbnail"),
             ("thumb-c", b"the third thumbnail"),
         ];
-        build(&ROOT, &items(&bodies), None).expect("packs")
+        build(vault(), &ROOT, &items(&bodies), None).expect("packs")
     }
 
     #[test]
@@ -434,6 +448,7 @@ mod tests {
         let pack = a_pack();
         assert_eq!(pack.entries.len(), 3);
         let opened = open_range(
+            vault(),
             Custody::FileKey(&FILE_KEY),
             &pack.bytes,
             &pack.entries[1],
@@ -447,7 +462,7 @@ mod tests {
     fn the_trailing_table_rebuilds_the_rows_a_restore_has_not_got() {
         let pack = a_pack();
         assert_eq!(
-            read_table(&ROOT, &pack.bytes, None).expect("reads"),
+            read_table(vault(), &ROOT, &pack.bytes, None).expect("reads"),
             pack.entries
         );
     }
@@ -458,7 +473,13 @@ mod tests {
         let mut lying = pack.entries[0].clone();
         lying.length = pack.bytes.len() as u64 + 1;
         assert!(matches!(
-            open_range(Custody::FileKey(&FILE_KEY), &pack.bytes, &lying, None),
+            open_range(
+                vault(),
+                Custody::FileKey(&FILE_KEY),
+                &pack.bytes,
+                &lying,
+                None
+            ),
             Err(ObjectError::PackTable { .. })
         ));
     }
@@ -472,7 +493,13 @@ mod tests {
         swapped.offset = pack.entries[1].offset;
         swapped.length = pack.entries[1].length;
         assert_eq!(
-            open_range(Custody::FileKey(&FILE_KEY), &pack.bytes, &swapped, None),
+            open_range(
+                vault(),
+                Custody::FileKey(&FILE_KEY),
+                &pack.bytes,
+                &swapped,
+                None
+            ),
             Err(ObjectError::ReadBackMismatch)
         );
     }
@@ -484,6 +511,7 @@ mod tests {
         assert!(should_repack(&pack.entries, &live));
 
         let repacked = repack(
+            vault(),
             &ROOT,
             &pack.bytes,
             &pack.entries,
@@ -497,6 +525,7 @@ mod tests {
         assert_eq!(repacked.entries[1].name, pack.entries[2].name);
         assert_eq!(
             open_range(
+                vault(),
                 Custody::FileKey(&FILE_KEY),
                 &repacked.bytes,
                 &repacked.entries[1],
@@ -522,6 +551,7 @@ mod tests {
         let live: BTreeSet<String> = ["thumb-a".to_owned()].into();
         assert_eq!(
             repack(
+                vault(),
                 &ROOT,
                 &pack.bytes,
                 &pack.entries,
@@ -547,7 +577,7 @@ mod tests {
         let last = pack.bytes.len() - 1;
         pack.bytes[last] ^= 0xff;
         assert!(matches!(
-            read_table(&ROOT, &pack.bytes, None),
+            read_table(vault(), &ROOT, &pack.bytes, None),
             Err(ObjectError::PackTable { .. })
         ));
     }

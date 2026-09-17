@@ -40,6 +40,15 @@ use serde_json::{Value, json};
 const ROOT: [u8; 32] = [0x11; 32];
 const FILE_KEY: [u8; 32] = [0x22; 32];
 
+/// The vault these objects are sealed for — §4's `(vault identity key, kind)`
+/// AAD binding. The key is never written into an object; it is associated data
+/// on both the key wrap and every body chunk.
+const VAULT_KEY: [u8; 32] = [0x33; 32];
+
+fn vault() -> object::VaultId<'static> {
+    object::VaultId::new(&VAULT_KEY)
+}
+
 fn fixture_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../contracts/crypto/object-vectors.json")
@@ -140,7 +149,8 @@ fn open_every_committed_object(committed: &Value) {
             .expect("a flag")
             .then_some(&dictionary);
         assert_eq!(
-            object::open(custody, &sealed, with).unwrap_or_else(|error| panic!("{name}: {error}")),
+            object::open(vault(), custody, &sealed, with)
+                .unwrap_or_else(|error| panic!("{name}: {error}")),
             plaintext,
             "{name} no longer opens"
         );
@@ -156,11 +166,11 @@ fn open_every_committed_object(committed: &Value) {
         .decode(pack["sealedBase64"].as_str().expect("pack bytes"))
         .expect("base64");
     let entries =
-        object::pack::read_table(&ROOT, &bytes, None).expect("the committed pack's table");
+        object::pack::read_table(vault(), &ROOT, &bytes, None).expect("the committed pack's table");
     for (entry, (id, plaintext)) in entries.iter().zip(pack_bodies()) {
         assert_eq!(entry.id, id);
         assert_eq!(
-            object::pack::open_range(Custody::FileKey(&FILE_KEY), &bytes, entry, None)
+            object::pack::open_range(vault(), Custody::FileKey(&FILE_KEY), &bytes, entry, None)
                 .expect("an item opens from its range"),
             plaintext
         );
@@ -226,6 +236,7 @@ fn generate(committed: &Value, refresh: bool) -> Value {
                 Custody::FileKey(&FILE_KEY)
             };
             let sealed = object::seal(
+                vault(),
                 custody_ref,
                 &SealOptions {
                     kind: *kind,
@@ -277,7 +288,7 @@ fn generate(committed: &Value, refresh: bool) -> Value {
             plaintext,
         })
         .collect();
-    let pack = object::pack::build(&ROOT, &items, None).expect("packs");
+    let pack = object::pack::build(vault(), &ROOT, &items, None).expect("packs");
     let pack_bytes = match (refresh, committed["pack"]["sealedBase64"].as_str()) {
         (false, Some(previous)) => json!(previous),
         _ => json!(STANDARD.encode(&pack.bytes)),
@@ -289,6 +300,7 @@ fn generate(committed: &Value, refresh: bool) -> Value {
     // nothing.
     let oversized = vec![0_u8; MAX_PLAINTEXT_BYTES * 2 + 1024];
     let (parts, list) = object::seal_list(
+        vault(),
         Custody::FileKey(&FILE_KEY),
         &SealOptions {
             kind: Kind::Blob,
@@ -327,6 +339,12 @@ fn generate(committed: &Value, refresh: bool) -> Value {
         },
         "rootKeyHex": hex::encode(ROOT),
         "fileKeyHex": hex::encode(FILE_KEY),
+        // THE VAULT IDENTITY KEY IS AN INPUT, NOT A FIELD OF ANY OBJECT (§4).
+        // It is associated data on the key wrap and on every body chunk, so a
+        // reader needs it to open these vectors and will find it nowhere inside
+        // them — which is the point: a blind store must not be able to tell
+        // which vault a ciphertext belongs to.
+        "vaultIdentityKeyHex": hex::encode(VAULT_KEY),
         "dictionary": {
             "sampleCount": samples().len(),
             "maxBytes": 16 * 1024,

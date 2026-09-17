@@ -31,12 +31,17 @@
 //! so a retry is a re-upload and never a re-seal. `tests/object.rs` asserts no
 //! nonce repeats across retries **or across process restarts**.
 //!
-//! **3. A header cannot be transplanted.** The key wrap's AAD carries kind and
-//! role — the same construction `centraid_identity::sealed_box` uses, with the
-//! same length-prefixed encoding, so `kind = "ab", role = "c"` is not
-//! `kind = "a", role = "bc"` — and every header additionally carries 16 random
-//! bytes of [`SALT_BYTES`] salt, so two objects of the SAME kind and role do not
-//! share a header either. [`header`] says why the second half is needed.
+//! **3. A header cannot be transplanted, and neither can a body.** §4's rule is
+//! that the **AAD binds `(vault identity key, kind)`**, and both the key wrap
+//! and every body chunk carry it ([`VaultId`]): the kind and role stop a header
+//! moving between a `base` and a `manifest`, and the identity key stops it
+//! moving between two **vaults** a blind store holds side by side — including
+//! the case where both share a root key because one was restored from the
+//! other's phrase. The encoding is the one `centraid_identity::sealed_box` uses,
+//! length-prefixed, so `kind = "ab", role = "c"` is not `kind = "a", role = "bc"`
+//! — and every header additionally carries 16 random bytes of [`SALT_BYTES`]
+//! salt, so two objects of the SAME kind and role in the SAME vault do not share
+//! a header either. [`header`] says why that last part is needed.
 //!
 //! **4. Sizes are bounded, not exact.** The plaintext of a compressing kind is
 //! zstd'd against a **trained dictionary named in the header** ([`dict`]) and
@@ -99,6 +104,10 @@ pub const TAG_BYTES: usize = 16;
 
 /// A content key, and the key-wrap key derived from the vault root.
 pub const KEY_BYTES: usize = 32;
+
+/// A vault identity key: an Ed25519 public key, which §0 makes the `vault_id`
+/// and the address. It is **associated data here and never a key**.
+pub const VAULT_ID_BYTES: usize = 32;
 
 /// `plaintext_len ‖ payload_len`, the two big-endian `u64`s Padmé pads around.
 const FRAME_PREFIX_BYTES: usize = 16;
@@ -212,6 +221,49 @@ impl ObjectName {
     }
 }
 
+/// The vault an object belongs to: its **identity key**, which #1029 §0 makes
+/// its `vault_id` and its address.
+///
+/// ## Why the AAD binds it (§4), and why the object does not carry it
+///
+/// §4's sentence is "**AAD binds `(vault identity key, kind)`**". Both halves
+/// are load-bearing and they answer different attacks. The kind and role stop a
+/// header being transplanted between a `base` and a `manifest` of one vault;
+/// the identity key stops the same transplant **between vaults** — a store that
+/// holds two members' objects cannot move one vault's sealed range into the
+/// other's manifest and have it open, even in the case where the two share a
+/// root key because one was restored from the other's phrase.
+///
+/// It is bound in **both** associated data, not one:
+///
+/// - the **key wrap**, so a `Wrapped` object's key does not unwrap under
+///   another vault's root;
+/// - every **body chunk**, because a [`Custody::FileKey`] object has no wrap at
+///   all, and binding only the wrap would leave every blob and thumbnail — the
+///   overwhelming majority of a phone's objects — unbound to its vault.
+///
+/// **The key is never written into the object.** It is the one field that would
+/// tell a blind store which vault a ciphertext belongs to, which is exactly the
+/// linkage §4 spends the whole format avoiding. Both parties already know it:
+/// the writer is the vault, and a reader who cannot name the vault has no root
+/// key either.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VaultId<'a>(&'a [u8; VAULT_ID_BYTES]);
+
+impl<'a> VaultId<'a> {
+    /// Name the vault an object is sealed for or opened as.
+    #[must_use]
+    pub const fn new(identity_key: &'a [u8; VAULT_ID_BYTES]) -> Self {
+        Self(identity_key)
+    }
+
+    /// The raw identity key.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; VAULT_ID_BYTES] {
+        self.0
+    }
+}
+
 /// Where the key that opens this object lives.
 ///
 /// The two arms are §4's two cases and there is no third: `base`, `segment`,
@@ -261,6 +313,7 @@ pub struct Sealed {
 /// dictionary; [`ObjectError::Entropy`] when the operating system will not give
 /// a nonce; [`ObjectError::Seal`] or [`ObjectError::Compression`] otherwise.
 pub fn seal(
+    vault: VaultId<'_>,
     custody: Custody<'_>,
     options: &SealOptions<'_>,
     plaintext: &[u8],
@@ -283,7 +336,7 @@ pub fn seal(
     let (content_key, wrapped_key) = match custody {
         Custody::Wrapped(root) => {
             let content_key = random_bytes::<KEY_BYTES>()?;
-            let wrapped = wrap_key(root, options.kind, options.role, &content_key)?;
+            let wrapped = wrap_key(vault, root, options.kind, options.role, &content_key)?;
             (content_key, wrapped)
         }
         Custody::FileKey(file_key) => (*file_key, Vec::new()),
@@ -301,6 +354,7 @@ pub fn seal(
 
     let mut bytes = header_bytes.clone();
     seal_body(
+        vault,
         &content_key,
         &header_bytes,
         &pad_frame(plaintext.len(), &payload),
@@ -327,6 +381,7 @@ pub fn seal(
 /// [`ObjectError::DictionaryMismatch`] or [`ObjectError::DictionaryRequired`]
 /// for the dictionary; [`ObjectError::Malformed`] for the framing.
 pub fn open(
+    vault: VaultId<'_>,
     custody: Custody<'_>,
     sealed: &[u8],
     dictionary: Option<&Dictionary>,
@@ -335,7 +390,9 @@ pub fn open(
     let header_bytes = &sealed[..body_at];
 
     let content_key = match custody {
-        Custody::Wrapped(root) => unwrap_key(root, header.kind, header.role, &header.wrapped_key)?,
+        Custody::Wrapped(root) => {
+            unwrap_key(vault, root, header.kind, header.role, &header.wrapped_key)?
+        }
         Custody::FileKey(file_key) => {
             if !header.wrapped_key.is_empty() {
                 // A file-key object that carries a wrap is a header from some
@@ -346,7 +403,7 @@ pub fn open(
         }
     };
 
-    let padded = open_body(&content_key, header_bytes, &sealed[body_at..])?;
+    let padded = open_body(vault, &content_key, header_bytes, &sealed[body_at..])?;
     let (plaintext_len, payload) = unpad_frame(&padded)?;
 
     if !header.compressed {
@@ -385,6 +442,7 @@ pub fn open(
 /// # Errors
 /// [`ObjectError::ReadBackMismatch`], or whatever [`open`] refused.
 pub fn verify_read_back(
+    vault: VaultId<'_>,
     custody: Custody<'_>,
     sealed: &Sealed,
     from_disk: &[u8],
@@ -393,7 +451,7 @@ pub fn verify_read_back(
     if ObjectName::of(from_disk) != sealed.name {
         return Err(ObjectError::ReadBackMismatch);
     }
-    let plain = open(custody, from_disk, dictionary)?;
+    let plain = open(vault, custody, from_disk, dictionary)?;
     if blake3::hash(&plain).as_bytes() != &sealed.plaintext_hash {
         return Err(ObjectError::ReadBackMismatch);
     }
@@ -422,6 +480,7 @@ pub struct ObjectList {
 /// # Errors
 /// Whatever [`seal`] refused for a part.
 pub fn seal_list(
+    vault: VaultId<'_>,
     custody: Custody<'_>,
     options: &SealOptions<'_>,
     plaintext: &[u8],
@@ -434,7 +493,7 @@ pub fn seal_list(
         .chunks(MAX_PLAINTEXT_BYTES)
         .chain(std::iter::once(&plaintext[..0]).take(usize::from(plaintext.is_empty())))
     {
-        let one = seal(custody, options, part)?;
+        let one = seal(vault, custody, options, part)?;
         parts.push(one.name);
         sealed.push(one);
     }
@@ -453,6 +512,7 @@ pub fn seal_list(
 /// [`ObjectError::Malformed`] when the bytes handed over are not the listed
 /// parts in the listed order; otherwise whatever [`open`] refused.
 pub fn open_list(
+    vault: VaultId<'_>,
     custody: Custody<'_>,
     list: &ObjectList,
     parts: &[&[u8]],
@@ -470,7 +530,7 @@ pub fn open_list(
                 reason: "a part is not the object the list names, or is out of order",
             });
         }
-        out.extend_from_slice(&open(custody, bytes, dictionary)?);
+        out.extend_from_slice(&open(vault, custody, bytes, dictionary)?);
     }
     if out.len() as u64 != list.plaintext_bytes {
         return Err(ObjectError::Malformed {
@@ -494,20 +554,25 @@ pub(crate) fn random_bytes<const N: usize>() -> ObjectResult<[u8; N]> {
     Ok(bytes)
 }
 
-/// The key-wrap AAD: the format's name, the kind and the role, each
-/// length-prefixed.
+/// One length-prefixed field of associated data.
 ///
 /// Length-prefixed rather than delimited, for the reason
 /// `centraid_identity::sealed_box` gives: a delimiter can appear inside a kind
 /// or a role and a length cannot, so `kind = "ab", role = "c"` and
 /// `kind = "a", role = "bc"` are different associated data.
-fn wrap_aad(kind: Kind, role: Role) -> Vec<u8> {
+fn push_field(out: &mut Vec<u8>, bytes: &[u8]) {
+    out.extend_from_slice(&u32::try_from(bytes.len()).unwrap_or(u32::MAX).to_be_bytes());
+    out.extend_from_slice(bytes);
+}
+
+/// The key-wrap AAD: the format's name, **the vault identity key** (§4), the
+/// kind and the role, each length-prefixed.
+fn wrap_aad(vault: VaultId<'_>, kind: Kind, role: Role) -> Vec<u8> {
     let mut out = Vec::new();
-    for field in [FORMAT_NAME, kind.as_str(), role.as_str()] {
-        let bytes = field.as_bytes();
-        out.extend_from_slice(&u32::try_from(bytes.len()).unwrap_or(u32::MAX).to_be_bytes());
-        out.extend_from_slice(bytes);
-    }
+    push_field(&mut out, FORMAT_NAME.as_bytes());
+    push_field(&mut out, vault.as_bytes());
+    push_field(&mut out, kind.as_str().as_bytes());
+    push_field(&mut out, role.as_str().as_bytes());
     out
 }
 
@@ -519,6 +584,7 @@ fn wrap_key_from_root(root: &[u8; KEY_BYTES]) -> [u8; KEY_BYTES] {
 }
 
 fn wrap_key(
+    vault: VaultId<'_>,
     root: &[u8; KEY_BYTES],
     kind: Kind,
     role: Role,
@@ -532,7 +598,7 @@ fn wrap_key(
             (&nonce).into(),
             Payload {
                 msg: content_key,
-                aad: &wrap_aad(kind, role),
+                aad: &wrap_aad(vault, kind, role),
             },
         )
         .map_err(|_| ObjectError::Seal)?;
@@ -543,6 +609,7 @@ fn wrap_key(
 }
 
 fn unwrap_key(
+    vault: VaultId<'_>,
     root: &[u8; KEY_BYTES],
     kind: Kind,
     role: Role,
@@ -566,7 +633,7 @@ fn unwrap_key(
             (&nonce).into(),
             Payload {
                 msg: &wrapped[NONCE_BYTES..],
-                aad: &wrap_aad(kind, role),
+                aad: &wrap_aad(vault, kind, role),
             },
         )
         .map_err(|_| ObjectError::Open)?;
@@ -641,15 +708,18 @@ fn unpad_frame(padded: &[u8]) -> ObjectResult<(usize, &[u8])> {
     Ok((plaintext_len, &padded[FRAME_PREFIX_BYTES..end]))
 }
 
-/// The chunk AAD: the whole header, then the index, then whether this is the
-/// last chunk.
+/// The chunk AAD: **the vault identity key** (§4), then the whole header, then
+/// the index, then whether this is the last chunk.
 ///
 /// The index is what refuses a reordering and the final flag is what refuses a
 /// truncation — a reader decides `final` from "are there bytes after this
 /// chunk", so cutting the tail makes the new last chunk open with `final = 1`
-/// against a tag computed with `final = 0`.
-fn chunk_aad(header_bytes: &[u8], index: u32, final_chunk: bool) -> Vec<u8> {
-    let mut aad = Vec::with_capacity(header_bytes.len() + 5);
+/// against a tag computed with `final = 0`. The vault is what refuses a body
+/// lifted into another vault's object, which for a [`Custody::FileKey`] object
+/// is the ONLY place it can be refused: such an object has no key wrap to bind.
+fn chunk_aad(vault: VaultId<'_>, header_bytes: &[u8], index: u32, final_chunk: bool) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(VAULT_ID_BYTES + 4 + header_bytes.len() + 5);
+    push_field(&mut aad, vault.as_bytes());
     aad.extend_from_slice(header_bytes);
     aad.extend_from_slice(&index.to_be_bytes());
     aad.push(u8::from(final_chunk));
@@ -657,6 +727,7 @@ fn chunk_aad(header_bytes: &[u8], index: u32, final_chunk: bool) -> Vec<u8> {
 }
 
 fn seal_body(
+    vault: VaultId<'_>,
     content_key: &[u8; KEY_BYTES],
     header_bytes: &[u8],
     padded: &[u8],
@@ -674,7 +745,7 @@ fn seal_body(
                 (&nonce).into(),
                 Payload {
                     msg: chunk,
-                    aad: &chunk_aad(header_bytes, index32, index + 1 == chunk_count),
+                    aad: &chunk_aad(vault, header_bytes, index32, index + 1 == chunk_count),
                 },
             )
             .map_err(|_| ObjectError::Seal)?;
@@ -690,6 +761,7 @@ fn seal_body(
 }
 
 fn open_body(
+    vault: VaultId<'_>,
     content_key: &[u8; KEY_BYTES],
     header_bytes: &[u8],
     body: &[u8],
@@ -739,7 +811,7 @@ fn open_body(
                 (&nonce).into(),
                 Payload {
                     msg: &body[framed..end],
-                    aad: &chunk_aad(header_bytes, index, end == body.len()),
+                    aad: &chunk_aad(vault, header_bytes, index, end == body.len()),
                 },
             )
             .map_err(|_| ObjectError::Open)?;
@@ -760,6 +832,12 @@ mod tests {
     use super::*;
 
     const ROOT: [u8; 32] = [3_u8; 32];
+    /// The vault every object in these tests is sealed for — §4's AAD binding.
+    const VAULT_KEY: [u8; 32] = [33_u8; 32];
+
+    fn vault() -> VaultId<'static> {
+        VaultId::new(&VAULT_KEY)
+    }
 
     fn dictionary() -> Dictionary {
         let owned: Vec<Vec<u8>> = (0..64_u32)
@@ -777,10 +855,16 @@ mod tests {
             role: Role::Original,
             dictionary: None,
         };
-        let sealed = seal(Custody::FileKey(&file_key), &options, b"a photograph").expect("seals");
+        let sealed = seal(
+            vault(),
+            Custody::FileKey(&file_key),
+            &options,
+            b"a photograph",
+        )
+        .expect("seals");
         assert!(sealed.bytes.len() > 42, "a header and a body");
         assert_eq!(
-            open(Custody::FileKey(&file_key), &sealed.bytes, None).expect("opens"),
+            open(vault(), Custody::FileKey(&file_key), &sealed.bytes, None).expect("opens"),
             b"a photograph"
         );
     }
@@ -796,7 +880,7 @@ mod tests {
             role: Role::Whole,
             dictionary: Some(&dictionary),
         };
-        let sealed = seal(Custody::Wrapped(&ROOT), &options, &plain).expect("seals");
+        let sealed = seal(vault(), Custody::Wrapped(&ROOT), &options, &plain).expect("seals");
         assert!(
             sealed.bytes.len() < plain.len(),
             "the dictionary bought nothing: {} vs {}",
@@ -804,7 +888,13 @@ mod tests {
             plain.len()
         );
         assert_eq!(
-            open(Custody::Wrapped(&ROOT), &sealed.bytes, Some(&dictionary)).expect("opens"),
+            open(
+                vault(),
+                Custody::Wrapped(&ROOT),
+                &sealed.bytes,
+                Some(&dictionary)
+            )
+            .expect("opens"),
             plain
         );
     }
@@ -817,7 +907,7 @@ mod tests {
             dictionary: None,
         };
         assert_eq!(
-            seal(Custody::Wrapped(&ROOT), &options, b"{}"),
+            seal(vault(), Custody::Wrapped(&ROOT), &options, b"{}"),
             Err(ObjectError::DictionaryRequired)
         );
     }
@@ -831,13 +921,18 @@ mod tests {
             role: Role::Whole,
             dictionary: Some(&dictionary),
         };
-        let sealed = seal(Custody::Wrapped(&ROOT), &options, b"{\"a\":1}").expect("seals");
+        let sealed = seal(vault(), Custody::Wrapped(&ROOT), &options, b"{\"a\":1}").expect("seals");
         assert!(matches!(
-            open(Custody::Wrapped(&ROOT), &sealed.bytes, Some(&other)),
+            open(
+                vault(),
+                Custody::Wrapped(&ROOT),
+                &sealed.bytes,
+                Some(&other)
+            ),
             Err(ObjectError::DictionaryMismatch { .. })
         ));
         assert_eq!(
-            open(Custody::Wrapped(&ROOT), &sealed.bytes, None),
+            open(vault(), Custody::Wrapped(&ROOT), &sealed.bytes, None),
             Err(ObjectError::DictionaryRequired)
         );
     }
@@ -850,9 +945,9 @@ mod tests {
             dictionary: None,
         };
         let key = [5_u8; 32];
-        let sealed = seal(Custody::FileKey(&key), &options, b"").expect("seals");
+        let sealed = seal(vault(), Custody::FileKey(&key), &options, b"").expect("seals");
         assert_eq!(
-            open(Custody::FileKey(&key), &sealed.bytes, None).expect("opens"),
+            open(vault(), Custody::FileKey(&key), &sealed.bytes, None).expect("opens"),
             b""
         );
     }
@@ -865,14 +960,22 @@ mod tests {
             role: Role::Thumbnail,
             dictionary: None,
         };
-        let sealed = seal(Custody::FileKey(&key), &options, b"a thumbnail").expect("seals");
-        verify_read_back(Custody::FileKey(&key), &sealed, &sealed.bytes, None).expect("verifies");
+        let sealed =
+            seal(vault(), Custody::FileKey(&key), &options, b"a thumbnail").expect("seals");
+        verify_read_back(
+            vault(),
+            Custody::FileKey(&key),
+            &sealed,
+            &sealed.bytes,
+            None,
+        )
+        .expect("verifies");
 
         let mut damaged = sealed.bytes.clone();
         let last = damaged.len() - 1;
         damaged[last] ^= 1;
         assert_eq!(
-            verify_read_back(Custody::FileKey(&key), &sealed, &damaged, None),
+            verify_read_back(vault(), Custody::FileKey(&key), &sealed, &damaged, None),
             Err(ObjectError::ReadBackMismatch)
         );
     }
@@ -907,7 +1010,7 @@ mod tests {
         };
         let oversized = vec![0_u8; MAX_PLAINTEXT_BYTES + 1];
         assert_eq!(
-            seal(Custody::FileKey(&key), &options, &oversized),
+            seal(vault(), Custody::FileKey(&key), &options, &oversized),
             Err(ObjectError::TooLarge(MAX_PLAINTEXT_BYTES + 1))
         );
     }
