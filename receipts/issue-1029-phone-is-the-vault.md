@@ -870,3 +870,226 @@ no adapter, no server.
 | 8 `bun run check:push:static` | **4/4 green** (`bun install` first) |
 | 9 `node scripts/check-ledgers.mjs --base 2a0a1f0a` | **ok — 19 sections across 5 ledgers hold** |
 | 10 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
+
+## W4 — the standalone adapter (lane B)
+
+One binary and one image anyone can run, over `crates/gateway-core`'s ports and
+nothing else, passing the same conformance suite the Cloudflare adapter will —
+in **all four store-and-mode combinations**. *Neither deployment is the
+reference implementation: the protocol and its conformance suite are* (§3), so
+the interesting thing about this lane is what is **not** in it: no rule.
+
+### What landed
+
+| Where | What |
+| --- | --- |
+| `crates/gateway-server/Cargo.toml`, `README.md` (new) | the crate, `#![forbid(unsafe_code)]`, and what is deliberately not in it |
+| `crates/gateway-server/src/lib.rs` (new) | the shape, and the three things that are this deployment's rather than the protocol's |
+| `crates/gateway-server/src/clock.rs` (new) | the ONE reach for the wall clock; every rule takes time as an input (F10) |
+| `crates/gateway-server/src/sql.rs` (new) | 23 statements, every one `include_str!`'d from `contracts/` |
+| `crates/gateway-server/src/state.rs` (new) | `StateStore` over SQLite; the compare-and-set under `BEGIN IMMEDIATE` (F7) |
+| `crates/gateway-server/src/bytes/{mod,fs,s3,sigv4,configured}.rs` (new) | two byte stores, the optional mirror the scrub repairs from, and AWS SigV4 |
+| `crates/gateway-server/src/tenancy.rs` (new) | admission by invite, owner-managed (Q13) |
+| `crates/gateway-server/src/http.rs` (new) | axum over the rules, and the proxy a phone `PUT`s to |
+| `crates/gateway-server/src/serve.rs` (new) | the listener, and the only one in this workspace |
+| `crates/gateway-server/src/acme.rs` (new) | TLS-ALPN-01: no inbound port 80, no DNS API token |
+| `crates/gateway-server/src/service.rs` (new) | the systemd unit and launchd agent, carried over from the v0 installer |
+| `crates/gateway-server/src/config.rs` (new) | what an operator wrote down, and the defaults if they wrote nothing |
+| `crates/gateway-server/src/bin/centraid-gateway.rs` (new) | `serve`, `invite`, `invites`, `scrub`, `health`, `install` |
+| `crates/gateway-server/tests/common/mod.rs` (new) | the harness, and a real S3-compatible store over a real socket |
+| `crates/gateway-server/tests/conformance.rs` (new) | `conformance::run`, four times, plus the red-first check |
+| `crates/gateway-server/tests/tenancy.rs` (new) | two tenants, a live server, real certificates and signatures |
+| `crates/gateway-server/tests/canary.rs` (new) | the raw SQLite bytes, every stored file, and the log |
+| `crates/gateway-server/tests/first_run.rs` (new) | no vault, no keys, no private key on disk |
+| `crates/gateway-server/tests/no_rules_here.rs` (new) | the architecture, as a grep |
+| `crates/gateway-server/tests/container.rs` (new) | every coupling between the image and the CLI |
+| `contracts/gateway/schema.sql` | `base`, `base_object`, `client_base_delete` |
+| `contracts/gateway/standalone.sql` (new) | the `invite` table: this deployment's admission, and nothing else |
+| `contracts/gateway/queries/*.sql` (23 new) | one statement per file, so `sql-confinement` needs no allowlist edit |
+| `deploy/gateway-server/{Dockerfile,README.md}` (new) | the image, and self-hosting it |
+| `deploy/README.md` | which gateway "binds no TCP listener" is about, now that there are two |
+| `crates/xtask/src/rules.rs` | `no-listening-socket` repointed, with a two-entry named allowlist and two new tests |
+| `crates/vault/tests/one_hash.rs` | one allowlist entry: `gateway-server/src/bytes/sigv4.rs` |
+| `.governance/packs/.../gateway-engine-mode-agnostic/**`, `CONSTITUTION.md` | the directive that lost its subject, repointed (W4B-4, its own commit) |
+| `Cargo.toml` | axum, reqwest, tokio-rustls-acme, tokio-rustls, time; and the `sha2`/`hmac` boundary comment, which now names the two crates that carry it |
+
+### The conformance run, combination by combination
+
+`conformance::run` is a library function precisely so more than one adapter can
+drive it. All four are green, and the two axes are independent rather than
+redundant:
+
+| Combination | Result | What only this one exercises |
+| --- | --- | --- |
+| filesystem × attest | **green** | the store attests what the adapter recorded at upload |
+| filesystem × read-and-hash | **green** | the adapter reads and hashes; catches bytes that do not hash to their name |
+| S3 × attest | **green** | a real signed `HEAD`, a real attestation header, parsed |
+| S3 × read-and-hash | **green** | a real signed `GET`, hashed here, with the attestation asked for on the same request |
+
+Plus `the_suite_goes_red_against_a_harness_that_stores_nothing`: a harness that
+drops uploads on the floor takes the suite red **against this adapter**, so the
+four rows above are not satisfied by a harness that quietly did nothing.
+
+**What the S3 half could not be run against, named rather than skipped.** The S3
+store is a real HTTP server over a real socket, reached by the real `reqwest`
+client with a real SigV4 signature — but it is not MinIO, not B2 and not R2. It
+verifies the *shape* of the `Authorization` header rather than recomputing the
+signature; the chain itself is pinned against AWS's own published vectors in
+`sigv4`'s unit tests (RFC 4231 case 2 for the MAC, the 2015-08-30 `us-east-1`
+`iam` signing key for the four-step derivation). **Interoperability with a
+particular vendor is untested here**, which is precisely why the checksum mode
+is configuration rather than something the adapter sniffs.
+
+### Two defects the four runs found, and neither was visible by reading
+
+1. **`Response::content_length()` on a `HEAD` is zero.** reqwest reports the
+   body it received, not the header, so every attest-mode commit failed with
+   `SizeMismatch` — a message naming the checksum rather than the header that
+   caused it. The store's `Content-Length` header is what is read now.
+2. **An upload the client did not attest is a rejection in BOTH modes.**
+   `checksum/no-attestation-is-a-rejection` asserts it for `ReadAndHash` too,
+   and `gateway-core`'s in-memory adapter answers `None` in both. The S3 store
+   was reading and hashing an unattested object anyway, which would have
+   **accepted bytes the hosted adapter refuses** — the exact divergence the
+   shared suite exists to catch. It now asks for the attestation on the same
+   request with `x-amz-checksum-mode: ENABLED` rather than paying a second round
+   trip. (This is also a tension worth naming: `ByteStore::evidence`'s doc
+   comment reads as though a store that cannot attest is simply read and hashed,
+   while the suite requires the refusal. The suite is the authority and this
+   adapter follows it; **owner question** below.)
+
+### What the canary scanned
+
+The suite's own canary runs in all four combinations, through the two windows a
+`Harness` opens. `tests/canary.rs` is wider, because those two windows are the
+adapter's own account of itself:
+
+- **the SQLite file's raw bytes on disk**, after the object has been declared,
+  committed, tombstoned and purged — a value that reached a column and was
+  deleted is still in the file, and a `SELECT` would not show it;
+- **every byte of every file** under the data directory, sidecar markers
+  included;
+- **the log**, captured while the path runs, for the plaintext, its BLAKE3, and
+  for a whole vault key or object name — a log is the one place the gateway's
+  entire view would otherwise be gathered in one copyable file.
+
+Needles: the plaintext and its BLAKE3, in raw bytes and in hex. The ciphertext
+is derived from the plaintext so it shares no run with it, so a hit means a
+leak rather than a collision. The check is asked of something: the ciphertext's
+presence on disk is asserted **before** the purge, or a scan after it would be
+scanning an empty directory and calling that clean.
+
+And on a live server: an invite minted through the real CLI does not appear in
+`gateway.sqlite`, its `-wal` or its `-shm`; only its BLAKE3 does.
+
+### The rulings this lane spent
+
+**§3 — one protocol, two deployments.** No `GatewayMode` here either, and
+`tests/no_rules_here.rs` is the grep that says so; `bytes/`, `tenancy.rs` and
+`service.rs`/`acme.rs` are the three places this deployment differs, and every
+one of them is behind a port or is admission.
+
+**F7 — the manifest CAS is the fence.** `BEGIN IMMEDIATE`, which takes the write
+lock *before* the read, so the read and the write are one step. `BEGIN DEFERRED`
+would be the bug with a transaction around it: it takes a read lock and upgrades,
+which SQLite answers with `SQLITE_BUSY` and a retry loop a careless author turns
+back into read-decide-write. The decision inside is `commit::compare_and_set` —
+three mechanisms, one rule.
+
+**F4 — the guard reads padded size and server time.** Untouched. The delete rate
+limit's memory is one row per vault, because `record_client_base_delete(vault,
+at)` carries no object name.
+
+**F13 — quotas and lapse are rules.** A redeemed invite carries a quota; there
+is no unbounded arm anywhere, and `Quota` has no `None`.
+
+**Q13 — household tenancy.** By invite, owner-minted, single-use under a race
+(the redemption is a conditional `UPDATE` on `redeemed_at_ms IS NULL`), and the
+server keeps the invite's BLAKE3 and never the invite.
+
+**Q24 — append-only off by default.** `Config::append_only` is `false`, the
+default is asserted in `config.rs` and in `tenancy.rs`, and
+`deploy/gateway-server/README.md` says what turning it on costs beside the five
+defences that need no decision at all.
+
+**W4c owns Cloudflare.** No Worker was written.
+
+### Findings, and the questions that go with them
+
+1. **`contracts/gateway/schema.sql` had nowhere to put a base.** `BaseRecord` is
+   a **group** of objects under one commit head, and the floor, the coverage
+   window and the size guard are all defined over the group. `object.generation`
+   cannot stand in: a phone may commit many bases under one generation id, and
+   the suite's own abuse run lands fifty. `base` and `base_object` are added to
+   the **shared** schema, because the Worker needs them as much as this does.
+2. **`client_delete`'s key cannot be written by the port that needs it.** It is
+   keyed `(vault_key, object_name)`; `StateStore::record_client_base_delete`
+   carries no name, because the rule does not need one. `client_base_delete` is
+   added as the rate limit's own one-row-per-vault memory, and `client_delete`
+   stays as the per-object audit ledger — **which the engine never writes**.
+   **Owner question:** should `client_delete` be written from the delete path
+   (an owner reading "what did this device delete, and when" has nothing today),
+   or dropped from the schema?
+3. **`no-listening-socket` was written before the product had a server.** Its
+   finding text said the blob door is "the only listener the product may ever
+   have"; #1029 §3 introduces a gateway whose entire job is to be dialled. It is
+   **repointed, not relaxed**: it still scans every crate and every other file
+   inside this one, the exemption is two named files with reasons rather than a
+   crate or a `tests/` glob, and two new tests keep it honest — a second listener
+   in the gateway crate is still caught, and a dead allowlist entry fails.
+   **Owner question:** is a named-file allowlist the right shape here, or should
+   the rule instead learn the difference between a shipped tree and a `tests/`
+   one?
+4. **A second `sha2`/`hmac` carve-out.** SigV4 is an HMAC-SHA256 chain over a
+   SHA-256 payload digest; a signature restated in BLAKE3 opens no bucket. The
+   spelling is confined to `bytes/sigv4.rs` — the module's own constants are what
+   the S3 store and the tests use, so the boundary is one file including in
+   tests — with one `SHA256_ALLOWED` entry in lane A's shape. The workspace
+   comment beside `sha2` now names the two gateway crates rather than claiming
+   only `xtask` and `identity` carry it. **Owner question:** W0.5-R1 is still a
+   ruling with a recommendation rather than a `docs/decisions.md` supersession of
+   D-1025-S4-5; this is its third coat and W9 should close it.
+5. **There are two service-unit generators in the tree now.**
+   `crates/centraid/src/cmd/units.rs` and `gateway_install.rs` survive — the
+   brief expected W2 to have deleted them — and `deploy/systemd/`,
+   `deploy/launchd/` and `contracts/deploy/units/*.expected` are their frozen
+   goldens. They were **not** moved here, and the reason is that the move is
+   bigger than it looks: their units carry a `LoadCredentialEncrypted` keystore
+   credential that a **blind** gateway has no use for, and their goldens are
+   byte-frozen against v0's own generator over a `centraid gateway` exec line
+   that would have to change. `deploy/README.md` now states the seam.
+   **Owner question:** retire `centraid gateway install` and its credential arm
+   and regenerate the goldens against `centraid-gateway serve`, or keep both
+   because `centraid` still installs as a service for a different job?
+   Recommend the first, in a wave that can also touch `contracts/deploy/units/`.
+6. **`deploy/docker/Dockerfile`'s default command no longer works.** Its
+   `CMD ["gateway", "--data-dir", "/data"]` refers to a verb W2 reduced to
+   `gateway install`; the image builds and then exits on `docker run`. Found in
+   passing, not this lane's subject, and not fixed here.
+7. **The image could not be built.** This container has no Docker daemon
+   (`/var/run/docker.sock` is absent), so `docker build` did not run anywhere in
+   this lane. `tests/container.rs` checks every coupling a build would have
+   caught — the package, the binary, the profile and the `target/` path, each
+   verb and flag in `CMD`/`ENTRYPOINT`/`HEALTHCHECK`, the environment variable
+   the CLI reads, the unprivileged user, the state directory and the digest pins
+   — and claims nothing more than that.
+8. **The replay window is still the only anti-replay bound**, as lane A recorded.
+   This adapter adds no seen-nonce store, so a captured **delete** is replayable
+   inside the window. Repeating the question rather than letting it go quiet.
+
+### Verification (lane B)
+
+`export CARGO_TARGET_DIR=/home/user/.cargo-target-w4b` throughout.
+
+| Exit item | Result |
+| --- | --- |
+| 1 `cargo build --workspace` | **clean** |
+| 2 `cargo test -p centraid-gateway-server` | **64 green** — 37 unit + `conformance` 5, `tenancy` 5, `container` 6, `first_run` 5, `no_rules_here` 4, `canary` 2. Named: `the_suite_is_green_against_{a_directory,an_s3_store}_in_{attest,read_and_hash}_mode`, `one_tenant_cannot_{read,write_under,delete}_anothers_*`, `a_signature_does_not_travel_between_paths`, `no_plaintext_and_no_plaintext_hash_is_anywhere_on_disk`, `nothing_the_gateway_logs_carries_a_plaintext_or_a_whole_key` |
+| 3 `cargo test --workspace` | **green, 1596 tests, exit 0** (1530 on base; +66) |
+| 4 conformance, four combinations | **4/4 green** — the table above. S3 against an in-process S3-compatible store, not a vendor |
+| 5 `gate --lane fmt` / `--lane clippy` / `--lane rules` | **PASS**, **PASS**, **PASS** (4 rules, 0 pending; sql-confinement clean over 207 files, no-listening-socket clean over 317 with 2 named) |
+| 6 `gate --profile local` | `fmt` `clippy` `test` `rules` all **ok**. **BUDGET 196.1s of 120s**, `test` 193.6s, at load average 4.5–5.5 on 4 vCPUs beside the sibling mobile lane's two resident JVM daemons — the same contention lane A measured as 73.3s alone against 161.8s shared. This crate's own suite is **0.23s** of execution. Nothing in a ledger was touched. `ledgers` fails on **"no merge base found"**, the worktree limitation both W3 lanes and lane A recorded |
+| 7 `bun run check:push:static` | **4/4 green** (`bun install` first; `bun run format` over the two new READMEs) |
+| 8 `node scripts/check-ledgers.mjs --base c4120bf0` | **ok — 19 sections across 5 ledgers hold** |
+| 9 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings.** The law **moved**, as W4B-4 intended: the digest is now **`2612c611d7e6`** |
+| 10 live run, no vault and no keys | **yes.** `serve` on an empty directory → `{"protocol_min":1,"protocol_max":1,…}`; every unauthenticated verb refused (`GatewaySignatureInvalid`, `Unauthorized`); an invite minted, redeemed once, and the second redemption refused; `scrub` clean; no file in the data directory that looks like key material; the invite code absent from `gateway.sqlite`, its `-wal` and its `-shm` |
