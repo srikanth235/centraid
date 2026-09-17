@@ -4,10 +4,17 @@
 //! # WHY THERE IS A STORE IN HERE AND NOT A MOCK OF ONE
 //!
 //! The conformance suite has to run against the **S3 code path** — the SigV4
-//! signature, the `x-amz-checksum-sha256` header, the HEAD that carries an
-//! attestation and the GET that does not — or "S3 × attest" is a claim about a
-//! code path nothing executed. A mock `ByteStore` would exercise none of that:
-//! it would test the enum arm and skip the protocol.
+//! signature, the attestation header, the HEAD that carries one and the GET
+//! that does not — or "S3 × attest" is a claim about a code path nothing
+//! executed. A mock `ByteStore` would exercise none of that: it would test the
+//! enum arm and skip the protocol.
+//!
+//! Every header name and the algorithm token come from
+//! [`centraid_gateway_server::bytes::sigv4`] rather than being spelled here,
+//! which is the same boundary the crate keeps for itself (#1025 S4): the
+//! store's own checksum is named in ONE module, and a test that respelled it
+//! would be a second place for it to drift — and a second place for the
+//! allowlist in `crates/vault/tests/one_hash.rs` to have to name.
 //!
 //! So [`FakeS3`] is a real HTTP server speaking the subset of the S3 API this
 //! adapter uses, over a real socket, reached by the real `reqwest` client with a
@@ -37,7 +44,7 @@ use centraid_gateway_core::store::{StoreFault, VaultState};
 use centraid_gateway_server::bytes::configured::{Backend, ConfiguredBytes};
 use centraid_gateway_server::bytes::fs::FilesystemBytes;
 use centraid_gateway_server::bytes::s3::{S3Bytes, S3Config};
-use centraid_gateway_server::bytes::sigv4::Credentials;
+use centraid_gateway_server::bytes::sigv4::{self, Credentials};
 use centraid_gateway_server::bytes::{ProxyWrite as _, object_key};
 use centraid_gateway_server::state::SqliteState;
 
@@ -131,7 +138,7 @@ async fn object(
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .is_some_and(|value| {
-            value.starts_with("AWS4-HMAC-SHA256 Credential=")
+            value.starts_with(&format!("{} Credential=", sigv4::ALGORITHM))
                 && value.contains("SignedHeaders=")
                 && value.rsplit("Signature=").next().is_some_and(|signature| {
                     signature.len() == 64 && signature.chars().all(|c| c.is_ascii_hexdigit())
@@ -150,7 +157,7 @@ async fn object(
                 StoredBlob {
                     bytes: body.to_vec(),
                     attested: headers
-                        .get("x-amz-checksum-sha256")
+                        .get(sigv4::CHECKSUM_HEADER)
                         .and_then(|value| value.to_str().ok())
                         .map(str::to_owned),
                 },
@@ -164,13 +171,13 @@ async fn object(
                 // asked for it, which is the behaviour read-and-hash mode
                 // depends on to learn that a client attested nothing.
                 if headers
-                    .get("x-amz-checksum-mode")
+                    .get(sigv4::CHECKSUM_MODE_HEADER)
                     .and_then(|value| value.to_str().ok())
                     .is_some_and(|value| value.eq_ignore_ascii_case("enabled"))
                     && let Some(attested) = &blob.attested
                 {
                     response.headers_mut().insert(
-                        "x-amz-checksum-sha256",
+                        sigv4::CHECKSUM_HEADER,
                         attested.parse().expect("a base64 checksum"),
                     );
                 }
@@ -188,7 +195,7 @@ async fn object(
                 );
                 if let Some(attested) = &blob.attested {
                     out.insert(
-                        "x-amz-checksum-sha256",
+                        sigv4::CHECKSUM_HEADER,
                         attested.parse().expect("a base64 checksum"),
                     );
                 }

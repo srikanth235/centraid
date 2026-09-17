@@ -149,16 +149,29 @@ fn the_runtime_stage_is_unprivileged_and_declares_the_state_it_keeps() {
 
 /// Both `FROM` lines are digest-pinned, matching the posture of the sibling
 /// image and of `.github/workflows/**`.
+///
+/// The check is for a WELL-FORMED digest rather than for the word: a reference
+/// ending `@` and something is not a pin, and a truncated digest is the shape a
+/// careless edit leaves behind. It also keeps the OCI algorithm's own spelling
+/// out of this file, which is worth doing for its own sake — ONE HASH
+/// (#1025 S4), and the two places this repository legitimately names somebody
+/// else's are declared in `crates/vault/tests/one_hash.rs`, not scattered
+/// through tests.
 #[test]
 fn every_base_image_is_digest_pinned() {
     for line in dockerfile()
         .lines()
         .filter(|line| line.starts_with("FROM "))
     {
-        assert!(
-            line.contains("@sha256:"),
-            "a base image is not digest-pinned: {line}"
-        );
+        let reference = line.split_whitespace().nth(1).unwrap_or_default();
+        let pinned = reference.split_once('@').is_some_and(|(_, digest)| {
+            digest.split_once(':').is_some_and(|(algorithm, value)| {
+                !algorithm.is_empty()
+                    && value.len() == 64
+                    && value.chars().all(|c| c.is_ascii_hexdigit())
+            })
+        });
+        assert!(pinned, "a base image is not digest-pinned: {line}");
     }
 }
 

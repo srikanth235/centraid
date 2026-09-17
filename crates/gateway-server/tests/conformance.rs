@@ -15,7 +15,7 @@
 //! | | attest | read-and-hash |
 //! | --- | --- | --- |
 //! | **filesystem** | the store attests what the adapter recorded at upload | the adapter reads and hashes; catches bytes that do not hash to their name |
-//! | **S3** | a real `HEAD`, a real `x-amz-checksum-sha256`, parsed | a real `GET`, hashed here |
+//! | **S3** | a real `HEAD`, a real attestation header, parsed | a real `GET`, hashed here |
 //!
 //! The S3 half runs against a real HTTP store over a real socket with a real
 //! SigV4 signature (`tests/common`), because the alternative — a mock
