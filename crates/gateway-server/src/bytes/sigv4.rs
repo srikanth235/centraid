@@ -49,6 +49,15 @@ pub const CONTENT_DIGEST_HEADER: &str = "x-amz-content-sha256";
 /// fallback this file could choose on its own.
 pub const CHECKSUM_HEADER: &str = "x-amz-checksum-sha256";
 
+/// The request header that asks a store to return [`CHECKSUM_HEADER`] on a
+/// `GET`.
+///
+/// S3 returns the attestation on a `GET` only when this is sent, which matters
+/// here because read-and-hash mode has to know whether the client attested
+/// anything at all — an upload with no checksum header is a rejection in BOTH
+/// modes, and finding that out must not cost a second round trip.
+pub const CHECKSUM_MODE_HEADER: &str = "x-amz-checksum-mode";
+
 /// What a request is signed against.
 #[derive(Debug, Clone)]
 pub struct Credentials {

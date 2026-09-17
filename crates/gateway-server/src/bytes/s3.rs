@@ -138,6 +138,17 @@ impl S3Bytes {
         body: Option<Vec<u8>>,
         attested: bool,
     ) -> Result<reqwest::Response, StoreFault> {
+        self.send_asking(method, key, body, attested, false).await
+    }
+
+    async fn send_asking(
+        &self,
+        method: reqwest::Method,
+        key: &str,
+        body: Option<Vec<u8>>,
+        attested: bool,
+        ask_for_checksum: bool,
+    ) -> Result<reqwest::Response, StoreFault> {
         let payload = body.as_deref().unwrap_or(&[]);
         let digest = sigv4::payload_digest(payload);
         let (url, headers) = self.signed(method.as_str(), key, &digest, crate::clock::now());
@@ -154,6 +165,9 @@ impl S3Bytes {
                 sigv4::CHECKSUM_HEADER,
                 base64_standard(AttestedChecksum::of(bytes).as_bytes()),
             );
+        }
+        if ask_for_checksum {
+            request = request.header(sigv4::CHECKSUM_MODE_HEADER, "ENABLED");
         }
         if let Some(bytes) = body {
             request = request.body(bytes);
@@ -235,6 +249,21 @@ fn base64_standard(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
+/// The store's own `Content-Length`, read from the header.
+///
+/// **Not `Response::content_length()`**: on a `HEAD` that reports the body the
+/// client received, which is zero, and a zero here is a `SizeMismatch` on every
+/// commit — a failure whose message names the checksum and not the header that
+/// caused it.
+fn content_length(response: &reqwest::Response) -> u64 {
+    response
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok())
+        .unwrap_or_default()
+}
+
 fn decode_base64(text: &str) -> Option<Vec<u8>> {
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD.decode(text).ok()
@@ -308,39 +337,50 @@ impl ByteStore for S3Bytes {
         name: &ObjectName,
     ) -> Result<ChecksumEvidence, StoreFault> {
         let key = object_key(vault, name);
+        // AN UPLOAD THE CLIENT DID NOT ATTEST IS A REJECTION IN BOTH MODES, and
+        // that is a rule rather than this file's preference: R2 records
+        // the attestation only when the client sent it, so silence has to be
+        // a refusal — `gateway-core`'s conformance suite asserts it under
+        // `checksum/no-attestation-is-a-rejection` for `Attest` AND for
+        // `ReadAndHash`, and its in-memory adapter answers `None` in both. An
+        // adapter that quietly read and hashed an unattested object anyway
+        // would accept bytes the hosted adapter refuses, which is the exact
+        // divergence the shared suite exists to catch.
+        //
+        // In read-and-hash mode that means the one request has to carry the
+        // attestation back too, which is what `x-amz-checksum-mode: ENABLED`
+        // asks for; the alternative is a HEAD before every GET.
+        let attesting = self.config.checksum_mode == ChecksumMode::ReadAndHash;
+        let response = if attesting {
+            self.send_asking(reqwest::Method::GET, &key, None, false, true)
+                .await?
+        } else {
+            self.send(reqwest::Method::HEAD, &key, None, false).await?
+        };
+        if !response.status().is_success() {
+            return Ok(ChecksumEvidence::None);
+        }
+        let Some(attested) = response
+            .headers()
+            .get(sigv4::CHECKSUM_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(decode_base64)
+            .and_then(|bytes| AttestedChecksum::from_slice(&bytes))
+        else {
+            // THE STORE ATTESTED NOTHING. A rejection, not a shrug.
+            return Ok(ChecksumEvidence::None);
+        };
+
         match self.config.checksum_mode {
-            ChecksumMode::Attest => {
-                // A HEAD, and the gateway never reads the bytes. This is the
-                // mode the hosted adapter runs in, and running it here is what
-                // keeps the two adapters comparable.
-                let response = self.send(reqwest::Method::HEAD, &key, None, false).await?;
-                if !response.status().is_success() {
-                    return Ok(ChecksumEvidence::None);
-                }
-                let Some(header) = response
-                    .headers()
-                    .get(sigv4::CHECKSUM_HEADER)
-                    .and_then(|value| value.to_str().ok())
-                else {
-                    // THE STORE ATTESTED NOTHING. A rejection, not a shrug.
-                    return Ok(ChecksumEvidence::None);
-                };
-                let Some(checksum) =
-                    decode_base64(header).and_then(|bytes| AttestedChecksum::from_slice(&bytes))
-                else {
-                    return Ok(ChecksumEvidence::None);
-                };
-                let stored_size = response.content_length().unwrap_or_default();
-                Ok(ChecksumEvidence::Attested {
-                    checksum,
-                    stored_size,
-                })
-            }
+            // The gateway never read the bytes — the mode the hosted adapter
+            // runs in, and running it here is what keeps the two comparable.
+            // `content_length()` is not read: on a HEAD it reports the body
+            // reqwest received, which is zero. The header is the store's answer.
+            ChecksumMode::Attest => Ok(ChecksumEvidence::Attested {
+                checksum: attested,
+                stored_size: content_length(&response),
+            }),
             ChecksumMode::ReadAndHash => {
-                let response = self.send(reqwest::Method::GET, &key, None, false).await?;
-                if !response.status().is_success() {
-                    return Ok(ChecksumEvidence::None);
-                }
                 let bytes = response
                     .bytes()
                     .await
