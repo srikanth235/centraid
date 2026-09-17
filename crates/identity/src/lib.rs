@@ -10,6 +10,7 @@
 //! | [`safety_number`] | the digits two people read to each other to confirm they hold each other's real key |
 //! | [`sealed_box`] | HPKE base mode to a box key — the primitive sealed mail and share invites are built from |
 //! | [`certificate`] | "identity key K certifies device D at epoch E", and the verifier that refuses a superseded one |
+//! | [`discovery`] | publish and resolve against a configurable `iroh-dns-server`, and the typed-URL fallback |
 //! | [`account`] | "vault V belongs to account A", and the signed listing a fresh phone restores from |
 //! | [`record`] | the signed pkarr record that makes a key findable: `mailbox=` and `cert=` under the identity key, `gateway=` under the account key |
 //!
@@ -31,6 +32,7 @@
 pub mod account;
 pub mod certificate;
 pub mod derive;
+pub mod discovery;
 pub mod phrase;
 pub mod record;
 pub mod safety_number;
@@ -45,6 +47,9 @@ pub use certificate::{
 };
 pub use derive::{
     AccountKey, BoxKey, DeriveError, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey,
+};
+pub use discovery::{
+    DEFAULT_DNS_SERVER, Discovery, DiscoveryError, Located, ResolutionSource, SourceUsed,
 };
 pub use phrase::{PhraseError, RecoveryPhrase, Seed};
 pub use record::{
