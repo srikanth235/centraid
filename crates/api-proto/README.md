@@ -19,8 +19,6 @@ The split is not cosmetic: it is why the gateway can promise stability to seats 
 | --- | --- |
 | `value.proto` | `Value` (SQLite's five storage classes), `NullValue`, `RecordKey` |
 | `row.proto` | `RowImage`, `PriorDelta` — the absent-versus-NULL and delta-prior contracts |
-| `log.proto` | `LogRow`, `LogPage`, `LogCursor`, `RebootstrapRequired`, `LogRequest` |
-| `intent.proto` | `Intent`, `BaseVersion`, `Outcome`, `Conflict`, `WaitingOn`, `ProducedRow` |
 | `command.proto` | `Command`, `Principal`, `CommandOutcome` |
 | `query.proto` | `PageQuery`, `PageOrder`, `PageCursor`, `PageRequest`, `Page`, `Row` |
 | `change.proto` | `ChangeEvent`, `HealthEvent`, `ConnectivityEvent` |
@@ -29,6 +27,10 @@ The split is not cosmetic: it is why the gateway can promise stability to seats 
 | `admin.proto` | `DevicesList`, `DevicesRevoke`, `BackupNow` — command _inputs_, not a second envelope |
 | `error.proto` | `ErrorCode` (closed) and `Error` |
 | `envelope.proto` | `Envelope`, `Request`, `Response`, `Event`, `Cancel` |
+| `gateway.proto` | `ProtocolRange`, `SignedRequest`, `ClockSkew`, `VersionRefusal` — the gateway envelope ([#1029](https://github.com/srikanth235/centraid/issues/1029) §3) |
+| `backup.proto` | `ObjectKind`, `ObjectDeclaration`, `UploadRequest`/`UploadTarget`, `CommitRequest`/`HeadConflict`, `GenerationList`, `DeleteRequest`/`DeleteRefusal`, `ScrubReport` |
+| `lease.proto` | `LeaseClaim`, `Lease`, `VaultMoved`, `VaultRegistration`, `VaultsResponse`, `AdmissionRequest`, `Plan` |
+| `mailbox.proto` | `DepositCapability`, `DepositRequest`, `MailboxEntry`, `DrainResponse`, `AckRequest`, `ShareCapability`, `PackRange`, `Feed` |
 | `screen/v1/screen.proto` | `ScreenState`, `ScreenEvent`, the per-screen states and `SeatState` — one file by design (D-1020-E3a) |
 
 Each file carries its own reasoning in comments.

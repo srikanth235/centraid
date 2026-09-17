@@ -68,6 +68,19 @@ enum ErrorCode {
   // device says the true thing instead: this identity is not the enrolled one.
   ERROR_CODE_IDENTITY_MISMATCH = 24;
 
+  // THE VAULT MOVED TO ANOTHER DEVICE (#1029 §0, §3).
+  //
+  // In the 20s and not the 1s deliberately: a superseded device is NOT a
+  // stranger, and the two refusals have different answers. `UNAUTHORIZED` means
+  // "whoever you are, not here"; this means "you held this vault and a higher
+  // epoch took it". It comes from a TOMBSTONE and not a deletion, which is what
+  // lets a blind gateway tell the two apart at all.
+  //
+  // The phone's answer is behavioural rather than a sentence: it freezes that
+  // vault read-only, shows the unacked spool as "N changes since <date>", and
+  // keeps it. A `VaultMoved` (`lease.proto`) rides with this code.
+  ERROR_CODE_VAULT_MOVED = 25;
+
   // --- intents and commands ---
   // The submitted `payload_hash` does not match the input.
   ERROR_CODE_INTENT_HASH_MISMATCH = 40;
@@ -110,6 +123,60 @@ enum ErrorCode {
   // An entry point caught a panic. The handle is poisoned and the shell
   // restarts the core deliberately (#1020 Execution model).
   ERROR_CODE_INTERNAL = 63;
+
+  // --- the gateway (#1029 §3) ---
+  //
+  // Every one of these is a rule in `crates/gateway-core`, and the mapping is
+  // that crate's `Refusal::code`. A code and not a sentence, like every refusal
+  // in this enum: an adapter that invented its own wording for one of these
+  // would be an adapter the phone branches on differently.
+
+  // The request signature did not verify against the device certificate it
+  // carried, or the certificate did not chain to the vault's identity key.
+  ERROR_CODE_GATEWAY_SIGNATURE_INVALID = 80;
+  // The request timestamp is outside the replay window. A `ClockSkew` rides
+  // with it carrying the SERVER'S time, and the client re-signs ONCE.
+  ERROR_CODE_GATEWAY_CLOCK_SKEW = 81;
+  // The declaration, or the store, offered no attested checksum. R2 records
+  // `checksums.sha256` only when the client sent it, so "no checksum" must be a
+  // rejection and not a shrug — otherwise the one rule the write-once scheme
+  // rests on is optional.
+  ERROR_CODE_GATEWAY_CHECKSUM_MISSING = 82;
+  // The attested checksum is not the one the declaration bound to this name,
+  // or the bytes do not hash to the name in read-and-hash mode.
+  ERROR_CODE_GATEWAY_CHECKSUM_MISMATCH = 83;
+  // A presign was asked for a name that is already committed. Storage is
+  // write-once and a name is the hash of its bytes.
+  ERROR_CODE_GATEWAY_ALREADY_COMMITTED = 84;
+  // A commit named an object that was never declared, or never uploaded.
+  ERROR_CODE_GATEWAY_OBJECT_UNKNOWN = 85;
+  // The declared size is above the 16 MiB cap (F6). A bigger file is a list of
+  // objects, recorded in the vault.
+  ERROR_CODE_GATEWAY_OBJECT_TOO_LARGE = 86;
+  // The manifest head compare-and-set lost: `prev_head` is not the current
+  // head. A `HeadConflict` rides with it (F7).
+  ERROR_CODE_GATEWAY_HEAD_CONFLICT = 87;
+  // The lease claim's epoch is at or below the one the gateway holds. The
+  // successor of `DeviceTrust`'s refusal, on the wire (F3).
+  ERROR_CODE_GATEWAY_LEASE_STALE = 88;
+  // The writer does not hold the lease. Distinct from `VAULT_MOVED`, which is
+  // for the device that USED to hold it.
+  ERROR_CODE_GATEWAY_NOT_LEASE_HOLDER = 89;
+  // The vault's quota is spent. Keys are free to mint, so an unbounded free
+  // tier is unbounded Sybil storage (F13).
+  ERROR_CODE_GATEWAY_QUOTA_EXCEEDED = 90;
+  // The plan lapsed: the vault is READ-ONLY and retained for a stated period.
+  // Restore still works. A `Plan` rides with it.
+  ERROR_CODE_GATEWAY_PLAN_LAPSED = 91;
+  // A delete was refused. A `DeleteRefusal` says which of the floor, the size
+  // guard, the rate limit or the append-only flag held it (F4, F10).
+  ERROR_CODE_GATEWAY_DELETE_REFUSED = 92;
+  // A capability does not cover the object or the pack range being read, or it
+  // was revoked or has expired.
+  ERROR_CODE_GATEWAY_CAPABILITY_SCOPE = 93;
+  // A mailbox deposit exceeded the capability's size cap or its rate limit.
+  // Deposits are unsigned, so one leaked capability must not fill a mailbox.
+  ERROR_CODE_GATEWAY_MAILBOX_REFUSED = 94;
 }
 
 message Error {

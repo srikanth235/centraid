@@ -1,0 +1,220 @@
+// The object API: declare, commit, list, delete (#1029 §3, §4).
+//
+// **The gateway is blind.** Nothing in this file carries plaintext, a plaintext
+// hash, or a key. What a gateway sees is on purpose and is exactly this:
+// identity keys, generation ids, txid ranges, object kinds, padded sizes and
+// timing. What it never sees — plaintext, plaintext hashes, table names, exact
+// file sizes, which objects hold equal content — is absent from these messages
+// because a field is the only way it could arrive.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// What an object is for. The gateway branches on it for retention (a `base` is
+// the unit) and for the size guard, and for nothing else: it cannot open one.
+enum ObjectKind {
+  OBJECT_KIND_UNSPECIFIED = 0;
+  // A 4 MiB page range of a page-identical base snapshot.
+  OBJECT_KIND_BASE = 1;
+  // A commit-bounded page segment.
+  OBJECT_KIND_SEGMENT = 2;
+  // A generation's sealed, hash-chained manifest.
+  OBJECT_KIND_MANIFEST = 3;
+  // One part of a member's own file.
+  OBJECT_KIND_BLOB = 4;
+  // ~16 MiB of small items with an encrypted item table at its end.
+  OBJECT_KIND_PACK = 5;
+  // One sealed entry of a share feed (§7).
+  OBJECT_KIND_SHARE_ENTRY = 6;
+}
+
+// AN OBJECT NAMED TWICE, AND THE SECOND NAME IS SOMEBODY ELSE'S PROTOCOL.
+//
+// `name` is the object's identity everywhere in this repository: the BLAKE3-256
+// of its ciphertext, which is what `centraid_media::object::ObjectName::of`
+// computes and what a manifest, a base range list and a pack reference record.
+// ONE HASH (#1025 S4): everything Centraid defines for itself is BLAKE3.
+//
+// `attested_checksum` is the SHA-256 of the same bytes, and it is here because
+// the object store's API is not ours. R2 and every S3-compatible store attest
+// SHA-256 and nothing else, and R2 records `checksums.sha256` only when the
+// client supplied it — so a commit must fail on "no checksum", not only on
+// "wrong checksum". The client therefore declares it UP FRONT, at the moment it
+// declares the name, and the declaration is what binds the two: a gateway that
+// later reads an attested SHA-256 off the store compares it against the value
+// recorded here, and a second declaration of the same `name` with a different
+// checksum is refused. That binding is the whole of what an attest-only store
+// can give a blind verifier, and `crates/gateway-core`'s read-and-hash mode is
+// what closes the rest of it (B2 and MinIO differ on which headers they
+// attest, so both modes are rules and both are in the conformance suite).
+message ObjectDeclaration {
+  // 32 bytes. BLAKE3-256 of the sealed bytes.
+  bytes name = 1;
+  // 32 bytes. SHA-256 of the same sealed bytes, for the store to attest.
+  bytes attested_checksum = 2;
+  ObjectKind kind = 3;
+  // The sealed length in bytes, after zstd and Padmé. It is PADDED and
+  // therefore a size class, not a size: that is the only size a gateway is
+  // allowed to learn, and the size guard (F4) is defined over it because it is
+  // the only census a blind store can take.
+  //
+  // At most 16 MiB (F6). A bigger file is a list of objects, recorded in the
+  // vault, so there is one upload path and no multipart — whose composite
+  // checksum cannot be blind-verified.
+  uint64 padded_size = 4;
+}
+
+message UploadRequest {
+  repeated ObjectDeclaration objects = 1;
+}
+
+// Where to put one object's bytes, or why there is nowhere to put them.
+message UploadTarget {
+  bytes name = 1;
+  // A presigned store URL on the hosted adapter, or a URL on the server itself
+  // when the standalone adapter has no publicly reachable S3 endpoint. Empty
+  // when `already_committed` is set.
+  string url = 2;
+  // When the presigned target stops working. It must exceed the longest
+  // background deferral a phone can be put through; SigV4 caps it at 7 days.
+  int64 expires_at_ms = 3;
+  // REFUSE TO PRESIGN A COMMITTED NAME (#1029 §3). Storage is write-once and a
+  // name is the hash of its bytes, so a target for a name already committed is
+  // a door to overwriting an object that something else already references. It
+  // is not an error: a retry with identical bytes is a no-op, so the phone is
+  // simply told the object is already there and moves on.
+  bool already_committed = 4;
+}
+
+message UploadResponse {
+  repeated UploadTarget targets = 1;
+}
+
+// THE COMMIT, AND ITS COMPARE-AND-SET (F7).
+//
+// A gateway cannot forge a manifest — the chain is sealed and hash-linked — but
+// "newest" is whatever its index says, and a FRESH PHONE HAS NO MEMORY OF THE
+// LAST HEAD. `prev_head` is what makes rolling the head backwards impossible
+// for the gateway to do quietly: the head moves only from the value the writer
+// last saw. It is one line on a Durable Object, which runs one request at a
+// time, and it is the ONLY thing that gives the standalone adapter — which has
+// no such property — the same guarantee.
+message CommitRequest {
+  // 128 random bits, hex. Never a counter (#116): a break always starts a new
+  // one and generations have no order, which is why a device certificate's
+  // epoch is its own counter and not a generation (F3).
+  string generation = 1;
+  // The names being committed, each of which must already have been declared
+  // and uploaded.
+  repeated bytes objects = 2;
+  // The manifest object this commit makes the head of the vault.
+  bytes manifest_head = 3;
+  // THE HEAD THIS WRITER LAST SAW. Absent means "this vault has no head yet",
+  // which is a DIFFERENT fact from "the empty hash" and is why the field is
+  // `optional`: a singular `bytes` cannot tell a first commit from a writer
+  // that read a head and then dropped it.
+  optional bytes prev_head = 4;
+  // The txid range this generation now covers. The gateway keeps it so a
+  // restoring phone can list without opening anything.
+  uint64 first_txid = 5;
+  uint64 last_txid = 6;
+}
+
+message CommitResponse {
+  // The head as it now stands. Equal to `manifest_head` on success.
+  bytes head = 1;
+  // The gateway's OWN receipt time, which is what retention is judged by and
+  // what a client cannot backdate.
+  int64 committed_at_ms = 2;
+}
+
+// Rides with the compare-and-set refusal so the loser is TOLD rather than
+// silently clobbering: the phone re-reads from `current_head` and decides.
+message HeadConflict {
+  bytes current_head = 1;
+}
+
+// One object as the gateway holds it. `padded_size` and `kind` are the
+// declaration's; `received_at_ms` is the gateway's own clock.
+message ObjectEntry {
+  bytes name = 1;
+  ObjectKind kind = 2;
+  uint64 padded_size = 3;
+  int64 received_at_ms = 4;
+  // Set when the object is tombstoned but not yet purged. Until the purge a
+  // restored phone can undelete, or restore an older generation.
+  optional int64 purge_after_ms = 5;
+}
+
+message GenerationEntry {
+  string generation = 1;
+  int64 first_seen_at_ms = 2;
+  uint64 first_txid = 3;
+  uint64 last_txid = 4;
+  bytes head = 5;
+  repeated ObjectEntry objects = 6;
+}
+
+message GenerationList {
+  repeated GenerationEntry generations = 1;
+}
+
+// A phone-directed delete only TOMBSTONES. The purge happens after a grace
+// period, on the gateway's own clock.
+message DeleteRequest {
+  repeated bytes objects = 1;
+}
+
+message DeleteResponse {
+  // The objects that were tombstoned, with the moment each becomes purgeable.
+  repeated ObjectEntry tombstoned = 1;
+  // The objects the gateway REFUSED to tombstone, and why. A partial delete is
+  // reported rather than rolled back: the phone asked for a set and the honest
+  // answer is which members of it the floor, the guard or the rate limit kept.
+  repeated DeleteRefusal refused = 2;
+}
+
+message DeleteRefusal {
+  bytes object = 1;
+  DeleteRefusalReason reason = 2;
+  // For `DELETE_REFUSAL_REASON_RATE_LIMITED`, when the next client-directed
+  // base tombstone becomes available.
+  optional int64 retry_after_ms = 3;
+}
+
+enum DeleteRefusalReason {
+  DELETE_REFUSAL_REASON_UNSPECIFIED = 0;
+  // The retention floor over bases holds it: one base per day for 7 days, one
+  // per week for 4 weeks, one per month for 6 months, judged by the GATEWAY's
+  // own receipt times (F10). A stolen phone cannot backdate its way past it.
+  DELETE_REFUSAL_REASON_RETENTION_FLOOR = 1;
+  // A segment or pack newer than the oldest retained base, plus the grace
+  // period, is retained with it.
+  DELETE_REFUSAL_REASON_COVERED_BY_BASE = 2;
+  // The newest base is under half its predecessor's padded size, so older
+  // bases are held until the member confirms on the phone (F4). The row-census
+  // warning lives on the phone, where the census is readable.
+  DELETE_REFUSAL_REASON_SIZE_GUARD = 3;
+  // At most one client-directed base tombstone per vault per day. A stolen
+  // phone cannot outrun a rate limit.
+  DELETE_REFUSAL_REASON_RATE_LIMITED = 4;
+  // The server's owner set the append-only flag: deletes are disabled for
+  // devices entirely and the owner prunes from the admin CLI.
+  DELETE_REFUSAL_REASON_APPEND_ONLY = 5;
+  // The vault's plan has lapsed. A lapsed plan is READ-ONLY and retained for a
+  // stated period, never deleted inside it (F13).
+  DELETE_REFUSAL_REASON_PLAN_LAPSED = 6;
+}
+
+// BLIND SCRUBBING (#1029 §3). Without any key, the gateway re-hashes stored
+// objects on a schedule and reports what no longer hashes to its own name. It
+// repairs from the second replica where one exists.
+message ScrubReport {
+  int64 started_at_ms = 1;
+  uint64 objects_read = 2;
+  // The names whose stored bytes no longer hash to the name. Bit rot, or a
+  // store that lost the object.
+  repeated bytes corrupt = 3;
+  repeated bytes repaired = 4;
+}

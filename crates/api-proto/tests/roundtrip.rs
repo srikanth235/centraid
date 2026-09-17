@@ -205,3 +205,129 @@ fn prost_drops_unknown_fields_which_is_why_nothing_relays_a_decoded_message() {
          unknown-field retention and D-1020-C13's mechanism 1 can be revisited"
     );
 }
+
+// ------------------------------------------------- the gateway protocol ----
+//
+// Same discipline as above: what is under test is the SCHEMA, not prost. The
+// gateway's two absent-versus-empty seams are `prev_head` (no head yet versus a
+// head this writer read) and `purge_after_ms` (live versus tombstoned), and
+// both are `optional` because a singular field cannot carry the distinction
+// (#1029 §3, F7).
+
+/// A FIRST COMMIT AND A COMMIT THAT READ AN EMPTY HEAD ARE DIFFERENT FACTS.
+///
+/// This is the compare-and-set fence itself (F7). If absent and empty collapsed
+/// into one value, a writer that had never read the vault could present the
+/// same bytes as a writer that had, and the gateway would have no way to refuse
+/// it — which is precisely the rollback the fence exists to make impossible.
+#[test]
+fn a_commit_with_no_previous_head_is_not_a_commit_with_an_empty_one() {
+    let first = core::CommitRequest {
+        generation: "e1d0f0b3b39a4c6f9c5f1d2a3b4c5d6e".to_owned(),
+        objects: vec![vec![1_u8; 32]],
+        manifest_head: vec![2_u8; 32],
+        prev_head: None,
+        first_txid: 1,
+        last_txid: 9,
+    };
+    let mut stale = first.clone();
+    stale.prev_head = Some(Vec::new());
+
+    roundtrip(&first);
+    roundtrip(&stale);
+
+    let decoded_first =
+        core::CommitRequest::decode(first.encode_to_vec().as_slice()).expect("decode");
+    let decoded_stale =
+        core::CommitRequest::decode(stale.encode_to_vec().as_slice()).expect("decode");
+    assert_eq!(decoded_first.prev_head, None, "no head yet stays absent");
+    assert_eq!(
+        decoded_stale.prev_head,
+        Some(Vec::new()),
+        "a present-but-empty head stays present"
+    );
+    assert_ne!(decoded_first, decoded_stale);
+}
+
+/// A LIVE OBJECT AND A TOMBSTONED ONE WHOSE GRACE PERIOD ENDED AT THE EPOCH.
+///
+/// `purge_after_ms` absent means "not tombstoned". A singular `int64` would
+/// make zero — a real instant — indistinguishable from "live", and the purge
+/// sweep would read every live object as purgeable.
+#[test]
+fn a_live_object_and_a_tombstone_at_time_zero_are_different_facts() {
+    let live = core::ObjectEntry {
+        name: vec![3_u8; 32],
+        kind: core::ObjectKind::Base as i32,
+        padded_size: 4 * 1024 * 1024,
+        received_at_ms: 1_770_000_000_000,
+        purge_after_ms: None,
+    };
+    let mut tombstoned = live.clone();
+    tombstoned.purge_after_ms = Some(0);
+
+    roundtrip(&live);
+    roundtrip(&tombstoned);
+    assert_ne!(
+        core::ObjectEntry::decode(live.encode_to_vec().as_slice()).expect("decode"),
+        core::ObjectEntry::decode(tombstoned.encode_to_vec().as_slice()).expect("decode")
+    );
+}
+
+/// THE BLIND-GATEWAY CANARY, AT THE SCHEMA LEVEL.
+///
+/// Every message a gateway receives is built from these fields, so a field that
+/// could carry plaintext is the only way plaintext could reach one. The object
+/// declaration is the narrowest place to hold the line: a name, a checksum, a
+/// kind and a PADDED size, and nothing whose value depends on what the object
+/// says.
+#[test]
+fn an_object_declaration_carries_no_plaintext_shaped_field() {
+    let declaration = core::ObjectDeclaration {
+        name: vec![4_u8; 32],
+        attested_checksum: vec![5_u8; 32],
+        kind: core::ObjectKind::Segment as i32,
+        padded_size: 65_536,
+    };
+    roundtrip(&declaration);
+    // Four fields, and the encoding proves there is no fifth to smuggle one in.
+    let bytes = declaration.encode_to_vec();
+    let decoded = core::ObjectDeclaration::decode(bytes.as_slice()).expect("decode");
+    assert_eq!(decoded, declaration);
+    assert_eq!(
+        decoded.name.len(),
+        32,
+        "the name is a 32-byte digest and never a path, a table or a title"
+    );
+}
+
+/// Version skew reads the same in both directions, which is why it is one
+/// message: a phone too old for a server and a server too old for a phone are
+/// the same comparison seen from two ends.
+#[test]
+fn a_version_refusal_reads_the_same_in_both_directions() {
+    let phone_too_old = core::VersionRefusal {
+        server: Some(core::ProtocolRange { min: 4, max: 6 }),
+        client: Some(core::ProtocolRange { min: 1, max: 3 }),
+    };
+    let server_too_old = core::VersionRefusal {
+        server: Some(core::ProtocolRange { min: 1, max: 3 }),
+        client: Some(core::ProtocolRange { min: 4, max: 6 }),
+    };
+    roundtrip(&phone_too_old);
+    roundtrip(&server_too_old);
+    assert_ne!(phone_too_old, server_too_old);
+}
+
+/// A skew refusal carries the SERVER's time, so the client can re-sign once
+/// (Reference B, "Protocol"). A refusal without it is a refusal a phone with a
+/// wrong clock can only answer by retrying with the same wrong clock.
+#[test]
+fn a_clock_skew_refusal_carries_the_server_time_and_the_window() {
+    let skew = core::ClockSkew {
+        server_time_ms: 1_770_000_000_000,
+        replay_window_seconds: 300,
+    };
+    roundtrip(&skew);
+    assert!(skew.server_time_ms > 0 && skew.replay_window_seconds > 0);
+}

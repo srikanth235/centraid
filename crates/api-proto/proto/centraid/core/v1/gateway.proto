@@ -1,0 +1,94 @@
+// The gateway envelope: versioning, request signing, and the two refusals a
+// phone has to be able to act on (#1029 §3).
+//
+// **One protocol, two deployments.** A phone cannot tell a Cloudflare Worker
+// from somebody's standalone binary, and nothing in this file names either. The
+// rules that read these messages live in `crates/gateway-core`; this file is
+// only their vocabulary.
+//
+// **Transport is HTTPS, not iroh** (#1029 §3). These messages are protobuf
+// BODIES of ordinary HTTP requests — there is no `Envelope` here and no frame:
+// the method, the path and the status line carry what `envelope.proto` carried
+// for the QUIC plane. That is why `SignedRequest` names a method and a path at
+// all.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// The protocol versions one side supports, inclusive at both ends.
+//
+// Every request carries `Centraid-Protocol: <n>` and every response carries the
+// server's min and max. Until the first release "v0, no legacy" holds and the
+// protocol changes freely; from the first release the hosted adapter supports
+// at least the last two phone releases, and SELF-HOSTERS UPGRADE LATE, which is
+// what makes this a real constraint rather than a formality.
+message ProtocolRange {
+  uint32 min = 1;
+  uint32 max = 2;
+}
+
+// THE PREIMAGE EVERY REQUEST IS SIGNED OVER.
+//
+// It is a message rather than a header-serialisation convention because two
+// adapters must build the same bytes: an HTTP message signature assembled from
+// header text differs between a Worker's `Request` and axum's, and a phone that
+// signs one and is verified by the other fails for a reason nobody can read.
+// `crates/gateway-core` turns this into the signed bytes, once.
+//
+// The signature is the DEVICE key's (§0): nothing dials the phone, so the
+// device key is a transport identity and nothing else. A lease claim is
+// additionally signed by the identity key — see `lease.proto`.
+message SignedRequest {
+  // Uppercase, as the HTTP method is written.
+  string method = 1;
+  // The path with its query, from the first `/`. Never the origin: a phone that
+  // signed the host would have to re-sign when a self-hoster put the same
+  // server behind a second name.
+  string path = 2;
+  // BLAKE3-256 of the request body, 32 bytes, and zero-length for a body-less
+  // request. BLAKE3 because this is OUR digest over OUR bytes; the SHA-256 in
+  // `backup.proto` is the object store's and is the only exception (#1025 S4).
+  bytes body_digest = 3;
+  // Milliseconds since the Unix epoch, by the CLIENT's clock. The server judges
+  // it against its own and against `ClockSkew.replay_window_seconds`.
+  int64 timestamp_ms = 4;
+  // The value of `Centraid-Protocol`, inside the signature: a middlebox that
+  // rewrote the header to force a downgrade would break the signature.
+  uint32 protocol = 5;
+  // `centraid_identity::DeviceCertificate::to_bytes` — "identity key K
+  // certifies device D at epoch E", signed by K. 136 bytes.
+  bytes device_certificate = 6;
+  // Ed25519 over the canonical encoding of fields 1..6, by the device key the
+  // certificate names.
+  bytes signature = 7;
+}
+
+// A 401 THAT TELLS THE PHONE WHAT TIME IT IS (Reference B, "Protocol").
+//
+// Replay windows fail on phones with wrong clocks, and a phone that has been
+// off for a month comes back with one. The refusal therefore carries the
+// server's time so the client re-signs ONCE with the offset applied. Once, and
+// not in a loop: a second skew refusal on a re-signed request is a real
+// failure, not a clock, and a client that retried forever would be a client
+// that hammers a server whose clock is the broken one.
+message ClockSkew {
+  int64 server_time_ms = 1;
+  uint32 replay_window_seconds = 2;
+}
+
+// THE PHONE'S TYPED "THIS SERVER NEEDS AN UPDATE" STATE, and its mirror.
+//
+// The successor of `Link::UpdateRequired`. It is a typed state and not a
+// sentence because the phone's answer to it is behavioural: a phone that finds
+// itself outside the server's range WRITES NOTHING — no upload, no commit, no
+// lease claim — because a write it does not understand the acknowledgement of
+// is a write it cannot reason about later.
+//
+// Both directions are one message on purpose. "The server is too old" and "the
+// phone is too old" are the same fact seen from two ends, and a shell renders
+// whichever sentence the comparison of the two ranges implies.
+message VersionRefusal {
+  ProtocolRange server = 1;
+  ProtocolRange client = 2;
+}
