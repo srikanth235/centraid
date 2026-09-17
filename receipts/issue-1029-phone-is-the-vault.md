@@ -647,3 +647,63 @@ capture side that seals with it is lane B's and is not in this section.
 | 10 `bun run check:push:static` | **4/4 green** (needed `bun install`; the worktree had no `node_modules`) |
 | 11 `node scripts/check-ledgers.mjs --base 2985cf4d` | **clean** — 19 sections across 5 ledgers |
 | 12 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings; the law did not move** |
+
+## W3 — capture, the spool and restore (lane B)
+
+Base `44e35f22`. Branch `claude/1029-w3b-capture-spool`. Local object store throughout; no network, no gateway.
+
+**The claim, in one line: a committed transaction survives losing the vault and comes back byte-exact.** `crates/vault/tests/restore_drill.rs::a_lost_vault_comes_back_byte_exact_from_its_generation` is where that is asserted, and the `release` profile's `restore-drill` step runs it.
+
+### The order the design turns on (F11)
+
+The WAL is durable first (`synchronous=FULL`, W1's). A segment is sealed, written, fsynced — file **and** directory — then read back **from the file** and opened (§4). Only then is `(salt1, salt2, frame index, last_txid)` recorded. Only then may a checkpoint run, and only while the log holds nothing capture has not cut. A spool entry is dropped only after the store acks it. Every crash window falls on the re-capture side, because re-capturing is free and losing is not.
+
+### B1–B13, each with its test
+
+| # | What it was | Test |
+| --- | --- | --- |
+| B1 | The base was a gzipped copy carrying `locker_key` and `access_device_secret` in the clear | `backup::base::tests::the_base_is_sealed_and_carries_no_readable_locker_key` — every range is a `centraid-object/1` object; the scan reads the sealed bytes. Also `member_key_gate`, which now scans the sealed range **and** the opened one |
+| B2 | `backup now` failed whenever there was a WAL tail: already-sealed bytes were sealed again and the length check rejected the result | `backup_crash_matrix::a_generation_over_a_live_log_succeeds_and_a_retry_re_sends_rather_than_reseals` |
+| B3 | Restore decrypted each segment, discarded it and reported "replayed" | `segment::tests::applying_a_segment_writes_its_pages_and_sets_the_database_size`; end to end in the drill, whose `segments_applied > 0` assertion is written to fail if the discard comes back |
+| B4 | `VACUUM INTO` renumbers pages, so frames could never replay onto the base | `base::tests::the_copy_is_page_identical_and_a_vacuum_copy_is_not` — reproduces the renumbering beside the page-for-page copy |
+| B5 | The tail was collected before the base, pairing a newer base with older frames | `backup_crash_matrix::a_generation_over_a_live_log_…`, which asserts the segments are the tail collected **after** the base |
+| B6 | A WAL restart was seen only when the file shrank, so a restart in place lost frames; capture took no lock | `wal::tests::a_restart_in_place_at_the_same_length_is_a_break_not_a_continuation` (same length, new salts, different bytes) and `…::a_restart_with_nothing_captured_behind_it_is_normal`; the race in `backup_crash_matrix::a_foreign_checkpoint_between_ticks_breaks_into_a_new_generation` |
+| B7 | Segments were byte ranges cut at the file's length, so they ended mid-frame or mid-transaction; the header, salts and checksums were never read | `wal::tests::a_read_stops_at_the_last_commit_frame_and_never_mid_transaction`, `…::a_torn_tail_is_ignored_exactly_as_sqlite_ignores_it`, `…::both_checksum_byte_orders_are_read` |
+| B8 | The generation was `pending_tail().len()+1` and `manifests+1`, so concurrent backups forked | `segment::tests::generation_ids_are_random_and_never_a_counter` — 64 mints, 64 distinct ids |
+| B9 | The derived nonce was reused, because B6 and B8 broke "one address, one set of bytes" | The v0 seals are **deleted** with their last callers; `object.rs::no_nonce_repeats_across_retries_or_restarts` (lane A's) holds the positive claim, and `backup_crash_matrix::…_a_retry_re_sends_rather_than_reseals` holds the vault-side half |
+| B10 | `DataDirLock` was never taken, and `process_is_live` read `/proc`, which does not exist on macOS or iOS | `restore::tests::a_held_data_directory_is_refused_and_the_refusal_needs_no_proc` — an OS file lock; no pid is written, so none can be wrong |
+| B11 | Two master keys, both rebuilt `active: 1` every run | Deleted with `keyring.rs`. One root key, in `objects::ObjectKeys`; `objects::tests::another_vaults_keys_do_not_open_this_vaults_segment`. **See finding 1: cheap rotation is not possible in the format as it stands, and that is written down rather than claimed** |
+| B12 | Discovery JSON-parsed every blob, and "newest" could belong to another vault | `manifest::tests::a_chain_is_walked_by_name_and_a_gap_is_named_rather_than_skipped` and `…::a_manifest_from_another_vault_does_not_open` — a tag failure, not a field comparison, because §4 binds the identity key into the AAD |
+| B13 | `FsBlobStore::put` never fsynced; its temp name was `{id}.{pid}.tmp` | `store::tests::a_put_is_durable_and_its_temp_name_cannot_collide`, `spool::tests::a_temp_name_cannot_collide_between_two_writers` |
+
+### The crash matrix
+
+`crates/vault/tests/backup_crash_matrix.rs`, nine cases. Each stops the sequence at one step and asks the next tick to carry on from what is on disk; each ends with the same question, **does a restore land on the last spooled commit?**
+
+After a commit and before the tick; after the spool write and before the cursor record; a checkpoint while the log holds an uncaptured commit; during a base build; the disk full; a foreign checkpoint between ticks; a generation over a live log; and a run of ticks, checkpoints and generations end to end. The replay fuzz is in the same file: random inserts, deletes and checkpoints from five fixed seeds, then restore and compare the **file bytes** and the **census**.
+
+Writing them found two real bugs, both fixed in `777352ad`:
+
+1. **`PRAGMA optimize` writes `sqlite_stat1`, so it is a commit** — and `checkpoint` was running it *after* capture, folding an uncaptured commit into the database file. Restores landed one commit behind, intermittently, since whether `optimize` writes anything depends on what came before. Reference B states the order and it is now the code's: run it, capture, then checkpoint.
+2. **`checkpoint` measured coverage from the spool's own bookkeeping**, which only knows what capture told it, so a commit made after the last tick was invisible to it. It now reads the log, which is the only honest witness.
+
+### What was deleted, and with what
+
+- `backup/kit.rs` and the recovery-kit file (§5). The written 24 words replace it; a file that carries keys is a file that can be copied.
+- `backup/keyring.rs` (B11). One root key.
+- `crates/media/src/format.rs`'s WAL-segment and manifest seals, their `WalAddress`, and the `derive_nonce`/`seal_aes_gcm`/`open_aes_gcm` primitives — the last callers were this lane's, which is why lane A could not reach them. `contracts/golden/format-golden.json` and its two golden tests went with the formats they pinned.
+- `crates/centraid/src/cmd/{backup,export,recover}.rs` as gateway commands, per Reference A's deletion inventory, with `tests/restore_drill.rs` and the CLI's date parser (whose only consumer was `recover --at`). The drill moved to `crates/vault/tests/restore_drill.rs` and the gate step points there.
+
+### New
+
+`contracts/migrations/003_backup_index.sql` — rung three, §4's "the vault is the index": `backup_object_range` (plaintext hash → the object already holding those bytes) and `backup_base_range` (one generation's base as an ordered list). A daily base is then one new range and ninety-nine reused ones (F10), and a restored phone does not re-upload a whole file for its first base.
+
+`backup/wal.rs` (the log reader), `backup/segment.rs` (the format W4 and W5 read), `backup/capture.rs` (the debounced tick and the checkpoint it owns), `backup/spool.rs`, `backup/objects.rs` (sealing and verify-before-upload). `backup/base.rs` and `backup/manifest.rs` rewritten.
+
+### Findings
+
+1. **Rotating the vault root key costs a full re-upload, and it should not.** The obvious rotation is to re-wrap each object's header under the new root and leave the bodies alone. `centraid-object/1`'s per-chunk AAD is the **whole header, the wrapped key included**, so changing the wrap invalidates every body tag. Excluding the wrap from the chunk AAD would make the cheap rotation possible and costs nothing in strength — a substituted wrap yields a different content key, so the body already fails to open — but that is a change to the format, not to its caller. Written down at `backup/objects.rs`'s header. **Owner question: make that change, or accept that rotation is a re-upload and say so in `SECURITY.md`?** Recommend the former, in whichever wave next opens `crates/media/src/object`.
+2. **`SQLITE_FCNTL_PERSIST_WAL` is still unset, and it costs a base on every restart.** SQLite checkpoints and removes the `-wal` when the last connection closes. Capture reads that as a restart with new salts under a live cursor — correctly, since it cannot tell a clean close from a foreign checkpoint that dropped frames — so it breaks into a new generation and owes it a full base. **Nothing is lost**: the frames went into the main file and the new base carries them, which `a_foreign_checkpoint_between_ticks_breaks_into_a_new_generation` asserts. What it costs is a base per app launch. The file-control needs C, `crates/vault` is `#![forbid(unsafe_code)]`, and W1 left it unset for exactly this reason — so this is a `core-ffi` shim and a root decision, and this lane stopped rather than reaching for an unsafe block.
+3. **The census is exact but it is a scan.** §2 asks for a running per-table count the `update_hook` maintains, so every txid carries a census with no scan. What is implemented is `Vault::census()` at the commit boundary capture cuts at — **exact**, because capture holds the write mutex and the walk stopped at the last commit, but 249 `count(*)`s per tick. The running version needs a counter table written inside the same transaction (the hook cannot write) and is a schema rung plus a guard change. Deferred, not done.
+4. **`restored-blob-coverage` has no store to ask any more.** The drill passes `None`: the only store it holds is the backup object store, whose names are ciphertext hashes, and a member's own bytes live in `centraid_blobs::ByteStore` (W6's). Handing it the backup store would compare a plaintext hash against a set of ciphertext names and report every row missing — a check that always fails rather than one that says something. The check is still right and wants W6's store.
+5. **`crates/centraid` has no backup verb at all now.** The phone is the writer and capture runs inside the core; what a CLI would have driven is W4's and W5's. `centraid` keeps `doctor`, `gateway install` and `units`, and it links no Locker custody symbol at all — `member_key_gate` asserts that absence rather than assuming it.
