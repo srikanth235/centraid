@@ -10,6 +10,7 @@
 //! | [`safety_number`] | the digits two people read to each other to confirm they hold each other's real key |
 //! | [`sealed_box`] | HPKE base mode to a box key — the primitive sealed mail and share invites are built from |
 //! | [`certificate`] | "identity key K certifies device D at epoch E", and the verifier that refuses a superseded one |
+//! | [`record`] | the signed pkarr record that makes a key findable: `mailbox=` and `cert=` under the identity key, `gateway=` under the account key |
 //!
 //! ## WHY THREE HASH FAMILIES LIVE IN THIS CRATE AND NOWHERE ELSE (W0.5-R1)
 //!
@@ -29,11 +30,16 @@
 pub mod certificate;
 pub mod derive;
 pub mod phrase;
+pub mod record;
 pub mod safety_number;
 pub mod sealed_box;
 
 pub use certificate::{
     CERTIFICATE_CONTEXT, CertificateError, DeviceCertificate, DeviceKey, DeviceTrust, Epoch,
+};
+pub use record::{
+    AccountRecord, CERT_ENTRY, GATEWAY_ENTRY, GatewayUrl, IdentityRecord, MAILBOX_ENTRY,
+    RECORD_NAME, RECORD_TTL_SECONDS, RecordError,
 };
 pub use derive::{
     AccountKey, BoxKey, DeriveError, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey,
