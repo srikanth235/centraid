@@ -45,6 +45,7 @@ import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.CameraRoll
 import dev.centraid.shared.shell.FoundResult
 import dev.centraid.shared.shell.TransferRuleChoice
+import dev.centraid.shared.shell.Shelf
 import dev.centraid.shared.sync.TransferRule
 import dev.centraid.shared.shell.CameraRollRunner
 import kotlinx.coroutines.Dispatchers
@@ -224,7 +225,20 @@ public class MainActivity : ComponentActivity() {
                         val platform = platformServices()
                         cameraRoll.value = CameraRollRunner(
                             services = platform,
-                            roll = CameraRoll(platform) { opened.shelf.core() },
+                            roll = CameraRoll(
+                                services = platform,
+                                core = { opened.shelf.core() },
+                                // A BACKUP IS A WRITE (#1029 F1). A vault that
+                                // moved to the member's other phone takes no
+                                // photographs.
+                                readOnly = {
+                                    if (opened.shelf.foregroundHolding()?.readOnly == true) {
+                                        Shelf.MOVED_SENTENCE
+                                    } else {
+                                        null
+                                    }
+                                },
+                            ),
                             host = photos,
                             scope = scope,
                             vaultId = { opened.shelf.foregroundHolding()?.vaultId },

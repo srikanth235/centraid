@@ -129,9 +129,47 @@ public class Shelf(
          * republishes.
          */
         public val core: CentraidCore? = null,
+        /**
+         * THIS VAULT MOVED TO ANOTHER PHONE (#1029 F1), or null.
+         *
+         * Set by [freeze] and never cleared here. See [Moved] and [freeze].
+         */
+        public val moved: Moved? = null,
     ) {
         /** Closed to give the OS its memory back, and reopened on next touch. */
         public val resting: Boolean get() = core == null
+
+        /**
+         * WRITES ARE REFUSED ON THIS VAULT, AND READS ARE NOT (#1029 F1).
+         *
+         * A frozen vault is fully readable. That is the whole shape of the
+         * ruling: the member keeps everything they had, and what stops is
+         * adding to a vault whose authority has moved to the phone they
+         * restored onto.
+         */
+        public val readOnly: Boolean get() = moved != null
+
+        /**
+         * WHAT THE MEMBER IS OWED WHEN THEY TOUCH A FROZEN VAULT (#1029 F1).
+         *
+         * "N changes since <date>", and the number is the SPOOL THIS PHONE IS
+         * STILL HOLDING — not a count of what is lost. Nothing was lost:
+         * [freeze] deletes nothing and this device keeps every row it had. The
+         * line exists so the member can see there is something here worth
+         * carrying across rather than discovering it after they wipe the phone.
+         *
+         * The DATE is the first ten characters of an RFC 3339 instant, which is
+         * its date part. `commonMain` has no calendar and adding one to render
+         * one line would be a dependency for a substring; a shell that wants a
+         * localised date has the raw [Moved.atIso] beside it.
+         */
+        public val frozenLine: String?
+            get() {
+                val at = moved ?: return null
+                val day = at.atIso.take(DATE_CHARS)
+                val changes = if (at.unacked == 1L) "1 change" else "${at.unacked} changes"
+                return "$changes since $day"
+            }
 
         /**
          * THE STATE, AND ON THIS DEVICE THERE IS ONE (#1029 §1).
@@ -169,6 +207,34 @@ public class Shelf(
             // the device that took them withholds nothing from itself.
         )
     }
+
+    /**
+     * THIS VAULT MOVED TO ANOTHER PHONE (#1029 §1, F1).
+     *
+     * ## Cooperation, not enforcement
+     *
+     * Both phones hold the same seed, so no lease and no lock can DECIDE who
+     * owns a vault — either phone could ignore any answer it is given and go on
+     * writing. What supersession buys is an ORDER (F3): the restored phone
+     * claims the next lease epoch, and a phone that learns its own epoch has
+     * been superseded stops writing because that is the cooperative thing to
+     * do, not because something stopped it.
+     *
+     * So this state does three things and no more: writes are refused
+     * ([Holding.readOnly]), the unacked spool is SHOWN ([Holding.frozenLine]),
+     * and it is KEPT. **Never wipe, never auto-take-back.** Wiping would
+     * destroy a member's only copy of whatever this phone wrote last; taking
+     * the vault back automatically would be two phones claiming one authority
+     * in a loop, with the member watching it flip.
+     *
+     * @property atIso when the other phone claimed the vault, RFC 3339.
+     * @property unacked how many changes this phone holds that the vault it
+     *   moved to has not seen. A count and never a deletion.
+     */
+    public data class Moved(
+        public val atIso: String,
+        public val unacked: Long,
+    )
 
     /** Why a [found] did not add a holding. A CODE; the sentence is the shell's. */
     public enum class FoundRefusal {
@@ -460,6 +526,33 @@ public class Shelf(
     // State
     // -----------------------------------------------------------------------
 
+    /**
+     * FREEZE A VAULT THAT MOVED TO ANOTHER PHONE (#1029 F1).
+     *
+     * **The only way in, and there is no way out.** Taking a vault back is a
+     * deliberate act and never an automatic one, so there is no `thaw` here:
+     * the act that would undo this is a member choosing to make THIS phone the
+     * authority again, which claims the next lease epoch — and the lease is
+     * #1029 W5's, with the restore it belongs to.
+     *
+     * ## Who calls this
+     *
+     * Whatever learns the vault moved, which is W5's restore client: it holds
+     * the lease and hears the supersession. **There is no typed error to key
+     * this on yet** — `error.proto` has no `ERROR_CODE_VAULT_MOVED`,
+     * `crates/api-proto` is another lane's, and inventing a code number here
+     * would be a second mechanism that disagreed with the first one minted.
+     * When that code lands, the mapping goes beside the others in
+     * `sync/ReadFailures.kt` and calls THIS function; the state, the refusal
+     * and the line do not move.
+     *
+     * Deletes nothing, closes nothing and keeps the core open: a frozen vault
+     * is fully readable, which is the point of freezing rather than forgetting.
+     */
+    public fun freeze(vaultId: String, atIso: String, unacked: Long) {
+        update(vaultId) { it.copy(moved = Moved(atIso = atIso, unacked = unacked)) }
+    }
+
     /** Re-read a holding's identity from its own file. */
     public fun rename(vaultId: String, name: String, color: String) {
         if (name.isEmpty()) return
@@ -647,6 +740,22 @@ public class Shelf(
         private const val NAME_BYTES: Int = 16
 
         private const val HEX: String = "0123456789abcdef"
+
+        /** `YYYY-MM-DD` — an RFC 3339 instant's date part. */
+        private const val DATE_CHARS: Int = 10
+
+        /**
+         * WHAT A WRITE TO A FROZEN VAULT IS ANSWERED WITH (#1029 F1).
+         *
+         * One sentence, here, because a rule that lives in every reducer is a
+         * rule one reducer will get wrong — the argument `WriteGate` made and
+         * the one thing about it worth keeping. It says what happened and what
+         * is still true, and it offers no way back: taking the vault back is a
+         * deliberate act (W5's) and a sentence that implied a button would be
+         * describing one that is not there.
+         */
+        public const val MOVED_SENTENCE: String =
+            "This vault moved to your other phone. Everything here is still readable."
 
         private val SIDECARS = listOf("-wal", "-shm")
     }

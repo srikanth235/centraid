@@ -159,6 +159,22 @@ public class ScreenRuntime<S, E>(
     private val scope: CoroutineScope,
     /** Null for a screen with no write. See [ScreenWrites]. */
     private val writes: ScreenWrites<S, E>? = null,
+    /**
+     * WHY THIS VAULT REFUSES WRITES, OR NULL (#1029 F1).
+     *
+     * The one gate left on this door, and the only kind of gate that still has
+     * a subject: a vault that MOVED to the member's other phone is read-only,
+     * and a write to it is refused with a sentence rather than committed or
+     * queued. `WriteGate` was here because a write could go three places; there
+     * is one place now, and this says when even that one is closed.
+     *
+     * A supplier and not a flag, for the reason [core] is one: the shelf can
+     * freeze a vault while a screen is on it, and a value captured at attach
+     * would let the next tap write to a vault that had moved a minute earlier.
+     *
+     * Null on every ordinary vault, which is the ordinary case.
+     */
+    private val readOnly: () -> String? = { null },
 ) {
     /**
      * Collect this host's effects and serve the ones that are this screen's.
@@ -298,6 +314,14 @@ public class ScreenRuntime<S, E>(
      * required for that reason.
      */
     private suspend fun submit(write: ScreenEffect.SubmitWrite, writes: ScreenWrites<S, E>) {
+        // A FROZEN VAULT REFUSES, AND SAYS SO (#1029 F1). Not queued and not
+        // silently dropped: the member is told the write did not happen, with
+        // the sentence that says why and what is still true.
+        readOnly()?.let { sentence ->
+            writes.settled(CommandStatus.COMMAND_STATUS_DENIED, sentence)
+                ?.let { host.send(it) }
+            return
+        }
         val handle = core()
         if (handle == null) {
             writes.settled(

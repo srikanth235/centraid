@@ -33,7 +33,7 @@ import kotlinx.coroutines.test.runTest
  */
 class CameraRollSpec : StringSpec({
 
-    fun rollOf(services: FakePlatformServices) = CameraRoll(services) { null }
+    fun rollOf(services: FakePlatformServices) = CameraRoll(services, core = { null })
 
     "a limited selection is a library, not a denial" {
         val services = FakePlatformServices()
@@ -212,7 +212,7 @@ class CameraRollSpec : StringSpec({
         runTest {
             val services = FakePlatformServices()
             services.mediaLibrary.grant = MediaPermission.MEDIA_PERMISSION_DENIED
-            val report = CameraRoll(services) { null }.pass("vault-1")
+            val report = CameraRoll(services, core = { null }).pass("vault-1")
             report.state.phase shouldBe BackupState.Phase.PHASE_IDLE
             report.state.paused_reason shouldContain "Settings"
             report.queued shouldBe 0

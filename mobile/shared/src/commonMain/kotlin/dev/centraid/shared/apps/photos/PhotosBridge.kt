@@ -8,6 +8,7 @@ import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.CameraRoll
 import dev.centraid.shared.shell.CameraRollRunner
 import dev.centraid.shared.shell.HomeSession
+import dev.centraid.shared.shell.Shelf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -90,7 +91,19 @@ public class PhotosBridge {
         // (`CameraRollRunner`).
         cameraRoll = CameraRollRunner(
             services = services,
-            roll = CameraRoll(services) { session.shelf.core() },
+            roll = CameraRoll(
+                services = services,
+                core = { session.shelf.core() },
+                // A BACKUP IS A WRITE (#1029 F1). A vault that moved to the
+                // member's other phone takes no photographs.
+                readOnly = {
+                    if (session.shelf.foregroundHolding()?.readOnly == true) {
+                        Shelf.MOVED_SENTENCE
+                    } else {
+                        null
+                    }
+                },
+            ),
             host = host,
             scope = scope,
             // READ AT EACH USE, not captured: a vault switch moves the

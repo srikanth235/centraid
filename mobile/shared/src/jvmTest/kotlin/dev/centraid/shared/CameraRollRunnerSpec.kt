@@ -35,7 +35,7 @@ class CameraRollRunnerSpec : StringSpec({
         scope: CoroutineScope,
     ) = CameraRollRunner(
         services = services,
-        roll = CameraRoll(services) { null },
+        roll = CameraRoll(services, core = { null }),
         host = host,
         scope = scope,
         vaultId = { "vault-1" },

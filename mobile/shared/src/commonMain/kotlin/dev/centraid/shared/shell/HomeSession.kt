@@ -144,6 +144,10 @@ public class HomeSession private constructor(
             reads = reads,
             scope = scope,
             writes = writes,
+            // READ OFF THE SHELF AT THE MOMENT OF THE WRITE (#1029 F1). A
+            // vault frozen while the member was mid-edit must refuse the save
+            // they then press, and a value read at attach would not.
+            readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
         ).start()
     }
 
@@ -181,6 +185,42 @@ public class HomeSession private constructor(
                 },
             )
         }
+
+    /**
+     * THIS VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1).
+     *
+     * Freezes it: writes are refused with [Shelf.MOVED_SENTENCE] and reads go
+     * on working. **Nothing is deleted and nothing is taken back.** Both phones
+     * hold the same seed, so this is cooperation and not enforcement — see
+     * [Shelf.Moved].
+     *
+     * The session republishes so the frozen holding's line is on screen without
+     * waiting for the next touch.
+     *
+     * ## Its one caller
+     *
+     * Whatever learns the vault moved, which is #1029 W5's restore client: it
+     * holds the lease and hears the supersession. There is no typed error to
+     * key this on yet — `error.proto` has no `ERROR_CODE_VAULT_MOVED` and
+     * `crates/api-proto` is another lane's — and when there is, the mapping
+     * calls this and nothing else changes. [Shelf.freeze] has the whole note.
+     */
+    public suspend fun vaultMoved(vaultId: String, atIso: String, unacked: Long) {
+        shelf.freeze(vaultId, atIso, unacked)
+        publishLockup()
+    }
+
+    /**
+     * "N changes since <date>" for the vault in front, or null (#1029 F1).
+     *
+     * Read by the chrome on both shells. It is NOT on `VaultLockup`, and that
+     * is a gap rather than a choice: the screen contract has three vault states
+     * and no slot for a frozen one or for its line, and the message lives in
+     * `crates/api-proto` — another lane's. Until it has one, the freeze reaches
+     * a member through the write refusal (which every screen already renders)
+     * and through this.
+     */
+    public val frozenLine: String? get() = shelf.foregroundHolding()?.frozenLine
 
     /**
      * FORGET A VAULT (#1025 S7-9).

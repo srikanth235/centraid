@@ -76,6 +76,17 @@ public class CameraRoll(
     private val services: PlatformServices,
     /** The open core, read at each use. See `ScreenRuntime`'s own note on this. */
     private val core: () -> CentraidCore?,
+    /**
+     * WHY THIS VAULT REFUSES WRITES, OR NULL (#1029 F1).
+     *
+     * A backup is a WRITE — every photograph it offers commits a
+     * `media.add_asset` — so a vault that moved to the member's other phone
+     * refuses one exactly as it refuses a note save. A supplier and not a flag
+     * for the same reason [core] is one: a pass runs for minutes and a value
+     * captured at construction would keep uploading into a vault frozen
+     * halfway through it.
+     */
+    private val readOnly: () -> String? = { null },
 ) {
     /** What one pass did, and what the screen should now say. */
     public data class Report(
@@ -125,6 +136,25 @@ public class CameraRoll(
             )
             onState(idle)
             return Report(state = idle)
+        }
+
+        // A FROZEN VAULT TAKES NO PHOTOGRAPHS (#1029 F1). IDLE and not parked:
+        // parked is a device out of disk, which resumes when space is freed,
+        // and this does not resume — the vault moved. The cursor is left where
+        // it is, so a member who takes this vault back later resumes from the
+        // photograph this pass stopped at rather than re-walking the roll.
+        //
+        // **BEFORE THE CORE IS ASKED FOR**, and the order is the sentence: a
+        // frozen holding that is also RESTING has no handle, and reading the
+        // core first would answer "No vault is open on this device" over a
+        // vault the member is looking at. What happened is that it moved.
+        readOnly()?.let { sentence ->
+            val frozen = BackupState(
+                phase = BackupState.Phase.PHASE_IDLE,
+                paused_reason = sentence,
+            )
+            onState(frozen)
+            return Report(state = frozen)
         }
 
         val handle = core() ?: return Report(

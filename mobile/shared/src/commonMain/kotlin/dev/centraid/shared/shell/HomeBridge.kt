@@ -146,6 +146,27 @@ public class HomeBridge {
     }
 
     /**
+     * THIS VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1).
+     *
+     * Not `suspend`, for the same reason [send] is not. See
+     * [HomeSession.vaultMoved] for who calls it and why there is no way back
+     * through this door.
+     */
+    public fun vaultMoved(vaultId: String, atIso: String, unacked: Long) {
+        val session = this.session ?: return
+        scope.launch { session.vaultMoved(vaultId, atIso, unacked) }
+    }
+
+    /**
+     * "N changes since <date>" for the vault in front, or null (#1029 F1).
+     *
+     * A door on the bridge rather than a screen event, for the reason
+     * [transferRule] is one: it is not a reduction, and the line has no slot on
+     * `VaultLockup` to ride in. See [HomeSession.frozenLine].
+     */
+    public fun frozenLine(): String? = session?.frozenLine
+
+    /**
      * FORGET A VAULT (#1025 S7-9).
      *
      * The inverse of [found], and the same shape for the same reason: a
