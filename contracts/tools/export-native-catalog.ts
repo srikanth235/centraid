@@ -342,13 +342,15 @@ export function emitNativeCatalog(repositoryRoot: string): {
       ""
     );
   }
-  kotlin.push(...kotlinIcons(), "}", "");
   kotlin.push(
+    ...kotlinIcons(),
+    "}",
+    "",
     "/** Geometry both shells need that the token table does not carry. */",
     "public object CentraidGeometry {",
     ...Object.entries(constants).map(([name, value]) => {
       const constName = name
-        .replace(/([a-z0-9])([A-Z])/gu, "$1_$2")
+        .replace(/(?<head>[a-z0-9])(?<upper>[A-Z])/gu, "$<head>_$<upper>")
         .toUpperCase();
       return Number.isInteger(value)
         ? `    public const val ${constName}: Int = ${value}`
@@ -436,8 +438,10 @@ export function emitNativeCatalog(repositoryRoot: string): {
       ""
     );
   }
-  swift.push(...swiftIcons(), "}", "");
   swift.push(
+    ...swiftIcons(),
+    "}",
+    "",
     "/// Geometry both shells need that the token table does not carry.",
     "public enum CentraidGeometry {",
     ...Object.entries(constants).map(([name, value]) =>
