@@ -502,7 +502,10 @@ mod tests {
             .expect("builds");
         let three = PageSegment::from_frames(generation(), 3, 16, Vec::new(), &[frame(1, 4, 3)])
             .expect("builds");
-        assert_eq!(apply_all(&file, std::slice::from_ref(&one), 1).expect("applies"), 1);
+        assert_eq!(
+            apply_all(&file, std::slice::from_ref(&one), 1).expect("applies"),
+            1
+        );
         let error = apply_all(&file, &[one, three], 1).expect_err("a gap is refused");
         assert!(matches!(error, SegmentError::OutOfOrder { .. }), "{error}");
     }
