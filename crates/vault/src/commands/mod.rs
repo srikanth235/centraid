@@ -106,7 +106,7 @@ impl Risk {
 
 /// What a handler is handed.
 pub struct CommandCtx<'tx, 'conn> {
-    tx: &'tx CommitTx<'tx, 'conn>,
+    tx: &'tx CommitTx<'conn>,
     /// The command being run, so a handler's own error can name itself.
     pub command: &'static str,
     pub input: serde_json::Value,
@@ -970,7 +970,7 @@ type DenyOutcome = (
 
 fn deny(
     vault: &Vault,
-    tx: &CommitTx<'_, '_>,
+    tx: &CommitTx<'_>,
     definition: &CommandDefinition,
     invocation_id: &str,
     sentence: &str,
