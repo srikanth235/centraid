@@ -31,6 +31,28 @@ use crate::clock::{Clock, ClockIds, Ids, SystemClock};
 use crate::error::{Result, VaultError};
 use crate::migrations::{APPLICATION_ID, head_version};
 
+/// THE PAGE SIZE, PINNED (#1029 §1).
+///
+/// Capture ships **pages**, not WAL bytes, and a segment's addresses are page
+/// numbers — so the page size is part of the segment format rather than a
+/// tuning knob. A file founded at one size and read by a build that assumed
+/// another would decode every segment at the wrong offset, and SQLite's
+/// compiled default has changed once already (1024 → 4096 in 3.12). 4096 is
+/// stated here so the file carries the decision rather than the build.
+///
+/// It can only be set on an EMPTY database: changing it afterwards needs a
+/// `VACUUM`, which this vault never runs (see [`Self::apply_pragmas`]).
+pub const PAGE_SIZE: i64 = 4096;
+
+/// How far the WAL is truncated back to when the app checkpoints it.
+///
+/// Not a checkpoint trigger — [`Self::apply_pragmas`] turns SQLite's automatic
+/// one off — but the ceiling a TRUNCATE leaves behind, so a vault that took one
+/// large import does not keep the sidecar it needed for it for the life of the
+/// phone. 64 MiB: large enough that an ordinary session never truncates, small
+/// enough that the file is not a surprise in a storage listing.
+pub const JOURNAL_SIZE_LIMIT: i64 = 64 * 1024 * 1024;
+
 /// How a vault file was opened.
 pub struct Vault {
     connection: Connection,
@@ -86,7 +108,21 @@ impl Vault {
             });
         }
         let connection = Connection::open(&path)?;
-        connection.pragma_update(None, "journal_mode", "wal")?;
+        // THE HEADER PRAGMAS, AND ONLY HERE. `page_size` and `auto_vacuum` are
+        // both recorded in the file header and both are silently ignored once a
+        // page exists — and `journal_mode = wal` writes one. Founding is the
+        // only moment either can be stated, which is why they are not in
+        // [`Self::apply_pragmas`] with the rest: a pragma that can only be set
+        // once must not sit in a function every open calls, where its failure
+        // to take would look like success.
+        connection.pragma_update(None, "page_size", PAGE_SIZE)?;
+        // NO AUTO-VACUUM, AND `VACUUM` NEVER RUNS (#1029 §1). A vacuum
+        // renumbers pages, and capture addresses segments BY page number: every
+        // page in the file would read as changed, the range dedup would match
+        // nothing, and the next backup would be a full copy of the vault. The
+        // space a vacuum reclaims is worth less than that.
+        connection.pragma_update(None, "auto_vacuum", "NONE")?;
+        Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "application_id", APPLICATION_ID)?;
         // OFF for the ladder: the baseline creates 157 tables whose foreign
         // keys point at each other, and SQLite resolves an FK's target lazily,
@@ -146,7 +182,7 @@ impl Vault {
             });
         }
 
-        connection.pragma_update(None, "journal_mode", "wal")?;
+        Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
 
         if found < head_version() {
@@ -175,6 +211,54 @@ impl Vault {
         Self::wrap(connection, path, found, clock, ids)
     }
 
+    /// THE PRAGMA SET, IN ONE PLACE, ON EVERY CONNECTION THIS CRATE OPENS
+    /// (#1029 §1).
+    ///
+    /// Stated rather than inherited. Everything below except `journal_mode` was
+    /// previously left at whatever the linked SQLite was compiled with, which
+    /// means the vault's durability was a property of the build and not of the
+    /// product — and `synchronous` in particular defaults to `NORMAL` under WAL,
+    /// which is the one setting F11 forbids.
+    ///
+    /// - **`journal_mode = WAL`** — the WAL is the phone's commit log, and what
+    ///   capture reads.
+    /// - **`synchronous = FULL`, explicitly (F11).** The durability order is
+    ///   "the WAL is durable before the spool". Under `NORMAL` a commit is
+    ///   acknowledged before its WAL frames reach the disk, so a crash between
+    ///   the acknowledgement and the fsync leaves the spool holding a commit the
+    ///   phone itself lost — a backup ahead of the device it backs up. There is
+    ///   no correct recovery from that, so it is not allowed to happen.
+    /// - **`wal_autocheckpoint = 0`** — the app owns checkpoints. SQLite's
+    ///   automatic one fires inside whichever commit happens to cross the
+    ///   threshold, which is precisely the moment capture has not sealed the
+    ///   tail; the WAL then restarts under it and two different byte ranges
+    ///   seal under one address.
+    /// - **`journal_size_limit`** — see [`JOURNAL_SIZE_LIMIT`].
+    /// - **`SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE`** — a last close must never
+    ///   checkpoint away a WAL the spool has not sealed. This is the half
+    ///   `docs/traps/wal-checkpoint.md` records as a real defect.
+    /// - **No `secure_delete`.** The file is plaintext to whoever can read it,
+    ///   so zeroing freed cells buys nothing — and it dirties pages capture then
+    ///   has to ship.
+    ///
+    /// `page_size` and `auto_vacuum` are NOT here: both are header properties
+    /// that only take on an empty file, so they are stated once in
+    /// [`Self::create_with`] where the statement can actually succeed.
+    fn apply_pragmas(connection: &Connection) -> Result<()> {
+        connection.pragma_update(None, "journal_mode", "wal")?;
+        connection.pragma_update(None, "synchronous", "FULL")?;
+        connection.pragma_update(None, "wal_autocheckpoint", 0)?;
+        connection.pragma_update(None, "journal_size_limit", JOURNAL_SIZE_LIMIT)?;
+        connection.set_db_config(
+            rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
+            true,
+        )?;
+        // The busy timeout has to be set on every connection or a second writer
+        // fails instantly instead of waiting.
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
+        Ok(())
+    }
+
     fn wrap(
         connection: Connection,
         path: PathBuf,
@@ -182,10 +266,27 @@ impl Vault {
         clock: Box<dyn Clock>,
         ids: Box<dyn Ids>,
     ) -> Result<Self> {
-        // The seat floor rules out plenty of SQL; nothing here needs to know
-        // that, but the busy timeout does have to be set on every connection
-        // or a second writer fails instantly instead of waiting.
-        connection.busy_timeout(std::time::Duration::from_secs(5))?;
+        // ONE OPENER, ONE PRAGMA SET, ONE CONNECTION PER VAULT — and this is the
+        // funnel all three meet in (#1029 §1). Every `Vault` in the process
+        // comes through here, so a connection that reached a caller without the
+        // set below is a connection that was never wrapped.
+        //
+        // **The one connection is an invariant now, not a convenience.** It used
+        // to be justified by SQLite's single writer (D-1020-D2-9); under capture
+        // it is stronger than that, and in both directions:
+        //
+        // - A separate READER connection makes a TRUNCATE checkpoint partial —
+        //   SQLite will not reset a WAL any connection still has a snapshot in —
+        //   so the checkpoint half-succeeds, the tail is never sealed at a known
+        //   offset, and capture loops over the same range.
+        // - A second OPENER arrives with the compiled default
+        //   `wal_autocheckpoint` (1000 pages) rather than the 0 set above, and
+        //   restarts the WAL underneath a capture that is mid-segment.
+        //
+        // So reads are `query_only` toggled on this same connection
+        // ([`Self::read`]) rather than served from a pool, and nothing else in
+        // the process opens the file.
+        Self::apply_pragmas(&connection)?;
         Ok(Self {
             connection,
             path,
@@ -359,6 +460,108 @@ mod tests {
             .expect("the pragma reads");
         assert_eq!(application_id, APPLICATION_ID);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every pragma #1029 §1 names, asserted on a FRESHLY OPENED vault.
+    ///
+    /// Read off the connection rather than off the source: the point of stating
+    /// them is that the file and the connection carry the decision, and a test
+    /// that re-read the constants would pass against a build that set none of
+    /// them.
+    #[test]
+    fn a_founded_vault_carries_the_whole_pragma_set() {
+        let dir = scratch();
+        std::fs::create_dir_all(&dir).expect("the scratch dir is made");
+        let path = dir.join("vault.db");
+        let vault = Vault::create_with(
+            &path,
+            Box::new(FixedClock::frozen()),
+            Box::new(SeededIds::new("test")),
+        )
+        .expect("a vault is founded");
+        assert_eq!(pragma_text(&vault, "journal_mode"), "wal");
+        // FULL is 2. Explicit, never the compiled default — under WAL that
+        // default is NORMAL, which is the one setting F11 forbids.
+        assert_eq!(pragma_int(&vault, "synchronous"), 2, "synchronous = FULL");
+        assert_eq!(
+            pragma_int(&vault, "wal_autocheckpoint"),
+            0,
+            "the app owns checkpoints"
+        );
+        assert_eq!(pragma_int(&vault, "journal_size_limit"), JOURNAL_SIZE_LIMIT);
+        assert_eq!(pragma_int(&vault, "page_size"), PAGE_SIZE);
+        assert_eq!(pragma_int(&vault, "auto_vacuum"), 0, "auto_vacuum = NONE");
+        // NOT SET, and that is the assertion. The file is plaintext to whoever
+        // can read it, so zeroing freed cells buys nothing and dirties pages
+        // capture must then ship.
+        assert_eq!(pragma_int(&vault, "secure_delete"), 0, "no secure_delete");
+        assert!(
+            vault
+                .connection()
+                .db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE)
+                .expect("the db config reads"),
+            "a last close must not checkpoint away a WAL the spool has not sealed"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A SECOND OPEN CHANGES NOTHING SILENTLY.
+    ///
+    /// The failure this guards is the one `docs/traps/wal-checkpoint.md`
+    /// records: a second opener arrives with the compiled-in
+    /// `wal_autocheckpoint` and restarts the WAL under a capture that is
+    /// mid-segment. Every connection comes through `wrap`, so every connection
+    /// carries the same set — and the header pragmas survive because they are
+    /// in the file.
+    #[test]
+    fn a_second_open_carries_the_same_pragma_set_and_changes_no_header() {
+        let dir = scratch();
+        std::fs::create_dir_all(&dir).expect("the scratch dir is made");
+        let path = dir.join("vault.db");
+        let founded = Vault::create_with(
+            &path,
+            Box::new(FixedClock::frozen()),
+            Box::new(SeededIds::new("test")),
+        )
+        .expect("a vault is founded");
+        founded.close().expect("the founding connection closes");
+
+        let reopened = Vault::open(&path).expect("the vault opens again");
+        assert_eq!(pragma_text(&reopened, "journal_mode"), "wal");
+        assert_eq!(pragma_int(&reopened, "synchronous"), 2);
+        assert_eq!(
+            pragma_int(&reopened, "wal_autocheckpoint"),
+            0,
+            "a second opener must not bring the compiled default back"
+        );
+        assert_eq!(
+            pragma_int(&reopened, "journal_size_limit"),
+            JOURNAL_SIZE_LIMIT
+        );
+        assert_eq!(pragma_int(&reopened, "page_size"), PAGE_SIZE);
+        assert_eq!(pragma_int(&reopened, "auto_vacuum"), 0);
+        assert_eq!(pragma_int(&reopened, "secure_delete"), 0);
+        assert!(
+            reopened
+                .connection()
+                .db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE)
+                .expect("the db config reads")
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn pragma_int(vault: &Vault, name: &str) -> i64 {
+        vault
+            .connection()
+            .query_row(&format!("PRAGMA {name}"), [], |row| row.get(0))
+            .unwrap_or_else(|error| panic!("PRAGMA {name} reads: {error}"))
+    }
+
+    fn pragma_text(vault: &Vault, name: &str) -> String {
+        vault
+            .connection()
+            .query_row(&format!("PRAGMA {name}"), [], |row| row.get(0))
+            .unwrap_or_else(|error| panic!("PRAGMA {name} reads: {error}"))
     }
 
     #[test]
