@@ -243,5 +243,7 @@ message CommandOutcome {
   // Adding a field with a fresh number is not a `buf breaking` violation: an
   // older peer ignores it and the seat then falls back to the version-set path
   // exactly as before.
-  optional uint64 commit_seq = 7;
+   // 7 WAS `commit_seq`, DELETED (#1029 §1). It was the position a SEAT's
+  // overlay settled against, allocated by `replica_meta` in the log plane. The
+  // number is retired, not reused.
 }

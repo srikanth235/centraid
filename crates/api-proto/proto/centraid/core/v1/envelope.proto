@@ -24,8 +24,6 @@ import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
-import "centraid/core/v1/intent.proto";
-import "centraid/core/v1/log.proto";
 import "centraid/core/v1/pair.proto";
 import "centraid/core/v1/query.proto";
 
@@ -44,26 +42,22 @@ message Envelope {
 }
 
 message Request {
+  // SEVEN VERBS LEFT WITH THE SEAT (#1029 §1, §6), and NO NUMBER IS REUSED —
+  // a field number that comes back meaning something else is how an old build
+  // reads a new message as a shape it recognises:
+  //   2  `log`            — a page of `replica_log` for a seat's cursor
+  //   3  `snapshot_head`  — already deleted in #1025 S7
+  //   4  `intent`         — a write queued for a gateway to run
+  //   7  `pair`           — redeeming a pairing ticket
+  //   8  `devices_list`   — the seats this vault has enrolled
+  //   9  `devices_revoke` — un-enrolling one
+  //   12 `blob`           — handing the stream over to iroh-blobs
   oneof kind {
     Hello hello = 1;
-    LogRequest log = 2;
-    // 3 WAS `snapshot_head`, DELETED (#1025 S7, item 5). The head travels on
-    // `PairOk` and on `RebootstrapRequired` — the two answers that tell a
-    // device to take a copy — so there is nothing left to ask for. The number
-    // is not reused: a field number that comes back meaning something else is
-    // how an old build reads a new message as a shape it recognises.
-    Intent intent = 4;
     Command command = 5;
     PageRequest page = 6;
-    PairRequest pair = 7;
-    DevicesList devices_list = 8;
-    DevicesRevoke devices_revoke = 9;
     BackupNow backup_now = 10;
     ContentUrlRequest content_urls = 11;
-    // THE STREAM IS HANDED OVER AFTER THIS ONE (#1025 S2). See
-    // `content.proto`'s `BlobRequest`: no response envelope follows, because
-    // what follows is iroh-blobs' protocol on the same stream.
-    BlobRequest blob = 12;
     // A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM (#1025 S4). See
     // `content.proto`'s `StageRequest`.
     StageRequest stage = 13;
@@ -71,18 +65,15 @@ message Request {
 }
 
 message Response {
+  // 4 `log`, 5 `rebootstrap_required`, 6 `snapshot_head`, 7 `outcome`,
+  // 10 `pair` and 11 `devices_list` were the answers to the requests above.
+  // The numbers are retired, not reused.
   oneof kind {
     Hello hello = 1;
     UpgradeRequired upgrade_required = 2;
     Unsupported unsupported = 3;
-    LogPage log = 4;
-    RebootstrapRequired rebootstrap_required = 5;
-    // 6 WAS `SnapshotHead`, deleted with the request that asked for it.
-    Outcome outcome = 7;
     CommandOutcome command = 8;
     Page page = 9;
-    PairResponse pair = 10;
-    DevicesListResult devices_list = 11;
     ContentUrls content_urls = 12;
     StageResponse stage = 13;
   }

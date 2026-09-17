@@ -288,11 +288,6 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
         "reads Subresource Integrity markers (`sha512-`, `sha256-`) out of \
          `bun.lock`. SRI's spelling is the W3C's",
     ),
-    (
-        "xtask/src/smoke.rs",
-        "pins a Docker base image by `@sha256:` and verifies a release tarball \
-         against `SHA256SUMS`. Both are the registry's and the release's own",
-    ),
 ];
 
 /// `sha256` survives in exactly the places that wrote down why.

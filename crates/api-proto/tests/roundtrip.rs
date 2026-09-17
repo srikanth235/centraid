@@ -10,8 +10,7 @@
 //! not that `prost::Message` works.
 
 use centraid_api_proto::core_v1::{
-    self as core, Conflict, Envelope, Error, Intent, LogPage, LogRow, PriorDelta, RecordKey,
-    RowImage, Value, envelope, value,
+    self as core, Envelope, Error, RecordKey, RowImage, Value, envelope, value,
 };
 use centraid_api_proto::screen_v1::ScreenState;
 use prost::Message;
@@ -82,73 +81,15 @@ fn a_wide_integer_survives_without_a_decimal_text_escape() {
     }
 }
 
-/// Three claims, three encodings (census seam 3): no prior known is an ABSENT
-/// `prior`; "the statement touched only the key" is a PRESENT, EMPTY
-/// `PriorDelta`; a real delta is a present, non-empty one. `optional` on the
-/// field is what keeps the first two apart.
-#[test]
-fn the_prior_delta_keeps_absent_empty_and_populated_apart() {
-    let base = LogRow {
-        seq: 7,
-        commit_seq: 3,
-        table: "tally_expense".to_owned(),
-        op: core::LogOp::Update as i32,
-        pk: Some(RecordKey {
-            values: vec![text("exp_1")],
-        }),
-        ..LogRow::default()
-    };
-
-    let no_prior = LogRow {
-        prior: None,
-        ..base.clone()
-    };
-    let empty_prior = LogRow {
-        prior: Some(PriorDelta::default()),
-        ..base.clone()
-    };
-    let mut delta = PriorDelta::default();
-    delta.columns.insert("amount".to_owned(), integer(120));
-    let real_prior = LogRow {
-        prior: Some(delta),
-        ..base
-    };
-
-    for row in [&no_prior, &empty_prior, &real_prior] {
-        roundtrip(row);
-    }
-    let decoded_empty =
-        LogRow::decode(empty_prior.encode_to_vec().as_slice()).expect("decode empty prior");
-    assert!(
-        decoded_empty.prior.is_some(),
-        "an empty delta is a real answer and must not decode as absent"
-    );
-    assert!(decoded_empty.prior.expect("present").columns.is_empty());
-    assert!(
-        LogRow::decode(no_prior.encode_to_vec().as_slice())
-            .expect("decode")
-            .prior
-            .is_none()
-    );
-}
-
-/// `actual_version == 0` means the row is gone. A sentinel inside the field
-/// only works because `row_version` starts at 1, so zero cannot be a real
-/// version; the test pins that the sentinel survives the encoder's default
-/// elision, which is the one way it could have been lost.
-#[test]
-fn a_conflict_whose_row_is_gone_still_says_so_after_encoding() {
-    let gone = Conflict {
-        entity: "tally.expense".to_owned(),
-        row_id: "exp_1".to_owned(),
-        shape_id: None,
-        expected_version: 4,
-        actual_version: 0,
-    };
-    let decoded = Conflict::decode(gone.encode_to_vec().as_slice()).expect("decode");
-    assert_eq!(decoded.actual_version, 0);
-    assert_eq!(decoded, gone);
-}
+// TWO TESTS STOOD HERE AND THEIR MESSAGES ARE DELETED (#1029 §1).
+//
+// `the_prior_delta_keeps_absent_empty_and_populated_apart` pinned census seam
+// 3 on a `LogRow`: absent `prior` means "no prior is known" and forces a
+// re-bootstrap, a PRESENT EMPTY `PriorDelta` means "the statement touched only
+// the key". `a_conflict_whose_row_is_gone_still_says_so_after_encoding` pinned
+// `Conflict.actual_version == 0` as "the row is gone", a sentinel a SEAT read
+// off a refused intent. `log.proto` and `intent.proto` are deleted with the
+// replica log plane and the intent plane, so neither message exists.
 
 /// Request id zero is the handshake and nothing else; every other body carries
 /// a non-zero id. The envelope round-trips each body variant, which is the
@@ -166,11 +107,10 @@ fn every_envelope_body_round_trips() {
             })),
         }),
         envelope::Body::Response(core::Response {
-            kind: Some(core::response::Kind::Log(LogPage {
-                epoch: "e1".to_owned(),
-                watermark: 12,
-                next: 12,
-                ..LogPage::default()
+            kind: Some(core::response::Kind::Command(core::CommandOutcome {
+                status: core::CommandStatus::Executed as i32,
+                invocation_id: "inv_1".to_owned(),
+                ..core::CommandOutcome::default()
             })),
         }),
         envelope::Body::Event(core::Event {
@@ -199,22 +139,22 @@ fn every_envelope_body_round_trips() {
     }
 }
 
-/// The intent's input and the screen's state are OPAQUE BYTES, and that is
+/// A command's input and the screen's state are OPAQUE BYTES, and that is
 /// load-bearing: it is mechanism 2 of D-1020-C13, the reason a newer peer's
 /// payload arrives whole even though prost drops unknown FIELDS.
+///
+/// It used to drive `Intent.input` as well; `intent.proto` is deleted (#1029
+/// §1) and `Command.input` carries the same claim for the verb that survived.
 #[test]
 fn opaque_payloads_survive_byte_for_byte() {
     let payload: Vec<u8> = (0u8..=255).collect();
-    let intent = Intent {
-        intent_id: "int_1".to_owned(),
-        app_id: "tally".to_owned(),
-        action: "add-expense".to_owned(),
+    let command = core::Command {
+        name: "tally.add_expense".to_owned(),
         input: payload.clone(),
-        payload_hash: "0".repeat(64),
-        online_only: false,
-        ..Intent::default()
+        invoke_key: "k1".to_owned(),
+        ..core::Command::default()
     };
-    let decoded = Intent::decode(intent.encode_to_vec().as_slice()).expect("decode");
+    let decoded = core::Command::decode(command.encode_to_vec().as_slice()).expect("decode");
     assert_eq!(decoded.input, payload);
 
     let screen = ScreenState {

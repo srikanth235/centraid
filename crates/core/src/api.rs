@@ -254,11 +254,6 @@ pub fn invoke(
         invocation_id: outcome.invocation_id,
         receipt_id: outcome.receipt_id,
         revoked_at: None,
-        // NO COMMIT POSITION (#1029 §1). It was the number a SEAT's overlay
-        // settled against, allocated by the log plane that is deleted. The
-        // field leaves the wire in W2-5 with the rest of the seat's
-        // vocabulary; until then it is absent, which is honest.
-        commit_seq: None,
     })
 }
 

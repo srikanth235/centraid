@@ -635,22 +635,6 @@ impl Handle {
                     },
                 )?)))
             }
-            // THE VERBS THAT ONLY MEANT ANYTHING ACROSS A PAIRING (#1029 §1,
-            // §6). `log` served a page of `replica_log` to a seat's cursor,
-            // `pair` redeemed a ticket against a gateway, `intent` queued a
-            // write for one to run, `blob` tagged a stream on a connection,
-            // and the two `devices` verbs listed and revoked the seats that had
-            // redeemed a ticket. There is no second host, so all six are
-            // refused by name rather than half-answered. The arms themselves
-            // leave the wire in W2-5, with `log.proto` and `intent.proto`.
-            K::Log(_)
-            | K::Pair(_)
-            | K::Intent(_)
-            | K::Blob(_)
-            | K::DevicesList(_)
-            | K::DevicesRevoke(_) => Err(CoreError::Unsupported {
-                type_url: "centraid.core.v1.Request".to_owned(),
-            }),
             K::BackupNow(_) => Err(CoreError::NotYetAvailable {
                 what: "backup",
                 lands_in: "wave 2 lane R",
@@ -770,6 +754,7 @@ fn response(kind: wire::response::Kind) -> wire::Response {
     wire::Response { kind: Some(kind) }
 }
 
+/// Whether a request is cancellable.
 ///
 /// A paged read, a command and a handshake are **bounded**: they finish on
 /// their own, bounded by their own limit. Sync, media and search indexing are
@@ -781,18 +766,8 @@ fn request_kind(request: &wire::Request) -> RequestKind {
     match &request.kind {
         Some(
             K::Hello(_)
-            | K::Log(_)
             | K::Page(_)
             | K::Command(_)
-            | K::Intent(_)
-            | K::Pair(_)
-            // A `blob` STREAM'S TAG NEVER REACHES `call` — it is answered by
-            // handing the stream to iroh-blobs — and it is classified BOUNDED
-            // so that a build which somehow routed one here refuses it as a
-            // request rather than parking it as a cancellable operation.
-            | K::Blob(_)
-            | K::DevicesList(_)
-            | K::DevicesRevoke(_)
             // A LOCATION LOOKUP IS BOUNDED: it is capped at
             // `api::MAX_CONTENT_URLS` rows of index reads and moves no bytes.
             | K::ContentUrls(_)
@@ -843,17 +818,6 @@ mod tests {
                 min_supported: 1,
                 product_version: "test".to_owned(),
                 capabilities: Vec::new(),
-            })),
-        }
-    }
-
-    fn log_request(limit: u32) -> wire::Request {
-        wire::Request {
-            kind: Some(wire::request::Kind::Log(wire::LogRequest {
-                since: None,
-                limit,
-                // A one-shot page; `tail` is the stay-open request.
-                tail: false,
             })),
         }
     }
@@ -956,23 +920,6 @@ mod tests {
         scratch.handle.call(&hello()).expect("the second");
     }
 
-    /// THE THREE LOG-PAGE TESTS ARE GONE WITH THEIR DOOR (#1029 §1).
-    ///
-    /// `a_log_page_with_a_zero_limit_is_refused`,
-    /// `an_absent_cursor_means_from_the_floor_and_not_from_zero` and
-    /// `a_cursor_from_another_epoch_is_a_response_and_not_an_error` all drove
-    /// `Request::Log`, which served a page of `replica_log` to a SEAT's cursor.
-    /// There is no seat and no `replica_log`; the request is answered
-    /// `Unsupported` until the arm leaves the wire in W2-5.
-    #[test]
-    fn a_log_request_is_refused_rather_than_half_answered() {
-        let scratch = Scratch::founded();
-        assert!(matches!(
-            scratch.handle.call(&log_request(32)),
-            Err(CoreError::Unsupported { .. })
-        ));
-    }
-
     #[test]
     fn a_request_with_no_kind_is_unsupported_and_not_a_panic() {
         let scratch = Scratch::founded();
@@ -1010,8 +957,13 @@ mod tests {
             }),
             RequestKind::Unbounded
         );
-        assert_eq!(request_kind(&log_request(10)), RequestKind::Bounded);
         assert_eq!(request_kind(&hello()), RequestKind::Bounded);
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::Command(wire::Command::default())),
+            }),
+            RequestKind::Bounded
+        );
         // AND A REQUEST WITH NO KIND IS BOUNDED, so an unknown message cannot
         // be used to register a cancellable slot that never finishes.
         assert_eq!(
