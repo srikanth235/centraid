@@ -12,12 +12,26 @@ import android.provider.MediaStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import androidx.work.Constraints
+import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import centraid.screen.v1.MediaPermission
+import com.google.android.gms.auth.blockstore.Blockstore
+import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
+import com.google.android.gms.auth.blockstore.StoreBytesData
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 /**
  * Android's platform services (#1020, D-1020-E4).
@@ -58,6 +72,8 @@ public object AndroidPlatform {
 
 public class AndroidPlatformServices(context: Context) : PlatformServices {
     override val secureStore: SecureStore = AndroidSecureStore(context)
+    override val backgroundTransfers: BackgroundTransfers = AndroidBackgroundTransfers(context)
+    override val syncedSecrets: SyncedSecrets = AndroidSyncedSecrets(context)
     override val backgroundTasks: BackgroundTasks = AndroidBackgroundTasks(context)
     override val networkStatus: NetworkStatus = AndroidNetworkStatus(context)
     override val mediaLibrary: MediaLibrary = AndroidMediaLibrary(context)
@@ -136,13 +152,74 @@ public class AndroidSecureStore(private val context: Context) : SecureStore {
     }
 }
 
+/**
+ * **THE PASS THE OS RUNS, AND IT IS A CONCRETE CLASS** (#1029 W5B-2).
+ *
+ * What stood here scheduled `PeriodicWorkRequestBuilder<androidx.work.Worker>`
+ * — the ABSTRACT base class. WorkManager instantiates a worker reflectively by
+ * name and `androidx.work.Worker` has no runnable body, so that request could
+ * never run: it was accepted, it appeared in `WorkManager`'s own diagnostics as
+ * enqueued, and every execution failed inside the framework. A registration
+ * that reports success and can never do the work is worse than no registration,
+ * because the member is told Centraid catches up in the background.
+ *
+ * A `CoroutineWorker` rather than a `Worker`: the pass is suspending all the
+ * way down (the ABI door, the gateway client, the spool), and a `Worker` would
+ * mean blocking a WorkManager thread on a network round trip.
+ *
+ * ## WHAT IT ACTUALLY DOES IS INSTALLED, NOT HARD-CODED
+ *
+ * [SyncPass.install] is what the shell calls at launch. This class owns being
+ * runnable, being retried and reporting a verdict; it does not own what a pass
+ * IS — that would put the sync policy inside an Android class where no JVM test
+ * can reach it.
+ *
+ * A pass with nothing installed is `Result.success()` and not a failure: an app
+ * that has not finished launching has nothing to catch up on, and a failure
+ * would make WorkManager back off the schedule for a reason that is not real.
+ */
+public class CentraidSyncWorker(
+    context: Context,
+    parameters: WorkerParameters,
+) : CoroutineWorker(context, parameters) {
+
+    override suspend fun doWork(): Result {
+        val pass = SyncPass.installed ?: return Result.success()
+        return try {
+            if (pass()) Result.success() else Result.retry()
+        } catch (error: Exception) {
+            // RETRY, NOT FAILURE. `Result.failure()` takes the work out of the
+            // queue for good, and a phone that lost its network mid-pass would
+            // never back up again until the app was opened.
+            Result.retry()
+        }
+    }
+}
+
+/** The pass body, installed by the shell at launch. See [CentraidSyncWorker]. */
+public object SyncPass {
+    internal var installed: (suspend () -> Boolean)? = null
+        private set
+
+    /** Install the body. Replacing it is how a test drives one. */
+    public fun install(pass: suspend () -> Boolean) {
+        installed = pass
+    }
+}
+
 public class AndroidBackgroundTasks(private val context: Context) : BackgroundTasks {
 
     override suspend fun register(): BackgroundTasks.Registration = try {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            PeriodicWorkRequestBuilder<androidx.work.Worker>(15, TimeUnit.MINUTES)
+            // **UPDATE, NOT KEEP, AND THAT IS THE MIGRATION.** The unique name
+            // is unchanged — a rename would orphan whatever a shipped build
+            // scheduled under the old one — but every device that ran the
+            // previous build has an unrunnable `androidx.work.Worker` enqueued
+            // under it, and `KEEP` would keep exactly that. `UPDATE` replaces
+            // the request in place, keeping the work's id and its schedule.
+            ExistingPeriodicWorkPolicy.UPDATE,
+            PeriodicWorkRequestBuilder<CentraidSyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(
                     Constraints.Builder()
                         // Wi-Fi and charger rules are queried before each item
@@ -165,8 +242,208 @@ public class AndroidBackgroundTasks(private val context: Context) : BackgroundTa
         )
     }
 
-    private companion object {
+    internal companion object {
+        /**
+         * v0's name, kept. Nothing scheduled under it is orphaned by this
+         * change — see the `UPDATE` above, which is what migrates it.
+         */
         const val WORK_NAME = "centraid-sync-pass"
+    }
+}
+
+/**
+ * One object, uploaded by WorkManager from the spool file (#1029 W5B-2).
+ *
+ * Expedited is deliberately NOT asked for: an upload is not urgent, expedited
+ * quota is small and shared, and a pass that spent it would be taking it from
+ * something a member is waiting on.
+ */
+public class CentraidUploadWorker(
+    context: Context,
+    parameters: WorkerParameters,
+) : CoroutineWorker(context, parameters) {
+
+    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val url = inputData.getString(KEY_URL) ?: return@withContext Result.failure()
+        val path = inputData.getString(KEY_PATH) ?: return@withContext Result.failure()
+        val names = inputData.getStringArray(KEY_HEADER_NAMES).orEmpty()
+        val values = inputData.getStringArray(KEY_HEADER_VALUES).orEmpty()
+        val file = File(path)
+        if (!file.exists()) {
+            // THE SPOOL FILE IS GONE. Not a retry: a vault that was reset, or a
+            // generation already committed, and re-running would fail forever.
+            return@withContext Result.success()
+        }
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "PUT"
+            connection.doOutput = true
+            // STREAMED, so a 16 MiB object never sits in this process's heap.
+            connection.setFixedLengthStreamingMode(file.length())
+            names.zip(values).forEach { (name, value) ->
+                connection.setRequestProperty(name, value)
+            }
+            file.inputStream().use { source ->
+                connection.outputStream.use { sink -> source.copyTo(sink) }
+            }
+            when (connection.responseCode) {
+                in 200..299 -> Result.success()
+                // A REFUSAL IS NOT A RETRY. The gateway said no — a spent quota,
+                // an expired target, a moved vault — and repeating the request
+                // would spend a member's battery to earn the same answer. The
+                // next foreground pass re-declares.
+                in 400..499 -> Result.failure()
+                else -> Result.retry()
+            }
+        } catch (error: java.io.IOException) {
+            Result.retry()
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    internal companion object {
+        const val KEY_URL = "url"
+        const val KEY_PATH = "path"
+        const val KEY_HEADER_NAMES = "header-names"
+        const val KEY_HEADER_VALUES = "header-values"
+    }
+}
+
+public class AndroidBackgroundTransfers(private val context: Context) : BackgroundTransfers {
+
+    override suspend fun enqueue(
+        uploads: List<BackgroundTransfers.Upload>,
+    ): BackgroundTransfers.Enqueued = try {
+        val manager = WorkManager.getInstance(context)
+        uploads.forEach { upload ->
+            manager.enqueueUniqueWork(
+                // UNIQUE BY OBJECT NAME, and `KEEP`: an object's name is the
+                // hash of its bytes, so two requests for one name are one
+                // upload. A pass that ran twice must not pay for it twice.
+                uploadWorkName(upload.objectName),
+                ExistingWorkPolicy.KEEP,
+                OneTimeWorkRequestBuilder<CentraidUploadWorker>()
+                    .setConstraints(
+                        Constraints.Builder()
+                            .setRequiredNetworkType(NetworkType.CONNECTED)
+                            .build(),
+                    )
+                    .setInputData(
+                        workDataOf(
+                            CentraidUploadWorker.KEY_URL to upload.url,
+                            CentraidUploadWorker.KEY_PATH to upload.spoolPath,
+                            CentraidUploadWorker.KEY_HEADER_NAMES to
+                                upload.headers.map { it.first }.toTypedArray(),
+                            CentraidUploadWorker.KEY_HEADER_VALUES to
+                                upload.headers.map { it.second }.toTypedArray(),
+                        ),
+                    )
+                    .build(),
+            )
+        }
+        BackgroundTransfers.Enqueued(
+            accepted = uploads.size,
+            sentence = BackgroundTransfers.ANDROID_UNMETERED_SENTENCE,
+        )
+    } catch (error: IllegalStateException) {
+        BackgroundTransfers.Enqueued(
+            accepted = 0,
+            sentence = "Centraid cannot upload in the background on this device.",
+            refusal = error.message ?: "WorkManager refused",
+        )
+    }
+
+    override suspend fun inFlight(): List<String> = WorkManager.getInstance(context)
+        .getWorkInfosByTag(CentraidUploadWorker::class.java.name)
+        .get()
+        .filter { !it.state.isFinished }
+        .flatMap { info -> info.tags.filter { it.startsWith(UPLOAD_PREFIX) } }
+        .map { it.removePrefix(UPLOAD_PREFIX) }
+
+    override suspend fun cancelAll() {
+        WorkManager.getInstance(context).cancelAllWorkByTag(CentraidUploadWorker::class.java.name)
+    }
+
+    private companion object {
+        const val UPLOAD_PREFIX = "centraid-upload-"
+
+        fun uploadWorkName(objectName: String): String = UPLOAD_PREFIX + objectName
+    }
+}
+
+/**
+ * Block Store, and **the sentence that says what it will not do** (#1029 §5).
+ *
+ * Block Store hands bytes back to a new device during the SETUP WIZARD and at
+ * no other time. There is no API that restores them afterwards, so a member who
+ * finished setting the phone up and then installed Centraid gets nothing — and
+ * on Android the written phrase is therefore the common path, not the fallback.
+ * [SyncedSecrets.ANDROID_SENTENCE] is what a member reads, and
+ * `restoresAfterSetup = false` is what a screen branches on.
+ *
+ * `setShouldBackupToCloud(true)` is asked for so the bytes survive a lost phone
+ * rather than only a device-to-device transfer; a device with no screen lock
+ * refuses it, which is why the answer is read rather than assumed.
+ */
+public class AndroidSyncedSecrets(private val context: Context) : SyncedSecrets {
+
+    override suspend fun availability(): SyncedSecrets.Availability = try {
+        val cloud = Blockstore.getClient(context).isEndToEndEncryptionAvailable.await()
+        SyncedSecrets.Availability(
+            synchronizing = cloud,
+            sentence = SyncedSecrets.ANDROID_SENTENCE,
+            // FALSE ON ANDROID, ALWAYS. Not a capability query: it is what the
+            // API does, and a build that discovered otherwise would be reading
+            // a different API.
+            restoresAfterSetup = false,
+        )
+    } catch (error: Exception) {
+        SyncedSecrets.Availability(
+            synchronizing = false,
+            sentence = SyncedSecrets.UNKNOWN_SENTENCE,
+            restoresAfterSetup = false,
+        )
+    }
+
+    override suspend fun putSeed(seedHex: String): Boolean = try {
+        Blockstore.getClient(context).storeBytes(
+            StoreBytesData.Builder()
+                .setBytes(seedHex.encodeToByteArray())
+                .setKey(SyncedSecrets.SEED_KEY)
+                .setShouldBackupToCloud(true)
+                .build(),
+        ).await()
+        true
+    } catch (error: Exception) {
+        false
+    }
+
+    override suspend fun seed(): String? = try {
+        Blockstore.getClient(context).retrieveBytes(
+            RetrieveBytesRequest.Builder()
+                .setKeys(listOf(SyncedSecrets.SEED_KEY))
+                .build(),
+        ).await()
+            .blockstoreDataMap[SyncedSecrets.SEED_KEY]
+            ?.bytes
+            ?.decodeToString()
+    } catch (error: Exception) {
+        null
+    }
+
+    override suspend fun forgetSeed() {
+        try {
+            Blockstore.getClient(context).deleteBytes(
+                com.google.android.gms.auth.blockstore.DeleteBytesRequest.Builder()
+                    .setKeys(listOf(SyncedSecrets.SEED_KEY))
+                    .build(),
+            ).await()
+        } catch (error: Exception) {
+            // A SEED THAT WOULD NOT DELETE IS NOT AN ERROR A MEMBER CAN ACT ON.
+            // The local copy is gone either way, and Block Store's own copy is
+            // overwritten by the next `putSeed`.
+        }
     }
 }
 

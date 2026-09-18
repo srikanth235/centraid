@@ -1549,3 +1549,204 @@ Named so the next wave inherits a clean edge rather than a half-built one.
   and neither mobile shell can be compiled in this container, so the background-transfer
   halves (`BGTaskScheduler` ids in `Info.plist`, a CONCRETE Android worker) would ship
   unverified. Half-written crypto is worse than none, so none was written.
+
+## W5 — the phone's client (lane B)
+
+Base `50461b81`. Branch `claude/1029-w5b-phone-client`. Law digest `2612c611d7e6`,
+unmoved at close.
+
+**The half W5 lane A did not build.** Lane A named two blockers and stopped rather than
+half-building; both are answered here, and the drill it left is extended from a proof of
+restore into a proof of the product.
+
+### The design decision lane A left open
+
+`commonMain` has no Ed25519, so signing is either a platform seam — a Swift half and a
+Kotlin half — or a door onto the rules. **It is the door**, and the reason is
+`gateway_core::auth`'s own opening sentence about the two SERVER adapters, which applies
+with more force to a client: *"A phone that signs one shape and is verified against the
+other fails for a reason nobody can read in a log."* Two shells signing their own preimages
+would be two shapes, drifting, surfacing as `SignatureInvalid` on somebody's restore.
+
+So `crates/gateway-client` signs and **the platform carries**. `Transport` is a port, not
+a client, and that is not portability taste: iOS suspends a process within seconds of the
+member leaving the app, and the only thing that keeps uploading is an `NSURLSession`
+background task the system owns — a Rust client holding its own socket could not do the one
+thing a phone client exists for.
+
+**What makes a file-based background upload signable without reading the file.** A signature
+covers a body digest, and an uploader that had to read 16 MiB to compute one defeats
+`uploadTask(with:fromFile:)`. It does not have to: an object's name IS the BLAKE3-256 of
+its sealed bytes (`ids.rs`), so for `PUT /v1/objects/{vault}/{name}` the digest is already
+in the path. `DeviceSigner::sign_object_put` is that one line, and
+`a_signed_object_put_covers_the_bytes_it_names` holds it against `ObjectName::of`.
+
+### What landed
+
+1. **`crates/gateway-client`** — `signer` (four headers over
+   `gateway_core::auth::preimage`, the clock offset on the signer rather than at a call
+   site), `transport` (the port, plus one `reqwest` impl that is explicitly not the
+   phone's, redirects off because the signature covers a path and not a host), `client`
+   (preflight, lease, declare, commit, put/get, the background authorisation), `outcome`
+   (the wire spelling read back into a typed thing), `spool` (batching, the presigned
+   lifetime rule, `BackupState`), `directory` (gateways, switching, invite redemption,
+   `appAccountToken`), `publish` (the pkarr refresh policy). 39 tests.
+
+2. **Clock-skew recovery, once.** The 401 carries the server's time; the signer learns an
+   OFFSET and every later stamp carries it, including a background task's hours afterwards.
+   A second skew refusal is `ClockUnrecoverable` and the call ends —
+   `a_clock_that_is_still_wrong_after_one_correction_stops` asserts two attempts and never
+   three. The offset is never written to a vault row and never shown: the moment a
+   gateway's refusal could move a phone's idea of *when a thing happened*, a gateway could
+   backdate a member's history.
+
+3. **"This server needs an update" is a LATCH, not a check.** `ServerNeeds::Update` is set
+   once and every write refuses locally —
+   `a_server_below_this_phones_minimum_is_written_to_zero_times` asserts the health check
+   and **nothing after it**. Reads still go through: `a_latched_client_still_reads`, because
+   restore must work from a server the phone will not trust with new bytes.
+
+4. **`gateway-server`'s `ErrorBody` was dropping both companions the rules carry.** The code
+   went out and `VaultMoved`'s epoch and moment did not, so a phone learned THAT its vault
+   moved and never when — half of "N changes since `<date>`", and the half a client would
+   have to invent from its own clock. Same for `VersionWindow`'s range, which
+   `version::admit`'s own comment says is carried "so the phone can render the typed state
+   without a second round trip". Both ride now, and a missing one is `Malformed` on the
+   client rather than defaulted: a shell drawing "0 changes since 1 January 1970" over a
+   frozen vault would be showing a fabricated fact, which is worse than an error because it
+   reads like one.
+
+5. **Background transfers, both platforms.** iOS: a background `URLSession`,
+   `uploadTaskWithRequest:fromFile:` over the sealed spool file, the object's name on the
+   task so a relaunched process knows what finished, `discretionary` left false because
+   `TransferRule` already owns the member's bill. The long `BGProcessingTask` joins the
+   refresh task and **both ids are in `Info.plist`** — an undeclared identifier raises an
+   exception that TERMINATES the app. Android: `CentraidSyncWorker` and
+   `CentraidUploadWorker`, concrete `CoroutineWorker`s.
+
+6. **`"centraid-sync-pass"` is KEPT, and `KEEP` is what changed.** The old code scheduled
+   `PeriodicWorkRequestBuilder<androidx.work.Worker>` — the ABSTRACT class. WorkManager
+   instantiates a worker reflectively; that one has no runnable body, so the work was
+   accepted, reported enqueued, and failed inside the framework every run, while
+   `register()` answered "Centraid catches up in the background". The unique name is
+   unchanged so nothing a shipped build scheduled is orphaned; the policy moves KEEP →
+   **UPDATE**, because `KEEP` would keep exactly the unrunnable request. That is the
+   migration, and it is the answer to the hand-off's question.
+
+7. **Custody.** The seed is the one secret allowed to leave a device. iOS:
+   `kSecAttrSynchronizable` with `kSecAttrAccessibleAfterFirstUnlock` (the two go together;
+   a synchronizable item with a device-only accessibility is refused), under its own service
+   so `IosSecureStore.clear`'s class-plus-service delete cannot reach it. F5 holds: the seed
+   is upstream of every vault-derived key, so syncing it adds nothing the phrase on a
+   member's shelf does not already carry — syncing anything DERIVED from it would.
+   **Android is not symmetric and the copy says so**: Block Store restores only in the
+   device-setup flow, `restoresAfterSetup` is false, and `ANDROID_SENTENCE` tells a member
+   who set their phone up first that they will need their 24 words.
+
+8. **The UI invariant, in the type system.** `BackupState` has no "backed up" a caller can
+   construct out of hope: its one constructor takes a gateway's own `committed_at_ms`, and
+   the only source of that is `CommitAck`. Kotlin's `BackupClaim` is a **formatter**, handed
+   those two numbers — a Kotlin copy of the rule would be a second answer to "is this backed
+   up", with the wrong half being the one a member reads.
+
+9. **The drill's wire arm.** See below.
+
+### The drill: what the wire arm proves that the library arm did not
+
+`the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_server`, in the same
+file and therefore under the same `restore-drill` gate step.
+
+| Proved over the wire | Where it would otherwise break |
+|---|---|
+| the signature this client makes is the one this server accepts | a phone that cannot authenticate at all |
+| the four headers, spelled the same on both sides | one rename, and every request fails |
+| declare and commit as JSON, field by field | a name nobody checks until a release |
+| `VAULT_MOVED` rendered by the server and read by the client, epoch AND moment | the freeze drawing a fabricated date |
+| a wrong clock recovered across a real socket, once | a phone off for a month that can never back up again |
+| the standalone deployment's `ReadAndHash` checksum mode | the drill ran `Attest` only |
+
+The old phone's clock starts at the **Unix epoch** and nothing corrects it but the protocol.
+`a_wrong_clock_is_recovered_against_a_real_server_in_one_retry` skips the preflight entirely,
+so the 401 path is decided by a real server rather than by a scripted answer.
+
+Two things only the wire arm could find:
+
+- **The client must carry `centraid-attested-checksum`.** Without it every object uploads
+  and the COMMIT is refused `GatewayChecksumMissing` — `ChecksumEvidence::None` is a
+  rejection, not a shrug. That reads as a server fault and is not one.
+- **The drill had never exercised `ReadAndHash`.** The library arm runs `Attest`, the hosted
+  mode. Between the two arms the step now covers both, which is the split the conformance
+  suite is built around.
+
+**What the wire arm does NOT prove, said plainly.** *TLS is the deployment's.*
+`TlsConfig::Terminated` is this server's default arm and the one every test runs — a reverse
+proxy, a Tunnel or a Funnel holds the certificate — so what crosses is **HTTP over a real
+TCP socket with real signing on top**. The signature is what authenticates a request in this
+protocol; TLS is confidentiality, and `acme.rs` is where it is obtained. Calling this arm
+"HTTPS" would be claiming a run that did not happen. *pkarr is not resolved here* either:
+the record and the resolver have their own tests against a real `iroh-dns-server`, and a
+drill that started a DNS server to be handed back a `127.0.0.1` port it already knew would
+be asserting the harness. `ResolutionSource::Typed` is the documented equal-standing source
+and is the one used.
+
+### What I could not compile
+
+- **Neither mobile shell.** No Android SDK in this container, and a Kotlin/Native link is
+  outside the disk budget (16 GB free at close, with a sibling lane building wasm). So
+  `PlatformServices.ios.kt`'s new `IosBackgroundTransfers` and `IosSyncedSecrets`, and
+  `PlatformServices.android.kt`'s two workers and `AndroidSyncedSecrets`, are **unverified by
+  any compiler** — the same status as every other line in those two files, whose headers
+  already say so. `BackgroundTransferLawSpec` scans them for the four regressions whose
+  failure modes are silent on a phone (an undeclared `BGTaskScheduler` id, an abstract
+  worker, a data-bodied background upload, `KEEP` over the broken entry). A scan is not a
+  compiler and is not offered as one; it is what would have caught the abstract `Worker`,
+  which passed every reviewer and every gate.
+- **`play-services-auth-blockstore`** is a new Gradle dependency, added to the catalog and to
+  `:shared`'s androidMain behind `androidEnabled`. It has never been resolved here.
+
+### Not built, and why
+
+- **The manifest head is not published in the pkarr record.** The brief asked for it. The
+  record has no entry for one, and adding it is a format change in
+  `centraid_identity::record` — **W4c is live in `crates/identity` and this lane stayed out**.
+  It would also be the wrong shape: a record is a public DNS answer under a key anyone may
+  query, and a head that changed on every commit would publish a member's write cadence —
+  how often they use their vault, and when they stopped — to anyone who resolves it. The
+  head reaches a phone from the gateway over a signed request, where the only party that
+  learns it already holds the objects. `publish.rs`'s header carries this.
+- **Hosted-account registration is the mechanism only.** `PurchaseToken::mint` maps a random
+  UUID to an account key; the server side of that mapping is `gateway/cloudflare`, which is
+  W4c's. **No price and no licence text is encoded anywhere** — Q15 and Q16 are open.
+
+### Rulings spent
+
+- **F1** — the old phone freezes and keeps its spool. The wire arm asserts it still holds
+  every row it wrote after the backup, and `BackupClaim.frozen` is asserted never to say
+  "lost" or "deleted".
+- **F2** — the wire restore takes the phrase and a URL. Nothing in it reads the old phone.
+- **F3** — the fresh phone claims `epoch + 1` and the server is what decides.
+- **F5** — the synchronizable item holds the SEED and nothing derived from it, under a
+  service string `SecureStore.clear` cannot reach.
+- **§6** — no listening socket and no iroh endpoint: `no-listening-socket` scans 330 files
+  clean, and `grep -rn 'iroh\|listen(\|bind(' mobile/` finds only the `rebind()` method,
+  comments, and a generated file under `build/`.
+- **Q15/Q16** — mechanism built, no price, no licence text.
+- **Doctrine 9** — `Error.moved` and `STATE_FROZEN` were used, not re-minted. The wire arm
+  joined the existing `restore-drill` step rather than adding a second name for one promise.
+  `ATTESTED_CHECKSUM_HEADER` is the header the server already reads, not a new one.
+
+### Found, not this lane's slice
+
+1. **`ErrorBody`'s companions were missing in `gateway-server` and are presumably missing in
+   the Cloudflare Worker too.** This lane fixed the standalone adapter; `gateway/cloudflare`
+   is W4c's tree and was not touched. **A phone talking to the hosted deployment will get a
+   `VAULT_MOVED` it must treat as malformed** until the Worker renders `moved` and
+   `protocol` the same way. That is a real, member-visible gap with an owner.
+2. **The attestation header's VALUE is not read by `gateway-server`** — `http.rs` checks
+   `contains_key` only. The store's own evidence is what is verified, so this is not a
+   soundness hole, but a client could send any value and an operator debugging a mismatch
+   would find a header that means nothing. Worth either reading it or documenting that its
+   presence is the whole signal.
+3. **The `restore-drill` step's `--nocapture` prints nothing useful now** that the wire arm
+   spawns a server; a failure inside `tokio::spawn` is swallowed by the `let _ =`. Not
+   changed here because the step's invocation is shared with the library arm.

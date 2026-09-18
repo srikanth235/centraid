@@ -45,6 +45,13 @@ centraid-core-ffi = { path = "../core-ffi" }
 # not derive an account key.
 centraid-identity = { path = "../identity" }
 centraid-gateway-core = { path = "../gateway-core" }
+# THE ARM THAT CROSSES A SOCKET (#1029 W5B-4). The drill's wire half brings up
+# a real `gateway-server` on `127.0.0.1:0` and talks to it through the phone's
+# own client — so the signature, the four headers, the JSON and the
+# `VAULT_MOVED` refusal are exercised end to end rather than described. Both are
+# dev-only: this binary is not a gateway and does not sign a gateway request.
+centraid-gateway-server = { path = "../gateway-server" }
+centraid-gateway-client = { path = "../gateway-client" }
 centraid-ontology = { path = "../ontology" }
 hex.workspace = true
 rusqlite.workspace = true

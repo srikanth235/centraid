@@ -28,11 +28,22 @@ androidx-core = "1.17.0"
 androidx-lifecycle = "2.9.4"
 androidx-security-crypto = "1.1.0"
 androidx-work = "2.10.5"
+# BLOCK STORE, AND THE ADAPTER THAT MAKES ITS `Task` AWAITABLE (#1029 §5, W5B-3).
+#
+# The seed is the ONE secret allowed to follow a member to their next phone, and
+# on Android the only thing that carries it is Block Store. It is Play Services,
+# which is a real cost — a device without Play Services gets
+# `SyncedSecrets.UNKNOWN_SENTENCE` and the written phrase, which is the path
+# Android members are on anyway (Block Store restores only in the device-setup
+# flow). Confined to `:shared`'s androidMain, behind `androidEnabled`.
+gms-blockstore = "16.4.0"
 roborazzi = "1.53.0"
 robolectric = "4.16"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }
+gms-blockstore = { module = "com.google.android.gms:play-services-auth-blockstore", version.ref = "gms-blockstore" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 wire-runtime = { module = "com.squareup.wire:wire-runtime", version.ref = "wire" }
 kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }

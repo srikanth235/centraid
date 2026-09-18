@@ -145,6 +145,18 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // vault back, and the old phone freezes" is the sentence this product
         // is for, and a drill buried in fifteen hundred passing tests has a
         // failure that reads as "the workspace is red".
+        //
+        // **ONE ARM OF IT NOW CROSSES A SOCKET** (#1029 W5B-4). Until W5 lane B
+        // the step drove the gateway as a LIBRARY, and its own header said so:
+        // no request signing, no wire. That made it a proof of the rules and of
+        // the keys, which is not the same as a proof of the product — a member's
+        // phone signs a request and sends it to a server that has never seen its
+        // process. `the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_server`
+        // brings up a real `centraid-gateway-server` on `127.0.0.1:0` and talks
+        // to it through `centraid-gateway-client`, so the signature, the four
+        // headers and the `VAULT_MOVED` refusal are exercised rather than
+        // described. The library arm stays: it is faster, it carries the plural
+        // ("every vault"), and it runs the other checksum mode.
         step("restore-drill", run_restore_drill),
         step("rules", run_rules),
         step("ledgers", run_ledgers),

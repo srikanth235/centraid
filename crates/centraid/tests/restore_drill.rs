@@ -786,3 +786,497 @@ async fn a_committed_object_is_not_presigned_again() {
     assert!(again[0].url.is_empty(), "and nothing was presigned for it");
     let _: Option<StoredObject> = None;
 }
+
+// ============================================================== over the wire ==
+//
+// THE ARM THAT CROSSES A SOCKET (#1029 W5B-4).
+//
+// Everything above drives `centraid_gateway_core::Gateway` as a library, and
+// the header says so plainly: "no HTTPS, no request signing, no pkarr". That
+// made the drill a proof of the RULES and of the KEYS, which is worth having
+// and is not the product. A member's phone does not call a function; it signs
+// a request, sends it over a socket to a server that has never seen its
+// process, and believes what comes back.
+//
+// So one arm crosses a real socket, to a real `centraid-gateway-server` bound
+// on `127.0.0.1:0`, through `centraid-gateway-client`. What that buys over the
+// library arm, exactly:
+//
+// | Proved here and not above | Where it would otherwise break |
+// |---|---|
+// | the signature this client produces is the one this server accepts | a phone that cannot authenticate at all, reported as `SignatureInvalid` |
+// | the four headers, spelled the same on both sides | one renamed header, and every request fails |
+// | JSON in and JSON out, for declare and commit | a field name nobody checks until a release |
+// | `VAULT_MOVED` **rendered by the server and read by the client**, with its epoch and its moment | the freeze drawing "0 changes since 1 January 1970" |
+// | a wrong phone clock recovered across the wire, once | a phone that has been off for a month and can never back up again |
+//
+// # What it still does not prove
+//
+// **TLS is the deployment's.** `TlsConfig::Terminated` is this server's default
+// arm and the one every test runs — a reverse proxy, a Cloudflare Tunnel or a
+// Tailscale Funnel holds the certificate — so what crosses here is HTTP over a
+// real TCP socket, with real signing on top. The signature is what authenticates
+// a request in this protocol; TLS is confidentiality, and `acme.rs` is where it
+// is obtained. Saying "HTTPS" about this arm would be saying something this test
+// has not run.
+//
+// **No phone shell is compiled**, for W5 lane A's reasons, unchanged.
+//
+// **pkarr is not resolved here.** The record and the resolver are
+// `centraid_identity::discovery`'s, with their own tests against a real
+// `iroh-dns-server`; what this arm needs from discovery is the gateway URL, and
+// a drill that spun up a DNS server to be handed back a `127.0.0.1` port it
+// already knew would be asserting the harness. `ResolutionSource::Typed` is the
+// documented equal-standing source for exactly this case, and it is the one
+// used.
+
+use centraid_gateway_client::client::GatewayClient;
+use centraid_gateway_client::outcome::ClientError;
+use centraid_gateway_client::signer::DeviceSigner;
+use centraid_gateway_client::transport::ReqwestTransport;
+use centraid_gateway_core::checksum::ChecksumMode as WireChecksumMode;
+use centraid_gateway_core::plan::Plan;
+use centraid_gateway_core::retention::Policy;
+use centraid_gateway_server::bytes::configured::{Backend, ConfiguredBytes};
+use centraid_gateway_server::bytes::fs::FilesystemBytes;
+use centraid_gateway_server::config::Config;
+use centraid_gateway_server::state::{SqliteState, register as register_vault};
+use centraid_gateway_server::{clock, serve};
+use centraid_identity::{DeviceCertificate, DeviceKey, Epoch, ResolutionSource};
+
+/// A server that is really listening, and the things that must outlive it.
+struct LiveGateway {
+    origin: String,
+    _objects: tempfile::TempDir,
+}
+
+/// Bring up a real gateway with these vaults registered under one account.
+async fn live_gateway(vaults: &[VaultId], account: VaultId) -> LiveGateway {
+    let objects = tempfile::tempdir().expect("an object directory");
+    let mut state = SqliteState::in_memory().expect("a state file");
+    for vault in vaults {
+        register_vault(
+            &mut state,
+            *vault,
+            account,
+            Plan::active(64 * 1024 * 1024),
+            false,
+        )
+        .await
+        .expect("a registered vault");
+    }
+    // READ-AND-HASH, which is the standalone deployment's mode: the server
+    // holds the bytes, so it re-derives the checksum rather than taking the
+    // client's word. The library arm above runs `Attest`, the hosted mode — so
+    // between them the drill covers both, which is the split the conformance
+    // suite is built around.
+    let bytes = ConfiguredBytes::new(Backend::Filesystem(
+        FilesystemBytes::open(objects.path(), WireChecksumMode::ReadAndHash, "")
+            .expect("an object directory"),
+    ));
+    let bound = serve::bind("127.0.0.1:0").await.expect("a free port");
+    let origin = format!("http://{}", bound.address);
+    let shared = serve::shared(centraid_gateway_server::http::Server {
+        gateway: centraid_gateway_core::Gateway::new(state, bytes, Policy::default()),
+        config: Config::defaults(objects.path(), &origin),
+    });
+    tokio::spawn(async move {
+        let _ = serve::serve_plain(bound, shared).await;
+    });
+    LiveGateway {
+        origin,
+        _objects: objects,
+    }
+}
+
+/// A client for one vault on a live gateway, with a fresh device key at the
+/// epoch it is given.
+fn phone_client(
+    origin: &str,
+    keys: &centraid_identity::VaultKeys,
+    epoch: u64,
+) -> GatewayClient<ReqwestTransport> {
+    let device = DeviceKey::generate().expect("a device key");
+    let certificate = DeviceCertificate::issue(&keys.identity, &device.public(), Epoch::new(epoch));
+    GatewayClient::new(
+        ReqwestTransport::new(origin).expect("a transport"),
+        DeviceSigner::new(device, &certificate, centraid_gateway_core::PROTOCOL_MIN),
+        VaultId::from_slice(&keys.identity.public().to_bytes()).expect("a vault id"),
+    )
+}
+
+/// Upload one generation over the wire: declare, PUT each object, commit.
+async fn upload_over_the_wire(
+    client: &mut GatewayClient<ReqwestTransport>,
+    phone: &PhoneVault,
+    now_ms: i64,
+) -> String {
+    let manifest_digest = backup::manifest::ManifestHead::read(&phone.home.head_path())
+        .expect("the head file reads")
+        .expect("a generation was taken")
+        .manifest;
+
+    let mut declarations = Vec::new();
+    let mut bodies = Vec::new();
+    for digest in phone.objects.ids().expect("the local store lists") {
+        let bytes = phone.objects.get(&digest).expect("the object reads");
+        let name = ObjectName::of(&bytes);
+        declarations.push(serde_json::json!({
+            "name": name.hex(),
+            "checksum": AttestedChecksum::of(&bytes).hex(),
+            "kind": if digest == manifest_digest {
+                ObjectKind::Manifest.as_str()
+            } else {
+                ObjectKind::Segment.as_str()
+            },
+            "padded_size": bytes.len() as u64,
+        }));
+        bodies.push((name, bytes));
+    }
+
+    let targets = client
+        .declare(&serde_json::json!({ "objects": declarations }), now_ms)
+        .await
+        .expect("the gateway presigns over the wire");
+    assert_eq!(
+        targets.len(),
+        bodies.len(),
+        "a target per declared object, from the server"
+    );
+
+    for (name, bytes) in bodies {
+        // THE ATTESTATION RIDES WITH THE BYTES. A store that was neither read
+        // nor attested says `ChecksumEvidence::None` at commit, which is a
+        // rejection: an upload that omitted this would succeed object by object
+        // and fail at the end with `GatewayChecksumMissing`, reading like a
+        // server fault.
+        let checksum = AttestedChecksum::of(&bytes);
+        client
+            .put_object(&name, bytes, &checksum, now_ms)
+            .await
+            .expect("the bytes cross the socket");
+    }
+
+    let ack = client
+        .commit(
+            &serde_json::json!({
+                "generation": manifest_generation(phone),
+                "objects": declarations
+                    .iter()
+                    .map(|one| one["name"].as_str().expect("hex").to_owned())
+                    .collect::<Vec<_>>(),
+                "manifest_head": manifest_digest,
+                "prev_head": serde_json::Value::Null,
+                "first_txid": 1,
+                "last_txid": u64::MAX,
+            }),
+            now_ms,
+        )
+        .await
+        .expect("the gateway commits over the wire");
+
+    // THE ONLY BACKUP CLAIM THERE IS. The moment is the SERVER's, in the
+    // server's own answer — not this phone's clock and not an optimistic
+    // local write. `BackupState::acked` is the only constructor for a
+    // "backed up" a shell may draw, and this is its one input.
+    assert!(
+        ack.committed_at_ms > 0,
+        "the acknowledgement carries the server's own moment"
+    );
+    assert_eq!(ack.head, manifest_digest, "the head the gateway now holds");
+    ack.head
+}
+
+/// **LOSE THE PHONE, TYPE 24 WORDS, GET IT BACK — ACROSS A SOCKET.**
+///
+/// One vault rather than two: the plural is the library arm's claim and is
+/// proved there through the account listing. What this arm is for is the
+/// transport, and a second vault would double the socket traffic to re-prove
+/// something already proved.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_server() {
+    let root = centraid_ontology::golden::scratch_dir().join("wire");
+    std::fs::create_dir_all(&root).expect("the scratch root is made");
+
+    // ---- day one -----------------------------------------------------------
+    let seed = RecoveryPhrase::parse(PHRASE).expect("24 words").seed();
+    let account = AccountKey::derive(&seed);
+    let account_id = VaultId::from_slice(&account.public().to_bytes()).expect("an account id");
+    let keys = VaultMint::fresh().mint_next(&seed).expect("vault 0");
+    let listing = VaultListing::sign(
+        &account,
+        &[VaultClaim::issue(
+            &account,
+            &keys.identity.public(),
+            keys.index,
+        )],
+    )
+    .expect("the account signs its listing");
+    let listing_bytes = listing.to_bytes();
+
+    let phone = found_and_back_up(&root.join("old-phone"), &keys, "Ada's notes");
+    let live = live_gateway(&[phone.gateway_id], account_id).await;
+
+    // THE GATEWAY URL COMES THROUGH `centraid_identity`'s OWN DOOR. A typed URL
+    // is not a second-class source (#1029 §0): it is the answer when resolution
+    // cannot give one, and the restore path has one code path for both.
+    let located = centraid_identity::Discovery::with_server(centraid_identity::DEFAULT_DNS_SERVER)
+        .expect("a discovery client")
+        .locate_account(
+            &account.public(),
+            &ResolutionSource::Typed(
+                centraid_identity::GatewayUrl::parse(&live.origin).expect("a gateway URL"),
+            ),
+        )
+        .await
+        .expect("a typed URL locates without a network");
+    assert_eq!(
+        located.gateway().as_str().trim_end_matches('/'),
+        live.origin,
+        "the URL the restore will use is the one the member typed"
+    );
+
+    // ---- the old phone backs up, over the wire ------------------------------
+    //
+    // ITS CLOCK IS AT THE UNIX EPOCH, which is the harshest skew a phone can
+    // have and is what a device that has been off the charger for months comes
+    // back with. Nothing corrects it but the protocol: `preflight` reads the
+    // server's own time off `/v1/health` and the signer carries the offset from
+    // there. A phone that had to be handed the right time would be a phone that
+    // cannot back up without one.
+    let old_phone_clock = 0_i64;
+    let mut old_phone = phone_client(&live.origin, &keys, 1);
+    let preflight = old_phone
+        .preflight(old_phone_clock)
+        .await
+        .expect("the ranges overlap");
+    assert_eq!(
+        preflight.agreed,
+        centraid_gateway_core::PROTOCOL_MAX,
+        "the highest version both understand"
+    );
+    assert!(
+        old_phone.clock_offset_ms() > 1_600_000_000_000,
+        "the phone learned a real clock off the wire, not a guess"
+    );
+
+    old_phone
+        .claim_lease(old_phone_clock)
+        .await
+        .expect("the first phone takes the lease");
+    let head = upload_over_the_wire(&mut old_phone, &phone, old_phone_clock).await;
+
+    // ---- the phone is lost, and a fresh one restores ------------------------
+    //
+    // F2 in the same shape as the library arm: what goes in is the phrase and
+    // a URL. Nothing here reads the old phone's directory, its key or its index.
+    let restored_dir = root.join("fresh-phone");
+    std::fs::create_dir_all(&restored_dir).expect("the restore directory");
+
+    let restored_seed = RecoveryPhrase::parse(PHRASE).expect("24 words").seed();
+    let restored_account = AccountKey::derive(&restored_seed);
+    let restored_listing = VaultListing::from_bytes(&listing_bytes).expect("the listing decodes");
+    restored_listing.verify().expect("its signature holds");
+    assert_eq!(
+        restored_listing.account(),
+        &restored_account.public(),
+        "the listing is this account's, checked against the key the seed produced"
+    );
+    let restored_keys = restored_listing
+        .restore(&restored_seed)
+        .expect("every vault's keys come back")
+        .remove(0);
+
+    // A FRESH DEVICE KEY AT EPOCH + 1 (F3), and the server is the one that
+    // decides whether it may have the lease.
+    let mut fresh_phone = phone_client(&live.origin, &restored_keys, 2);
+    let fresh_clock = 0_i64;
+    fresh_phone.preflight(fresh_clock).await.expect("health");
+    let lease = fresh_phone
+        .claim_lease(fresh_clock)
+        .await
+        .expect("the restored phone takes the lease at epoch 2");
+    assert_eq!(lease.epoch, 2, "the epoch the server now holds");
+    assert_eq!(
+        lease.head.as_deref(),
+        Some(head.as_str()),
+        "the head the gateway holds, read back over the wire"
+    );
+
+    let object_keys = ObjectKeys::new(
+        restored_keys.identity.public().to_bytes(),
+        *restored_keys.root.as_bytes(),
+    );
+    let home = BackupHome::open(restored_dir.join("backup")).expect("a backup home");
+    let store = home.objects().expect("this phone's own object store");
+
+    // THE MANIFEST NAMES EVERY OBJECT, AND EACH ONE IS FETCHED BY NAME. No
+    // enumeration of the gateway's store: a phone asks for what its manifest
+    // says, which is the only thing a presigned read would let it ask for
+    // anyway.
+    let head_name = ObjectName::from_slice(&hex::decode(&head).expect("hex")).expect("32 bytes");
+    let manifest_bytes = fresh_phone
+        .get_object(&head_name, fresh_clock)
+        .await
+        .expect("the manifest comes down");
+    assert_eq!(
+        store.put(&manifest_bytes).expect("stored"),
+        head,
+        "a downloaded object keeps its name"
+    );
+    let manifest =
+        GenerationManifest::open(&object_keys, &manifest_bytes).expect("the manifest opens");
+    for name in manifest
+        .base
+        .iter()
+        .map(|range| range.object_name.clone())
+        .chain(manifest.segments.iter().map(|one| one.object.clone()))
+    {
+        if store.get(&name).is_ok() {
+            continue;
+        }
+        let object = ObjectName::from_slice(&hex::decode(&name).expect("hex")).expect("32 bytes");
+        let bytes = fresh_phone
+            .get_object(&object, fresh_clock)
+            .await
+            .expect("an object the manifest names comes down");
+        assert_eq!(store.put(&bytes).expect("stored"), name);
+    }
+
+    let file = restored_dir.join("vault.db");
+    let restored =
+        backup::restore::restore_generation(&object_keys, &manifest, &store, &file, None)
+            .expect("the generation restores");
+    assert!(
+        restored.segments_applied > 0,
+        "the tail after the base was applied, not only the base"
+    );
+    assert_eq!(
+        backup::drill::census(&file).expect("a census"),
+        phone.census_at_backup,
+        "every table came back over the wire, row for row"
+    );
+
+    // ---- the old phone writes again, and the SERVER refuses it --------------
+    //
+    // This is the sentence the whole drill is for, and here it is the server
+    // saying it: a refusal rendered by `gateway-server` from
+    // `Refusal::VaultMoved`, carried as JSON with its companion, read back by
+    // `gateway-client` into the typed thing a shell freezes on.
+    let vault = Vault::open(&phone.file).expect("the old phone's vault opens");
+    for index in 0..UNACKED_WRITES {
+        write_one(&vault, WRITES + index);
+    }
+    vault.close().expect("the vault closes");
+
+    // ITS NEXT PUT, WHICH IS A DECLARE: that is where a phone's upload pass
+    // starts and where the write guard runs. A lease CLAIM at a stale epoch is
+    // a different refusal on purpose (`LeaseStale`) — "your claim is behind" is
+    // not the same sentence as "you held this vault and a higher epoch took
+    // it", and only the second one freezes.
+    let stale_claim = old_phone
+        .claim_lease(old_phone_clock)
+        .await
+        .expect_err("a stale epoch cannot re-take the lease");
+    assert!(
+        matches!(
+            stale_claim,
+            ClientError::Refused {
+                code: centraid_api_proto::core_v1::ErrorCode::GatewayLeaseStale,
+                ..
+            }
+        ),
+        "a stale claim is not a move: {stale_claim:?}"
+    );
+
+    let retried = phone
+        .objects
+        .ids()
+        .expect("the local store lists")
+        .into_iter()
+        .next()
+        .expect("the old phone has objects to retry");
+    let retried_bytes = phone.objects.get(&retried).expect("the object reads");
+    let refusal = old_phone
+        .declare(
+            &serde_json::json!({
+                "objects": [{
+                    "name": retried,
+                    "checksum": AttestedChecksum::of(&retried_bytes).hex(),
+                    "kind": ObjectKind::Segment.as_str(),
+                    "padded_size": retried_bytes.len() as u64,
+                }]
+            }),
+            old_phone_clock,
+        )
+        .await
+        .expect_err("the old phone's next put is refused");
+    let ClientError::Moved {
+        current_epoch,
+        moved_at_ms,
+    } = refusal
+    else {
+        panic!("the server refused with {refusal:?}, not a move");
+    };
+    assert_eq!(
+        current_epoch, 2,
+        "the refusal names the epoch that took the vault"
+    );
+    assert!(
+        moved_at_ms > 0,
+        "the refusal names WHEN it moved — the other half of 'N changes since \
+         <date>', and the half a phone would otherwise have to invent"
+    );
+
+    // F1: FREEZE AND SHOW, NEVER WIPE. The old phone still has what it wrote
+    // and never landed, which is what the frozen line counts.
+    let census_now = backup::drill::census(&phone.file).expect("a census");
+    assert_eq!(
+        census_now.get("core_content_item").copied().unwrap_or(0)
+            - phone
+                .census_at_backup
+                .get("core_content_item")
+                .copied()
+                .unwrap_or(0),
+        UNACKED_WRITES as i64,
+        "the old phone holds every row it wrote after the backup"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **A PHONE WITH A WRONG CLOCK AND NO PREFLIGHT, ACROSS THE WIRE.**
+///
+/// The recovery this lane exists to build, proved where it actually happens:
+/// the server renders a 401 carrying its own time, the client applies it, signs
+/// again, and the second attempt is accepted. The unit tests script that
+/// exchange; this one has a real `gateway-server` deciding it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_wrong_clock_is_recovered_against_a_real_server_in_one_retry() {
+    let root = centraid_ontology::golden::scratch_dir().join("skew");
+    std::fs::create_dir_all(&root).expect("the scratch root is made");
+    let seed = RecoveryPhrase::parse(PHRASE).expect("24 words").seed();
+    let account = AccountKey::derive(&seed);
+    let keys = VaultMint::fresh().mint_next(&seed).expect("vault 0");
+    let vault = VaultId::from_slice(&keys.identity.public().to_bytes()).expect("a vault id");
+    let live = live_gateway(
+        &[vault],
+        VaultId::from_slice(&account.public().to_bytes()).expect("an account id"),
+    )
+    .await;
+
+    // NO PREFLIGHT. The phone signs straight away with a clock a year and a
+    // half out, which is what a device that has been in a drawer does.
+    let mut phone = phone_client(&live.origin, &keys, 1);
+    let wrong = clock::now().millis() - 500 * DAY;
+    let lease = phone
+        .claim_lease(wrong)
+        .await
+        .expect("the 401 taught it the time and the second attempt was accepted");
+    assert_eq!(lease.epoch, 1);
+    assert!(
+        phone.clock_offset_ms().abs() > 400 * DAY,
+        "the offset is the server's time minus this phone's, learned from the refusal"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

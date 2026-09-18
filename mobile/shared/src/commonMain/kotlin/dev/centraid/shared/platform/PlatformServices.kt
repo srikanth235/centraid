@@ -18,6 +18,12 @@ import centraid.screen.v1.MediaPermission
 public interface PlatformServices {
     public val secureStore: SecureStore
     public val backgroundTasks: BackgroundTasks
+    // THE TWO W5 SEAMS (#1029 §3, W5B-2/-3). Both are here for the same reason
+    // as every other member: `commonMain` cannot do them. The OS moves bytes
+    // while the app is not running, and the OS is the only thing that can
+    // synchronise a secret to a member's next phone.
+    public val backgroundTransfers: BackgroundTransfers
+    public val syncedSecrets: SyncedSecrets
     public val networkStatus: NetworkStatus
     public val mediaLibrary: MediaLibrary
     public val ocr: Ocr

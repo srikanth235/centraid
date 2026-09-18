@@ -21,6 +21,8 @@ public actual fun platformServices(): PlatformServices = FakePlatformServices()
 public class FakePlatformServices(
     override val secureStore: FakeSecureStore = FakeSecureStore(),
     override val backgroundTasks: FakeBackgroundTasks = FakeBackgroundTasks(),
+    override val backgroundTransfers: FakeBackgroundTransfers = FakeBackgroundTransfers(),
+    override val syncedSecrets: FakeSyncedSecrets = FakeSyncedSecrets(),
     override val networkStatus: FakeNetworkStatus = FakeNetworkStatus(),
     override val mediaLibrary: FakeMediaLibrary = FakeMediaLibrary(),
     override val ocr: FakeOcr = FakeOcr(),
@@ -67,6 +69,72 @@ public class FakeBackgroundTasks(
     override suspend fun register(): BackgroundTasks.Registration {
         registrations += 1
         return answer
+    }
+}
+
+/**
+ * A platform that takes every batch and keeps it, so a pass can be asserted.
+ *
+ * It is cooperative by default and uncooperative on demand, which is this
+ * file's standing shape: a test about "Background App Refresh is off" sets
+ * [answer] rather than reaching for a second class.
+ */
+public class FakeBackgroundTransfers(
+    public var answer: BackgroundTransfers.Enqueued? = null,
+) : BackgroundTransfers {
+    /** Every upload this platform was handed, in order. */
+    public val handed: MutableList<BackgroundTransfers.Upload> = mutableListOf()
+
+    public var cancellations: Int = 0
+        private set
+
+    override suspend fun enqueue(
+        uploads: List<BackgroundTransfers.Upload>,
+    ): BackgroundTransfers.Enqueued {
+        answer?.let { return it }
+        handed.addAll(uploads)
+        return BackgroundTransfers.Enqueued(
+            accepted = uploads.size,
+            sentence = BackgroundTransfers.IN_FLIGHT_TITLE,
+        )
+    }
+
+    override suspend fun inFlight(): List<String> = handed.map { it.objectName }
+
+    override suspend fun cancelAll() {
+        cancellations += 1
+        handed.clear()
+    }
+}
+
+/**
+ * A platform that synchronises, ANSWERING AS iOS DOES by default.
+ *
+ * `restoresAfterSetup` is the field a test flips to stand in for Android, and
+ * that is the asymmetry worth having a fake for: it is the one that changes
+ * what a member is told.
+ */
+public class FakeSyncedSecrets(
+    public var availability: SyncedSecrets.Availability = SyncedSecrets.Availability(
+        synchronizing = true,
+        sentence = SyncedSecrets.IOS_SENTENCE,
+        restoresAfterSetup = true,
+    ),
+) : SyncedSecrets {
+    private var held: String? = null
+
+    override suspend fun availability(): SyncedSecrets.Availability = availability
+
+    override suspend fun putSeed(seedHex: String): Boolean {
+        if (!availability.synchronizing) return false
+        held = seedHex
+        return true
+    }
+
+    override suspend fun seed(): String? = held
+
+    override suspend fun forgetSeed() {
+        held = null
     }
 }
 
