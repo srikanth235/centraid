@@ -147,23 +147,36 @@ pub unsafe extern "C" fn centraid_open(
     // only on the success path.
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
         let config = marshal::config_from_json(bytes)?;
-        // NOTHING IS ATTACHED HERE ANY MORE (#1029 §6). `attach_network` built
-        // a `SeatLink` — an endpoint, a key and a byte store — so a replica
-        // could be replaced by a copy from a gateway. There is no gateway to
-        // take a copy from and no inbound endpoint on this device, so the open
-        // is the open: the file, the migrations, the handle.
+        // NO NETWORK IS ATTACHED HERE (#1029 §6). `attach_network` built a
+        // `SeatLink` — an endpoint, a key and a byte store — so a replica could
+        // be replaced by a copy from a gateway. There is no gateway to take a
+        // copy from and no inbound endpoint on this device, so the open is the
+        // open: the file, the migrations, the handle.
         //
-        // **WHAT WENT WITH IT, AND WHO OWES IT BACK.** `SeatLink` also opened
-        // `<vault>.bytes` and handed it to `Handle::attach_bytes`, which is
-        // how a photograph on this phone got a store to live in. That store is
-        // NOT opened here: `ByteStore::open` is asynchronous and
-        // `ContentBytes` holds a tokio runtime handle, so whoever attaches it
-        // has to own a runtime for the life of the core — a decision that
-        // belongs to the wave that rebuilds the phone's byte plane (#1029 W6),
-        // not to the one that deletes the seat. Until then a core opened over
-        // this ABI holds text and refuses binary bytes, by name, which is the
-        // honest state `Core::open_vault` already documents.
-        Core::open(config)
+        // **THE BYTE STORE CAME BACK, AND THE CORE OWNS IT** (#1029 W6,
+        // hand-off 2). `SeatLink` also opened `<vault>.bytes` and handed it to
+        // `Handle::attach_bytes`, and when it went a core over this ABI held
+        // text and refused binary bytes by name. `ByteStore::open` is
+        // asynchronous and `ContentBytes` holds a runtime handle, so somebody
+        // has to own a runtime for the life of the core; on a phone there is no
+        // longer anybody else, so it is the core.
+        // `Handle::open_own_bytes` says why the runtime is multi-threaded and
+        // what the alternatives were.
+        //
+        // **A STORE THAT WILL NOT OPEN IS NOT A FAILED OPEN.** The vault's rows
+        // are readable and every text write still lands; what a shell gets is
+        // the honest state it had before — photographs refused by name. An open
+        // that failed over a byte store would take a member's notes down with
+        // their camera roll.
+        let path = config.path.clone();
+        let handle = Core::open(config)?;
+        if let Err(error) = handle.open_own_bytes(path.with_extension("bytes")) {
+            tracing::warn!(
+                "the byte store did not open; this core holds text and refuses \
+                 photographs by name: {error}"
+            );
+        }
+        Ok(handle)
     }));
     match outcome {
         Ok(Ok(handle)) => {
