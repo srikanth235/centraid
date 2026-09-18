@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 // The rung-1 product/contract bundle (#915 Wave 4).
 //
-// `check:push` listed 59 gate names. Thirty-eight of them run in under a
-// second each and exist only because a gate needs a name in package.json —
-// they are not thirty-eight decisions a developer makes, they are one:
-// "does this diff satisfy the repo's contracts?". Naming them individually
-// cost the reader a 59-line command and cost the runner thirty-eight
-// concurrency slots that the long poles wanted.
+// Each of these runs in under a second and exists only because a gate needs a
+// name in package.json — they are not separate decisions a developer makes,
+// they are one: "does this diff satisfy the repo's contracts?". Naming them
+// individually in `check:push` cost the reader a long command and cost the
+// runner concurrency slots that the long poles wanted.
 //
 // So they collapse into one name, `lint:product`, run here at full machine
 // parallelism (they are tiny single-threaded node processes; the pool that
@@ -39,7 +38,6 @@ import { availableParallelism } from "node:os";
  */
 export const PRODUCT_GATES = Object.freeze([
   "test:ratchet",
-  "lint:engine-conformance",
   "test:advisory-expiry",
   "lint:law-registry",
   "lint:ledgers",
@@ -47,32 +45,15 @@ export const PRODUCT_GATES = Object.freeze([
   "lint:test-reachability",
   "lint:tsconfigs",
   "test:accessibility",
-  "lint:mobile-design",
-  "lint:mobile-rooms",
-  "lint:css",
   "security:lifecycle",
   "lint:container-opacity",
-  "lint:hairline",
   "lint:design-md",
   "lint:aria-labels",
   "lint:site-tokens",
   "lint:motion-rule",
-  "lint:quality-knobs",
   "lint:design-tokens",
-  "lint:mobile-testids",
-  "lint:logical-insets",
-  "check:mobile-suite-budgets",
-  "check:ui-receipt",
   "lint:turbo-cache",
   "lint:path-filters",
-  "lint:e2e-flows",
-  "lint:e2e-wiring",
-  "lint:e2e-claims",
-  "lint:seat-verbs",
-  "check:na-cells",
-  "lint:list-anchoring",
-  "lint:app-conformance",
-  "lint:protocol-routes",
   "lint:acp-min-versions",
   "lint:packages",
   "lint:node-version",
@@ -87,7 +68,7 @@ const secs = (ms) => (ms / 1000).toFixed(1);
 
 /**
  * Spawn one root package script, buffering its output.
- * @param {string} name The root package script to run, e.g. `lint:hairline`.
+ * @param {string} name The root package script to run, e.g. `lint:tsconfigs`.
  * @returns {Promise<{name: string, code: number, ms: number, out: string}>} The gate's exit code, wall clock, and combined output.
  */
 function runOne(name) {

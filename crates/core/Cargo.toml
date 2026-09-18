@@ -1,0 +1,67 @@
+[package]
+name = "centraid-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_core"
+path = "src/lib.rs"
+
+[features]
+default = []
+# THE FAULT-INJECTION DOOR (#1020 wave 3, lane E finding 4). Makes a `Command`
+# named `debug.panic` panic inside `Handle::call`, so a shell can prove its own
+# clause-9 poison handling against the REAL library rather than a fake ABI.
+# Never on in a release profile, and it exports nothing: `abi-five-symbols`
+# still counts five.
+debug-fault = []
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+# THE UNLOCK BOUNDARY'S ORIGIN MATCHER (#1029 §1). `locker::fill` asks
+# `centraid_apps_locker` whether a page's origin matches a stored one before it
+# will hand an autofill grant out — the one question a fill must not answer
+# itself.
+centraid-apps-locker = { path = "../apps/locker" }
+# THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
+# core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
+# door and this is the crate that has both halves in scope.
+centraid-blobs = { path = "../blobs" }
+# THE RUNTIME THE BYTE STORE NEEDS, OWNED BY THE CORE (#1029 W6, hand-off 2).
+# `ByteStore::open` is asynchronous and `ContentBytes` holds a runtime handle,
+# so SOMEBODY has to own a runtime for the life of the core. On a phone there is
+# no longer anybody else — `SeatLink` went with the seat plane — so it is this
+# crate. The workspace entry's `rt-multi-thread` is the feature that matters:
+# see `Handle::open_own_bytes`, where a current-thread runtime is a deadlock and
+# not a preference. This crate opens no socket.
+tokio.workspace = true
+centraid-ontology = { path = "../ontology" }
+centraid-protocol = { path = "../protocol" }
+centraid-vault = { path = "../vault" }
+prost.workspace = true
+# THE LOCKER'S OWN PRIMITIVES (#1029 §1), moved in with `crates/core/src/locker`:
+# Argon2id over the passphrase, AES-GCM around `K`, base64 for the wrapped blob
+# at rest, and `rand` for its salt and nonce.
+aes-gcm.workspace = true
+argon2.workspace = true
+base64.workspace = true
+rand.workspace = true
+serde.workspace = true
+# The network seam hands a connection DOWN (`link::SeatNetwork::sync`): SQLite
+# allows one writer and this crate holds it, so the type has to be nameable here.
+rusqlite.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+serde_json.workspace = true
+
+[[test]]
+name = "call_budget"
+path = "tests/call_budget.rs"

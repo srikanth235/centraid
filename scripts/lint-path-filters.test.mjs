@@ -67,16 +67,16 @@ test("claimedPaths claims every ancestor, because a deep glob does wake a lane",
 
 test("pathsRequiringClaim names workspaces and top-level dirs, not root files", () => {
   const required = pathsRequiringClaim([
-    "packages/vault/src/a.ts",
-    "apps/web/src/b.ts",
+    "packages/design/src/a.ts",
+    "desktop/electron/src/b.ts",
     "docs/x.md",
     "README.md",
-    ".github/workflows/ci.yml",
+    ".github/workflows/gate.yml",
   ]);
   assert.deepEqual([...required].sort(), [
-    "apps/web",
+    "desktop",
     "docs",
-    "packages/vault",
+    "packages/design",
   ]);
 });
 
@@ -127,7 +127,7 @@ test("escapeHatchProblems catches the `with:` read the `if:`-only reasoning miss
 `
   );
   assert.equal(problems.length, 1);
-  assert.match(problems[0], /ci\.yml:3 reads `web`/u);
+  assert.match(problems[0], /workflow:3 reads `web`/u);
   assert.match(problems[0], /counts as a PASS/u);
 });
 
@@ -147,7 +147,7 @@ test("escapeHatchProblems reads a folded `if:` as one condition, not two lines",
     "    if: >\n      needs.changes.outputs.docs == 'true'\n    runs-on: ubuntu-latest\n";
   const problems = escapeHatchProblems(missing);
   assert.equal(problems.length, 1);
-  assert.match(problems[0], /ci\.yml:1 reads `docs`/u);
+  assert.match(problems[0], /workflow:1 reads `docs`/u);
 });
 
 test("escapeHatchProblems does not swallow the line after a folded block", () => {
@@ -158,7 +158,7 @@ test("escapeHatchProblems does not swallow the line after a folded block", () =>
 `
   );
   assert.equal(problems.length, 1);
-  assert.match(problems[0], /ci\.yml:3 reads `web`/u);
+  assert.match(problems[0], /workflow:3 reads `web`/u);
 });
 
 test("a ledger entry for a path that no longer exists fails as stale", () => {

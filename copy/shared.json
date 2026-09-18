@@ -1,0 +1,21 @@
+{
+  "$generatedBy": "contracts/tools/export-copy.ts",
+  "app": "shared",
+  "strings": {
+    "LEAVING_SHARED_VAULT": "Leaving ends your access to this vault; copies already shared into your own vault stay.",
+    "SAVED_TO_MY_VAULT": "Saved to my vault",
+    "SHARE_ENRICHMENT_IS_THEIRS": "Their vault makes its own thumbnails, text and search for the copy, under their settings.",
+    "SHARE_FAILED": "Could not share with the selected people.",
+    "SHARE_IS_A_COPY": "Ending a share removes their copy and stops updates; anything they exported first stays theirs.",
+    "VAULT_DENIED_TITLE": "No vault access yet."
+  },
+  "functions": [
+    "sharedWithOutcome",
+    "retryInSeconds",
+    "truncatedListNotice",
+    "fieldNotOnThisDevice"
+  ],
+  "routes": [],
+  "moreRoutes": [],
+  "shelves": []
+}

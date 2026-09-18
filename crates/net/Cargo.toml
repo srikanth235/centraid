@@ -1,0 +1,20 @@
+[package]
+name = "centraid-net"
+description = "The pair ticket and its QR, parked for the #1029 §7 link ticket. The iroh transport it used to hold is gone (#1029)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_net"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+base64.workspace = true
+prost.workspace = true
+qrcode = { workspace = true }
+rand.workspace = true

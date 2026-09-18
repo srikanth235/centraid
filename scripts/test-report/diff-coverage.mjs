@@ -69,18 +69,15 @@ export function parseUnifiedDiffAddedLines(diffText) {
 }
 
 /**
- * Whether a path is an instrumentable source file under packages/ or apps/.
- * Aligns with root vitest coverage include: conventional package/app `src/`
- * trees plus the co-located blueprint app and kit runtimes. Package-root
- * configs (stryker/vitest) are not instrumented and must not fail the gate.
+ * Whether a path is an instrumentable source file under a package's `src/`.
+ * Aligns with the root vitest coverage include (`packages/*\/src/**`).
+ * Package-root configs (vitest) are not instrumented and must not fail the
+ * gate.
  * @param {string} filePath filePath parameter.
  * @returns {boolean} Return value.
  */
 export function isInstrumentableSource(filePath) {
-  if (!/^(?:packages|apps)\//u.test(filePath)) return false;
-  const conventionalSource = filePath.includes("/src/");
-  const blueprintRuntime = filePath.startsWith("packages/blueprints/apps/");
-  if (!conventionalSource && !blueprintRuntime) return false;
+  if (!/^packages\/[^/]+\/src\//u.test(filePath)) return false;
   if (!/\.(?:ts|tsx|js|jsx|mjs|cjs)$/u.test(filePath)) return false;
   if (/\.(?:test|spec)\.(?:ts|tsx|js|jsx|mjs|cjs)$/u.test(filePath))
     return false;

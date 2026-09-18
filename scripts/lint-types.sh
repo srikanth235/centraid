@@ -26,30 +26,13 @@ while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES_SRC_ONLY+=(-D "$rule")
 done < <(node scripts/lint-types-rules.mjs source)
 
-RULES_BLUEPRINT=()
-while IFS= read -r rule; do
-  [[ -n "$rule" ]] && RULES_BLUEPRINT+=(-D "$rule")
-done < <(node scripts/lint-types-rules.mjs blueprint)
-
 # Every workspace with src/ and a TypeScript program. Keep this explicit list
 # so adding a workspace forces a conscious coverage decision.
 TARGETS=(
-  packages/backup
-  packages/blueprints
-  packages/cli
-  packages/client
-  packages/core
   packages/design
-  packages/model-runtime
-  packages/server
   packages/test-kit
-  packages/tunnel
-  packages/vault
-  apps/desktop
-  apps/extension
-  apps/mobile
-  apps/oauth-worker
-  apps/web
+  desktop/electron
+  extension
 )
 
 contains() {
@@ -62,7 +45,7 @@ contains() {
 
 assert_workspace_coverage() {
   local workspace
-  for workspace in packages/* apps/*; do
+  for workspace in packages/* desktop/electron extension; do
     [[ -d "$workspace/src" && -f "$workspace/tsconfig.json" ]] || continue
     if ! contains "$workspace" "${TARGETS[@]}"; then
       echo "FAIL $workspace — TypeScript workspace is not targeted"
@@ -147,13 +130,6 @@ assert_envelope() {
 
 assert_workspace_coverage
 
-# The worker's TypeScript program depends on Wrangler's generated ambient
-# bindings. Generate them when lint:types runs from a fresh checkout so worker
-# coverage does not depend on a prior typecheck command.
-if [[ ! -f apps/oauth-worker/worker-configuration.d.ts ]]; then
-  bun run --cwd apps/oauth-worker cf-typegen >/dev/null
-fi
-
 policy_report="$(node scripts/lint-types-policy.mjs)"
 echo "$policy_report"
 baseline_rule_count="$(
@@ -187,16 +163,9 @@ for pkg in "${TARGETS[@]}"; do
 done
 
 # Executable TypeScript outside workspace src/ trees has its own compiler
-# program and explicit source/test profile. These targets close the historical
-# gap for the blueprint apps, repository scripts/tests, and Playwright e2e.
-# (The shared browser substrate no longer needs a row: it lives at
-# packages/design/src/elements and rides the package loop above.)
+# program and explicit source/test profile.
 EXTRA_TARGETS=(
-  "blueprint-apps|packages/blueprints/tsconfig.apps.json|packages/blueprints/apps|source"
   "repository-scripts|scripts/tsconfig.json|scripts|source"
-  "repository-tests|tests/tsconfig.json|tests|test"
-  "desktop-e2e|apps/desktop/tests/e2e/tsconfig.json|apps/desktop/tests/e2e|test"
-  "web-e2e|apps/web/tests/e2e/tsconfig.json|apps/web/tests/e2e|test"
 )
 
 for entry in "${EXTRA_TARGETS[@]}"; do
@@ -212,14 +181,9 @@ for entry in "${EXTRA_TARGETS[@]}"; do
   if [[ "$label" == "repository-scripts" ]]; then
     all_ignore='scripts/fixtures/**|**/*.{js,jsx,mjs,cjs}'
     source_ignore="$all_ignore"
-  elif [[ "$label" == "repository-tests" ]]; then
-    all_ignore='**/*.{js,jsx,mjs,cjs}'
   fi
 
   target_rules=("${RULES_ALL[@]}")
-  if [[ "$label" == blueprint-* ]]; then
-    target_rules=("${RULES_BLUEPRINT[@]}")
-  fi
 
   out_all="$(run "$cfg" "$all_ignore" "${target_rules[@]}" -- "$target" || true)"
   if ! assert_envelope "$label" "all" "$(( baseline_rule_count + ${#target_rules[@]} / 2 ))" "$out_all"; then

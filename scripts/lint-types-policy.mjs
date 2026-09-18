@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 
 import {
   allFileCompatibilityRules,
-  blueprintCompatibilityRules,
   compatibilityRules,
   fixtureRules,
   sourceOnlyCompatibilityRules,
@@ -38,8 +37,6 @@ if (
 if (
   new Set(typeAwareOnlyRules).size !== typeAwareOnlyRules.length ||
   new Set(compatibilityRules).size !== compatibilityRules.length ||
-  new Set(blueprintCompatibilityRules).size !==
-    blueprintCompatibilityRules.length ||
   compatibilityRules.some((rule) => !typeAwareOnlyRules.includes(rule))
 ) {
   throw new Error(
@@ -71,17 +68,6 @@ if (
     `type-aware catalog differs from the installed engine manifest: ${JSON.stringify(
       { catalogOnlyRules, engineOnlyRules }
     )}; regenerate scripts/lint-types-rules.mjs before upgrading`
-  );
-}
-
-if (
-  blueprintCompatibilityRules.some(
-    (rule) => !allFileCompatibilityRules.includes(rule)
-  ) ||
-  blueprintCompatibilityRules.includes("typescript/no-misused-promises")
-) {
-  throw new Error(
-    "blueprint compatibility rules must be an all-file subset with the documented callback-return exception"
   );
 }
 

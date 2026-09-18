@@ -2,15 +2,11 @@ name: release
 
 # The single entry point for cutting a release (#557).
 #
-# Three workflows used to listen on the same `v*.*.*` tags independently —
-# release-desktop, release-gateway-image and npm-gateway-publish — plus a fourth
-# on `companion-v*`. Cutting a tag produced three or four unrelated runs with no
-# shared notion of whether "the release" succeeded: npm could publish while
-# desktop packaging failed, and nothing anywhere said the release was broken.
-# You had to know to check four places.
+# One tag produces one run, and `release-check` is the single red/green for it:
+# before #557 each surface listened on the tags itself, so a partial release
+# looked like several unrelated runs with no shared verdict.
 #
-# Now one tag produces one run, and `release-check` is the single red/green for
-# it. Each surface stays in its own `lane-release-*.yml` file and declares the
+# Each surface stays in its own `lane-release-*.yml` file and declares the
 # secrets it accepts, so a lane can only ever receive the credentials for its own
 # platform — stronger isolation than five peer workflows that could each read
 # every repo secret.
@@ -23,7 +19,6 @@ on:
     tags:
       - "v*.*.*"
       - "v*.*.*-beta.*"
-      - "companion-v*"
   workflow_dispatch:
     inputs:
       surfaces:
@@ -33,19 +28,8 @@ on:
         type: choice
         options:
           - all
-          - desktop
-          - gateway-npm
           - gateway-image
           - mobile
-          - companion
-      dry_run:
-        description: "npm: force dry-run even if NPM_TOKEN is set"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
       ref:
         description: "gateway-image: git ref to build (default: current)"
         required: false
@@ -72,14 +56,6 @@ on:
         required: false
         default: false
         type: boolean
-      restamp_rollout_hours:
-        description: "desktop I8: re-stamp rollout window hours on an existing release (empty = skip)"
-        required: false
-        default: ""
-      restamp_tag:
-        description: "desktop I8: tag to restamp; required when restamp_rollout_hours is set"
-        required: false
-        default: ""
 
 # A tag is immutable — never cancel a release mid-flight for a "newer" one.
 concurrency:
@@ -97,10 +73,10 @@ jobs:
   # exercised, and nothing in the chain would have said so.
   #
   # Two ways to be a candidate, and both are checked because both are true: the
-  # tag is the CURRENT `refs/candidates/latest`, or it appears in the promotion
-  # history `candidate.yml` publishes to gh-pages at
-  # `test-report/candidates.json` (kept 200 deep). The second matters because
-  # cutting a release takes minutes and `main` keeps moving: a tag cut on
+  # tag is the CURRENT `refs/candidates/latest` (moved by `gate-nightly.yml`'s
+  # `promote-candidate` on a green nightly gate), or it appears in the
+  # promotion history on gh-pages at `test-report/candidates.json` (kept 200
+  # deep). The second matters because cutting a release takes minutes and `main` keeps moving: a tag cut on
   # yesterday's promoted candidate is exactly right, and requiring "equal to the
   # newest" would refuse it.
   #
@@ -136,7 +112,7 @@ jobs:
             echo "$TAG_SHA was promoted on $(jq -r --arg sha "$TAG_SHA" '.candidates[] | select(.sha == $sha) | .promotedAt' "$history")"
             exit 0
           fi
-          echo "::error title=Not a candidate::${TAG_SHA} was never promoted by candidate.yml. Releases ship promoted builds only — cut the tag on a SHA that appears in refs/candidates/latest or in the gh-pages promotion history (test-report/candidates.json). \`bun run release:prepare\` refuses the same SHA locally and says why."
+          echo "::error title=Not a candidate::${TAG_SHA} was never promoted by gate-nightly.yml. Releases ship promoted builds only — cut the tag on a SHA that appears in refs/candidates/latest or in the gh-pages promotion history (test-report/candidates.json). \`bun run release:prepare\` refuses the same SHA locally and says why."
           exit 1
 
   # Classifies what was cut, so each lane's `if:` reads as a sentence instead of
@@ -147,7 +123,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       product: ${{ steps.classify.outputs.product }}
-      companion: ${{ steps.classify.outputs.companion }}
       surfaces: ${{ steps.classify.outputs.surfaces }}
     steps:
       - id: classify
@@ -158,13 +133,11 @@ jobs:
         run: |
           set -euo pipefail
           product=false
-          companion=false
           case "$EVENT" in
             push)
-              # Tag line decides. `companion-v*` is a separate product cadence
-              # and must never drag the desktop/gateway surfaces along with it.
+              # Tag line decides. `companion-v*` was the Companion's own
+              # cadence and is gone with it (#1029 §6).
               case "$TAG" in
-                companion-v*) companion=true ;;
                 v*.*.*) product=true ;;
                 *) echo "::error::tag '$TAG' matched the trigger but no known release line"; exit 1 ;;
               esac
@@ -172,52 +145,13 @@ jobs:
             workflow_dispatch)
               # A manual run selects surfaces directly; `surfaces` gates the lanes.
               product=true
-              companion=true
               ;;
           esac
           {
             echo "product=${product}"
-            echo "companion=${companion}"
             echo "surfaces=${SURFACES}"
           } >> "$GITHUB_OUTPUT"
-          echo "event=$EVENT tag=$TAG product=$product companion=$companion surfaces=$SURFACES"
-
-  desktop:
-    needs: plan
-    if: >
-      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'desktop')
-    permissions:
-      contents: write
-    uses: ./.github/workflows/lane-release-desktop.yml
-    with:
-      restamp_rollout_hours: ${{ inputs.restamp_rollout_hours || '' }}
-      restamp_tag: ${{ inputs.restamp_tag || '' }}
-    secrets:
-      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-      AZURE_CODE_SIGNING_ACCOUNT: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}
-      AZURE_CERT_PROFILE: ${{ secrets.AZURE_CERT_PROFILE }}
-      CENTRAID_RELEASE_SIGNING_KEY: ${{ secrets.CENTRAID_RELEASE_SIGNING_KEY }}
-
-  gateway-npm:
-    needs: plan
-    if: >
-      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-npm')
-    permissions:
-      contents: read
-      # OIDC for `npm publish --provenance` (#557). Job-level permissions
-      # REPLACE the workflow-level block, so `contents: read` is restated.
-      id-token: write
-    uses: ./.github/workflows/lane-release-gateway-npm.yml
-    with:
-      # A tag publishes for real; a manual run defaults to dry-run.
-      dry_run: ${{ github.event_name == 'push' && 'false' || (inputs.dry_run || 'true') }}
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          echo "event=$EVENT tag=$TAG product=$product surfaces=$SURFACES"
 
   gateway-image:
     needs: plan
@@ -230,13 +164,34 @@ jobs:
     with:
       ref: ${{ inputs.ref || '' }}
 
+  # THE HOSTED GATEWAY (#1029 §3). Rides along on `all` like the image lane
+  # does: the Worker is part of the product that ships, and a release that moved
+  # the standalone image without moving the hosted adapter would be a release
+  # where the two deployments speak different protocol versions.
+  #
+  # `deploy` is off on a tag and asked for by name, because this repository has
+  # no Cloudflare account yet — the build and the shared suite still run, which
+  # is the half that is worth having today. See `gateway/cloudflare/README.md`.
+  gateway-worker:
+    needs: plan
+    if: >
+      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-worker')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lane-release-gateway-worker.yml
+    with:
+      ref: ${{ inputs.ref || '' }}
+      deploy: ${{ needs.plan.outputs.surfaces == 'gateway-worker' }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
   # Deliberately NOT reached by a `v*.*.*` tag. The store pipeline is manual by
-  # design (J7): a desktop version bump must not auto-submit to TestFlight/Play.
+  # design (J7): a product version bump must not auto-submit to TestFlight/Play.
   #
   # `surfaces: mobile` is required EXACTLY — this lane is the one that must not
   # ride along on `all`. `surfaces` defaults to `all`, so accepting it here would
-  # mean re-running release.yml to repackage a desktop installer also burns EAS
-  # build quota. Before #557 you had to dispatch release-mobile.yml by name;
+  # mean re-running release.yml for another surface also burns EAS build quota. Before #557 you had to dispatch release-mobile.yml by name;
   # requiring the explicit value keeps ship opt-in, as docs/release.md states.
   mobile:
     needs: plan
@@ -250,34 +205,61 @@ jobs:
       platform: ${{ inputs.mobile_platform || 'all' }}
       submit: ${{ inputs.mobile_submit || false }}
     secrets:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+      # EAS IS RETIRED (#1020 wave 3 lane E). The mobile lane builds the native
+      # projects under `mobile/`; these two secrets are no longer read by
+      # anything and are dropped from the call and from the lane's declaration
+      # in the same change.
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+      APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
 
-  companion:
+  # THE PREBUILT CORE ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-G2).
+  #
+  # Six binary triples with a symbol file each, the four Android ABIs, and the
+  # iOS XCFramework — plus one `SHA256SUMS` and one identity digest across all
+  # of them. It rides `all` rather than needing an explicit surface, because
+  # unlike `mobile` it submits nothing to anybody: it builds and publishes
+  # artifacts, and a release that shipped a surface whose core was never built
+  # for one of the required triples is a partial release.
+  #
+  # `require-candidate` is upstream of `plan`, so this lane inherits the
+  # candidate precondition like every other: a release ships a build somebody
+  # promoted (docs/release.md).
+  prebuilt-core:
     needs: plan
     if: >
-      needs.plan.outputs.companion == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'companion')
+      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'prebuilt-core')
     permissions:
       contents: read
-    uses: ./.github/workflows/lane-release-companion.yml
+    uses: ./.github/workflows/lane-prebuilt-core.yml
+    with:
+      ref: ${{ inputs.ref || '' }}
+      binary-only: false
 
   # The one signal for "did this release work". Before #557 there was none: four
-  # peer workflows each reported separately, so a partial release — npm shipped,
-  # desktop broken — looked like three greens and one red in four different
-  # places, with nothing naming the release itself as bad.
+  # peer workflows each reported separately, so a partial release looked like
+  # greens and a red in different places, with nothing naming the release
+  # itself as bad.
   #
-  # `skipped` passes (a `companion-v*` tag legitimately skips every product
-  # lane); `cancelled` fails.
+  # `skipped` passes; `cancelled` fails.
+  #
+  # THE DESKTOP AND COMPANION LANES ARE GONE (#1029 §6). `desktop/electron` was
+  # a sidecar around a local replica and the Companion's only server was that
+  # sidecar's socket; v0 has no paired client, and #1029 question 10 rules the
+  # extension re-proposed on top of a desktop reader if and when §6 is built.
   release-check:
     needs:
       [
         require-candidate,
         plan,
-        desktop,
-        gateway-npm,
         gateway-image,
+        gateway-worker,
         mobile,
-        companion,
+        prebuilt-core,
       ]
     if: always()
     runs-on: ubuntu-latest
@@ -290,7 +272,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "release $TAG lane results: $RESULTS"
-          # Fail closed — see the same guard in ci.yml's `check`.
+          # Fail closed — see the same guard in candidate.yml's `report`.
           if [ -z "${RESULTS//,/}" ]; then
             echo "::error::aggregator received no lane results — refusing to pass"
             exit 1

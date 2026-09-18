@@ -6,12 +6,6 @@
     "door": "hook",
     "why": "The affected packages' tests — the gate that actually catches breakage, and the wall clock every other rung-1 gate hides behind."
   },
-  "test:qualities": {
-    "class": "product",
-    "rung": 1,
-    "door": "hook",
-    "why": "The U/T-series product quality suites over the built packages."
-  },
   "design:gallery": {
     "class": "product",
     "rung": 1,
@@ -42,12 +36,6 @@
     "door": "hook",
     "why": "The floors ratchet's own unit tests (deletion and missing-key cases)."
   },
-  "check:reachability": {
-    "class": "product",
-    "rung": 1,
-    "door": "hook",
-    "why": "Every share surface must be reachable from a route a user can get to."
-  },
   "format:check": {
     "class": "contract",
     "rung": 1,
@@ -66,12 +54,6 @@
     "door": "hook",
     "why": "oxlint over the tree at 2.5 s — the cheapest gate in the set by hit rate."
   },
-  "lint:hermes-surface": {
-    "class": "product",
-    "rung": 1,
-    "door": "hook",
-    "why": "A Hermes array-surface gap crashes the phone, and the phone is the product."
-  },
   "test:claims": {
     "class": "contract",
     "rung": 1,
@@ -83,12 +65,6 @@
     "rung": 1,
     "door": "hook",
     "why": "An evidence file naming no claim, or a claim whose lane writes no evidence, is a rung-2 lint failure rather than a banner on the report (#915 Wave 3)."
-  },
-  "test:report:smoke": {
-    "class": "contract",
-    "rung": 1,
-    "door": "hook",
-    "why": "The report generator must render every section from the fixture root."
   },
   "lint:product": {
     "class": "contract",
@@ -168,41 +144,11 @@
     "door": "hook",
     "why": "The site's tokens must be the ones lowered from @centraid/design, not a second copy."
   },
-  "lint:mobile-design": {
-    "class": "contract",
-    "rung": 1,
-    "door": "hook",
-    "why": "Design-token consumption on the mobile surface."
-  },
-  "lint:mobile-rooms": {
-    "class": "product",
-    "rung": 1,
-    "door": "hook",
-    "why": "The six rooms are the mobile surface's one frame contract (#1015); this is what notices a screen ignoring them."
-  },
-  "lint:mobile-testids": {
-    "class": "contract",
-    "rung": 1,
-    "door": "hook",
-    "why": "E-unfakeable: a device flow may only assert on a declared testID."
-  },
   "lint:list-anchoring": {
     "class": "product",
     "rung": 1,
     "door": "hook",
     "why": "A virtualized list that anchors by default swallows rows arriving from another device (#903)."
-  },
-  "lint:logical-insets": {
-    "class": "contract",
-    "rung": 1,
-    "door": "hook",
-    "why": "Logical inset properties, never physical ones, so RTL is correct by construction."
-  },
-  "lint:hairline": {
-    "class": "contract",
-    "rung": 1,
-    "door": "hook",
-    "why": "Hairline borders come from the token, not from a literal that breaks at 3x density."
   },
   "lint:design-md": {
     "class": "contract",
@@ -233,12 +179,6 @@
     "rung": 1,
     "door": "hook",
     "why": "Every device flow must name what merges wrongly if it passes when it should not."
-  },
-  "lint:seat-verbs": {
-    "class": "contract",
-    "rung": 1,
-    "door": "hook",
-    "why": "Seat verbs must match the seat registry; a verb no seat declares reaches no screen."
   },
   "check:na-cells": {
     "class": "contract",
@@ -389,18 +329,6 @@
     "rung": 5,
     "door": "owner",
     "why": "The 11px type floor. Named by #915 as hygiene and moved, but it is the one gate in this class whose red IS user-visible (an unreadable label ships), and it reads no ledger — a pure source scan. The tradeoff is recorded in docs/decisions.md: detection moves from every push to within 7 days on main."
-  },
-  "lint:schema-export": {
-    "class": "hygiene",
-    "rung": 5,
-    "door": "owner",
-    "why": "The vault-schema/portable-export fingerprint. Its enforcing comparison is standing (fingerprint vs source), so a weekly run on main detects the same drift; only the diff-scoped 'touch the export owner in the same PR' hint is lost. Tradeoff recorded in docs/decisions.md."
-  },
-  "check:mobile-native-state": {
-    "class": "contract",
-    "rung": 2,
-    "door": "window",
-    "why": "30.5 s, the second-largest non-test pole. ci.yml's mobile-smoke job already runs it on exactly the diffs that matter (ci.yml #782 note); paying it on every push duplicated a rung-2 answer."
   },
   "lint:journey-ledger": {
     "class": "contract",

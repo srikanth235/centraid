@@ -1,5 +1,0 @@
-{
-  "_doc": "Register of fuzz findings that are known, reproduced, and awaiting a product decision (#839 G10). Keyed by the invariant class in scripts/fuzz/targets.mjs. A finding whose class is listed here is reported by `bun run test:fuzz` without failing the lane, because scripts/fuzz/replay.test.mjs pins its exact current behaviour: the day the product changes, that suite goes red and the entry must be revisited. A finding whose class is NOT listed fails the lane. Removing an entry is how a fix gets locked in — never add one to go green.",
-  "_empty": "The register is empty: the three classes it carried (wal.closer-roundtrip-rejected, fts-mirror.decision, fts-mirror.expression) were fixed under #846 P3/P4/P5 and their entries deleted with the fix. Their crashers stay committed under scripts/fuzz/crashers/ — replay.test.mjs now asserts each of those inputs runs clean, which is the regression lock the removal buys.",
-  "classes": {}
-}

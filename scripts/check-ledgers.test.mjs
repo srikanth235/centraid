@@ -21,7 +21,6 @@ import {
   budgetNumbers,
   checkLedgers,
   minimumTestsMirror,
-  mobileSuitesMirror,
   serializeLedger,
   shapeLegacy,
 } from "./check-ledgers.mjs";
@@ -34,13 +33,12 @@ after(() => {
 const COVERAGE = { approvedDeviation: "seed", "packages/a/**": { lines: 90 } };
 const MUTATION = { "packages/a": 80 };
 const CLAIMS = { flows: [{ id: "f1", owner: "a.ts", minimumTests: 4 }] };
-const ROSTER = { suites: { "pr-gate": { budgetMs: 480_000 } } };
 
 /** A repo whose HEAD holds the PRE-MERGE ledgers, ready for a merged head. */
 function preMergeRepo() {
   const root = mkdtempSync(path.join(tmpdir(), "ledgers-"));
   roots.push(root);
-  mkdirSync(path.join(root, "tests/agent-e2e-mobile"), { recursive: true });
+  mkdirSync(path.join(root, "tests"), { recursive: true });
   const write = (rel, value) =>
     writeFileSync(path.join(root, rel), `${JSON.stringify(value, null, 2)}\n`);
   write("tests/coverage-floors.json", COVERAGE);
@@ -50,7 +48,6 @@ function preMergeRepo() {
     lanes: { "pr-vitest": { budgetMs: 1000 } },
   });
   write("tests/claims.json", CLAIMS);
-  write("tests/agent-e2e-mobile/roster.json", ROSTER);
   for (const cmd of [
     ["init", "-q"],
     ["config", "user.email", "t@example.com"],
@@ -77,7 +74,6 @@ function writeMerged(write, overrides = {}) {
     },
     rungs: { 2: 900_000 },
     designTokenCss: { budgets: {} },
-    mobileSuites: { suites: overrides.mobileSuites ?? { "pr-gate": 480_000 } },
   });
   write("tests/inventory.json", {
     skips: {
@@ -219,23 +215,15 @@ describe("issue and expiry", () => {
   });
 });
 
-describe("derived mirrors", () => {
+describe("derived mirror", () => {
   test("a minimumTests mirror that drifts from the claims file fails", () => {
     const { root, write } = preMergeRepo();
     writeMerged(write, { minimumTests: { f1: 3 } });
     assert.match(run(root)[0], /mirrors tests\/claims\.json as 4 but reads 3/u);
   });
 
-  test("a mobile suite mirror that drifts from the roster fails", () => {
-    const { root, write } = preMergeRepo();
-    writeMerged(write, { mobileSuites: { "pr-gate": 900_000 } });
-    const errors = run(root);
-    assert.match(errors[0], /mirrors tests\/agent-e2e-mobile\/roster\.json/u);
-  });
-
-  test("the mirrors are read off their sources, not hand-typed", () => {
+  test("the mirror is read off its source, not hand-typed", () => {
     assert.deepEqual(minimumTestsMirror(CLAIMS), { f1: 4 });
-    assert.deepEqual(mobileSuitesMirror(ROSTER), { "pr-gate": 480_000 });
   });
 });
 

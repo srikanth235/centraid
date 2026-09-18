@@ -1,75 +1,64 @@
-# Recovery: auto-founding and enrollment
+# Recovery: founding and enrollment
 
-Use this runbook when a gateway's first boot did not produce the vaults you expect, a pairing capability expired, or a device lost its private iroh identity. Ground truth for relay e2e remains `tests/agent-e2e-pairing/AGENTS.md`.
+Use this runbook when a gateway's first boot did not produce the vault you expect, a pair ticket expired, or a device lost its identity. The pairing wire is [`crates/net/src/pairing.rs`](../../crates/net/src/pairing.rs); its end-to-end test is [`crates/net/tests/pair_and_stream.rs`](../../crates/net/tests/pair_and_stream.rs). The full enrollment model is [enrollment.md](../enrollment.md).
 
-## Auto-founding (issue #603)
+## Founding
 
-There is no founding ceremony, no founding ticket, and no `uninitialized` state. A gateway founds itself:
+There is no founding ceremony, no founding ticket, and no `uninitialized` state. `centraid gateway --data-dir <dir>` founds a vault the first time it finds none:
 
-1. Start `centraid-gateway serve` (or start the desktop-controlled local gateway) on a **fresh** data dir. At construction the gateway creates one vault:
-   - **Personal** — the founder's private vault and registry default. It remains `Personal` until an owner explicitly changes the vault name; profile identity is optional and belongs in Settings.
-2. The host's own device identity is enrolled to the founding **owner** on that vault (recorded in `vault_owners`), in the same `gateway.db` transaction — founding is simply the first mint (issue #726 D2). A shared vault is created later only through an explicit owner action.
-3. Nothing else happens. No kit is minted, no capability is issued, and no screen blocks the user.
+1. Under `<dir>/vault/` it stages a new `vault.db` in `.founding/`, writes the vault and owner rows, and renames the directory to `<dir>/vault/<vaultId>/`. The vault's display name is `--vault-name` (default `Centraid`). stderr says `FOUNDED a new vault <id> (owner party <id>)`.
+2. On every later start it opens the one vault it finds. A data dir holding two vaults is refused, never guessed at; a `vault.db` with a schema and no vault row is refused with the reason ("created and never founded").
+3. Nothing else happens. No kit is minted and no ticket is issued unless `--print-qr` asks for one.
 
-A data dir that **already** holds vault directories is never modified. `VaultRegistry.isFresh()` counts a vault directory that failed to mount, so corruption or a missing custody key can never make an existing gateway look fresh and get founded over its own data.
+Without `--data-dir` the gateway runs entirely in memory and says so on stderr: no vault, and every pairing is lost on exit.
 
-If a gateway does look empty, that is a real fault, not a legal state — check `centraid-gateway status --data-dir …` and `vault list`, both of which report `failedMounts` distinctly from an empty registry.
-
-Restoring an existing vault onto a blank machine is the **backup plane**, not founding: see [backup-restore.md](backup-restore.md) (`centraid-gateway recover --kit …`).
+Restoring an existing vault onto a blank machine is the backup plane, not founding: see [backup-restore.md](backup-restore.md). Run `recover` **before** the first `centraid gateway` against that data dir, or the gateway founds a new vault there.
 
 ## Ordinary enrollment
 
-Once a gateway is running:
+1. On the gateway host, start the gateway with tickets: `centraid gateway --data-dir <dir> --print-qr [N]`. `--print-qr` with no value mints one ticket; a count mints that many, because a ticket is one-shot and a phone and a tablet need two. Each is printed as a QR and as a `base64url` line.
+2. The device scans the QR (mobile) or runs `centraid seat pair <ticket>` (a desktop or headless seat). The redeeming connection is accepted provisionally, may carry only a `pair` request, and is promoted in place on success, so pairing and the first bootstrap share one dial.
+3. Redemption burns the ticket and enrols the device in one critical section. Enrollment lives in the vault's own `access_device` / `access_device_secret` rows, so it survives a gateway restart.
+4. Every later connection is admitted by the device's proven iroh EndpointId. Unknown and revoked are one refusal.
 
-1. On the gateway host, run `centraid-gateway pair --data-dir … [--vault …]` (`--qr` for a terminal QR). The command talks to the running loopback daemon on the configured port. With no `--owner` flag it pairs another device to the vault's own owner. Omitting `--vault` targets the registry default, the owner's **Personal** vault on an auto-founded gateway.
-   - Use `--owner <id-or-label>` to pair another device for an existing owner.
-   - Minting a vault for a genuinely **new** person is the _Add someone_ ceremony (issue #726 P1: `POST /centraid/_gateway/devices/ticket` with `body.forPerson` on the running daemon) — it always mints that person a vault of their own, never a role inside an existing one. There is no `--new-member`/`--grant`/`--role` flag on `pair`; those were deleted with the role lattice. The stopped-daemon `centraid-gateway devices add <endpoint-id> --vault <id> --new-owner <label>` is a different operation: it claims an already-existing, still-unowned vault for a brand-new owner rather than minting a fresh one — the recovery lane for a vault that predates ownership, not the everyday "add someone" flow.
-2. The device redeems the one-time capability over the iroh pairing ALPN.
-3. Redemption and the `gateway.db` enrollment commit atomically. The redeeming device supplies its own display name; this is separate from the saved gateway label and can be renamed later from Household.
-4. Subsequent requests are admitted by the enrolled EndpointId. There is no direct-HTTP pairing route or per-device bearer.
+`centraid pair --mint` mints from a process that exits immediately, so nothing can redeem its ticket; it says so on stderr. Use `centraid gateway --print-qr`.
 
 ## Durable state
 
 | Location | Role |
 | --- | --- |
-| `gateway.db` | Exclusive process lock; enrollments, one-time tickets, web sessions, preferences, backup/storage control state |
-| `keys/endpoint-key.bin` | Wrapped gateway iroh identity; losing it changes EndpointId and requires every device to re-pair |
-| Device secure storage | Per-connection private iroh key |
-| Desktop `connections.json` | Non-secret, device-local gateway registry keyed by EndpointId |
+| `<data-dir>/vault/<vaultId>/vault.db` | the vault, including the enrolled devices (`access_device`, `access_device_secret`) |
+| `<data-dir>/keys/gateway.endpoint.key` | the gateway's long-term iroh identity. Losing it changes the EndpointId and every paired device must pair again |
+| Device platform secure store | one enrollment record per vault: the device's private identity key, the vault id, dialling hints ([`Enrolments.kt`](../../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/Enrolments.kt)) |
+| Device replica | named by `vault_id` only, never by the gateway ([traps/seat-identity.md](../traps/seat-identity.md)) |
 
-Headless `keys/` files are encrypted with either OS/service custody or an external `0600` host credential under the platform configuration directory. That fallback credential is deliberately outside the gateway data dir, so a data-dir copy contains no parseable raw key material.
-
-Relay hints/tickets are refreshable address cache. They are not durable gateway identity and changing one must not create a second connection record.
+Tickets are **not** durable: only the secret's hash is held, in memory, for 15 minutes (`TICKET_TTL_MS`). A gateway restart invalidates every outstanding QR. Relay hints are refreshable address cache, not identity.
 
 ## Recovery steps
 
-### Capability expired or was consumed
+### Ticket expired, consumed, or minted before a restart
 
-Mint a new pair ticket. Never try to revive or edit the old value. Tickets burn on first **successful** redeem only — a wrong secret is rejected before the ticket row is deleted, so the genuine ticket still redeems afterwards.
-
-### `pair` reports a rejected credential
-
-`pair` fails with a bearer-mismatch error naming `CENTRAID_GATEWAY_TOKEN` when the daemon was launched with a pinned bearer this CLI cannot derive from `keys/endpoint-key.bin`. Restart the daemon without the pin, or run the command with `CENTRAID_GATEWAY_TOKEN` set to the same value. This used to be reported as "the iroh endpoint is not ready" — a lie the owner could not act on (issue #603).
+Mint a new one by restarting with `--print-qr`. Never try to revive or edit the old value. A wrong secret and an unknown ticket are the same refusal; an expired or already-burnt ticket says so.
 
 ### Device enrolled but cannot connect
 
-1. Run `centraid-gateway lock-status --data-dir …`; distinguish a free lock from a held-but-unresponsive daemon.
-2. Confirm the target vault still exists and the EndpointId remains enrolled with `centraid-gateway devices list`.
-3. If the device secure store was cleared, revoke the old EndpointId and pair a newly minted identity.
-4. For relay-only failures, run `tests/agent-e2e-pairing/flows/cross-network-relay.mjs` and inspect the kept test workspace.
+1. Check the gateway's stderr for the ready line (`centraid gateway ready`) and for the endpoint-identity warning — a gateway that could not keep its identity says it minted a fresh one and every seat must pair again.
+2. Run `centraid doctor --data-dir <dir>` to confirm the vault opens cleanly.
+3. If the device's secure store was cleared, its identity is gone: pair it again with a new ticket. The old device row stays in the vault until it is revoked.
+4. For relay-only failures, try `--no-relay` on a LAN or pass `--relay <url>` for a self-hosted relay, and read [logs.md](../logs.md) with `--log centraid_net=debug`.
 
-### Sole owner is lost
+### Revoking a lost device
 
-Use the filesystem-anchored device CLI on the gateway host. Revoking the last owner requires typed confirmation because it leaves only this shell/console recovery path — Centraid itself no longer offers any SSH-routed connect (issue #603 deleted that code).
+Revocation is the `devices.revoke` admin command ([`admin.proto`](../../crates/api-proto/proto/centraid/core/v1/admin.proto)): it deletes the device's private key sibling and keeps its row, so the device list still shows it and the door no longer admits it. `centraid devices list` and `centraid devices revoke <device>` exit `3` in this build — the verbs are owed, not silent stubs.
 
 ### Gateway identity is corrupt or lost
 
-Stop the daemon before custody work. A corrupt non-32-byte endpoint key refuses with recovery instructions. Restore the original `keys/endpoint-key.bin`; deleting it deliberately mints a new identity and requires every device to re-pair.
+Stop the gateway before custody work. Restore the original `keys/gateway.endpoint.key` from wherever you keep `keys/` out of band; deleting it deliberately mints a new identity and every device must pair again. The key store is never part of a backup generation or an export.
 
 ## Do not
 
-- Hand-edit `gateway.db` while the daemon holds its exclusive lock.
-- Persist pairing tickets as gateway identity.
+- Hand-edit `vault.db` while the gateway runs.
+- Persist pair tickets anywhere.
 - Copy device credentials into the gateway data directory.
 - Commit real pair tickets, endpoint secrets, or recovery kits.
-- Delete `vault/` to "reset" a gateway — that is how you get a data dir the auto-found bootstrap will happily found over.
+- Delete `vault/` to "reset" a gateway — the next start founds a new vault over the directory.

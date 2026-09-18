@@ -24,7 +24,7 @@ function parseArgs(argv) {
         .filter(Boolean);
     } else if (argv[i] === "--help" || argv[i] === "-h") {
       console.log(
-        "Usage: node scripts/release/matrix.mjs [--json] [--surfaces desktop,gateway-npm]"
+        "Usage: node scripts/release/matrix.mjs [--json] [--surfaces desktop,gateway-image]"
       );
       process.exit(0);
     }

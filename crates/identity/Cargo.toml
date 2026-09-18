@@ -1,0 +1,62 @@
+[package]
+name = "centraid-identity"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_identity"
+path = "src/lib.rs"
+
+# THE WASM-CLEAN HALF IS THE DEFAULT-OFF-ABLE ONE (#1029 §3, W4C-1).
+#
+# A Cloudflare Worker must decode and verify a `DeviceCertificate` — 104 bytes,
+# `certificate.rs` — and must **not** carry a DNS client. `pkarr` binds sockets
+# and `url` is only reached to parse a gateway address; neither compiles to, nor
+# belongs in, `wasm32-unknown-unknown`.
+#
+# This is a FEATURE and not a second crate because the split is already clean:
+# `pkarr`, `url` and `base64` are reached from exactly two modules (`record.rs`
+# and `discovery.rs`) and from no other file in this crate — `rg -l 'pkarr|url::|base64'
+# crates/identity/src` names those two and nothing else. A split crate would
+# move six files to buy a boundary a `#[cfg]` already draws, and would make
+# `centraid_identity::DeviceCertificate` two paths for the same 104 bytes.
+#
+# `mint` is a second, smaller gate for the same reason: minting a key needs
+# operating-system entropy (`rand::rngs::OsRng`), and a Worker verifies rather
+# than mints. Keeping it off the wasm build keeps `getrandom`'s
+# `wasm32-unknown-unknown` backend question out of a crate that never asks it.
+[features]
+default = ["discovery", "mint"]
+# The pkarr record, the account listing's transport and the typed-URL fallback.
+discovery = ["dep:pkarr", "dep:url", "dep:base64"]
+# Minting fresh keys and phrases from operating-system entropy — and sealing,
+# whose ephemeral encapsulation key is drawn the same way inside `hpke`. A
+# Worker opens nothing and seals nothing: it moves sealed bytes it cannot read.
+mint = ["dep:rand", "hpke/getrandom"]
+
+[dependencies]
+base64 = { workspace = true, optional = true }
+bip39.workspace = true
+blake3.workspace = true
+ed25519-dalek.workspace = true
+hex.workspace = true
+hmac.workspace = true
+hpke = { workspace = true }
+pkarr = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+sha2.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+url = { workspace = true, optional = true }
+x25519-dalek.workspace = true
+
+[dev-dependencies]
+iroh-dns-server.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true

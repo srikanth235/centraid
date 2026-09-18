@@ -4,13 +4,10 @@ packs:
   version: '0.1'
   source: local
   directives:
-  - handler-contract
   - law
   - no-hardcoded-model-ids
   - gateway-engine-mode-agnostic
-  - bracketed-replica-writes
   - format-check
   - coverage-scope-reachability
   - lint-check
-  - no-hardcoded-colors
   - pre-push-gate

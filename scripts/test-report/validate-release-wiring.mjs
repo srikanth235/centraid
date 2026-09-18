@@ -1,15 +1,14 @@
 /**
  * Structural gate for the release lane (#656 Layer 1F).
  *
- * `release.yml` plus five `lane-release-*.yml` files are ~880 lines of YAML with
+ * `release.yml` plus its `lane-release-*.yml` files are ~880 lines of YAML with
  * zero structural validation, and `lint:actions` (actionlint) is not part of
  * `check:pr`. Their load-bearing invariants are documented only in comments, so
  * the failure mode is silent: a lane added without adding it to
  * `release-check.needs` still shows a green "release-check" while that surface
  * is broken — exactly the four-separate-reds problem #557 set out to end.
  *
- * This asserts the shipped wiring the way `validate-nightly-wiring.mjs` does —
- * over the real YAML text, not a reimplementation of it, and without a YAML
+ * This asserts the shipped wiring over the real YAML text, not a reimplementation of it, and without a YAML
  * parser dependency the repo does not declare.
  */
 import { readFileSync, readdirSync } from "node:fs";
@@ -286,19 +285,6 @@ export function lintReleaseWiring(root = REPO_ROOT) {
 
   // (10) Per-job permissions REPLACE the workflow block, so a lane that widens
   // must restate what it still needs.
-  const npm = jobs.get("gateway-npm");
-  if (npm) {
-    if (!/id-token:\s*write/u.test(npm))
-      errors.push(
-        "gateway-npm job needs `id-token: write` for `npm publish --provenance`"
-      );
-    if (!/contents:\s*read/u.test(npm))
-      errors.push(
-        "gateway-npm job must restate `contents: read` — job permissions replace the workflow block"
-      );
-  } else {
-    errors.push("release.yml missing the gateway-npm lane job");
-  }
   const desktop = jobs.get("desktop");
   if (desktop && !/contents:\s*write/u.test(desktop))
     errors.push(

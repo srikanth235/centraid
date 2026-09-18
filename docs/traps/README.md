@@ -8,18 +8,10 @@ Read the matching trap before working near its area; each one was paid for once.
 | [worktrees.md](worktrees.md) | Install/build/data isolation in worktrees |
 | [wal-checkpoint.md](wal-checkpoint.md) | Unsafe SQLite/WAL copies |
 | [electron-screenshot.md](electron-screenshot.md) | Electron `capturePage` / Playwright screenshots |
-| [manifest-regeneration.md](manifest-regeneration.md) | `manifest.json` / vendor rebuilds |
-| [mobile-native-state.md](mobile-native-state.md) | Mobile native INPUT purity vs the fingerprint ratchet (L1–L4) |
 | [coverage-run-filters.md](coverage-run-filters.md) | Filtering a vitest coverage run without over-measuring |
-| [device-only-runtime-gaps.md](device-only-runtime-gaps.md) | APIs Hermes and Android's libcore lack that Node and the desktop JVM have |
 | [emulator-snapshot-settings.md](emulator-snapshot-settings.md) | `settings put global` on a lane that restores a cached AVD RAM snapshot |
-| [list-anchoring.md](list-anchoring.md) | Virtualized lists that hide rows arriving from another device |
-| [unreachable-vault.md](unreachable-vault.md) | A gateway that stops answering while the phone stays online |
 | [seat-identity.md](seat-identity.md) | A placeholder gateway id names a different seat file; a feed cursor with a second owner |
-| [loopback-identity-fallback.md](loopback-identity-fallback.md) | `deviceKeyFor` falling back to the host for a forwarded hop; the two forwarder lanes |
-| [lane-evidence.md](lane-evidence.md) | Why a green lane can vanish from the nightly report: upload path, `if: always()`, and the lane registry |
-| [ios-shell-injection.md](ios-shell-injection.md) | Re-using a cached iOS `.app` across commits: `expo export:embed` emits SOURCE, and a Hermes app runs it |
-| [generated-manifest-untracked-output.md](generated-manifest-untracked-output.md) | The blueprint manifest generator reads the directory, so untracked build output lands in a committed manifest |
-| [server-dist-resolution.md](server-dist-resolution.md) | `@centraid/server/*` self-imports resolve to `dist`; rebuild before trusting a `serve()`-booting test |
-| [file-uri-database-locations.md](file-uri-database-locations.md) | A SQLite directory passed to expo-sqlite as a PATH opens `Application%20Support` — a second, empty database |
-| [expression-index-spelling.md](expression-index-spelling.md) | **Superseded (#996 W5)** — the order/census expression indexes went with the shaped store; kept because frozen history cites it |
+| [stale-core-slice.md](stale-core-slice.md) | A Kotlin/Native framework links `libcentraid_core_ffi.a` by PATH, so a changed Rust core ships as the old one with no error |
+| [shared-cargo-target.md](shared-cargo-target.md) | Two worktrees on one `CARGO_TARGET_DIR`: a build script's `OUT_DIR` is keyed by package identity, and a gate verdict is then worthless |
+| [serde-json-preserve-order.md](serde-json-preserve-order.md) | A `serde_json::Value`'s printed text is not canonical — `preserve_order` unifies across a build, so one crate's feature decides another crate's sort |
+| [first-dial-readiness.md](first-dial-readiness.md) | A seat's first dial races the gateway's `READY` line, a relay probe and the endpoint's own address discovery — all three read as "the gateway did not answer" |

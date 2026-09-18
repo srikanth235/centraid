@@ -1,0 +1,118 @@
+// Sealed mailboxes and share feeds (#1029 §3, §7).
+//
+// A mailbox is addressed by the RECIPIENT's identity key, at `/m/{identity}` on
+// whichever gateway that key's pkarr record names. Federation between a hosted
+// user and a self-hosted one is therefore key resolution plus an HTTPS POST,
+// and nothing else is needed.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// A DEPOSIT IS NOT SIGNED BY THE SENDER AT THE GATEWAY, which is deliberate:
+// the recipient's gateway never learns who is writing to the mailbox. The
+// sender's signature is INSIDE the sealed bundle, where only the recipient
+// reads it.
+//
+// The price of that is that authorisation cannot be "who are you", so it is
+// "what did the recipient hand out": a deposit capability the recipient issued
+// in the link ceremony (§7). A stranger cannot fill a mailbox.
+//
+// And because a deposit is unsigned, ONE LEAKED CAPABILITY MUST NOT FILL A
+// MAILBOX (Reference B, "Protocol"): the capability carries its own size cap
+// and rate limit as well as the mailbox TTL, and all three are gateway rules.
+message DepositCapability {
+  // The recipient's identity key — the mailbox's address.
+  bytes mailbox = 1;
+  // Random, and the rate-limit key. Revoking one sender is forgetting one id.
+  bytes capability_id = 2;
+  int64 expires_at_ms = 3;
+  uint64 max_deposit_bytes = 4;
+  uint32 deposits_per_hour = 5;
+  // Ed25519 by the recipient's identity key over fields 1..5.
+  bytes signature = 6;
+}
+
+message DepositRequest {
+  DepositCapability capability = 1;
+  // The sealed bundle. The gateway sees its length and nothing else.
+  bytes sealed = 2;
+}
+
+message MailboxEntry {
+  bytes entry_id = 1;
+  int64 deposited_at_ms = 2;
+  // The mailbox TTL applied at deposit. On Cloudflare a Durable Object alarm
+  // enforces it; the standalone adapter sweeps.
+  int64 expires_at_ms = 3;
+  bytes sealed = 4;
+}
+
+// Drain and ack are both signed by a device key with a CURRENT certificate from
+// that identity key — the same rule the lease uses, so a superseded phone stops
+// draining a mailbox at the same moment it stops writing a vault.
+message DrainResponse {
+  repeated MailboxEntry entries = 1;
+  // Entries the gateway still holds beyond this page.
+  bool more = 2;
+}
+
+message AckRequest {
+  repeated bytes entry_ids = 1;
+}
+
+// A SHARE CAPABILITY SCOPES EXACTLY WHAT IT MAY READ.
+//
+// The gateway records which object ids a share references, so a capability
+// reads exactly those and nothing else in the vault. Scope is over WHOLE
+// objects and over PACK RANGES, because a thumbnail is an item inside a ~16 MiB
+// pack and a share that could only name whole objects would hand the recipient
+// every other member's thumbnail in the same pack.
+//
+// A pack a live share references is NEVER REPACKED (F8): repacking would
+// invalidate these ranges and every recipient's cached references.
+//
+// Revocation takes effect immediately — the gateway forgets the capability, and
+// the next read is refused.
+message ShareCapability {
+  bytes share_id = 1;
+  // The recipient's identity key. It needs no account on the owner's gateway.
+  bytes recipient = 2;
+  // Whole objects this capability may read.
+  repeated bytes objects = 3;
+  // Byte ranges inside pack objects it may read.
+  repeated PackRange ranges = 4;
+  int64 expires_at_ms = 5;
+  // Ed25519 by the owner's vault identity key over fields 1..5.
+  bytes signature = 6;
+}
+
+message PackRange {
+  bytes object = 1;
+  uint64 offset = 2;
+  uint64 length = 3;
+}
+
+// `/v/{vault}/s/{share_id}/feed` — an append-only list of sealed entries,
+// written by the owner under its lease.
+message FeedRequest {
+  // Read entries after this sequence number. Recipients pull while the owner's
+  // phone sleeps, so the cursor is theirs and not the server's.
+  uint64 after = 1;
+  uint32 limit = 2;
+}
+
+message FeedEntry {
+  // SEQUENCE NUMBERS ARE OWNER-ASSIGNED, so a feed re-created on a new gateway
+  // continues where recipients' cursors left off. A server-assigned sequence
+  // would restart at one and every recipient would re-read the whole feed —
+  // or, worse, skip it.
+  uint64 seq = 1;
+  bytes object = 2;
+  int64 appended_at_ms = 3;
+}
+
+message Feed {
+  repeated FeedEntry entries = 1;
+  uint64 head_seq = 2;
+}

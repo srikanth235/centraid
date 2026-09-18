@@ -1,0 +1,35 @@
+// Admin verbs (#1020, D-1020-C4).
+//
+// **These are command inputs, not a second envelope.** A headless gateway has
+// no admin UI; every admin operation is a `Command` from any owner seat or from
+// the CLI, and produces the same receipts (#1020 Decision, *The CLI is a
+// client*). So these messages define the INPUT of named commands and the
+// answers come back as `CommandOutcome` — there is no privileged path here to
+// audit separately.
+//
+// The command names are stated once, here, as the enum below, so the CLI and
+// the shells cannot spell them differently.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// The registered name of each admin command.
+enum AdminCommand {
+  ADMIN_COMMAND_UNSPECIFIED = 0;
+  // `devices.list`
+  ADMIN_COMMAND_DEVICES_LIST = 1;
+  // `devices.revoke`
+  ADMIN_COMMAND_DEVICES_REVOKE = 2;
+  // `backup.now`
+  ADMIN_COMMAND_BACKUP_NOW = 3;
+}
+
+// DevicesList, DeviceRow, DevicesListResult AND DevicesRevoke LEFT WITH THE
+// SEATS THEY LISTED (#1029 §1, §6). Their two consumers were the gateway's
+// allowlist — now server-side — and a paired client's "Devices" screen.
+//
+message BackupNow {
+  // Take the snapshot even if the interval has not elapsed.
+  bool force = 1;
+}

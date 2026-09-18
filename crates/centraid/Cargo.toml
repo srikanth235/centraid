@@ -1,0 +1,61 @@
+[package]
+name = "centraid"
+description = "The one binary: gateway, seat, pair, devices, backup, doctor, recover, export, native-host (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "centraid"
+path = "src/main.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-apps-locker = { path = "../apps/locker" }
+centraid-apps-tally = { path = "../apps/tally" }
+centraid-core = { path = "../core" }
+centraid-blobs = { path = "../blobs" }
+centraid-protocol = { path = "../protocol" }
+centraid-vault = { path = "../vault" }
+base64.workspace = true
+clap.workspace = true
+flate2.workspace = true
+prost.workspace = true
+serde = { workspace = true }
+thiserror.workspace = true
+serde_json.workspace = true
+# `net` for the seat's Unix socket (and `UnixStream::peer_cred`, which is what
+# lets the peer check happen without `unsafe`); `fs` is not needed — the blob
+# door's waiting read runs on the blocking pool over `std::fs`.
+tokio = { workspace = true, features = ["signal", "net"] }
+tracing.workspace = true
+url.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+centraid-core-ffi = { path = "../core-ffi" }
+# THE RESTORE DRILL'S THREE CRATES (#1029 W5). `tests/restore_drill.rs` drives
+# the real keys, the real vault and the real gateway rules together — which is
+# the only way "lose the phone, type 24 words, get every vault back" is one
+# claim rather than three. Dev-only: the binary itself is not a gateway and does
+# not derive an account key.
+centraid-identity = { path = "../identity" }
+centraid-gateway-core = { path = "../gateway-core" }
+# THE ARM THAT CROSSES A SOCKET (#1029 W5B-4). The drill's wire half brings up
+# a real `gateway-server` on `127.0.0.1:0` and talks to it through the phone's
+# own client — so the signature, the four headers, the JSON and the
+# `VAULT_MOVED` refusal are exercised end to end rather than described. Both are
+# dev-only: this binary is not a gateway and does not sign a gateway request.
+centraid-gateway-server = { path = "../gateway-server" }
+centraid-gateway-client = { path = "../gateway-client" }
+centraid-ontology = { path = "../ontology" }
+hex.workspace = true
+rusqlite.workspace = true
+centraid-api-proto = { path = "../api-proto" }
+prost.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tempfile.workspace = true

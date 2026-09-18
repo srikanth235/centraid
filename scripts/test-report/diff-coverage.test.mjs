@@ -39,41 +39,25 @@ describe("parseUnifiedDiffAddedLines", () => {
 });
 
 describe("isInstrumentableSource", () => {
-  test("accepts package/app/tool and blueprint runtime source, rejects tests and docs", () => {
-    expect(isInstrumentableSource("packages/vault/src/foo.ts")).toBe(true);
-    expect(isInstrumentableSource("apps/web/src/main.tsx")).toBe(true);
-    expect(isInstrumentableSource("packages/model-runtime/src/ctc.ts")).toBe(
-      true
-    );
-    expect(
-      isInstrumentableSource(
-        "packages/blueprints/apps/tasks/handlers/create.ts"
-      )
-    ).toBe(true);
+  test("accepts package src, rejects tests, docs and tooling", () => {
     expect(
       isInstrumentableSource("packages/design/src/elements/kit-avatar.ts")
     ).toBe(true);
-    expect(
-      isInstrumentableSource(
-        "packages/blueprints/apps/tasks/handlers/create.test.ts"
-      )
-    ).toBe(false);
-    expect(
-      isInstrumentableSource("packages/blueprints/apps/tasks/app.json")
-    ).toBe(false);
-    expect(isInstrumentableSource("packages/vault/src/foo.test.ts")).toBe(
+    expect(isInstrumentableSource("packages/test-kit/src/clock.ts")).toBe(true);
+    expect(isInstrumentableSource("packages/design/src/foo.test.ts")).toBe(
+      false
+    );
+    expect(isInstrumentableSource("packages/design/src/foo.d.ts")).toBe(false);
+    expect(isInstrumentableSource("desktop/electron/src/main/ipc.ts")).toBe(
       false
     );
     expect(isInstrumentableSource("README.md")).toBe(false);
     expect(isInstrumentableSource("scripts/x.mjs")).toBe(false);
     // Package-root tooling configs are outside the executable include roots.
-    expect(isInstrumentableSource("packages/vault/stryker.config.mjs")).toBe(
+    expect(isInstrumentableSource("packages/design/vitest.config.ts")).toBe(
       false
     );
-    expect(
-      isInstrumentableSource("packages/vault/vitest.mutation.config.ts")
-    ).toBe(false);
-    expect(isInstrumentableSource("packages/vault/vitest.config.ts")).toBe(
+    expect(isInstrumentableSource("packages/design/assets/app.json")).toBe(
       false
     );
   });

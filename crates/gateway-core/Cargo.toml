@@ -1,0 +1,38 @@
+[package]
+name = "centraid-gateway-core"
+description = "Every rule a Centraid gateway enforces, written once (#1029 §3)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_gateway_core"
+path = "src/lib.rs"
+
+# WASM-CLEAN BY CONSTRUCTION (#1029 §3). The Cloudflare adapter compiles this
+# crate to `wasm32-unknown-unknown` for a Worker, so the dependency list is as
+# much a rule as anything in `src/`: no tokio, no rusqlite, no filesystem, no
+# ambient clock and no thread. Time and randomness are INPUTS to the rules,
+# never globals they reach for — `tests/wasm_clean.rs` is the scan that keeps
+# that true, and `cargo check --target wasm32-unknown-unknown` is the proof.
+[dependencies]
+# The wire types. The mapping from a rule to the code it answers with belongs
+# beside the rule, not in each adapter.
+centraid-api-proto = { path = "../api-proto" }
+# ONE HASH: an object's name is the BLAKE3-256 of its ciphertext.
+blake3.workspace = true
+# Request signatures. Pure Rust, so it crosses to `wasm32` unchanged. This crate
+# deliberately does NOT depend on `centraid-identity`: the certificate's byte
+# layout belongs to the crate that mints it, and `centraid-identity` carries
+# pkarr, which a Worker has no business linking. An adapter decodes the
+# certificate there and hands `auth::CertifiedDevice` in.
+ed25519-dalek.workspace = true
+hex.workspace = true
+# The store's attested checksum, and the ONE place this crate names it. See
+# `src/checksum.rs`, and the `crates/vault/tests/one_hash.rs` allowlist entry
+# that carries the reason.
+sha2.workspace = true
+thiserror.workspace = true

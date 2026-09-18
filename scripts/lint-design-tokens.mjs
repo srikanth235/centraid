@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Design-token zero-debt gate (#630 Wave 0; type/radius closure in #747).
 //
-// Raw hex colors and literal font-family stacks in client/blueprint CSS are
+// Raw hex colors and literal font-family stacks in consumer CSS are
 // design-system forks. The checked-in budget is now empty; comparison remains
 // so any attempted allowance is visible in review and the gate still explains
 // stale or widened entries. Comments are stripped so issue references such as
@@ -15,13 +15,7 @@ import path from "node:path";
 import { readLedgerSection, writeLedgerSection } from "./check-ledgers.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const TARGETS = [
-  "packages/client/src",
-  "packages/blueprints/apps",
-  "packages/design/src/elements",
-  "apps/web/src",
-  "apps/extension/static",
-];
+const TARGETS = ["packages/design/src/elements", "extension/static"];
 // The CSS debt ledger is `tests/budgets.json#designTokenCss.budgets` since
 // #915 Wave 4, and it is still deliberately EMPTY — see docs/traps/design-tokens.md.
 const BUDGET_FILE = path.join(ROOT, "tests/budgets.json");

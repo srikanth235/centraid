@@ -75,9 +75,7 @@ describe("scanSkipSites", () => {
 
   test("scan configuration excludes the detectors' own fixtures", () => {
     expect(SCAN_EXCLUDE).toContain("scripts/test-report/");
-    expect(SCAN_INCLUDE.some((pattern) => pattern.startsWith("tests/"))).toBe(
-      true
-    );
+    expect(SCAN_INCLUDE).toContain("scripts/**/*.test.mjs");
     expect(SKIP_PATTERNS.every((detector) => detector.pattern.source)).toBe(
       true
     );
@@ -108,14 +106,8 @@ describe("discoverSkipSites", () => {
       "scripts/gateway-package/nested.test.mjs",
       "test('x', (t) => {\n  t.skip('dist missing');\n});"
     );
-    writeFixture(
-      root,
-      "apps/mobile/scripts/nested.test.mjs",
-      "it.todo('mobile script');"
-    );
     const sites = await discoverSkipSites({ root });
     expect(sites.map((found) => found.key).sort()).toEqual([
-      "apps/mobile/scripts/nested.test.mjs#1",
       "scripts/gateway-package/nested.test.mjs#1",
       "scripts/top.test.mjs#1",
     ]);

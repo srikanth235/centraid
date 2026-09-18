@@ -1,0 +1,136 @@
+{
+  "digest": "5b50d566bf4c3fe88f5e63ce9e4610acdffe7554b796e9d5154758b13dc181cf",
+  "scenarios": [
+    {
+      "checks": [
+        {
+          "actual": "needs-action",
+          "claim": "the task starts open",
+          "expected": "needs-action"
+        },
+        {
+          "actual": ["completed", "(host-clock)"],
+          "claim": "completing twice, from two apps, is one completion",
+          "expected": ["completed", "(host-clock)"]
+        },
+        {
+          "actual": ["needs-action", null],
+          "claim": "reopening is not completing",
+          "expected": ["needs-action", null]
+        }
+      ],
+      "drift": "ONT-27",
+      "id": "ONT-27/one-completion",
+      "surfaces": ["People — the person's tasks", "Tasks — the list"],
+      "title": "completing from People and then from Tasks is one completion"
+    },
+    {
+      "checks": [
+        {
+          "actual": ["string", null, 1],
+          "claim": "the repeating task spawns exactly one successor",
+          "expected": ["string", null, 1]
+        },
+        {
+          "actual": ["id-0164", "id-0164"],
+          "claim": "both occurrences carry the head's series identity",
+          "expected": ["id-0164", "id-0164"]
+        },
+        {
+          "actual": 1,
+          "claim": "the successor is still about Mum",
+          "expected": 1
+        }
+      ],
+      "drift": "ONT-27",
+      "id": "ONT-27/the-successor-is-still-about-the-person",
+      "surfaces": [
+        "People — the person's tasks",
+        "Tasks — the recurring series"
+      ],
+      "title": "a recurring person task rolls over once, and keeps its links"
+    },
+    {
+      "checks": [
+        {
+          "actual": ["failed", "failed"],
+          "claim": "a task may not be its own parent, by either door",
+          "expected": ["failed", "failed"]
+        },
+        {
+          "actual": ["failed", "failed", true],
+          "claim": "`due_at: banana` is refused by either door, with one sentence",
+          "expected": ["failed", "failed", true]
+        },
+        {
+          "actual": "failed",
+          "claim": "February 31 is not a day",
+          "expected": "failed"
+        }
+      ],
+      "drift": "ONT-26",
+      "id": "ONT-26/one-invariant-boundary",
+      "surfaces": ["Tasks — the editor", "Atlas — the row editor"],
+      "title": "the same impossible task, refused by the command and by the row editor"
+    },
+    {
+      "checks": [
+        {
+          "actual": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            },
+            {
+              "amount_minor": 5000,
+              "currency": "USD"
+            }
+          ],
+          "claim": "the position is two balances, one per currency",
+          "expected": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            },
+            {
+              "amount_minor": 5000,
+              "currency": "USD"
+            }
+          ]
+        },
+        {
+          "actual": "unavailable",
+          "claim": "the single hero figure is unavailable, not a sum",
+          "expected": "unavailable"
+        },
+        {
+          "actual": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            },
+            {
+              "amount_minor": 5000,
+              "currency": "USD"
+            }
+          ],
+          "claim": "and it names the components rather than adding them",
+          "expected": [
+            {
+              "amount_minor": 5000,
+              "currency": "EUR"
+            },
+            {
+              "amount_minor": 5000,
+              "currency": "USD"
+            }
+          ]
+        }
+      ],
+      "drift": "ONT-23",
+      "id": "ONT-23/two-currencies-are-two-balances",
+      "surfaces": ["Tally — the dashboard hero", "Tally — the group ledger"],
+      "title": "USD 100 + EUR 100 is two balances, and nothing is 200"
+    }
+  ]
+}

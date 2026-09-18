@@ -1,0 +1,32 @@
+# A page of rows, with a keyset cursor and money that carries its own exponent
+# and locale. JPY is deliberate: an exponent of 0 is what breaks a renderer that
+# divides minor units by 100 unconditionally, which is v0's bug
+# (`packages/design/src/format.ts:38`).
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_ACTIVITY
+data {
+  rows {
+    expense_id: "exp-0001"
+    description: "Dinner"
+    amount { minor: 4250 currency: "USD" exponent: 2 locale: "en-US" }
+    group_name: "Flat"
+    payer_name: "Ada"
+    occurred_at: "2026-09-11T19:30:00+01:00"
+  }
+  rows {
+    expense_id: "exp-0002"
+    description: "Taxi"
+    amount { minor: 3200 currency: "JPY" exponent: 0 locale: "ja-JP" }
+    group_name: "Trip"
+    payer_name: "Grace"
+    occurred_at: "2026-09-10T08:05:00+09:00"
+    settled: true
+  }
+  next_cursor: "2026-09-10T08:05:00+09:00|exp-0002"
+  net_balance { minor: -1050 currency: "USD" exponent: 2 locale: "en-US" }
+}
+pending_expense_ids: "exp-0001"

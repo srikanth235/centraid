@@ -8,7 +8,7 @@
  * intrinsic to the suite, not a one-off manual run.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -183,9 +183,15 @@ test("the real repository is clean and fully ledgered", () => {
   // stands, so a red run here means real Rust changed.
   const result = auditUnsafeEdges();
   assert.deepEqual(result.findings, []);
-  assert.deepEqual(Object.keys(result.counts).toSorted(), [
-    "apps/web/iroh-wasm",
-    "packages/tunnel/data-plane",
-    "packages/tunnel/native",
-  ]);
+  assert.deepEqual(
+    Object.keys(result.counts).toSorted(),
+    Object.keys(
+      JSON.parse(
+        readFileSync(
+          new URL("rust-unsafe-ledger.json", import.meta.url),
+          "utf8"
+        )
+      ).crates
+    ).toSorted()
+  );
 });

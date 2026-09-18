@@ -1,6 +1,6 @@
-# Protocol and feature contracts (C1–C4)
+# Protocol and feature contracts
 
-Policy for gateway ↔ clients (desktop, web, mobile, and the browser extension in [#462](https://github.com/srikanth235/centraid/issues/462)). Settled with issue [#468](https://github.com/srikanth235/centraid/issues/468). **C1–C3 must land before #462** creates the first real old-client / new-gateway skew (C4).
+Policy and shape for the wire between a gateway and its seats — the mobile shells, the desktop's `centraid seat` sidecar — and for the local channel the desktop and the browser Companion speak to a seat. Settled with [#468](https://github.com/srikanth235/centraid/issues/468) as C1–C3, and restated for the one tree by [#1020](https://github.com/srikanth235/centraid/issues/1020) and [#1025](https://github.com/srikanth235/centraid/issues/1025).
 
 ## C1 — Two contracts
 
@@ -12,19 +12,19 @@ Wire schema changes **never break parsing** in either direction:
 | --- | --- |
 | New fields | Optional with defaults on the reader |
 | Optional → required | Forbidden without a coordinated floor bump |
-| Removed fields | Stay accepted (ignore) until the floor drops them |
-| Types | Never narrow (string ↛ enum of fewer values; number ↛ int-only) without a floor |
-| Discriminants | Add new union members only as unknown-tolerant or behind a capability |
+| Removed fields | `reserved`, never reused; stay accepted (ignored) until the floor drops them |
+| Types | Never narrow without a floor |
+| Discriminants | Add new `oneof` members only as unknown-tolerant (`Unsupported`) or behind a capability |
 
-The handshake and parsers stay green across versions even when a **feature** is unavailable.
+The handshake and parsers stay green across versions even when a **feature** is unavailable. `buf breaking` holds the rules mechanically (see [the v1 wire](#the-v1-wire-two-packages-two-promises-1020)).
 
 ### (b) Feature contract — per feature
 
-New product capability requires a **gateway capability flag** (or equivalent version/capability surface).
+New product capability requires a **capability flag** in `Hello.capabilities` (or a version-window move).
 
-- Old gateways / clients show a clear **"update the gateway"** / **"update the app"** wall.
+- An old gateway or seat shows a clear **"update the gateway"** / **"update the app"** wall — the shell renders `UpgradeRequired`.
 - **No fallback paths.** No degraded modes. No defensive branches scattered through feature code that pretend an old host can half-run the new flow.
-- Capability detection happens in **exactly one place** (central map / handshake), not re-derived in every screen and route.
+- Capability detection happens in **exactly one place** — the handshake (`judge` in `crates/protocol/src/version.rs`) — not re-derived in every screen.
 
 **Decided:** no-fallback is confirmed policy, not a proposal. Both ends are under one maintainer pre-1.0; every fallback branch is permanent review tax.
 
@@ -36,86 +36,12 @@ parse always succeeds  →  capability check  →  feature runs OR single update
 
 Never: parse succeeds → feature code branches into three historical shapes.
 
-### Replica-specific correctness fields
-
-The offline replica extends the additive wire contract with fields that are safe for older readers to ignore and required by newer readers when present:
-
-- `commitId` groups all change rows from one canonical write transaction; servers page through complete groups and expose `hasMore` for bounded catch-up.
-- `rowVersion` is the ROW'S OWN `row_version` column, bumped by the row's touch trigger — never a log position ([#996](https://github.com/srikanth235/centraid/issues/996) R6). It means the same thing on the gateway and on the phone, which is what lets a seat state a precondition at all. Clients apply upserts and deletes monotonically, ignoring stale replay data. Zero is "not there, or never touched": `row_version` starts at 1, so zero can never be a live row's answer. Every replicated mutable table carries the column, the ext band included; the tables that still do not are registered in `packages/vault/src/schema/updated-at.ts` and a canary asserts the register in both directions.
-- `baseVersions` on an intent is an optimistic concurrency precondition. A stale precondition produces a structured `conflict` outcome, not a generic transport failure, and does not dispatch the action. **Every write states one** ([#1014](https://github.com/srikanth235/centraid/issues/1014) R18) — a chained write and a destructive one included. The only row with nothing to observe is one a queued predecessor will mint, which the write names with `{"$intent": …}` instead. A chained write's base is REBASED at the gateway onto the version its predecessor produced, so the child is checked against its parent rather than against the pre-chain row; a third party's edit between the two is still a conflict. The array is sorted by `(entity, rowId, shapeId)` compared as UTF-16 CODE UNITS, never by locale collation, because both ends hash it and a runtime's ICU order is not a property of the string ([#1014](https://github.com/srikanth235/centraid/issues/1014) C20).
-- `commitSeq` on an `executed` outcome is the canonical commit that answer landed in, and it is what a seat's overlay waits on: the pending row clears when the seat's applier reaches that commit, not when the answer arrives. It is stamped inside the batch's own transaction, and it travels on every path an outcome travels — the intent reply, the recovery list and the peer answer, where the number is the ORIGIN's. An outcome with no `commitSeq` (a gateway older than the field) is settled by `answeredVersions` instead ([#1014](https://github.com/srikanth235/centraid/issues/1014) R1).
-- `coverage` distinguishes a readable partial preview from a complete replica; `durability` distinguishes persistent storage from an in-memory fallback. These values are status/result metadata, not permission signals.
-- `x-centraid-seat-vault` on the seat snapshot door names the vault the artifact is a copy of, beside the seq, epoch and schema-epoch headers ([#1014](https://github.com/srikanth235/centraid/issues/1014), C16). A seat compares it with the vault it asked for BEFORE it downloads a byte and refuses a mismatch by name; it also asks the expanded file's own `core_vault` row the same question, which needs nothing from the gateway. The header is OPTIONAL in both directions and stays that way: an older app ignores it, and a newer app against a gateway that does not send it treats the answer as "the door did not say" — it installs, reports the bootstrap as unverified-at-the-door and logs it, rather than refusing a compatible pair. Wire-compatibility here is load-bearing: the replica protocol does not get a lockstep gateway-and-app upgrade.
-- `?seq=` on the seat snapshot door is the seat PINNING the artifact it measured ([#1014](https://github.com/srikanth235/centraid/issues/1014), V4). The door builds for the current watermark, and a gateway is never quiescent — the system recognition automations write their conversation ledger on every boot and those rows replicate — so a phone that HEADed seq 4 and then asked for bytes was handed seq 5, which `If-Range` correctly refuses as a different file; on a slow enough connection the bootstrap never landed. A GET carrying `?seq=` is served that artifact while the gateway still holds it. It is a HINT, NEVER A DEMAND: a seq the cache has evicted, or nonsense, is answered with the current artifact rather than a 404, and a gateway older than #1014 ignores the parameter — so the client keeps a bounded re-HEAD (`SEAT_SNAPSHOT_MOVE_RETRIES`, `packages/client/src/replica/seat/seat-loop.ts`) for both cases. The snapshot cache keeps the newest few artifacts BY SEQ, evicting oldest first, and never evicts one with a download in flight or the one the current request is serving; eviction used to sort the directory listing lexically over `snapshot-<hash>-<seq>`, which orders by the hash prefix and could delete the artifact a phone was resuming (V19).
-- `truncated` and `appliedLimit` on a read result say that the read's own window cut the answer short, and name the window that produced the rows. They answer a different question from `coverage`, which is about how much of the library this device holds: a fully bootstrapped replica still truncates a 5,000-row roster at the 1,000-row default. Both are absent when nothing was cut off, and `acceptTruncation` on a read request is the caller declaring it will take the default window (#922) — a wire field with no first-party writer left: naming it in a blueprint or in mobile app code is a TRIPWIRE FAILURE (`packages/blueprints/src/paged-read-tripwire.test.ts`, `apps/mobile/src/kit/hooks/replica-read-windows.test.ts`, both asserting zero occurrences), because the flag existed so a caller could take an unnamed window and then be surprised by the cut. A read states its own window. All three are optional additive fields — an older reader ignores them and behaves exactly as it did — so they do not bump the protocol version.
-
-The intent door has four answers and each means something different to the seat. `200` carries a settled outcome; `202` carries `in-flight` or a `parked` outcome, both of which the seat re-asks about; `409` is a refusal the seat must act on — `replica_intent_payload_mismatch` when this id was admitted with a different payload, `intent_id_reused` when the id is held by a different admission, and `replica_intent_outcome_expired` when the idempotency window has lapsed — and in all three the remedy is a new id against a freshly observed base; `500` is the vault failing to record the admission, which is a retry, never an acknowledgement ([#1014](https://github.com/srikanth235/centraid/issues/1014) X20).
-
-**An intent's identity is `(vaultId, intentId, payloadHash)`, and the device is attribution** ([#1014](https://github.com/srikanth235/centraid/issues/1014) G23/V9). The durable outbox lives in the seat file, and the seat file outlives the enrolment: a phone restored from a device backup, or an OS app clone, comes back under a new endpoint id and replays an outbox of intents this vault already holds. Keyed on the device, every one of them was a `409 intent_id_reused` the seat could not retry past. The id is client-minted and random and the hash covers the app, the action, the input and the base versions, so a caller who can state both is holding the same intent; a different payload under a known id is still a reuse, from any device.
-
-**An answer that has aged out leaves a tombstone, never a hole** ([#1014](https://github.com/srikanth235/centraid/issues/1014) G16). The retention sweep collapses a settled outcome past `expires_at` instead of deleting it: the id, the device, the app, the action, the payload hash and the window stay; the payload, the reason, the produced set and the chain go. A deleted row would answer "I have never seen this id" and run the intent a second time — the one thing the window exists to prevent. An outcome that is still WAITING (`parked`, `sending`, `queued`) is never collapsed, and neither is one whose `commit_seq` a live seat has not reached.
-
-On the member write door every RETAINED verdict is a dedupe hit — `executed`, `parked`, `denied`, `failed` and `conflict` all answer from the row rather than invoking again, because a second invocation of a parked write puts a second confirmation in the owner's queue. `sending` is the only status that re-enters: it means the row died before its outcome. A write whose durable verdict could not be recorded is answered `in-flight`, never `executed`.
-
-The browser outbox migration is additive: it never drops the pending-intent store. Settling an intent atomically records its sanitized outcome and removes the queued input, so conflict details survive a reload without retaining the original payload.
-
-### Subscription stream and cursor contract (#731, reshaped by #929)
-
-A shared container does not add a second device replica dialect. A device still holds one ordinary physical replica cursor for each vault, and that cursor covers all rows in the vault even when they came from several grants. What a subscription adds is one row per `(shape_id, audience_vault_id)` in `share_subscription`, held on BOTH seats with the same shape: the origin reads `cursor_seq` as that audience's acknowledgement, the audience reads it as how far it has ingested.
-
-Catch-up ships ROWS, over the ordinary replica change grammar, through four peer doors — `/centraid/_peer/replica/{bootstrap,changes,blob,intents}` (peer protocol 2). There is no separate command log and no per-grant hash chain: the origin is the single writer of the container, so its own replica change sequence is the order, and `cursor_epoch` names the epoch that sequence is measured in.
-
-Deterministic apply rules:
-
-- `cursor_epoch` unequal to the origin's current epoch is a **re-bootstrap**, exactly as it is for a device; the seat never extends a floor on a subscriber's behalf;
-- a batch that starts AHEAD of `cursor_seq` is a gap — fetch the missing tail or re-bootstrap; a batch that starts at or behind it OVERLAPS and every change in it is an idempotent upsert or delete under the same version guard;
-- `structure_digest` is what the seat last ingested over everything a field update cannot express (which rows, an album's membership, a folder's filing, a Tally sub-graph). Unequal is re-projection; equal turns a refreshed shape into one UPDATE per moved row, which is what stops a one-field edit waking every device;
-- ingest records shape-keyed `share_subscription_lineage` claims carrying `origin_row_version`, so a row survives a purge while any other live shape claims it, and a member's phone drops a pending write only once its replica holds the origin's answered version;
-- the domain mutation and the cursor advance settle atomically at the audience vault;
-- derivative rows are absent from the shape, so each member's local recognition pipeline remains authoritative.
-
-Revocation purges the shape's rows on the audience and settles `removed` only on the audience's cursor acknowledgement; a share that was never delivered settles with the "nothing had been delivered" detail instead.
-
-Four properties the stream depends on, each of them a fix under [#1014](https://github.com/srikanth235/centraid/issues/1014):
-
-- **The doorbell rings after the commit.** Every phone and desktop write reaches the vault through the Gateway's invocation batch, which is ONE transaction. A provenance ring raised from inside a run used to reach the host while that transaction was still open, so the grant-refresh listener read the pre-commit vault and whatever it threw was swallowed — and sharing followed only grant-plane writes. Rings now accumulate in the batch and flush once after `COMMIT` with the union of entity types. A ring that names NO types (a sweep, an import, a purge) means "walk every live grant subject"; an empty list means "this commit moved nothing a grant could care about". The two are different answers and are never collapsed.
-- **A resend scrubs from the audience's side.** `reason: "resend"` is the origin saying its own record of what this audience holds is not to be trusted — behind the retention floor, or in another epoch after a roll. Its `leave` list comes from exactly that record, so the audience also drops every claim the resend did not carry, by the same rule as a leave: deleted only when no other live grant claims it. A claim the resend DID carry but the applier could not place is kept — skipped is the pass falling short, never the row leaving.
-- **Blobs stream, and the manifest's size is the cap.** The origin's blob door serves one 1 MiB chunk by RANGE and reports the size from `stat`, rather than reading the whole object per chunk. The audience streams each chunk into a staging file and adopts it under its content address, and refuses a `total` — or a byte count — past the size the manifest declared, before the next chunk is asked for.
-- **A refusal on this path is a state.** The blob door's dial used to let a connection error out of `pullShareTail` as a rejected promise, where the tail door answered `unreachable`; a peer whose link died mid-object therefore reached the sweep as a throw rather than a pending row. Both doors now answer with a state, and `tests/quality/share-path-chaos.integration.test.ts` — the plane's chaos lane, cataloged as `SHARE_PATH_FAULTS` in `tests/quality/network-faults.ts` — holds the six apply rules above under a cut tail page, a cut blob chunk and a duplicated delivery.
-- **Two vaults on one gateway need no dial.** A local pair carries `remoteVaultId: null` and no `vault_routes` row. The audience's pull and a member's forwarded edit take an in-process path that runs the peer doors' own admission (`admitGrantAtOrigin`) and the peer doors' own intent execution (`executeMemberIntent`); what it drops is the link check and the vault signature, both of which prove a REMOTE caller is the couple it claims to be. A caller inside the host that opened both vaults already is.
-
-### One intent grammar (#750, #929)
-
-A member command that cannot execute at the moment it is composed becomes a durable intent, and there is now one lifecycle rather than three: the replica pending-write outbox. A member's write to a shared container is a **signed replica intent the origin executes** — the member's vault signs a canonical envelope (intent id, shape, origin vault, member vault, command, input) with its Ed25519 identity key, the origin verifies it against `share_party_vault_binding` before invoking, and the receipt names the member rather than the owner whose credential executed it. The member's seat holds a pending row until its replica carries the origin's answer; the overlay lives in `replica_intent_outcome`, keyed by (intent, device), and only moves forward.
-
-The signed envelope carries the intent id, the shape, the origin vault, the member vault, the command, the input and the member's `baseVersions` — and, when the sender states them, an `expiresAt` and a per-send `nonce` ([#1014](https://github.com/srikanth235/centraid/issues/1014) V7). Those two ride as a TRAILING pair inside the signed bytes: an older peer signs and verifies exactly the bytes it always did, and a replayer who strips the pair off a newer envelope gets the older form, whose bytes the signature does not cover. The origin refuses an envelope past its own `expiresAt` with `409 expired`, AFTER verifying the signature — checking first would be checking a number anyone could have written — and consults the idempotency window's far edge on this path as it always did on the device path. The origin's payload hash covers the base versions, the window and the nonce, so two envelopes that differ only in what they were composed against are two intents.
-
-The origin runs the same conflict check the device door runs, over whatever base versions the envelope states; a conflict travels back as its own terminal answer carrying both versions, so the member's outbox row reads like a device conflict rather than spinning on a retry. A forwarded edit states no base version yet: `share_subscription_lineage.origin_row_version` is the origin's replica CHANGE SEQUENCE and not a `row_version`, and stating it would compare a transport position against a column.
-
-`parked` carries a structured `waitingOn` of kind `owner`, `origin` or `gateway`, plus the label from the link, so both seats say who is being waited on in the same words. A shape removal settles that shape's queued intents as `expired` with "no longer shared with you".
-
-An intent has exactly two answers and they belong to different people. The MEMBER withdraws their own; the OWNER of the origin decides a confirmation-gated one. Both still ride the `/centraid/_gateway/commons/intents/<intentId>/{cancel,decide}` paths (`packages/core/src/protocol/routes.ts`): the rail those names came from is gone, the names are not, and renaming a wire path is a compatibility act rather than a vocabulary one.
-
-The named identity fault rides the same refusal channel. When a member's presented vault identity key differs from the key its `share_party_vault_binding` pinned at join time, the refusal is a named reason rather than "invalid vault signature": the seat can then say the account changed keys, which is a different sentence from "we could not verify this".
-
-### Command→container routing is declared, not inferred (#750)
-
-Which commands may write into a shared container, and which input key carries the container id, are DATA (`packages/vault/src/share/container-routing.ts`), not string heuristics over the command name. Each row declares the command, its owning schema, the input key, the container type, how the container is resolved, and whether the command is actable by a member; a routed-but-undeclared command is refused BY NAME rather than landing as a private mutation the next pass reverts.
-
-Sharing as a subscription is pre-release (v0) and carries **no** wire compatibility surface: there is one frame shape and one intent envelope, every cursor, digest and signature field is required, and a peer presenting anything else is a hard fault that parks that subscription with a named state. No optional-when-absent field, no version negotiation below the peer protocol's own floor.
-
-### Pair-ticket multi-vault redemption
-
-A pair ticket is one-time onboarding envelope, not a gateway-wide grant. Its server-side invitation contains an ordered list of vault ids the owner already owns — no `role` field; access is ownership, not a grant per vault (#726 P0). Redemption creates the corresponding vault-scoped enrollments in one transaction and returns the first vault as the initial active vault. Newer responses additionally carry `vaultIds` and `vaults[]` with per-vault enrollment metadata; readers must default an absent list to the primary vault.
-
-Clients may present one scan/paste flow, but they must retain the resulting vault bindings independently. Revoking or forgetting one vault must not remove the other bindings, replicas, cursors, or outboxes. The gateway remains only the transport/control front door; authorization is evaluated per vault.
-
 ## C2 — `COMPAT(name)` tagging
 
 Every back-compat shim carries a machine-grepable comment:
 
-```ts
-// COMPAT(replica-epoch-v1): added 2026-07-01, drop when floor >= 0.4.0
+```rust
+// COMPAT(name): added <version or date>, drop when floor >= <schema_version>
 ```
 
 | Required               | Meaning                       |
@@ -124,168 +50,132 @@ Every back-compat shim carries a machine-grepable comment:
 | `added`                | Version or date introduced    |
 | `drop when floor >= …` | When cleanup is allowed       |
 
-**Ban:** untagged `??` / dual-path code that exists only for older peers. One `rg 'COMPAT\('` must produce the complete cleanup backlog.
+**Ban:** untagged dual-path code that exists only for older peers. One `rg 'COMPAT\('` must produce the complete cleanup backlog. Cleanup floors cite the wire `schema_version` or a capability name, never the product version.
 
 ## C3 — Wire-schema purity
 
 Schemas are **structural declarations only**:
 
-- No transforms, preprocess, or coercion inside the schema definition.
+- No transforms, preprocess, or coercion inside the schema definition. A `.proto` file declares shapes; a canonical-JSON `input` is validated against the command's own input schema in `crates/vault`, once.
 - Normalization is an **explicit post-validation pass** with a named function.
-- Tagged unions use **discriminated unions** (one clear discriminant field), not ad-hoc optional field combinations.
+- Tagged unions use one `oneof` with a clear discriminant, not ad-hoc optional field combinations.
 
-Keeps generated clients, docs, and human readers aligned; prevents "schema that is really a parser."
+Keeps generated clients (Rust, Kotlin, Swift, TypeScript), docs, and human readers aligned; prevents "schema that is really a parser."
 
-## C4 — Order of work
+## The v1 wire: two packages, two promises ([#1020](https://github.com/srikanth235/centraid/issues/1020))
 
-Land C1–C3 (this doc + code that honors it on the handshake and any new cross-client fields) **before** extension pairing (#462). The extension is the first long-lived client that will lag the gateway in the wild.
+The wire is protobuf over iroh QUIC, defined in [`crates/api-proto`](../crates/api-proto/README.md) as **two packages with two different compatibility promises** ([R-1020-4](decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020)):
 
-## Three numbers on the wire (issue #512)
+| Package | What it carries | Promise | Checked against |
+| --- | --- | --- | --- |
+| `centraid.core.v1` | Queries, commands, rows, change events, the pairing handshake, the admin command inputs | A **gateway compatibility commitment**: a member's paired phone depends on it | `buf breaking` against **the PR base and every released tag inside the version window** — a chain of individually-compatible commits can still break the release a member is running |
+| `centraid.screen.v1` | Screen states and screen events | **Shell-internal**; it may change every release | `buf breaking` against the PR base only |
 
-| Field | Role |
-| --- | --- |
-| `version` | **Product** semver — display / about only. Clients **must not** refuse connect because product strings differ. |
-| `protocolVersion` | Wire protocol integer (CapVer-style). Mutual support window with `minSupportedProtocol`. |
-| `minSupportedProtocol` | Oldest protocol this peer still speaks. |
-| `capabilities` | Required feature flags (C1) — not product version. The experimental-gate keys `automations` / `connectors` ([#774](https://github.com/srikanth235/centraid/issues/774)) are the one optional, absent-tolerant pair: absent reads as off, and clients wall or hide the surface rather than probing routes. |
+One schema with one promise would force the weaker half to carry the stronger half's cost: a screen-state field rename would become a wire break, so screen shapes would ossify or the promise would quietly stop being kept.
 
-Handshake (`judgeGatewayInfo`):
+### The version window
+
+`Hello` carries `schema_version`, `min_supported`, the product version and `capabilities`. The product version is **display only**: a seat must not refuse to connect because product strings differ, because a seat that refuses an unfamiliar gateway version cannot be fixed from the gateway side. The judgement is symmetric (`crates/protocol/src/version.rs`):
 
 ```
-ok iff peer.protocolVersion >= local.minSupported
-     && local.protocolVersion >= peer.minSupported
+ok iff peer.schema_version >= local.min_supported
+    && local.schema_version >= peer.min_supported
 ```
 
-Product skew (desktop 0.6 talking to gateway labeled 0.4) is **allowed** when protocol matches. Surfaces may skip shipping a product version without breaking connect.
+`SCHEMA_VERSION` and `MIN_SUPPORTED` are both `1` today.
 
-Constants live in `@centraid/core/protocol` (`GATEWAY_VERSION`, `GATEWAY_PROTOCOL_VERSION`, `GATEWAY_MIN_PROTOCOL_VERSION`).
+**The framing is `u32BE(len) ‖ body`** with a 256 KiB ceiling and three named refusals, in [`crates/protocol`](../crates/protocol/src/lib.rs) — a crate in which **no iroh type appears**, because deterministic simulation is the primary sync proof and a protocol that named a real network could not be one. `crates/net` implements the transport traits over iroh and `crates/sim` implements them over `turmoil`. The byte-level facts are a fixture (`contracts/protocol/framing-golden.json`), regenerated and diffed by a test, because that is the only form in which a Swift or Kotlin implementation can be held to the same answer.
 
-`GATEWAY_PROTOCOL_VERSION` and `GATEWAY_MIN_PROTOCOL_VERSION` both moved to `4` for [#996](https://github.com/srikanth235/centraid/issues/996) wave 3, which removes the required `multiVaultReplica` and `crossVaultPlacements` keys from `GatewayCapabilities` along with the mount plane they described — dropping required keys from a structural contract is a wire change either end would otherwise read as malformed. They moved to `3` before that for the member→owner wire rename (#726 P0 — ownership replaces roles). Each was a hard floor bump, no COMPAT window; an old client sees the update wall. See [decisions.md](decisions.md).
+**Compatibility, in four rules.** A gateway supports seats from the last **N = 3** minor releases; `open` and the pairing handshake exchange `{schema_version, min_supported}`; a seat outside the window gets a typed `UpgradeRequired` the shell renders, and a gateway older than the seat is allowed as long as the seat's `min_supported` admits it. Migrations are forward-only, held as fixtures in `contracts/migrations`, and a file newer than its binary refuses to open with `DowngradeRefused` rather than guessing.
 
-`COMPAT(name)` cleanup floors should cite **protocol** (or capability name), not product semver, when possible.
+**Unknown fields, and the honest limit.** The rule is that unknown fields are preserved and unknown message types are answered with `Unsupported{type_url}`, never dropped silently. prost 0.14 does not retain unknown fields — verified in the vendored source rather than assumed — so the invariant is held **one layer out**, at the frame: nothing in the v1 plane relays a _decoded_ message, and every payload that crosses a version boundary is opaque `bytes`. The residual gap is named rather than papered over: a **field** added in a future release is invisible to this build, and a middlebox that decoded and re-encoded would lose it. A test turns red if prost ever gains the feature ([D-1020-C13](decisions.md#wave-2-lane-rulings-1020)).
 
-### A second, independent handshake: the peer plane (issue #726 P3)
+**An intent's and a command's `input` are `bytes` carrying canonical JSON**, not a message per action and not `Any`. The input _is_ the hash preimage — the payload hash (lowercase hex BLAKE3, [#1025](https://github.com/srikanth235/centraid/issues/1025) S4) is taken over canonical JSON (`canonical_json` in `crates/vault/src/intents.rs`) and the gateway compares in constant time — and protobuf serialisation is explicitly not canonical, so a proto body could not carry a payload hash at all ([D-1020-C12](decisions.md#wave-2-lane-rulings-1020)).
 
-Two owners' gateways speaking directly over a link (see [ARCHITECTURE.md](../ARCHITECTURE.md#vault-ownership-and-sharing-726) and [SECURITY.md](../SECURITY.md#the-peer-plane-726-p3)) are not the gateway↔client relationship the numbers above govern, so they get their own version pair rather than reusing `GATEWAY_PROTOCOL_VERSION`: `PEER_PROTOCOL_VERSION` / `PEER_MIN_PROTOCOL_VERSION` in `packages/core/src/protocol/version.ts`, currently `1` / `1`. The two pairs are deliberately uncoupled — two linked gateways upgrade their peer protocol on their own owners' schedules, independent of whatever protocol version each speaks to its own clients.
+**The desktop's local channel is not on this wire.** The seat socket's frame carries a channel tag: `0x00` is a `centraid.core.v1` envelope byte-identical to what crosses iroh, `0x01` is one UTF-8 JSON local message naming things that cannot exist remotely — a peer uid, a byte offset into a file this process can see, a capability token for a child on this machine. Adding those to `centraid.core.v1` would put them under its FILE promise to seats that update on their own schedule ([D-1020-F9](decisions.md#wave-3-lane-rulings-1020)). A new local message is **additive** and does not bump `LOCAL_PROTOCOL_VERSION`, whose own rule is that it is bumped when a message changes shape.
 
-`judgePeerHandshake` (`packages/core/src/protocol/peer.ts`) implements the same C1 two-contract shape as the client handshake, applied to a peer instead: parse always succeeds, then the mutual version window is judged, then either the link forms or the peer sees exactly one typed refusal (`protocol_refused`) — never a parse error, never a silent downgrade. It is a hard floor with no COMPAT shim, consistent with the rest of #726's no-fallback posture. One detail worth naming because it is easy to get backwards: the peer-plane link **ceremony** judges this version window _before_ a presented link ticket is looked up or touched at all, so a peer running an incompatible protocol cannot burn a real ticket by attempting redemption and failing the handshake.
+## One ALPN, one connection per vault, one stream per request ([#1025](https://github.com/srikanth235/centraid/issues/1025) S2, S3)
 
-Everything on `/centraid/_peer/*` is gateway↔GATEWAY. No client, phone, or browser ever speaks it, and `packages/tunnel/fixtures/wire-golden.json` — the Swift/Kotlin client conformance fixture — was deliberately left unchanged when the peer plane landed: a phone has no links, so adding the peer ALPN there would falsely tell mobile it owes an implementation.
+The v1 plane is **one ALPN**, and it is the only one a v1 endpoint advertises: `centraid/v1`. Everything a device does with its gateway rides it — redeeming a pairing code, a page of the log, a write, a bootstrap offer, a blob's bytes. `centraid/v1/byte`, `centraid/v1/peer` and `centraid/v1/pair` are all gone ([D-1025-S2-1](decisions.md#slice-s2--one-protocol-1025), [D-1025-S3-4](decisions.md#slice-s3--bytes-both-ways-one-store-1025)).
 
-## Pre-1.0 schema stance (F1)
-
-Until 1.0:
-
-- Prefer optional additive fields for forward compatibility; the handshake's protocol and capability fields are required on every reachable gateway.
-- **Protocol** floor bumps refuse incompatible peers (update wall), not product string equality.
-- Vault DDL / storage **schemaEpoch** in replica code is a storage cursor concept; it may later diverge from wire protocol.
-- **1.0** = first release after which every schema change ships a migration ([decisions.md](decisions.md)).
-
-## RPC / API naming (`/centraid/_*` planes)
-
-Issue #504 batch 1. **Mechanical:** route constants live in `@centraid/core/protocol`; `scripts/lint-protocol-routes.mjs` (via `check:pr`) flags hard-coded known paths in extension + product CLI.
-
-### Plane scheme (de-facto, freeze carefully)
-
-| Prefix | Plane | Role |
-| --- | --- | --- |
-| `/centraid/_gateway/*` | Shell / control | Info, health, devices, pair, logs, … |
-| `/centraid/_vault/*` | Vault | Status, blobs, replica, consent, … |
-| `/centraid/_apps/*` | Apps store | List, publish, web-session mint, … |
-| `/centraid/_web/*` | Browser sessions | Control cookie proxy, redeem |
-| `/centraid/_brief/*` | Daily brief feature | Content-minimized current-vault summary |
-| `/centraid/_harnesses/*`, `/centraid/_automations/*`, … | Feature planes | Same underscore-plane pattern |
-
-The underscore planes above are gateway-wide surfaces. A running **app** owns its own surface under `/centraid/<appId>/*` (static assets, `_changes`, `_query`, `_turn`, and the app RPC routes below); the reserved `_`-prefixed segments inside an app prefix are the app's control sub-routes.
-
-### App RPC (per-app, issue #505)
-
-Handler invocation is **not** a plane — it is addressed under the invoking app's own prefix. The app id and handler name ride in the path; the JSON body carries only the arguments.
-
-| Method + path | Replaces | Body | Notes |
-| --- | --- | --- | --- |
-| `POST /centraid/<appId>/actions/<action>` | `centraid_write` | `{ input?, intentId? }` | Runs a declared action; a write. |
-| `POST /centraid/<appId>/queries/<query>` | `centraid_read` | `{ input? }` | Runs a declared query; a read (allowed for read-only devices). |
-| `GET /centraid/<appId>/_describe` | `centraid_describe` | — | Returns the app's manifest; `?action=<name>`/`?query=<name>` narrows to one handler. |
-| `POST /centraid/<appId>/_turn` | — | conversation turn | Opens the app's SSE conversation stream; `appTurnPath`. |
-
-The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0 ships no dual-route compat window ([decisions.md](decisions.md)). Path builders `appActionPath` / `appQueryPath` / `appDescribePath` / `appTurnPath` live in `@centraid/core/protocol`, alongside the vault-plane `assistantTurnPath` / `assistantResolvePath`. The persisted-conversation family (`/_centraid-conversations/apps/<appId>/…`) is a flat top-level name that rule 1 below forbids for new protocol entries, so its builders stay in `packages/client/src/conversation-routes.ts`. Auth, consent, vault scoping (`x-centraid-vault`), Companion grants, and browser-session scoping are unchanged — the reshape moved routing keys from the body into the path but kept every gate.
-
-### Rules
-
-1. **No new flat names** under `/centraid/<word>` without a plane underscore segment and a migration plan. (`<appId>` is a path parameter, not a reserved word — it addresses the app's own surface.)
-2. Request/response pairs stay under one plane; do not invent parallel `/v2` trees without epoch bump.
-3. Clients import `ROUTES` (and the app-path builders) from `@centraid/core/protocol` rather than string-copying paths.
-4. Wire schemas stay structural (C3); normalization is a named post-pass.
-
-### Blueprint-readiness feature contracts (#630)
-
-Mobile judges the normal gateway handshake before mounting a replica. The mutual protocol window and the required `seatReplica` capability — the snapshot and log-tail doors ([#996](https://github.com/srikanth235/centraid/issues/996)) — are evaluated once in `mobile-gateway-compatibility-core.ts`; incompatibility produces exactly one “update gateway” or “update app” wall. Feature code does not retry older route shapes or silently fall back to an online-only client.
-
-Household placement uses the gateway control plane because one request names an origin and an audience vault. It is **same-owner only** since #825: `POST /centraid/_gateway/edges` refuses a cross-owner pair with `cross_owner_give_retired` and names the grant plane in its message, because giving another person a copy is no longer a verb this product has (ruling G-copy). `gatewayPlacements` is the durable, link-token-idempotent client outbox ingress — the only route left on this plane since #726 P0 deleted the dead `/share` routes (`gatewayShare`, `gatewayShareRemove`, `gatewayShareReceipts` had no client caller; placement's own `share_access_receipts` recording stays). The gateway resolves both vault handles and confirms ownership — not a role — before entering either single-vault context.
-
-**A placement is bracketed by an attempt row, and the origin's release comes last.** The act touches three databases in three transactions — the origin's authority grant, the audience's projection, and for a move the origin's release — so `share_placement_attempts` records that the act began, with its parameters, BEFORE the first vault write; `share_access_receipts` is written after the projection; the release runs after the receipt; and the attempt row is dropped only when all of it is durable. Each step is idempotent by id (`INSERT OR IGNORE` under the authority plane's live-answer index, dedupe-by-content on the projection, a delete for the release), so a retry of the same `placementId` resumes rather than places twice. A retry that re-addresses that id — different items, a different pair — answers `409 placement_id_reused`: one token is one act. Releasing before the receipt was unrecoverable, not merely untidy: the origin was emptied with nothing recorded, and the retry's `readShareClosure` refused the items the first attempt had already removed, so the phone's outbox retried a `placement_failed` forever ([#1014](https://github.com/srikanth235/centraid/issues/1014)). The window this order chooses instead is the item existing in both vaults, which the retry resolves — and a receipt with an attempt row still beside it is exactly that state, so the route does not short-circuit on it.
-
-`briefToday` is a read-only feature-plane projection. The caller supplies an explicit local-day `[from,to)` range, date, and IANA time zone; the response is bounded events, due tasks, the day's photo count, and the owner's Tally net position. Notification schedulers may wake Home but must not copy those titles or balances into a push payload.
-
-### The grant plane (`/centraid/_vault/grants`, issue #825)
-
-A share is a **standing grant**, not a copy handed over: who may see or edit which subject, from when, until it is revoked. Owner tier, active-vault scope (`ROUTE_SECURITY_REGISTRY`), constants `ROUTES.vaultGrants` / `ROUTES.vaultGrantSubjects` with the `vaultGrantPath` / `vaultGrantRevokePath` builders in `@centraid/core/protocol`.
-
-| Method + path | Body / query | Answers |
-| --- | --- | --- |
-| `GET /centraid/_vault/grants/subjects` | — | `{subjects: [{subjectType, capabilities, fulfillment}]}` — the declared registry a surface consults BEFORE drawing Share. |
-| `POST /centraid/_vault/grants` | `{audienceKind: party\|circle, audienceId, subjectType, subjectId, capability: view\|edit, subjectLabel?, maxSizeBytes?}` | `201 {outcome: "created", grant, fulfillmentPass}` — or `200 {outcome: "exists", …}` for the grant already standing. Fulfillment runs on the gesture. |
-| `GET /centraid/_vault/grants?partyId=` | — | `{partyId, channel, grants}` — everything that person can reach, party grants unioned with the circle grants they are on the roster of (ruling G-audience). |
-| `GET /centraid/_vault/grants?audienceKind=&audienceId=[&includeRevoked=1]` | — | `{audience, grants}` — the literal rows for that audience; a party grant and a circle grant containing that party are never merged here. |
-| `GET /centraid/_vault/grants?subjectType=&subjectId=[&includeRevoked=1]` | — | `{subject, grants}` — the object side: who is this album/document shared with. |
-| `GET /centraid/_vault/grants/<grantId>` | — | `{grant}`, delivery state included; `404` for one this caller cannot see. |
-| `POST /centraid/_vault/grants/<grantId>/revoke` | — | `{outcome, grant, removal, message}` — one verb, uniform, honestly best-effort (ruling G-revoke). |
-
-Every grant on the wire carries `fulfillment: [{peerVaultId, state, updatedAt, detail}]`, the per-audience-vault delivery state (`awaiting_channel | syncing | delivered | remove_sent | removed`).
-
-**Absent is never empty.** `channel: null` is "this vault has never reached that person" and is a different fact from a `severed` channel; `fulfillment: []` is "no audience vault addressed yet"; a grant this caller cannot see is `404`, never an empty answer; an audience this vault has never heard of is `404 audience_not_found` (checked against `core_party` / `social_circle`) rather than the `grants: []` that means "nothing is shared with them". The one question this cannot be asked of is the SUBJECT read: subject ids are app-polymorphic, so no table at this layer can say whether one exists and `[]` there covers both facts. The seam behind the routes keeps the same distinction — a pass over a vault this host has not mounted answers `{origin: "unmounted", reason}`, never an empty report list.
-
-Refusals are actionable rather than silent: a subject type with no fulfillment strategy is `400 subject_not_offerable`, and an `edit` grant on a container no origin can execute writes for is `400 capability_not_offerable`, both naming what the vault CAN do instead. Three answers are shared by every route in the table, since the plane is owner-tier and active-vault-scoped: `403 device_identity_required` for a caller with no proved device, `409 vault_unavailable` when no vault is mounted for the request, and `404` — bare, nothing else said — for a mounted vault this caller's owner does not hold, the same topology hiding the edge plane uses. Clients read grants themselves through the **ordinary replica plane** — `share.authority` and `share.fulfillment` are consent-shaped entities like any other, so an app with the scope gets them in its shape and an app without it gets no entity at all.
-
-**What #825 took off the wire.** Copy-as-share retired (ruling G-copy), and these answer `not_found` exactly as an unknown path does:
-
-| Retired verb | Was |
+| Layer | Rule |
 | --- | --- |
-| `POST /centraid/_peer/edge/give` | pushing a closure to another owner's vault |
-| `GET /centraid/_peer/edge/closure/:id` | the audience pulling that closure back after answering an ask |
-| `POST /centraid/_peer/edge/deny` | relaying the audience's refusal to the origin |
-| `GET /centraid/_peer/blob/chunk` | the audience's ranged, resumable pull of a given item's ORIGINAL bytes |
-| `GET /centraid/_gateway/edges/pending` | the owner's list of asks awaiting a decision |
-| `POST /centraid/_gateway/edges/:edgeId/answer` | accept/refuse on one of those asks |
-| `GET\|PUT /centraid/_gateway/links/<linkId>/receive-setting` | the per-link accept/ask/refuse preference for gives ARRIVING — nothing arrives to govern |
+| Connection | One per vault. `centraid_net::Endpoint::accept` looks the peer key up in the allowlist **once**, before any stream, and the answer holds for every stream the connection will ever carry. |
+| Stream | One per request. **Both sides loop on `accept_bi`** — the accepting side may open streams too, which is what lets a gateway pull a phone's blob on the connection the phone dialled. |
+| First frame | A `centraid.core.v1.Request` envelope naming the kind. Nothing else may come first. |
 
-Their handlers are deleted, not gated. What a proved peer may still reach on `/centraid/_peer/*` is the link ceremony, the route assertion, and the four subscription doors `/centraid/_peer/replica/{bootstrap,changes,blob,intents}` (which carry their own blob door and never used the retired one). Closure reading and projection survive BENEATH a grant as internal fulfillment transport — machinery, never a member-facing act.
+### Two states, and a connection is promoted in place
 
-**Cross-host grant delivery is an open gap.** Fulfillment resolves an audience vault through the host gateway's own registry, so a grant to a party whose vault lives on another gateway parks at `syncing` with that vault named and stays there. It is not an error state and no route reports it as one; v1's tested reach is co-hosted vaults, and carrying a grant across the peer plane is a follow-up under [#825](https://github.com/srikanth235/centraid/issues/825).
+The accept-time lookup's answer is a **state**, not a refusal:
 
-### The replica change feed: verdicts, bounds and the two cursors ([#1014](https://github.com/srikanth235/centraid/issues/1014))
+| State | Who | What it may do |
+| --- | --- | --- |
+| **promoted** | an enrolled, unrevoked device | every request kind below |
+| **provisional** | everyone else — which is every device the first time it knocks | **exactly one stream**, a 2 KiB frame cap, a 5-second deadline, and `pair` is the only kind it may carry |
 
-**A frame is a WAKE.** A seat that is told the gateway moved pulls its own pages from the seat-log door; the feed carries no rows a client depends on. Everything below is about what the feed is allowed to say and how many of them a gateway will hold.
+A provisional connection that asks for anything else is refused `UNAUTHORIZED` **by name** and the **connection** ends, not just the stream: a stranger that asked for a log page has said what it is. A successful redemption **promotes that same connection in place** — no reconnect — so a phone goes `pair` → `blob` → `log` on one dial, in one window.
 
-**The feed reads the one log** (R-1014-1). Its source is `replica_log` — the same table the seat door serves — through `packages/vault/src/replica/change-log.ts`, which maps a physical table name and a wire-typed row image back into the logical entity, canonical row id and filter JSON a shape speaks. The wire is unchanged: a cursor is still `{epoch, seq}` and a doorbell still names `(entity, rowId, op, shapeIds)`. What changed is the sequence space behind the seq, which no seat can detect for itself, so the file says it: the migration rotates the epoch once with `epoch_reason = 'one-log'` on any vault that carried the retired trigger log, and every shipped phone re-bootstraps exactly once. A `local` log row — a key-only doorbell position for a gateway-private table, which is how an intent outcome gets a position in the same space as the rows it is interleaved with — is served to the feed and filtered out of the seat door.
+The enrolment check has not moved and has not weakened: it is the same lookup, in the same place, before any stream, for the connection's whole life. What moved is where its answer is expressed — from a TLS label to a state on the accepted connection.
 
-**The rebootstrap verdict vocabulary is closed** (`packages/server/src/routes/replica-routes.ts#REPLICA_REBOOTSTRAP_VERDICTS`), and `packages/client/src/replica/rebootstrap-copy.ts` is total over it — a verdict added on one side without copy on the other is a type error, not a blank screen. `device-access-changed` joined it in #1014 (V16): the stream had always sent it on a mid-stream authorization change, it was on no list, and the normaliser rewrote it to `invalid-cursor` — telling a member their device's position could not be read for something a person did. Nothing else on the wire carries a raw `Error.message`: the retry frame is a typed code and the exception belongs in the gateway's log.
+### The request kinds a stream can open with
 
-**A multiplex mount fails alone.** One radio carries N sovereign vaults, and a mount's trouble is a scoped frame — `rebootstrap`, `revoked` or the terminal `error` — never the radio's. Since #1014 (V18) the enrolment gate is evaluated PER MOUNT: a vault this device is not enrolled for gets `error` with reason `scope-not-enrolled` and the rest stream, where a single unknown vault used to take the whole radio down with a blanket `403 replica_scope_not_enrolled` before any per-mount check had run. A radio on which NO mount is admissible still answers that 403, which is the single-mount client's behaviour unchanged. The client turns `error` into a per-vault re-bootstrap (or a revoke for `scope-not-enrolled`); before #1014 (V21) it had no branch for the frame at all and the mount went silent for the life of the connection.
+| Kind | The stream is | Answer |
+| --- | --- | --- |
+| `pair` | a ticket redemption. **The only kind a provisional connection may carry** | `PairResponse`; on success the connection is promoted |
+| `hello` | the first stream a **promoted** connection opens, the version window | `Hello`, or `UpgradeRequired` and nothing else |
+| `log` | a page of the log since a cursor — and, with `tail`, **every page after it too** | `LogPage`, or `RebootstrapRequired`. With `tail`, many `LogPage`s on the one stream |
+| `intent` | a write, run on the gateway under the enrolled device's principal | `Outcome`, carrying the **commit position** the effect landed in — or `BYTES_NOT_YET_HELD`, see below |
+| `blob` | **handed over**: everything after this frame is iroh-blobs' own get/provide protocol, verbatim | no envelope — the transfer is the answer |
 
-**Two SSE bounds, not one.** The process cap (`SSE_MAX_SUBSCRIBERS`, 32) is the #351 Tier 4 bound. Beside it sits a per-device bound (`SSE_PER_DEVICE_MAX`, 2): one phone opening the whole allowance used to starve every other seat in the household, and before #1014's periodic pull there was no delivery path to fall back on. Both refusals are `503 sse_capacity` with `Retry-After`.
+The table names the kinds the sync plane turns on; `Request` in `crates/api-proto/proto/centraid/core/v1/envelope.proto` is the whole list, which also carries `command`, `page`, `content_urls`, `stage` and the admin inputs (`devices_list`, `devices_revoke`, `backup_now`).
 
-**Two cursors, two jobs — do not conflate them.**
+#### A `log` stream may stay open ([#1025](https://github.com/srikanth235/centraid/issues/1025) S2, [D-1025-S7-40](decisions.md#slice-s2--the-tail-stream-1025))
 
-|  | Where | Written by | Read by |
-| --- | --- | --- | --- |
-| `access_device_secret.sync_cursor` / `sync_cursor_at` | The VAULT (private band) | The seat-log door, with the position the device SENT | `lowestSeatCursor`, so retention holds the log floor at or below the lowest live seat within `REPLICA_SEAT_HOLD_DAYS` |
-| `device_checkpoints` | The GATEWAY database, per `(endpoint_id, vault_id)` | The seat-log door and the multiplex feed, on each served page | `hadReplicaScope` (the multiplex gate), the Household device list's `checkpoint`, and `revoke()`'s drop |
+`LogRequest.tail` is the one field, and there are **no new message types**: a tail is the same answer, more than once. A gateway answering a tail serves the catch-up pages from `since` exactly as it serves a one-shot request — following `has_more` — and then **keeps the stream open**, writing a further `LogPage` every time that vault's watermark moves past what it last sent. `RebootstrapRequired` ends the stream as it ends any request.
 
-The first is a RETENTION hold — how far the log may be collected. The second is a SCOPE record — durable proof that this device mounts this vault, which is what survives a device going offline and what an ownership change must destroy: `OwnerStore.setOwner` drops the ex-owner's devices' checkpoints before it repoints `vault_owners` (#1014, V18). Neither had a production writer before #1014 (V1/T9 and V2/X9 respectively), which is why the multiplex gate could only ever see `hadReplicaScope === false`.
+**One page per commit batch, never one per row.** The gateway's own wake carries no payload, so the stream serving a seat asks the log door where the watermark is and writes whatever is there; a batch of four hundred rows is one wake and one page.
 
-`access_device.last_seen_at` is a THIRD answer to "when was this device last seen" and it has neither a writer nor a reader (#1014, V23). It is deliberately not being written: `access_device` replicates, so a liveness stamp on it is a `replica_log` row per device per interval delivered to every seat forever, which would crowd real changes out of the retention window for a column nothing consults. The two columns above are the liveness this product actually uses — the private one for retention, the gateway one for the device list — and dropping the dead column is owed to a schema wave.
+**One log per vault, and a seat never subscribes to a table.** Every table's changes are rows in that one log, named by `LogRow.table`. There is no filter on the request and no subscription vocabulary anywhere on this wire, because a seat holds a COPY of the vault and not a view of part of it.
+
+**A seat holds at most one tail per vault**, and a second tail from the same device replaces the first: the second is what that device believes. The gateway can enumerate the devices with a tail open — presence falls out of that registry — and it goes to a log line and nothing else, because what a member may learn about another member's devices is a product decision and not a protocol default.
+
+This is the whole of the freshness mechanism. There is no interval, no poll and no push wake: see [mobile-offline.md](mobile-offline.md#one-stream-three-occasions) for the three occasions a seat opens one.
+
+#### The bootstrap head rides the answers that ask for a copy ([#1025](https://github.com/srikanth235/centraid/issues/1025) S7, [D-1025-S7-5](decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025))
+
+There is no `snapshot_head` request. `PairOk` and `RebootstrapRequired` each carry `{snapshot_hash, snapshot_seq, snapshot_bytes}`, and those two messages are the **only** occasions on which a device is told to take a copy — so a separate request could only ever be a second round trip for an answer one of them already had, on the connection the redemption had just promoted, with a real state in between: a device that is paired and does not yet know what to fetch.
+
+`snapshot_bytes` is there for the **room check**, which happens before the first byte moves: a first bootstrap needs one copy of the artifact and a re-bootstrap two, because the old file is still there until the new one is renamed over it. It is also the denominator of the progress a "Copying your vault" screen draws.
+
+The one state with no other way to ask is **paired, with no file, and the pairing recovered from the shell's secure store**. It asks for a `log` page from a cursor it does not have and is answered `RebootstrapRequired` carrying the head, which is the conversation every seat under the floor already has.
+
+A `blob` stream carries no hash in its tagging frame. The hash is in iroh-blobs' own request, which follows on the same stream; naming it twice would be two places for a fetcher and a provider to disagree, and the second would be the one nobody checks.
+
+**A malformed first frame costs its stream and nothing else.** `crates/protocol`'s rule — a malformed frame ends the connection, because the stream's position is no longer known — still holds, of the stream. With one stream per request the blast radius is one request: the stream is dropped, the connection lives, and the pages in flight beside it are untouched.
+
+**Deadlines come from the shell.** `SeatNetwork::sync` and the `seat.sync` command take a `SyncWindow` — a relative deadline and an optional byte/item budget — and the core holds no constant of its own. A window the deadline cuts is a **normal end**: the pass reports what it kept, every applied commit is committed, every verified chunk group is durable, and the next pass continues from the cursor they left ([D-1025-S2-3](decisions.md#slice-s2--one-protocol-1025)).
+
+### Bytes commit after rows, and never only on a phone ([#1025](https://github.com/srikanth235/centraid/issues/1025) S3)
+
+A photograph taken on a phone lives in that phone's own content store. The **gateway pulls it** — on a `blob` stream of the connection the seat opened, because the phone is behind the worse NAT and is the side that knows when it is awake — and commits the content row only once it holds the bytes.
+
+An `intent` stream is therefore three steps in this order:
+
+1. the intent's `needs` are read out of it **through the payload-hash gate**. `Intent.needs` carries `{hash, byte_size, media_type}` per blob and is part of the canonical payload (`needs`, sorted by hash, omitted when empty), so a gateway cannot be told to fetch bytes the member did not sign for and a proxy cannot add one in flight;
+2. every declared blob this gateway does not already hold is fetched and staged;
+3. only then is the intent executed and the row committed.
+
+It is a **declaration** rather than something the gateway derives from the command: deriving it needs a per-command table of "which input property names bytes", which is a second definition of the byte door that drifts silently every time a command is added ([D-1025-S3-5](decisions.md#slice-s3--bytes-both-ways-one-store-1025)).
+
+A pull that does not finish answers `ERROR_CODE_BYTES_NOT_YET_HELD`, which is **retryable**: not executed, not failed. The seat reads an `Error` on an `intent` stream as "this attempt did not land", the write stays in its outbox, and the next window submits it again. Complete or nothing — the intent cannot run against half a photograph, and what landed is kept for the retry ([D-1025-S3-6](decisions.md#slice-s3--bytes-both-ways-one-store-1025)).
+
+## An intent's identity and its answers
+
+**An intent's identity is `(vault_id, intent_id, payload_hash)`, and the device is attribution** ([#1014](https://github.com/srikanth235/centraid/issues/1014) G23/V9). The outbox lives in the seat file, and the seat file outlives the enrolment: a phone restored from a device backup comes back under a new endpoint id and replays an outbox of intents this vault already holds. The id is client-minted and random and the hash covers the app, the action, the input, the base versions, the predecessors and the declared bytes, so a caller who can state both is holding the same intent; a different payload under a known id is a reuse, from any device (`crates/vault/src/intents.rs`).
+
+**Every write states its read-set.** `Intent.base_versions` names the `row_version` the seat observed on each row it depends on — the row's own column, bumped by its touch trigger, never a log position ([#996](https://github.com/srikanth235/centraid/issues/996) R6). A stale base produces a `Conflict` carrying both versions, not a transport failure, and does not run the command; `actual_version = 0` means the row is gone, because `row_version` starts at 1. `depends_on` names predecessor intents in outbox order and is part of the hash, because an intent whose predecessors were rewritten in flight is a different intent. The canonical form sorts object keys by UTF-16 code unit, never by locale collation.
+
+**An answer is the gateway's fact.** `Outcome` carries one of seven statuses (`queued`, `sending`, `parked`, `executed`, `denied`, `failed`, `conflict`); a `parked` answer names who is being waited on (`WaitingOn`: owner, origin, gateway, or a predecessor intent by id). An `executed` outcome carries the commit position its effect landed in, and that is what a seat's pending write waits on ([mobile-offline.md](mobile-offline.md#how-an-intent-settles)). The outcome ledger's window is 30 days, the log's own retention floor: past its edge the answer is `outcome_expired` — "I no longer know" — and never a silent re-execution.
 
 ## The member sentence and its detail (#1015 R-NY-10)
 
@@ -294,26 +184,17 @@ Anything a producer hands a seat **to display** travels in two registers, and th
 | Register | What it is | Who reads it |
 | --- | --- | --- |
 | The member sentence | A whole sentence about the member's vault, in member words, one error noun, sentence case | Every screen, **verbatim** |
-| `detail` | The raw text — exception, HTTP status, path, filename | The run log, Diagnostics, `[centraid]` console lines ([logs.md](logs.md)) |
+| `detail` | The raw text — exception, database message, path | Logs and support bundles only ([logs.md](logs.md)) |
 
-The producer owes both. A gateway notice carries `headline` (the sentence, built by `automationNoticeHeadline` / `outboxNoticeHeadline` / `enrichRefusalNotice` in `packages/server/src/serve/notices.ts`) and `detail.gist` (`noticeGist`, the failure's first line); a seat renders `headline` and never `detail.gist`. A refusal on a route answers a member sentence in `message` with the machine-readable reason in its own field, the way the grant plane's `subject_not_offerable` does.
+The producer owes both. On the wire, `centraid.core.v1.Error` carries `sentence` — built from the error `code` alone, with no layer's own text interpolated into it (`sentence_for_code` in `crates/core/src/error.rs`) — beside `detail`, which is for logs only and once carried a SQLite `RAISE(ABORT)` message onto a member's screen. `CommandOutcome.reason` is an owner-facing sentence on the same terms: the author's words for a failed precondition, the access plane's sentence for a denial, with the raw predicate kept for the audit trail. The local channel follows the same split: each local refusal code has its own sentence (`crates/centraid/src/cmd/seat/local.rs`), and the desktop shell passes the seat's sentence through rather than inventing one.
 
-Where the producer is the seat itself — nothing crossed the wire — the same split holds inside the app. The transfer queue's `upload_item.last_error` is member copy produced by `memberTransferFailure` (`apps/mobile/src/lib/upload/transfer-failure.ts`) at the drainer's catch, because three surfaces print that row verbatim; the exception goes to the log. A failed CSV export throws `ExportFailureError(member, detail)` from `insights-export.ts` for the same reason. `DirectTransferError` carries an optional `member` for the cases where the thrower knows better than its status does.
-
-**A seat never repairs a string it was given.** The phone used to run gateway headlines and queue rows through a regex that lowered "gateway" to "vault host", which laundered the vocabulary of sentences that should never have reached a screen, and rewrote the member's own words when a rule they named contained one of those nouns. That filter is deleted; a producer that emits engine vocabulary is a bug at the producer.
-
-## Stream authority
-
-| Channel | Authority | Use |
-| --- | --- | --- |
-| **Live stream** (SSE / turn stream) | Immediacy | Show tokens and run progress as they happen |
-| **Paged / authoritative fetch** | Correctness + catch-up | Conversation history, missed events after reconnect |
-
-Do not treat the live stream as the sole source of truth after a gap — re-fetch authoritative pages. Product CLI streaming is deferred (#504 batch 3 follow-up).
+**A seat never repairs a string it was given.** A regex that lowers engine vocabulary after the fact runs on one seat and misses the next shape; a producer that emits engine vocabulary is a bug at the producer.
 
 ## Related
 
-- [decisions.md](decisions.md) — C1, F1
+- [decisions.md](decisions.md) — C1, R-1020-4, the #1025 slice rulings
 - [SECURITY.md](../SECURITY.md) — transport trust boundaries
-- [ARCHITECTURE.md](../ARCHITECTURE.md) — gateway HTTP surface
-- `@centraid/core/protocol` — version, capabilities, route constants
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — the crates and what crosses between the shells
+- [`crates/api-proto`](../crates/api-proto/README.md) — the schema tree, and how to add a field
+- [`crates/protocol`](../crates/protocol/src/lib.rs) — framing, handshake, version window
+- [`desktop/README.md`](../desktop/README.md) — the seat socket's local channel

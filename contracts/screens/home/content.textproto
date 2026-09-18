@@ -1,0 +1,48 @@
+# A FILLED HOME. One app with content is enough for the grid.
+#
+# The mosaic's third cell carries no `thumbnail_path`: the asset exists and its
+# bytes are not addressable yet. It is STILL A CELL — dropping the row would
+# reflow ten photos as one blank under a "10".
+data {
+  springboard: SPRINGBOARD_CONTENT
+  tiles {
+    app_id: "photos" status: TILE_STATUS_CONTENT size: TILE_SIZE_LARGE wide: true earns_grid: true
+    count { value: 1284 } count_label: "photos"
+    body { photos {
+      offline_pack: true
+      cells { asset_id: "asset-1" thumbnail_path: "/thumbs/asset-1.jpg" }
+      cells { asset_id: "asset-2" thumbnail_path: "/thumbs/asset-2.jpg" }
+      cells { asset_id: "asset-3" }
+    } }
+  }
+  tiles {
+    app_id: "docs" status: TILE_STATUS_CONTENT size: TILE_SIZE_MEDIUM wide: true earns_grid: true
+    count { value: 42 } count_label: "documents"
+    body { docs { rows { document_id: "doc-1" name: "Lease.pdf" size: "1.2 MB" } } }
+  }
+  tiles {
+    app_id: "notes" status: TILE_STATUS_CONTENT size: TILE_SIZE_MEDIUM wide: true earns_grid: true
+    count { value: 7 } count_label: "notes"
+    body { notes { note_id: "note-1" title: "Roof" excerpt: "Ring the surveyor back before Friday." } }
+  }
+  tiles { app_id: "agenda" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }
+  tiles { app_id: "tasks" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Capture the next thing to do" }
+  tiles { app_id: "people" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
+  tiles { app_id: "tally" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
+  # LOCKER WITHHOLDS ITS COUNT. No `count` field at all — absent is the withheld
+  # glyph, and a `0` here would be a lie about how many secrets a member has.
+  tiles { app_id: "locker" status: TILE_STATUS_CONTENT size: TILE_SIZE_SMALL earns_grid: true count_label: "items" body { locker { locked: true } } }
+  first_moves { id: "connectors" label: "Connect an account" hint: "Mail, calendar and contacts arrive on their own." icon_key: "Plug" }
+  first_moves { id: "agenda" label: "Add an event" hint: "Your week, on the front page." icon_key: "Calendar" }
+  first_moves { id: "tasks" label: "Add a task" hint: "The next thing to do." icon_key: "Check" }
+  # 1284 + 42 + 7. Locker contributes NOTHING, not a zero.
+  things { total: 1333 settled: true }
+  status { tone: TONE_QUIET copy: "Everything is on your gateway" destination: DESTINATION_NONE }
+  # THE PACKED GRID, decided by the machine so the two shells cannot pack it
+  # differently. A wide tile takes a whole line; smalls pair. A lone small at
+  # the end is not a hole.
+  grid_rows { app_ids: "photos" }
+  grid_rows { app_ids: "docs" }
+  grid_rows { app_ids: "notes" }
+  grid_rows { app_ids: "locker" }
+}

@@ -1,0 +1,28 @@
+# PHOTO ACCESS IS OFF, AND THE GRID IS STILL FULL.
+#
+# The grid reads the VAULT; the backup reads the CAMERA ROLL. Two planes, two
+# permissions — and a denied media permission must not blank a library the
+# member already owns. The fixture exists to make that inseparable from the
+# contract: `data` has cells AND `permission` is denied.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_LIBRARY
+permission: MEDIA_PERMISSION_DENIED
+data {
+  cells {
+    asset_id: "ast-0001"
+    thumbnail_path: "thumbs/ast-0001.jpg"
+    captured_at: "2026-08-30T17:12:04Z"
+    captured_utc_offset_minutes: -420
+    kind: KIND_PHOTO
+    favorite: true
+  }
+}
+backup {
+  phase: PHASE_IDLE
+  paused_reason: "Photo access is off. Turn it on in Settings to back up your camera roll."
+}
+sheet: SHEET_NONE

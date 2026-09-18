@@ -3906,13 +3906,16 @@
       "minimumTests": 7
     },
     {
-      "id": "blob-format-cbsf-properties",
-      "name": "CBSF directory codec and AAD properties",
+      "id": "object-format-properties",
+      "name": "centraid-object/1 header, AAD, padding and pack properties",
       "surface": "blob-custody",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/core/src/blob/cbsf-properties.test.ts",
-      "minimumTests": 6
+      "owner": "crates/media/tests/object.rs",
+      "minimumTests": 7,
+      "replacesMinimumTestsFlow": "blob-format-cbsf-properties",
+      "approvedMinimumTestsDeviation": "#1029 §4 replaces CBSF with `centraid-object/1`, and this flow takes over `blob-format-cbsf-properties`'s floor one-to-one at a HIGHER number: 6 becomes 7. Same surface, same dimension, same tier — the properties of the format a blob wears. The predecessor's owner, `packages/core/src/blob/cbsf-properties.test.ts`, was a v0 TypeScript file deleted with that tree in b318fba12, so its floor had been guarding a test that could not run; the successor's owner is `crates/media/tests/object.rs`, which is where the same laws are now asserted — no nonce repeats across retries or restarts, the 16 MiB cap under worst-case incompressible input, an oversized input becoming an ordered list, a pack addressable by range whose headers do not transplant, Padmé collapsing neighbouring sizes, and (W3 lane B) an object sealed for one vault not opening as another. The two CBSF properties with no successor are the plaintext-BLAKE3 header commitment and the nonce-MAC-doubles-as-key construction, both of which are defects the new format exists to remove rather than laws to carry over; the floor still rises, because the new format has more to say.",
+      "_comment": "Floor history: predecessor `blob-format-cbsf-properties` (6), retired with CBSF itself (#1029 §4). See receipts/issue-1029-phone-is-the-vault.md."
     },
     {
       "id": "protocol-handshake-properties",

@@ -1,19 +1,16 @@
 #!/usr/bin/env node
 /**
- * The body of a rolling per-lane issue, when the report cannot supply one (#915).
+ * The body of a rolling per-lane issue (#915).
  *
- * WHY A FALLBACK EXISTS AT ALL. The rolling issue's body is supposed to come
- * from `scripts/test-report/rolling-issue-body.mjs`, rendered from the same
- * attention-queue model as the report's §3, so the issue and the page can never
- * disagree. But the alerting path runs precisely when things are broken — the
- * report job is one of the lanes that can be red, and a red `test-health-report`
- * leaves no `summary.json` to render from. An alerting path that throws when
- * the report is missing is #556 restated: a lane red with no trace anywhere.
+ * The v0 HTML report that rendered richer bodies was retired with the v0 tree
+ * (#1020); this is the body every lane's alerting path uses now. It must not
+ * depend on anything that can itself be red: an alerting path that throws when
+ * its input is missing is #556 restated — a lane red with no trace anywhere.
  *
  * So this writes the smaller, always-available truth: which lane, what verdict
  * GitHub recorded, whether it is parked and until when, and the run to read.
- * It never invents a case list. A body that says "the report did not render" is
- * information; a body that fabricates cell-level detail is not.
+ * It never invents a case list: a body that fabricates cell-level detail is
+ * worse than a short one.
  *
  * Usage:
  *   node scripts/ci/rolling-issue-fallback-body.mjs \

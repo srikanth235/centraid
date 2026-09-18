@@ -27,10 +27,9 @@
 // check-comment-density-ratchet) still own their own detection and their own
 // `--write`; they measure populations off the tree, which no diff-vs-base
 // validator can do. This owns the shared shape: direction, waiver scope,
-// issue-and-expiry, and the two DERIVED MIRRORS (`floors.minimumTests` from
-// tests/claims.json, `budgets.mobileSuites` from the mobile roster), which
-// `--write` refreshes and which are asserted equal here so a mirror can never
-// drift from its source.
+// issue-and-expiry, and the DERIVED MIRROR (`floors.minimumTests` from
+// tests/claims.json), which `--write` refreshes and which is asserted equal
+// here so the mirror can never drift from its source.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -52,7 +51,6 @@ export const INVENTORY_PATH = "tests/inventory.json";
 export const QUARANTINE_PATH = "tests/quarantine.json";
 export const CLAIMS_PATH = "tests/claims.json";
 export const JOURNEYS_PATH = "tests/journeys.json";
-export const ROSTER_PATH = "tests/agent-e2e-mobile/roster.json";
 
 const [F, B, I, Q, J] = [
   FLOORS_PATH,
@@ -101,7 +99,6 @@ export const SECTIONS = Object.freeze([
     budget: "budgets",
     base: "tests/design-token-css-budget.json",
   },
-  { file: B, key: "mobileSuites", direction: "mirror" },
   {
     file: I,
     key: "skips",
@@ -414,7 +411,6 @@ export function checkLedgers({
   if (errors.length) return { errors };
 
   const claims = readJson(CLAIMS_PATH, root) ?? {};
-  const roster = readJson(ROSTER_PATH, root) ?? {};
 
   for (const section of SECTIONS) {
     const doc = head[section.file];
@@ -466,66 +462,43 @@ export function checkLedgers({
         errors.push(...widened);
       }
     } else if (section.direction === "mirror") {
-      errors.push(
-        ...mirrorErrors(section, label, value, claims, roster, baseRef, root)
-      );
+      errors.push(...mirrorErrors(label, value, claims, baseRef, root));
     }
   }
   return { errors };
 }
 
 /**
- * A derived mirror must equal its source exactly, and the source's own numbers
- * must still ratchet. `minimumTests` mirrors tests/claims.json and
- * `mobileSuites` mirrors the mobile roster; neither number is hand-typed here.
- * @param {any} section section descriptor
+ * The derived mirror must equal its source exactly, and the source's own
+ * numbers must still ratchet. `minimumTests` mirrors tests/claims.json; no
+ * number in it is hand-typed here.
  * @param {string} label section label for messages
  * @param {any} value the section's value
  * @param {any} claims parsed tests/claims.json
- * @param {any} roster parsed mobile roster
  * @param {string} baseRef merge base ref
  * @param {string} root repo root
  * @returns {string[]} failures
  */
-function mirrorErrors(section, label, value, claims, roster, baseRef, root) {
+function mirrorErrors(label, value, claims, baseRef, root) {
   const errors = [];
-  const minimum = section.key === "minimumTests";
-  const want = minimum
-    ? minimumTestsMirror(claims)
-    : mobileSuitesMirror(roster);
-  const source = minimum ? CLAIMS_PATH : ROSTER_PATH;
-  const got = (minimum ? value.flows : value.suites) ?? {};
+  const want = minimumTestsMirror(claims);
+  const got = value.flows ?? {};
   for (const key of new Set([...Object.keys(want), ...Object.keys(got)])) {
     if (want[key] !== got[key]) {
       errors.push(
-        `${label}.${key} mirrors ${source} as ${want[key] ?? "(absent)"} but reads ${got[key] ?? "(absent)"}; run \`node scripts/check-ledgers.mjs --write\``
+        `${label}.${key} mirrors ${CLAIMS_PATH} as ${want[key] ?? "(absent)"} but reads ${got[key] ?? "(absent)"}; run \`node scripts/check-ledgers.mjs --write\``
       );
     }
   }
-  if (minimum) {
-    // #915 renamed tests/matrix.json to tests/claims.json; the base side falls
-    // back so the rename cannot let a floor down unwatched for one merge.
-    const baseClaims =
-      readJsonAt(baseRef, CLAIMS_PATH, root) ??
-      readJsonAt(baseRef, "tests/matrix.json", root);
-    if (baseClaims) {
-      errors.push(
-        ...diffMinimumTests(baseClaims, claims).map(
-          (line) => `${label}: ${line}`
-        )
-      );
-    }
-    return errors;
-  }
-  const baseSuites = mobileSuitesMirror(
-    readJsonAt(baseRef, ROSTER_PATH, root) ?? {}
-  );
-  for (const [id, ms] of Object.entries(baseSuites)) {
-    if (got[id] !== undefined && got[id] > ms) {
-      errors.push(
-        `${label}.${id} widened ${ms} → ${got[id]} (suite budgets are tighten-only)`
-      );
-    }
+  // #915 renamed tests/matrix.json to tests/claims.json; the base side falls
+  // back so the rename cannot let a floor down unwatched for one merge.
+  const baseClaims =
+    readJsonAt(baseRef, CLAIMS_PATH, root) ??
+    readJsonAt(baseRef, "tests/matrix.json", root);
+  if (baseClaims) {
+    errors.push(
+      ...diffMinimumTests(baseClaims, claims).map((line) => `${label}: ${line}`)
+    );
   }
   return errors;
 }
@@ -540,23 +513,11 @@ export function minimumTestsMirror(claims) {
   return out;
 }
 
-/** `{suiteId: budgetMs}` for every roster suite that declares one. */
-export function mobileSuitesMirror(roster) {
-  const out = {};
-  for (const [id, suite] of Object.entries(roster?.suites ?? {})) {
-    if (typeof suite?.budgetMs === "number") out[id] = suite.budgetMs;
-  }
-  return out;
-}
-
-/** Refresh the two derived mirrors from their sources. */
+/** Refresh the derived mirror from its source. */
 export function writeMirrors(root = ROOT) {
   const floors = readJson(FLOORS_PATH, root);
   floors.minimumTests.flows = minimumTestsMirror(readJson(CLAIMS_PATH, root));
   writeFileSync(path.join(root, FLOORS_PATH), serializeLedger(floors));
-  const budgets = readJson(BUDGETS_PATH, root);
-  budgets.mobileSuites.suites = mobileSuitesMirror(readJson(ROSTER_PATH, root));
-  writeFileSync(path.join(root, BUDGETS_PATH), serializeLedger(budgets));
 }
 
 /** Resolve the merge base the ratchet compares against. */
@@ -582,7 +543,7 @@ function main() {
   const argv = process.argv.slice(2);
   if (argv.includes("--write")) {
     writeMirrors();
-    process.stdout.write("check-ledgers: mirrors refreshed\n");
+    process.stdout.write("check-ledgers: mirror refreshed\n");
     return;
   }
   const baseIndex = argv.indexOf("--base");
@@ -601,7 +562,7 @@ function main() {
     );
     for (const line of errors) console.error(`  - ${line}`);
     console.error(
-      "Lower a floor or widen a budget by EXTENDING that SECTION's approvedDeviation with the new rationale (a neighbouring section's note never waives, and mere presence never waives — #781). A mirror difference is fixed by editing the source (tests/claims.json, tests/agent-e2e-mobile/roster.json) and running `node scripts/check-ledgers.mjs --write`."
+      "Lower a floor or widen a budget by EXTENDING that SECTION's approvedDeviation with the new rationale (a neighbouring section's note never waives, and mere presence never waives — #781). A mirror difference is fixed by editing the source (tests/claims.json) and running `node scripts/check-ledgers.mjs --write`."
     );
     process.exitCode = 1;
     return;
