@@ -1750,3 +1750,144 @@ and is the one used.
 3. **The `restore-drill` step's `--nocapture` prints nothing useful now** that the wire arm
    spawns a server; a failure inside `tokio::spawn` is swallowed by the `let _ =`. Not
    changed here because the step's invocation is shared with the library arm.
+
+## W6 — blobs, file keys and thumbnails
+
+Branch `claude/1029-w6-blobs`, base `3fe7cc84`. Rust **1677** (base 1652); Kotlin `:shared`
+**220**, `:core` **16/16**.
+
+### The file table
+
+| File | What landed |
+| --- | --- |
+| `crates/media/src/object/mod.rs` | the chunk AAD binds the header's FIXED PREFIX, not the wrap; `rewrap`; three tests |
+| `crates/media/src/object/header.rs` | the field table gains an "in the chunk AAD" column, and the wrap is the one `no` |
+| `crates/media/src/object/pack.rs` | `build_all` — fill packs to the cap, one after another — and `table_cost` |
+| `crates/media/tests/object_vectors.rs` | a `rotation` block pinning "a re-wrap does not re-encrypt the body" |
+| `contracts/crypto/object-vectors.json` | regenerated; `sealedBase64` and the new `rotation` block |
+| `contracts/migrations/004_blob_custody.sql` | **rung four** — `backup_blob_custody`, `backup_blob_placement` |
+| `crates/vault/src/migrations.rs` | `BLOB_CUSTODY_SQL`, appended to `LADDER` |
+| `crates/vault/src/backup/custody.rs` | `FileKey`, `BlobRole`, `Placement`, `Custody`, `admit`, `record_placements`, `lookup`, `thumbnails`, `originals`, `open_blob`, `grid_fetches` |
+| `crates/vault/src/backup/objects.rs` | `ObjectKeys::rotate_root`; the "rotation costs a full re-upload" finding replaced by what it costs now |
+| `crates/vault/src/backup/restore.rs` | `restored-blob-custody`, and why `restored-blob-coverage` takes a store it is not opening |
+| `crates/vault/src/backup/drill.rs` | `run_drill` takes `member_bytes`; `write_one` writes custody so the check has rows |
+| `crates/vault/tests/restore_grid.rs` | the 100k acceptance criterion, the ranges, and the ordering |
+| `crates/vault/tests/baseline.rs` | rung four's four objects declared, `user_version` 4 |
+| `crates/blobs/src/plan.rs` | `wants_from_custody` — the transfer rule governs something again |
+| `crates/core/src/handle.rs` | `open_own_bytes`: the core owns the runtime and the byte store |
+| `crates/core-ffi/src/lib.rs` | `centraid_open` opens `<vault>.bytes`; a store that will not open is not a failed open |
+| `crates/centraid/tests/restore_drill.rs` | a real `ContentBytes` handed to `restored-blob-coverage` |
+| `mobile/.../screen/ScreenMachine.kt`, `.../sync/ScreenRuntime.kt` | what serves `FetchOriginal` and the one hop that does not |
+| `mobile/.../shell/CameraRoll.kt`, `.../shell/Staging.kt` | the gateway is not the writer any more, and the invoke key never leaves the device |
+
+### What the restore test proves, at what scale
+
+`crates/vault/tests/restore_grid.rs` packs **100 000 thumbnails** of 1 KiB through the real
+sealer into real packs and plans the grid over the rows that come out:
+
+```
+restore grid: 100000 thumbnails of 1024 B in 8 packs = 8 requests
+```
+
+**8, and the reason it is 8 is packs.** `grid_fetches` groups placements by `object_name`, so
+its length is the number of distinct objects the vault's index names — 100 000 × ~1.7 KiB
+sealed ÷ 16 MiB — and the item count never enters the arithmetic. The test asserts
+`fetches.len() == packs`, that `fetches.len() * 100 < 100 000`, that every item is in exactly
+one fetch (a cheap incomplete grid is not a grid), and that no object is fetched twice. 1 KiB
+is at the SMALL end of a real thumbnail, which packs MORE per pack and makes the assertion
+harder, not easier. Two tests beside it carry the other halves: every item opens from the
+range the row recorded, out of real pack bytes and without reading the item table; and the
+grid's plan names **not one original object**, while the originals' own rows are there to be
+fetched on demand (F14).
+
+### The five hand-offs
+
+1. **Exclude the wrapped key from the chunk AAD — DONE.** The AAD is bytes 0..58: version,
+   kind, role, flags, salt, dictionary id, and the wrap's declared LENGTH (which is what stops
+   a wrapped object being re-presented as a file-key one). `object::rewrap` and
+   `ObjectKeys::rotate_root` copy a body verbatim under a new root, and
+   `a_substituted_wrap_still_fails_to_open_the_body` asserts the strength argument instead of
+   repeating it. Vectors regenerated with a `rotation` block. **The honest residual**: an
+   object's name is the BLAKE3 of its whole bytes, so a re-wrapped object is a new object to
+   the store and the wrapped kinds are still re-uploaded. What makes rotation affordable is
+   that a `blob` or `thumbnail` carries no wrap at all — a rotation does not touch a single
+   photograph, which is almost all of a phone's bytes.
+2. **The content store over the C ABI — DONE, and the decision is written down.** The core
+   owns a two-worker tokio runtime and opens `<vault>.bytes`. Multi-threaded is not a
+   preference: `ContentBytes` drives each verb with `block_on` from its own thread, and on a
+   current-thread runtime nothing drives the tasks iroh-blobs spawns for its store actor, so
+   the first verb waits on a task nobody polls. The alternatives were "leave it" (F14 is then
+   unreachable from a phone) and "the shell owns one" (a Rust runtime handle across the ABI is
+   a pointer with no type on the other side). A store that will not open leaves the core as it
+   was — text, photographs refused by name — because an open that failed over a byte store
+   would take a member's notes down with their camera roll.
+3. **`ScreenEffect.FetchOriginal` — HALF SERVED, AND NOT DELETED. Say the blocker.** What is
+   built: the vault holds the file key and the `(object, offset, length)` for every original,
+   `custody::open_blob` turns those into verified plaintext, and the member's transfer rule
+   decides whether a window may ask. What is **not** built: the request that carries the tap.
+   `Request` has no `fetch_original` arm, and adding one means a proto field, a handler, and a
+   **gateway transport inside `crates/core`** — a layering decision for the umbrella, not one
+   to take while wiring a screen. The effect is kept because the remaining hop is a wire, not
+   a design, and both Kotlin sites now name that hop instead of naming this wave.
+4. **`TransferRule` and the two "Download settings" sheets — KEPT, AND GIVEN SOMETHING TO
+   GOVERN.** They rode `SyncWindow` to a `seat.sync` that left with the seat plane, and
+   `plan()` had no caller outside its own crate. The rule was never wrong; what it governed
+   went away. `plan::wants_from_custody` turns the vault's custody rows into `Want`s, so a
+   `MANUAL` rule withholds every original and lets every thumbnail cross, and a tap still
+   overrides it for one item.
+5. **`restored-blob-coverage` — SERVED, AND A BETTER CHECK BESIDE IT.** `run_drill` takes
+   `member_bytes`, and `crates/centraid`'s drill — the one crate above `crates/blobs` that
+   runs it — hands it a real `ContentBytes` and asserts it answers `0 missing`. But the
+   hand-off's framing is half right and the half that is wrong matters: **under F14 a restored
+   phone holds no plaintext at all**, because it shows the grid and fetches originals on
+   demand, so a coverage check over a local store would fail on every correct restore. The new
+   `restored-blob-custody` needs no store and is what a restore can actually promise — every
+   blob's file key and at least one placement came back. `crates/vault`'s drill passes `None`
+   and leans on it.
+
+### Rulings spent
+
+- **F14** — the vault owns its copy, with eviction. A custody row names a plaintext hash the
+  vault can re-derive and an object it can re-fetch, never a PhotoKit asset id, so
+  `ByteStore::sweep` may evict at any time without the row becoming a lie. This is also what
+  made `restored-blob-custody` necessary.
+- **F6** — 16 MiB per object. A blob over it is an ordered list of `blob` objects, and
+  `Placement.part_index` is the only thing that says which half of a video is first.
+- **F8** — `build_all` reaches `finish` and `repack` unchanged; the `LiveShareIndex` seam is
+  W8's and was not filled.
+- **§4, the phone deduplicates** — `custody::admit` is a `SELECT` on the second sight of the
+  same bytes, and the gateway is never asked.
+- **ONE HASH** — the drill's stand-in object name goes through `content_digest`, which is
+  `crates/vault`'s one declared route; `one_hash.rs` caught the direct `blake3::hash` and was
+  obeyed rather than amended. **No SHA carve-out added.**
+- **`estate-separation`** — no law-estate path was touched, so no separate commit was owed.
+
+### Found, not this lane's slice
+
+1. **The forbidden-token grep is not empty, and the doctrine it stands for is satisfied.**
+   `grep -rn 'blob:blake3-\|already_held\|add_asset:' crates/ mobile/` returns 49 lines. None
+   of the three crosses the gateway wire: `blob:blake3-<hex>` is a `content_uri` value in a
+   table inside the encrypted vault file; `already_held` is a field of the core↔shell C ABI
+   reply, same device, same process; `media.add_asset:<hash>` is a `Command.invoke_key` over
+   that same ABI. The sentence "no plaintext hash crosses the wire" is enforced by
+   `gateway-core`'s own conformance canary
+   (`canary/no-plaintext-or-plaintext-hash-is-anywhere-in-the-store`), which fails if either
+   the plaintext or its hash appears in a stored object or in the gateway's state. Emptying
+   the grep means renaming the vault's content-URI scheme and the stage reply's field — ten
+   crates, both shells, and a change to a `core_content_item` column's VALUE shape, which is a
+   data migration rather than a code change — and buys the property nothing. **Recommendation:
+   retire the literal grep in favour of the canary, or scope it to the gateway crates.** What
+   was genuinely wrong and is fixed: `CameraRoll.kt` and `Staging.kt` still said the gateway
+   was the writer and read the intent id from a replay ledger.
+2. **`encode_table` clamps an item id longer than 65535 bytes to `u16::MAX` instead of
+   refusing it**, so a pathological id would produce a table that decodes as a different
+   table. Unreachable from any caller in the tree today (ids are `thumb-<n>`-shaped), but it
+   is a silent truncation in a length prefix and those are worth refusing.
+3. **`ObjectFetch::byte_span` is computed and nothing ranges on it.** It is the right shape
+   for a partly-dead pack — fetch the live span rather than the whole object — and the
+   transport that would use it does not exist yet. Kept because the alternative is recomputing
+   it at the call site that eventually appears.
+4. **The `local` profile's `ledgers` step fails in this container for an environment reason,
+   not a code one.** `git merge-base HEAD origin/main` exits 1 — the umbrella's history has no
+   common ancestor with `origin/main` in this checkout — and it fails identically at the base
+   commit `3fe7cc84`. `node scripts/check-ledgers.mjs --base 3fe7cc84` is clean.
