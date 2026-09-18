@@ -893,6 +893,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-gateway-client"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "blake3",
+ "centraid-api-proto",
+ "centraid-gateway-core",
+ "centraid-gateway-server",
+ "centraid-identity",
+ "ed25519-dalek",
+ "hex",
+ "rand 0.9.5",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "centraid-gateway-core"
 version = "1.0.0-alpha.0"
 dependencies = [

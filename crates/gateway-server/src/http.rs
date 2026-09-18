@@ -98,6 +98,21 @@ pub fn router(server: Shared) -> Router {
 // --------------------------------------------------------------- rendering --
 
 /// A refusal on the wire.
+///
+/// # THE COMPANION TRAVELS WITH THE REFUSAL
+///
+/// Two codes are meaningless without one, and both companions exist in the
+/// rules already — `Refusal::VaultMoved` carries the epoch and the moment, and
+/// `Refusal::VersionWindow` carries the range that `version::admit`'s own
+/// comment says is there "so the phone can render the typed state without a
+/// second round trip". This body used to drop both, so a phone learned THAT its
+/// vault had moved and never when — half of "N changes since `<date>`", and the
+/// half a client would otherwise have to invent from its own clock.
+///
+/// They are `Option`s because a body-less code has neither, and
+/// `centraid-gateway-client` treats a missing one as malformed rather than as a
+/// default: a shell that drew "0 changes since 1 January 1970" over a frozen
+/// vault would be showing a fabricated fact.
 #[derive(Debug, Serialize)]
 pub struct ErrorBody {
     /// The code from `Refusal::code()`. **Never a sentence**: the member-facing
@@ -106,6 +121,30 @@ pub struct ErrorBody {
     pub code: String,
     /// The server's clock, so a phone with a wrong one can re-sign **once**.
     pub server_time_ms: i64,
+    /// `centraid.core.v1.VaultMoved`, for the moved code and nothing else.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moved: Option<MovedBody>,
+    /// The server's supported range, for the version code and nothing else.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<ProtocolBody>,
+}
+
+/// `centraid.core.v1.VaultMoved`'s two fields, on the HTTP wire.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MovedBody {
+    /// The lease epoch that holds the vault now.
+    pub current_epoch: u64,
+    /// When it took it, on this server's clock.
+    pub moved_at_ms: i64,
+}
+
+/// The protocol range this server supports, inclusive.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct ProtocolBody {
+    /// Inclusive.
+    pub min: u32,
+    /// Inclusive.
+    pub max: u32,
 }
 
 /// The HTTP status one error code is carried by.
@@ -138,14 +177,41 @@ const fn status_for(code: ErrorCode) -> StatusCode {
 
 fn refused(refusal: &Refusal) -> Response {
     let code = refusal.code();
-    (
-        status_for(code),
-        axum::Json(ErrorBody {
-            code: format!("{code:?}"),
-            server_time_ms: crate::clock::now().millis(),
-        }),
-    )
-        .into_response()
+    (status_for(code), axum::Json(body_of(refusal, code))).into_response()
+}
+
+/// Render one refusal, companion and all.
+///
+/// A `match` over the two refusals that carry one, so a third minted later
+/// fails to compile here rather than reaching a phone stripped of the field it
+/// needs.
+fn body_of(refusal: &Refusal, code: ErrorCode) -> ErrorBody {
+    let (moved, protocol) = match refusal {
+        Refusal::VaultMoved {
+            current_epoch,
+            moved_at,
+        } => (
+            Some(MovedBody {
+                current_epoch: *current_epoch,
+                moved_at_ms: moved_at.millis(),
+            }),
+            None,
+        ),
+        Refusal::VersionWindow { server, .. } => (
+            None,
+            Some(ProtocolBody {
+                min: server.0,
+                max: server.1,
+            }),
+        ),
+        _ => (None, None),
+    };
+    ErrorBody {
+        code: format!("{code:?}"),
+        server_time_ms: crate::clock::now().millis(),
+        moved,
+        protocol,
+    }
 }
 
 fn faulted(fault: &Fault) -> Response {
@@ -161,6 +227,8 @@ fn faulted(fault: &Fault) -> Response {
                 axum::Json(ErrorBody {
                     code: format!("{:?}", ErrorCode::Internal),
                     server_time_ms: crate::clock::now().millis(),
+                    moved: None,
+                    protocol: None,
                 }),
             )
                 .into_response()
@@ -676,6 +744,49 @@ mod tests {
             assert!(name.starts_with("centraid-"));
             assert_eq!(name.to_ascii_lowercase(), name, "headers arrive lowercase");
         }
+    }
+
+    /// **A MOVED REFUSAL CARRIES WHEN IT MOVED.** Without this a phone knows
+    /// THAT its vault moved and never when, which is half of "N changes since
+    /// `<date>`" — and a client inferring the date from its own clock would be
+    /// inventing the one fact the refusal exists to carry.
+    #[test]
+    fn a_moved_refusal_carries_its_epoch_and_its_moment() {
+        let refusal = Refusal::VaultMoved {
+            current_epoch: 4,
+            moved_at: centraid_gateway_core::ServerTime::from_millis(1_770_000_000_000),
+        };
+        let body = body_of(&refusal, refusal.code());
+        let moved = body.moved.expect("the companion rides with the code");
+        assert_eq!(moved.current_epoch, 4);
+        assert_eq!(moved.moved_at_ms, 1_770_000_000_000);
+        assert!(body.protocol.is_none(), "one companion per refusal");
+    }
+
+    /// The range rides with the version refusal so the phone can render "this
+    /// server needs an update" without a second round trip — which is what
+    /// `version::admit`'s own comment promises.
+    #[test]
+    fn a_version_refusal_carries_the_range_this_server_supports() {
+        let refusal = Refusal::VersionWindow {
+            server: (PROTOCOL_MIN, PROTOCOL_MAX),
+            client: 9,
+        };
+        let body = body_of(&refusal, refusal.code());
+        let range = body.protocol.expect("the range rides with the code");
+        assert_eq!((range.min, range.max), (PROTOCOL_MIN, PROTOCOL_MAX));
+        assert!(body.moved.is_none());
+    }
+
+    /// A refusal with no companion carries neither, and the fields are skipped
+    /// rather than serialised as nulls.
+    #[test]
+    fn a_refusal_with_no_companion_carries_neither() {
+        let body = body_of(&Refusal::NotLeaseHolder, ErrorCode::GatewayNotLeaseHolder);
+        assert!(body.moved.is_none() && body.protocol.is_none());
+        let rendered = serde_json::to_string(&body).expect("serialises");
+        assert!(!rendered.contains("moved"), "{rendered}");
+        assert!(!rendered.contains("protocol"), "{rendered}");
     }
 
     #[test]
