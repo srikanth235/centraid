@@ -342,6 +342,20 @@ impl Harness for ServerHarness {
             .await
     }
 
+    /// THE REAL SERIALIZER, not a restatement of it.
+    ///
+    /// `ErrorBody::of` is the one place this crate builds a refusal's body, so
+    /// the conformance case drives the code a phone actually receives — a
+    /// harness that rendered the companions itself would pass while the handler
+    /// dropped them, which is the failure this window was opened for.
+    async fn error_body(
+        &self,
+        refusal: &centraid_gateway_core::error::Refusal,
+    ) -> Result<String, StoreFault> {
+        serde_json::to_string(&centraid_gateway_server::http::ErrorBody::of(refusal, 0))
+            .map_err(|error| StoreFault::new(error.to_string()))
+    }
+
     async fn corrupt(&mut self, vault: VaultId, name: ObjectName) -> Result<(), StoreFault> {
         self.gateway.bytes.primary().corrupt(&vault, &name).await
     }

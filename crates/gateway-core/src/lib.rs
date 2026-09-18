@@ -24,7 +24,13 @@
 //! became padded base size plus a server-side delete rate limit (F4). The
 //! row-census warning moved to the phone, where the census is readable.
 //!
-//! `tests/blind.rs` is the canary that keeps this from being a comment.
+//! [`conformance`]'s own canary case is what keeps this from being a comment:
+//! it plants a plaintext, puts a ciphertext derived from it through the whole
+//! object path, and reads back **every stored byte and the adapter's whole
+//! state dump** looking for the plaintext or its BLAKE3, raw and in hex. It
+//! runs against every adapter, because the suite does; `gateway-server`'s
+//! `tests/canary.rs` opens a wider window still, onto the raw SQLite file and
+//! the log.
 //!
 //! # WASM-CLEAN BY CONSTRUCTION
 //!

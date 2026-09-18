@@ -641,6 +641,30 @@ impl StateStore for SqliteState {
             .map_err(fault)?;
         Ok(())
     }
+
+    /// The per-object audit ledger. Four columns, every one of them already on
+    /// the `object` row for the same object — what this adds is that it
+    /// outlives the purge that removes that row.
+    async fn record_client_delete(
+        &mut self,
+        vault: &VaultId,
+        name: &ObjectName,
+        kind: ObjectKind,
+        at: ServerTime,
+    ) -> Result<(), StoreFault> {
+        self.connection()?
+            .execute(
+                sql::CLIENT_DELETE_INSERT,
+                params![
+                    vault.as_bytes().as_slice(),
+                    name.as_bytes().as_slice(),
+                    kind.as_str(),
+                    at.millis(),
+                ],
+            )
+            .map_err(fault)?;
+        Ok(())
+    }
 }
 
 /// Register a vault and its account without going through a rule.

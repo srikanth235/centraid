@@ -9,9 +9,16 @@
 //!
 //! 1. **Every writer of a hash column goes through `content_digest`.** A site
 //!    that mints its own value is how two names for one photograph get filed.
-//! 2. **`sha256` appears in `crates/` only where an allowlist says why.** The
-//!    allowlist is tiny and each entry carries its reason, because an allowlist
-//!    without reasons is a place to hide the next one.
+//! 2. **`sha256` appears in the Rust tree only where an allowlist says why.**
+//!    The allowlist is tiny and each entry carries its reason, because an
+//!    allowlist without reasons is a place to hide the next one.
+//!
+//! "The Rust tree" is `crates/` **and `gateway/`** (#1029 §3). The second root
+//! is not a convenience: `gateway/cloudflare` is an adapter of the same protocol
+//! as `crates/gateway-server`, it has the same reason to name SigV4, and a scan
+//! that stopped at `crates/` would have let the third carve-out in without
+//! anybody writing down why. A rule that covers one of two adapters is a rule
+//! the other one is exempt from by accident.
 //!
 //! Neither scan is clever, and that is the point: a clever scan is one somebody
 //! silences.
@@ -19,16 +26,33 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-fn crates_root() -> PathBuf {
+fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
+        .join("../..")
         .canonicalize()
-        .expect("crates/ resolves")
+        .expect("the repository root resolves")
+}
+
+fn crates_root() -> PathBuf {
+    repository_root().join("crates")
+}
+
+/// Every root of Rust source this repository ships.
+///
+/// `crates/` is the workspace; `gateway/` is the Cloudflare adapter, which is
+/// its OWN cargo workspace (it compiles only to `wasm32-unknown-unknown`) and is
+/// therefore reached by path rather than by workspace membership. A file under
+/// either is scanned the same way and is named in the allowlist by its path from
+/// the repository root.
+fn source_roots() -> Vec<PathBuf> {
+    vec![crates_root(), repository_root().join("gateway")]
 }
 
 fn rust_files() -> Vec<PathBuf> {
     let mut found = Vec::new();
-    walk(&crates_root(), &mut found);
+    for root in source_roots() {
+        walk(&root, &mut found);
+    }
     found.sort();
     assert!(found.len() > 200, "only {} files were scanned", found.len());
     found
@@ -52,8 +76,14 @@ fn walk(dir: &Path, into: &mut Vec<PathBuf>) {
     }
 }
 
+/// A file's name as the allowlist spells it.
+///
+/// Under `crates/` the prefix is stripped, which is what every existing entry
+/// was written against; anywhere else — `gateway/`, today — the path is relative
+/// to the repository root, so the two roots cannot collide on a name.
 fn relative(path: &Path) -> String {
     path.strip_prefix(crates_root())
+        .or_else(|_| path.strip_prefix(repository_root()))
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
@@ -353,6 +383,30 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          it verifies is BLAKE3 because THAT digest is ours",
     ),
     (
+        "gateway/cloudflare/src/r2.rs",
+        "R2'S OWN FIELD NAME, AND NOTHING COMPUTED (#1029 §3). `checksums.sha256` \
+         is a field on a type the Workers runtime defines, not a digest this \
+         file chooses: it is read, and its `Option` IS the rule — R2 records the \
+         attestation only when the client sent it, so `None` is a refused commit. \
+         The entry is here rather than silenced with a citation because the \
+         distinction is worth a reader's attention: this file NAMES a store's \
+         field, `sigv4.rs` beside it COMPUTES a signature, and only the second \
+         is a hash decision. Every object NAME this adapter handles is BLAKE3",
+    ),
+    (
+        "gateway/cloudflare/src/sigv4.rs",
+        "AWS SIGNATURE VERSION 4 AGAIN, on the other adapter and for a different \
+         half of it (#1029 §3). `gateway-server` signs HEADERS for requests it \
+         makes itself; this signs a QUERY STRING for a request the gateway never \
+         makes — the presigned URL a phone uploads to, because on the hosted \
+         adapter bytes never pass through gateway code at all. Same reason, same \
+         boundary: this is the ONLY module in `gateway/cloudflare` that names the \
+         function, every object NAME it handles is BLAKE3, and the request body \
+         digest it verifies is BLAKE3 because THAT digest is ours. The \
+         duplication between the two SigV4 modules is real and is filed as a \
+         find in this lane\'s receipt with a recommendation to extract it",
+    ),
+    (
         "xtask/src/artifact.rs",
         "`cargo xtask artifact-key` hashes the tree into a GitHub Actions cache \
          key. It names nothing inside a vault and GitHub's cache is not ours",
@@ -418,7 +472,13 @@ fn sha256_appears_only_where_an_allowlist_says_why() {
 #[test]
 fn every_allowlisted_file_still_needs_its_exemption() {
     for (file, reason) in SHA256_ALLOWED {
-        let path = crates_root().join(file);
+        // A `gateway/…` entry is relative to the repository root; everything
+        // else is relative to `crates/`. See `relative`.
+        let path = if file.starts_with("gateway/") {
+            repository_root().join(file)
+        } else {
+            crates_root().join(file)
+        };
         let text = std::fs::read_to_string(&path)
             .unwrap_or_else(|error| panic!("{file} is allowlisted and unreadable: {error}"));
         assert!(

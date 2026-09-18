@@ -1,0 +1,12 @@
+-- THE CONFORMANCE HARNESS'S RESET, AND NOTHING ELSE RUNS IT.
+--
+-- `{table}` is substituted by the adapter with a name read from
+-- `tables_select.sql` — SQLite's own catalogue, never anything a client sent —
+-- because SQL has no parameter form for an identifier. It is the second and
+-- last templated statement in this directory, and the only one that writes.
+--
+-- The suite resets between cases so that no case can pass on another's
+-- leftovers. A reset that dropped and recreated tables would re-run the schema
+-- on every case; emptying them keeps the schema applied once and is what a
+-- Durable Object, which has no `DROP DATABASE`, can actually do.
+DELETE FROM "{table}";

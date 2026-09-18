@@ -39,7 +39,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use centraid_api_proto::core_v1::ErrorCode;
-use centraid_gateway_core::checksum::AttestedChecksum;
+use centraid_gateway_core::checksum::{AttestedChecksum, ChecksumFault};
 use centraid_gateway_core::engine::{Caller, CommitInput, Fault, Gateway};
 use centraid_gateway_core::error::Refusal;
 use centraid_gateway_core::ids::{Generation, Key32, ObjectKind, ObjectName, VaultId};
@@ -64,6 +64,19 @@ pub const SIGNATURE_HEADER: &str = "centraid-signature";
 pub const TIMESTAMP_HEADER: &str = "centraid-timestamp";
 /// The protocol version, inside the signature so a middlebox cannot rewrite it.
 pub const PROTOCOL_HEADER: &str = "centraid-protocol";
+/// The checksum a client attests for the bytes it is uploading, hex.
+///
+/// Which digest that is, is `centraid_gateway_core::checksum`'s and is named
+/// there and in `crates/gateway-server/src/bytes/sigv4.rs` — the two modules
+/// the one-hash boundary allows — and deliberately not here.
+///
+/// **Optional, and its absence is a refusal one step later**: R2 records the
+/// attestation only when the client sent it, so a commit fails on *no
+/// checksum* and not only on *wrong checksum*. A client that omits it uploads
+/// successfully and is then refused `GatewayChecksumMissing` at commit — which
+/// is a 4xx and a CLIENT fault, not this server failing. See
+/// [`status_for`] and `put_object`.
+pub const ATTESTED_CHECKSUM_HEADER: &str = "centraid-attested-checksum";
 
 /// Everything a running server holds.
 pub struct Server {
@@ -99,20 +112,21 @@ pub fn router(server: Shared) -> Router {
 
 /// A refusal on the wire.
 ///
-/// # THE COMPANION TRAVELS WITH THE REFUSAL
+/// # THE CODE IS NOT THE WHOLE ANSWER
 ///
-/// Two codes are meaningless without one, and both companions exist in the
-/// rules already — `Refusal::VaultMoved` carries the epoch and the moment, and
-/// `Refusal::VersionWindow` carries the range that `version::admit`'s own
-/// comment says is there "so the phone can render the typed state without a
-/// second round trip". This body used to drop both, so a phone learned THAT its
-/// vault had moved and never when — half of "N changes since `<date>`", and the
-/// half a client would otherwise have to invent from its own clock.
+/// Almost every refusal a phone *acts* on also carries a value: the epoch that
+/// superseded this device and **when**, the head as it stands now, the server's
+/// protocol range, the bytes left in a quota. This body used to carry the code
+/// and the clock and nothing else, so a phone learned THAT its vault moved and
+/// never WHEN — and a shell that defaults the missing time draws "0 changes
+/// since 1 January 1970" over a frozen vault, which is a fabricated fact rather
+/// than a missing one.
 ///
-/// They are `Option`s because a body-less code has neither, and
-/// `centraid-gateway-client` treats a missing one as malformed rather than as a
-/// default: a shell that drew "0 changes since 1 January 1970" over a frozen
-/// vault would be showing a fabricated fact.
+/// The companions are `centraid_gateway_core::error::Companions` and this
+/// renders them; it does not choose them. `gateway-core`'s conformance case
+/// `errors/a-refusal-carries-its-companions-on-the-wire` drives this very
+/// serializer and fails if a name or a value is lost, which is what stops the
+/// two deployments from drifting apart on it again.
 #[derive(Debug, Serialize)]
 pub struct ErrorBody {
     /// The code from `Refusal::code()`. **Never a sentence**: the member-facing
@@ -120,31 +134,135 @@ pub struct ErrorBody {
     /// `error.proto` already states for every other refusal in this product.
     pub code: String,
     /// The server's clock, so a phone with a wrong one can re-sign **once**.
+    ///
+    /// Not a companion: every body carries it, after any refusal, because a
+    /// phone with a wrong clock has to be able to re-sign after all of them.
     pub server_time_ms: i64,
-    /// `centraid.core.v1.VaultMoved`, for the moved code and nothing else.
+    /// `VAULT_MOVED`: which epoch superseded this device, and when.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub moved: Option<MovedBody>,
-    /// The server's supported range, for the version code and nothing else.
+    /// `VERSION_WINDOW`: both ends of the comparison.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<ProtocolBody>,
+    /// `GATEWAY_CLOCK_SKEW`: the replay window, beside the clock above.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skew_window_ms: Option<i64>,
+    /// `GATEWAY_HEAD_CONFLICT`: the head as it stands now.
+    ///
+    /// **Present with an empty string when there is no head.** "There is no
+    /// head" is an answer — re-read from nothing — and a phone that could not
+    /// tell it from a dropped companion could not tell it from a broken server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_head: Option<String>,
+    /// `GATEWAY_QUOTA_EXCEEDED`: the ceiling, the spend and the ask.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quota: Option<QuotaBody>,
+    /// `GATEWAY_LEASE_STALE`: the epoch held and the epoch claimed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lease: Option<LeaseBody>,
+    /// `GATEWAY_OBJECT_TOO_LARGE`: what was declared and the cap.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<SizeBody>,
+    /// The object an unknown-object or already-committed refusal names, hex.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub object: Option<String>,
 }
 
-/// `centraid.core.v1.VaultMoved`'s two fields, on the HTTP wire.
-#[derive(Debug, Clone, Copy, Serialize)]
+/// See [`ErrorBody::moved`].
+#[derive(Debug, Serialize)]
 pub struct MovedBody {
-    /// The lease epoch that holds the vault now.
     pub current_epoch: u64,
-    /// When it took it, on this server's clock.
     pub moved_at_ms: i64,
 }
 
-/// The protocol range this server supports, inclusive.
-#[derive(Debug, Clone, Copy, Serialize)]
+/// See [`ErrorBody::protocol`].
+#[derive(Debug, Serialize)]
 pub struct ProtocolBody {
-    /// Inclusive.
-    pub min: u32,
-    /// Inclusive.
-    pub max: u32,
+    pub server_protocol_min: u32,
+    pub server_protocol_max: u32,
+    pub client_protocol: u32,
+}
+
+/// See [`ErrorBody::quota`].
+#[derive(Debug, Serialize)]
+pub struct QuotaBody {
+    pub quota_bytes: u64,
+    pub used_bytes: u64,
+    pub wanted_bytes: u64,
+}
+
+/// See [`ErrorBody::lease`].
+#[derive(Debug, Serialize)]
+pub struct LeaseBody {
+    pub held_epoch: u64,
+    pub claimed_epoch: u64,
+}
+
+/// See [`ErrorBody::size`].
+#[derive(Debug, Serialize)]
+pub struct SizeBody {
+    pub declared_bytes: u64,
+    pub cap_bytes: u64,
+}
+
+impl ErrorBody {
+    /// The body for one refusal, companions and all.
+    ///
+    /// **The only place this crate builds an error body with companions**, so
+    /// there is one answer rather than one per handler.
+    #[must_use]
+    pub fn of(refusal: &Refusal, server_time_ms: i64) -> Self {
+        let companions = refusal.companions();
+        Self {
+            code: format!("{:?}", refusal.code()),
+            server_time_ms,
+            moved: companions.moved.map(|moved| MovedBody {
+                current_epoch: moved.current_epoch,
+                moved_at_ms: moved.moved_at_ms,
+            }),
+            protocol: companions.protocol.map(|protocol| ProtocolBody {
+                server_protocol_min: protocol.server_min,
+                server_protocol_max: protocol.server_max,
+                client_protocol: protocol.client,
+            }),
+            skew_window_ms: companions.skew_window_ms,
+            current_head: companions
+                .head
+                .map(|head| head.map(|name| name.hex()).unwrap_or_default()),
+            quota: companions.quota.map(|quota| QuotaBody {
+                quota_bytes: quota.quota_bytes,
+                used_bytes: quota.used_bytes,
+                wanted_bytes: quota.wanted_bytes,
+            }),
+            lease: companions.lease.map(|lease| LeaseBody {
+                held_epoch: lease.held,
+                claimed_epoch: lease.claimed,
+            }),
+            size: companions.size.map(|size| SizeBody {
+                declared_bytes: size.declared_bytes,
+                cap_bytes: size.cap_bytes,
+            }),
+            object: companions.object.map(|object| object.hex()),
+        }
+    }
+
+    /// A body that carries no companions, for an internal error — which is not
+    /// a refusal and has none.
+    #[must_use]
+    pub fn internal(server_time_ms: i64) -> Self {
+        Self {
+            code: format!("{:?}", ErrorCode::Internal),
+            server_time_ms,
+            moved: None,
+            protocol: None,
+            skew_window_ms: None,
+            current_head: None,
+            quota: None,
+            lease: None,
+            size: None,
+            object: None,
+        }
+    }
 }
 
 /// The HTTP status one error code is carried by.
@@ -171,47 +289,27 @@ const fn status_for(code: ErrorCode) -> StatusCode {
         ErrorCode::GatewayDeleteRefused
         | ErrorCode::GatewayCapabilityScope
         | ErrorCode::GatewayMailboxRefused => StatusCode::FORBIDDEN,
+        // WHICH SIDE IS AT FAULT, SAID IN THE STATUS. `GATEWAY_CHECKSUM_MISSING`
+        // is the commonest refusal a new client meets — it uploaded every
+        // object without an attestation header and the commit refused the lot —
+        // and "checksum missing" from a server reads like the server lost
+        // something. It did not: a 400 says the request was wrong, and the
+        // request was wrong because it never attested. It is named here rather
+        // than left to the catch-all so that the attribution is a decision
+        // somebody made and not a default.
+        ErrorCode::GatewayChecksumMissing | ErrorCode::GatewayChecksumMismatch => {
+            StatusCode::BAD_REQUEST
+        }
         _ => StatusCode::BAD_REQUEST,
     }
 }
 
 fn refused(refusal: &Refusal) -> Response {
-    let code = refusal.code();
-    (status_for(code), axum::Json(body_of(refusal, code))).into_response()
-}
-
-/// Render one refusal, companion and all.
-///
-/// A `match` over the two refusals that carry one, so a third minted later
-/// fails to compile here rather than reaching a phone stripped of the field it
-/// needs.
-fn body_of(refusal: &Refusal, code: ErrorCode) -> ErrorBody {
-    let (moved, protocol) = match refusal {
-        Refusal::VaultMoved {
-            current_epoch,
-            moved_at,
-        } => (
-            Some(MovedBody {
-                current_epoch: *current_epoch,
-                moved_at_ms: moved_at.millis(),
-            }),
-            None,
-        ),
-        Refusal::VersionWindow { server, .. } => (
-            None,
-            Some(ProtocolBody {
-                min: server.0,
-                max: server.1,
-            }),
-        ),
-        _ => (None, None),
-    };
-    ErrorBody {
-        code: format!("{code:?}"),
-        server_time_ms: crate::clock::now().millis(),
-        moved,
-        protocol,
-    }
+    (
+        status_for(refusal.code()),
+        axum::Json(ErrorBody::of(refusal, crate::clock::now().millis())),
+    )
+        .into_response()
 }
 
 fn faulted(fault: &Fault) -> Response {
@@ -224,12 +322,7 @@ fn faulted(fault: &Fault) -> Response {
             tracing::error!(detail = %store, "a store failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                axum::Json(ErrorBody {
-                    code: format!("{:?}", ErrorCode::Internal),
-                    server_time_ms: crate::clock::now().millis(),
-                    moved: None,
-                    protocol: None,
-                }),
+                axum::Json(ErrorBody::internal(crate::clock::now().millis())),
             )
                 .into_response()
         }
@@ -628,6 +721,32 @@ async fn delete(
     }
 }
 
+/// Did the client attest a checksum for these bytes, and is it true?
+///
+/// # Errors
+///
+/// [`Refusal::Checksum`] with a mismatch when the header is present and either
+/// is not a checksum at all or is one for some other bytes — both are the
+/// client saying something untrue about what it is uploading, and the proxy is
+/// holding the bytes, so this is the cheapest place in the whole path to find
+/// out rather than one round trip later at the commit.
+fn attestation(headers: &HeaderMap, body: &[u8]) -> Result<bool, Refusal> {
+    let Some(text) = header(headers, ATTESTED_CHECKSUM_HEADER) else {
+        // ABSENT IS ALLOWED THROUGH ON PURPOSE. That is exactly what R2
+        // produces for a client that sent no checksum; the commit refuses it in
+        // both deployments, and a proxy that refused it here instead would be a
+        // proxy whose answer differs from the hosted adapter's (§3).
+        return Ok(false);
+    };
+    let claimed = hex::decode(text.trim())
+        .ok()
+        .and_then(|bytes| AttestedChecksum::from_slice(&bytes));
+    match claimed {
+        Some(claimed) if claimed == AttestedChecksum::of(body) => Ok(true),
+        _ => Err(Refusal::Checksum(ChecksumFault::Mismatch)),
+    }
+}
+
 /// The proxy's write half: the `PUT` a phone makes to the target it was handed.
 async fn put_object(
     State(server): State<Shared>,
@@ -648,7 +767,23 @@ async fn put_object(
     // attestation — because "no attestation" is a REJECTION at commit, not a
     // shrug, and an adapter that filled one in would be an adapter that had
     // quietly turned write-once into a comment.
-    let attested = headers.contains_key("centraid-attested-checksum");
+    //
+    // **AND THE HEADER'S VALUE IS READ, not merely counted.** A presence check
+    // makes the header a flag a client can set to any string at all, so an
+    // operator debugging a commit that failed on the checksum finds a header
+    // that means nothing and learns nothing from it. Here the value is compared
+    // against the bytes that just arrived, and a lie is refused *at the upload*
+    // rather than one round trip later at the commit — the proxy is holding the
+    // bytes, so it is the cheapest place in the whole path to find out.
+    //
+    // An ABSENT header is still allowed through on purpose: that is exactly
+    // what R2 produces for a client that sent no checksum, the commit refuses
+    // it in both deployments, and a proxy that refused it here instead would be
+    // a proxy whose answer differs from the hosted adapter's (§3).
+    let attested = match attestation(&headers, &body) {
+        Ok(attested) => attested,
+        Err(refusal) => return refused(&refusal),
+    };
     let server = server.lock().await;
     match server
         .gateway
@@ -690,6 +825,76 @@ async fn get_object(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// THE ATTESTATION HEADER'S VALUE MEANS SOMETHING.
+    ///
+    /// It used to be checked with `contains_key` alone, so any string at all
+    /// counted as an attestation and an operator debugging a failed commit
+    /// found a header that told them nothing. Now a header that is present and
+    /// untrue is refused where the bytes are, one round trip earlier than the
+    /// commit that would otherwise have caught it.
+    #[test]
+    fn an_attestation_is_believed_only_when_it_matches_the_bytes() {
+        let body = b"the bytes a phone is uploading".to_vec();
+        let mut headers = HeaderMap::new();
+        assert_eq!(
+            attestation(&headers, &body),
+            Ok(false),
+            "no header is not a refusal here: it is what R2 produces, and the \
+             commit is where both deployments refuse it"
+        );
+
+        headers.insert(
+            ATTESTED_CHECKSUM_HEADER,
+            AttestedChecksum::of(&body)
+                .hex()
+                .parse()
+                .expect("a header value"),
+        );
+        assert_eq!(attestation(&headers, &body), Ok(true));
+
+        headers.insert(
+            ATTESTED_CHECKSUM_HEADER,
+            AttestedChecksum::of(b"quite different bytes")
+                .hex()
+                .parse()
+                .expect("a header value"),
+        );
+        assert_eq!(
+            attestation(&headers, &body),
+            Err(Refusal::Checksum(ChecksumFault::Mismatch)),
+            "an attestation for other bytes is a lie, not a shrug"
+        );
+
+        headers.insert(
+            ATTESTED_CHECKSUM_HEADER,
+            "not a checksum".parse().expect("a header value"),
+        );
+        assert_eq!(
+            attestation(&headers, &body),
+            Err(Refusal::Checksum(ChecksumFault::Mismatch)),
+            "a header that is not a checksum at all is refused rather than \
+             counted as an attestation"
+        );
+    }
+
+    /// A MISSING ATTESTATION IS THE CLIENT'S FAULT, AND THE STATUS SAYS SO.
+    ///
+    /// It is the commonest refusal a new client meets — every object uploaded
+    /// and the commit refused the lot — and "checksum missing" from a server
+    /// reads like the server lost something. A 4xx says the request was wrong.
+    #[test]
+    fn a_missing_attestation_is_carried_by_a_client_error_status() {
+        for code in [
+            ErrorCode::GatewayChecksumMissing,
+            ErrorCode::GatewayChecksumMismatch,
+        ] {
+            assert!(
+                status_for(code).is_client_error(),
+                "{code:?} must not read as a server fault"
+            );
+        }
+    }
 
     /// A REFUSAL IS NEVER A 500 AND A STORE FAULT ALWAYS IS. The phone retries
     /// one and not the other, and getting this backwards is a phone that either
@@ -756,7 +961,7 @@ mod tests {
             current_epoch: 4,
             moved_at: centraid_gateway_core::ServerTime::from_millis(1_770_000_000_000),
         };
-        let body = body_of(&refusal, refusal.code());
+        let body = ErrorBody::of(&refusal, crate::clock::now().millis());
         let moved = body.moved.expect("the companion rides with the code");
         assert_eq!(moved.current_epoch, 4);
         assert_eq!(moved.moved_at_ms, 1_770_000_000_000);
@@ -772,9 +977,12 @@ mod tests {
             server: (PROTOCOL_MIN, PROTOCOL_MAX),
             client: 9,
         };
-        let body = body_of(&refusal, refusal.code());
+        let body = ErrorBody::of(&refusal, crate::clock::now().millis());
         let range = body.protocol.expect("the range rides with the code");
-        assert_eq!((range.min, range.max), (PROTOCOL_MIN, PROTOCOL_MAX));
+        assert_eq!(
+            (range.server_protocol_min, range.server_protocol_max),
+            (PROTOCOL_MIN, PROTOCOL_MAX)
+        );
         assert!(body.moved.is_none());
     }
 
@@ -782,7 +990,7 @@ mod tests {
     /// rather than serialised as nulls.
     #[test]
     fn a_refusal_with_no_companion_carries_neither() {
-        let body = body_of(&Refusal::NotLeaseHolder, ErrorCode::GatewayNotLeaseHolder);
+        let body = ErrorBody::of(&Refusal::NotLeaseHolder, crate::clock::now().millis());
         assert!(body.moved.is_none() && body.protocol.is_none());
         let rendered = serde_json::to_string(&body).expect("serialises");
         assert!(!rendered.contains("moved"), "{rendered}");

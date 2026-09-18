@@ -1,5 +1,23 @@
 # syntax=docker/dockerfile:1.7-labs
-# THE v1 GATEWAY IMAGE (#1020, D-1020-G1). Build context: monorepo root.
+# THE `centraid` OPERATOR IMAGE (#1020, D-1020-G1). Build context: monorepo
+# root.
+#
+# **THIS IS NOT THE SERVING IMAGE, AND HAS NOT BEEN SINCE W2** (#1029 §3).
+# The gateway that serves is `crates/gateway-server` and its image is
+# `deploy/gateway-server/Dockerfile`, whose `CMD` is `serve`. What the
+# `centraid` binary has left is operator verbs a person runs and reads:
+# `doctor`, and `gateway install`, which writes a service unit onto a host and
+# is not something a container does at all.
+#
+# So the default command is `doctor`: ONE-SHOT, and it exits. A `docker run` of
+# this image is a health report on the data directory you mounted, not a server
+# you left running. Anything else is `docker run … centraid <verb>` through the
+# ENTRYPOINT below.
+#
+# It used to be `CMD ["gateway", "--data-dir", "/data"]`, which W2 broke when it
+# reduced the `gateway` verb to `gateway install` — the image built and then
+# exited on `docker run`, for four months, because nothing checked. That is what
+# `crates/centraid/tests/container.rs` is now for.
 #
 # Vault/data: bind-mount a host path or a named volume at /data — a bare run
 # LOSES STATE when the container is removed. There is deliberately no anonymous
@@ -20,9 +38,9 @@
 # shell in it". debian-slim is ~30 MB over distroless for a shell, ca-
 # certificates and coreutils.
 #
-# NO REVERSE PROXY, NO TLS, NO BACKUP CRON — see deploy/README.md. iroh is QUIC
-# over UDP with its own transport encryption and needs none of the three, and
-# backup is the gateway's own scheduler.
+# NO REVERSE PROXY, NO TLS, NO BACKUP CRON — see deploy/README.md. Nothing here
+# listens, so there is nothing to put a proxy in front of. The serving gateway's
+# image is where those questions live (`deploy/gateway-server/README.md`).
 #
 # Base images are digest-pinned (multi-arch index), matching the Action SHA pin
 # posture of .github/workflows/**.
@@ -118,8 +136,8 @@ FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc401
 
 ARG VERSION=1.0.0-alpha.0
 ARG REVISION=unknown
-LABEL org.opencontainers.image.title="centraid-gateway" \
-  org.opencontainers.image.description="Centraid gateway: the iroh endpoint, the device allowlist and the vault's authority (#1020)" \
+LABEL org.opencontainers.image.title="centraid" \
+  org.opencontainers.image.description="Centraid operator verbs over a vault directory: doctor, and the service install (#1029 §3). The serving gateway is deploy/gateway-server." \
   org.opencontainers.image.source="https://github.com/srikanth235/centraid" \
   org.opencontainers.image.url="https://github.com/srikanth235/centraid" \
   org.opencontainers.image.version="${VERSION}" \
@@ -141,15 +159,18 @@ COPY --from=build /out/centraid /usr/local/bin/centraid
 USER centraid
 WORKDIR /data
 
-# NO `EXPOSE`. The gateway binds no TCP listener at all — it is a QUIC/UDP iroh
-# endpoint dialled by node id, enforced by `crates/xtask`'s `no-listening-socket`
-# rule and by `crates/centraid/tests/no_listener.rs`. An `EXPOSE 8787` here
-# would document a port that does not exist.
+# NO `EXPOSE`. This binary binds no socket of any kind: W2 deleted the iroh
+# endpoint it once served, and what is left are operator verbs that read a data
+# directory and exit. `crates/xtask`'s `no-listening-socket` rule is what keeps
+# that true. An `EXPOSE` here would document a port that does not exist.
 
-# `doctor` is the health check because it is the check an operator runs by hand:
-# one command, one meaning, and no second definition of "up" to drift.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD ["/usr/local/bin/centraid", "doctor", "--data-dir", "/data"]
+# NO `HEALTHCHECK`. A health check answers "is the long-running process in this
+# container still serving", and there is no long-running process here — the
+# default command is one-shot and exits. Docker would run the check against a
+# container that has already stopped and report `unhealthy` forever, which is a
+# false alarm rather than a signal. The serving image
+# (`deploy/gateway-server/Dockerfile`) is where a health check belongs, and it
+# has one.
 
 ENTRYPOINT ["/usr/local/bin/centraid"]
-CMD ["gateway", "--data-dir", "/data"]
+CMD ["doctor", "--data-dir", "/data"]
