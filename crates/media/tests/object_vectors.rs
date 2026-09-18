@@ -40,6 +40,9 @@ use serde_json::{Value, json};
 const ROOT: [u8; 32] = [0x11; 32];
 const FILE_KEY: [u8; 32] = [0x22; 32];
 
+/// The root a rotation moves to — see the `rotation` block below.
+const NEXT_ROOT: [u8; 32] = [0x44; 32];
+
 /// The vault these objects are sealed for — §4's `(vault identity key, kind)`
 /// AAD binding. The key is never written into an object; it is associated data
 /// on both the key wrap and every body chunk.
@@ -311,6 +314,41 @@ fn generate(committed: &Value, refresh: bool) -> Value {
     )
     .expect("splits");
 
+    // THE WRAP IS NOT IN THE CHUNK AAD (W3 → W6). Pinned as a determined fact:
+    // a re-wrap changes only the header's wrap bytes, and the body that follows
+    // is the same ciphertext. If the wrap ever goes back into the AAD, `rewrap`
+    // stops round-tripping and this block is what says so.
+    let rotatable = object::seal(
+        vault(),
+        Custody::Wrapped(&ROOT),
+        &SealOptions {
+            kind: Kind::Manifest,
+            role: Role::Whole,
+            dictionary: Some(&dictionary),
+        },
+        br#"{"format":"centraid-generation/1","txid":9}"#,
+    )
+    .expect("seals");
+    let rotated = object::rewrap(vault(), &ROOT, &NEXT_ROOT, &rotatable.bytes).expect("rewraps");
+    let body_at = object::header::Header::decode(&rotatable.bytes)
+        .expect("decodes")
+        .1;
+    assert_eq!(
+        &rotated[body_at..],
+        &rotatable.bytes[body_at..],
+        "a re-wrap re-encrypted the body — the wrap is back in the chunk AAD"
+    );
+    assert_eq!(
+        object::open(
+            vault(),
+            Custody::Wrapped(&NEXT_ROOT),
+            &rotated,
+            Some(&dictionary)
+        )
+        .expect("the rotated object opens under the new root"),
+        br#"{"format":"centraid-generation/1","txid":9}"#
+    );
+
     let padme_buckets: Vec<Value> = [0_u64, 1, 9, 100, 1000, 1024, 100_000, 1_048_577]
         .into_iter()
         .map(|length| json!({ "length": length, "padded": padme(length) }))
@@ -354,6 +392,15 @@ fn generate(committed: &Value, refresh: bool) -> Value {
         // The padding, as values. The object sizes below already depend on
         // these, but a bucket table is what makes a changed rule readable.
         "padme": padme_buckets,
+        // THE WRAP IS NOT IN THE CHUNK AAD. The rotated object's body is the
+        // same ciphertext as the original's; only the header's wrap moved.
+        "rotation": {
+            "nextRootKeyHex": hex::encode(NEXT_ROOT),
+            "sealedBytes": rotatable.bytes.len(),
+            "rotatedBytes": rotated.len(),
+            "bodyAt": body_at,
+            "bodyIsVerbatim": true,
+        },
         "objects": objects,
         "pack": {
             "items": bodies

@@ -16,21 +16,29 @@
 //! wrapped into that object's own header**, and every object is reachable from
 //! the root through exactly one wrap.
 //!
-//! ### What rotating that root key costs, which is more than it should
+//! ### What rotating that root key costs, now that it is affordable
 //!
-//! The obvious rotation is to re-wrap each header under the new root and leave
-//! the bodies alone. **That does not work in `centraid-object/1` as it stands**,
-//! and it is worth writing down rather than discovering later: the per-chunk
-//! AAD is the WHOLE header, the wrapped key included, so changing the wrap
-//! invalidates every body tag in the object. Rotating the root therefore means
-//! re-sealing and re-uploading every object, not rewriting a few bytes of each.
+//! W3 lane B recorded that it was not: the per-chunk AAD was the WHOLE header,
+//! the wrapped key included, so re-wrapping a header invalidated every body tag
+//! and rotating the root meant re-sealing every object the vault had ever
+//! written. W6 excluded the wrap from the chunk AAD, which costs nothing in
+//! strength — a substituted wrap yields a different content key, so the body
+//! already fails to open — and [`ObjectKeys::rotate_root`] is the result.
 //!
-//! Excluding the wrap from the chunk AAD would make the cheap rotation possible
-//! and would cost nothing in strength — a substituted wrap yields a different
-//! content key, so the body already fails to open — but that is a change to the
-//! format lane A landed, not one to make while rewriting its caller. It is a
-//! finding for the umbrella (`receipts/issue-1029-phone-is-the-vault.md`), and
-//! B11's own defect — two masters, neither rotatable — is closed either way.
+//! What a rotation now touches:
+//!
+//! - a `base`, `segment`, `manifest` or pack item table is **re-wrapped**, its
+//!   body copied verbatim. No plaintext is found, decompressed or re-sealed, and
+//!   no read-back has to be verified a second time;
+//! - a `blob` or `thumbnail` is **not touched at all**. Its file key lives in
+//!   the vault's blob-custody row, so rotating the root re-wraps that row and
+//!   leaves every photograph where it is — which is the overwhelming majority of
+//!   a phone's bytes and the reason the rotation is affordable.
+//!
+//! The one thing a rotation does not save is the upload: an object's name is the
+//! BLAKE3 of its whole bytes, header included, so a re-wrapped object is a new
+//! object to the store. That is a cost in the wrapped kinds only, and B11's own
+//! defect — two masters, neither rotatable — is closed either way.
 //!
 //! ## The vault identity key is associated data, never a key
 //!
@@ -142,6 +150,19 @@ impl ObjectKeys {
             sealed,
             kind.compresses().then(page_dictionary),
         )?)
+    }
+
+    /// **Rotate the vault root key over one wrapped object** (W3 → W6).
+    ///
+    /// Answers the object's new bytes, whose body is the old body verbatim. See
+    /// the module header for what a rotation touches and what it does not.
+    ///
+    /// # Errors
+    /// [`ObjectError::Open`] when this is not the root the object was wrapped
+    /// under, or when the object carries no wrap — a `blob` or `thumbnail`,
+    /// whose file key is the vault's to re-wrap and not this format's.
+    pub fn rotate_root(&self, to: &[u8; object::KEY_BYTES], sealed: &[u8]) -> Result<Vec<u8>> {
+        Ok(object::rewrap(self.vault(), &self.root_key, to, sealed)?)
     }
 
     /// **Write an object, then read it back from disk and open it** (§4, F11).
@@ -289,6 +310,30 @@ mod tests {
             sealed.bytes.len(),
             plain.len()
         );
+    }
+
+    /// The rotation W3 priced as a full re-upload: the new root opens the
+    /// object, the old one does not, and the body was never re-encrypted.
+    #[test]
+    fn rotating_the_root_re_wraps_without_re_sealing_the_body() {
+        let mine = keys();
+        let plain = b"a page of core_entity rows".repeat(50);
+        let sealed = mine
+            .seal(Kind::Segment, Role::Whole, &plain)
+            .expect("seals");
+
+        let next = [9_u8; 32];
+        let rotated = mine.rotate_root(&next, &sealed.bytes).expect("rotates");
+        let rotated_keys = ObjectKeys::new([7_u8; 32], next);
+        assert_eq!(
+            rotated_keys.open(Kind::Segment, &rotated).expect("opens"),
+            plain
+        );
+        assert!(mine.open(Kind::Segment, &rotated).is_err());
+
+        // The tail is the same ciphertext: the body was copied, not re-sealed.
+        let tail = sealed.bytes.len() - 4096;
+        assert_eq!(&rotated[rotated.len() - 4096..], &sealed.bytes[tail..]);
     }
 
     #[test]
