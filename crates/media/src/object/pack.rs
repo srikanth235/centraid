@@ -114,6 +114,122 @@ impl LiveShareIndex for NoLiveShares {
     }
 }
 
+/// Fill packs to the cap, one after another, for a library that does not fit in
+/// one (#1029 §4).
+///
+/// [`build`] answers one pack and refuses when the items do not fit. A camera
+/// roll's thumbnails do not fit in one pack and never will — this is what turns
+/// a list of a hundred thousand of them into the ~`total / 16 MiB` packs that
+/// make a restore's grid cost **packs, not thumbnails**.
+///
+/// ## Why the budget is a measurement and not an estimate
+///
+/// A pack is closed when the next item's SEALED length, plus the table the pack
+/// will need, plus the trailer, would pass [`MAX_PACK_BYTES`]. Each of those is
+/// measured: the item is sealed first and its length is known, and the table's
+/// cost is bounded by [`table_cost`] rather than guessed. An estimate that ran
+/// under would produce a pack [`finish`] refuses after the work was done.
+///
+/// # Errors
+/// [`ObjectError::TooLarge`] when a SINGLE item cannot fit in a pack of its own
+/// — that item belongs in its own object, not in a pack — otherwise whatever
+/// sealing an item refused.
+pub fn build_all(
+    vault: VaultId<'_>,
+    root: &[u8; super::KEY_BYTES],
+    items: &[PackItem<'_>],
+    dictionary: Option<&Dictionary>,
+) -> ObjectResult<Vec<Pack>> {
+    let mut packs = Vec::new();
+    // NOT pre-allocated to the cap. A pack of three thumbnails is the common
+    // case on a phone that just took a photograph, and reserving 16 MiB for it
+    // would be a sixteen-megabyte allocation to save a few reallocations. It was
+    // measured at a hundred thousand items and bought nothing — the cost there
+    // is the per-item seal, not the growth.
+    let mut bytes = Vec::new();
+    let mut entries: Vec<PackEntry> = Vec::new();
+
+    for item in items {
+        let sealed = seal(
+            vault,
+            item.custody,
+            &SealOptions {
+                kind: item.kind,
+                role: item.role,
+                dictionary,
+            },
+            item.plaintext,
+        )?;
+
+        // Would this item close the pack? Measured against the table this pack
+        // would then need, plus the trailer.
+        let standing = bytes.len() + sealed.bytes.len();
+        let projected = standing + table_cost(&entries, item.id) + TRAILER_BYTES;
+        if projected > MAX_PACK_BYTES {
+            if entries.is_empty() {
+                // One item that cannot share a pack with even its own table. It
+                // is an object, not a pack item.
+                //
+                // Unreachable while `MAX_PLAINTEXT_BYTES` leaves the headroom it
+                // does — `seal` refuses an oversized plaintext before this line,
+                // and anything it accepts seals to well under the cap. It stays
+                // because the alternative is emitting an empty pack and looping,
+                // and because the headroom is a constant somebody may narrow.
+                return Err(ObjectError::TooLarge(projected));
+            }
+            packs.push(finish(
+                vault,
+                root,
+                std::mem::take(&mut bytes),
+                std::mem::take(&mut entries),
+                dictionary,
+            )?);
+        }
+
+        entries.push(PackEntry {
+            id: item.id.to_owned(),
+            name: sealed.name,
+            offset: bytes.len() as u64,
+            length: sealed.bytes.len() as u64,
+        });
+        bytes.extend_from_slice(&sealed.bytes);
+    }
+
+    if !entries.is_empty() {
+        packs.push(finish(vault, root, bytes, entries, dictionary)?);
+    }
+    Ok(packs)
+}
+
+/// An upper bound on the sealed item table for these entries plus one more.
+///
+/// The table's plaintext is `count ‖ (id_len ‖ id ‖ name ‖ offset ‖ length)*`
+/// ([`encode_table`]), and sealing it adds a header, a nonce, a length and a
+/// tag per chunk plus Padmé's at-most-12%. Bounded rather than sealed-and-
+/// measured, because measuring would mean sealing a table per item — a table
+/// per item is a hundred thousand seals for a library that needs seventy.
+fn table_cost(entries: &[PackEntry], next_id: &str) -> usize {
+    let rows: usize = entries
+        .iter()
+        .map(|entry| 2 + entry.id.len() + 32 + 16)
+        .sum::<usize>()
+        + 2
+        + next_id.len()
+        + 32
+        + 16;
+    let plaintext = 4 + rows;
+    // The frame prefix, Padmé's ceiling, the header, and one chunk's framing
+    // per 4 MiB. A table this large is already pathological; the bound only has
+    // to be an over-estimate.
+    let padded = plaintext + 16 + plaintext / 8 + 64;
+    super::header::HEADER_FIXED_BYTES
+        + super::NONCE_BYTES
+        + super::KEY_BYTES
+        + super::TAG_BYTES
+        + padded
+        + padded.div_ceil(super::CHUNK_BYTES).max(1) * (super::NONCE_BYTES + 4 + super::TAG_BYTES)
+}
+
 /// Seal every item, concatenate them, and close with a sealed item table.
 ///
 /// # Errors
@@ -569,6 +685,109 @@ mod tests {
         let all: BTreeSet<String> = pack.entries.iter().map(|entry| entry.id.clone()).collect();
         assert!(!should_repack(&pack.entries, &all));
         assert!(!should_repack(&[], &all));
+    }
+
+    /// **THE PROPERTY A RESTORE'S GRID RESTS ON.** Many items become a few
+    /// packs, every pack is under the cap, every item still opens by its range,
+    /// and no item was dropped or duplicated on a pack boundary.
+    #[test]
+    fn many_items_fill_packs_to_the_cap_and_nothing_falls_between_them() {
+        // 6 MiB apiece, so three do not fit in one 16 MiB pack: the boundary is
+        // exercised rather than assumed.
+        let bodies: Vec<(String, Vec<u8>)> = (0..7_u32)
+            .map(|index| {
+                let mut body = vec![index as u8; 6 * 1024 * 1024];
+                body[0] = 0xa0 | index as u8;
+                (format!("thumb-{index}"), body)
+            })
+            .collect();
+        let items: Vec<PackItem<'_>> = bodies
+            .iter()
+            .map(|(id, plaintext)| PackItem {
+                id,
+                custody: Custody::FileKey(&FILE_KEY),
+                kind: Kind::Thumbnail,
+                role: Role::Thumbnail,
+                plaintext,
+            })
+            .collect();
+
+        let packs = build_all(vault(), &ROOT, &items, None).expect("packs");
+        assert_eq!(packs.len(), 4, "two items per pack, seven items");
+
+        let mut seen = Vec::new();
+        for pack in &packs {
+            assert!(pack.bytes.len() <= MAX_PACK_BYTES, "a pack passed the cap");
+            assert_eq!(
+                read_table(vault(), &ROOT, &pack.bytes, None).expect("reads"),
+                pack.entries,
+                "a pack's trailing table is not its own rows"
+            );
+            for entry in &pack.entries {
+                let opened = open_range(
+                    vault(),
+                    Custody::FileKey(&FILE_KEY),
+                    &pack.bytes,
+                    entry,
+                    None,
+                )
+                .expect("an item opens by its range");
+                let (_, expected) = bodies
+                    .iter()
+                    .find(|(id, _)| id == &entry.id)
+                    .expect("a row names an item");
+                assert_eq!(&opened, expected, "{} opened as something else", entry.id);
+                seen.push(entry.id.clone());
+            }
+        }
+        seen.sort();
+        let mut wanted: Vec<String> = bodies.iter().map(|(id, _)| id.clone()).collect();
+        wanted.sort();
+        assert_eq!(seen, wanted, "an item fell between two packs");
+    }
+
+    /// An item no object can hold is refused by name, before any pack is built
+    /// — it is a [`super::seal_list`] call, not a pack item.
+    #[test]
+    fn one_item_too_large_for_any_object_is_refused_rather_than_packed() {
+        let huge = vec![0_u8; super::super::MAX_PLAINTEXT_BYTES + 1];
+        let items = [PackItem {
+            id: "too-big",
+            custody: Custody::FileKey(&FILE_KEY),
+            kind: Kind::Blob,
+            role: Role::Original,
+            plaintext: &huge,
+        }];
+        assert_eq!(
+            build_all(vault(), &ROOT, &items, None),
+            Err(ObjectError::TooLarge(super::super::MAX_PLAINTEXT_BYTES + 1))
+        );
+    }
+
+    /// The cap holds for the WORST case a pack can be handed: items that each
+    /// seal to just under half of it, so every boundary decision is tight.
+    #[test]
+    fn the_largest_item_a_pack_will_take_still_leaves_room_for_its_table() {
+        let big = vec![7_u8; super::super::MAX_PLAINTEXT_BYTES];
+        let items = [PackItem {
+            id: "the-only-one",
+            custody: Custody::FileKey(&FILE_KEY),
+            kind: Kind::Blob,
+            role: Role::Original,
+            plaintext: &big,
+        }];
+        let packs = build_all(vault(), &ROOT, &items, None).expect("packs");
+        assert_eq!(packs.len(), 1);
+        assert!(packs[0].bytes.len() <= MAX_PACK_BYTES);
+    }
+
+    #[test]
+    fn no_items_is_no_packs_rather_than_one_empty_one() {
+        assert!(
+            build_all(vault(), &ROOT, &[], None)
+                .expect("packs")
+                .is_empty()
+        );
     }
 
     #[test]

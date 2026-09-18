@@ -331,9 +331,15 @@ mod tests {
         );
         assert!(mine.open(Kind::Segment, &rotated).is_err());
 
-        // The tail is the same ciphertext: the body was copied, not re-sealed.
-        let tail = sealed.bytes.len() - 4096;
-        assert_eq!(&rotated[rotated.len() - 4096..], &sealed.bytes[tail..]);
+        // The body is the SAME ciphertext: copied, not re-sealed. Both objects
+        // are the same length because a wrap is a fixed size, so the two bodies
+        // start at the same offset.
+        assert_eq!(rotated.len(), sealed.bytes.len());
+        let body_at = centraid_media::object::header::Header::decode(&sealed.bytes)
+            .expect("decodes")
+            .1;
+        assert_eq!(&rotated[body_at..], &sealed.bytes[body_at..]);
+        assert_ne!(&rotated[..body_at], &sealed.bytes[..body_at]);
     }
 
     #[test]
