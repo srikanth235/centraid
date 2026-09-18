@@ -128,6 +128,24 @@ pub fn steps(profile: Profile) -> Vec<Step> {
             )
         }),
         step("test", run_tests),
+        // THE PRODUCT'S PROMISE, ON EVERY LOOP (#1029 §2, W5-4).
+        //
+        // It stood in `release` alone, and that was right while the drill was
+        // the durability one and nobody had measured it. Both drills together
+        // cost about a second and a half on this hardware, and `release` is the
+        // profile that runs LEAST often — so a promise proved only there is a
+        // promise proved after the code is merged. It is in `local` now, which
+        // makes it a step of every profile, because each is a superset of the
+        // one before.
+        //
+        // `test` above also runs both, and they must stay ordinary
+        // integration tests: a drill that only ran under a gate step is a drill
+        // nobody can run while they are working on it. What the step buys is
+        // that the promise is NAMED — "lose the phone, type 24 words, get every
+        // vault back, and the old phone freezes" is the sentence this product
+        // is for, and a drill buried in fifteen hundred passing tests has a
+        // failure that reads as "the workspace is red".
+        step("restore-drill", run_restore_drill),
         step("rules", run_rules),
         step("ledgers", run_ledgers),
     ];
@@ -202,7 +220,6 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     }
     let mut release = nightly;
     release.extend([
-        step("restore-drill", run_restore_drill),
         step("artifact-identity", run_artifact_identity),
         step("prebuilt-core-required", run_prebuilt_core_required),
         // `vps-smoke` STOOD HERE (D-1020-G5, #1029 §6). It installed the
@@ -688,11 +705,17 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 // Steps
 // ---------------------------------------------------------------------------
 
-/// THE RESTORE DRILL (#1020, wave 2 lane R, D-1020-R7; rewritten for #1029 §2).
+/// THE RESTORE DRILL (#1020, wave 2 lane R, D-1020-R7; rewritten for #1029 §2,
+/// and given its second half by #1029 W5-4).
 ///
 /// The acceptance box is *"the restore drill runs in CI"*, and this is the step
-/// that makes it true. It runs `centraid-vault`'s `restore_drill` integration
-/// test, which:
+/// that makes it true. **It runs two**, in order, because the promise has two
+/// halves and each is meaningless alone: a vault that comes back byte-exact on
+/// a phone nobody can restore onto is a backup with no product, and a phone
+/// that lists two vaults and restores files nobody checked is a product with no
+/// backup.
+///
+/// ### 1. Durability — `centraid-vault`'s `restore_drill`
 ///
 /// - founds a vault and writes commits;
 /// - captures, so the spool holds every committed page;
@@ -705,6 +728,25 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 /// - proves `restore_check` is clean, proves the census matches the census the
 ///   generation carried at that txid, and proves the restored file is
 ///   **byte-identical** to the one that was lost.
+///
+/// ### 2. The phone — `centraid`'s `restore_drill` (#1029 W5-4)
+///
+/// The half `crates/vault`'s drill names in its own header as belonging to the
+/// wave that builds the lease:
+///
+/// - one 24-word phrase, one account key, **two** vaults minted at two indices
+///   and named by the account's own signed listing;
+/// - real commits, a real generation, and every object **uploaded through the
+///   gateway's rules** — lease, plan, quota, write-once, compare-and-set;
+/// - the phone is lost. It is NOT deleted: F1 is about a phone that is still
+///   there;
+/// - a fresh phone restores from **the phrase and a gateway and nothing else**
+///   — the restore function takes no path, no key and no vault id, so F2 holds
+///   structurally rather than by discipline — claims each lease at `epoch + 1`
+///   (F3), and both vaults come back with matching censuses;
+/// - the old phone's next put is refused with `VAULT_MOVED` carrying the epoch
+///   that took it and WHEN, and every row and spool entry it holds is still
+///   there for the freeze to show.
 ///
 /// **It moved crates with the code it is about** (#1029 §5). It used to run
 /// `crates/centraid`'s test against the real `centraid recover` binary and a
@@ -723,24 +765,35 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 /// restorable.
 fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
     let started = Instant::now();
-    let outcome = process(
-        ctx,
-        "restore-drill",
-        "cargo",
-        &[
-            "test",
-            "-p",
-            "centraid-vault",
-            "--test",
-            "restore_drill",
-            "--",
-            "--nocapture",
-        ],
-    )?;
-    let seconds = started.elapsed().as_secs_f64();
-    if !matches!(outcome, Outcome::Ok(_)) {
-        return Ok(outcome);
+    // TWO DRILLS, ONE STEP (#1029 W5-4). The second cannot live in the first's
+    // crate: it drives `centraid-identity` and `centraid-gateway-core` as well
+    // as the vault, and `crates/vault` depends on neither — a durability crate
+    // that had to know about an account key would be the layering this
+    // workspace is arranged to prevent. So it is `crates/centraid`'s, and a
+    // SECOND STEP for it would be a second name for one promise.
+    for (package, what) in [("centraid-vault", "durability"), ("centraid", "the phone")] {
+        let outcome = process(
+            ctx,
+            "restore-drill",
+            "cargo",
+            &[
+                "test",
+                "-p",
+                package,
+                "--test",
+                "restore_drill",
+                "--",
+                "--nocapture",
+            ],
+        )?;
+        if !matches!(outcome, Outcome::Ok(_)) {
+            let Outcome::Failed(detail) = outcome else {
+                return Ok(outcome);
+            };
+            return Ok(Outcome::Failed(format!("the {what} drill: {detail}")));
+        }
     }
+    let seconds = started.elapsed().as_secs_f64();
     // The wall clock, as evidence rather than as a ceiling. There is no
     // `restoreDrillSeconds` slot in `contracts/ledgers/gate-budgets.json` —
     // the release profile's budget is `null` by ruling — so the number is
@@ -757,7 +810,9 @@ fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
         ),
     )?;
     Ok(Outcome::Ok(format!(
-        "lose a vault and restore it byte-exact in {seconds:.1}s (release budget is unbounded by ruling) — evidence: {}",
+        "lose a vault and restore it byte-exact, then lose the PHONE and restore \
+         every vault from 24 words while the old one freezes, in {seconds:.1}s \
+         (no budget slot by ruling) — evidence: {}",
         display_relative(&ctx.root, &dir)
     )))
 }
@@ -1988,27 +2043,44 @@ mod tests {
         }
     }
 
+    /// The cheap steps, and the ORDER, which is load-bearing for one of them.
+    ///
+    /// `restore-drill` joined them in #1029 W5-4 and sits AFTER `test`
+    /// deliberately: `test` builds every test target in the workspace, so the
+    /// drill's own binaries are warm by the time this step runs and it costs
+    /// about a second and a half instead of the three minutes a cold build of
+    /// its two targets would. A drill placed before `test` would put a compile
+    /// on the loop's critical path and read as a slow drill.
     #[test]
-    fn local_carries_the_five_cheap_steps() {
+    fn local_carries_the_six_cheap_steps_with_the_drill_after_the_tests() {
         assert_eq!(
             names(Profile::Local),
-            ["fmt", "clippy", "test", "rules", "ledgers"]
+            ["fmt", "clippy", "test", "restore-drill", "rules", "ledgers"]
         );
     }
 
+    /// What release adds, and what it no longer needs to.
+    ///
+    /// `restore-drill` was one of these and is now a `local` step, so every
+    /// profile carries it — #1029 W5-4's reason is in the step list: release is
+    /// the profile that runs LEAST often, and a promise proved only there is a
+    /// promise proved after the code is merged. The drill did not leave the
+    /// release profile; it arrived everywhere else, which the assertion below
+    /// checks rather than assumes.
+    ///
+    /// `vps-smoke` was a fourth. It ran `centraid gateway` in a clean container
+    /// and paired a seat with it over iroh (#1029 §6).
     #[test]
-    fn release_adds_the_drill_the_identity_check_and_the_required_triples() {
+    fn release_adds_the_identity_check_and_the_required_triples() {
         let nightly = names(Profile::Nightly);
         let release = names(Profile::Release);
-        // `vps-smoke` was the fourth. It ran `centraid gateway` in a clean
-        // container and paired a seat with it over iroh (#1029 §6).
         assert_eq!(
             &release[nightly.len()..],
-            [
-                "restore-drill",
-                "artifact-identity",
-                "prebuilt-core-required"
-            ]
+            ["artifact-identity", "prebuilt-core-required"]
+        );
+        assert!(
+            release.contains(&"restore-drill"),
+            "release still runs the drill — it inherits it from `local` now: {release:?}"
         );
     }
 
