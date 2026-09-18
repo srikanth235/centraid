@@ -253,8 +253,10 @@ pub trait ByteStore {
     ///
     /// # AN UNATTESTED UPLOAD IS A REFUSAL IN BOTH MODES, NOT A READ
     ///
-    /// R2 records `checksums.sha256` **only if the client sent it**, so a
-    /// commit must fail on *no checksum* and not merely on *wrong checksum* —
+    /// R2 records its attested checksum **only if the client sent it** (the
+    /// field is an `Option`, and [`crate::checksum`] is the one module here
+    /// that names which digest it is), so a commit must fail on *no checksum*
+    /// and not merely on *wrong checksum* —
     /// and the conformance suite asserts that in both modes
     /// (`checksum/no-attestation-is-a-rejection`). **A read-and-hash adapter
     /// must therefore not treat a missing attestation as an invitation to read

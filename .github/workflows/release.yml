@@ -164,6 +164,28 @@ jobs:
     with:
       ref: ${{ inputs.ref || '' }}
 
+  # THE HOSTED GATEWAY (#1029 §3). Rides along on `all` like the image lane
+  # does: the Worker is part of the product that ships, and a release that moved
+  # the standalone image without moving the hosted adapter would be a release
+  # where the two deployments speak different protocol versions.
+  #
+  # `deploy` is off on a tag and asked for by name, because this repository has
+  # no Cloudflare account yet — the build and the shared suite still run, which
+  # is the half that is worth having today. See `gateway/cloudflare/README.md`.
+  gateway-worker:
+    needs: plan
+    if: >
+      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-worker')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lane-release-gateway-worker.yml
+    with:
+      ref: ${{ inputs.ref || '' }}
+      deploy: ${{ needs.plan.outputs.surfaces == 'gateway-worker' }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
   # Deliberately NOT reached by a `v*.*.*` tag. The store pipeline is manual by
   # design (J7): a product version bump must not auto-submit to TestFlight/Play.
   #
@@ -230,7 +252,7 @@ jobs:
   # sidecar's socket; v0 has no paired client, and #1029 question 10 rules the
   # extension re-proposed on top of a desktop reader if and when §6 is built.
   release-check:
-    needs: [require-candidate, plan, gateway-image, mobile, prebuilt-core]
+    needs: [require-candidate, plan, gateway-image, gateway-worker, mobile, prebuilt-core]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -1,0 +1,110 @@
+# THE HOSTED GATEWAY'S DEPLOYMENT (#1029 §3).
+#
+# Everything here is a BINDING or a NAME. There is no rule in this file and
+# there is not going to be one: the retention floor, the object cap, the replay
+# window and the delete rate limit are `crates/gateway-core`'s, and a knob here
+# that could change one of them would be a knob that makes this deployment
+# answer a phone differently from the standalone server.
+#
+# `vars` carries exactly two kinds of value: a NAME of something outside this
+# repository (a bucket, a store's verification endpoint), and a NUMBER the owner
+# is entitled to choose because it is a commercial decision rather than a
+# protocol one (what a product is worth in bytes, what a free account gets).
+# Q15 and Q16 are open, so no price and no plan name appears anywhere.
+
+name = "centraid-gateway"
+main = "build/worker/shim.mjs"
+compatibility_date = "2026-01-01"
+
+# `worker-build` compiles this crate to `wasm32-unknown-unknown` and writes the
+# shim `main` points at. It is a cargo tool rather than a step in this file so
+# that the same command works locally and in CI.
+[build]
+command = "cargo install -q worker-build --version 0.1 && worker-build --release"
+
+# ------------------------------------------------------------------ R2 --
+
+# THE BYTES. Bind it, and set the S3 face below for presigning — the binding
+# cannot presign and a phone uploads through a presigned URL (§3).
+[[r2_buckets]]
+binding = "OBJECTS"
+bucket_name = "centraid-objects"
+
+# --------------------------------------------------- Durable Objects --
+
+# ONE PER VAULT: the lease fence and the manifest compare-and-set (F7).
+# ONE PER MAILBOX: the TTL, enforced by an alarm.
+# ONE PER ACCOUNT: the vault listing a restored phone reads, and the purchase
+# map. Each is named by a key, so routing is `id_from_name(<hex>)` and two
+# tenants cannot share an object even by construction.
+[[durable_objects.bindings]]
+name = "VAULTS"
+class_name = "VaultObject"
+
+[[durable_objects.bindings]]
+name = "MAILBOXES"
+class_name = "MailboxObject"
+
+[[durable_objects.bindings]]
+name = "ACCOUNTS"
+class_name = "AccountObject"
+
+# SQLITE-BACKED, which is what makes `contracts/gateway/schema.sql` the ONE
+# schema both adapters apply. A key-value Durable Object would have needed a
+# second schema, and a second schema is a second place for a rule to be wrong in
+# only one deployment.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VaultObject", "MailboxObject", "AccountObject"]
+
+# ------------------------------------------------------------- vars --
+
+[vars]
+# The bucket's S3 face, for presigning. `R2_ACCESS_KEY_ID` and
+# `R2_SECRET_ACCESS_KEY` are SECRETS (`wrangler secret put`) and are deliberately
+# absent from this file.
+R2_S3_HOST = "REPLACE-WITH-ACCOUNT-ID.r2.cloudflarestorage.com"
+R2_BUCKET = "centraid-objects"
+R2_REGION = "auto"
+# What a product id is worth, in BYTES. A number the owner sets; Q15 (pricing)
+# is open and this repository encodes no price.
+PRODUCT_QUOTAS = "{}"
+# What an account with no verified receipt gets. ZERO IS THE SAFE DEFAULT and it
+# is a real free tier rather than "no limit": keys are free to mint, so an
+# unbounded free tier is unbounded Sybil storage (F13).
+FREE_QUOTA_BYTES = "0"
+# The stores' verification endpoints. Absent means this deployment refuses to
+# verify that store rather than trusting the client's copy of the answer.
+# APP_STORE_VERIFY_URL = "…"
+# PLAY_VERIFY_URL = "…"
+
+# ------------------------------------------------- the dev environment --
+#
+# THE CONFORMANCE ROUTE EXISTS ONLY HERE. `POST /__conformance` resets a vault's
+# storage and runs the shared suite inside a real Durable Object; a deployed
+# Worker must not carry it, so the flag that enables it is set in this
+# environment and nowhere else. `wrangler dev` (Miniflare) reads this block.
+[env.dev]
+[env.dev.vars]
+CONFORMANCE = "1"
+R2_S3_HOST = "localhost"
+R2_BUCKET = "centraid-objects"
+R2_REGION = "auto"
+PRODUCT_QUOTAS = "{}"
+FREE_QUOTA_BYTES = "0"
+
+[[env.dev.r2_buckets]]
+binding = "OBJECTS"
+bucket_name = "centraid-objects"
+
+[[env.dev.durable_objects.bindings]]
+name = "VAULTS"
+class_name = "VaultObject"
+
+[[env.dev.durable_objects.bindings]]
+name = "MAILBOXES"
+class_name = "MailboxObject"
+
+[[env.dev.durable_objects.bindings]]
+name = "ACCOUNTS"
+class_name = "AccountObject"

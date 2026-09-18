@@ -1,0 +1,66 @@
+# ITS OWN CARGO WORKSPACE, ON PURPOSE (#1029 §3).
+#
+# This crate compiles to `wasm32-unknown-unknown` and to nothing else: its
+# `worker` dependency is `wasm-bindgen` all the way down and does not build for
+# a host target at all. A member of the repository's workspace would therefore
+# break `cargo build --workspace` for everybody, and would pull a second
+# several-hundred-crate dependency tree into every `cargo check` in the repo.
+#
+# So it is a workspace of its own, with its own `Cargo.lock`, and the repository
+# gate reaches it through its own step rather than through `--workspace`. The
+# cost is that a `gateway-core` change does not rebuild this crate until someone
+# asks; the deploy workflow asks on every push, which is where it matters.
+[workspace]
+
+[package]
+name = "centraid-gateway-worker"
+version = "1.0.0-alpha.0"
+edition = "2024"
+rust-version = "1.91"
+license = "MIT"
+publish = false
+repository = "https://github.com/srikanth235/centraid"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# THIS CRATE HOLDS NO RULES, AND THE DEPENDENCY LIST IS WHERE THAT STARTS.
+#
+# Every refusal, every floor, every checksum comparison and every scope check is
+# `centraid-gateway-core`'s. What is here is a router, three Durable Objects, a
+# bucket and a certificate.
+[dependencies]
+centraid-gateway-core = { path = "../../crates/gateway-core" }
+# The wire's error codes. The MAPPING from a rule to its code is
+# `gateway-core`'s; this crate only renders it.
+centraid-api-proto = { path = "../../crates/api-proto" }
+# The device certificate's byte layout, WITHOUT the discovery half: `pkarr` is a
+# DNS client that binds sockets and a Worker has no business linking one.
+# `default-features = false` is what W4C-1 split the crate for.
+centraid-identity = { path = "../../crates/identity", default-features = false }
+# The body digest a request signature covers, and a receipt's own hash. ONE HASH
+# (#1025 S4): everything this repository defines for itself is BLAKE3.
+blake3 = "1.8"
+hex = "0.4"
+# AWS Signature Version 4, for presigning an R2 URL — HMAC-SHA256 over a SHA-256
+# payload digest. Somebody else's protocol, the third carve-out in lane A's
+# shape, confined to `src/sigv4.rs` with its own entry in
+# `crates/vault/tests/one_hash.rs`.
+hmac = "0.13"
+sha2 = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# THE PLATFORM, AND IT IS wasm32-ONLY ON PURPOSE.
+#
+# `worker` is `wasm-bindgen` all the way down and does not build for a host
+# target. Keeping it behind this cfg is what lets `cargo test` run on the host
+# against the halves that are pure — the SigV4 presigner, the receipt
+# interpretation, the error-body shape and the status table — instead of leaving
+# their tests written and never executed. Everything that touches a Durable
+# Object, a bucket or a `Response` is behind `cfg(target_arch = "wasm32")` in
+# `src/lib.rs` for the same reason.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+worker = "0.8"
