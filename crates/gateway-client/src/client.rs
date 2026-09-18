@@ -31,13 +31,23 @@
 //! [`CommitAck`] it holds. There is no optimistic path here and no method that
 //! answers before the server has.
 
+use centraid_gateway_core::checksum::AttestedChecksum;
 use centraid_gateway_core::ids::{ObjectName, VaultId};
 use centraid_gateway_core::version::{Range, Skew, negotiate};
 use serde::Deserialize;
 
 use crate::outcome::{ClientError, ErrorBody, ServerNeeds};
-use crate::signer::{DeviceSigner, SignedHeaders};
+use crate::signer::DeviceSigner;
 use crate::transport::{HttpRequest, HttpResponse, Transport};
+
+/// The header a client attests a stored object's checksum in.
+///
+/// Its VALUE is the checksum the declaration bound to this name; its PRESENCE
+/// is what the standalone adapter records, because `ChecksumEvidence::None` is
+/// a rejection at commit and not a shrug. An S3-compatible store carries the
+/// same fact as `x-amz-checksum-sha256`, which is why the two adapters agree
+/// without either restating the rule.
+pub const ATTESTED_CHECKSUM_HEADER: &str = "centraid-attested-checksum";
 
 /// What `/v1/health` said, and what this phone agreed to speak.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -257,6 +267,15 @@ impl<T: Transport> GatewayClient<T> {
     /// The foreground path. A background upload does not come through here: it
     /// takes [`Self::authorize_object_put`] and hands the platform a file.
     ///
+    /// **THE ATTESTATION IS NOT OPTIONAL.** A store that was neither read nor
+    /// attested says `ChecksumEvidence::None` at commit, and that is a
+    /// rejection rather than a shrug — a client that omitted this header would
+    /// upload every object successfully and then be refused at commit with
+    /// `GatewayChecksumMissing`, which reads as a server fault and is not one.
+    /// It is a parameter rather than something computed here because the
+    /// checksum is the one the *declaration* bound to this name: recomputing it
+    /// would be a second answer to what these bytes are.
+    ///
     /// # Errors
     ///
     /// Any refusal, typed.
@@ -264,10 +283,12 @@ impl<T: Transport> GatewayClient<T> {
         &mut self,
         name: &ObjectName,
         sealed: Vec<u8>,
+        checksum: &AttestedChecksum,
         phone_now_ms: i64,
     ) -> Result<(), ClientError> {
         let path = format!("/v1/objects/{}/{}", self.vault.hex(), name.hex());
-        self.write("PUT", &path, sealed, phone_now_ms).await?;
+        self.write_attested("PUT", &path, sealed, Some(checksum), phone_now_ms)
+            .await?;
         Ok(())
     }
 
@@ -299,14 +320,28 @@ impl<T: Transport> GatewayClient<T> {
     ///
     /// It takes `&self`: authorising an upload changes nothing, which is what
     /// makes it callable from whatever thread the platform hands the app.
+    ///
+    /// The attestation header rides with it for [`Self::put_object`]'s reason,
+    /// and it matters more here: a background task that uploaded a whole
+    /// generation unattested would be refused at the *next* commit, hours
+    /// later, with nothing on screen to connect the two.
     #[must_use]
     pub fn authorize_object_put(
         &self,
         name: &ObjectName,
+        checksum: &AttestedChecksum,
         phone_now_ms: i64,
-    ) -> (String, SignedHeaders) {
-        self.signer
-            .sign_object_put(&self.vault.hex(), name, phone_now_ms)
+    ) -> (String, Vec<(String, String)>) {
+        let (path, headers) = self
+            .signer
+            .sign_object_put(&self.vault.hex(), name, phone_now_ms);
+        let mut carried: Vec<(String, String)> = headers
+            .pairs()
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect();
+        carried.push((ATTESTED_CHECKSUM_HEADER.to_owned(), checksum.hex()));
+        (path, carried)
     }
 
     /// A write, refused locally when the server is known to be too old.
@@ -317,16 +352,28 @@ impl<T: Transport> GatewayClient<T> {
         body: Vec<u8>,
         phone_now_ms: i64,
     ) -> Result<HttpResponse, ClientError> {
+        self.write_attested(method, path, body, None, phone_now_ms)
+            .await
+    }
+
+    async fn write_attested(
+        &mut self,
+        method: &str,
+        path: &str,
+        body: Vec<u8>,
+        checksum: Option<&AttestedChecksum>,
+        phone_now_ms: i64,
+    ) -> Result<HttpResponse, ClientError> {
         if let Some(needs @ ServerNeeds::Update { .. }) = self.server_needs {
             // IT WRITES NOTHING TO THAT SERVER. Not a request that will be
             // refused — no request at all, so there is nothing for an operator
             // to see in a log and nothing for a member's battery to pay for.
             return Err(ClientError::Version(needs));
         }
-        self.attempt(method, path, body, phone_now_ms).await
+        self.attempt_attested(method, path, body, checksum, phone_now_ms)
+            .await
     }
 
-    /// Sign, send, and spend the one retry the rules allow.
     async fn attempt(
         &mut self,
         method: &str,
@@ -334,8 +381,21 @@ impl<T: Transport> GatewayClient<T> {
         body: Vec<u8>,
         phone_now_ms: i64,
     ) -> Result<HttpResponse, ClientError> {
+        self.attempt_attested(method, path, body, None, phone_now_ms)
+            .await
+    }
+
+    /// Sign, send, and spend the one retry the rules allow.
+    async fn attempt_attested(
+        &mut self,
+        method: &str,
+        path: &str,
+        body: Vec<u8>,
+        checksum: Option<&AttestedChecksum>,
+        phone_now_ms: i64,
+    ) -> Result<HttpResponse, ClientError> {
         let first = self
-            .send_signed(method, path, body.clone(), phone_now_ms)
+            .send_signed(method, path, body.clone(), checksum, phone_now_ms)
             .await?;
         if first.status < 400 {
             return Ok(first);
@@ -356,7 +416,9 @@ impl<T: Transport> GatewayClient<T> {
         // THE ONE RETRY. Apply the server's own clock and sign again.
         self.signer
             .learn_clock(refusal.server_time_ms, phone_now_ms);
-        let second = self.send_signed(method, path, body, phone_now_ms).await?;
+        let second = self
+            .send_signed(method, path, body, checksum, phone_now_ms)
+            .await?;
         if second.status < 400 {
             return Ok(second);
         }
@@ -377,6 +439,7 @@ impl<T: Transport> GatewayClient<T> {
         method: &str,
         path: &str,
         body: Vec<u8>,
+        checksum: Option<&AttestedChecksum>,
         phone_now_ms: i64,
     ) -> Result<HttpResponse, ClientError> {
         let headers = self.signer.sign(method, path, &body, phone_now_ms);
@@ -385,7 +448,19 @@ impl<T: Transport> GatewayClient<T> {
             .into_iter()
             .map(|(name, value)| (name.to_owned(), value))
             .collect();
-        if !body.is_empty() {
+        if let Some(checksum) = checksum {
+            // OUTSIDE THE SIGNATURE, deliberately. The signature already covers
+            // the body's own digest, so a middlebox that rewrote this header
+            // could make a commit FAIL and never make one succeed over bytes
+            // nobody declared. Putting it in the preimage would mean changing
+            // `gateway_core::auth`, which both server adapters verify with —
+            // a protocol change to carry a fact the protocol already binds.
+            map.insert(ATTESTED_CHECKSUM_HEADER.to_owned(), checksum.hex());
+            map.insert(
+                "content-type".to_owned(),
+                "application/octet-stream".to_owned(),
+            );
+        } else if !body.is_empty() {
             map.insert("content-type".to_owned(), "application/json".to_owned());
         }
         Ok(self
