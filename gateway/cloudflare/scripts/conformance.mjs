@@ -28,7 +28,9 @@ const PROBE_INTERVAL_MS = 1_000;
 // Miniflare has to compile the Worker to wasm on the first run, which is a
 // cargo build. Minutes, not seconds, and a short timeout here reads as a
 // conformance failure when it is a cold cache.
-const START_TIMEOUT_MS = Number(process.env.CONFORMANCE_START_TIMEOUT_MS ?? 900_000);
+const START_TIMEOUT_MS = Number(
+  process.env.CONFORMANCE_START_TIMEOUT_MS ?? 900_000
+);
 
 // THE LOCAL SECRETS, WRITTEN RATHER THAN COMMITTED.
 //
@@ -52,6 +54,14 @@ const DEV_VARS = [
   'R2_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"',
   "",
 ].join("\n");
+
+/// A pause. The braces are load-bearing: an arrow body that RETURNED
+/// `setTimeout`'s handle would be a promise executor returning a value, which
+/// means nothing and reads as though it did.
+const sleep = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 function fail(message) {
   process.stderr.write(`conformance: ${message}\n`);
@@ -81,7 +91,7 @@ async function main() {
       String(PORT),
       "--local",
     ],
-    { cwd: root, stdio: ["ignore", "pipe", "pipe"] },
+    { cwd: root, stdio: ["ignore", "pipe", "pipe"] }
   );
 
   let output = "";
@@ -97,29 +107,43 @@ async function main() {
     exited = code;
   });
 
-  const ready = async () => {
-    const deadline = Date.now() + START_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      if (exited !== null) {
-        throw new Error(`wrangler exited with ${exited} before becoming ready:\n${output}`);
-      }
-      try {
-        const probe = await fetch(`http://127.0.0.1:${PORT}/version`);
-        if (probe.ok) {
-          return;
-        }
-      } catch {
-        // Not up yet.
-      }
-      await new Promise((resolve) => setTimeout(resolve, PROBE_INTERVAL_MS));
+  // RECURSION RATHER THAN A LOOP, and not for style. `await` inside a loop is
+  // usually a sequential pipeline somebody should have run with `Promise.all`,
+  // which is why the linter flags it; here the whole point is to wait for one
+  // thing and ask again, so there is nothing to parallelise. Expressing it as a
+  // tail call says that, instead of suppressing a rule that is right everywhere
+  // else in this repository.
+  const ready = async (deadline = Date.now() + START_TIMEOUT_MS) => {
+    if (exited !== null) {
+      throw new Error(
+        `wrangler exited with ${exited} before becoming ready:\n${output}`
+      );
     }
-    throw new Error(`wrangler did not answer in ${START_TIMEOUT_MS}ms:\n${output}`);
+    const up = await fetch(`http://127.0.0.1:${PORT}/version`).then(
+      (probe) => probe.ok,
+      // Not up yet. A connection refused is the expected answer for most of
+      // this wait and is not worth printing once a second.
+      () => false
+    );
+    if (up) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `wrangler did not answer in ${START_TIMEOUT_MS}ms:\n${output}`
+      );
+    }
+    await sleep(PROBE_INTERVAL_MS);
+    await ready(deadline);
   };
 
   const run = async (query, label) => {
-    const answer = await fetch(`http://127.0.0.1:${PORT}/__conformance${query}`, {
-      method: "POST",
-    });
+    const answer = await fetch(
+      `http://127.0.0.1:${PORT}/__conformance${query}`,
+      {
+        method: "POST",
+      }
+    );
     const report = await answer.text();
     process.stdout.write(`--- ${label} ---\n${report}`);
     if (!answer.ok) {
@@ -135,17 +159,24 @@ async function main() {
     await ready();
     const green = await run("", "the suite against this adapter");
     if (green !== "GREEN") {
-      fail(green === "RED" ? "the suite failed against this adapter" : `no verdict: ${green}`);
+      fail(
+        green === "RED"
+          ? "the suite failed against this adapter"
+          : `no verdict: ${green}`
+      );
     }
     // AND THE SUITE HAS TO BE ABLE TO FAIL. A harness that drops uploads on the
     // floor must go red, or the green above is satisfied by a harness that
     // quietly did nothing.
-    const forgetful = await run("?forgetful=1", "a harness that stores nothing");
+    const forgetful = await run(
+      "?forgetful=1",
+      "a harness that stores nothing"
+    );
     if (forgetful !== "GREEN") {
       fail(
         forgetful === "FORGETFUL-GREEN"
           ? "a harness that stores nothing PASSED the suite against this adapter"
-          : `no verdict: ${forgetful}`,
+          : `no verdict: ${forgetful}`
       );
     }
     process.stdout.write("conformance: GREEN against the Cloudflare adapter\n");
