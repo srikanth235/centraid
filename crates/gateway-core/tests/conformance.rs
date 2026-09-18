@@ -17,6 +17,7 @@ use centraid_gateway_core::engine::Gateway;
 use centraid_gateway_core::ids::{ObjectName, VaultId};
 use centraid_gateway_core::memory::{MemoryBytes, MemoryState};
 use centraid_gateway_core::retention::Policy;
+use centraid_gateway_core::error::Refusal;
 use centraid_gateway_core::store::{StoreFault, VaultState};
 
 /// Drive a future that never pends.
@@ -109,6 +110,22 @@ impl Harness for MemoryHarness {
         // field, it is in here.
         Ok(format!("{:?}", self.gateway.state))
     }
+
+    /// The companion rendering, straight off `Refusal::companions()`.
+    ///
+    /// **This harness is not a deployment and its serializer is not a
+    /// protocol.** Rendering the fields the rules produced is the most this can
+    /// honestly do; what the case is really for is the two adapters, whose
+    /// serializers are hand-written and are where a companion actually gets
+    /// lost. Here it proves the rules produce the companions at all, which is
+    /// the half that has to be true before an adapter can render them.
+    async fn error_body(&self, refusal: &Refusal) -> Result<String, StoreFault> {
+        let mut body = format!("code={:?}", refusal.code());
+        for (field, value) in refusal.companions().fields() {
+            body.push_str(&format!(" {field}={value}"));
+        }
+        Ok(body)
+    }
 }
 
 /// Every case, named, and a failure prints which.
@@ -145,6 +162,7 @@ fn the_conformance_suite_is_green_against_the_in_memory_adapter() {
         "version-skew/server-too-old-writes-nothing",
         "version-skew/client-too-old",
         "canary/no-plaintext-or-plaintext-hash-is-anywhere-in-the-store",
+        "errors/a-refusal-carries-its-companions-on-the-wire",
     ] {
         assert!(
             report.cases.iter().any(|case| case.name == required),
@@ -202,6 +220,10 @@ fn the_suite_goes_red_against_a_harness_that_does_not_store_what_it_was_given() 
 
         async fn state_text(&self) -> Result<String, StoreFault> {
             self.0.state_text().await
+        }
+
+        async fn error_body(&self, refusal: &Refusal) -> Result<String, StoreFault> {
+            self.0.error_body(refusal).await
         }
     }
 

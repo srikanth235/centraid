@@ -75,6 +75,7 @@ async fn run(store: Store, mode: ChecksumMode) {
         "retention/one-client-base-tombstone-per-vault-per-day",
         "scrub/bit-rot-is-reported-without-any-key",
         "canary/no-plaintext-or-plaintext-hash-is-anywhere-in-the-store",
+        "errors/a-refusal-carries-its-companions-on-the-wire",
     ] {
         assert!(
             report.cases.iter().any(|case| case.name == required),
@@ -159,6 +160,13 @@ async fn the_suite_goes_red_against_a_harness_that_stores_nothing() {
 
         async fn state_text(&self) -> Result<String, StoreFault> {
             self.0.state_text().await
+        }
+
+        async fn error_body(
+            &self,
+            refusal: &centraid_gateway_core::error::Refusal,
+        ) -> Result<String, StoreFault> {
+            self.0.error_body(refusal).await
         }
     }
 

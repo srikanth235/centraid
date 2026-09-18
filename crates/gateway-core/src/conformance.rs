@@ -164,6 +164,22 @@ pub trait Harness {
     /// canary's second window, and the reason it is a `String` is that the
     /// canary asks only one question of it: does a plaintext appear in here?
     async fn state_text(&self) -> Result<String, StoreFault>;
+
+    /// **THE BODY THIS ADAPTER PUTS ON THE WIRE FOR A REFUSAL**, as text.
+    ///
+    /// Not a rule and not storage: this is the adapter's own serializer, and it
+    /// is here because it is the one place a deployment can silently lose
+    /// something the rules produced. [`Refusal::code`] and
+    /// [`Refusal::companions`] are `gateway-core`'s, and an adapter that
+    /// rendered the code and dropped the companions would hand the phone a
+    /// refusal it can display and not act on — which is what the standalone
+    /// adapter was doing, found by the phone's own lane rather than by anything
+    /// here.
+    ///
+    /// Text rather than a typed body because the two adapters do not share a
+    /// serializer and are not required to: what the suite asks is that the name
+    /// and the value both survive into whatever this adapter sends.
+    async fn error_body(&self, refusal: &Refusal) -> Result<String, StoreFault>;
 }
 
 fn vault_id() -> VaultId {
@@ -271,6 +287,7 @@ pub async fn run<H: Harness>(harness: &mut H) -> Report {
     let quota = Plan::active(1_024 * 1_024 * 1_024);
 
     version_skew(&mut report);
+    error_companions(harness, &mut report).await;
     checksum_modes(harness, &mut report, quota).await;
     presign_refusal(harness, &mut report, quota).await;
     head_race(harness, &mut report, quota).await;
@@ -280,6 +297,94 @@ pub async fn run<H: Harness>(harness: &mut H) -> Report {
     scrub_and_purge(harness, &mut report, quota).await;
     canary(harness, &mut report, quota).await;
     report
+}
+
+/// A REFUSAL REACHES THE PHONE WITH WHAT THE RULE PUT IN IT.
+///
+/// The code says *what* was refused and the companions say *which* — the epoch
+/// that superseded this device and **when**, the head as it stands now, the
+/// server's protocol range. A phone that gets `VAULT_MOVED` and no time can
+/// freeze the vault and cannot tell the member how much is at stake, and a
+/// shell that defaults the missing time draws a fabricated one.
+///
+/// This case exists because that is exactly what happened: the standalone
+/// adapter's error body carried the code and the server clock and nothing else,
+/// and it was found by the phone's client lane rather than by this suite. The
+/// suite had no window onto an adapter's wire body at all, which is the hole —
+/// [`Harness::error_body`] is that window, and this is what looks through it.
+///
+/// It asks only that the **name and the value both survive**. How an adapter
+/// nests them is its own business; that it sends them is the protocol's.
+async fn error_companions<H: Harness>(harness: &mut H, report: &mut Report) {
+    let name = "errors/a-refusal-carries-its-companions-on-the-wire";
+    let refusals = [
+        Refusal::VaultMoved {
+            current_epoch: 7,
+            moved_at: at(START),
+        },
+        Refusal::VersionWindow {
+            server: (1, 1),
+            client: 9,
+        },
+        Refusal::HeadConflict {
+            current: Some(ObjectName::of(b"the head as it stands")),
+        },
+        Refusal::LeaseStale {
+            held: 3,
+            claimed: 3,
+        },
+        Refusal::QuotaExceeded {
+            quota_bytes: 1_024,
+            used_bytes: 1_000,
+            wanted_bytes: 2_048,
+        },
+    ];
+
+    for refusal in &refusals {
+        let body = match harness.error_body(refusal).await {
+            Ok(body) => body,
+            Err(fault) => {
+                report.fail(name, format!("the adapter could not render {refusal:?}: {fault:?}"));
+                return;
+            }
+        };
+        // The code first: a body that lost that lost everything.
+        let code = format!("{:?}", refusal.code());
+        if !body.contains(&code) && !body.contains(&code.to_ascii_uppercase()) {
+            report.fail(
+                name,
+                format!("the body for {refusal:?} does not name its code {code}: {body}"),
+            );
+            return;
+        }
+        for (field, value) in refusal.companions().fields() {
+            if !body.contains(value.as_str()) {
+                report.fail(
+                    name,
+                    format!(
+                        "the body for {refusal:?} dropped `{field}` = `{value}`. A phone \
+                         reads a missing companion as malformed rather than defaulting it, \
+                         because a defaulted value is a fabricated fact: {body}"
+                    ),
+                );
+                return;
+            }
+        }
+    }
+
+    // AND THE ABSENT HEAD IS STILL AN ANSWER. A lost compare-and-set against an
+    // empty vault must not be indistinguishable from an adapter that dropped
+    // the companion, or the phone cannot tell "re-read from nothing" from "this
+    // server is broken".
+    let empty = Refusal::HeadConflict { current: None };
+    match harness.error_body(&empty).await {
+        Ok(body) => report.check(
+            name,
+            body.contains("head"),
+            format!("a head conflict with no head names no head at all: {body}"),
+        ),
+        Err(fault) => report.fail(name, format!("the adapter could not render {empty:?}: {fault:?}")),
+    }
 }
 
 /// VERSION SKEW BOTH WAYS. A self-hoster a year behind, and a phone nobody has
