@@ -49,6 +49,63 @@ use crate::r2::{R2Bytes, S3Face, object_key, put_as_a_phone_would};
 use crate::vault::DurableState;
 use crate::wire::ErrorBody;
 
+/// A SUITE THAT CANNOT FAIL IS NOT A SUITE.
+///
+/// Every assertion about a green run is satisfied by a harness that quietly did
+/// nothing, so the suite has to be shown going RED against one. This harness
+/// lies about exactly one thing — it drops uploads on the floor — and every
+/// commit must then fail on "no attested checksum", which is the rule R2's own
+/// behaviour forced.
+///
+/// `gateway-core` proves this against its in-memory adapter and
+/// `gateway-server` against its own; it has to be true of **this** harness too,
+/// or the Worker's green run proves nothing about the Worker.
+pub struct ForgetfulHarness(pub WorkerHarness);
+
+impl Harness for ForgetfulHarness {
+    type State = DurableState;
+    type Bytes = R2Bytes;
+
+    async fn reset(&mut self, mode: ChecksumMode, policy: Policy) -> Result<(), StoreFault> {
+        self.0.reset(mode, policy).await
+    }
+
+    fn gateway(&mut self) -> &mut Gateway<Self::State, Self::Bytes> {
+        self.0.gateway()
+    }
+
+    async fn register(&mut self, state: VaultState) -> Result<(), StoreFault> {
+        self.0.register(state).await
+    }
+
+    async fn upload(
+        &mut self,
+        _vault: VaultId,
+        _name: ObjectName,
+        _bytes: Vec<u8>,
+        _attested: bool,
+    ) -> Result<(), StoreFault> {
+        // The bytes go nowhere.
+        Ok(())
+    }
+
+    async fn corrupt(&mut self, vault: VaultId, name: ObjectName) -> Result<(), StoreFault> {
+        self.0.corrupt(vault, name).await
+    }
+
+    async fn stored_bytes(&self) -> Result<Vec<Vec<u8>>, StoreFault> {
+        self.0.stored_bytes().await
+    }
+
+    async fn state_text(&self) -> Result<String, StoreFault> {
+        self.0.state_text().await
+    }
+
+    async fn error_body(&self, refusal: &Refusal) -> Result<String, StoreFault> {
+        self.0.error_body(refusal).await
+    }
+}
+
 /// The suite's view of this deployment.
 pub struct WorkerHarness {
     gateway: Gateway<DurableState, R2Bytes>,

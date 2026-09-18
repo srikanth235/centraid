@@ -99,10 +99,33 @@ impl DurableState {
     ///
     /// A store fault.
     pub fn reset(&self) -> Result<(), StoreFault> {
-        for table in self.tables()? {
+        // CHILDREN FIRST, AND THAT IS NOT A DETAIL. A Durable Object's SQLite
+        // **enforces foreign keys**, unlike a plain SQLite connection where
+        // they are off until a pragma turns them on — so emptying `account`
+        // while a `vault` row still references it fails with
+        // `SQLITE_CONSTRAINT_TRIGGER`, and every case after it in the run
+        // reports "setup failed" with nothing naming the cause. It is written
+        // down here because that is exactly how it was found.
+        //
+        // `defer_foreign_keys` would be the other answer and is not available:
+        // it defers only to the end of a transaction, and each `exec` here is
+        // its own.
+        //
+        // The order is the schema's own: everything hangs off `vault`, and
+        // `vault` hangs off `account`.
+        const LAST: [&str; 2] = ["vault", "account"];
+        let tables = self.tables()?;
+        for table in tables.iter().filter(|name| !LAST.contains(&name.as_str())) {
             self.sql
-                .exec(&sql::table_clear(&table), None)
+                .exec(&sql::table_clear(table), None)
                 .map_err(fault)?;
+        }
+        for table in LAST {
+            if tables.iter().any(|name| name == table) {
+                self.sql
+                    .exec(&sql::table_clear(table), None)
+                    .map_err(fault)?;
+            }
         }
         Ok(())
     }

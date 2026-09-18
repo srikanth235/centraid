@@ -372,7 +372,13 @@ impl DurableObject for VaultObject {
         // there is no certificate to check. The route is unreachable unless the
         // Worker was started with the flag.
         if segments.first().is_some_and(|first| first == "__conformance") {
-            return self.run_conformance().await;
+            // `?forgetful=1` runs the same suite against a harness that drops
+            // uploads on the floor, and it must go RED. Without that, every
+            // green run above is satisfied by a harness that quietly did
+            // nothing — and the check has to be made against THIS harness, not
+            // only against the other two adapters'.
+            let forgetful = url.query().is_some_and(|query| query.contains("forgetful"));
+            return self.run_conformance(forgetful).await;
         }
 
         let Some(vault) = segments.get(1).and_then(|hex| key_of(hex)) else {
@@ -431,9 +437,9 @@ impl VaultObject {
         ))
     }
 
-    async fn run_conformance(&self) -> WorkerResult<Response> {
+    async fn run_conformance(&self, forgetful: bool) -> WorkerResult<Response> {
         let bucket = self.env.bucket(BUCKET)?;
-        let mut harness = match WorkerHarness::new(
+        let harness = match WorkerHarness::new(
             self.state.storage().sql(),
             bucket,
             s3_face(&self.env),
@@ -442,6 +448,20 @@ impl VaultObject {
             Ok(harness) => harness,
             Err(fault) => return Response::error(fault.0, 500),
         };
+        if forgetful {
+            let mut harness = crate::conformance::ForgetfulHarness(harness);
+            let report = centraid_gateway_core::conformance::run(&mut harness).await;
+            let mut body = report.render();
+            // INVERTED ON PURPOSE. A forgetful harness that reported GREEN is
+            // the failure, so this route's verdict is "did it go red".
+            body.push_str(if report.is_green() {
+                "FORGETFUL-GREEN\n"
+            } else {
+                "GREEN\n"
+            });
+            return Response::ok(body);
+        }
+        let mut harness = harness;
         let report = centraid_gateway_core::conformance::run(&mut harness).await;
         // A LINE PER CASE AND THEN A VERDICT. The suite never panics — a Worker
         // has no test harness to catch one — so the verdict is what the runner

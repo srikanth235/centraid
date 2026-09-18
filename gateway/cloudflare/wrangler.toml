@@ -17,10 +17,15 @@ main = "build/worker/shim.mjs"
 compatibility_date = "2026-01-01"
 
 # `worker-build` compiles this crate to `wasm32-unknown-unknown` and writes the
-# shim `main` points at. It is a cargo tool rather than a step in this file so
-# that the same command works locally and in CI.
+# shim `main` points at. Its version tracks `worker`'s — they are released
+# together and a mismatch produces a shim the runtime cannot load — so it is
+# pinned to the same number the `[dependencies]` table carries.
+#
+# `cargo install` is idempotent and is here rather than in the workflow so that
+# the same command works locally and in CI: an operator running `wrangler dev`
+# on a fresh checkout should not have to be told about a second tool first.
 [build]
-command = "cargo install -q worker-build --version 0.1 && worker-build --release"
+command = "cargo install -q worker-build --version 0.8.6 --locked && worker-build --release"
 
 # ------------------------------------------------------------------ R2 --
 
