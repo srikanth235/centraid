@@ -376,6 +376,17 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
                         },
                     )
                     .await?;
+                // THE AUDIT LEDGER, FOR EVERY GRANTED TOMBSTONE OF EVERY KIND
+                // (W4b hand-off 1). It records only what a blind gateway
+                // already holds — the vault key, the object name, the kind and
+                // its own clock — and it is written *here*, above the port, so
+                // that neither adapter can be the one that keeps it. Without
+                // this an owner asked "what did this device delete, and when"
+                // has the object row until the purge removes it, and nothing
+                // afterwards.
+                self.state
+                    .record_client_delete(&caller.vault, name, candidate.kind, caller.now)
+                    .await?;
                 if candidate.kind == ObjectKind::Base {
                     // The rate limit's memory, and it is updated INSIDE the
                     // batch: a client that asked to tombstone ten bases in one

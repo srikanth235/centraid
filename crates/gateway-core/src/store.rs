@@ -179,6 +179,39 @@ pub trait StateStore {
         vault: &VaultId,
         at: ServerTime,
     ) -> Result<(), StoreFault>;
+
+    /// **THE PER-OBJECT AUDIT LEDGER**: this device asked for this object to be
+    /// tombstoned, and the gateway agreed, at this time.
+    ///
+    /// It is a different row from [`Self::record_client_base_delete`] and for a
+    /// different reader. That one is the rate limit's own memory — one row per
+    /// vault, no object name, because the rule asks only *when did this vault
+    /// last tombstone a base*. This is `client_delete` in
+    /// `contracts/gateway/schema.sql`, keyed by name, and it is what an owner
+    /// reads when asked what a device deleted and when. Folding them would mean
+    /// inventing a name the rate limit never sends, or making the rule scan a
+    /// growing table for a `MAX` on every delete.
+    ///
+    /// # IT RECORDS ONLY WHAT A BLIND GATEWAY ALREADY HOLDS
+    ///
+    /// A vault key, an object name, an object kind and the gateway's own clock
+    /// — every one of them already a column on `object` for the same object.
+    /// The ledger adds no new visibility; it adds *durability*, because the
+    /// object row is what a purge eventually removes and this is what outlives
+    /// it. If a field ever wanted to arrive here that is not on that list, the
+    /// answer is no: this is a ledger a blind gateway keeps about its own acts,
+    /// not about a member's content.
+    ///
+    /// Called by [`crate::engine::Gateway::delete`] for **every** tombstone it
+    /// grants, of every kind — not only bases, which are merely the kind the
+    /// rate limit counts.
+    async fn record_client_delete(
+        &mut self,
+        vault: &VaultId,
+        name: &ObjectName,
+        kind: ObjectKind,
+        at: ServerTime,
+    ) -> Result<(), StoreFault>;
 }
 
 /// The objects. **Bytes never pass through gateway code on the hosted
@@ -205,13 +238,34 @@ pub trait ByteStore {
     ) -> Result<UploadTarget, StoreFault>;
 
     /// What the store can say about the bytes at this name, in whichever mode
-    /// it supports.
+    /// **the adapter was built in**.
     ///
-    /// An attest-only store answers [`ChecksumEvidence::Attested`] from a HEAD
-    /// request; a store that cannot attest is **read and hashed**. A store that
-    /// has nothing at all answers [`ChecksumEvidence::None`], which is a
-    /// rejection — R2 records the checksum only when the client sent it, so
-    /// silence has to be a refusal.
+    /// The mode is [`Self::checksum_mode`] and it is the whole of what decides
+    /// which answer is owed:
+    ///
+    /// - [`ChecksumMode::Attest`] — answer [`ChecksumEvidence::Attested`] from
+    ///   the store's own attestation, typically a `HEAD`.
+    /// - [`ChecksumMode::ReadAndHash`] — read the bytes and answer
+    ///   [`ChecksumEvidence::ReadAndHashed`], which is the only mode that can
+    ///   see whether the bytes hash to the *name* they are filed under.
+    /// - **Either mode**, when the store has nothing to say about this object:
+    ///   [`ChecksumEvidence::None`], which [`crate::checksum::verify`] refuses.
+    ///
+    /// # AN UNATTESTED UPLOAD IS A REFUSAL IN BOTH MODES, NOT A READ
+    ///
+    /// R2 records `checksums.sha256` **only if the client sent it**, so a
+    /// commit must fail on *no checksum* and not merely on *wrong checksum* —
+    /// and the conformance suite asserts that in both modes
+    /// (`checksum/no-attestation-is-a-rejection`). **A read-and-hash adapter
+    /// must therefore not treat a missing attestation as an invitation to read
+    /// and hash the bytes anyway.** Doing so accepts an object the hosted
+    /// adapter refuses, which is precisely the divergence the shared suite
+    /// exists to catch — and W4b's S3 store was doing it (that lane's receipt,
+    /// "Two defects the four runs found"). Read-and-hash is the stronger check
+    /// *over an attested object*, never a substitute for the attestation.
+    ///
+    /// The suite is the authority here, and this paragraph is the port saying
+    /// the same thing so an adapter author does not have to infer it.
     async fn evidence(
         &self,
         vault: &VaultId,

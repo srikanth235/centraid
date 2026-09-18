@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use crate::checksum::{AttestedChecksum, ChecksumEvidence, ChecksumMode};
 use crate::commit;
-use crate::ids::{ObjectName, VaultId};
+use crate::ids::{ObjectKind, ObjectName, VaultId};
 use crate::retention::BaseRecord;
 use crate::store::{ByteStore, StateStore, StoreFault, StoredObject, UploadTarget, VaultState};
 use crate::time::{Duration, ServerTime};
@@ -34,6 +34,8 @@ pub struct MemoryState {
     objects: BTreeMap<(VaultId, ObjectName), StoredObject>,
     bases: BTreeMap<(VaultId, ObjectName), BaseRecord>,
     client_base_deletes: BTreeMap<VaultId, ServerTime>,
+    /// The per-object audit ledger, `client_delete` in the shared schema.
+    client_deletes: BTreeMap<(VaultId, ObjectName), (ObjectKind, ServerTime)>,
 }
 
 impl MemoryState {
@@ -136,6 +138,33 @@ impl StateStore for MemoryState {
     ) -> Result<(), StoreFault> {
         self.client_base_deletes.insert(*vault, at);
         Ok(())
+    }
+
+    async fn record_client_delete(
+        &mut self,
+        vault: &VaultId,
+        name: &ObjectName,
+        kind: ObjectKind,
+        at: ServerTime,
+    ) -> Result<(), StoreFault> {
+        self.client_deletes.insert((*vault, *name), (kind, at));
+        Ok(())
+    }
+}
+
+impl MemoryState {
+    /// The audit ledger, for a test that asks whether the delete path wrote it.
+    ///
+    /// Not on [`StateStore`]: no rule reads this ledger, and a port operation
+    /// no rule reads is an operation every adapter has to implement for
+    /// nobody.
+    #[must_use]
+    pub fn client_deletes(&self, vault: &VaultId) -> Vec<(ObjectName, ObjectKind, ServerTime)> {
+        self.client_deletes
+            .iter()
+            .filter(|((held, _), _)| held == vault)
+            .map(|((_, name), (kind, at))| (*name, *kind, *at))
+            .collect()
     }
 }
 
