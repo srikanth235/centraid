@@ -19,6 +19,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.BackgroundTasks.BGAppRefreshTaskRequest
+import platform.BackgroundTasks.BGProcessingTaskRequest
 import platform.BackgroundTasks.BGTaskScheduler
 import platform.CoreFoundation.CFDataCreate
 import platform.CoreFoundation.CFDataGetBytePtr
@@ -62,6 +63,8 @@ import platform.Security.kSecClass
 import platform.Security.kSecClassGenericPassword
 import platform.Security.kSecMatchLimit
 import platform.Security.kSecMatchLimitOne
+import platform.Security.kSecAttrSynchronizable
+import platform.Security.kSecAttrAccessibleAfterFirstUnlock
 import platform.Security.kSecReturnData
 import platform.Security.kSecValueData
 import platform.darwin.dispatch_get_main_queue
@@ -71,8 +74,15 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileSize
 import platform.Foundation.NSNumber
 import platform.Foundation.NSTemporaryDirectory
+import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
+import platform.Foundation.NSURLSession
+import platform.Foundation.NSURLSessionConfiguration
+import platform.Foundation.NSURLSessionUploadTask
 import platform.Foundation.NSUUID
+import platform.Foundation.backgroundSessionConfigurationWithIdentifier
+import platform.Foundation.setHTTPMethod
+import platform.Foundation.setValue
 import platform.Foundation.closeFile
 import platform.Foundation.fileHandleForReadingAtPath
 import platform.Foundation.NSDateFormatter
@@ -133,6 +143,8 @@ public actual fun platformServices(): PlatformServices = IosPlatformServices()
 public class IosPlatformServices : PlatformServices {
     override val secureStore: SecureStore = IosSecureStore()
     override val backgroundTasks: BackgroundTasks = IosBackgroundTasks()
+    override val backgroundTransfers: BackgroundTransfers = IosBackgroundTransfers()
+    override val syncedSecrets: SyncedSecrets = IosSyncedSecrets()
     override val networkStatus: NetworkStatus = IosNetworkStatus()
     override val mediaLibrary: MediaLibrary = IosMediaLibrary()
     override val ocr: Ocr = IosOcr()
@@ -299,11 +311,24 @@ public class IosSecureStore : SecureStore {
 public class IosBackgroundTasks : BackgroundTasks {
 
     override suspend fun register(): BackgroundTasks.Registration {
-        val request = BGAppRefreshTaskRequest(TASK_IDENTIFIER)
-        request.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(EARLIEST_SECONDS)
+        val refresh = BGAppRefreshTaskRequest(REFRESH_IDENTIFIER)
+        refresh.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(EARLIEST_SECONDS)
+        // THE LONG ONE, for uploading a generation. A refresh task's budget is
+        // seconds; a `BGProcessingTask` gets minutes, and asks for a network
+        // rather than a charger — a member who never charges overnight still
+        // gets backed up, which is exactly the member most likely to lose a
+        // phone.
+        val processing = BGProcessingTaskRequest(PROCESSING_IDENTIFIER)
+        processing.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(EARLIEST_SECONDS)
+        processing.requiresNetworkConnectivity = true
+        processing.requiresExternalPower = false
         var refusal = ""
         val submitted = try {
-            BGTaskScheduler.sharedScheduler.submitTaskRequest(request, null)
+            // BOTH OR NEITHER. A phone that took the refresh and refused the
+            // processing task would catch up on rows and never upload bytes,
+            // which is the state a member reads as "backed up" and is not.
+            BGTaskScheduler.sharedScheduler.submitTaskRequest(refresh, null) &&
+                BGTaskScheduler.sharedScheduler.submitTaskRequest(processing, null)
         } catch (error: Throwable) {
             refusal = error.message ?: "BGTaskScheduler refused"
             false
@@ -319,10 +344,273 @@ public class IosBackgroundTasks : BackgroundTasks {
         )
     }
 
-    private companion object {
-        /** Declared in `Info.plist`'s `BGTaskSchedulerPermittedIdentifiers`. */
-        const val TASK_IDENTIFIER = "dev.centraid.sync-pass"
+    internal companion object {
+        /**
+         * **EVERY ONE OF THESE IS IN `Info.plist`'s
+         * `BGTaskSchedulerPermittedIdentifiers`, AND THAT IS NOT A STYLE RULE.**
+         *
+         * `BGTaskScheduler` raises an `NSInternalInconsistencyException` when an
+         * identifier is registered or submitted that the bundle does not
+         * declare — the app does not fail the task, it TERMINATES. A member
+         * whose phone kills Centraid on launch has no backup and no way to tell
+         * anyone why, so the list below and the plist array are one fact kept
+         * in two files, and `mobile/iosApp/Resources/Info.plist` names this
+         * companion in its own comment.
+         */
+        const val REFRESH_IDENTIFIER = "dev.centraid.sync-pass"
+
+        /**
+         * The long one. A refresh task gets ~30 seconds; uploading a
+         * generation does not fit in that, and `BGProcessingTask` is the class
+         * iOS provides for work that needs minutes and can wait for a charger.
+         */
+        const val PROCESSING_IDENTIFIER = "dev.centraid.upload-pass"
+
+        /** Both ids, for the registration and for the test that pins the plist. */
+        val PERMITTED_IDENTIFIERS: List<String> =
+            listOf(REFRESH_IDENTIFIER, PROCESSING_IDENTIFIER)
+
         const val EARLIEST_SECONDS = 15.0 * 60.0
+    }
+}
+
+/**
+ * **THE BACKGROUND SESSION, AND WHY IT IS FILE-BASED** (#1029 W5B-2).
+ *
+ * `NSURLSessionConfiguration.backgroundSessionConfigurationWithIdentifier` is
+ * the only way bytes keep moving after iOS suspends the app: the transfer is
+ * handed to a system daemon, the app is relaunched into the background when it
+ * finishes, and the session is looked up again by this identifier.
+ *
+ * Three rules, and all three are iOS's rather than ours:
+ *
+ * 1. **`uploadTaskWithRequest:fromFile:` ONLY.** A background session refuses a
+ *    data-bodied upload task — `NSURLSession` documents it as unsupported and
+ *    the task fails immediately. So the sealed spool file is what is handed
+ *    over, which is also what keeps a 16 MiB object out of this process's heap.
+ * 2. **One identifier, one session, for the life of the app.** Creating a
+ *    second session with the same identifier throws; creating one with a new
+ *    identifier orphans everything the first one had in flight.
+ * 3. **`discretionary` is left FALSE.** iOS may then start the transfer
+ *    promptly rather than waiting for what it considers ideal conditions; the
+ *    member's own transfer rule is what decides whether an object may cross a
+ *    metered link, and handing that decision to the system as well would be two
+ *    policies over one member's bill. What `discretionary` would have bought is
+ *    already bought by `TransferRule`.
+ *
+ * The presigned lifetime is not checked here — `Batch::usable_for` in
+ * `centraid_gateway_client` already refused any target that could expire inside
+ * the longest deferral iOS may impose, which is the comparison that is actually
+ * correct.
+ */
+public class IosBackgroundTransfers : BackgroundTransfers {
+
+    private val session: NSURLSession by lazy {
+        NSURLSession.sessionWithConfiguration(
+            NSURLSessionConfiguration.backgroundSessionConfigurationWithIdentifier(SESSION_ID),
+        )
+    }
+
+    override suspend fun enqueue(
+        uploads: List<BackgroundTransfers.Upload>,
+    ): BackgroundTransfers.Enqueued {
+        // ALREADY IN FLIGHT IS NOT ENQUEUED AGAIN. A background session
+        // OUTLIVES the process: after a relaunch iOS hands back every task it
+        // still holds, and a pass that did not ask would pay for each object
+        // twice.
+        val running = inFlight().toSet()
+        var accepted = 0
+        uploads.forEach { upload ->
+            if (upload.objectName in running) return@forEach
+            val request = NSMutableURLRequest(uRL = NSURL(string = upload.url))
+            request.setHTTPMethod("PUT")
+            upload.headers.forEach { (name, value) ->
+                request.setValue(value, forHTTPHeaderField = name)
+            }
+            val task: NSURLSessionUploadTask = session.uploadTaskWithRequest(
+                request = request,
+                fromFile = NSURL.fileURLWithPath(upload.spoolPath),
+            )
+            // THE OBJECT'S NAME RIDES ON THE TASK, so a completion handler that
+            // wakes in a relaunched process knows what finished without a
+            // side table that did not survive the relaunch.
+            task.setTaskDescription(upload.objectName)
+            task.resume()
+            accepted += 1
+        }
+        return BackgroundTransfers.Enqueued(
+            accepted = accepted,
+            sentence = BackgroundTransfers.FORCE_QUIT_SENTENCE,
+        )
+    }
+
+    override suspend fun inFlight(): List<String> = suspendCancellableCoroutine { continuation ->
+        session.getTasksWithCompletionHandler { data, uploads, downloads ->
+            val names = buildList {
+                (uploads ?: emptyList<Any?>()).forEach { task ->
+                    (task as? platform.Foundation.NSURLSessionTask)
+                        ?.taskDescription
+                        ?.let { add(it) }
+                }
+            }
+            continuation.resume(names)
+        }
+    }
+
+    override suspend fun cancelAll() {
+        session.invalidateAndCancel()
+    }
+
+    private companion object {
+        /**
+         * One identifier for the life of the app. See rule 2 in the class
+         * comment: a second session under this name throws, and a session under
+         * a new name orphans what the old one was carrying.
+         */
+        const val SESSION_ID = "dev.centraid.uploads"
+    }
+}
+
+/**
+ * The iCloud Keychain item that carries the seed, and **nothing else**
+ * (#1029 §5, W5B-3).
+ *
+ * [IosSecureStore] pins every item `…ThisDeviceOnly`, deliberately, so a seat
+ * credential cannot ride a restore onto a device nobody enrolled. This class is
+ * the one exception in the product: `kSecAttrSynchronizable` true, and
+ * `kSecAttrAccessibleAfterFirstUnlock` WITHOUT the `ThisDeviceOnly` suffix —
+ * the two go together, and an item marked synchronizable with a device-only
+ * accessibility is simply refused by the Keychain.
+ *
+ * It is a different service string from [SecureStore.PREFIX] on purpose: it
+ * makes [IosSecureStore.clear]'s single class-plus-service delete incapable of
+ * reaching the seed, and it makes the synchronizable set one item that an
+ * operator can see rather than a flag on one row in a larger table.
+ *
+ * F5 holds: what synchronises is the seed, which is upstream of every
+ * vault-derived key. Losing it loses everything anyway, so it adds no exposure
+ * the phrase on a member's shelf does not already carry — and syncing anything
+ * DERIVED from it would.
+ */
+public class IosSyncedSecrets : SyncedSecrets {
+
+    override suspend fun availability(): SyncedSecrets.Availability {
+        // THE KEYCHAIN WILL NOT ANSWER "is iCloud Keychain on" DIRECTLY, and
+        // there is no API that does. What can be observed is whether a
+        // synchronizable item round-trips, which is the same question asked in
+        // the only way iOS answers it.
+        val probe = "probe"
+        val stored = write(PROBE_KEY, probe)
+        val readBack = if (stored) read(PROBE_KEY) else null
+        delete(PROBE_KEY)
+        val synchronizing = readBack == probe
+        return SyncedSecrets.Availability(
+            synchronizing = synchronizing,
+            sentence = if (synchronizing) {
+                SyncedSecrets.IOS_SENTENCE
+            } else {
+                SyncedSecrets.IOS_OFF_SENTENCE
+            },
+            // TRUE ON iOS, and this is the half Android cannot match: an iCloud
+            // Keychain item comes back whenever the member signs in, not only
+            // during a setup wizard.
+            restoresAfterSetup = true,
+        )
+    }
+
+    override suspend fun putSeed(seedHex: String): Boolean =
+        write(SyncedSecrets.SEED_KEY, seedHex)
+
+    override suspend fun seed(): String? = read(SyncedSecrets.SEED_KEY)
+
+    override suspend fun forgetSeed() {
+        delete(SyncedSecrets.SEED_KEY)
+    }
+
+    private fun read(key: String): String? = memScoped {
+        val found = alloc<CFTypeRefVar>()
+        val status = syncedQuery(key) { query ->
+            CFDictionarySetValue(query, kSecReturnData, kCFBooleanTrue)
+            CFDictionarySetValue(query, kSecMatchLimit, kSecMatchLimitOne)
+            SecItemCopyMatching(query, found.ptr)
+        }
+        if (status != errSecSuccess) return@memScoped null
+        val data: CFDataRef = found.value?.reinterpret() ?: return@memScoped null
+        try {
+            val bytes = CFDataGetBytePtr(data) ?: return@memScoped null
+            bytes.readBytes(CFDataGetLength(data).toInt()).decodeToString()
+        } finally {
+            CFRelease(data)
+        }
+    }
+
+    private fun write(key: String, value: String): Boolean {
+        // REPLACE, NEVER TWO. A second seed under one key is a phone that
+        // restores to whichever the Keychain happened to answer with.
+        delete(key)
+        val bytes = value.encodeToByteArray()
+        val status = bytes.usePinned { pinned ->
+            val data = CFDataCreate(
+                kCFAllocatorDefault,
+                pinned.addressOf(0).reinterpret(),
+                bytes.size.convert(),
+            )
+            try {
+                syncedQuery(key) { query ->
+                    CFDictionarySetValue(query, kSecValueData, data)
+                    CFDictionarySetValue(
+                        query,
+                        kSecAttrAccessible,
+                        kSecAttrAccessibleAfterFirstUnlock,
+                    )
+                    SecItemAdd(query, null)
+                }
+            } finally {
+                data?.let { CFRelease(it) }
+            }
+        }
+        return status == errSecSuccess
+    }
+
+    private fun delete(key: String) {
+        syncedQuery(key) { query -> SecItemDelete(query) }
+    }
+
+    private inline fun syncedQuery(key: String, build: (CFMutableDictionaryRef?) -> OSStatus): OSStatus {
+        val query = CFDictionaryCreateMutable(
+            kCFAllocatorDefault,
+            0,
+            kCFTypeDictionaryKeyCallBacks.ptr,
+            kCFTypeDictionaryValueCallBacks.ptr,
+        )
+        val service = cfString(SERVICE)
+        val account = cfString(key)
+        try {
+            CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword)
+            service?.let { CFDictionarySetValue(query, kSecAttrService, it) }
+            account?.let { CFDictionarySetValue(query, kSecAttrAccount, it) }
+            // THE ONE ATTRIBUTE THIS CLASS EXISTS FOR.
+            CFDictionarySetValue(query, kSecAttrSynchronizable, kCFBooleanTrue)
+            return build(query)
+        } finally {
+            account?.let { CFRelease(it) }
+            service?.let { CFRelease(it) }
+            query?.let { CFRelease(it) }
+        }
+    }
+
+    private fun cfString(value: String): CFStringRef? = memScoped {
+        CFStringCreateWithCString(kCFAllocatorDefault, value.cstr.ptr, kCFStringEncodingUTF8)
+    }
+
+    private companion object {
+        /**
+         * A DIFFERENT SERVICE FROM [SecureStore.PREFIX], so that store's
+         * class-plus-service `clear` cannot reach the seed and this one item is
+         * the whole of what synchronises.
+         */
+        const val SERVICE = "centraid.v1.synced."
+        const val PROBE_KEY = "availability-probe"
     }
 }
 

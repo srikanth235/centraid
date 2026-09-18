@@ -144,6 +144,13 @@ kotlin {
             androidMain.dependencies {
                 implementation(libs.androidx.security.crypto)
                 implementation(libs.androidx.work.runtime)
+                // BLOCK STORE AND ITS `Task`-to-coroutine adapter (#1029 W5B-3).
+                // The seed is the one secret that may follow a member to their
+                // next phone; `AndroidSyncedSecrets` is what carries it, and
+                // `kotlinx-coroutines-play-services` is what makes a `Task`
+                // awaitable without a callback pyramid.
+                implementation(libs.gms.blockstore)
+                implementation(libs.kotlinx.coroutines.play.services)
             }
         }
         // THE ONE TEST SOURCE SET THAT NEEDS AN APPLE TOOLCHAIN (#1025 S6).
