@@ -73,6 +73,10 @@ pub struct DeviceKey(SigningKey);
 impl DeviceKey {
     /// A fresh device key from operating-system entropy. Minted once per phone,
     /// and again on every restore.
+    ///
+    /// Behind the `mint` feature: a Worker verifies a certificate it was handed
+    /// and never mints the device key inside one (#1029 §3, W4C-1).
+    #[cfg(feature = "mint")]
     pub fn generate() -> Result<Self, CertificateError> {
         use rand::TryRngCore as _;
 

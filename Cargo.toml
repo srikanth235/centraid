@@ -233,18 +233,26 @@ x25519-dalek = { version = "3", default-features = false, features = [
 # W0.5-R1's third carve-out). Feature set is pared to the one ciphersuite this
 # product uses — `x25519` (the KEM; it pulls in `hkdfsha2`, the RFC's own
 # KDF), `aes` (AES-128-GCM, RFC 9180's `aead_id = 0x0001`), `alloc` (the
-# `Vec`-returning seal/open this crate calls) and `getrandom` (the ephemeral
-# encapsulation key, drawn once per seal — the one place this crate lets a
-# dependency touch the system RNG directly rather than going through
-# `rand`, because `hpke`'s convenience entry point is what keeps its
-# `rand_core 0.10` off this crate's own call sites entirely). The crate's
-# defaults additionally pull in `mlkem`, `chacha` and `shake` (a post-quantum
-# KEM, a second AEAD, three more hash families) that no ciphersuite here uses.
+# `Vec`-returning seal/open this crate calls). The crate's defaults
+# additionally pull in `mlkem`, `chacha` and `shake` (a post-quantum KEM, a
+# second AEAD, three more hash families) that no ciphersuite here uses.
+#
+# **`getrandom` IS NOT HERE, AND THAT IS THE WASM SPLIT** (#1029 §3, W4C-1).
+# It is what draws the ephemeral encapsulation key, once per seal — the one
+# place this repository lets a dependency touch the system RNG directly rather
+# than going through `rand`, because `hpke`'s convenience entry point is what
+# keeps its `rand_core 0.10` off our own call sites. But `getrandom` has no
+# backend on `wasm32-unknown-unknown` unless one is named in RUSTFLAGS, and a
+# Cloudflare Worker that verifies a device certificate must not need one. A
+# feature named in this table is unioned into every member that inherits the
+# dependency and cannot be switched off downstream, so it is named by
+# `centraid-identity`'s own `mint` feature instead (`crates/identity/Cargo.toml`),
+# which is default-on: nothing in this workspace changes, and the
+# `--no-default-features` half compiles to wasm with no RNG in its graph at all.
 hpke = { version = "0.14", default-features = false, features = [
   "x25519",
   "aes",
   "alloc",
-  "getrandom",
 ] }
 
 # Wave 0.5 lane B — discovery: the signed pkarr record, publish and resolve
