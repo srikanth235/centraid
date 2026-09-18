@@ -1,6 +1,7 @@
 package dev.centraid.shared.shell
 
 import centraid.core.v1.Envelope
+import centraid.core.v1.FoundRequest
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
 import centraid.core.v1.PageRequest
@@ -76,5 +77,46 @@ public object VaultRoster {
         // a roster row for it would be a blank the member could tap.
         if (id.isEmpty() && name.isEmpty()) return null
         return VaultLockup(vault_id = id, vault_name = name)
+    }
+
+    /**
+     * FOUND A VAULT IN AN OPEN, EMPTY FILE (#1029 W5, hand-off 1).
+     *
+     * The write half of [identify], and it is here beside it for the reason
+     * [identify] is here at all: these are the two statements about a vault's
+     * OWN IDENTITY, and one file writing the row and another reading it is how
+     * two layers come to disagree about what a vault is called.
+     *
+     * `Core::open` with `create` lays the migrations down and stops. This is
+     * the door that writes `core_vault` and the owner's `core_party` — one
+     * commit, `crates/core`'s `api::found` — and until it existed a phone could
+     * make a file that could never say which vault it was.
+     *
+     * **Nothing is read back here.** The response carries the id, and the shelf
+     * still calls [identify] afterwards: the NAME a member sees has to come out
+     * of the vault rather than out of the string the shell happened to send,
+     * which is the rule [identify]'s header states and the one the old pairing
+     * path broke by printing a gateway's CLI flag.
+     *
+     * Answers false for every refusal — a core that would not take the write,
+     * a file that already holds a vault ([`ERROR_CODE_VAULT_ALREADY_HELD`]).
+     * The caller deletes the file it made; see [Shelf.found].
+     */
+    public suspend fun found(
+        core: CentraidCore,
+        displayName: String,
+        ownerName: String,
+    ): Boolean {
+        val envelope = Envelope(
+            request_id = 0,
+            request = Request(
+                found = FoundRequest(display_name = displayName, owner_name = ownerName),
+            ),
+        )
+        return when (val outcome = core.call(envelope)) {
+            is CoreOutcome.Failed -> false
+            is CoreOutcome.Answered ->
+                outcome.value.response?.found?.vault_id?.isNotEmpty() == true
+        }
     }
 }

@@ -120,18 +120,60 @@ class AbiRoundTripSpec : StringSpec({
 
             // --- the event path --------------------------------------------
             //
-            // Zero events is the expected answer on a quiet core, and what the
-            // drain proves is clause 6: the timeout path allocates nothing, so
-            // the buffer accounting does not move.
-            val beforeDrain = core.buffersHandedOver
-            val reader = core.startReader(timeoutMs = 25)
-            Thread.sleep(150)
-            core.buffersHandedOver shouldBe beforeDrain
+            // **THE EXPECTATION HERE WAS STALE, AND IT WAS THE EXPECTATION AND
+            // NOT THE CORE** (#1029 W5, judging the one red this suite carried
+            // in from W1).
+            //
+            // It read: take `buffersHandedOver`, start the reader, sleep 150 ms,
+            // and assert the number did not move. It stopped holding the moment
+            // W1 gave `crates/vault` a rusqlite `update_hook`, and it failed
+            // 3 → 8. The tempting reading is "the core emits events nobody asked
+            // for, and on a phone that is battery". It is the wrong reading, and
+            // the two lines below are what tell the two apart.
+            //
+            // **The events are the WRITE's, five lines up.** `core.add_party`
+            // runs inside a commit guard, and a deny is receipted — the audit
+            // rows are a commit whether the command lands or is refused — so the
+            // hook reports the tables that commit touched and the core offers
+            // one `ChangeEvent` per table. A shell MUST get those: they are what
+            // redraws a screen after a write. What the old assertion actually
+            // said was "a command produces no change events", which was true
+            // only while nothing produced any.
+            //
+            // **So the test drains first and then measures.** Once the queue is
+            // empty the handle is idle in the sense clause 6 is about, and the
+            // clause — the timeout path allocates nothing — is asserted where it
+            // is true. If the core really did emit on an idle handle, the second
+            // half below would fail, and it is the half worth keeping: it is the
+            // battery question, asked directly.
+            var drained = 0
+            while (core.drainOnce(timeoutMs = EVENT_TIMEOUT_MS) == CoreStatus.OK) {
+                drained += 1
+                // A CEILING, so "drain until quiet" cannot become "spin
+                // forever": a core that emitted without being written to would
+                // hang this loop rather than failing it, and a hang is the one
+                // failure mode a CI step reads as a timeout instead of a bug.
+                drained.toLong() shouldBeLessThan EVENT_DRAIN_CEILING
+            }
+
+            // CLAUSE 6, ON A HANDLE THAT IS ACTUALLY IDLE. Nothing has been
+            // written since the drain emptied the queue, so every one of these
+            // is the timeout path — and the timeout path hands over no buffer.
+            val quiet = core.buffersHandedOver
+            repeat(IDLE_DRAINS) {
+                core.drainOnce(timeoutMs = EVENT_TIMEOUT_MS) shouldBe CoreStatus.TIMEOUT
+            }
+            core.buffersHandedOver shouldBe quiet
 
             // --- clause 1, over the whole session --------------------------
             core.buffersFreed shouldBe core.buffersHandedOver
             core.bytesCopied shouldBeGreaterThan 0L
 
+            // CLAUSE 7: close is what unblocks a reader parked in `next_event`,
+            // and the reader is started here rather than above so the drain
+            // loop has the queue to itself — two consumers of one event stream
+            // would make the count above a race.
+            val reader = core.startReader(timeoutMs = EVENT_TIMEOUT_MS)
             core.close()
             reader.join()
             core.lifecycle.value shouldBe CoreLifecycle.Closed
@@ -171,19 +213,45 @@ class AbiRoundTripSpec : StringSpec({
                 Dispatchers.IO,
                 AbiContractSpec.UI_THREAD,
             ) shouldBe CoreOutcome.Failed(
+                // THE SENTENCE IS THE PRODUCTION ONE, and it moved (#1029 §1).
+                // `CentraidCore.open` says "vault" and "VAULT FILE" because
+                // "replica" names a plane this umbrella deleted — a copy of an
+                // authority somewhere else. This literal still said "replica"
+                // and had gone unnoticed: the assertion sits after the event
+                // drain, and the stale drain expectation above failed the test
+                // before this line ever ran. Two reds, one of them hidden
+                // behind the other.
                 CoreFailure.BadArgument(
-                    "a core is already open on that replica in this process. ONE HANDLE PER " +
-                        "REPLICA (R-1020-24): app extensions never open the vault.",
+                    "a core is already open on that vault in this process. ONE HANDLE PER " +
+                        "VAULT FILE (R-1020-24): app extensions never open the vault.",
                 ),
             )
             // TWO ON TWO PATHS: they coexist. The second file is a copy of the
             // fixture, because "a different path" has to be a different VAULT
             // to prove anything — the guard is about the file, not the string.
+            //
+            // **THE SIDECARS COME TOO, AND THAT IS NOT TIDINESS** (#1029 W5).
+            // The fixture is open in WAL mode, so its `.db` alone has
+            // `application_id 0` — every page the vault wrote is still in the
+            // `-wal`. Copying only the `.db` produced a file `Vault::open`
+            // refuses with `NotAVault`, so this assertion was not proving that
+            // two vaults coexist; it was proving what `centraid_open` does with
+            // a file that is not a vault, which turned out to be answer `OK`
+            // with a null handle (fixed in `crates/core-ffi`'s `code_for_open`,
+            // and pinned by that crate's own contract test). Nobody had seen
+            // it: the stale drain expectation above failed the test first.
             val second = File(
                 System.getProperty("centraid.core.fixtureDir"),
                 "spike-vault-second.db",
             )
-            File(configuration().databasePath).copyTo(second, overwrite = true)
+            val source = File(configuration().databasePath)
+            source.copyTo(second, overwrite = true)
+            for (sidecar in listOf("-wal", "-shm")) {
+                val beside = File(source.path + sidecar)
+                if (beside.exists()) {
+                    beside.copyTo(File(second.path + sidecar), overwrite = true)
+                }
+            }
             val other = CentraidCore.open(
                 configuration().copy(databasePath = second.path),
                 Dispatchers.IO,
@@ -196,6 +264,7 @@ class AbiRoundTripSpec : StringSpec({
                 )
             }
             second.delete()
+            for (sidecar in listOf("-wal", "-shm")) File(second.path + sidecar).delete()
         } finally {
             first.close()
         }
@@ -303,6 +372,31 @@ class AbiRoundTripSpec : StringSpec({
          * than relaxed per language.
          */
         private const val CALL_CEILING_US = 50_000L
+
+        /**
+         * How long one `next_event` waits. Short, because the drain below runs
+         * it once per queued event and then four more times against an empty
+         * queue — the wall-clock cost of this section is `IDLE_DRAINS` times
+         * this number.
+         */
+        private const val EVENT_TIMEOUT_MS = 25
+
+        /**
+         * THE DRAIN'S CEILING, and what makes it an assertion rather than a
+         * loop (#1029 W5).
+         *
+         * One `core.add_party` — landed or receipted as a deny — touches a
+         * handful of tables and the core offers one `ChangeEvent` per table.
+         * Eight was the measured count on this fixture. The ceiling is well
+         * above it and well below "something is emitting on its own": a core
+         * that produced events without being written to would trip this instead
+         * of hanging the suite, which is the difference between a bug report
+         * and a CI timeout.
+         */
+        private const val EVENT_DRAIN_CEILING = 64L
+
+        /** Enough empty `next_event`s that one lucky timeout proves nothing. */
+        private const val IDLE_DRAINS = 4
 
         /** The 200 parties `spike-fixture` seeds. */
         private val SEEDED_QUERY = ScreenRead(

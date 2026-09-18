@@ -38,6 +38,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod marshal;
+pub mod wal;
 
 use std::panic::AssertUnwindSafe;
 
@@ -133,6 +134,14 @@ pub unsafe extern "C" fn centraid_open(
     let Some(bytes) = (unsafe { marshal::slice_of(config, len) }) else {
         return CENTRAID_BAD_ARGUMENT;
     };
+    // THE `-wal` SIDECAR PERSISTS, AND THE C CALL FOR IT LIVES IN THIS CRATE
+    // (#1029 W5, hand-off 5). Installed on the way in rather than at library
+    // load: there is no load hook in a `cdylib` a shell dlopens, and `open` is
+    // the one door every vault on this device comes through. Idempotent — the
+    // second call answers `false` and changes nothing. See
+    // `centraid_vault::wal_persistence` for what it adds over
+    // `SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE` and what W5 measured.
+    centraid_vault::wal_persistence::install(wal::persist);
     // The panic barrier is OUTSIDE every allocation this call makes, so a panic
     // in the middle leaks nothing the caller was told about: `out` is written
     // only on the success path.
@@ -164,7 +173,8 @@ pub unsafe extern "C" fn centraid_open(
             unsafe { out.write(boxed) };
             CENTRAID_OK
         }
-        Ok(Err(error)) => code_for(&error),
+        // NEVER `OK` WITHOUT A HANDLE. See [`code_for_open`].
+        Ok(Err(error)) => code_for_open(&error),
         // THERE IS NO HANDLE TO POISON YET. A panic in `open` is reported as
         // such and the caller gets no handle at all, which is the only honest
         // answer: a poisoned handle it never received cannot be restarted.
@@ -408,5 +418,40 @@ fn code_for(error: &CoreError) -> i32 {
         // shell branches on; collapsing them into status codes here would be a
         // second, smaller error vocabulary for the shell to learn.
         _ => CENTRAID_OK,
+    }
+}
+
+/// The status code one core error becomes **at `open`**, where there is no
+/// response body to carry a reason (#1029 W5).
+///
+/// ## The bug this exists for
+///
+/// [`centraid_open`] used [`code_for`], and [`code_for`]'s last arm is
+/// `_ => CENTRAID_OK` — which is right for [`centraid_call`], where a refusal
+/// travels as an encoded `Error` in the out-buffer and the status code says only
+/// whether the CALL worked. **`open` has no out-buffer.** So every refusal that
+/// was not one of the five named arms came back as `CENTRAID_OK` with a null
+/// handle, which is exactly what [`code_for`]'s own comment says open must never
+/// do — the shell reads a success and has nothing to read it from.
+///
+/// It was reachable from an ordinary case, not a contrived one: open a file that
+/// is not a Centraid vault (`VaultError::NotAVault` — a `.db` copied away from
+/// its `-wal` sidecar has `application_id 0`) and the JNA binding answered
+/// "`centraid_open` returned OK and a null handle". `AbiRoundTripSpec`'s
+/// two-paths assertion had been failing on precisely that, unseen: the spec's
+/// stale event-drain expectation failed the test a dozen lines earlier.
+///
+/// ## The mapping
+///
+/// The named codes keep their meanings and **everything else is
+/// [`CENTRAID_BAD_ARGUMENT`]**: from a caller's side, an open that will not
+/// produce a handle is an argument — a path, a create flag, a digest — this core
+/// cannot open. It is still not an error vocabulary (the ABI has six codes and
+/// `CONTRACT.md` governs the table); the reason is in the log line the core
+/// already emits.
+fn code_for_open(error: &CoreError) -> i32 {
+    match code_for(error) {
+        CENTRAID_OK => CENTRAID_BAD_ARGUMENT,
+        code => code,
     }
 }

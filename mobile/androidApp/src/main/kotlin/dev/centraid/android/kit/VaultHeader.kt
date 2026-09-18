@@ -44,14 +44,15 @@ import dev.centraid.shared.shell.TransferRuleChoice
  * differently. The iOS shell states the identical table; the two shells
  * must read the same, so a change here is a change there.
  *
- * **"Online" is a PAST-TENSE FACT.** [VaultLockup.State.STATE_ONLINE] says the
- * last pass REACHED the gateway and finished; nothing on this screen probes
- * anything, so "connected" would promise a live link this state has not checked.
- * "Synced" is what it may say, and it is what it says.
+ * **"Synced" is a PAST-TENSE FACT.** [VaultLockup.State.STATE_ONLINE] says the
+ * vault is here and whole; nothing on this screen probes anything, so
+ * "connected" would promise a live link this state has not checked.
  *
- * EXHAUSTIVE and with no `else`, deliberately: a fourth case added to `State`
- * must fail to compile here rather than fall quietly into somebody else's
- * sentence, which is the failure this line is recovering from.
+ * EXHAUSTIVE and with no `else`, deliberately: a case added to `State` must
+ * fail to compile here rather than fall quietly into somebody else's sentence,
+ * which is the failure this line is recovering from. `STATE_SYNCING` and
+ * `STATE_OFFLINE` left with the pass they described (#1029 §1, W5); the case
+ * that took their place is the FREEZE.
  *
  * `STATE_UNSPECIFIED` is the proto zero and is NEVER EMITTED — a lockup
  * carrying it is one nobody filled in — so it draws NOTHING. Pairing is not in
@@ -62,9 +63,13 @@ import dev.centraid.shared.shell.TransferRuleChoice
  */
 public fun stateLine(state: VaultLockup.State): String = when (state) {
     VaultLockup.State.STATE_UNSPECIFIED -> ""
-    VaultLockup.State.STATE_SYNCING -> "syncing"
     VaultLockup.State.STATE_ONLINE -> "synced"
-    VaultLockup.State.STATE_OFFLINE -> "offline"
+    // THE VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1, W5). A STATE and
+    // not an incident: it is drawn in place under the vault's name like the
+    // other one, in the same mono line, because a banner would make a
+    // deliberate hand-over look like a fault. The COUNT of what this phone is
+    // still holding rides beside it in `VaultLockup.frozen_line`.
+    VaultLockup.State.STATE_FROZEN -> "moved to your other phone"
 }
 
 /**

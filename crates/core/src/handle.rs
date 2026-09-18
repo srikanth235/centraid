@@ -627,6 +627,14 @@ impl Handle {
                 self.with_vault(|vault| crate::api::content_urls(vault, refs))?,
             ))),
             K::Stage(frame) => Ok(response(wire::response::Kind::Stage(self.stage(frame)?))),
+            // THE VAULT IS FOUNDED INSIDE THE FILE THIS HANDLE IS OPEN ON
+            // (#1029 W5, hand-off 1). `with_vault` is what answers
+            // `CoreError::Unpaired` when there is no file at all, which is the
+            // correct refusal: founding needs a file, and a path that opened is
+            // what `create` produced.
+            K::Found(request) => Ok(response(wire::response::Kind::Found(
+                self.with_vault(|vault| crate::api::found(vault, request))?,
+            ))),
             K::Command(command) => {
                 let changes = crate::events::ChangeFeed::new(self.events());
                 Ok(response(wire::response::Kind::Command(self.with_vault(
@@ -775,7 +783,13 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // a chunk is at most `stage::MAX_CHUNK_BYTES` and `end` hashes
             // what is already in memory. The UNBOUNDED thing is the shell's
             // loop, which the shell already owns and can stop between frames.
-            | K::Stage(_),
+            | K::Stage(_)
+            // FOUNDING IS ONE COMMIT and it is the shortest write this ABI
+            // takes: two rows, the relation vocabulary, a calendar and two
+            // policy rows. A cancel arriving mid-found could not stop it
+            // anyway — the commit guard is what decides, and it is
+            // all-or-nothing.
+            | K::Found(_),
         )
         | None => RequestKind::Bounded,
         // A snapshot fetch and a backup are as long as the artifact is.
@@ -808,6 +822,66 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
+    }
+
+    /// A core over a file `create` made and nothing has founded.
+    ///
+    /// The state a phone's shelf is in between [`Core::open`] with `create` and
+    /// the found that follows it — which is a state nothing could leave over
+    /// this ABI until #1029 W5 added the door.
+    fn unfounded() -> Scratch {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("it opens");
+        Scratch { dir, handle }
+    }
+
+    /// HAND-OFF 1, OVER THE ENVELOPE AND NOT JUST THE FUNCTION.
+    ///
+    /// `crates/core`'s `api::found` has its own tests; this is the one that
+    /// proves a SHELL can reach it — the `Request` arm dispatches, the
+    /// `Response` arm comes back, and the file names itself afterwards.
+    #[test]
+    fn a_found_request_over_the_envelope_makes_the_file_a_vault() {
+        let scratch = unfounded();
+        assert_eq!(
+            scratch
+                .handle
+                .with_vault(|vault| Ok(vault.vault_id()?))
+                .expect("the vault answers"),
+            None,
+            "a created file holds no vault"
+        );
+
+        let request = wire::Request {
+            kind: Some(wire::request::Kind::Found(wire::FoundRequest {
+                display_name: "Tahoe".to_owned(),
+                owner_name: "Me".to_owned(),
+            })),
+        };
+        let Some(wire::response::Kind::Found(answer)) =
+            scratch.handle.call(&request).expect("it answers").kind
+        else {
+            panic!("a found response comes back");
+        };
+        assert!(!answer.vault_id.is_empty());
+
+        assert_eq!(
+            scratch
+                .handle
+                .with_vault(|vault| Ok(vault.vault_id()?))
+                .expect("the vault answers"),
+            Some(answer.vault_id),
+            "the file now names the vault the found made"
+        );
+
+        // A SECOND FOUND OVER THE SAME ENVELOPE IS REFUSED, and a shell
+        // branches on the code rather than on a sentence.
+        let refusal = scratch
+            .handle
+            .call(&request)
+            .expect_err("a second found is refused");
+        assert_eq!(refusal.code(), wire::ErrorCode::VaultAlreadyHeld);
     }
 
     fn hello() -> wire::Request {

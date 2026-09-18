@@ -161,8 +161,10 @@ public class HomeBridge {
      * "N changes since <date>" for the vault in front, or null (#1029 F1).
      *
      * A door on the bridge rather than a screen event, for the reason
-     * [transferRule] is one: it is not a reduction, and the line has no slot on
-     * `VaultLockup` to ride in. See [HomeSession.frozenLine].
+     * [transferRule] is one: it is not a reduction. The line DOES have a slot
+     * on `VaultLockup` now (#1029 W5) and every roster row carries it; this
+     * answers the same derivation for a caller that wants the vault in front
+     * without subscribing. See [HomeSession.frozenLine].
      */
     public fun frozenLine(): String? = session?.frozenLine
 

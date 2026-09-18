@@ -1069,50 +1069,78 @@ message VaultLockup {
   // still be waiting for Wi-Fi to bring the photographs.
   uint32 originals_withheld = 8;
 
+  // WHAT THIS PHONE IS STILL HOLDING FOR A VAULT THAT MOVED (#1029 F1, W5).
+  //
+  // "N changes since <date>", or empty for a vault that has not moved. It is a
+  // SENTENCE and not a count, because the number alone is ambiguous in the one
+  // direction that matters: a member reading "12" has no way to tell twelve
+  // changes kept from twelve changes lost, and nothing was lost — `Shelf.freeze`
+  // deletes nothing and the phone keeps every row it had.
+  //
+  // **THE SLOT IS HERE SO THERE IS ONE PLACE.** `HomeBridge.frozenLine` was a
+  // door beside the roster, with a comment saying the line "has no slot on
+  // `VaultLockup` to ride in" — which made the switcher's row and the header's
+  // second line two renderings of one fact taken from two sources, exactly the
+  // shape `gateway_name` died of. The line rides the lockup with the state it
+  // belongs to.
+  string frozen_line = 9;
+
   // `gateway_name`, which no layer could ever write; `offline`, which only
   // meant something beside it; and `link`, whose enum made pairing a STATE of
   // a vault. See the message header and [State].
   reserved 2, 4, 6;
   reserved "gateway_name", "offline", "link";
 
-  // HOW THIS VAULT STANDS ON THIS DEVICE — THREE CASES AND NO FOURTH (#1025
-  // S7-9, superseding D-1025-S7-8's `Link`).
+  // HOW THIS VAULT STANDS ON THIS DEVICE — AND ON A PHONE THAT IS THE VAULT
+  // THERE ARE TWO CASES (#1025 S7-9 superseding D-1025-S7-8's `Link`; trimmed
+  // by #1029 W5, hand-off 3).
   //
   // **Pairing is an ACTION, not a state.** `Link` had five cases and two of
   // them were not states of a vault at all. `LINK_UNPAIRED` was a state of the
   // DEVICE — a device holding zero vaults shows the pair flow, and a vault
   // that is held was by definition admitted — so a vault could never truthfully
-  // be "unpaired" and the case only ever fired as a guess. `LINK_PAIRED` meant
-  // "admitted, nothing has reported yet", which is the same thing to a member
-  // as "the copy is still coming": both are [STATE_SYNCING].
+  // be "unpaired" and the case only ever fired as a guess.
   //
-  // What is left is one axis with three values, each of which a member can act
-  // on differently, and every one of them DERIVED — from the last pass's
-  // outcome and whether a pass is in flight — rather than stored. A stored
-  // state is a state that can disagree with the file beside it.
+  // **AND THEN THE GATEWAY WENT.** `STATE_SYNCING` and `STATE_OFFLINE` were
+  // both facts about a PASS: one said a copy was still coming, the other that
+  // the last pass had not reached the gateway. #1029 §1 deletes the sync plane,
+  // the replica plane and the pass — the phone IS the vault — so neither could
+  // be reached by any layer, and `Shelf.Holding.state` said so in a comment
+  // while returning the one honest value. An enum whose values are unreachable
+  // is an enum that invites a shell to render a guess; both are RESERVED, by
+  // number and by name, so a `buf breaking` WIRE_JSON promise holds and no
+  // later value comes back wearing either spelling.
   //
-  // "Behind N" is a MODIFIER and not a case: a vault that reached its gateway
-  // and has N entries still to apply is online and busy, not a fourth state.
+  // "Behind N" is a MODIFIER and not a case, and so is `originals_withheld`.
   enum State {
-    // The proto zero, and NEVER EMITTED. Every holding has one of the three
+    // The proto zero, and NEVER EMITTED. Every holding has one of the two
     // below the moment the shelf knows about it, and a shell that receives
     // this is looking at a lockup nobody filled in — it draws no line rather
     // than a claim.
     STATE_UNSPECIFIED = 0;
-    // A pass is in flight, or the first copy has not fully landed. This
-    // absorbs what `LINK_PAIRED` used to say: between redeeming a ticket and
-    // holding a whole file, what a member is owed is "your vault is being
-    // copied", with a progress percent when the copy reports one.
-    STATE_SYNCING = 1;
-    // The last pass REACHED the gateway and finished. A PAST-TENSE FACT, and
-    // the wording must stay past tense: nothing here probes a gateway, so a
-    // header that said "connected" would promise a live link this state has
-    // not checked. "Synced" is what it may say.
+    // THE VAULT IS HERE AND IT IS WHOLE. A file on this device whose core
+    // opened — which includes a RESTING holding, whose handle was closed to
+    // give the OS its memory back and whose vault did not change.
+    //
+    // A PAST-TENSE FACT, and the wording must stay past tense: nothing here
+    // probes anything, so a header that said "connected" would promise a live
+    // link this state has not checked.
     STATE_ONLINE = 2;
-    // The last pass did not reach the gateway. A phone in a lift is not a
-    // broken phone: the copy still reads, writes still queue, and the next
-    // window continues from here.
-    STATE_OFFLINE = 3;
+    // THIS VAULT MOVED TO ANOTHER PHONE, AND THIS ONE IS COOPERATING
+    // (#1029 F1, W5). Writes refuse, reads do not, the unacked spool is shown
+    // in `frozen_line` and KEPT.
+    //
+    // A STATE and not an incident, drawn in place under the vault's name like
+    // the others. Both phones hold the same seed, so no lease can DECIDE who
+    // owns a vault; this phone stopped writing because that is the cooperative
+    // thing to do. There is no way out of it on this enum, because taking a
+    // vault back is a deliberate act on the phone taking it.
+    STATE_FROZEN = 4;
+
+    // `STATE_SYNCING` (1) and `STATE_OFFLINE` (3) were facts about a PASS, and
+    // #1029 §1 deletes the pass. See the enum header.
+    reserved 1, 3;
+    reserved "STATE_SYNCING", "STATE_OFFLINE";
   }
 }
 

@@ -38,6 +38,15 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 centraid-core-ffi = { path = "../core-ffi" }
+# THE RESTORE DRILL'S THREE CRATES (#1029 W5). `tests/restore_drill.rs` drives
+# the real keys, the real vault and the real gateway rules together — which is
+# the only way "lose the phone, type 24 words, get every vault back" is one
+# claim rather than three. Dev-only: the binary itself is not a gateway and does
+# not derive an account key.
+centraid-identity = { path = "../identity" }
+centraid-gateway-core = { path = "../gateway-core" }
+centraid-ontology = { path = "../ontology" }
+hex.workspace = true
 rusqlite.workspace = true
 centraid-api-proto = { path = "../api-proto" }
 prost.workspace = true

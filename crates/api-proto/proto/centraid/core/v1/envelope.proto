@@ -24,8 +24,8 @@ import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
-import "centraid/core/v1/pair.proto";
 import "centraid/core/v1/query.proto";
+import "centraid/core/v1/vault.proto";
 
 message Envelope {
   // Zero is reserved for the handshake, which is not a request: `Hello` is
@@ -61,6 +61,10 @@ message Request {
     // A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM (#1025 S4). See
     // `content.proto`'s `StageRequest`.
     StageRequest stage = 13;
+    // MAKE THIS FILE A VAULT (#1029 W5, hand-off 1). The door `Core::open` with
+    // `create` left missing: the migrations were laid and nothing over this ABI
+    // could write `core_vault`. See `vault.proto`.
+    FoundRequest found = 14;
   }
 }
 
@@ -76,6 +80,7 @@ message Response {
     Page page = 9;
     ContentUrls content_urls = 12;
     StageResponse stage = 13;
+    FoundResponse found = 14;
   }
 }
 

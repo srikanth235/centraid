@@ -23,9 +23,26 @@ message ChangeEvent {
   string table = 1;
   // Every key that changed in this coalescing window, deduplicated.
   repeated RecordKey pk_set = 2;
-  // The highest commit this event covers. A seat's overlay clears against a
-  // COMMIT SEQ, never against a `LogRow.seq` (census seam 5).
-  uint64 commit_seq = 3;
+
+  // 3 WAS `commit_seq`, DELETED (#1029 W5, hand-off 4). The number is retired,
+  // not reused — exactly as `command.proto` retired its own.
+  //
+  // It was "the highest commit this event covers", and it existed for ONE
+  // reader: a seat's overlay cleared against a commit seq rather than against a
+  // `LogRow.seq` (census seam 5). #1029 §1 deletes the seat, the replica plane
+  // and the log plane's `commit_seq` with them — `crates/vault/src/log` says so
+  // in its own header — so on this device the field had no consumer that read
+  // it and no producer that could fill it.
+  //
+  // What was actually being sent is what makes deleting it right rather than
+  // merely tidy. The producer is a rusqlite `update_hook`
+  // (`crates/core/src/events.rs`), which knows the TABLES a commit touched and
+  // no position at all, so it wrote a literal ZERO into every event. A phone
+  // that trusted the field would read "commit 0" for every change in the
+  // vault's life — which is worse than an absent field, because an absent field
+  // cannot be believed.
+  reserved 3;
+  reserved "commit_seq";
 }
 
 // How the core is coping. `queue_depth` and `capacity` are the backpressure the

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 16] = [
+const PROTOS: [&str; 17] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -37,6 +37,10 @@ const PROTOS: [&str; 16] = [
     "proto/centraid/core/v1/backup.proto",
     "proto/centraid/core/v1/lease.proto",
     "proto/centraid/core/v1/mailbox.proto",
+    // Founding a vault over the ABI (#1029 W5, hand-off 1). Its own file rather
+    // than an arm on `command.proto`, because founding is the act that writes
+    // the rows the command plane's gate order reads.
+    "proto/centraid/core/v1/vault.proto",
     "proto/centraid/screen/v1/screen.proto",
 ];
 

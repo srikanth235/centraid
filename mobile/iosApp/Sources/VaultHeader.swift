@@ -290,15 +290,19 @@ extension Centraid_Screen_V1_VaultLockup {
     /// gateway is what this replaced.
     ///
     /// **"Synced" and never "connected".** `STATE_ONLINE` is a PAST-TENSE
-    /// FACT: the last pass reached the gateway and finished. Nothing on this
-    /// side probes anything, so a word in the present tense would promise a
-    /// live link no layer here has checked.
+    /// FACT: the vault is here and whole. Nothing on this side probes
+    /// anything, so a word in the present tense would promise a live link no
+    /// layer here has checked. `.syncing` and `.offline` left with the pass
+    /// they described (#1029 §1, W5) and `.frozen` took their place.
     var stateLine: String {
         switch state {
         case .unspecified: return ""
-        case .syncing: return "syncing"
         case .online: return "synced"
-        case .offline: return "offline"
+        // THE VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1, W5). The
+        // Android table states the identical sentence; the two shells must
+        // read the same. The count of what this phone is still holding rides
+        // beside it in `VaultLockup.frozen_line`.
+        case .frozen: return "moved to your other phone"
         case .UNRECOGNIZED: return ""
         }
     }

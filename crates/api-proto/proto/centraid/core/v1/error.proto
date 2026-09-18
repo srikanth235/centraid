@@ -12,6 +12,8 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/lease.proto";
+
 enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;
 
@@ -205,4 +207,20 @@ message Error {
   // member — the rule `command.proto` states for `CommandOutcome.reason`, which
   // this message had no way to keep.
   string sentence = 4;
+
+  // WHAT `ERROR_CODE_VAULT_MOVED` RIDES WITH (#1029 §0, W5 hand-off 2).
+  //
+  // The code's own comment above has said "a `VaultMoved` (`lease.proto`) rides
+  // with this code" since the gateway messages landed, and **there was no field
+  // for it to ride in** — so a phone could learn THAT its vault had moved and
+  // never when, which is half the line a member is owed ("N changes since
+  // <date>"). A client that inferred the date from its own clock would be
+  // inventing the one fact the refusal exists to carry.
+  //
+  // A field rather than a `oneof` over every code's companion: companions are
+  // per-code and rare, and a oneof would make each new one a change to the
+  // shape every decoder reads. `code` is still what a shell branches on, and an
+  // absent `moved` on a `VAULT_MOVED` is HANDLED rather than trusted — see
+  // `dev.centraid.shared.sync.movedFrom`.
+  optional VaultMoved moved = 5;
 }

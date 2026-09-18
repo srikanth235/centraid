@@ -221,7 +221,6 @@ fn the_event_path_drains_through_the_abi() {
                         kind: Some(wire::value::Kind::Text(format!("k{index}"))),
                     }],
                 }],
-                commit_seq: index as u64,
             })),
         }));
     }

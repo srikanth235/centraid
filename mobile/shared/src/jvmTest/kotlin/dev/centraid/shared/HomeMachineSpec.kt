@@ -230,7 +230,7 @@ class HomeMachineSpec : StringSpec({
         state.vault!!.vault_name shouldBe "Another vault"
     }
 
-    "the same vault going offline moves the LOCKUP and nothing else" {
+    "the same vault freezing moves the LOCKUP and nothing else" {
         val named = HomeMachine.reduce(
             opened(),
             HomeEvent(
@@ -243,23 +243,26 @@ class HomeMachineSpec : StringSpec({
             ),
         ).state
         val filled = arrive(named, "docs", TileStatus.TILE_STATUS_CONTENT, TileCount(value_ = 3))
-        val offline = HomeMachine.reduce(
+        val frozen = HomeMachine.reduce(
             filled,
             HomeEvent(
                 vault_changed = HomeEvent.VaultChanged(
                     vault = VaultLockup(
                         vault_name = "Demo vault",
-                        state = VaultLockup.State.STATE_OFFLINE,
+                        state = VaultLockup.State.STATE_FROZEN,
+                        frozen_line = "3 changes since 2026-03-14",
                     ),
                 ),
             ),
         ).state
-        // Same vault (both unnamed here), changed reachability: the tiles are
-        // still this vault's rows and blanking them would be a refresh that
-        // took away every destination the member was reaching for.
-        offline.data_!!.tiles.first { it.app_id == "docs" }.status shouldBe
+        // Same vault, a state that moved: the tiles are still this vault's rows
+        // and blanking them would be a refresh that took away every destination
+        // the member was reaching for. **A frozen vault is fully readable**
+        // (#1029 F1), so this is not merely tolerable — it is the point.
+        frozen.data_!!.tiles.first { it.app_id == "docs" }.status shouldBe
             TileStatus.TILE_STATUS_CONTENT
-        offline.vault!!.state shouldBe VaultLockup.State.STATE_OFFLINE
+        frozen.vault!!.state shouldBe VaultLockup.State.STATE_FROZEN
+        frozen.vault!!.frozen_line shouldBe "3 changes since 2026-03-14"
     }
 
     // --- the packed grid --------------------------------------------------
@@ -557,7 +560,7 @@ class HomeMachineSpec : StringSpec({
                         VaultLockup(
                             vault_id = "v2",
                             vault_name = "Second Vault",
-                            state = VaultLockup.State.STATE_SYNCING,
+                            state = VaultLockup.State.STATE_ONLINE,
                         ),
                     ),
                 ),
@@ -565,7 +568,7 @@ class HomeMachineSpec : StringSpec({
         ).state
         state.vaults.map { it.vault_name } shouldContainExactly
             listOf("Tahoe Demo", "Second Vault")
-        state.vaults.last().state shouldBe VaultLockup.State.STATE_SYNCING
+        state.vaults.last().state shouldBe VaultLockup.State.STATE_ONLINE
         // AND ONE FORGOTTEN, which is the inverse and the same mechanism.
         state = HomeMachine.reduce(
             state,

@@ -1,0 +1,63 @@
+// Founding a vault, over the ABI (#1029 §1, W5 hand-off 1).
+//
+// THE HALF THE SHELL WAS MISSING. `Core::open` with `create` lays the
+// migrations down and stops there; the two rows that make those tables a VAULT
+// — `core_vault` and its owner's `core_party` — are written by
+// `centraid_vault::Vault::found`, and until this file existed nothing over the
+// C ABI could reach it. A phone could make a file it could never name, which is
+// what `Shelf.FoundRefusal.NOT_FOUNDED` was refusing honestly.
+//
+// ## Why a REQUEST ARM and not a registered command
+//
+// Every other write the shell makes is a `Command` through
+// `centraid_vault::commands::Registry`, and founding cannot be one. The
+// registry's gate order (`crates/vault/src/commands/mod.rs`) begins with the
+// ontology version and ends with a RECEIPT, and every step in between needs
+// facts a vault that has not been founded does not have: the access plane
+// evaluates a `Principal` against `core_vault.self_party_id`, and the audit
+// trail's invocation row names the vault the receipt belongs to. Founding is
+// the act that WRITES those. A command that had to be exempted from the gate
+// order would be a second command plane wearing the first one's name.
+//
+// ## Founding is not idempotent and does not pretend to be
+//
+// A second found over a founded file would lay a second `core_vault` row beside
+// the first, and `Vault::vault_id` reads `ORDER BY vault_id LIMIT 1` — so the
+// file would answer a different id depending on which row sorted first. It is
+// refused with `ERROR_CODE_VAULT_ALREADY_HELD`, which is that code's own
+// wording ("a run against a core that is already holding someone's rows would
+// lay a second vault over the first and destroy it").
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// Make this file a vault.
+message FoundRequest {
+  // What the member calls it. Written to `core_vault.display_name`, which is
+  // THE ONE PLACE a vault's name lives — `Shelf` reads it back off the file
+  // rather than keeping the string it sent, so a rename inside the vault is the
+  // only rename there is.
+  //
+  // Empty is accepted and is a real state: a vault with no name draws "No vault
+  // yet" rather than a blank, and the member names it later.
+  string display_name = 1;
+  // What the owner party is called. A `core_party` of kind `person`, and the
+  // only party in a fresh vault.
+  //
+  // THERE IS NO EMAIL ADDRESS, NO PHONE NUMBER AND NO ACCOUNT HERE, and there
+  // is nowhere for one to arrive (`lease.proto`'s header states the same rule
+  // for the gateway plane). A display name is what the owner is called on their
+  // own device.
+  string owner_name = 2;
+}
+
+// The vault that now exists in this file.
+message FoundResponse {
+  // The vault's own id, minted inside the commit. The shell does NOT choose it:
+  // a file name is not an identity (`Shelf`'s header), and an id the shell
+  // supplied would be a second place it lives.
+  string vault_id = 1;
+  // The owner party `core_vault.self_party_id` points at.
+  string owner_party_id = 2;
+}

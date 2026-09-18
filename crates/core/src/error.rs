@@ -32,20 +32,22 @@ pub enum CoreError {
     #[error("there is no vault at this path yet; create one, or restore one")]
     Unpaired,
 
-    /// THIS REPLICA ALREADY HOLDS A VAULT, AND A PAIRING WOULD REPLACE IT
-    /// (#1025 S7-9).
+    /// THIS FILE ALREADY HOLDS A VAULT, AND FOUNDING WOULD LAY A SECOND OVER IT
+    /// (#1025 S7-9, re-homed by #1029 W5).
     ///
-    /// `Handle::pair` bootstraps the first copy into the file this core is open
-    /// on. Run against a core that is already holding a vault — which is what a
-    /// phone pairing a SECOND gateway onto a live session did — the bootstrap
-    /// publishes over the replica the member is reading, and the first vault is
-    /// gone. The guard is `seed-demo-vault`'s, which refuses an existing vault
-    /// rather than seeding over it; the difference is that there is no `--force`
-    /// here, because a shell has a fresh file available and no reason to want
-    /// this one.
+    /// It guarded `Handle::pair`, which bootstrapped a first copy into the file
+    /// this core was open on. There is no pairing plane and no copy to take
+    /// (#1029 §1), and the hazard moved intact to the door that replaced it:
+    /// `crate::api::found` writes `core_vault`, and `Vault::found` mints a
+    /// fresh id and inserts unconditionally — so a second found leaves TWO
+    /// vault rows in one file, and `Vault::vault_id`'s `ORDER BY vault_id LIMIT
+    /// 1` answers whichever of them sorted first. The member's own vault would
+    /// start answering to a different id after a double tap.
     ///
-    /// Refused BEFORE the ticket is redeemed, so a refusal burns nothing.
-    #[error("this core already holds vault {vault_id}; pair from a fresh replica")]
+    /// Refused BEFORE anything is written, and the vault that is here is left
+    /// exactly as it was. The remedy is a fresh file, which a shell always has:
+    /// `Shelf.freshVaultFile` names one no vault in the directory is using.
+    #[error("this file already holds vault {vault_id}; found into a fresh file")]
     VaultAlreadyHeld { vault_id: String },
 
     /// THE ENDPOINT THIS DEVICE SPAWNED IS NOT THE ONE ITS GATEWAY ENROLLED
@@ -193,6 +195,15 @@ impl CoreError {
             detail: self.to_string(),
             diagnostic_id: self.diagnostic_id().unwrap_or_default().to_owned(),
             sentence: self.sentence(),
+            // NONE, AND NOT BECAUSE IT IS UNIMPLEMENTED (#1029 W5). `moved`
+            // carries `lease.proto`'s `VaultMoved` on an
+            // `ERROR_CODE_VAULT_MOVED`, and that code is a GATEWAY's refusal:
+            // it means "you held this vault and a higher epoch took it", which
+            // is a statement about a lease this core neither holds nor hears
+            // about. `CoreError` has no variant that maps to it, so there is no
+            // arm here that could fill it in — and a core that invented an
+            // epoch and a date would be the second mechanism F1 forbids.
+            moved: None,
         }
     }
 }
@@ -234,13 +245,12 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         }
         C::SnapshotUnavailable => "The gateway has nowhere to build a copy of the vault right now.",
         // THE VAULT ALREADY HERE IS THE ONE THIS PROTECTS, and the sentence
-        // says so rather than naming a file: the member's copy is intact, which
-        // is the fact they need. Mobile never renders this — `Shelf.admit`
-        // pairs from a fresh file and refuses a duplicate before the core sees
-        // it — so this is the sentence for the caller that got there another
-        // way (#1025 S7-9).
+        // says so rather than naming a file: the member's vault is intact,
+        // which is the fact they need. Mobile rarely renders it — `Shelf.found`
+        // founds into a fresh file every time — so this is the sentence for the
+        // caller that got there another way (#1025 S7-9, #1029 W5).
         C::VaultAlreadyHeld => {
-            "That copy already holds a vault, so it was left alone. Pair into a new one."
+            "There is already a vault in that file, so it was left alone. Make a new one."
         }
         // WHAT IS WRONG IS THE CREDENTIAL, AND THE REMEDY IS PAIRING AGAIN
         // (#1025 S7-13). It names neither key — they are 64 hex characters

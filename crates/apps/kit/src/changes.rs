@@ -28,49 +28,46 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct ChangeEvent {
     pub table: String,
     pub pk_set: BTreeSet<String>,
-    /// The transaction the change belongs to. **Not a `seq`** — comparing one
-    /// against the other is "the R6 mistake in miniature" (#1020 plane seam 5).
-    pub commit_seq: i64,
+    // `commit_seq` STOOD HERE AND LEFT WITH THE WIRE FIELD (#1029 W5,
+    // hand-off 4). It was "the transaction the change belongs to", mirroring
+    // `centraid.core.v1.ChangeEvent.commit_seq` — and that field's only reader
+    // was a seat's overlay, which cleared against a commit seq rather than a
+    // `LogRow.seq`. #1029 §1 deletes the seat and the log plane's commit
+    // position, so the core writes a literal zero into every event it emits;
+    // carrying a mirror of a constant zero through this crate's coalescing
+    // would be a number an app could believe.
 }
 
 impl ChangeEvent {
-    pub fn of(table: &str, pks: impl IntoIterator<Item = &'static str>, commit_seq: i64) -> Self {
+    pub fn of(table: &str, pks: impl IntoIterator<Item = &'static str>) -> Self {
         Self {
             table: table.to_owned(),
             pk_set: pks.into_iter().map(str::to_owned).collect(),
-            commit_seq,
         }
     }
 }
 
 /// Coalesce a stream of events per `(table, pk)`.
 ///
-/// The **highest `commit_seq`** wins for a table, because a cursor advances
-/// monotonically and an overlay clears against the latest commit it has seen.
 /// A table that arrives once with a pk set and once **without** collapses to
 /// *without*: the wider claim is the true one, and narrowing it would skip a
 /// rerun the wide event asked for.
 pub fn coalesce(events: impl IntoIterator<Item = ChangeEvent>) -> Vec<ChangeEvent> {
-    let mut by_table: BTreeMap<String, (BTreeSet<String>, bool, i64)> = BTreeMap::new();
+    let mut by_table: BTreeMap<String, (BTreeSet<String>, bool)> = BTreeMap::new();
     for event in events {
         let entry = by_table
             .entry(event.table)
-            .or_insert((BTreeSet::new(), false, i64::MIN));
+            .or_insert((BTreeSet::new(), false));
         if event.pk_set.is_empty() {
             entry.1 = true;
             entry.0.clear();
         } else if !entry.1 {
             entry.0.extend(event.pk_set);
         }
-        entry.2 = entry.2.max(event.commit_seq);
     }
     by_table
         .into_iter()
-        .map(|(table, (pk_set, _, commit_seq))| ChangeEvent {
-            table,
-            pk_set,
-            commit_seq,
-        })
+        .map(|(table, (pk_set, _))| ChangeEvent { table, pk_set })
         .collect()
 }
 
@@ -224,10 +221,10 @@ mod tests {
     #[test]
     fn coalescing_keeps_one_event_per_table_and_the_wider_claim() {
         let events = vec![
-            ChangeEvent::of("tally_expense", ["e-1"], 10),
-            ChangeEvent::of("tally_expense", ["e-2"], 11),
-            ChangeEvent::of("tally_settlement", [], 12),
-            ChangeEvent::of("tally_settlement", ["s-1"], 9),
+            ChangeEvent::of("tally_expense", ["e-1"]),
+            ChangeEvent::of("tally_expense", ["e-2"]),
+            ChangeEvent::of("tally_settlement", []),
+            ChangeEvent::of("tally_settlement", ["s-1"]),
         ];
         let out = coalesce(events);
         assert_eq!(out.len(), 2);
@@ -236,9 +233,7 @@ mod tests {
             out[0].pk_set,
             ["e-1", "e-2"].into_iter().map(str::to_owned).collect()
         );
-        assert_eq!(out[0].commit_seq, 11);
         // The empty set is the wide claim and survives the narrow one.
         assert!(out[1].pk_set.is_empty());
-        assert_eq!(out[1].commit_seq, 12);
     }
 }

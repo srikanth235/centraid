@@ -219,12 +219,27 @@ pub fn run_drill(
     })
 }
 
-/// One commit the drill can count.
+/// One commit a drill can count.
 ///
 /// `core_content_item` is the table it writes because its only foreign keys are
-/// nullable: the drill is about losing and recovering rows, not about the
+/// nullable: a drill is about losing and recovering rows, not about the
 /// ontology's dependency order.
-fn write_one(vault: &Vault, index: usize) -> std::result::Result<(), VaultError> {
+///
+/// **PUBLIC, AND THAT IS WHERE THE SQL HAS TO LIVE** (#1029 W5-4). The phone
+/// drill in `crates/centraid` needs the same commits, and it had its own copy
+/// of this statement until two rules said no and were right: `sql-confinement`
+/// keeps every SQL literal inside `crates/{ontology,vault,search,apps/kit}`,
+/// and `one_hash` requires every writer of a hash column to be declared with
+/// the SOURCE of its value. A drill in another crate satisfies neither by
+/// copying the statement and both by calling this.
+///
+/// The hash is [`crate::content::content_digest`]'s, which is `one_hash`'s
+/// whole rule: there is one hash in this product and a writer either calls that
+/// function or carries a value that already went through it.
+///
+/// # Errors
+/// [`VaultError`] from the commit.
+pub fn write_one(vault: &Vault, index: usize) -> std::result::Result<(), VaultError> {
     vault.commit(|tx| {
         tx.set_producer("drill.write");
         tx.connection().execute(

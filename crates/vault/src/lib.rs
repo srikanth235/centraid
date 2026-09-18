@@ -60,6 +60,20 @@ pub mod snapshot;
 pub mod testdoor;
 pub mod time;
 pub mod value;
+pub mod wal_persistence;
+
+/// SQLite, AS THIS CRATE LINKS IT (#1029 W5, hand-off 5).
+///
+/// `crates/core-ffi` needs the `Connection` and the `ffi` module to make one
+/// `sqlite3_file_control` call for `crate::wal_persistence` — the shim the
+/// constitution keeps in that crate because it is unsafe. Re-exported rather
+/// than depended on twice, so the `Connection` the shim takes is the same TYPE
+/// this crate hands it and not a second rusqlite that happens to unify today.
+///
+/// **It is not an invitation.** The `sql-confinement` rule still refuses SQL
+/// outside the four allowed crates; what this exports is the handle, not the
+/// query language.
+pub use rusqlite;
 
 pub use access::{
     BLIND_SCHEMA, Decision, Principal, RevealUnrepresentable, SealedSubject, Verb, evaluate_access,
