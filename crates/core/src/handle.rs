@@ -106,6 +106,17 @@ pub struct Handle {
     /// an honest state and not a failure: a vault with no store refuses binary
     /// bytes rather than writing a row that names bytes nothing kept.
     bytes: Mutex<Option<centraid_blobs::ContentBytes>>,
+    /// THE RUNTIME THAT STORE RUNS ON, WHEN THIS CORE OWNS IT (#1029 W6).
+    ///
+    /// `None` when somebody else owns one and handed a `ContentBytes` in
+    /// through [`Handle::attach_bytes`] — a gateway's `run.rs` does exactly
+    /// that. `Some` when [`Handle::open_own_bytes`] built one, which is the
+    /// case over the C ABI, where there is no other owner left on the device.
+    ///
+    /// It is held HERE and nowhere else because it must outlive every verb the
+    /// byte door drives on it: a runtime dropped while `ContentBytes` still
+    /// holds its handle is a store whose next call panics.
+    runtime: Mutex<Option<Arc<tokio::runtime::Runtime>>>,
     /// Open staging sessions: bytes a shell is streaming in so this core can
     /// name them (#1025 S4). See [`crate::stage`].
     staging: crate::stage::Staging,
@@ -209,6 +220,7 @@ impl Core {
             cancelled: Mutex::new(Vec::new()),
             diagnostics: AtomicU64::new(0),
             bytes: Mutex::new(None),
+            runtime: Mutex::new(None),
         })
     }
 
@@ -297,6 +309,82 @@ impl Handle {
     /// Attached AFTER the vault is open, because opening the store is
     /// asynchronous and `Core::open` is not. A core that is never handed one
     /// holds text and refuses photographs, honestly and by name.
+    /// **OPEN THE CONTENT STORE THIS CORE OWNS** (#1029 W6, hand-off 2).
+    ///
+    /// ## The decision, and why it is this one
+    ///
+    /// `ByteStore::open` is asynchronous and `ContentBytes` holds a runtime
+    /// handle, so somebody has to own a runtime for the life of the core.
+    /// Until #1029 that was `SeatLink`, which opened `<vault>.bytes` and handed
+    /// it to [`Self::attach_bytes`]; `SeatLink` went with the seat plane, and a
+    /// core opened over the C ABI has been holding text and refusing binary
+    /// bytes by name ever since (`core-ffi/src/lib.rs`).
+    ///
+    /// There is no other owner left on a phone. The alternatives were:
+    ///
+    /// - **leave it** — then F14's "the vault owns its copy" is unreachable
+    ///   from a phone, a restored grid has nowhere to put a thumbnail, and
+    ///   `ScreenEffect.FetchOriginal` has no server for a second wave running;
+    /// - **make the shell own one** — a Swift or Kotlin shell would have to
+    ///   hold a Rust runtime handle across the ABI, which is a pointer with no
+    ///   type on the other side and a lifetime nobody can state;
+    /// - **this** — the core owns it, opens the store beside the vault, and
+    ///   drops both together.
+    ///
+    /// ## Why the runtime is MULTI-THREADED, which is not a preference
+    ///
+    /// `ContentBytes` drives each verb with `runtime.block_on` from a thread of
+    /// its own (`blobs/src/door.rs` says why). On a **current-thread** runtime
+    /// that call drives only the future it was given — nothing drives the tasks
+    /// `iroh-blobs` spawns for its store actor, so the first verb waits for a
+    /// task that will never be polled. A multi-threaded runtime drives its own
+    /// workers, so the spawned actor runs whoever calls in. Two workers: this
+    /// runtime serves one store and a phone has other things to do with its
+    /// cores.
+    ///
+    /// Non-fatal by design. A store that will not open leaves the core exactly
+    /// as it was — text, and photographs refused by name — because a vault that
+    /// would not open its byte store is still a vault whose notes save.
+    ///
+    /// # Errors
+    /// [`CoreError`] wrapping whatever the runtime builder or the store
+    /// refused. The core is unchanged on either.
+    pub fn open_own_bytes(&self, root: impl AsRef<std::path::Path>) -> Result<()> {
+        let root = root.as_ref().to_path_buf();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("centraid-bytes")
+            .enable_all()
+            .build()
+            .map_err(|error| CoreError::Invariant {
+                context: format!("the byte store's runtime would not start: {error}"),
+            })?;
+        let store = runtime
+            .block_on(centraid_blobs::ByteStore::open(&root))
+            .map_err(|error| CoreError::Invariant {
+                context: format!(
+                    "the byte store at {} would not open: {error}",
+                    root.display()
+                ),
+            })?;
+        let door = centraid_blobs::ContentBytes::new(store, runtime.handle().clone());
+        // THE RUNTIME IS KEPT FIRST. `attach_bytes` publishes a door that
+        // drives on this runtime's handle; publishing it before the runtime is
+        // held would leave a window where a verb could reach a runtime about to
+        // be dropped.
+        if let Ok(mut held) = self.runtime.lock() {
+            *held = Some(Arc::new(runtime));
+        }
+        self.attach_bytes(door);
+        Ok(())
+    }
+
+    /// Whether this core opened and owns its own byte store.
+    #[must_use]
+    pub fn owns_its_bytes(&self) -> bool {
+        self.runtime.lock().ok().is_some_and(|held| held.is_some())
+    }
+
     pub fn attach_bytes(&self, bytes: centraid_blobs::ContentBytes) {
         if let Ok(mut held) = self.bytes.lock() {
             *held = Some(bytes.clone());
@@ -822,6 +910,42 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
+    }
+
+    /// **HAND-OFF 2, ANSWERED.** A core that opens its own byte store holds
+    /// photographs; one that does not holds text and says so.
+    ///
+    /// The whole claim is here: the runtime the core built actually drives the
+    /// store's actor, so a verb that reaches through `ContentBytes` answers
+    /// instead of hanging on a task nobody polls. That is the property a
+    /// current-thread runtime would not have, and it is why the builder asks
+    /// for workers.
+    #[test]
+    fn a_core_that_opens_its_own_bytes_can_hold_a_photograph() {
+        use centraid_vault::backup::store::BlobStore as _;
+
+        let scratch = Scratch::founded();
+        assert!(
+            !scratch.handle.owns_its_bytes(),
+            "a core holds text until it is asked for a store"
+        );
+        assert!(scratch.handle.bytes().is_none());
+
+        scratch
+            .handle
+            .open_own_bytes(scratch.dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        assert!(scratch.handle.owns_its_bytes());
+
+        let door = scratch.handle.bytes().expect("a door is attached");
+        let photograph = b"a camera original's bytes".repeat(64);
+        let id = door.put(&photograph).expect("the store takes it");
+        assert!(door.has(&id).expect("it answers"), "the store lost it");
+        assert_eq!(door.get(&id).expect("it reads back"), photograph);
+        assert!(
+            door.path_of(&id).expect("it answers").is_some(),
+            "nothing is inlined, so a grid has a file to open"
+        );
     }
 
     /// A core over a file `create` made and nothing has founded.

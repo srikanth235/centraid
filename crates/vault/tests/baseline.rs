@@ -17,8 +17,8 @@
 //! So the answer to "what is excluded from the comparison" is **nothing**. The
 //! founded schema and the corpus's schema are equal as sets and as text, EXCEPT
 //! for what the ladder adds above the baseline — rung two's four revision
-//! guards (#1020, D-1020-N2) and rung three's four backup-index objects
-//! (#1029 §2, §4), named in
+//! guards (#1020, D-1020-N2), rung three's four backup-index objects and rung
+//! four's four blob-custody objects (#1029 §2, §4), named in
 //! `LADDER_OBJECTS` and asserted as the whole of the difference. Any future
 //! exclusion has to be added to this table with its reason, and the assertion
 //! below is what forces that.
@@ -30,16 +30,21 @@ use std::collections::BTreeMap;
 use centraid_vault::{APPLICATION_ID, Vault, head_version};
 
 /// What the ladder adds above the baseline: rung two's four revision guards
-/// (#1020, D-1020-N2) and rung three's in-vault backup index (#1029 §2, §4).
+/// (#1020, D-1020-N2), rung three's in-vault backup index and rung four's blob
+/// custody — a file key per blob, and where its bytes are (#1029 §2, §4).
 ///
 /// The corpus is a v0 file and knows nothing of the v1 ladder above rung one,
 /// so a founded v1 file legitimately carries exactly these and nothing else.
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 8] = [
+const LADDER_OBJECTS: [&str; 12] = [
     "backup_base_range",
     "backup_base_range_by_hash",
+    "backup_blob_custody",
+    "backup_blob_custody_by_role",
+    "backup_blob_placement",
+    "backup_blob_placement_by_object",
     "backup_object_range",
     "backup_object_range_by_object",
     "core_entity_revision_no_self_parent",
@@ -255,10 +260,10 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // says nothing about a v1 file (D-1020-D1-2).
     assert_eq!(user_version, head_version());
     // Rung two is the revision guards (#1020, D-1020-N2); rung three is the
-    // in-vault backup index (#1029 §2, §4). Spelled out rather than left as
-    // `head_version()` alone: a rung silently vanishing would still satisfy the
-    // line above.
-    assert_eq!(user_version, 3);
+    // in-vault backup index and rung four is blob custody (#1029 §2, §4).
+    // Spelled out rather than left as `head_version()` alone: a rung silently
+    // vanishing would still satisfy the line above.
+    assert_eq!(user_version, 4);
     assert_eq!(journal, "wal");
 }
 

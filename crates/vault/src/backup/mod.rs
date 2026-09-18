@@ -27,6 +27,7 @@
 //! | [`capture`] | the debounced, commit-bounded tick, and the checkpoint it owns |
 //! | [`spool`] | sealed segments that outlive a checkpoint, and the durable cursor |
 //! | [`base`] | the page-identical base, its ranges, and the in-vault dedup index |
+//! | [`custody`] | every blob's own file key, where its bytes are, and the grid a restore shows first |
 //! | [`objects`] | sealing, and §4's verify-before-upload |
 //! | [`manifest`] | the generation manifest and its hash chain |
 //! | [`store`] | the content-addressed object store (local filesystem in v0) |
@@ -47,6 +48,7 @@
 
 pub mod base;
 pub mod capture;
+pub mod custody;
 pub mod drill;
 pub mod manifest;
 pub mod objects;
@@ -64,6 +66,7 @@ pub use capture::{
     CaptureError, CaptureOutcome, CapturePolicy, CaptureReason, CheckpointOutcome, Debounce,
     capture, checkpoint,
 };
+pub use custody::{Admission, BlobRole, Custody, FileKey, ObjectFetch, Placement, grid_fetches};
 pub use manifest::{
     GenerationManifest, MANIFEST_FORMAT, ManifestError, ManifestHead, SegmentRef, chain_from,
 };

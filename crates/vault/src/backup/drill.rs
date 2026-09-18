@@ -100,6 +100,7 @@ pub fn run_drill(
     keys: &ObjectKeys,
     writes: usize,
     after: usize,
+    member_bytes: Option<&dyn backup::store::BlobStore>,
 ) -> Result<DrillOutcome> {
     let started = std::time::Instant::now();
     let live = root.join("live");
@@ -164,16 +165,22 @@ pub fn run_drill(
             .map_err(|error| fail(error.to_string()))?;
 
     // ---- 7. is it clean, are the rows back, are the bytes the same? ------
-    // NO BLOB STORE IS PASSED, deliberately. `restored-blob-coverage` asks
-    // whether the bytes a `core_content_item` row points at are in a store, and
-    // the store this drill has is the **backup object store** — sealed objects
-    // named by their own ciphertext hash. A member's own bytes live in
-    // `centraid_blobs::ByteStore` (`store.rs` says so), and they are W6's.
-    // Handing the backup store to that check would make it compare a plaintext
-    // hash against a set of ciphertext names and report every row missing,
-    // which is a check that always fails rather than a check that says
+    // THE STORE THIS TAKES IS A MEMBER'S OWN BYTES, AND IT IS A PARAMETER
+    // (#1029 W6, hand-off 5). `restored-blob-coverage` asks whether the bytes a
+    // `core_content_item` row points at are in a store. The store this drill
+    // holds itself is the **backup object store** — sealed objects named by
+    // their own ciphertext hash — and handing that to the check would compare a
+    // plaintext hash against a set of ciphertext names and report every row
+    // missing, which is a check that always fails rather than one that says
     // something.
-    let report = backup::restore_drill(&restored_file, None, None, Some(&census_at_head))
+    //
+    // A member's bytes live in `centraid_blobs::ByteStore`, which only a crate
+    // above `crates/blobs` can open, so a caller that has one passes it here
+    // and a caller that has none passes `None`. `None` is honest rather than
+    // lenient: `restored-blob-custody` runs either way, and under F14 — the
+    // vault owns its copy AND EVICTS IT — that is the check a restored phone
+    // can actually pass.
+    let report = backup::restore_drill(&restored_file, None, member_bytes, Some(&census_at_head))
         .map_err(|error| fail(error.to_string()))?;
     if !report.is_clean() {
         return Err(fail(format!(
@@ -255,6 +262,34 @@ pub fn write_one(vault: &Vault, index: usize) -> std::result::Result<(), VaultEr
         )?;
         Ok(())
     })?;
+    // AND ITS BLOB CUSTODY (#1029 §4, W6). A content row with no custody row is
+    // a photograph whose key did not survive, and `restored-blob-custody` is
+    // the check that catches it — so the drill has to write one, or the check
+    // it runs over the restored file is a check over an empty table.
+    let hash = crate::content::content_digest(format!("drill content {index}").as_bytes());
+    let admission = crate::backup::custody::admit(
+        vault,
+        &hash,
+        (64 + index) as u64,
+        crate::backup::custody::BlobRole::Original,
+    )?;
+    if matches!(admission, crate::backup::custody::Admission::Fresh(_)) {
+        crate::backup::custody::record_placements(
+            vault,
+            &hash,
+            &[crate::backup::custody::Placement {
+                part_index: 0,
+                // Through `content_digest`, which is `crates/vault`'s one
+                // declared way to compute a hash (ONE HASH, `one_hash.rs`). A
+                // stand-in object name: the drill's blobs are never sealed, and
+                // what `restored-blob-custody` checks is that the ROW came
+                // back, not what the object holds.
+                object_name: crate::content::content_digest(hash.as_bytes()),
+                byte_offset: 0,
+                byte_length: (64 + index) as u64,
+            }],
+        )?;
+    }
     Ok(())
 }
 

@@ -28,22 +28,22 @@ import okio.ByteString.Companion.encodeUtf8
  * ## The shape, and why each step is where it is
  *
  * ```
- *   page(cursor)  ->  open(localId)  ->  Staging.stage  ->  Intent(needs=…)
- *   the platform      the platform       THE CORE NAMES     the gateway pulls
- *   enumerates        streams bytes      THE BYTES          and then commits
+ *   page(cursor)  ->  open(localId)  ->  Staging.stage  ->  media.add_asset
+ *   the platform      the platform       THE CORE NAMES     THIS VAULT
+ *   enumerates        streams bytes      THE BYTES          COMMITS THE ROW
  * ```
  *
  * **The phone never computes an identity.** `Staging` exists because the vault's
  * identity is BLAKE3 and no phone SDK offers it (D-1025-S4-6); this class
  * therefore stages first and reads the hash off the core's answer, and the
- * `media.add_asset` it then queues NAMES that hash rather than asserting one.
+ * `media.add_asset` it then commits NAMES that hash rather than asserting one.
  *
- * **The gateway is still the only writer.** What goes in the outbox is an
- * ordinary [Intent] carrying [NeededBytes], which is the declaration that makes
- * the gateway open a `blob` stream back down this seat's own connection, fetch
- * and verify the bytes, and only then execute — so a content row never names
- * bytes the gateway does not hold (`crates/seat-link/src/serve.rs`,
- * `crates/centraid/tests/bytes_upward.rs`).
+ * **THE PHONE IS THE WRITER** (#1029 §1). It used to say the gateway was: an
+ * [Intent] carrying `NeededBytes` went into an outbox, and a gateway opened a
+ * `blob` stream back down the seat's connection, fetched the bytes and then
+ * executed. There is no gateway writer and no outbox — `crates/seat-link` is
+ * gone — so the bytes are staged into THIS vault's own store and the command
+ * commits the row beside them, in one process, with no second party.
  *
  * ## Idempotence, twice over, because once is not enough
  *
@@ -51,13 +51,20 @@ import okio.ByteString.Companion.encodeUtf8
  *    nothing. It is advanced after each asset is queued, not once at the end, so
  *    a pass the OS kills half way resumes at the photograph it was on rather
  *    than at the one it started from.
- * 2. **The intent id is the CONTENT HASH** and not the asset's local id. That is
- *    the belt to the cursor's braces and it is the half that survives a cursor
- *    that was lost, reset, or written by an older build: the same bytes always
- *    produce the same `media.add_asset:<hash>` id, the gateway's replay ledger
- *    short-circuits the duplicate, and `media.add_asset` DEDUPES on the content
- *    row besides. A member who screenshots the same image twice is two assets
- *    with two hashes and is meant to be; a roll re-walked is one.
+ * 2. **The invoke key is the CONTENT HASH** and not the asset's local id. That
+ *    is the belt to the cursor's braces and it is the half that survives a
+ *    cursor that was lost, reset, or written by an older build: the same bytes
+ *    always produce the same key, the CORE's own replay ledger short-circuits
+ *    the duplicate, and `media.add_asset` DEDUPES on the content row besides.
+ *    A member who screenshots the same image twice is two assets with two
+ *    hashes and is meant to be; a roll re-walked is one.
+ *
+ *    **It never leaves this device** (#1029 §4). It was `Intent.intent_id` and
+ *    a gateway's replay ledger read it; now it is `Command.invoke_key` over the
+ *    C ABI, in one process. No plaintext hash crosses the wire, and
+ *    `gateway-core`'s own conformance canary
+ *    (`no-plaintext-or-plaintext-hash-is-anywhere-in-the-store`) is what proves
+ *    it rather than this sentence.
  *
  * Keying on the local id instead would break in exactly the case that matters —
  * a restored phone, where every `PHAsset` identifier is new and the bytes are

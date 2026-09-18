@@ -68,6 +68,16 @@ pub const REVISIONS_SQL: &str = include_str!("../../../contracts/migrations/002_
 pub const BACKUP_INDEX_SQL: &str =
     include_str!("../../../contracts/migrations/003_backup_index.sql");
 
+/// Rung four: blob custody — every blob's own file key, and where its bytes are
+/// (#1029 §4).
+///
+/// §4's "every blob has its own random file key" and "the vault is the index",
+/// for originals and thumbnails. One row per set of bytes is what makes the
+/// phone's own deduplication a lookup, and what makes W8's sharing upload the
+/// bytes once however many people hold the key.
+pub const BLOB_CUSTODY_SQL: &str =
+    include_str!("../../../contracts/migrations/004_blob_custody.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -88,6 +98,11 @@ pub const LADDER: &[Migration] = &[
         version: 3,
         name: "backup-index",
         sql: BACKUP_INDEX_SQL,
+    },
+    Migration {
+        version: 4,
+        name: "blob-custody",
+        sql: BLOB_CUSTODY_SQL,
     },
 ];
 

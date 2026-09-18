@@ -83,6 +83,12 @@ public object Staging {
      * resume: a staging session is this core's, in this process, and a shell
      * that lost one has the bytes still — it starts again, and the core's
      * `already_held` makes the retry cheap if the first attempt did land.
+     *
+     * `already_held` is an answer this core gives this shell across the C ABI,
+     * in one process, and it is the phone deduplicating on its own (#1029 §4).
+     * It is not a question anybody asks a gateway: a gateway could not answer
+     * without being told a plaintext hash, which is the confirmable commitment
+     * the object format spends itself avoiding.
      */
     public suspend fun stage(
         core: CentraidCore,

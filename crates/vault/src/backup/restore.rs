@@ -417,9 +417,45 @@ pub fn restore_drill(
     };
     checks.push(census_check);
 
+    // `restored-blob-custody`: THE CHECK THAT NEEDS NO STORE, and the one that
+    // is actually true of a restored phone (#1029 §4, F14).
+    //
+    // What a restore guarantees about a member's photographs is not that this
+    // device is holding their plaintext — F14 says the vault owns its copy AND
+    // EVICTS IT, so a phone that has swept is the ordinary case and a coverage
+    // check over a local store would fail on every one of them. What it
+    // guarantees is that the restored vault **knows where every blob's bytes
+    // are and holds the key that opens them**: a custody row with a 32-byte
+    // file key, and at least one `(object, offset, length)` placement.
+    //
+    // A row with neither is the failure this catches, and it is the one that
+    // matters: a photograph whose key did not survive the restore is a
+    // photograph nobody will ever open again, however many copies of the
+    // ciphertext the gateway is holding.
+    let custody = custody_coverage(&connection, DEFAULT_DRILL_CAS_SAMPLE)?;
+    if let Some((sampled, orphans)) = custody {
+        checks.push(DrillCheck {
+            name: "restored-blob-custody".into(),
+            ok: orphans.is_empty(),
+            detail: format!(
+                "{sampled} sampled, {} with no key or no placement",
+                orphans.len()
+            ),
+        });
+    }
+
     // `restored-blob-coverage`: a sample, because a full verification is a
     // re-download of the vault. What it catches is a store that is
     // systematically empty.
+    //
+    // **IT ASKS A STORE OF A MEMBER'S OWN BYTES, NOT THE BACKUP'S** (#1029 W6,
+    // hand-off 5). Backup objects are named by their CIPHERTEXT hash and a
+    // content row names a PLAINTEXT hash, so handing this the object store
+    // would report every row missing — a check that always fails rather than a
+    // check that says something. The store it wants is
+    // `centraid_blobs::ContentBytes`, which is the one content store a device
+    // holds, and only a crate above `crates/blobs` can build one; that is why
+    // this is a parameter and not something opened here.
     let mut blobs_sampled = 0_usize;
     let mut blobs_missing = Vec::new();
     if let Some(store) = blobs {
@@ -444,6 +480,46 @@ pub fn restore_drill(
         blobs_missing,
         elapsed_ms: started.elapsed().as_millis(),
     })
+}
+
+/// How many blob-custody rows the restored file carries, and which of them have
+/// no key or no placement.
+///
+/// `None` when the file predates rung four, which is not a failure: a
+/// generation taken before blob custody existed has nothing to be missing.
+fn custody_coverage(
+    connection: &rusqlite::Connection,
+    limit: usize,
+) -> Result<Option<(usize, Vec<String>)>> {
+    let tables = physical_tables(connection)?;
+    if !tables.contains("backup_blob_custody") || !tables.contains("backup_blob_placement") {
+        return Ok(None);
+    }
+    let mut statement = connection.prepare(
+        "SELECT c.plaintext_hash,
+                length(c.file_key),
+                (SELECT COUNT(*) FROM backup_blob_placement p
+                  WHERE p.plaintext_hash = c.plaintext_hash)
+         FROM backup_blob_custody c
+         ORDER BY c.plaintext_hash LIMIT ?1",
+    )?;
+    let mut sampled = 0_usize;
+    let mut orphans = Vec::new();
+    let rows = statement.query_map([limit as i64], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, i64>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (hash, key_bytes, placements) = row?;
+        sampled += 1;
+        if key_bytes != 32 || placements == 0 {
+            orphans.push(hash);
+        }
+    }
+    Ok(Some((sampled, orphans)))
 }
 
 /// A sample of the content addresses the restored rows point at.
@@ -870,6 +946,11 @@ mod tests {
                 "foreign-keys",
                 "seal-key",
                 "restored-census",
+                // Rung four's check, and it runs WITHOUT a store: under F14 the
+                // vault owns its copy and evicts it, so what a restore has to
+                // prove is that every blob's key and placement came back, not
+                // that this device happens to be holding the plaintext.
+                "restored-blob-custody",
                 "restored-blob-coverage"
             ]
         );

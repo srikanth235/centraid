@@ -17,22 +17,38 @@
 //!
 //! ## WHAT THE HEADER DOES CARRY, AND WHY EACH FIELD IS AUTHENTICATED
 //!
-//! The whole encoded header is the associated data of **every** body chunk, so
-//! none of it can be edited without breaking every tag: a `segment` cannot be
-//! re-labelled a `blob`, the dictionary id cannot be swapped for one that
-//! decompresses to something else, and the compressed flag cannot be cleared.
+//! The header's **fixed prefix** — every byte up to [`HEADER_FIXED_BYTES`] — is
+//! the associated data of **every** body chunk, so none of it can be edited
+//! without breaking every tag: a `segment` cannot be re-labelled a `blob`, the
+//! dictionary id cannot be swapped for one that decompresses to something else,
+//! and the compressed flag cannot be cleared.
 //!
-//! | Bytes | Field |
-//! | --- | --- |
-//! | 0..4 | magic `CNOB` |
-//! | 4 | format version, `1` |
-//! | 5 | [`Kind`] |
-//! | 6 | [`Role`] |
-//! | 7 | flags — bit 0 is "zstd, against the dictionary named below" |
-//! | 8..24 | the object salt: 16 random bytes, drawn per object |
-//! | 24..56 | dictionary id: BLAKE3 of the dictionary bytes, all-zero when uncompressed |
-//! | 56..58 | wrapped-key length, big-endian; `0` when the key lives in the vault |
-//! | 58.. | the wrapped key |
+//! | Bytes | Field | In the chunk AAD |
+//! | --- | --- | --- |
+//! | 0..4 | magic `CNOB` | yes |
+//! | 4 | format version, `1` | yes |
+//! | 5 | [`Kind`] | yes |
+//! | 6 | [`Role`] | yes |
+//! | 7 | flags — bit 0 is "zstd, against the dictionary named below" | yes |
+//! | 8..24 | the object salt: 16 random bytes, drawn per object | yes |
+//! | 24..56 | dictionary id: BLAKE3 of the dictionary bytes, all-zero when uncompressed | yes |
+//! | 56..58 | wrapped-key length, big-endian; `0` when the key lives in the vault | yes |
+//! | 58.. | the wrapped key | **no** — see below |
+//!
+//! ## THE WRAP IS THE ONE FIELD THE BODY DOES NOT AUTHENTICATE
+//!
+//! It was, and W3 lane B found the bill: with the wrap in the chunk AAD,
+//! rotating the vault root key invalidated every body tag, so a rotation was a
+//! re-encryption of everything the vault had ever sealed. Excluding it costs
+//! nothing — a substituted wrap yields a different content key and the body
+//! fails to open on the KEY, before any tag is consulted
+//! (`mod.rs::a_substituted_wrap_still_fails_to_open_the_body`) — and it makes
+//! `object::rewrap` possible, which copies a body verbatim.
+//!
+//! The wrap's declared LENGTH stays in the AAD, at bytes 56..58. That is what
+//! keeps a wrapped object from being re-presented as a file-key one, or the
+//! reverse: the two disagree about where the body starts, and a reader that took
+//! the length on trust would slice the body at a boundary the sealer never used.
 //!
 //! ## THE SALT, AND THE TRANSPLANT IT REFUSES THAT KIND AND ROLE DO NOT
 //!

@@ -408,8 +408,51 @@ async fn restore_onto_a_fresh_phone(
             .iter()
             .map(|(table, rows)| (table.clone(), *rows))
             .collect();
-        let report = backup::restore_drill(&file, None, None, Some(&expected))
+        // **`restored-blob-coverage` HAS A STORE TO ASK** (#1029 W6, hand-off 5).
+        //
+        // The check asks whether the bytes a `core_content_item` row points at
+        // are in a store of a MEMBER'S OWN bytes. The backup object store
+        // beside it cannot answer — its names are ciphertext hashes and a
+        // content row names a plaintext hash — so this is the one content store
+        // a device holds, `centraid_blobs::ContentBytes`, opened here and handed
+        // in. Nothing else in the workspace can build one below `crates/blobs`,
+        // which is why `restore_drill` takes it rather than opening it.
+        //
+        // This phone is given the bytes on purpose. A **restored** phone holds
+        // none — it shows the thumbnail grid and fetches originals on demand
+        // (F14) — and that is exactly why the drill in `crates/vault` passes
+        // `None` and leans on `restored-blob-custody` instead. What is being
+        // proved here is the other case: a device that IS meant to hold a
+        // member's bytes is asked, and answers.
+        let member_bytes = centraid_blobs::ByteStore::open(dir.join("member.bytes"))
+            .await
+            .expect("the member's own byte store opens");
+        for index in 0..24_usize {
+            member_bytes
+                .add_bytes(format!("drill content {index}").into_bytes())
+                .await
+                .expect("the store takes the drill's own bytes");
+        }
+        let door =
+            centraid_blobs::ContentBytes::new(member_bytes, tokio::runtime::Handle::current());
+
+        let report = backup::restore_drill(&file, None, Some(&door), Some(&expected))
             .expect("the restore check runs");
+        let coverage = report
+            .checks
+            .iter()
+            .find(|check| check.name == "restored-blob-coverage")
+            .expect("the check ran, because a store was passed");
+        assert!(
+            coverage.ok && coverage.detail.ends_with("0 missing"),
+            "the store was asked and could not answer: {}",
+            coverage.detail
+        );
+        assert!(
+            !coverage.detail.starts_with("0 sampled"),
+            "the coverage check sampled nothing, so it asserted nothing: {}",
+            coverage.detail
+        );
         assert!(
             report.is_clean(),
             "the restored vault is not clean: {}",

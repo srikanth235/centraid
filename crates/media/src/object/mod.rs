@@ -458,6 +458,61 @@ pub fn verify_read_back(
     Ok(())
 }
 
+/// **Rotate the vault root key over one object without re-encrypting it.**
+///
+/// Unwraps the content key under `from`, wraps it under `to`, and copies the
+/// body **verbatim**. This is the whole of what excluding the wrap from
+/// [`chunk_aad`] bought: before that change the per-chunk AAD was the entire
+/// header, so a new wrap invalidated every tag and a rotation was a re-seal of
+/// every byte the vault held (W3 lane B's finding, `backup/objects.rs`).
+///
+/// ## What it costs, stated honestly
+///
+/// The body is reused; the object's NAME is not. A name is the BLAKE3 of the
+/// whole object, header included, so a rotated object is a different object to
+/// the store and a gateway still receives its bytes again. What is saved is the
+/// re-encryption — the plaintext never has to be found, decompressed, re-padded
+/// or re-sealed, and nothing has to be read back and verified a second time
+/// (F11 already passed over these exact body bytes).
+///
+/// The larger saving is what this function is NOT needed for: a `blob` or
+/// `thumbnail` carries no wrap at all, because its file key lives in the vault's
+/// blob-custody row (§4). Rotating the root re-wraps the custody rows and does
+/// not touch a single photograph — which is the overwhelming majority of a
+/// phone's bytes, and the reason rotation is now affordable at all.
+///
+/// # Errors
+/// [`ObjectError::Open`] when `from` is not the root this object was wrapped
+/// under, or when the object carries no wrap to rotate (a [`Custody::FileKey`]
+/// object: its key is the vault's to re-wrap, not this format's).
+pub fn rewrap(
+    vault: VaultId<'_>,
+    from: &[u8; KEY_BYTES],
+    to: &[u8; KEY_BYTES],
+    sealed: &[u8],
+) -> ObjectResult<Vec<u8>> {
+    let (header, body_at) = Header::decode(sealed)?;
+    if header.wrapped_key.is_empty() {
+        return Err(ObjectError::Open);
+    }
+    let content_key = unwrap_key(vault, from, header.kind, header.role, &header.wrapped_key)?;
+    let rewrapped = Header {
+        wrapped_key: wrap_key(vault, to, header.kind, header.role, &content_key)?,
+        ..header
+    };
+    let encoded = rewrapped.encode();
+    // The new wrap is the same length as the old one — nonce, key, tag — so the
+    // fixed prefix the chunk AAD binds is byte-identical and the body's tags
+    // still hold. Asserted rather than assumed: if a later version ever varies
+    // the wrap's length, this is where it has to be noticed.
+    if encoded.len() != body_at {
+        return Err(ObjectError::Seal);
+    }
+    let mut out = encoded;
+    out.extend_from_slice(&sealed[body_at..]);
+    Ok(out)
+}
+
 /// The ordered parts an oversized input became.
 ///
 /// The vault records this, exactly as it records a pack's
@@ -708,8 +763,8 @@ fn unpad_frame(padded: &[u8]) -> ObjectResult<(usize, &[u8])> {
     Ok((plaintext_len, &padded[FRAME_PREFIX_BYTES..end]))
 }
 
-/// The chunk AAD: **the vault identity key** (§4), then the whole header, then
-/// the index, then whether this is the last chunk.
+/// The chunk AAD: **the vault identity key** (§4), then the header's fixed
+/// prefix, then the index, then whether this is the last chunk.
 ///
 /// The index is what refuses a reordering and the final flag is what refuses a
 /// truncation — a reader decides `final` from "are there bytes after this
@@ -717,10 +772,31 @@ fn unpad_frame(padded: &[u8]) -> ObjectResult<(usize, &[u8])> {
 /// against a tag computed with `final = 0`. The vault is what refuses a body
 /// lifted into another vault's object, which for a [`Custody::FileKey`] object
 /// is the ONLY place it can be refused: such an object has no key wrap to bind.
+///
+/// ## THE WRAPPED KEY IS NOT IN HERE, AND THAT IS THE POINT (#1029, W3→W6)
+///
+/// This used to be the WHOLE encoded header, wrap included, and W3 lane B found
+/// what that cost: rotating the vault root key means re-wrapping each header,
+/// and if the wrap is in the AAD then changing it invalidates every body tag —
+/// so a rotation was a re-encryption of every byte the vault has ever sealed.
+///
+/// **Excluding it costs nothing in strength.** A substituted wrap yields a
+/// different content key, and a body sealed under the real one does not open
+/// under a different one: the body already refuses the substitution, through the
+/// key rather than through the tag. What the AAD still binds is everything that
+/// changes how the body is *read* — the version, the kind, the role, the
+/// compressed flag, the dictionary id, the salt, and the declared wrap LENGTH,
+/// which is what stops a wrapped object being re-presented as a file-key one.
+/// [`rewrap`] is what this buys.
 fn chunk_aad(vault: VaultId<'_>, header_bytes: &[u8], index: u32, final_chunk: bool) -> Vec<u8> {
-    let mut aad = Vec::with_capacity(VAULT_ID_BYTES + 4 + header_bytes.len() + 5);
+    // The fixed prefix, never the wrap. `Header::decode` has already refused
+    // anything shorter than this, and `Header::encode` always writes it, so the
+    // slice is total — but `min` rather than an index, because a panic here
+    // would be reachable from bytes an attacker chose.
+    let bound = &header_bytes[..header::HEADER_FIXED_BYTES.min(header_bytes.len())];
+    let mut aad = Vec::with_capacity(VAULT_ID_BYTES + 4 + bound.len() + 5);
     push_field(&mut aad, vault.as_bytes());
-    aad.extend_from_slice(header_bytes);
+    aad.extend_from_slice(bound);
     aad.extend_from_slice(&index.to_be_bytes());
     aad.push(u8::from(final_chunk));
     aad
@@ -998,6 +1074,134 @@ mod tests {
             unpad_frame(&tampered),
             Err(ObjectError::Malformed { .. })
         ));
+    }
+
+    /// **THE ROTATION W3 COULD NOT AFFORD.** Re-wrapping an object's key does
+    /// not re-encrypt its body: the body bytes are the SAME bytes, and the
+    /// rotated object opens under the new root and no longer under the old one.
+    #[test]
+    fn rewrapping_an_objects_key_does_not_re_encrypt_its_body() {
+        let dictionary = dictionary();
+        let plain = "core_content_item|content_id=3|byte_size=3|"
+            .repeat(300)
+            .into_bytes();
+        let options = SealOptions {
+            kind: Kind::Segment,
+            role: Role::Whole,
+            dictionary: Some(&dictionary),
+        };
+        let sealed = seal(vault(), Custody::Wrapped(&ROOT), &options, &plain).expect("seals");
+
+        const NEXT_ROOT: [u8; 32] = [77_u8; 32];
+        let rotated = rewrap(vault(), &ROOT, &NEXT_ROOT, &sealed.bytes).expect("rewraps");
+
+        let (_, body_at) = Header::decode(&sealed.bytes).expect("decodes");
+        assert_eq!(
+            &rotated[body_at..],
+            &sealed.bytes[body_at..],
+            "the body was re-encrypted — the whole point of excluding the wrap \
+             from the chunk AAD is that these are the same bytes"
+        );
+        assert_ne!(
+            &rotated[..body_at],
+            &sealed.bytes[..body_at],
+            "nothing was rotated"
+        );
+        assert_eq!(
+            open(
+                vault(),
+                Custody::Wrapped(&NEXT_ROOT),
+                &rotated,
+                Some(&dictionary)
+            )
+            .expect("opens under the new root"),
+            plain
+        );
+        assert_eq!(
+            open(
+                vault(),
+                Custody::Wrapped(&ROOT),
+                &rotated,
+                Some(&dictionary)
+            ),
+            Err(ObjectError::Open),
+            "the old root still opens the rotated object"
+        );
+    }
+
+    /// Excluding the wrap from the chunk AAD does not let a wrap be swapped for
+    /// another object's: a substituted wrap yields a different content key, so
+    /// the body refuses through the KEY rather than through the tag. This is the
+    /// claim the change rests on, asserted rather than argued.
+    #[test]
+    fn a_substituted_wrap_still_fails_to_open_the_body() {
+        let options = SealOptions {
+            kind: Kind::Base,
+            role: Role::Whole,
+            dictionary: Some(&dictionary()),
+        };
+        let dictionary = dictionary();
+        let mine = seal(
+            vault(),
+            Custody::Wrapped(&ROOT),
+            &SealOptions {
+                dictionary: Some(&dictionary),
+                ..options
+            },
+            b"my pages",
+        )
+        .expect("seals");
+        let theirs = seal(
+            vault(),
+            Custody::Wrapped(&ROOT),
+            &SealOptions {
+                dictionary: Some(&dictionary),
+                ..options
+            },
+            b"their pages",
+        )
+        .expect("seals");
+
+        let (mine_header, mine_body_at) = Header::decode(&mine.bytes).expect("decodes");
+        let (theirs_header, _) = Header::decode(&theirs.bytes).expect("decodes");
+        let mut frankenstein = Header {
+            wrapped_key: theirs_header.wrapped_key,
+            ..mine_header
+        }
+        .encode();
+        frankenstein.extend_from_slice(&mine.bytes[mine_body_at..]);
+        assert_eq!(
+            open(
+                vault(),
+                Custody::Wrapped(&ROOT),
+                &frankenstein,
+                Some(&dictionary)
+            ),
+            Err(ObjectError::Open)
+        );
+    }
+
+    /// A `blob` has no wrap to rotate — its file key is the vault's. Rotation
+    /// never touches a photograph, and the refusal says so rather than
+    /// pretending to have rotated something.
+    #[test]
+    fn a_file_key_object_has_no_wrap_to_rotate() {
+        let key = [13_u8; 32];
+        let sealed = seal(
+            vault(),
+            Custody::FileKey(&key),
+            &SealOptions {
+                kind: Kind::Blob,
+                role: Role::Original,
+                dictionary: None,
+            },
+            b"a photograph",
+        )
+        .expect("seals");
+        assert_eq!(
+            rewrap(vault(), &ROOT, &[78_u8; 32], &sealed.bytes),
+            Err(ObjectError::Open)
+        );
     }
 
     #[test]

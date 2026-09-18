@@ -196,13 +196,18 @@ public class ScreenRuntime<S, E>(
             if (effect is ScreenEffect.SubmitWrite && writes != null) {
                 scope.launch { submit(effect, writes) }
             }
-            // `ScreenEffect.FetchOriginal` IS NOT SERVED HERE ANY MORE
-            // (#1029 §1). It rode `seat.bytes.fetch` — `seat.sync` with a
-            // one-item window — and `grep -rn 'seat.bytes.fetch' crates/` is
-            // now empty: the command left with the seat plane. The affordance
-            // stays on the Photos grid and the effect stays in the contract;
-            // what serves it is the phone's own byte plane, which #1029 W6
-            // builds.
+            // `ScreenEffect.FetchOriginal` IS STILL NOT SERVED HERE (#1029 §1,
+            // W6). It rode `seat.bytes.fetch` — `seat.sync` with a one-item
+            // window — and `grep -rn 'seat.bytes.fetch' crates/` is empty: the
+            // command left with the seat plane.
+            //
+            // W6 built what is UNDER it — the vault holds the file key and the
+            // `(object, offset, length)` for every original, and the member's
+            // transfer rule governs the plan again — and did not build the
+            // request that carries the tap, because `Request` has no
+            // `fetch_original` arm and adding one puts a gateway transport
+            // inside `crates/core`. `ScreenEffect.FetchOriginal`'s own note
+            // says what the remaining hop is.
         }
     }
     private suspend fun serve(afterCursor: String?) {
