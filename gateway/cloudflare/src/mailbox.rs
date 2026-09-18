@@ -47,8 +47,9 @@ use worker::{SqlStorage, SqlStorageValue};
 /// in the **shared** schema and the standalone adapter has its own reads over
 /// them; when that adapter grows its mailbox routes, these move there and both
 /// use them. Until then a statement with one caller in one file is honest about
-/// how many callers it has. `tests/shared_sql.rs` is what notices when a second
-/// one appears.
+/// how many callers it has. `tests/no_rules_here.rs`'s
+/// `the_shared_statements_are_included_rather_than_restated` exempts this one
+/// file by name and nothing else, so a second file growing a statement fails.
 mod statements {
     /// Every entry in this mailbox that has not expired, oldest first: a drain
     /// is a read in deposit order, because a recipient's cursor is a position
@@ -68,8 +69,7 @@ mod statements {
                               mailbox_key = ?1 AND capability_id = ?2 AND \
                               deposited_at_ms > ?3;";
     /// The ack: a recipient has the entry and it may go.
-    pub const ACK: &str =
-        "DELETE FROM mailbox_entry WHERE mailbox_key = ?1 AND entry_id = ?2;";
+    pub const ACK: &str = "DELETE FROM mailbox_entry WHERE mailbox_key = ?1 AND entry_id = ?2;";
     /// Everything past its TTL. The alarm's own statement.
     pub const EXPIRE: &str =
         "DELETE FROM mailbox_entry WHERE mailbox_key = ?1 AND expires_at_ms < ?2;";
@@ -325,10 +325,7 @@ impl MailboxStore {
     /// # Errors
     ///
     /// A store fault.
-    pub fn expire_and_next(
-        &self,
-        now: ServerTime,
-    ) -> Result<Option<ServerTime>, StoreFault> {
+    pub fn expire_and_next(&self, now: ServerTime) -> Result<Option<ServerTime>, StoreFault> {
         self.sql
             .exec(
                 statements::EXPIRE,

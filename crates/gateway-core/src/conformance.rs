@@ -344,7 +344,10 @@ async fn error_companions<H: Harness>(harness: &mut H, report: &mut Report) {
         let body = match harness.error_body(refusal).await {
             Ok(body) => body,
             Err(fault) => {
-                report.fail(name, format!("the adapter could not render {refusal:?}: {fault:?}"));
+                report.fail(
+                    name,
+                    format!("the adapter could not render {refusal:?}: {fault:?}"),
+                );
                 return;
             }
         };
@@ -383,7 +386,10 @@ async fn error_companions<H: Harness>(harness: &mut H, report: &mut Report) {
             body.contains("head"),
             format!("a head conflict with no head names no head at all: {body}"),
         ),
-        Err(fault) => report.fail(name, format!("the adapter could not render {empty:?}: {fault:?}")),
+        Err(fault) => report.fail(
+            name,
+            format!("the adapter could not render {empty:?}: {fault:?}"),
+        ),
     }
 }
 

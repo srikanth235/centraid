@@ -14,10 +14,10 @@ use std::task::{Context, Poll, Waker};
 use centraid_gateway_core::checksum::ChecksumMode;
 use centraid_gateway_core::conformance::{self, Harness};
 use centraid_gateway_core::engine::Gateway;
+use centraid_gateway_core::error::Refusal;
 use centraid_gateway_core::ids::{ObjectName, VaultId};
 use centraid_gateway_core::memory::{MemoryBytes, MemoryState};
 use centraid_gateway_core::retention::Policy;
-use centraid_gateway_core::error::Refusal;
 use centraid_gateway_core::store::{StoreFault, VaultState};
 
 /// Drive a future that never pends.

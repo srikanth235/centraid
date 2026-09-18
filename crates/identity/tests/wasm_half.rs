@@ -34,7 +34,10 @@ const WASM_HALF: [&str; 6] = [
 /// What the wasm half may not reach for, and what each one would drag in.
 const FORBIDDEN: [(&str, &str); 4] = [
     ("pkarr", "a signed-DNS client that binds sockets"),
-    ("url::", "a URL parser the certificate layout has no use for"),
+    (
+        "url::",
+        "a URL parser the certificate layout has no use for",
+    ),
     (
         "base64",
         "the record encoding, which lives on the discovery half",

@@ -44,9 +44,7 @@ use centraid_gateway_core::ids::{Generation, Key32, ObjectKind, ObjectName, Vaul
 use centraid_gateway_core::lease::{Lease, LeaseState};
 use centraid_gateway_core::plan::{self, Plan};
 use centraid_gateway_core::retention::BaseRecord;
-use centraid_gateway_core::store::{
-    ObjectState, StateStore, StoreFault, StoredObject, VaultState,
-};
+use centraid_gateway_core::store::{ObjectState, StateStore, StoreFault, StoredObject, VaultState};
 use centraid_gateway_core::time::ServerTime;
 use worker::{SqlStorage, SqlStorageValue};
 
@@ -158,7 +156,10 @@ impl DurableState {
         for table in self.tables()? {
             // The table name came out of SQLite's own catalogue, never out of a
             // request, and the statement is `contracts/gateway/queries/`'s.
-            let cursor = self.sql.exec(&sql::table_dump(&table), None).map_err(fault)?;
+            let cursor = self
+                .sql
+                .exec(&sql::table_dump(&table), None)
+                .map_err(fault)?;
             for row in cursor.raw() {
                 out.push_str(&table);
                 for value in row.map_err(fault)? {
@@ -200,11 +201,7 @@ impl DurableState {
         Ok(rows)
     }
 
-    fn execute(
-        &self,
-        statement: &str,
-        bindings: Vec<SqlStorageValue>,
-    ) -> Result<(), StoreFault> {
+    fn execute(&self, statement: &str, bindings: Vec<SqlStorageValue>) -> Result<(), StoreFault> {
         self.sql.exec(statement, bindings).map_err(fault)?;
         Ok(())
     }
@@ -216,8 +213,9 @@ fn fault(error: worker::Error) -> StoreFault {
 
 fn key32(value: Option<&SqlStorageValue>) -> Result<Key32, StoreFault> {
     match value {
-        Some(SqlStorageValue::Blob(bytes)) => Key32::from_slice(bytes)
-            .ok_or_else(|| StoreFault::new("a stored key is not 32 bytes")),
+        Some(SqlStorageValue::Blob(bytes)) => {
+            Key32::from_slice(bytes).ok_or_else(|| StoreFault::new("a stored key is not 32 bytes"))
+        }
         other => Err(StoreFault::new(format!(
             "a stored key is not a blob: {other:?}"
         ))),
@@ -610,10 +608,7 @@ impl StateStore for DurableState {
         &self,
         vault: &VaultId,
     ) -> Result<Option<ServerTime>, StoreFault> {
-        let rows = self.query(
-            sql::CLIENT_BASE_DELETE_SELECT,
-            vec![blob(vault.as_bytes())],
-        )?;
+        let rows = self.query(sql::CLIENT_BASE_DELETE_SELECT, vec![blob(vault.as_bytes())])?;
         match rows.first() {
             Some(row) => Ok(maybe_integer(row.first())?.map(ServerTime::from_millis)),
             None => Ok(None),

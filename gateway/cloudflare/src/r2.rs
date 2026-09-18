@@ -143,11 +143,7 @@ impl R2Bytes {
             .execute()
             .await
             .map_err(fault)?;
-        Ok(listed
-            .objects()
-            .iter()
-            .map(worker::Object::key)
-            .collect())
+        Ok(listed.objects().iter().map(worker::Object::key).collect())
     }
 }
 
@@ -213,11 +209,7 @@ impl ByteStore for R2Bytes {
                  R2_S3_HOST in the environment",
             ));
         };
-        let path = sigv4::encode_path(&format!(
-            "/{}/{}",
-            s3.bucket,
-            object_key(vault, name)
-        ));
+        let path = sigv4::encode_path(&format!("/{}/{}", s3.bucket, object_key(vault, name)));
         let url = sigv4::presign(
             &PresignRequest {
                 method: "PUT",

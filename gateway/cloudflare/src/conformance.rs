@@ -279,4 +279,3 @@ impl Harness for WorkerHarness {
             .map_err(|error| StoreFault::new(error.to_string()))
     }
 }
-

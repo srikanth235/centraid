@@ -369,7 +369,10 @@ mod tests {
             Refusal::HeadConflict {
                 current: Some(Key32::from_bytes([5; 32])),
             },
-            Refusal::LeaseStale { held: 2, claimed: 2 },
+            Refusal::LeaseStale {
+                held: 2,
+                claimed: 2,
+            },
             Refusal::VaultMoved {
                 current_epoch: 3,
                 moved_at: ServerTime::from_millis(8),
@@ -381,8 +384,8 @@ mod tests {
             },
         ];
         for refusal in refusals {
-            let rendered = serde_json::to_string(&ErrorBody::of(&refusal, 0))
-                .expect("the body serialises");
+            let rendered =
+                serde_json::to_string(&ErrorBody::of(&refusal, 0)).expect("the body serialises");
             for (field, value) in refusal.companions().fields() {
                 assert!(
                     rendered.contains(value.as_str()),

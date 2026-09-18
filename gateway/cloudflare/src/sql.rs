@@ -16,8 +16,11 @@
 //! The shared statements use SQLite's numbered `?1`, `?2` form. A Durable
 //! Object binds an array positionally onto exactly that — its storage is
 //! SQLite, and `?1` is SQLite's own spelling for the first bound value — so the
-//! statements are run unchanged. `tests/shared_sql.rs` is the check that they
-//! stay numbered and stay shared.
+//! statements are run unchanged.
+//!
+//! `tests/no_rules_here.rs` is the check that they stay SHARED: it fails on a
+//! `SELECT`, `INSERT`, `UPDATE` or `DELETE` in a Rust string literal anywhere in
+//! this crate but `mailbox.rs`, which says why it is the exception.
 
 macro_rules! statement {
     ($(#[$meta:meta])* $name:ident, $file:literal) => {

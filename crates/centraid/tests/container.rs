@@ -83,11 +83,7 @@ fn the_image_does_not_default_to_a_verb_that_needs_a_host_or_a_subcommand() {
         .filter(|line| !line.trim_start().starts_with('#'))
         .collect::<Vec<_>>()
         .join("\n");
-    for wrong in [
-        r#"CMD ["gateway""#,
-        r#"CMD ["serve""#,
-        r#"CMD ["recover""#,
-    ] {
+    for wrong in [r#"CMD ["gateway""#, r#"CMD ["serve""#, r#"CMD ["recover""#] {
         assert!(
             !text.contains(wrong),
             "`{wrong}` is not something this binary can do as a container's \
