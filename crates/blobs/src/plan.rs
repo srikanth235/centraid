@@ -7,6 +7,9 @@
 //!
 //! It is pure. It does no I/O, holds no store and opens no connection — it
 //! takes a list of [`Want`] and a [`Budget`] and returns an ordered [`Plan`].
+//! [`wants_from_custody`] is where those wants come from now: the vault's own
+//! blob-custody rows (#1029 §4, W6), which is what gave the member's transfer
+//! rule something to govern again after `seat.sync` left with the seat plane.
 //! That is deliberate: scheduling is the part most likely to need changing as
 //! real phones report back, and a pure function is the part that can be changed
 //! without a device in the room.
@@ -404,6 +407,68 @@ pub fn plan(wants: impl IntoIterator<Item = Want>, budget: Budget) -> Plan {
     }
 }
 
+/// **TURN THE VAULT'S BLOB CUSTODY INTO WANTS** (#1029 §4, W6, hand-off 4).
+///
+/// ## What this closes
+///
+/// [`OriginalsRule`] — the member's transfer rule — and the two "Download
+/// settings" sheets that set it had nothing to govern. `SyncWindow` carried it
+/// to a `seat.sync` that left with the seat plane, and [`plan`] had no caller
+/// at all: `grep -rn 'centraid_blobs::plan' crates/` outside this crate was
+/// empty. A setting a member can change and nothing reads is worse than no
+/// setting, because it says the phone is obeying something.
+///
+/// The rule was never wrong; what it governed went away. In the phone-is-the-
+/// vault model the thing it governs is this: **which of the blobs the vault
+/// already knows about does this window ask the gateway for.** The vault's
+/// custody rows say what exists and how big it is
+/// (`centraid_vault::backup::custody`), the byte store says how much of each is
+/// already here, and this turns the pair into the [`Want`]s [`plan`] orders.
+///
+/// ## The tier is the ROLE, and that is the whole mapping
+///
+/// A `thumbnail` custody row is [`Tier::Thumbnail`] and an `original` row is
+/// [`Tier::Original`]. There is no preview tier here: a preview is a
+/// `core_content_derivative` and has no custody row of its own, so a caller
+/// that wants previews planned hands them in beside these.
+///
+/// A blob with **no placement** is left out. It is a row the vault admitted and
+/// has not sealed yet — the crash window between `custody::admit` and
+/// `custody::record_placements` — and there is nowhere to fetch it from, so
+/// asking for it would be a want no window can ever satisfy.
+///
+/// `recency` is the caller's, because the vault's own `created_at` is a string
+/// and the comparison here is an integer; `moving` likewise, because whether a
+/// blob is a video is a `core_content_item.media_type` question and this crate
+/// holds no rows.
+pub fn wants_from_custody<'a>(
+    blobs: impl IntoIterator<Item = &'a centraid_vault::backup::custody::Custody>,
+    held: &std::collections::HashMap<ContentHash, u64>,
+    recency: impl Fn(&str) -> i64,
+    moving: impl Fn(&str) -> bool,
+) -> Vec<Want> {
+    use centraid_vault::backup::custody::BlobRole;
+
+    blobs
+        .into_iter()
+        .filter(|blob| !blob.placements.is_empty())
+        .filter_map(|blob| {
+            let hash = ContentHash::parse_hex(&blob.plaintext_hash).ok()?;
+            Some(Want {
+                hash,
+                tier: match blob.role {
+                    BlobRole::Thumbnail => Tier::Thumbnail,
+                    BlobRole::Original => Tier::Original,
+                },
+                size: blob.plaintext_bytes,
+                held: held.get(&hash).copied().unwrap_or(0),
+                recency: recency(&blob.plaintext_hash),
+                moving: moving(&blob.plaintext_hash),
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -759,5 +824,116 @@ mod tests {
         assert!(Tier::Thumbnail.variants().contains(&"poster"));
         assert!(Tier::Thumbnail.variants().contains(&"thumb"));
         assert!(!Tier::Preview.variants().contains(&"poster"));
+    }
+
+    // ------------------------------------------------- custody into wants ----
+
+    fn custody_row(
+        seed: u8,
+        role: centraid_vault::backup::custody::BlobRole,
+        bytes: u64,
+        placed: bool,
+    ) -> centraid_vault::backup::custody::Custody {
+        use centraid_vault::backup::custody::{Custody, FileKey, Placement};
+        Custody {
+            plaintext_hash: hex::encode([seed; 32]),
+            file_key: FileKey::fresh().expect("draws"),
+            plaintext_bytes: bytes,
+            role,
+            placements: if placed {
+                vec![Placement {
+                    part_index: 0,
+                    object_name: hex::encode([seed.wrapping_add(1); 32]),
+                    byte_offset: 0,
+                    byte_length: bytes,
+                }]
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    /// **HAND-OFF 4.** The member's transfer rule governs the vault's own
+    /// custody rows: every thumbnail crosses, and a `MANUAL` rule withholds
+    /// every original — which is the whole of what the two "Download settings"
+    /// sheets set, connected to something that reads it.
+    #[test]
+    fn the_transfer_rule_governs_the_blobs_the_vault_holds_custody_of() {
+        use centraid_vault::backup::custody::BlobRole;
+
+        let rows = [
+            custody_row(1, BlobRole::Thumbnail, 2048, true),
+            custody_row(2, BlobRole::Thumbnail, 2048, true),
+            custody_row(3, BlobRole::Original, 4_000_000, true),
+            custody_row(4, BlobRole::Original, 900_000_000, true),
+        ];
+        let held = std::collections::HashMap::new();
+        let wants = wants_from_custody(
+            &rows,
+            &held,
+            |_| 0,
+            // The 900 MB one is a video.
+            |hash| hash.starts_with(&hex::encode([4_u8; 1])),
+        );
+        assert_eq!(wants.len(), 4);
+
+        let manual = plan(
+            wants.clone(),
+            Budget {
+                originals: OriginalsRule::Manual,
+                ..Budget::foreground()
+            },
+        );
+        assert_eq!(manual.items.len(), 2, "only the thumbnails crossed");
+        assert!(manual.items.iter().all(|want| want.tier == Tier::Thumbnail));
+        assert_eq!(manual.withheld, 2, "both originals are still owed");
+
+        // And the download arrow overrides it for one item, which is what the
+        // affordance means.
+        let tapped = wants[2].hash;
+        let one = plan(
+            wants.clone(),
+            Budget {
+                originals: OriginalsRule::Manual,
+                only: Some(tapped),
+                ..Budget::foreground()
+            },
+        );
+        assert_eq!(one.items.len(), 1);
+        assert_eq!(one.items[0].hash, tapped);
+    }
+
+    /// A blob the vault admitted and has not sealed yet is left out: there is
+    /// nowhere to fetch it from, so a want for it is one no window can satisfy.
+    #[test]
+    fn a_blob_with_no_placement_is_not_a_want() {
+        use centraid_vault::backup::custody::BlobRole;
+
+        let rows = [
+            custody_row(5, BlobRole::Thumbnail, 100, false),
+            custody_row(6, BlobRole::Thumbnail, 100, true),
+        ];
+        let wants = wants_from_custody(&rows, &std::collections::HashMap::new(), |_| 0, |_| false);
+        assert_eq!(wants.len(), 1);
+        assert_eq!(
+            wants[0].hash,
+            ContentHash::parse_hex(&hex::encode([6_u8; 32])).unwrap()
+        );
+    }
+
+    /// The tier order still holds over custody rows: every thumbnail before any
+    /// original, which is what fills a restored grid first.
+    #[test]
+    fn thumbnails_from_custody_are_planned_before_any_original() {
+        use centraid_vault::backup::custody::BlobRole;
+
+        let rows = [
+            custody_row(7, BlobRole::Original, 4_000_000, true),
+            custody_row(8, BlobRole::Thumbnail, 2048, true),
+        ];
+        let wants = wants_from_custody(&rows, &std::collections::HashMap::new(), |_| 0, |_| false);
+        let ordered = plan(wants, Budget::foreground());
+        assert_eq!(ordered.items[0].tier, Tier::Thumbnail);
+        assert_eq!(ordered.items[1].tier, Tier::Original);
     }
 }

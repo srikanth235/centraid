@@ -464,6 +464,106 @@ pub fn grid_fetches(blobs: &[Custody]) -> Vec<ObjectFetch> {
         .collect()
 }
 
+/// **OPEN A BLOB FROM THE OBJECTS ITS PLACEMENTS NAME** (#1029 §4, F6, F14).
+///
+/// The read half of custody, and the half a `FetchOriginal` server sits on: it
+/// takes a custody row and the object bytes its placements point at, slices each
+/// part out by `(offset, length)`, opens it under the row's **file key**, joins
+/// the parts in `part_index` order, and checks the result against the row's own
+/// plaintext hash before handing it back.
+///
+/// One function for all three shapes §4 defines, because they are one shape
+/// here: a blob in its own object is one placement at offset 0, an original over
+/// 16 MiB is several (F6), and a thumbnail is a range inside a pack. Nothing
+/// downstream branches on which it got.
+///
+/// ## WHY THE HASH CHECK IS NOT REDUNDANT
+///
+/// Every chunk is authenticated, so bytes that open are bytes this vault sealed.
+/// What the tag cannot catch is a **row that points at the wrong object** — a
+/// placement that survived a repack, an offset off by one item — because the
+/// bytes at that range are a perfectly valid object of this vault's, sealed
+/// under a key the caller supplied. The plaintext hash is the only thing that
+/// says *this is the photograph the member asked for*, and it costs one pass.
+///
+/// `objects` is looked up by object name. A caller that is streaming hands in
+/// only the objects this blob needs; a caller with a pack already downloaded
+/// hands in the pack once and opens every thumbnail in it without fetching
+/// again — which is what makes a restored grid cost packs and not thumbnails.
+///
+/// # Errors
+/// [`VaultError::Invariant`] when a placement names an object the caller did not
+/// supply, points outside it, or when the joined plaintext is not what the row
+/// says it is.
+pub fn open_blob(
+    vault: object::VaultId<'_>,
+    held: &Custody,
+    objects: &std::collections::HashMap<String, Vec<u8>>,
+) -> Result<Vec<u8>> {
+    if held.placements.is_empty() {
+        return Err(VaultError::Invariant {
+            context: format!(
+                "blob {} has a custody row and no placement: it was admitted and never sealed",
+                &held.plaintext_hash[..16]
+            ),
+        });
+    }
+    let mut parts: Vec<&Placement> = held.placements.iter().collect();
+    parts.sort_by_key(|placement| placement.part_index);
+
+    let mut out = Vec::with_capacity(held.plaintext_bytes as usize);
+    for placement in parts {
+        let object = objects
+            .get(&placement.object_name)
+            .ok_or_else(|| VaultError::Invariant {
+                context: format!(
+                    "part {} of blob {} is in object {}, which was not supplied",
+                    placement.part_index,
+                    &held.plaintext_hash[..16],
+                    &placement.object_name[..16]
+                ),
+            })?;
+        let start = usize::try_from(placement.byte_offset).unwrap_or(usize::MAX);
+        let end = start
+            .checked_add(usize::try_from(placement.byte_length).unwrap_or(usize::MAX))
+            .filter(|end| *end <= object.len())
+            .ok_or_else(|| VaultError::Invariant {
+                context: format!(
+                    "part {} of blob {} points outside object {}",
+                    placement.part_index,
+                    &held.plaintext_hash[..16],
+                    &placement.object_name[..16]
+                ),
+            })?;
+        // The AEAD's refusal is DELIBERATELY not forwarded verbatim. It says
+        // "this object does not open with this key and this header" on purpose
+        // — telling a caller which half of its guess was wrong is telling an
+        // attacker which half to keep — and the row it names is what a member's
+        // support bundle needs instead.
+        let part = object::open(vault, held.file_key.custody(), &object[start..end], None)
+            .map_err(|error| VaultError::Invariant {
+                context: format!(
+                    "part {} of blob {} did not open: {error}",
+                    placement.part_index,
+                    &held.plaintext_hash[..16]
+                ),
+            })?;
+        out.extend_from_slice(&part);
+    }
+
+    let got = hex::encode(blake3::hash(&out).as_bytes());
+    if got != held.plaintext_hash {
+        return Err(VaultError::Invariant {
+            context: format!(
+                "blob {} opened to {} — the row points at the wrong bytes",
+                &held.plaintext_hash[..16],
+                &got[..16]
+            ),
+        });
+    }
+    Ok(out)
+}
+
 /// `query_row` that answers `None` for no rows instead of an error.
 trait OptionalRow<T> {
     fn optional_row(self) -> Result<Option<T>>;
@@ -661,6 +761,122 @@ mod tests {
             "the items are not in offset order"
         );
         assert_eq!(fetches[0].byte_span(), (1024, 41 * 1024));
+    }
+
+    /// **THE READ A `FetchOriginal` SERVER MAKES.** A blob sealed under its own
+    /// file key, placed, and opened back out of the object by its row alone.
+    #[test]
+    fn a_blob_opens_from_the_objects_its_placements_name() {
+        const VAULT_KEY: [u8; 32] = [0x61; 32];
+        let vault_id = object::VaultId::new(&VAULT_KEY);
+
+        let plaintext = b"a camera original".repeat(200);
+        let key = FileKey::fresh().expect("draws");
+        let sealed = object::seal(
+            vault_id,
+            key.custody(),
+            &object::SealOptions {
+                kind: object::Kind::Blob,
+                role: object::Role::Original,
+                dictionary: None,
+            },
+            &plaintext,
+        )
+        .expect("seals");
+
+        let held = Custody {
+            plaintext_hash: hex::encode(blake3::hash(&plaintext).as_bytes()),
+            file_key: key,
+            plaintext_bytes: plaintext.len() as u64,
+            role: BlobRole::Original,
+            placements: vec![Placement {
+                part_index: 0,
+                object_name: sealed.name.hex(),
+                byte_offset: 0,
+                byte_length: sealed.bytes.len() as u64,
+            }],
+        };
+        let objects = std::collections::HashMap::from([(sealed.name.hex(), sealed.bytes.clone())]);
+        assert_eq!(
+            open_blob(vault_id, &held, &objects).expect("opens"),
+            plaintext
+        );
+
+        // A row that points at the wrong object is caught by the HASH, not by a
+        // tag: the bytes there are a perfectly valid object of this vault's.
+        let other = object::seal(
+            vault_id,
+            held.file_key.custody(),
+            &object::SealOptions {
+                kind: object::Kind::Blob,
+                role: object::Role::Original,
+                dictionary: None,
+            },
+            b"a different photograph",
+        )
+        .expect("seals");
+        let misplaced = Custody {
+            placements: vec![Placement {
+                part_index: 0,
+                object_name: other.name.hex(),
+                byte_offset: 0,
+                byte_length: other.bytes.len() as u64,
+            }],
+            ..held.clone()
+        };
+        let mixed = std::collections::HashMap::from([(other.name.hex(), other.bytes)]);
+        assert!(
+            open_blob(vault_id, &misplaced, &mixed).is_err(),
+            "a row pointing at the wrong object opened as the right photograph"
+        );
+
+        // And an object the caller did not supply is named, not guessed at.
+        assert!(open_blob(vault_id, &held, &std::collections::HashMap::new()).is_err());
+    }
+
+    /// F6: an original over the cap is several objects, and they join in part
+    /// order — which is the ONLY thing that says which half of a video is first.
+    #[test]
+    fn an_original_in_several_parts_joins_in_part_order() {
+        const VAULT_KEY: [u8; 32] = [0x62; 32];
+        let vault_id = object::VaultId::new(&VAULT_KEY);
+
+        let key = FileKey::fresh().expect("draws");
+        let halves: [&[u8]; 2] = [b"the first half...", b"and the second half"];
+        let whole: Vec<u8> = halves.concat();
+        let mut objects = std::collections::HashMap::new();
+        let mut placements = Vec::new();
+        for (index, part) in halves.iter().enumerate() {
+            let sealed = object::seal(
+                vault_id,
+                key.custody(),
+                &object::SealOptions {
+                    kind: object::Kind::Blob,
+                    role: object::Role::Original,
+                    dictionary: None,
+                },
+                part,
+            )
+            .expect("seals");
+            placements.push(Placement {
+                part_index: u32::try_from(index).expect("two parts"),
+                object_name: sealed.name.hex(),
+                byte_offset: 0,
+                byte_length: sealed.bytes.len() as u64,
+            });
+            objects.insert(sealed.name.hex(), sealed.bytes);
+        }
+        // Handed in BACKWARDS, so the sort is what puts them right.
+        placements.reverse();
+
+        let held = Custody {
+            plaintext_hash: hex::encode(blake3::hash(&whole).as_bytes()),
+            file_key: key,
+            plaintext_bytes: whole.len() as u64,
+            role: BlobRole::Original,
+            placements,
+        };
+        assert_eq!(open_blob(vault_id, &held, &objects).expect("opens"), whole);
     }
 
     #[test]

@@ -146,12 +146,27 @@ public sealed interface ScreenEffect {
      * WhatsApp's download arrow. An effect and not a write: it commits
      * nothing.
      *
-     * **NOTHING SERVES IT RIGHT NOW** (#1029 §1). It rode `seat.bytes.fetch`,
-     * which left with the seat plane — `grep -rn 'seat.bytes.fetch' crates/`
-     * is empty — so `ScreenRuntime` no longer answers it. The affordance and
-     * this effect are kept rather than deleted because the phone's own byte
-     * plane is #1029 W6's, and that is the wave that gives this a server
-     * again.
+     * **WHAT SERVES IT, AND WHAT IS STILL MISSING** (#1029 §1, W6).
+     *
+     * It rode `seat.bytes.fetch`, which left with the seat plane —
+     * `grep -rn 'seat.bytes.fetch' crates/` is empty — so `ScreenRuntime` has
+     * not answered it since. W6 built the two halves under it and NOT the hop
+     * between them, and the honest state is worth writing down rather than
+     * discovering:
+     *
+     * - the vault knows where the original is and holds the key that opens it
+     *   (`backup_blob_placement`, `backup::custody::open_blob`);
+     * - the member's transfer rule decides whether this window may ask for it,
+     *   and a tap overrides the rule for that one item
+     *   (`centraid_blobs::plan::wants_from_custody`, `Budget::only`);
+     * - **there is no core request that carries the tap.** `Request` has no
+     *   `fetch_original` arm, so a shell has nothing to send. Adding one means
+     *   a proto field, a handler, and a gateway transport inside
+     *   `crates/core` — which is a layering decision for the umbrella and not
+     *   one to take while wiring a screen.
+     *
+     * The affordance and this effect are kept rather than deleted because that
+     * remaining hop is a wire, not a design.
      */
     public data class FetchOriginal(
         public val screenId: String,
