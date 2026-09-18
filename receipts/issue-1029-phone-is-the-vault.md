@@ -1143,3 +1143,187 @@ was not caught when it landed. One environmental note for whoever runs the gate:
    settings". W6's, with the byte plane.
 5. **`mobile/maestro/flows/cold-start-and-relaunch.yaml` still does not exist.** Third
    wave running that Reference A's inventory names it.
+
+## W5 — keys, restore and the phone's client
+
+Base `0f988007`. Branch `claude/1029-w5-keys-restore`. Law digest `1d83dd8ab268`.
+
+**What landed, and what did not.** The four ABI doors, the `PERSIST_WAL` shim and the
+restore drill landed. **The phone's gateway client and the seed's custody screens did
+not** — see "What this wave did not build" at the end, which names each piece, why it
+stopped, and what the next wave inherits. Nothing was half-built: no signing code, no
+background-transfer code and no phrase screens exist in a partial state.
+
+### The hand-offs
+
+1. **`vault.found` over the ABI — DONE.** `crates/api-proto/proto/centraid/core/v1/vault.proto`
+   carries `FoundRequest`/`FoundResponse`; `envelope.proto` gains `Request.found = 14` and
+   `Response.found = 14`; `crates/core`'s `api::found` and a `handle.rs` dispatch arm write
+   the row. Its own request arm and **not** a registered command: the registry's gate order
+   evaluates a `Principal` against `core_vault.self_party_id` and writes a receipt naming the
+   vault, and founding is the act that writes both — a command exempted from the gate order
+   would be a second command plane wearing the first one's name. A second found is refused
+   with `ERROR_CODE_VAULT_ALREADY_HELD`, because `Vault::found` inserts unconditionally and
+   two `core_vault` rows make `vault_id`'s `ORDER BY … LIMIT 1` a random draw.
+   Kotlin: `VaultRoster.found` beside `identify`, `Shelf.found(name, ownerName)`.
+   Tests: `founding_turns_a_created_file_into_a_vault_that_can_name_itself`,
+   `a_second_found_is_refused_and_the_vault_already_here_is_untouched`,
+   `a_found_request_over_the_envelope_makes_the_file_a_vault`, `FoundDoorSpec`.
+
+2. **`ERROR_CODE_VAULT_MOVED` — ALREADY MINTED; the GAP WAS THE FIELD.** The brief's State
+   table predates `4947f59f`: the code (`= 25`) and `lease.proto`'s `VaultMoved` were on this
+   base already. What did not exist was anywhere for the companion to ride — `error.proto`'s
+   own comment says "a `VaultMoved` (`lease.proto`) rides with this code" and there was no
+   field. `Error.moved` is that field. Without it a phone learns THAT its vault moved and
+   never when, which is half of "N changes since `<date>`", and a client inferring the date
+   from its own clock would be inventing the one fact the refusal exists to carry.
+   `dev.centraid.shared.sync.movedFrom` is the one reader; the unacked count is an ARGUMENT
+   and never read off the refusal, because the gateway cannot know what this phone has not
+   sent it.
+
+3. **The `VaultLockup` trim plus the frozen slot — DONE.** `STATE_SYNCING` and
+   `STATE_OFFLINE` were facts about a PASS that #1029 §1 deleted; both are reserved by number
+   AND by name, which is what keeps the `WIRE_JSON` promise `buf.yaml` makes for
+   `centraid.screen.v1`. `STATE_FROZEN = 4` and `string frozen_line = 9` take their place.
+   Before this, `Shelf` could only say `STATE_ONLINE` about a vault that had moved — a
+   switcher row reading "synced" over a vault refusing every write, which is the umbrella's
+   UI invariant broken in the smallest possible way. Both shells' `stateLine` tables say the
+   same sentence. `HomeBridge.frozenLine` stays and is not a second source: it and the lockup
+   both read `Shelf.Holding.frozenLine`.
+
+4. **`ChangeEvent.commit_seq` — DELETED, with its producers.** Its only reader was a seat's
+   overlay. What makes deleting it right rather than tidy: the producer is now a rusqlite
+   `update_hook`, which knows tables and no position, so it wrote a literal ZERO into every
+   event in the vault's life — worse than an absent field, because an absent field cannot be
+   believed. `rows_applied` went with it (callerless since the applier left), as did
+   `apps/kit`'s mirror and its max-coalescing.
+
+5. **`SQLITE_FCNTL_PERSIST_WAL` — SHIM LANDED, AND W3's COST DOES NOT REPRODUCE HERE.**
+   The receipt carried W1's claim (`NO_CKPT_ON_CLOSE` is the whole requirement) and W3's
+   (a full base per app launch) with no measurement between them.
+   `crates/vault/tests/relaunch.rs` is the measurement: found, capture, **checkpoint** — the
+   case the two claims differ over, since the app owns checkpoints and a checkpointed WAL is
+   the one SQLite would delete at close — drop the connection, reopen, capture. Same
+   generation, `broke: false`, and the `-wal` survives with its salts. **On this host W1 was
+   right and the base-per-launch cost is not real.**
+   The shim landed anyway, and not defensively: the two settings are different promises —
+   one says do not checkpoint at close, the other says do not delete the `-wal` at close even
+   when it has been checkpointed — and the measurement is a Linux measurement against this
+   workspace's `libsqlite3-sys`. Neither phone's SQLite has ever been compiled in this
+   container. One unsafe call, in `crates/core-ffi/src/wal.rs`, plugged into
+   `centraid_vault::wal_persistence`; a host that installs nothing gets what it had before,
+   and a VFS that refuses the control is logged rather than fatal.
+
+6. **Android's `"centraid-sync-pass"` — UNTOUCHED, and it is still the name.** This wave did
+   not build background transfers, so nothing was renamed and nothing scheduled was orphaned.
+   The hand-off passes through unchanged to whoever builds them.
+
+### The drill, its shape, and its edges
+
+`crates/centraid/tests/restore_drill.rs`, under the gate step **`restore-drill`**.
+
+One phrase (a published BIP-39 vector, so the derivation is checked against something
+outside this repository), one account key, **two** vaults minted at two indices and named by
+the account's own signed listing. Real commits, a real page-identical base and real
+segments. Every object uploaded through `centraid_gateway_core::Gateway`'s own rules: lease,
+plan, quota, write-once, compare-and-set on `prev_head`. Then the phone is lost — **not
+deleted**, because F1 is about a phone that is still there — and a fresh phone restores.
+
+**What makes the restore claim worth anything is the signature, not a comment.**
+`restore_onto_a_fresh_phone(phrase, gateway, listing, dir, now)` takes no path on the old
+phone, no key, no index and no vault id. F2 holds structurally: it is not that the restore
+declines to read the lost phone, it is that it cannot. It verifies the listing against the
+key its own seed just produced, claims each lease at `epoch + 1` (F3) with a fresh device
+key, reads the head the gateway holds, downloads what the manifest names, and applies the
+base and every segment.
+
+Asserted: both vaults discovered; both censuses match table by table; `segments_applied > 0`,
+so the tail AFTER the base is proved and not only the base; the old phone's next put is
+refused with `VAULT_MOVED` naming epoch 2 and the moment it moved; every table on the old
+phone is at or above its count at backup and `core_content_item` is exactly three rows above
+it; its spool is non-empty.
+
+**What it cannot prove.**
+- **No phone shell is compiled** (no Android SDK; a Kotlin/Native link is outside the disk
+  budget). The freeze itself — writes refused, reads kept, the line drawn, nothing wiped —
+  is Kotlin, and is pinned by `VaultMovedSpec` and `VaultMovedProducerSpec`. What the drill
+  asserts is the refusal those specs key on, with its companion, and that the old phone's
+  rows and spool are intact for them to show.
+- **No HTTPS, no request signing, no pkarr.** The gateway is called as a library. The
+  transport is the piece this wave did not build.
+- **One SQLite**, the host's.
+
+The step was `release`-only and is now a `local` step, so every profile carries it: release
+is the profile that runs least often, and a promise proved only there is a promise proved
+after the merge. It runs **both** drills in one `cargo test --workspace --test restore_drill`
+— two `-p` invocations resolve features differently from the `--workspace` build the `test`
+step just did and rebuilt 105.7 s of graph every run; naming the target across the workspace
+costs 1.5 s.
+
+### Three reds in `:core:jvmTest`, one known and two hiding behind it
+
+The brief named one and asked for a judgement. Judging it uncovered two more, both
+reproduced at `0f988007` by stashing everything but the spec fix.
+
+1. **`AbiRoundTripSpec`'s event drain — the EXPECTATION was stale, not the core.** Proved
+   rather than argued: the spec now drains the queue to empty and THEN asserts clause 6 over
+   four idle `next_event`s, and it passes — so nothing is emitted on an idle handle and this
+   is not a battery finding. The 3 → 8 was the `core.add_party` twelve lines above it, whose
+   deny is receipted and so is a commit the `update_hook` reports. A shell MUST get those.
+   What the old assertion actually said was "a command produces no change events", true only
+   while nothing produced any.
+2. **The two-handles sentence literal still said "replica"**; production has said "vault"
+   since `a53e15b9`. Unseen because assertion 1 failed twelve lines earlier.
+3. **`centraid_open` could answer `OK` with a null handle** — a contract violation
+   `code_for`'s own comment forbids in those words. It used `code_for`, whose
+   `_ => CENTRAID_OK` arm is right for `call` (the reason rides in the out-buffer) and wrong
+   for `open` (there is none). Reachable from an ordinary case: a `.db` copied away from its
+   `-wal` has `application_id 0` and `Vault::open` refuses it. `code_for_open` never answers
+   OK; `an_open_that_refuses_an_ordinary_file_never_answers_ok` pins it. The spec's copy takes
+   its sidecars now, so that assertion tests what it says it tests.
+
+### Rulings spent
+
+- **F1** — the drill does not delete the old phone and asserts, per table, that nothing
+  shrank. There is no `thaw` and nothing takes a vault back.
+- **F2** — held by the restore function's signature rather than by discipline.
+- **F3** — the restore claims `epoch + 1`; `VAULT_MOVED` names the epoch that took it.
+- **§6** — nothing opened a socket; `no-listening-socket` scans 301 files clean.
+- **Doctrine 2** — one unsafe call, in `crates/core-ffi`.
+- **Doctrine 8** — `Error.moved` rather than a second refusal envelope; the drill joined the
+  existing `restore-drill` step rather than adding a second name for one promise;
+  `backup::drill::write_one` is public rather than copied.
+
+### Found, not this lane's slice
+
+1. **`crates/api-proto/proto/centraid/core/v1/pair.proto` has no importer and no consumer.**
+   `envelope.proto`'s import of it was unused (`buf lint` says so once buf is on PATH) and is
+   dropped here; nothing in Rust or Kotlin names `PairOk` or `PairRequest`. It is dead
+   schema. Deleting a `centraid.core.v1` FILE is a `buf breaking` FILE-category act and
+   belongs to whoever owns that promise, not to this lane.
+2. **Neither `buf` nor `node_modules` existed in this container**, and
+   `cargo xtask gate --profile mobile-jvm` cannot run without either — its first two
+   sub-steps are `bun contracts/tools/build-screen-fixtures.ts` (which shells out to `buf`)
+   and `bun run format`. Both were installed with the repo's own pinned commands. Any brief
+   that quotes a mobile-jvm budget is quoting a run that had them.
+3. **`crates/core`'s `VaultAlreadyHeld` doc and member sentence were pairing-flavoured**,
+   naming `Handle::pair` and telling a member to "pair into a new one" for a plane that no
+   longer exists. Reworded here because this wave gave the variant its new producer.
+
+### What this wave did not build
+
+Named so the next wave inherits a clean edge rather than a half-built one.
+
+- **W5-2, the seed and custody.** No seed slot in the FFI, no phrase setup or check screens,
+  no synchronizable keychain item. The Android caveat the brief names — Block Store restores
+  only in the device-setup flow, so the written phrase is the common path there — has no copy
+  to live in yet. `crates/identity`'s `RecoveryPhrase`/`Seed` are landed and the drill drives
+  them; what is missing is the door onto the phone and the screens around it.
+- **W5-3, the phone's gateway client.** Nothing: no request signing, no clock-skew recovery,
+  no background transfers on either platform, no batching, no gateway switching, no hosted
+  registration, no invite redemption, no pkarr publish. The two blockers are real and worth
+  writing down: `commonMain` has no Ed25519, so signing is either a platform seam or a door
+  over the ABI onto `crates/gateway-core`'s `auth` — a design decision, not a coding task —
+  and neither mobile shell can be compiled in this container, so the background-transfer
+  halves (`BGTaskScheduler` ids in `Info.plist`, a CONCRETE Android worker) would ship
+  unverified. Half-written crypto is worse than none, so none was written.
