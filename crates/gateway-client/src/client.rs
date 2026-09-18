@@ -45,8 +45,11 @@ use crate::transport::{HttpRequest, HttpResponse, Transport};
 /// Its VALUE is the checksum the declaration bound to this name; its PRESENCE
 /// is what the standalone adapter records, because `ChecksumEvidence::None` is
 /// a rejection at commit and not a shrug. An S3-compatible store carries the
-/// same fact as `x-amz-checksum-sha256`, which is why the two adapters agree
-/// without either restating the rule.
+/// same fact in its own attestation header
+/// (`centraid_gateway_server::bytes::sigv4`), which is why the two adapters
+/// agree without either restating the rule — and why the digest inside is the
+/// one `AttestedChecksum` already computes rather than anything this crate
+/// chooses.
 pub const ATTESTED_CHECKSUM_HEADER: &str = "centraid-attested-checksum";
 
 /// What `/v1/health` said, and what this phone agreed to speak.
