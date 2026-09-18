@@ -765,33 +765,36 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 /// restorable.
 fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
     let started = Instant::now();
-    // TWO DRILLS, ONE STEP (#1029 W5-4). The second cannot live in the first's
-    // crate: it drives `centraid-identity` and `centraid-gateway-core` as well
-    // as the vault, and `crates/vault` depends on neither — a durability crate
-    // that had to know about an account key would be the layering this
-    // workspace is arranged to prevent. So it is `crates/centraid`'s, and a
-    // SECOND STEP for it would be a second name for one promise.
-    for (package, what) in [("centraid-vault", "durability"), ("centraid", "the phone")] {
-        let outcome = process(
-            ctx,
-            "restore-drill",
-            "cargo",
-            &[
-                "test",
-                "-p",
-                package,
-                "--test",
-                "restore_drill",
-                "--",
-                "--nocapture",
-            ],
-        )?;
-        if !matches!(outcome, Outcome::Ok(_)) {
-            let Outcome::Failed(detail) = outcome else {
-                return Ok(outcome);
-            };
-            return Ok(Outcome::Failed(format!("the {what} drill: {detail}")));
-        }
+    // TWO DRILLS, ONE STEP, ONE INVOCATION (#1029 W5-4). The second cannot
+    // live in the first's crate: it drives `centraid-identity` and
+    // `centraid-gateway-core` as well as the vault, and `crates/vault` depends
+    // on neither — a durability crate that had to know about an account key
+    // would be the layering this workspace is arranged to prevent. So it is
+    // `crates/centraid`'s, and a SECOND STEP for it would be a second name for
+    // one promise.
+    //
+    // **`--workspace --test`, NOT two `-p` runs, and the difference is 100
+    // seconds of the local loop.** `cargo test -p <one>` resolves features for
+    // that package alone, which is a DIFFERENT feature set from the
+    // `--workspace` build the `test` step above has just done — so two `-p`
+    // invocations rebuilt a large part of the dependency graph on every run
+    // (measured: 105.7 s against 1.5 s). Naming the TARGET across the workspace
+    // runs both drills under the same resolution the step before it warmed.
+    let outcome = process(
+        ctx,
+        "restore-drill",
+        "cargo",
+        &[
+            "test",
+            "--workspace",
+            "--test",
+            "restore_drill",
+            "--",
+            "--nocapture",
+        ],
+    )?;
+    if !matches!(outcome, Outcome::Ok(_)) {
+        return Ok(outcome);
     }
     let seconds = started.elapsed().as_secs_f64();
     // The wall clock, as evidence rather than as a ceiling. There is no
