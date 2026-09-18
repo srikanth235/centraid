@@ -1366,3 +1366,215 @@ defences that need no decision at all.
 | 8 `node scripts/check-ledgers.mjs --base c4120bf0` | **ok — 19 sections across 5 ledgers hold** |
 | 9 `node .governance/law/run.mjs --brief-digest 1d83dd8ab268` | **10 rules, no findings.** The law **moved**, as W4B-4 intended: the digest is now **`2612c611d7e6`** |
 | 10 live run, no vault and no keys | **yes.** `serve` on an empty directory → `{"protocol_min":1,"protocol_max":1,…}`; every unauthenticated verb refused (`GatewaySignatureInvalid`, `Unauthorized`); an invite minted, redeemed once, and the second redemption refused; `scrub` clean; no file in the data directory that looks like key material; the invite code absent from `gateway.sqlite`, its `-wal` and its `-shm` |
+
+## W4 — the hosted adapter (lane C)
+
+Base `590bdaa2`, branch `claude/1029-w4c-cloudflare`, law digest `2612c611d7e6`
+at base and at head — **no drift**.
+
+The claim: `crates/gateway-core` really is the whole of the rules, because a
+second adapter on a completely different runtime now passes the same suite
+without reimplementing one of them.
+
+### The files
+
+| Path | What it is |
+| --- | --- |
+| `crates/identity/Cargo.toml`, `src/lib.rs`, `src/certificate.rs`, `src/phrase.rs`, `src/sealed_box.rs` | the wasm split: `discovery` and `mint`, both default-on |
+| `crates/identity/tests/wasm_half.rs` | the local grep for it (2 tests) |
+| `Cargo.toml` | `hpke`'s `getrandom` moved off the workspace table onto `centraid-identity`'s `mint` |
+| `crates/gateway-core/src/error.rs` | `Companions`, `Moved`, `ProtocolWindow`, `Quota`, `LeaseEpochs`, `SizeCap`, `Refusal::companions()` |
+| `crates/gateway-core/src/plan.rs` | `Entitlement`, `RETAIN_AFTER_LAPSE`, `plan::judge` (F13) |
+| `crates/gateway-core/src/store.rs` | `StateStore::record_client_delete`; `ByteStore::evidence` reworded |
+| `crates/gateway-core/src/engine.rs` | the delete path writes the audit ledger |
+| `crates/gateway-core/src/memory.rs` | the in-memory half of both |
+| `crates/gateway-core/src/conformance.rs` | `Harness::error_body` and `errors/a-refusal-carries-its-companions-on-the-wire` |
+| `crates/gateway-core/tests/audit_ledger.rs` | the ledger rule (2 tests) |
+| `crates/gateway-core/tests/conformance.rs` | the in-memory harness's `error_body` |
+| `crates/gateway-server/src/state.rs`, `src/http.rs` | the ledger write; `ErrorBody` with companions; the attestation header's value read |
+| `crates/gateway-server/tests/audit_ledger.rs`, `tests/common/mod.rs`, `tests/conformance.rs` | the adapter-storage proof and the suite's new window |
+| `crates/centraid/tests/container.rs` | the image's verbs, pinned (4 tests) |
+| `crates/vault/tests/one_hash.rs` | the scan now covers `gateway/` too; two entries added |
+| `deploy/docker/Dockerfile` | `CMD` fixed, `HEALTHCHECK` removed, stale iroh prose corrected |
+| `contracts/gateway/hosted.sql` | this deployment's admission addendum |
+| `contracts/gateway/queries/{purchase_token_insert,purchase_token_select,purchase_token_redeem,purchase_receipt_insert,purchase_receipts_select,account_vault_insert,account_vaults_select,table_clear}.sql` | eight statements |
+| `gateway/cloudflare/Cargo.toml`, `Cargo.lock` | its own cargo workspace |
+| `gateway/cloudflare/src/lib.rs` | the Worker, the three Durable Objects, the routes |
+| `gateway/cloudflare/src/vault.rs` | `StateStore` over the DO's SQLite |
+| `gateway/cloudflare/src/r2.rs` | `ByteStore` over R2 |
+| `gateway/cloudflare/src/sigv4.rs` | presigning |
+| `gateway/cloudflare/src/mailbox.rs` | the mailbox object and its alarm |
+| `gateway/cloudflare/src/accounts.rs` | admission by key and purchase |
+| `gateway/cloudflare/src/wire.rs` | headers, statuses, the error body |
+| `gateway/cloudflare/src/sql.rs` | the shared statements, by `include_str!` |
+| `gateway/cloudflare/src/conformance.rs` | the harness, and the forgetful one |
+| `gateway/cloudflare/tests/no_rules_here.rs` | the grep (6 tests) |
+| `gateway/cloudflare/{wrangler.toml,README.md,scripts/conformance.mjs}` | deployment, the register, the runner |
+| `.github/workflows/lane-release-gateway-worker.yml`, `release.yml` | the deploy lane |
+
+### W4C-1 — a feature, not a second crate, and the evidence for it
+
+`pkarr`, `url` and `base64` are reached from exactly two modules —
+`rg -l 'pkarr|url::|base64' crates/identity/src` names `record.rs` and
+`discovery.rs` and nothing else. A split crate would have moved six files to buy
+a boundary a `#[cfg]` already draws, and would have made
+`centraid_identity::DeviceCertificate` two paths for the same 104 bytes.
+
+The part the brief did not anticipate: **`hpke` pulls `getrandom`**, which has no
+`wasm32-unknown-unknown` backend unless one is named in RUSTFLAGS. A feature
+named in `[workspace.dependencies]` is unioned into every inheriting member and
+cannot be switched off downstream, so `hpke/getrandom` moved onto
+`centraid-identity`'s own `mint` feature. `SealedBox::seal` went with it;
+`open` did not, because opening needs no entropy.
+
+### W4C-2 — three things the runtime decided, and one it did not
+
+- **The Durable Object is the fence.** `compare_and_set_head` takes no
+  transaction and no lock: one object per vault, one request at a time. Three
+  mechanisms, one rule — `commit::compare_and_set` in all three.
+- **The 10 GB cap shapes what is in the object.** An object row is under 200
+  bytes, so ten million objects is ~2 GB and that vault holds 160 TB at the
+  16 MiB cap. Per-item rows are not here and the phone's ledger is.
+- **R2 attests only what the client sent**, and the binding says so in its own
+  types: `checksum().sha256` is an `Option`. `None` is `ChecksumEvidence::None`
+  and a refused commit. `ReadAndHash` is implemented too and asks for the
+  attestation **first**, so it cannot become a way past the missing-checksum
+  rule — W4b's S3 store had exactly that hole.
+- **The binding cannot presign**, so there are two R2 APIs: the binding for the
+  gateway's own reads, a signed S3 query string for the phone's transfer.
+
+Two rules moved **into** `gateway-core` rather than being written in the
+adapter, which is where the architecture says they go: `plan::judge` and
+`plan::RETAIN_AFTER_LAPSE` decide what a verified receipt means by the gateway's
+own clock. The hosted adapter is the only deployment that verifies purchases,
+but it must not be the place that decides what one means — and there is no
+second implementation to disagree with it, which is precisely why it would have
+gone unnoticed.
+
+`workers-rs` did **not** block anything. Q14's TypeScript fallback was not
+needed and was not taken.
+
+### W4C-3 — what ran under Miniflare, and what the canary scanned
+
+`node gateway/cloudflare/scripts/conformance.mjs`: `wrangler dev --env dev`
+(workerd, a real Durable Object, a real local R2 bucket), `POST /__conformance`.
+
+**21 of 21 cases GREEN**, and the run covers both checksum modes against the one
+store this deployment has — `checksum/attest-mode-commits-verified-bytes` and
+`checksum/read-and-hash-mode-commits-verified-bytes`, plus
+`read-and-hash-catches-bytes-that-do-not-hash-to-their-name` and
+`no-attestation-is-a-rejection` in both. There is one store here and not two, so
+the four-way table W4b ran has no counterpart: R2 × attest is production, R2 ×
+read-and-hash is the suite's, and a second store is not something this
+deployment has.
+
+**`?forgetful=1` goes RED**, which is what makes the green mean anything: the
+harness drops uploads and nine cases fail on `Refused(Checksum(Missing))` while
+`checksum/no-attestation-is-a-rejection` and the four that touch no bytes stay
+green. The runner asserts both verdicts.
+
+The canary's two windows on this deployment: **every object in R2**, listed and
+read back, and **every table in the Durable Object's SQLite**, every row, every
+column, blobs in hex. Needles: a planted plaintext and its BLAKE3, raw and hex,
+with a ciphertext derived so it shares no run with the plaintext.
+
+**Running it found three defects reading did not**, all recorded in
+`dbc0f7f6`: a Durable Object's SQLite **enforces foreign keys** (the harness's
+reset emptied `account` before `vault`, and every later case reported "setup
+failed" with nothing naming the cause); `env.secret(…)` answers nothing under
+Miniflare without `.dev.vars`; and `wrangler` walks **up** for its config and
+found this repository's root `wrangler.json`, the public site's.
+
+### W4C-4 — the four hand-offs
+
+1. **The audit ledger is written.** It is `client_delete` (the brief says
+   `client_base_delete`; W4b's receipt item 2 is the one meant). A port
+   operation `StateStore::record_client_delete` and a call from
+   `Gateway::delete` for **every** granted tombstone of **every** kind, above
+   the port so neither adapter can be the one that keeps it. It records a vault
+   key, an object name, a kind and the gateway's own clock — every one already a
+   column on `object` for the same object, so it adds durability and not
+   visibility. Proved by the rule (`gateway-core/tests/audit_ledger.rs`,
+   including that a refused delete writes nothing) and by each adapter's storage
+   (`gateway-server/tests/audit_ledger.rs`, over both byte stores).
+2. **The two service-unit generators are NOT deleted, and this is an owner
+   hand-off rather than a decision.** Every deletion in this environment is
+   refused by the permission system: `git rm` of
+   `crates/centraid/src/cmd/{units,gateway_install}.rs`,
+   `crates/centraid/tests/gateway_install.rs`, `contracts/deploy/units/`,
+   `deploy/systemd/` and `deploy/launchd/` was denied ("Irreversible Local
+   Destruction"), and it was not worked around — truncating the files would have
+   been the same act with the audit trail removed. **Everything else was
+   prepared**: the blast radius is `crates/centraid/src/main.rs`'s
+   `Command::Gateway`/`GatewayCommand`, `cmd/mod.rs`'s two `pub mod` lines,
+   `deploy/vps/install.sh:207`'s `centraid gateway install` (successor:
+   `centraid-gateway install`, which exists), and prose in `deploy/README.md`,
+   `docs/logs.md`, `ARCHITECTURE.md` and `crates/centraid/README.md`. No
+   `.governance/` or `.github/` file names any of them, so it is one product
+   commit. `deploy/systemd/` and `deploy/launchd/` belong in the deletion too:
+   their `ExecStart=/usr/local/bin/centraid gateway --data-dir …` names a verb
+   W2 removed, so they are dead on arrival exactly as the goldens are.
+3. **`deploy/docker/Dockerfile` is fixed.** `CMD` is `doctor --data-dir /data`,
+   which is a verb the CLI has; the `HEALTHCHECK` is gone, because a health
+   check on a container whose process exits reports `unhealthy` forever; the
+   `EXPOSE` comment no longer cites `tests/no_listener.rs`, which does not
+   exist, or an iroh endpoint W2 deleted; the image's own labels say what it is.
+   `crates/centraid/tests/container.rs` is why it cannot rot silently again,
+   and it is the claim `gateway-server/tests/container.rs` already makes about
+   the other image.
+4. **`ByteStore::evidence`'s doc is reworded.** It now says which answer each
+   mode owes and that **an unattested upload is a refusal in both modes, not an
+   invitation to read and hash the bytes anyway** — naming W4b's S3 defect as
+   the reason. The suite is the authority and the port now says the same thing
+   so an adapter author does not have to infer it.
+
+### Handed up — owner decisions this lane could not take
+
+1. **The deletions above.** Blocked by the environment, not by judgement.
+2. **SigV4 is written twice.** `gateway-server/src/bytes/sigv4.rs` signs headers
+   for requests that server makes; `gateway/cloudflare/src/sigv4.rs` signs a
+   query string for a request this one never makes. They overlap in the
+   string-to-sign and the signing key. **Recommend** extracting a WASM-clean
+   `centraid-sigv4` crate; not done here because it would move a one-hash
+   allowlist entry and is worth its own review rather than a footnote in this
+   one.
+3. **`account_vault` is read and never written.** The listing a restored phone
+   reads is in place; the route that adds a vault to an account belongs with the
+   phone's registration flow, which W5 owns. **Owner question:** should the
+   vault object call the account object on its first `put_vault`, or should the
+   phone register with both?
+4. **No staging run, and no store call.** This container has no Cloudflare
+   account and no store credentials. What a real account would still prove:
+   that R2's attestation arrives through the binding as documented, that a URL
+   this crate signs is one R2 accepts, that a Durable Object alarm fires after a
+   month of silence, and that `?1`-numbered placeholders bind positionally in DO
+   SQL — Miniflare says they do, and Miniflare is workerd, which is the same
+   engine, but it is not the same deployment.
+5. **`subtle` is declared by `crates/identity` and used by nothing**
+   (`rg -l subtle crates/identity/src` is empty). Outside this lane's slice;
+   filed rather than removed.
+
+### Verification (lane C)
+
+`export CARGO_TARGET_DIR=/home/user/.cargo-target-w4c` throughout; the Worker's
+own workspace uses `/home/user/.cargo-target-w4c-wasm`.
+
+| Exit item | Result |
+| --- | --- |
+| 1 `cargo build --workspace` | **clean** |
+| 2 `cargo test --workspace` | **green, 1615 tests, exit 0** (1596 on base; +19). The Worker's own 14 unit + 6 scan tests are in its own workspace and are not in that number |
+| 3 `cargo check -p centraid-identity --no-default-features --target wasm32-unknown-unknown` | **clean** |
+| 4 the Worker builds for `wasm32-unknown-unknown` | **clean**, and `worker-build --release` produces the shim and a 32.4 kB `index.js`. **`workers-rs` blocked nothing**; Q14's fallback was not needed |
+| 5 conformance under Miniflare | **21/21 GREEN**, both checksum modes, one store (there is one here). **`?forgetful=1` RED**, as it must be |
+| 6 the canary over R2 and the Durable Object SQL | **clean** — `canary/no-plaintext-or-plaintext-hash-is-anywhere-in-the-store`, over every stored object and every table of the object's SQLite |
+| 7 `gate --lane fmt` / `--lane clippy` / `--lane rules` | **PASS**, **PASS**, **PASS** (4 rules, 0 pending; sql-confinement clean over 211 files, no-listening-socket clean over 321 with 2 named) |
+| 8 `gate --profile local` | `fmt` `clippy` `test` `rules` all **ok**. **BUDGET 157.9s of 120s**, `test` 156.0s, on 4 vCPUs beside a live sibling lane — inside the 73s-alone to 196s-shared band lanes A and B measured. Nothing in a ledger was touched. `ledgers` fails on **"no merge base found"**, the worktree limitation every lane has recorded |
+| 9 `bun run check:push:static` | **4/4 green** (`bun install` first; `bun run format`, and three `oxlint` findings in the runner fixed rather than suppressed) |
+| 10 `node scripts/check-ledgers.mjs --base 590bdaa2` | **ok — 19 sections across 5 ledgers hold** |
+| 11 `node .governance/law/run.mjs --brief-digest 2612c611d7e6` | **10 rules, no findings.** `lawDigest` base and head are both `2612c611d7e6…` — **no drift** |
+
+**Disk** was the binding constraint the brief warned about: two lanes and a
+second artefact tree filled the volume during `cargo test --workspace`, which
+failed with `No space left on device`. Both target directories were `cargo
+clean`ed and the run repeated; no ledger, budget or test was touched to get
+past it.
