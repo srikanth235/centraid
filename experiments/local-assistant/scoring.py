@@ -15,6 +15,7 @@ overwritten: a changed run is a new label, which is the brief's method rule.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,28 @@ from reference import CATEGORIES
 
 def _one(conn: sqlite3.Connection, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
     return conn.execute(sql, params).fetchone()
+
+
+def _same_text(left: str, right: str) -> bool:
+    """Are these the same text, ignoring case, punctuation and spacing?
+
+    The deployed filler copies slot values verbatim out of the utterance, so a
+    body slot arrives as the user typed it — "hire a bus", not "Hire a bus.".
+    A predicate that demanded the trailing full stop would be scoring the
+    model's punctuation rather than the outcome, so titles and bodies are
+    compared on their words.
+    """
+    return _words(left) == _words(right)
+
+
+def _contains_text(haystack: str, needle: str) -> bool:
+    """Does the haystack contain the needle, compared on words?"""
+    return _words(needle) in _words(haystack)
+
+
+def _words(text: str) -> str:
+    """Lowercase words, single-spaced, with punctuation dropped."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).split())
 
 
 def task_status(conn: sqlite3.Connection, task_id: str, status: str) -> bool:
@@ -50,22 +73,20 @@ def task_assigned(conn: sqlite3.Connection, task_id: str, person_ids: list[str])
 
 def task_exists(conn: sqlite3.Connection, title: str, due: str | None = None) -> bool:
     """An open task with that title exists, due on that day when one is named."""
-    row = _one(
-        conn, "SELECT due, status FROM task WHERE lower(title) = ?", (title.lower(),)
-    )
-    if row is None or row["status"] != "open":
-        return False
-    return due is None or row["due"] == due
+    for row in conn.execute("SELECT title, due, status FROM task"):
+        if not _same_text(row["title"], title) or row["status"] != "open":
+            continue
+        if due is None or row["due"] == due:
+            return True
+    return False
 
 
 def event_exists(conn: sqlite3.Connection, title: str, starts: str) -> bool:
     """An event with that title starts at that stamp."""
-    row = _one(
-        conn,
-        "SELECT id FROM event WHERE lower(title) = ? AND starts = ? AND status = 'confirmed'",
-        (title.lower(), starts),
-    )
-    return row is not None
+    for row in conn.execute("SELECT title, starts, status FROM event"):
+        if _same_text(row["title"], title) and row["starts"] == starts and row["status"] == "confirmed":
+            return True
+    return False
 
 
 def event_starts(conn: sqlite3.Connection, event_id: str, starts: str) -> bool:
@@ -90,30 +111,36 @@ def event_has_attendees_by_title(
     conn: sqlite3.Connection, title: str, person_ids: list[str]
 ) -> bool:
     """The event created with that title carries those attendees."""
-    row = _one(conn, "SELECT id FROM event WHERE lower(title) = ?", (title.lower(),))
-    return row is not None and event_has_attendees(conn, row["id"], person_ids)
+    for row in conn.execute("SELECT id, title FROM event"):
+        if _same_text(row["title"], title):
+            return event_has_attendees(conn, row["id"], person_ids)
+    return False
 
 
 def note_exists(conn: sqlite3.Connection, title: str, notebook_id: str | None = None) -> bool:
     """A note with that title exists, filed in that notebook when one is named."""
-    row = _one(conn, "SELECT notebook_id FROM note WHERE lower(title) = ?", (title.lower(),))
-    if row is None:
-        return False
-    return notebook_id is None or row["notebook_id"] == notebook_id
+    for row in conn.execute("SELECT title, notebook_id FROM note"):
+        if not _same_text(row["title"], title):
+            continue
+        if notebook_id is None or row["notebook_id"] == notebook_id:
+            return True
+    return False
 
 
 def note_body_contains(conn: sqlite3.Connection, note_id: str, text: str) -> bool:
     """That note's body now contains that text, and kept what it had."""
     row = _one(conn, "SELECT body FROM note WHERE id = ?", (note_id,))
-    return row is not None and text.lower() in row["body"].lower()
+    return row is not None and _contains_text(row["body"], text)
 
 
 def person_exists(conn: sqlite3.Connection, full_name: str, company: str | None = None) -> bool:
     """A person with that name exists, at that company when one is named."""
-    row = _one(conn, "SELECT company FROM person WHERE lower(full_name) = ?", (full_name.lower(),))
-    if row is None:
-        return False
-    return company is None or row["company"] == company
+    for row in conn.execute("SELECT full_name, company FROM person"):
+        if not _same_text(row["full_name"], full_name):
+            continue
+        if company is None or row["company"] == company:
+            return True
+    return False
 
 
 def interaction_logged(
@@ -135,7 +162,12 @@ def person_note_exists(conn: sqlite3.Connection, person_id: str, body: str) -> b
         "SELECT id FROM person_note WHERE person_id = ? AND lower(body) = ?",
         (person_id, body.lower()),
     )
-    return row is not None
+    if row is not None:
+        return True
+    return any(
+        _same_text(other["body"], body)
+        for other in conn.execute("SELECT body FROM person_note WHERE person_id = ?", (person_id,))
+    )
 
 
 def photos_in_album(conn: sqlite3.Connection, album_id: str, photo_ids: list[str]) -> bool:
@@ -158,12 +190,12 @@ def doc_in_folder(conn: sqlite3.Connection, doc_id: str, folder_id: str) -> bool
 
 def locker_item_exists(conn: sqlite3.Connection, service: str, kind: str) -> bool:
     """A locker item for that service, of that kind."""
-    row = _one(
-        conn,
-        "SELECT id FROM locker_item WHERE lower(service) = ? AND kind = ? AND trashed = 0",
-        (service.lower(), kind),
+    return any(
+        _same_text(row["service"], service)
+        for row in conn.execute(
+            "SELECT service FROM locker_item WHERE kind = ? AND trashed = 0", (kind,)
+        )
     )
-    return row is not None
 
 
 def tally_settled(conn: sqlite3.Connection, person_ids: list[str]) -> bool:
