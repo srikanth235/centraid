@@ -85,3 +85,10 @@ experiments/local-assistant/**/__pycache__/
 # experiments/local-assistant/selector/RESULTS-selector.md.
 experiments/local-assistant/.venv-selector/
 experiments/local-assistant/selector/artifacts/
+
+# The joint lane's virtualenv (CPU torch + transformers + onnxruntime), its
+# checkpoints and its ONNX export. Rebuilt by the commands in
+# experiments/local-assistant/joint/RESULTS-joint.md; the committed evidence is
+# each run's metrics, not its weights.
+experiments/local-assistant/.venv-joint/
+experiments/local-assistant/joint/artifacts/

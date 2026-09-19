@@ -1,6 +1,6 @@
 # Local assistant experiment
 
-An offline experiment, outside the TypeScript workspace on purpose: Python 3 standard library only for everything below `selector/`, which is the first model lane and has its own virtualenv (`.venv-selector`, gitignored) with CPU torch, sentence-transformers and scikit-learn. Turbo, knip, oxlint and oxfmt do not own `.py` files, so nothing here is picked up by a repo gate.
+An offline experiment, outside the TypeScript workspace on purpose: Python 3 standard library only, except the two model lanes, which each have their own gitignored virtualenv: `selector/` (`.venv-selector`: CPU torch, sentence-transformers, scikit-learn) and `joint/` (`.venv-joint`: CPU torch, transformers, onnx, onnxruntime). Turbo, knip, oxlint and oxfmt do not own `.py` files, so nothing here is picked up by a repo gate.
 
 The question it exists to answer: can a small local pipeline turn a user turn plus short conversation context into the right vault query or typed command, across the eight system apps, reliably enough to ship — without a frontier model in the loop?
 
@@ -23,6 +23,8 @@ This directory holds the parts that must exist **before** any model is run: the 
 | `protocol.md` | The frozen protocol: suite, scoring, ceilings, variants, change log. |
 | `runs/reference.json` | The reference run's report, committed as the freeze's evidence. |
 | `test_*.py` | Unit tests for the resolvers, the executor and the suite. |
+| `joint/` | Pipeline stages [1] and [2] in one model: a MiniLM encoder with an operation head, a BIO slot-span tagger and per-enum-slot heads, its span-annotated data generator, ONNX export and `predict_joint.predict(...)`. Results and reproduce commands in [`joint/RESULTS-joint.md`](joint/RESULTS-joint.md). |
+| `run_suite_joint.py` | The joint model end to end on the frozen suite, scored by outcome. |
 | `selector/` | Pipeline stage [1], the operation selector: synthetic training world, data generator with sibling hard negatives, overlap guard, zero-shot and trained runs, `predict.select(...)`. Results and reproduce commands in [`selector/RESULTS-selector.md`](selector/RESULTS-selector.md). |
 
 ## Running it
@@ -54,7 +56,7 @@ user turn + last K turns
   → [5] rendering            by template, with a clarification path
 ```
 
-Steps 3 and 4 are what this directory implements and tests. Step 1 has run: `selector/` reaches 83.7% operation accuracy on the suite's 98 turns with a logistic regression over frozen MiniLM embeddings. Step 2 is still a model lane that has not run; it needs weights listed under "Models and packages required" in `protocol.md`.
+Steps 3 and 4 are what this directory implements and tests. Step 1 has run twice: `selector/` reaches 83.7% operation accuracy on the suite's 98 turns with a logistic regression over frozen MiniLM embeddings, and `joint/` folds steps 1 and 2 into **one** fine-tuned MiniLM encoder — 96.8% operation accuracy and **60/74 outcome accuracy end to end**, in 90.7 MB of ONNX at 3.5 ms per request. Step 2 as a separate generative filler is not needed: nothing in the suite's 132 reference slot values requires generation, and the span tagger copies them.
 
 Two constraints the code holds, not the model:
 

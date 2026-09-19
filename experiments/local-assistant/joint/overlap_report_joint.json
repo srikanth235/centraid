@@ -1,0 +1,10 @@
+{
+  "lane": "joint",
+  "threshold": 0.8,
+  "generated_unique_utterances": 13304,
+  "reference_utterances": 211,
+  "offenders": [],
+  "proper_noun_leaks": [],
+  "max_jaccard": 0.8,
+  "max_jaccard_pair": ["sorry, brief me on today", "brief me on today"]
+}
