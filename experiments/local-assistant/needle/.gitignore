@@ -1,0 +1,5 @@
+# weights are never committed; adapter configs and metrics are
+checkpoints/
+adapters/*/adapter.safetensors
+adapters/*/tuned.cact
+.cache/

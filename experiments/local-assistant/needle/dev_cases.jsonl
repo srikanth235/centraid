@@ -1,0 +1,43 @@
+{"id": "t_due_1", "tag": "read", "request": "what tasks are due this week", "expect": {"op": "tasks_due", "slots": {"window": "this week"}}}
+{"id": "t_due_2", "tag": "read", "request": "show me the tasks due tomorrow", "expect": {"op": "tasks_due", "slots": {"window": "tomorrow"}}}
+{"id": "t_about", "tag": "read", "request": "what tasks do I have about the website redesign", "expect": {"op": "tasks_about", "slots": {"topic": "website redesign"}}}
+{"id": "t_proj", "tag": "read", "request": "list the tasks in the Atlas project", "expect": {"op": "tasks_by_project", "slots": {"project": "Atlas"}}}
+{"id": "t_people", "tag": "read", "request": "what is Priya working on", "expect": {"op": "tasks_for_people", "slots": {"people": "Priya"}}}
+{"id": "t_add", "tag": "write", "request": "add a task to renew the passport due Friday", "expect": {"op": "tasks_add", "slots": {"title": "renew the passport", "due": "Friday"}}}
+{"id": "t_complete", "tag": "write", "request": "mark file taxes as done", "expect": {"op": "tasks_complete", "slots": {"task": "file taxes"}}}
+{"id": "t_setdue", "tag": "write", "request": "push file taxes to next Monday", "expect": {"op": "tasks_set_due", "slots": {"task": "file taxes", "due": "next Monday"}}}
+{"id": "t_assign", "tag": "write", "request": "assign file taxes to Priya", "expect": {"op": "tasks_assign", "slots": {"task": "file taxes", "people": "Priya"}}}
+{"id": "ag_up", "tag": "read", "request": "what is on my calendar next week", "expect": {"op": "agenda_upcoming", "slots": {"window": "next week"}}}
+{"id": "ag_up_cal", "tag": "read", "request": "what is on my work calendar tomorrow", "expect": {"op": "agenda_upcoming", "slots": {"window": "tomorrow", "calendar": "work"}}}
+{"id": "ag_search", "tag": "read", "request": "when is the design review", "expect": {"op": "agenda_search", "slots": {"topic": "design review"}}}
+{"id": "ag_day", "tag": "read", "request": "how does Thursday look", "expect": {"op": "agenda_day_context", "slots": {"day": "Thursday"}}}
+{"id": "ag_create", "tag": "write", "request": "put a dentist appointment on Tuesday at 4", "expect": {"op": "agenda_create_event", "slots": {"title": "dentist appointment", "when": "Tuesday at 4"}}}
+{"id": "ag_resched", "tag": "write", "request": "move the design review to Friday", "expect": {"op": "agenda_reschedule", "slots": {"event": "design review", "when": "Friday"}}}
+{"id": "ag_cancel", "tag": "write", "request": "cancel the standup", "expect": {"op": "agenda_cancel_event", "slots": {"event": "standup"}}}
+{"id": "ag_att", "tag": "write", "request": "add Priya to the design review", "expect": {"op": "agenda_attendee_add", "slots": {"event": "design review", "people": "Priya"}}}
+{"id": "pp_at", "tag": "read", "request": "who was at the design review", "expect": {"op": "people_at", "slots": {"event": "design review"}}}
+{"id": "pp_company", "tag": "read", "request": "who do I know at Initech", "expect": {"op": "people_at_company", "slots": {"company": "Initech"}}}
+{"id": "pp_profile", "tag": "read", "request": "show me Priya's profile", "expect": {"op": "people_profile", "slots": {"person": "Priya"}}}
+{"id": "pp_find", "tag": "read", "request": "find the contact for Marco Reyes", "expect": {"op": "people_find", "slots": {"name": "Marco Reyes"}}}
+{"id": "pp_log", "tag": "write", "request": "log that I called Priya yesterday", "expect": {"op": "people_log_interaction", "slots": {"person": "Priya", "when": "yesterday", "channel": "call"}}}
+{"id": "ta_bal", "tag": "read", "request": "what is my balance with Priya", "expect": {"op": "tally_balance_with", "slots": {"people": "Priya"}}}
+{"id": "ta_owes", "tag": "read", "request": "who owes me money", "expect": {"op": "tally_who_owes_me", "slots": {"direction": "owed_to_me"}}}
+{"id": "ta_group", "tag": "read", "request": "what is the balance in the Goa trip group", "expect": {"op": "tally_group_balance", "slots": {"group": "Goa trip"}}}
+{"id": "ta_add", "tag": "write", "request": "add a 1200 dinner expense with Priya", "expect": {"op": "tally_add_expense", "slots": {"description": "dinner", "amount": 1200, "people": "Priya"}}}
+{"id": "ta_settle", "tag": "write", "request": "settle up with Marco", "expect": {"op": "tally_settle_up", "slots": {"people": "Marco"}}}
+{"id": "nt_search", "tag": "read", "request": "find my notes about the website redesign", "expect": {"op": "notes_search", "slots": {"topic": "website redesign"}}}
+{"id": "nt_people", "tag": "read", "request": "what notes mention Priya", "expect": {"op": "notes_about_people", "slots": {"people": "Priya"}}}
+{"id": "nt_create", "tag": "write", "request": "make a note titled kitchen remodel ideas", "expect": {"op": "notes_create", "slots": {"title": "kitchen remodel ideas"}}}
+{"id": "ph_people", "tag": "read", "request": "show me photos of Priya", "expect": {"op": "photos_of_people", "slots": {"people": "Priya"}}}
+{"id": "ph_place", "tag": "read", "request": "photos taken in Lisbon", "expect": {"op": "photos_at_place", "slots": {"place": "Lisbon"}}}
+{"id": "dc_search", "tag": "read", "request": "find the lease pdf", "expect": {"op": "docs_search", "slots": {"topic": "lease", "kind": "pdf"}}}
+{"id": "lk_find", "tag": "read", "request": "what is my Netflix login", "expect": {"op": "locker_find", "slots": {"service": "Netflix", "kind": "login"}}}
+{"id": "lk_weak", "tag": "read", "request": "which passwords are reused", "expect": {"op": "locker_weak", "slots": {"reason": "reused"}}}
+{"id": "fu_proj", "tag": "followup", "context": [{"request": "what tasks are due this week", "results": [{"id": "t1", "title": "file taxes", "project": "finance"}, {"id": "t2", "title": "renew passport", "project": "personal"}]}], "request": "only the ones in the finance project", "expect": {"op": "tasks_by_project", "slots": {"project": "finance"}}}
+{"id": "fu_owe", "tag": "followup-cross", "context": [{"request": "who was at the design review", "results": [{"name": "Priya"}, {"name": "Marco"}]}], "request": "do I owe any of them", "expect": {"op": "tally_balance_with", "slots": {"people": "them", "direction": "i_owe"}}}
+{"id": "fu_photos", "tag": "followup", "context": [{"request": "show me photos of Priya", "results": [{"id": "p1"}, {"id": "p2"}]}], "request": "just the ones from last summer", "expect": {"op": "photos_of_people", "slots": {"people": "Priya", "window": "last summer"}}}
+{"id": "fu_att", "tag": "followup", "context": [{"request": "when is the design review", "results": [{"id": "e9", "title": "design review", "start": "2026-09-24T10:00"}]}], "request": "add Marco to it", "expect": {"op": "agenda_attendee_add", "slots": {"event": "design review", "people": "Marco"}}}
+{"id": "fu_week", "tag": "followup", "context": [{"request": "what is on my calendar next week", "results": [{"id": "e1", "title": "standup"}]}], "request": "how about the week after", "expect": {"op": "agenda_upcoming", "slots": {"window": "the week after"}}}
+{"id": "fu_first", "tag": "followup-ordinal", "context": [{"request": "what tasks do I have about the website redesign", "results": [{"id": "t7", "title": "pick a palette"}, {"id": "t8", "title": "rewrite the copy"}]}], "request": "mark the first one done", "expect": {"op": "tasks_complete", "slots": {"task": "the first one"}}}
+{"id": "fu_they", "tag": "followup-cross", "context": [{"request": "who do I know at Initech", "results": [{"name": "Dana Okafor"}, {"name": "Marco Reyes"}]}], "request": "what are they working on", "expect": {"op": "tasks_for_people", "slots": {"people": "they"}}}
+{"id": "fu_exp", "tag": "followup", "context": [{"request": "what is my balance with Priya", "results": [{"net": -420}]}], "request": "show me the expenses instead", "expect": {"op": "tally_expenses_with", "slots": {"people": "Priya"}}}

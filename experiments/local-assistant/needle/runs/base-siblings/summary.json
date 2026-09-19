@@ -1,0 +1,11 @@
+{
+  "n": 43,
+  "op_correct": 0.6511627906976745,
+  "slot_exact": 0.46511627906976744,
+  "markers": {},
+  "seconds_total": 19.18,
+  "label": "base-siblings",
+  "shape": "siblings",
+  "cases": "needle/dev_cases.jsonl",
+  "weights": null
+}

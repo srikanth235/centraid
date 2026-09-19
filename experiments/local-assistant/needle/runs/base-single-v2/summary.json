@@ -1,0 +1,13 @@
+{
+  "n": 43,
+  "op_correct": 0.9302325581395349,
+  "slot_exact": 0.6511627906976745,
+  "markers": {
+    "malformed": 3
+  },
+  "seconds_total": 20.19,
+  "label": "base-single-v2",
+  "shape": "single",
+  "cases": "needle/dev_cases.jsonl",
+  "weights": null
+}
