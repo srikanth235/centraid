@@ -59,6 +59,7 @@ Steps 3 and 4 are what this directory implements and tests. Step 1 has run: `sel
 Two constraints the code holds, not the model:
 
 - The model never writes SQL. It names an operation and fills slots; every value reaches the database bound, never formatted into a statement.
+- Slot values are taken as the user said them. The deployed filler is a span tagger that copies spans verbatim, so the resolvers accept determiners, possessives, plural and singular, type words, ordinal dates and every grammar a group can be named in. `resolve_all(op, slots, context, conn)` resolves a whole bundle of raw spans in one call; `test_verbatim_spans.py` proves each verbatim form reaches the same outcome as its canonical rewrite.
 - Cross-app requests are composed in code. An operation takes a phrase — `people="attendees of the design review"` — and the resolvers do the join. The model is never asked to plan a multi-hop chain.
 
 ## Relationship to the product

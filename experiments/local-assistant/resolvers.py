@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any, Literal
 
+from catalogue import by_name
 from world import TODAY
 
 Outcome = Literal["ok", "ambiguous", "not_found"]
@@ -116,7 +117,12 @@ def resolve_date_range(phrase: str, today: date = TODAY) -> DateRange | None:
 
     iso = re.search(r"(\d{4})-(\d{2})-(\d{2})", text)
     if iso:
-        day = date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+        try:
+            day = date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+        except ValueError:
+            # A span tagger copies whatever the user typed, "2026-02-30"
+            # included. An impossible day is not a date phrase.
+            return None
         return DateRange(day, day + timedelta(days=1))
 
     month_only = re.fullmatch(r"(\d{4})-(\d{2})", text)
@@ -179,7 +185,62 @@ def resolve_date_range(phrase: str, today: date = TODAY) -> DateRange | None:
             day = today + timedelta(days=forward)
         return DateRange(day, day + timedelta(days=1))
 
+    ordinal = _ordinal_day_of_month(text, today)
+    if ordinal is not None:
+        return DateRange(ordinal, ordinal + timedelta(days=1))
+
     return None
+
+
+# Ordinal day names, spelled and numeric. A span tagger copies what the user
+# said — "the twenty-fifth", "the 3rd" — so the surface form has to land on the
+# same day as the ISO form a canonicalising model would have produced.
+_ORDINAL_UNITS = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
+    "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11,
+    "twelfth": 12, "thirteenth": 13, "fourteenth": 14, "fifteenth": 15,
+    "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
+    "twentieth": 20, "thirtieth": 30,
+}
+
+# Words that turn an ordinal into a reference into the last result rather than
+# a date: "the first one", "the last two". Those belong to resolve_reference.
+_ORDINAL_NOT_A_DATE = {
+    "one", "ones", "two", "three", "four", "five", "item", "items", "result",
+    "results", "task", "tasks", "note", "notes", "photo", "photos", "doc",
+    "docs", "document", "documents", "person", "people",
+}
+
+
+def _ordinal_day_of_month(text: str, today: date) -> date | None:
+    """A bare ordinal as a day of the current month, or None.
+
+    Only a phrase that is *nothing but* an ordinal counts. "the first one"
+    carries a trailing noun and is a reference into the last result, not a
+    date, so it is rejected here and handled by ``resolve_reference``.
+    """
+    words = text.replace("-", " ").split()
+    words = [w for w in words if w not in ("the", "on", "of", "month", "this")]
+    if not words or any(w in _ORDINAL_NOT_A_DATE for w in words):
+        return None
+
+    number: int | None = None
+    if len(words) == 1:
+        numeric = re.fullmatch(r"(?P<n>\d{1,2})(?:st|nd|rd|th)", words[0])
+        if numeric:
+            number = int(numeric.group("n"))
+        elif words[0] in _ORDINAL_UNITS:
+            number = _ORDINAL_UNITS[words[0]]
+    elif len(words) == 2 and words[0] in ("twenty", "thirty") and words[1] in _ORDINAL_UNITS:
+        unit = _ORDINAL_UNITS[words[1]]
+        if unit <= 9:
+            number = (20 if words[0] == "twenty" else 30) + unit
+    if number is None or not 1 <= number <= 31:
+        return None
+    try:
+        return today.replace(day=number)
+    except ValueError:
+        return None
 
 
 def resolve_day(phrase: str, today: date = TODAY) -> date | None:
@@ -224,10 +285,90 @@ def resolve_datetime(phrase: str, today: date = TODAY) -> str | None:
 
 # -------------------------------------------------------------------- people
 
-_GROUP_AT_COMPANY = re.compile(r"\b(?:people|everyone|anyone|folks|contacts|team)\s+(?:i know\s+)?at\s+(?P<company>.+)$")
-_GROUP_ATTENDEES = re.compile(r"\b(?:attendees|people|everyone|who was|guests?)\s+(?:of|at|from|in)\s+(?:the\s+)?(?P<event>.+)$")
+# Group phrase grammar. A span tagger copies the user's own words, so the same
+# group is named several ways — "people at Initech", "everyone at Initech",
+# "the Initech people" — and each of them has to reach the same ids as the
+# canonical form. Each entry is (interpretation, pattern); `resolve_people`
+# tries them in order and keeps the first that resolves, so a phrase that reads
+# as a company but names an event ("people at the design review") falls through
+# to the event reading rather than failing.
+_GROUP_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    # Company, named after a preposition.
+    ("company", re.compile(
+        r"^(?:(?:the|my|our|his|her|their)\s+)?(?:people|everyone|everybody|anyone|folks|contacts|team|colleagues)"
+        r"\s+(?:i\s+know\s+)?(?:at|from|with|in)\s+(?:(?:the|my|our|his|her|their)\s+)?(?P<x>.+)$")),
+    # Attendees, named after a preposition.
+    ("event", re.compile(
+        r"^(?:(?:the|my|our|his|her|their)\s+)?(?:attendees|guests|invitees)\s+(?:of|at|for|from|in)"
+        r"\s+(?:(?:the|my|our|his|her|their)\s+)?(?P<x>.+)$")),
+    # Attendees, named by what they did.
+    ("event", re.compile(
+        r"^(?:(?:the|my|our|his|her|their)\s+)?(?:people|everyone|everybody|folks|ones)\s+(?:who\s+|that\s+)?"
+        r"(?:went\s+to|attended|came\s+to|were\s+at|was\s+at|showed\s+up\s+to)"
+        r"\s+(?:(?:the|my|our|his|her|their)\s+)?(?P<x>.+)$")),
+    # Attendees, named by a question.
+    ("event", re.compile(
+        r"^(?:who\s+(?:was|were)\s+at|who\s+came\s+to|who\s+went\s+to|who\s+attended|"
+        r"who\s+is\s+coming\s+to|who\s+s\s+coming\s+to)\s+(?:(?:the|my|our|his|her|their)\s+)?(?P<x>.+)$")),
+    # Attendees, named by a suffix: "the design review attendees".
+    ("event", re.compile(r"^(?:(?:the|my|our|his|her|their)\s+)?(?P<x>.+?)\s+(?:attendees|guests|invitees)$")),
+    # Company, named by a suffix: "the Initech people".
+    ("company", re.compile(
+        r"^(?:(?:the|my|our|his|her|their)\s+)?(?P<x>.+?)\s+(?:people|folks|team|crowd|contacts|colleagues|lot)$")),
+    # The original broad prepositional form, kept last as a catch-all.
+    ("event", re.compile(
+        r"^(?:(?:the|my|our|his|her|their)\s+)?(?:people|everyone|anyone|folks|guests?)\s+(?:of|at|from|in)"
+        r"\s+(?:(?:the|my|our|his|her|their)\s+)?(?P<x>.+)$")),
+]
 
-_DEICTIC_PEOPLE = {"those people", "them", "these people", "those", "the same people", "that group"}
+_DEICTIC_PEOPLE = {
+    "those people", "them", "they", "these people", "those", "these",
+    "the same people", "that group", "the group", "the attendees",
+    "the same group", "all of them", "everyone there",
+}
+
+# The deictics that point at one non-person thing the previous turn produced:
+# "move it to Thursday", "book flights for it".
+_DEICTIC_THING = {"it", "that", "that one", "this", "this one", "the same one"}
+
+
+# Determiners, possessives and the type words a user puts around a name. A
+# verbatim span carries them ("the offsite flights task", "my Work notebook")
+# and they never help identify a row, so they are dropped before scoring.
+_FILLER = {
+    "the", "a", "an", "my", "our", "his", "her", "their", "its", "that",
+    "this", "these", "those", "some", "any", "one", "on", "at", "in", "for",
+    "to", "of", "about", "s",
+}
+
+_TYPE_WORDS = {
+    "task", "tasks", "note", "notes", "notebook", "document", "documents",
+    "doc", "docs", "file", "files", "item", "items", "entry", "entries",
+    "event", "events", "meeting", "meetings", "photo", "photos", "picture",
+    "pictures", "album", "albums", "folder", "folders", "project", "projects",
+    "list", "lists", "thing", "things",
+}
+
+
+def _content_tokens(text: str, drop_type_words: bool = True) -> list[str]:
+    """The tokens of a phrase that could identify a row."""
+    skip = _FILLER | _TYPE_WORDS if drop_type_words else _FILLER
+    return [token for token in text.split() if token not in skip]
+
+
+def _token_hits(token: str, haystack: str) -> bool:
+    """Does a token match a word in the haystack, plural or singular?
+
+    Matching is anchored to a word boundary rather than a bare substring, so
+    "it" no longer matches inside "Initech", and a prefix match lets "flight"
+    find "flights". The singular of a plural token is tried too.
+    """
+    candidates = {token}
+    if len(token) > 3 and token.endswith("s"):
+        candidates.add(token[:-1])
+    if len(token) > 4 and token.endswith("es"):
+        candidates.add(token[:-2])
+    return any(re.search(rf"\b{re.escape(candidate)}", haystack) for candidate in candidates)
 
 
 def _people_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
@@ -326,23 +467,9 @@ def resolve_people(
         ]
         return _ok(ids, "everyone who owes me") if ids else _missing("nobody owes me")
 
-    company_match = _GROUP_AT_COMPANY.search(text)
-    if company_match:
-        return resolve_company_people(conn, company_match.group("company"))
-
-    attendee_match = _GROUP_ATTENDEES.search(text)
-    if attendee_match:
-        event = resolve_event(conn, attendee_match.group("event"))
-        if not event.ok:
-            return event
-        ids = [
-            row["person_id"]
-            for row in conn.execute(
-                "SELECT person_id FROM attendee WHERE event_id = ? ORDER BY person_id",
-                (event.ids[0],),
-            )
-        ]
-        return _ok(ids, "attendees") if ids else _missing("that event has no attendees")
+    group = _resolve_group_phrase(conn, text)
+    if group is not None:
+        return group
 
     # "Neha and Marcus" — a small explicit list. Every member must resolve.
     parts = [p.strip() for p in re.split(r"\band\b|,", phrase) if p.strip()]
@@ -358,6 +485,47 @@ def resolve_people(
     return resolve_person(conn, phrase)
 
 
+def _attendees_of(conn: sqlite3.Connection, phrase: str) -> Resolution:
+    """Everybody invited to the event that phrase names."""
+    event = resolve_event(conn, phrase)
+    if not event.ok:
+        return event
+    ids = [
+        row["person_id"]
+        for row in conn.execute(
+            "SELECT person_id FROM attendee WHERE event_id = ? ORDER BY person_id",
+            (event.ids[0],),
+        )
+    ]
+    return _ok(ids, "attendees") if ids else _missing("that event has no attendees")
+
+
+def _resolve_group_phrase(conn: sqlite3.Connection, text: str) -> Resolution | None:
+    """The first group reading of a phrase that resolves, or None.
+
+    Returns None when the phrase is not a group phrase at all, so the caller
+    can fall through to a personal name. When it *is* a group phrase but no
+    reading resolves, the first reading's failure is returned, because that is
+    the one whose wording the user chose.
+    """
+    first_failure: Resolution | None = None
+    for interpretation, pattern in _GROUP_PATTERNS:
+        match = pattern.match(text)
+        if not match:
+            continue
+        argument = match.group("x")
+        found = (
+            resolve_company_people(conn, argument)
+            if interpretation == "company"
+            else _attendees_of(conn, argument)
+        )
+        if found.ok:
+            return found
+        if first_failure is None:
+            first_failure = found
+    return first_failure
+
+
 def resolve_company_people(conn: sqlite3.Connection, company: str) -> Resolution:
     """Everybody recorded at one company."""
     wanted = _norm(company)
@@ -370,26 +538,38 @@ def resolve_company_people(conn: sqlite3.Connection, company: str) -> Resolution
 # -------------------------------------------------------------------- events
 
 
-def resolve_event(conn: sqlite3.Connection, phrase: str, today: date = TODAY) -> Resolution:
+def resolve_event(
+    conn: sqlite3.Connection,
+    phrase: str,
+    today: date = TODAY,
+    context: "Context | None" = None,
+) -> Resolution:
     """One event from a title phrase, optionally carrying a date word.
 
     The date half narrows rather than selects: "the design review" and "the
     design review last Thursday" both land on one row, but the second one
     survives a world with two design reviews.
+
+    With a ``context``, a bare "it" or "that" binds to the event the previous
+    turn produced, which is how a verbatim span says "for it".
     """
     text = _norm(phrase)
     if not text:
         return _missing("empty event phrase")
     window = resolve_date_range(phrase, today)
 
+    if context is not None and text in _DEICTIC_THING and context.last_kind == "event":
+        pointed = resolve_reference(conn, phrase, context, kind="event")
+        if pointed.ok:
+            return pointed
+
     rows = list(conn.execute("SELECT * FROM event ORDER BY starts, id"))
-    stop = {"the", "a", "an", "my", "our", "meeting", "event", "on", "at", "in", "for", "to"}
-    tokens = [t for t in text.split() if t not in stop]
+    tokens = _content_tokens(text)
 
     scored: list[tuple[int, sqlite3.Row]] = []
     for row in rows:
         title = _norm(row["title"])
-        hits = sum(1 for token in tokens if token in title)
+        hits = sum(1 for token in tokens if _token_hits(token, title))
         if hits == 0:
             continue
         if window is not None:
@@ -440,10 +620,13 @@ _ORDINALS = {
 
 _COUNTS = {"two": 2, "three": 3, "four": 4, "couple": 2, "both": 2}
 
+# Every phrase that means "the previous result, all of it". The two deictic
+# sets are folded in so a phrase that names the group ("they", "the attendees")
+# or the thing ("it", "this one") reaches the same branch as a bare "those".
 _WHOLE_RESULT = {
     "those", "them", "these", "all of them", "all of those", "the whole lot",
     "that", "it", "that one", "those ones", "the same ones",
-}
+} | _DEICTIC_PEOPLE | _DEICTIC_THING
 
 
 def resolve_reference(
@@ -559,12 +742,15 @@ def _resolve_named(
             return pointed
 
     rows = list(conn.execute(f"SELECT id, {column} AS label FROM {table} ORDER BY id"))  # noqa: S608 - literals
-    stop = {"the", "a", "an", "my", "that", "this", "one", "task", "note", "document", "doc", "item", "entry"}
-    tokens = [t for t in text.split() if t not in stop]
+    tokens = _content_tokens(text)
+    if not tokens:
+        # The phrase was nothing but determiners and a type word ("that task"),
+        # so there is nothing to match on but the previous result.
+        return _missing(f"no {label} matching {phrase!r}")
     scored = []
     for row in rows:
         haystack = _norm(row["label"])
-        hits = sum(1 for token in tokens if token in haystack)
+        hits = sum(1 for token in tokens if _token_hits(token, haystack))
         if hits:
             scored.append((hits, row["id"]))
     if not scored:
@@ -640,12 +826,140 @@ def describe(conn: sqlite3.Connection, resolution: Resolution) -> list[str]:
     return labels
 
 
+# --------------------------------------------- resolving a whole slot bundle
+
+# What each slot name is, as a referent. The joint-model lane hands raw spans
+# straight from the utterance, so it needs one door that knows which slots are
+# phrases and which are literals, rather than re-deriving it per operation.
+#
+# A slot missing from this table is a literal: a topic, a title, a body, a
+# company, a place, a service, an amount or an enum. Literals pass through
+# untouched, because the whole point of a span tagger is that the user's words
+# are already the value.
+SLOT_KINDS: dict[str, str] = {
+    "people": "people",
+    "attendees": "people",
+    "person": "people",
+    "assignee": "people",
+    "event": "event",
+    "task": "task",
+    "note": "note",
+    "docs": "document",
+    "photos": "photos",
+    "item": "locker_item",
+    "album": "album",
+    "folder": "folder",
+    "notebook": "notebook",
+    "project": "project",
+    "group": "tally_group",
+    "window": "date_range",
+    "due": "day",
+    "day": "day",
+    "when": "datetime",
+}
+
+
+@dataclass(frozen=True)
+class SlotResolution:
+    """One slot after resolution: a referent, a date, or a passed-through literal."""
+
+    name: str
+    kind: str
+    raw: Any
+    resolution: Resolution | None = None
+    value: Any = None
+
+    @property
+    def ok(self) -> bool:
+        """True when the slot is usable — a literal always is."""
+        return self.resolution is None or self.resolution.ok
+
+
+def resolve_all(
+    op: str,
+    slots: dict[str, Any],
+    context: Context | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> dict[str, SlotResolution]:
+    """Resolve every slot of one operation's raw spans in one call.
+
+    The filler hands over what the user said, verbatim; this turns each slot
+    into the referent it names. ``op`` is carried so a slot the operation does
+    not declare is reported rather than silently resolved — the catalogue, not
+    this table, decides what an operation takes.
+
+    The first slot that fails does not stop the rest: every slot is reported,
+    so a caller can tell a clarify (one ambiguous name) from a refusal
+    (nothing matched at all).
+    """
+    if conn is None:
+        raise ValueError("resolve_all needs a connection to the world")
+    declared = by_name().get(op)
+    context = context if context is not None else Context()
+
+    resolved: dict[str, SlotResolution] = {}
+    for name, raw in slots.items():
+        if declared is not None and name not in declared["params"]:
+            resolved[name] = SlotResolution(
+                name, "undeclared", raw, _missing(f"{op} declares no slot called {name!r}")
+            )
+            continue
+        kind = SLOT_KINDS.get(name, "literal")
+        phrase = "" if raw is None else str(raw)
+        if kind == "literal":
+            resolved[name] = SlotResolution(name, kind, raw, None, raw)
+        elif kind == "date_range":
+            window = resolve_date_range(phrase)
+            resolved[name] = SlotResolution(
+                name, kind, raw,
+                None if window else _missing(f"{phrase!r} is not a date phrase"),
+                window,
+            )
+        elif kind == "day":
+            day = resolve_day(phrase)
+            resolved[name] = SlotResolution(
+                name, kind, raw,
+                None if day else _missing(f"{phrase!r} is not a date phrase"),
+                day,
+            )
+        elif kind == "datetime":
+            stamp = resolve_datetime(phrase)
+            resolved[name] = SlotResolution(
+                name, kind, raw,
+                None if stamp else _missing(f"{phrase!r} is not a date-and-time phrase"),
+                stamp,
+            )
+        else:
+            found = _REFERENT_RESOLVERS[kind](conn, phrase, context)
+            resolved[name] = SlotResolution(name, kind, raw, found, found.ids)
+    return resolved
+
+
+_REFERENT_RESOLVERS: dict[str, Any] = {
+    "people": lambda conn, phrase, ctx: resolve_people(conn, phrase, ctx),
+    "event": lambda conn, phrase, ctx: resolve_event(conn, phrase, TODAY, ctx),
+    "task": lambda conn, phrase, ctx: resolve_task(conn, phrase, ctx),
+    "note": lambda conn, phrase, ctx: resolve_note(conn, phrase, ctx),
+    "document": lambda conn, phrase, ctx: resolve_document(conn, phrase, ctx),
+    "photos": lambda conn, phrase, ctx: resolve_photos(conn, phrase, ctx),
+    "locker_item": lambda conn, phrase, ctx: resolve_locker_item(conn, phrase, ctx),
+    "album": lambda conn, phrase, _ctx: resolve_album(conn, phrase),
+    "folder": lambda conn, phrase, _ctx: resolve_folder(conn, phrase),
+    "notebook": lambda conn, phrase, _ctx: resolve_notebook(conn, phrase),
+    "project": lambda conn, phrase, _ctx: resolve_project(conn, phrase),
+    "tally_group": lambda conn, phrase, _ctx: resolve_tally_group(conn, phrase),
+}
+
+
 __all__ = [
     "Context",
     "DateRange",
     "Resolution",
+    "SLOT_KINDS",
+    "SlotResolution",
     "describe",
     "resolve_album",
+    "resolve_all",
     "resolve_company_people",
     "resolve_date_range",
     "resolve_datetime",
