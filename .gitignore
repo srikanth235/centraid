@@ -73,3 +73,9 @@ apps/desktop/release/
 # by `files: ["apps"]` and kept out of the catalog by build-manifest.mjs.
 packages/blueprints/apps/*/actions/*.js
 packages/blueprints/apps/*/queries/*.js
+
+# The local-assistant experiment writes one JSON report per labelled run.
+# Runs are append-only and local; only the reference run is evidence.
+experiments/local-assistant/runs/*.json
+!experiments/local-assistant/runs/reference.json
+experiments/local-assistant/**/__pycache__/
