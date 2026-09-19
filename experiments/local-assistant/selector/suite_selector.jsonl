@@ -1,0 +1,98 @@
+{"case_id": "r01", "turn": 0, "category": "single_read", "request": "what's on my calendar next week", "previous_request": null, "previous_operation": null, "label": "agenda_upcoming"}
+{"case_id": "r02", "turn": 0, "category": "single_read", "request": "anything on the calendar tomorrow", "previous_request": null, "previous_operation": null, "label": "agenda_upcoming"}
+{"case_id": "r03", "turn": 0, "category": "single_read", "request": "find the design review on my calendar", "previous_request": null, "previous_operation": null, "label": "agenda_search"}
+{"case_id": "r04", "turn": 0, "category": "single_read", "request": "what does the twenty-fifth look like", "previous_request": null, "previous_operation": null, "label": "agenda_day_context"}
+{"case_id": "r05", "turn": 0, "category": "single_read", "request": "what's due this week", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"case_id": "r06", "turn": 0, "category": "single_read", "request": "is anything overdue", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"case_id": "r07", "turn": 0, "category": "single_read", "request": "do I have anything on my list about the visa", "previous_request": null, "previous_operation": null, "label": "tasks_about"}
+{"case_id": "r08", "turn": 0, "category": "single_read", "request": "what's left in the Website refresh project", "previous_request": null, "previous_operation": null, "label": "tasks_by_project"}
+{"case_id": "r09", "turn": 0, "category": "single_read", "request": "who do I know at Initech", "previous_request": null, "previous_operation": null, "label": "people_at_company"}
+{"case_id": "r10", "turn": 0, "category": "single_read", "request": "look up Priya Raman", "previous_request": null, "previous_operation": null, "label": "people_find"}
+{"case_id": "r11", "turn": 0, "category": "single_read", "request": "find my notes about onboarding", "previous_request": null, "previous_operation": null, "label": "notes_search"}
+{"case_id": "r12", "turn": 0, "category": "single_read", "request": "what's in my Journal notebook", "previous_request": null, "previous_operation": null, "label": "notes_in_notebook"}
+{"case_id": "r13", "turn": 0, "category": "single_read", "request": "show me the Goa album", "previous_request": null, "previous_operation": null, "label": "photos_in_album"}
+{"case_id": "r14", "turn": 0, "category": "single_read", "request": "what photos did I take last week", "previous_request": null, "previous_operation": null, "label": "photos_by_date"}
+{"case_id": "r15", "turn": 0, "category": "single_read", "request": "find anything about Initech in my drive", "previous_request": null, "previous_operation": null, "label": "docs_search"}
+{"case_id": "r16", "turn": 0, "category": "single_read", "request": "what's in my Contracts folder", "previous_request": null, "previous_operation": null, "label": "docs_in_folder"}
+{"case_id": "r17", "turn": 0, "category": "single_read", "request": "is anything in my locker reused or weak", "previous_request": null, "previous_operation": null, "label": "locker_weak"}
+{"case_id": "r18", "turn": 0, "category": "single_read", "request": "who owes me money", "previous_request": null, "previous_operation": null, "label": "tally_who_owes_me"}
+{"case_id": "w01", "turn": 0, "category": "single_write", "request": "schedule a budget review tomorrow at 3 pm", "previous_request": null, "previous_operation": null, "label": "agenda_create_event"}
+{"case_id": "w02", "turn": 0, "category": "single_write", "request": "move the design review to Thursday", "previous_request": null, "previous_operation": null, "label": "agenda_reschedule"}
+{"case_id": "w03", "turn": 0, "category": "single_write", "request": "cancel the Initech offsite", "previous_request": null, "previous_operation": null, "label": "agenda_cancel_event"}
+{"case_id": "w04", "turn": 0, "category": "single_write", "request": "add Priya to the retro", "previous_request": null, "previous_operation": null, "label": "agenda_attendee_add"}
+{"case_id": "w05", "turn": 0, "category": "single_write", "request": "remind me to call the landlord on Friday", "previous_request": null, "previous_operation": null, "label": "tasks_add"}
+{"case_id": "w06", "turn": 0, "category": "single_write", "request": "mark the domain renewal done", "previous_request": null, "previous_operation": null, "label": "tasks_complete"}
+{"case_id": "w07", "turn": 0, "category": "single_write", "request": "push the passport renewal to next month", "previous_request": null, "previous_operation": null, "label": "tasks_set_due"}
+{"case_id": "w08", "turn": 0, "category": "single_write", "request": "give the offsite flights task to Priya", "previous_request": null, "previous_operation": null, "label": "tasks_assign"}
+{"case_id": "w09", "turn": 0, "category": "single_write", "request": "add Rhea Kapoor at Initech to my contacts", "previous_request": null, "previous_operation": null, "label": "people_add"}
+{"case_id": "w10", "turn": 0, "category": "single_write", "request": "log that I called Priya today", "previous_request": null, "previous_operation": null, "label": "people_log_interaction"}
+{"case_id": "w11", "turn": 0, "category": "single_write", "request": "start a note called Offsite debrief in Work", "previous_request": null, "previous_operation": null, "label": "notes_create"}
+{"case_id": "w12", "turn": 0, "category": "single_write", "request": "add to the offsite ideas note: hire a bus", "previous_request": null, "previous_operation": null, "label": "notes_append"}
+{"case_id": "w13", "turn": 0, "category": "single_write", "request": "save a login for Hooli VPN under srikanth", "previous_request": null, "previous_operation": null, "label": "locker_add"}
+{"case_id": "w14", "turn": 0, "category": "single_write", "request": "file the migration runbook under Personal", "previous_request": null, "previous_operation": null, "label": "docs_move"}
+{"case_id": "x01", "turn": 0, "category": "cross_app_one_call", "request": "who was at the design review", "previous_request": null, "previous_operation": null, "label": "people_at"}
+{"case_id": "x02", "turn": 0, "category": "cross_app_one_call", "request": "who actually accepted the sprint planning invite", "previous_request": null, "previous_operation": null, "label": "people_at"}
+{"case_id": "x03", "turn": 0, "category": "cross_app_one_call", "request": "do I owe any of the design review attendees", "previous_request": null, "previous_operation": null, "label": "tally_balance_with"}
+{"case_id": "x04", "turn": 0, "category": "cross_app_one_call", "request": "what's my balance with everyone at Initech", "previous_request": null, "previous_operation": null, "label": "tally_balance_with"}
+{"case_id": "x05", "turn": 0, "category": "cross_app_one_call", "request": "what are the Initech people on the hook for", "previous_request": null, "previous_operation": null, "label": "tasks_for_people"}
+{"case_id": "x06", "turn": 0, "category": "cross_app_one_call", "request": "what have I written about the design review attendees", "previous_request": null, "previous_operation": null, "label": "notes_about_people"}
+{"case_id": "x07", "turn": 0, "category": "cross_app_one_call", "request": "photos of the people who went to the Initech offsite", "previous_request": null, "previous_operation": null, "label": "photos_of_people"}
+{"case_id": "x08", "turn": 0, "category": "cross_app_one_call", "request": "settle up with everyone I owe", "previous_request": null, "previous_operation": null, "label": "tally_settle_up"}
+{"case_id": "x09", "turn": 0, "category": "cross_app_one_call", "request": "invite everyone at Initech to the retro", "previous_request": null, "previous_operation": null, "label": "agenda_attendee_add"}
+{"case_id": "x10", "turn": 0, "category": "cross_app_one_call", "request": "book a planning session on Thursday with everyone at Acme", "previous_request": null, "previous_operation": null, "label": "agenda_create_event"}
+{"case_id": "c01", "turn": 0, "category": "chain", "request": "who's coming to the design review", "previous_request": null, "previous_operation": null, "label": "people_at"}
+{"case_id": "c01", "turn": 1, "category": "chain", "request": "and what do they owe me", "previous_request": "who's coming to the design review", "previous_operation": "people_at", "label": "tally_balance_with"}
+{"case_id": "c02", "turn": 0, "category": "chain", "request": "find my notes about the migration", "previous_request": null, "previous_operation": null, "label": "notes_search"}
+{"case_id": "c02", "turn": 1, "category": "chain", "request": "now show me the tasks about it", "previous_request": "find my notes about the migration", "previous_operation": "notes_search", "label": "tasks_about"}
+{"case_id": "c03", "turn": 0, "category": "chain", "request": "what's due this week", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"case_id": "c03", "turn": 1, "category": "chain", "request": "mark the electricity bill one done", "previous_request": "what's due this week", "previous_operation": "tasks_due", "label": "tasks_complete"}
+{"case_id": "c04", "turn": 0, "category": "chain", "request": "who do I know at Acme", "previous_request": null, "previous_operation": null, "label": "people_at_company"}
+{"case_id": "c04", "turn": 1, "category": "chain", "request": "book an intro call with them on Thursday", "previous_request": "who do I know at Acme", "previous_operation": "people_at_company", "label": "agenda_create_event"}
+{"case_id": "c05", "turn": 0, "category": "chain", "request": "show me the Goa album", "previous_request": null, "previous_operation": null, "label": "photos_in_album"}
+{"case_id": "c05", "turn": 1, "category": "chain", "request": "put those in Offsite 2026", "previous_request": "show me the Goa album", "previous_operation": "photos_in_album", "label": "photos_add_to_album"}
+{"case_id": "c06", "turn": 0, "category": "chain", "request": "what's in my Contracts folder", "previous_request": null, "previous_operation": null, "label": "docs_in_folder"}
+{"case_id": "c06", "turn": 1, "category": "chain", "request": "star the Acme one", "previous_request": "what's in my Contracts folder", "previous_operation": "docs_in_folder", "label": "docs_star"}
+{"case_id": "c07", "turn": 0, "category": "chain", "request": "when is the offsite", "previous_request": null, "previous_operation": null, "label": "agenda_search"}
+{"case_id": "c07", "turn": 1, "category": "chain", "request": "add a task to book flights for it, due Monday", "previous_request": "when is the offsite", "previous_operation": "agenda_search", "label": "tasks_add"}
+{"case_id": "c08", "turn": 0, "category": "chain", "request": "what do the Initech people owe me", "previous_request": null, "previous_operation": null, "label": "tally_balance_with"}
+{"case_id": "c08", "turn": 1, "category": "chain", "request": "nudge them by logging that I messaged Priya", "previous_request": "what do the Initech people owe me", "previous_operation": "tally_balance_with", "label": "people_log_interaction"}
+{"case_id": "f01", "turn": 0, "category": "follow_up", "request": "what's on my calendar next week", "previous_request": null, "previous_operation": null, "label": "agenda_upcoming"}
+{"case_id": "f01", "turn": 1, "category": "follow_up", "request": "and what about October", "previous_request": "what's on my calendar next week", "previous_operation": "agenda_upcoming", "label": "agenda_upcoming"}
+{"case_id": "f02", "turn": 0, "category": "follow_up", "request": "what's due this week", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"case_id": "f02", "turn": 1, "category": "follow_up", "request": "what about next week", "previous_request": "what's due this week", "previous_operation": "tasks_due", "label": "tasks_due"}
+{"case_id": "f03", "turn": 0, "category": "follow_up", "request": "who do I know at Initech", "previous_request": null, "previous_operation": null, "label": "people_at_company"}
+{"case_id": "f03", "turn": 1, "category": "follow_up", "request": "and at Hooli", "previous_request": "who do I know at Initech", "previous_operation": "people_at_company", "label": "people_at_company"}
+{"case_id": "f04", "turn": 0, "category": "follow_up", "request": "photos of Lena", "previous_request": null, "previous_operation": null, "label": "photos_of_people"}
+{"case_id": "f04", "turn": 1, "category": "follow_up", "request": "just the ones from this month", "previous_request": "photos of Lena", "previous_operation": "photos_of_people", "label": "photos_of_people"}
+{"case_id": "f05", "turn": 0, "category": "follow_up", "request": "find my notes that mention a plan", "previous_request": null, "previous_operation": null, "label": "notes_search"}
+{"case_id": "f05", "turn": 1, "category": "follow_up", "request": "only the ones in my Work notebook", "previous_request": "find my notes that mention a plan", "previous_operation": "notes_search", "label": "notes_search"}
+{"case_id": "f06", "turn": 0, "category": "follow_up", "request": "who owes me money", "previous_request": null, "previous_operation": null, "label": "tally_who_owes_me"}
+{"case_id": "f06", "turn": 1, "category": "follow_up", "request": "and who do I owe", "previous_request": "who owes me money", "previous_operation": "tally_who_owes_me", "label": "tally_who_owes_me"}
+{"case_id": "f07", "turn": 0, "category": "follow_up", "request": "find the Initech documents", "previous_request": null, "previous_operation": null, "label": "docs_search"}
+{"case_id": "f07", "turn": 1, "category": "follow_up", "request": "just the spreadsheets", "previous_request": "find the Initech documents", "previous_operation": "docs_search", "label": "docs_search"}
+{"case_id": "f08", "turn": 0, "category": "follow_up", "request": "show me the balances in the Goa trip group", "previous_request": null, "previous_operation": null, "label": "tally_group_balance"}
+{"case_id": "f08", "turn": 1, "category": "follow_up", "request": "and the Flatmates group", "previous_request": "show me the balances in the Goa trip group", "previous_operation": "tally_group_balance", "label": "tally_group_balance"}
+{"case_id": "i01", "turn": 0, "category": "reference_into_result", "request": "what's due this week", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"case_id": "i01", "turn": 1, "category": "reference_into_result", "request": "mark the first one done", "previous_request": "what's due this week", "previous_operation": "tasks_due", "label": "tasks_complete"}
+{"case_id": "i02", "turn": 0, "category": "reference_into_result", "request": "what's due this week", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"case_id": "i02", "turn": 1, "category": "reference_into_result", "request": "push the last one to next month", "previous_request": "what's due this week", "previous_operation": "tasks_due", "label": "tasks_set_due"}
+{"case_id": "i03", "turn": 0, "category": "reference_into_result", "request": "photos of Lena", "previous_request": null, "previous_operation": null, "label": "photos_of_people"}
+{"case_id": "i03", "turn": 1, "category": "reference_into_result", "request": "put the first two in the Family album", "previous_request": "photos of Lena", "previous_operation": "photos_of_people", "label": "photos_add_to_album"}
+{"case_id": "i04", "turn": 0, "category": "reference_into_result", "request": "who was at the Initech offsite", "previous_request": null, "previous_operation": null, "label": "people_at"}
+{"case_id": "i04", "turn": 1, "category": "reference_into_result", "request": "only the ones with Priya", "previous_request": "who was at the Initech offsite", "previous_operation": "people_at", "label": "people_profile"}
+{"case_id": "i05", "turn": 0, "category": "reference_into_result", "request": "show me the Goa album", "previous_request": null, "previous_operation": null, "label": "photos_in_album"}
+{"case_id": "i05", "turn": 1, "category": "reference_into_result", "request": "only the ones with Marcus Reed", "previous_request": "show me the Goa album", "previous_operation": "photos_in_album", "label": "photos_of_people"}
+{"case_id": "i06", "turn": 0, "category": "reference_into_result", "request": "what's in my Contracts folder", "previous_request": null, "previous_operation": null, "label": "docs_in_folder"}
+{"case_id": "i06", "turn": 1, "category": "reference_into_result", "request": "star the second one", "previous_request": "what's in my Contracts folder", "previous_operation": "docs_in_folder", "label": "docs_star"}
+{"case_id": "i07", "turn": 0, "category": "reference_into_result", "request": "what's left in the Migration project", "previous_request": null, "previous_operation": null, "label": "tasks_by_project"}
+{"case_id": "i07", "turn": 1, "category": "reference_into_result", "request": "assign that first one to Priya", "previous_request": "what's left in the Migration project", "previous_operation": "tasks_by_project", "label": "tasks_assign"}
+{"case_id": "i08", "turn": 0, "category": "reference_into_result", "request": "who do I know at Acme", "previous_request": null, "previous_operation": null, "label": "people_at_company"}
+{"case_id": "i08", "turn": 1, "category": "reference_into_result", "request": "log that I emailed the last one", "previous_request": "who do I know at Acme", "previous_operation": "people_at_company", "label": "people_log_interaction"}
+{"case_id": "n01", "turn": 0, "category": "refusal_none", "request": "book me a flight to Lisbon", "previous_request": null, "previous_operation": null, "label": "none"}
+{"case_id": "n02", "turn": 0, "category": "refusal_none", "request": "what's the weather tomorrow", "previous_request": null, "previous_operation": null, "label": "none"}
+{"case_id": "n03", "turn": 0, "category": "refusal_none", "request": "what's Neha's email", "previous_request": null, "previous_operation": null, "label": "people_profile"}
+{"case_id": "n04", "turn": 0, "category": "refusal_none", "request": "log that I called Marcus", "previous_request": null, "previous_operation": null, "label": "people_log_interaction"}
+{"case_id": "n05", "turn": 0, "category": "refusal_none", "request": "cancel the shareholders meeting", "previous_request": null, "previous_operation": null, "label": "agenda_cancel_event"}
+{"case_id": "n06", "turn": 0, "category": "refusal_none", "request": "mark the renew one done", "previous_request": null, "previous_operation": null, "label": "tasks_complete"}
+{"case_id": "n07", "turn": 0, "category": "refusal_none", "request": "put the first one in the Goa album", "previous_request": null, "previous_operation": null, "label": "photos_add_to_album"}
+{"case_id": "n08", "turn": 0, "category": "refusal_none", "request": "show me my photos from Reykjavik", "previous_request": null, "previous_operation": null, "label": "photos_at_place"}

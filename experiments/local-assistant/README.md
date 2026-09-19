@@ -1,6 +1,6 @@
 # Local assistant experiment
 
-An offline experiment, outside the TypeScript workspace on purpose: Python 3 standard library only, no packages, no models, no network. Turbo, knip, oxlint and oxfmt do not own `.py` files, so nothing here is picked up by a repo gate.
+An offline experiment, outside the TypeScript workspace on purpose: Python 3 standard library only for everything below `selector/`, which is the first model lane and has its own virtualenv (`.venv-selector`, gitignored) with CPU torch, sentence-transformers and scikit-learn. Turbo, knip, oxlint and oxfmt do not own `.py` files, so nothing here is picked up by a repo gate.
 
 The question it exists to answer: can a small local pipeline turn a user turn plus short conversation context into the right vault query or typed command, across the eight system apps, reliably enough to ship — without a frontier model in the loop?
 
@@ -23,6 +23,7 @@ This directory holds the parts that must exist **before** any model is run: the 
 | `protocol.md` | The frozen protocol: suite, scoring, ceilings, variants, change log. |
 | `runs/reference.json` | The reference run's report, committed as the freeze's evidence. |
 | `test_*.py` | Unit tests for the resolvers, the executor and the suite. |
+| `selector/` | Pipeline stage [1], the operation selector: synthetic training world, data generator with sibling hard negatives, overlap guard, zero-shot and trained runs, `predict.select(...)`. Results and reproduce commands in [`selector/RESULTS-selector.md`](selector/RESULTS-selector.md). |
 
 ## Running it
 
@@ -53,7 +54,7 @@ user turn + last K turns
   → [5] rendering            by template, with a clarification path
 ```
 
-Steps 3 and 4 are what this directory implements and tests. Steps 1 and 2 are model lanes that have not run: they need weights and packages that are not installed, listed under "Models and packages required" in `protocol.md`.
+Steps 3 and 4 are what this directory implements and tests. Step 1 has run: `selector/` reaches 83.7% operation accuracy on the suite's 98 turns with a logistic regression over frozen MiniLM embeddings. Step 2 is still a model lane that has not run; it needs weights listed under "Models and packages required" in `protocol.md`.
 
 Two constraints the code holds, not the model:
 

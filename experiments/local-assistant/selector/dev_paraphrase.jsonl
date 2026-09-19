@@ -1,0 +1,153 @@
+{"request": "whats my week look like", "previous_request": null, "previous_operation": null, "label": "agenda_upcoming"}
+{"request": "hey, am I busy on saturday at all?", "previous_request": null, "previous_operation": null, "label": "agenda_upcoming"}
+{"request": "diary for next month please", "previous_request": null, "previous_operation": null, "label": "agenda_upcoming"}
+{"request": "when's that vendor sync happening", "previous_request": null, "previous_operation": null, "label": "agenda_search"}
+{"request": "i forget the date of the hiring panel", "previous_request": null, "previous_operation": null, "label": "agenda_search"}
+{"request": "look for a board prep meeting", "previous_request": null, "previous_operation": null, "label": "agenda_search"}
+{"request": "give me the whole shape of thursday, meetings and todos", "previous_request": null, "previous_operation": null, "label": "agenda_day_context"}
+{"request": "brief me on the 22nd", "previous_request": null, "previous_operation": null, "label": "agenda_day_context"}
+{"request": "how packed is tomorrow, including what's due", "previous_request": null, "previous_operation": null, "label": "agenda_day_context"}
+{"request": "who's actually turning up to the launch party", "previous_request": null, "previous_operation": null, "label": "people_at"}
+{"request": "attendee list for the roadmap huddle?", "previous_request": null, "previous_operation": null, "label": "people_at"}
+{"request": "tell me who was in the budget walkthrough", "previous_request": null, "previous_operation": null, "label": "people_at"}
+{"request": "stick a pottery class on friday evening", "previous_request": null, "previous_operation": null, "label": "agenda_create_event"}
+{"request": "i need a supplier call with Dmitri next tuesday at 11", "previous_request": null, "previous_operation": null, "label": "agenda_create_event"}
+{"request": "new meeting please: board prep, monday morning", "previous_request": null, "previous_operation": null, "label": "agenda_create_event"}
+{"request": "can the vendor sync happen on wednesday instead", "previous_request": null, "previous_operation": null, "label": "agenda_reschedule"}
+{"request": "slide the hiring panel an hour later", "previous_request": null, "previous_operation": null, "label": "agenda_reschedule"}
+{"request": "the launch party moved, make it the 30th", "previous_request": null, "previous_operation": null, "label": "agenda_reschedule"}
+{"request": "bin the roadmap huddle", "previous_request": null, "previous_operation": null, "label": "agenda_cancel_event"}
+{"request": "we're not doing the supplier call, take it off", "previous_request": null, "previous_operation": null, "label": "agenda_cancel_event"}
+{"request": "cancel pottery class this week", "previous_request": null, "previous_operation": null, "label": "agenda_cancel_event"}
+{"request": "get Hana on the budget walkthrough too", "previous_request": null, "previous_operation": null, "label": "agenda_attendee_add"}
+{"request": "Clara should be invited to the board prep", "previous_request": null, "previous_operation": null, "label": "agenda_attendee_add"}
+{"request": "add two more people to the launch party: Theo and Nadia", "previous_request": null, "previous_operation": null, "label": "agenda_attendee_add"}
+{"request": "anything i'm late on?", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"request": "whats due by friday", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"request": "give me today's list", "previous_request": null, "previous_operation": null, "label": "tasks_due"}
+{"request": "is there a todo somewhere about the boiler", "previous_request": null, "previous_operation": null, "label": "tasks_about"}
+{"request": "tasks to do with insurance?", "previous_request": null, "previous_operation": null, "label": "tasks_about"}
+{"request": "i swear i wrote a task about the pension", "previous_request": null, "previous_operation": null, "label": "tasks_about"}
+{"request": "how much is left on the Garden project", "previous_request": null, "previous_operation": null, "label": "tasks_by_project"}
+{"request": "open items under Ledger cleanup", "previous_request": null, "previous_operation": null, "label": "tasks_by_project"}
+{"request": "show me everything filed in H1 roadmap", "previous_request": null, "previous_operation": null, "label": "tasks_by_project"}
+{"request": "what has Yusuf got on his plate", "previous_request": null, "previous_operation": null, "label": "tasks_for_people"}
+{"request": "which tasks are sitting with the Baxtel lot", "previous_request": null, "previous_operation": null, "label": "tasks_for_people"}
+{"request": "anything i handed to Ingrid still open", "previous_request": null, "previous_operation": null, "label": "tasks_for_people"}
+{"request": "remind me to order printer ink", "previous_request": null, "previous_operation": null, "label": "tasks_add"}
+{"request": "chuck 'return the router' on my list for thursday", "previous_request": null, "previous_operation": null, "label": "tasks_add"}
+{"request": "i must remember to send the invoice, add it under Ledger cleanup", "previous_request": null, "previous_operation": null, "label": "tasks_add"}
+{"request": "watered the plants, cross it off", "previous_request": null, "previous_operation": null, "label": "tasks_complete"}
+{"request": "the parking permit one is sorted", "previous_request": null, "previous_operation": null, "label": "tasks_complete"}
+{"request": "close out the chimney sweep task", "previous_request": null, "previous_operation": null, "label": "tasks_complete"}
+{"request": "the invoice task can wait until next month", "previous_request": null, "previous_operation": null, "label": "tasks_set_due"}
+{"request": "new deadline for the router return: friday", "previous_request": null, "previous_operation": null, "label": "tasks_set_due"}
+{"request": "put back the printer ink one by a week", "previous_request": null, "previous_operation": null, "label": "tasks_set_due"}
+{"request": "let Mei take the chimney sweep task", "previous_request": null, "previous_operation": null, "label": "tasks_assign"}
+{"request": "hand the invoice job to Rafael", "previous_request": null, "previous_operation": null, "label": "tasks_assign"}
+{"request": "Sam owns the parking permit one now", "previous_request": null, "previous_operation": null, "label": "tasks_assign"}
+{"request": "have i got Oluchi saved anywhere", "previous_request": null, "previous_operation": null, "label": "people_find"}
+{"request": "search contacts: Bittencourt", "previous_request": null, "previous_operation": null, "label": "people_find"}
+{"request": "is there a Fiona in my people", "previous_request": null, "previous_operation": null, "label": "people_find"}
+{"request": "whats Hana's number", "previous_request": null, "previous_operation": null, "label": "people_profile"}
+{"request": "everything i've got stored on Theo Vasquez", "previous_request": null, "previous_operation": null, "label": "people_profile"}
+{"request": "remind me when Clara's birthday is", "previous_request": null, "previous_operation": null, "label": "people_profile"}
+{"request": "who have i got at Northwind", "previous_request": null, "previous_operation": null, "label": "people_at_company"}
+{"request": "contacts working for Cobalt Works?", "previous_request": null, "previous_operation": null, "label": "people_at_company"}
+{"request": "list everyone from Larkspur in my vault", "previous_request": null, "previous_operation": null, "label": "people_at_company"}
+{"request": "save Nadia Boulos as a contact, she's at Vertigo Labs", "previous_request": null, "previous_operation": null, "label": "people_add"}
+{"request": "add a new person: Ingrid Halvorsen", "previous_request": null, "previous_operation": null, "label": "people_add"}
+{"request": "put Sam Okonjo in my contacts with his email", "previous_request": null, "previous_operation": null, "label": "people_add"}
+{"request": "note that i rang Dmitri this morning", "previous_request": null, "previous_operation": null, "label": "people_log_interaction"}
+{"request": "log a coffee with Mei yesterday", "previous_request": null, "previous_operation": null, "label": "people_log_interaction"}
+{"request": "record that Yusuf and i emailed on thursday", "previous_request": null, "previous_operation": null, "label": "people_log_interaction"}
+{"request": "on Clara's record, write that she's vegetarian", "previous_request": null, "previous_operation": null, "label": "people_add_note"}
+{"request": "remember Theo hates phone calls", "previous_request": null, "previous_operation": null, "label": "people_add_note"}
+{"request": "add to Fiona's profile: moving to Oslo in spring", "previous_request": null, "previous_operation": null, "label": "people_add_note"}
+{"request": "where did i write about shipping rates", "previous_request": null, "previous_operation": null, "label": "notes_search"}
+{"request": "any notes on the landlord?", "previous_request": null, "previous_operation": null, "label": "notes_search"}
+{"request": "look through my notes for the supplier deal", "previous_request": null, "previous_operation": null, "label": "notes_search"}
+{"request": "open Sparks", "previous_request": null, "previous_operation": null, "label": "notes_in_notebook"}
+{"request": "whats sitting in my Diary notebook", "previous_request": null, "previous_operation": null, "label": "notes_in_notebook"}
+{"request": "list everything in the Kitchen notebook", "previous_request": null, "previous_operation": null, "label": "notes_in_notebook"}
+{"request": "notes that have Rafael attached", "previous_request": null, "previous_operation": null, "label": "notes_about_people"}
+{"request": "which of my notes are linked to Hana", "previous_request": null, "previous_operation": null, "label": "notes_about_people"}
+{"request": "anything written down about the Northwind people", "previous_request": null, "previous_operation": null, "label": "notes_about_people"}
+{"request": "note to self: the boiler service is due in march", "previous_request": null, "previous_operation": null, "label": "notes_create"}
+{"request": "start a note in Research about shipping rates", "previous_request": null, "previous_operation": null, "label": "notes_create"}
+{"request": "write down that Mei recommended a good electrician", "previous_request": null, "previous_operation": null, "label": "notes_create"}
+{"request": "tack onto the boiler quote note: they want cash", "previous_request": null, "previous_operation": null, "label": "notes_append"}
+{"request": "add a line to the reading list note", "previous_request": null, "previous_operation": null, "label": "notes_append"}
+{"request": "update the supplier call notes with the new price", "previous_request": null, "previous_operation": null, "label": "notes_append"}
+{"request": "got any pics with Ingrid in them", "previous_request": null, "previous_operation": null, "label": "photos_of_people"}
+{"request": "photos where Sam shows up", "previous_request": null, "previous_operation": null, "label": "photos_of_people"}
+{"request": "find me shots of the Larkspur crowd", "previous_request": null, "previous_operation": null, "label": "photos_of_people"}
+{"request": "pictures i took in august", "previous_request": null, "previous_operation": null, "label": "photos_by_date"}
+{"request": "camera roll from last weekend", "previous_request": null, "previous_operation": null, "label": "photos_by_date"}
+{"request": "what did i shoot on the 14th", "previous_request": null, "previous_operation": null, "label": "photos_by_date"}
+{"request": "open up Kerala", "previous_request": null, "previous_operation": null, "label": "photos_in_album"}
+{"request": "whats in the Pets album", "previous_request": null, "previous_operation": null, "label": "photos_in_album"}
+{"request": "show me everything filed in Roadtrip", "previous_request": null, "previous_operation": null, "label": "photos_in_album"}
+{"request": "pictures from when i was in Porto", "previous_request": null, "previous_operation": null, "label": "photos_at_place"}
+{"request": "anything shot at the lake house", "previous_request": null, "previous_operation": null, "label": "photos_at_place"}
+{"request": "photos taken up Table Mountain", "previous_request": null, "previous_operation": null, "label": "photos_at_place"}
+{"request": "drop those into Balcony", "previous_request": null, "previous_operation": null, "label": "photos_add_to_album"}
+{"request": "file the Jaipur ones under Roadtrip", "previous_request": null, "previous_operation": null, "label": "photos_add_to_album"}
+{"request": "add these pictures to the Summit 2027 album", "previous_request": null, "previous_operation": null, "label": "photos_add_to_album"}
+{"request": "where's the lease pdf", "previous_request": null, "previous_operation": null, "label": "docs_search"}
+{"request": "dig out the warranty card", "previous_request": null, "previous_operation": null, "label": "docs_search"}
+{"request": "any files mentioning the pension", "previous_request": null, "previous_operation": null, "label": "docs_search"}
+{"request": "whats in Legal", "previous_request": null, "previous_operation": null, "label": "docs_in_folder"}
+{"request": "list the files in my Taxes folder", "previous_request": null, "previous_operation": null, "label": "docs_in_folder"}
+{"request": "open the Warranties folder", "previous_request": null, "previous_operation": null, "label": "docs_in_folder"}
+{"request": "flag the tax return as important", "previous_request": null, "previous_operation": null, "label": "docs_star"}
+{"request": "star the lease", "previous_request": null, "previous_operation": null, "label": "docs_star"}
+{"request": "favourite everything in Invoices", "previous_request": null, "previous_operation": null, "label": "docs_star"}
+{"request": "shift the lease into Legal", "previous_request": null, "previous_operation": null, "label": "docs_move"}
+{"request": "the warranty card belongs in Warranties", "previous_request": null, "previous_operation": null, "label": "docs_move"}
+{"request": "refile the tax return under Taxes", "previous_request": null, "previous_operation": null, "label": "docs_move"}
+{"request": "whats my Fernpost login", "previous_request": null, "previous_operation": null, "label": "locker_find"}
+{"request": "get me the Pinecart credentials", "previous_request": null, "previous_operation": null, "label": "locker_find"}
+{"request": "do i have a Zenbank entry saved", "previous_request": null, "previous_operation": null, "label": "locker_find"}
+{"request": "anything in my locker flagged as reused", "previous_request": null, "previous_operation": null, "label": "locker_weak"}
+{"request": "which of my logins are dodgy", "previous_request": null, "previous_operation": null, "label": "locker_weak"}
+{"request": "show me breached passwords", "previous_request": null, "previous_operation": null, "label": "locker_weak"}
+{"request": "store my new Driftshare password", "previous_request": null, "previous_operation": null, "label": "locker_add"}
+{"request": "save Hollowmail credentials in the locker", "previous_request": null, "previous_operation": null, "label": "locker_add"}
+{"request": "add a locker entry for Zenbank", "previous_request": null, "previous_operation": null, "label": "locker_add"}
+{"request": "am i square with Dmitri", "previous_request": null, "previous_operation": null, "label": "tally_balance_with"}
+{"request": "how much do i owe Clara overall", "previous_request": null, "previous_operation": null, "label": "tally_balance_with"}
+{"request": "net me out against the Vertigo Labs lot", "previous_request": null, "previous_operation": null, "label": "tally_balance_with"}
+{"request": "anyone still owe me?", "previous_request": null, "previous_operation": null, "label": "tally_who_owes_me"}
+{"request": "who am i in debt to", "previous_request": null, "previous_operation": null, "label": "tally_who_owes_me"}
+{"request": "list outstanding balances in my favour", "previous_request": null, "previous_operation": null, "label": "tally_who_owes_me"}
+{"request": "how's the Housemates group looking", "previous_request": null, "previous_operation": null, "label": "tally_group_balance"}
+{"request": "balances for Book club", "previous_request": null, "previous_operation": null, "label": "tally_group_balance"}
+{"request": "where does everyone stand in Cycling crew", "previous_request": null, "previous_operation": null, "label": "tally_group_balance"}
+{"request": "itemise the bills i've shared with Theo", "previous_request": null, "previous_operation": null, "label": "tally_expenses_with"}
+{"request": "every split expense involving Nadia, line by line", "previous_request": null, "previous_operation": null, "label": "tally_expenses_with"}
+{"request": "what have Mei and i actually split", "previous_request": null, "previous_operation": null, "label": "tally_expenses_with"}
+{"request": "i paid 90 for the ferry tickets, split it with Yusuf", "previous_request": null, "previous_operation": null, "label": "tally_add_expense"}
+{"request": "add groceries 55 to the Housemates group", "previous_request": null, "previous_operation": null, "label": "tally_add_expense"}
+{"request": "new shared expense: the cabin, 600, me and Ingrid", "previous_request": null, "previous_operation": null, "label": "tally_add_expense"}
+{"request": "Rafael paid me back in full", "previous_request": null, "previous_operation": null, "label": "tally_settle_up"}
+{"request": "we're even now, me and Oluchi", "previous_request": null, "previous_operation": null, "label": "tally_settle_up"}
+{"request": "zero out what i owe Fiona", "previous_request": null, "previous_operation": null, "label": "tally_settle_up"}
+{"request": "book me a table at that thai place", "previous_request": null, "previous_operation": null, "label": "none"}
+{"request": "is it going to rain on sunday", "previous_request": null, "previous_operation": null, "label": "none"}
+{"request": "what's bitcoin at right now", "previous_request": null, "previous_operation": null, "label": "none"}
+{"request": "sort that out would you", "previous_request": null, "previous_operation": null, "label": "clarify"}
+{"request": "change it", "previous_request": null, "previous_operation": null, "label": "clarify"}
+{"request": "you know the one i mean, do that", "previous_request": null, "previous_operation": null, "label": "clarify"}
+{"request": "and november?", "previous_request": "whats my week look like", "previous_operation": "agenda_upcoming", "label": "agenda_upcoming"}
+{"request": "same for next week", "previous_request": "whats due by friday", "previous_operation": "tasks_due", "label": "tasks_due"}
+{"request": "and Northwind?", "previous_request": "who have i got at Cobalt Works", "previous_operation": "people_at_company", "label": "people_at_company"}
+{"request": "only the ones with Hana", "previous_request": "open up Kerala", "previous_operation": "photos_in_album", "label": "photos_of_people"}
+{"request": "only the ones with Hana", "previous_request": "who's actually turning up to the launch party", "previous_operation": "people_at", "label": "people_profile"}
+{"request": "narrow that down to last month", "previous_request": "got any pics with Ingrid in them", "previous_operation": "photos_of_people", "label": "photos_of_people"}
+{"request": "first ones done, tick it", "previous_request": "whats due by friday", "previous_operation": "tasks_due", "label": "tasks_complete"}
+{"request": "shove the bottom one out to december", "previous_request": "anything i'm late on?", "previous_operation": "tasks_due", "label": "tasks_set_due"}
+{"request": "flag number two", "previous_request": "whats in Legal", "previous_operation": "docs_in_folder", "label": "docs_star"}
+{"request": "put the first two in the Pets album", "previous_request": "pictures i took in august", "previous_operation": "photos_by_date", "label": "photos_add_to_album"}
+{"request": "note that i dropped the bottom one an email", "previous_request": "who have i got at Northwind", "previous_operation": "people_at_company", "label": "people_log_interaction"}
+{"request": "do any of them owe me anything", "previous_request": "attendee list for the roadmap huddle?", "previous_operation": "people_at", "label": "tally_balance_with"}

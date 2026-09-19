@@ -145,4 +145,5 @@ Nothing here is downloaded until the owner says so.
 
 Every change after the freeze is logged here with its reason. A changed run gets a new label; an existing label is never overwritten. The frozen state is the reference run above.
 
-_(empty — nothing has changed since the freeze)_
+- **2026-09-19 — selector lane run; nothing in the frozen evaluation changed.** `selector/` was added: a synthetic training world, a template generator, a lexical-overlap guard against the suite and the catalogue's documentation utterances (0 offenders), and the runs `zs-01` (zero-shot embedding baselines), `lr-01` (logistic regression over frozen embeddings) and `ft-01` (encoder fine-tune). `suite.json`, `reference.py`, the world, the resolvers and the executor are untouched; the selector reads the suite only to derive its gold labels (`selector/suite_selector.jsonl`) and never trains on it. Results: [`selector/RESULTS-selector.md`](selector/RESULTS-selector.md).
+- **2026-09-19 — the packages the selector lane needs are installed** (CPU torch, sentence-transformers, scikit-learn, numpy, pinned in `selector/requirements.txt`) and one model downloaded: `sentence-transformers/all-MiniLM-L6-v2` (~90 MB). Nothing else on the "Models and packages required" list has been downloaded.
