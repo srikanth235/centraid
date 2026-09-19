@@ -40,6 +40,9 @@ sys.path.insert(0, str(HERE))
 
 import annotate as A  # noqa: E402
 from gen_selector_data import OPENERS, SEED, SLOTS, TYPO_TARGETS  # noqa: E402
+from transformers import AutoTokenizer  # noqa: E402
+
+_FRAGMENT_TOKENIZER = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
 from overlap_check import THRESHOLD, jaccard, reference_corpus, tokens  # noqa: E402
 from templates import CONTINUATION_TEMPLATES, DEPENDENT_TEMPLATES, TEMPLATES  # noqa: E402
 
@@ -66,6 +69,15 @@ def too_close(text: str) -> bool:
 SYLLABLES = ("ka", "ro", "min", "tel", "sor", "va", "dun", "lex", "bri", "quo", "nar", "vel", "ash", "pim", "gor", "thu")
 COMMON = ("blue", "north", "stone", "river", "paper", "glass", "iron", "amber", "quiet", "hollow", "spring", "ridge")
 UNSEEN_SHARE = 0.35
+
+# `j-05`'s invented names were syllable strings ("Karomin"). The suite's are
+# ordinary-looking proper nouns that WordPiece fragments in an ordinary way —
+# "Initech" is `in ##ite ##ch`, "Offsite debrief" is four pieces over two words
+# with only the head capitalised. So the generator below builds names in those
+# shapes on purpose: a stem plus a corporate/place suffix, mixed case, a share
+# of multi-word titles with a lowercase tail, and a share carrying a digit
+# ("Q3 planning"). Names are checked to fragment: a name the tokenizer keeps
+# whole teaches the tagger nothing about continuation pieces.
 # Placeholders whose value is a proper noun the model must copy rather than
 # recognise. Date pools are left alone: those really are closed sets.
 NAMEY = {
@@ -73,22 +85,64 @@ NAMEY = {
     "folder", "group", "place", "service", "note", "doc", "task", "topic", "expense",
 }
 
+STEMS = ("vera", "cald", "norr", "pyra", "solv", "tan", "mer", "quil", "zan", "orb", "hal",
+         "fen", "trel", "bax", "cyr", "dorn", "elm", "gav", "hest", "jor", "kel", "lum", "mirr")
+SUFFIXES = ("tech", "corp", "ware", "line", "dyne", "worx", "sys", "lab", "point", "gate", "field", "haven")
+HEADS = ("Quarterly", "Midyear", "Handover", "Kickoff", "Roadmap", "Onboarding", "Vendor",
+         "Budget", "Retro", "Launch", "Rollout", "Audit")
+TAILS = ("debrief", "planning", "review", "sync", "notes", "recap", "checklist", "handoff", "brief", "prep")
+GIVEN = ("Anwen", "Torin", "Sable", "Idris", "Marek", "Ilse", "Odalys", "Bram", "Nuala", "Cato", "Xiu")
+FAMILY = ("Vestergaard", "Okonkwo", "Marchetti", "Halloran", "Brennfeld", "Nakagawa", "Quiroga",
+          "Underhill", "Fassbender", "Adeyemi", "Thorsen")
+
+
+def _fragments(text: str) -> bool:
+    """True when the tokenizer splits every word of ``text`` into pieces."""
+    try:
+        return any(len(_FRAGMENT_TOKENIZER.tokenize(word)) > 1 for word in text.split())
+    except Exception:  # pragma: no cover - tokenizer unavailable
+        return True
+
 
 def invented(placeholder: str, rng: random.Random) -> str:
-    """A proper noun no training template has ever produced."""
+    """A proper noun no training template has ever produced.
 
-    def word() -> str:
-        return "".join(rng.choice(SYLLABLES) for _ in range(rng.randint(2, 3))).capitalize()
+    Shaped like the suite's: fragmenting under WordPiece, mixed case, and
+    sometimes several words with only the head capitalised.
+    """
 
-    if placeholder in {"person", "people"}:
-        return f"{word()} {word()}" if rng.random() < 0.5 else word()
-    if placeholder in {"task", "topic", "expense", "doc", "note"}:
-        if rng.random() < 0.5:
-            return f"the {rng.choice(COMMON)} {rng.choice(COMMON)}"
-        return f"the {word().lower()} {rng.choice(COMMON)}"
-    if rng.random() < 0.5:
-        return f"{rng.choice(COMMON).capitalize()} {word().lower()}"
-    return word()
+    def coined() -> str:
+        return (rng.choice(STEMS) + rng.choice(SUFFIXES)).capitalize()
+
+    def person() -> str:
+        return f"{rng.choice(GIVEN)} {rng.choice(FAMILY)}" if rng.random() < 0.6 else rng.choice(FAMILY)
+
+    def titled() -> str:
+        roll = rng.random()
+        if roll < 0.3:
+            return f"Q{rng.randint(1, 4)} {rng.choice(TAILS)}"
+        if roll < 0.75:
+            return f"{rng.choice(HEADS)} {rng.choice(TAILS)}"
+        return f"{coined()} {rng.choice(TAILS)}"
+
+    for _ in range(6):
+        if placeholder in {"person", "people"}:
+            candidate = person()
+        elif placeholder in {"task", "topic", "expense", "doc", "note"}:
+            roll = rng.random()
+            if roll < 0.4:
+                candidate = f"the {titled().lower()}"
+            elif roll < 0.7:
+                candidate = titled()
+            else:
+                candidate = f"the {rng.choice(COMMON)} {rng.choice(TAILS)}"
+        elif placeholder in {"company", "service", "project"}:
+            candidate = coined()
+        else:
+            candidate = titled() if rng.random() < 0.5 else coined()
+        if _fragments(candidate):
+            return candidate
+    return candidate
 
 
 def value_for(placeholder: str, rng: random.Random) -> str:
@@ -167,13 +221,42 @@ def _inside(spans: list[dict], at: int) -> bool:
     return any(span["start"] <= at < span["end"] for span in spans)
 
 
+# `j-05`'s register noise was thin: an opener, an apostrophe, a leading
+# capital, one typo — all at ~10%, and every proper noun arrived capitalised.
+# The blind re-check set showed the cost: the model is tuned to the frozen
+# suite's phrasing register, and terse, lowercased or indirect renderings of
+# the same request miss their operation. `REGISTER_WIDE` turns on a wider set:
+# more openers, trailing politeness, all-lowercase and all-of-it-shouted whole
+# requests (which also lowercases proper nouns inside spans, since the span is
+# moved with the text rather than re-found), a dropped leading article, and a
+# doubled chance of a typo.
+REGISTER_WIDE = False
+EXTRA_OPENERS = ("so ", "umm ", "i need to ", "could you ", "just ", "right, ", "hmm ", "need to ")
+TRAILERS = (" please", " thanks", " for me", " if you can", " ta")
+
+
 def rough(text: str, spans: list[dict], rng: random.Random) -> tuple[str, list[dict]]:
     """Register noise that keeps the recorded spans exact.
 
     An edit that would land inside a slot span is skipped rather than applied,
     so a span is never silently corrupted; every other edit shifts the spans
-    that follow it.
+    that follow it. Case changes are the exception: they never move a boundary,
+    so they may cross a span — and must, since lowercased proper nouns are the
+    point of the wide register.
     """
+    if REGISTER_WIDE:
+        if rng.random() < 0.18:
+            opener = rng.choice(EXTRA_OPENERS)
+            text = opener + text
+            _shift(spans, 0, len(opener))
+        if rng.random() < 0.12:
+            trailer = rng.choice(TRAILERS)
+            text = text + trailer
+        roll = rng.random()
+        if roll < 0.20:
+            text = text.lower()
+        elif roll < 0.24:
+            text = text.upper()
     if rng.random() < 0.12:
         opener = rng.choice(OPENERS)
         text = opener + text
@@ -185,7 +268,7 @@ def rough(text: str, spans: list[dict], rng: random.Random) -> tuple[str, list[d
             _shift(spans, at, -1)
     if rng.random() < 0.10 and text and not _inside(spans, 0):
         text = text[0].upper() + text[1:]
-    if rng.random() < 0.10 and len(text) > 12:
+    if rng.random() < (0.20 if REGISTER_WIDE else 0.10) and len(text) > 12:
         at = rng.randrange(4, len(text) - 1)
         if not _inside(spans, at):
             if text[at] in TYPO_TARGETS:  # doubled letter
@@ -358,8 +441,14 @@ def main() -> None:
         default=UNSEEN_SHARE,
         help="Share of proper-noun slot values replaced by an invented name (0 reproduces run j-02's data).",
     )
+    parser.add_argument(
+        "--register-wide",
+        action="store_true",
+        help="Wider phrasing register: more openers, trailers, lowercased and shouted requests, more typos.",
+    )
     args = parser.parse_args()
     globals()["UNSEEN_SHARE"] = args.unseen_share
+    globals()["REGISTER_WIDE"] = args.register_wide
 
     rng = random.Random(SEED)
     train_pool, val_pool = split_templates(rng)

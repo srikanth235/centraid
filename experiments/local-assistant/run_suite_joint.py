@@ -39,6 +39,19 @@ import world  # noqa: E402
 from build_suite import load  # noqa: E402
 from executor import execute  # noqa: E402
 from joint.predict_joint import predict_many  # noqa: E402
+
+# ``--onnx`` swaps the torch prediction path for the onnxruntime one, so the
+# quantised graph is scored end to end (predict -> resolvers -> executor ->
+# outcome) and not only compared logit-by-logit against torch.
+_PREDICT = {"torch": predict_many}
+
+
+def _predictor(kind: str):  # noqa: ANN202
+    if kind not in _PREDICT:
+        from joint.predict_onnx import predict_many as onnx_predict_many
+
+        _PREDICT[kind] = lambda rows, **kwargs: onnx_predict_many(rows, graph=kind, **kwargs)
+    return _PREDICT[kind]
 from reference import REFERENCE  # noqa: E402
 
 # Which suite, and whose reference calls the gold operation comes from. The
@@ -206,6 +219,7 @@ def run(label: str, artifact: str, margin: float, oracle: bool, suite_name: str 
         "kind": "end_to_end",
         "suite": suite_name,
         "artifact": artifact,
+        "backend": globals().get("_BACKEND", "torch"),
         "margin_threshold": margin,
         "previous_operation": "oracle" if oracle else "model",
         "wall_clock_seconds": round(time.time() - started, 1),
@@ -231,8 +245,13 @@ def main() -> int:
     parser.add_argument("--artifact", default="j-01", help="Checkpoint under joint/artifacts/.")
     parser.add_argument("--margin", type=float, default=0.0)
     parser.add_argument("--oracle-previous", action="store_true")
+    parser.add_argument("--onnx", default="torch", choices=("torch", "fp32", "int8"), help="Prediction backend.")
     parser.add_argument("--suite", default="frozen", choices=("frozen", "blind"), help="Which suite to score.")
     args = parser.parse_args()
+
+    if args.onnx != "torch":
+        globals()["predict_many"] = _predictor(args.onnx)
+    globals()["_BACKEND"] = args.onnx
 
     runs = HERE / "runs"
     runs.mkdir(exist_ok=True)

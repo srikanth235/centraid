@@ -34,6 +34,7 @@ because most rows carry no enum at all.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +49,14 @@ sys.path.insert(0, str(HERE))
 import annotate as A  # noqa: E402
 
 ENCODER = "sentence-transformers/all-MiniLM-L6-v2"
+
+# Standard practice for BIO tagging on WordPiece is to supervise only the first
+# piece of each word and let the continuation pieces be `-100`, so the model is
+# never asked to make a decision the decoder throws away. `JOINT_FIRST_SUBWORD`
+# turns that on; off, every piece inside a span carries a tag, which is what
+# runs up to `j-07` were trained with. The decoder is word-aware either way
+# (see :func:`decode_spans`), so the two are directly comparable.
+FIRST_SUBWORD_ONLY = os.environ.get("JOINT_FIRST_SUBWORD") == "1"
 MAX_LENGTH = 64
 
 LABELS: list[str] = list(A.LABELS)
@@ -165,6 +174,19 @@ def encode_rows(rows: list[dict], tokenizer, with_targets: bool = True):  # noqa
                     prefix = "I" if started else "B"
                     tags[position, token_index] = BIO_INDEX[f"{prefix}-{span['slot']}"]
                     started = True
+    if FIRST_SUBWORD_ONLY:
+        for position, row in enumerate(rows):
+            request = str(row["request"])
+            previous_end = -1
+            for token_index in range(tags.shape[1]):
+                if not request_mask[position, token_index]:
+                    continue
+                start, end = int(offsets[position, token_index, 0]), int(offsets[position, token_index, 1])
+                if end <= start:
+                    continue
+                if start == previous_end and request[start:end].isalnum() and request[start - 1].isalnum():
+                    tags[position, token_index] = -100
+                previous_end = end
     enums = {}
     for slot in ENUM_SLOTS:
         values = ENUM_VALUES[slot]
@@ -191,7 +213,72 @@ def loss_of(outputs, batch: Batch) -> torch.Tensor:  # noqa: ANN001
 
 
 def decode_spans(request: str, tag_ids: list[int], offsets, request_positions: list[int]) -> dict[str, str]:
-    """BIO tags back to slot values, as substrings of the original request."""
+    """BIO tags back to slot values, as substrings of the original request.
+
+    Decoding is **word-aware**, not piece-aware, because WordPiece splits an
+    unseen proper noun into pieces the tagger tags inconsistently. Measured on
+    the frozen suite with `j-05`: ``Initech`` came back ``in/B-event
+    ##ite/O ##ch/I-event`` and a piece-by-piece decoder stopped at the first
+    ``O``, yielding ``"In"``; ``Offsite debrief`` came back with a spurious
+    ``B-`` on every piece and yielded ``"Offs"``. Two rules fix both without
+    retraining:
+
+    1. **Whole word.** Pieces are grouped into words (a piece whose start
+       offset touches the previous piece's end with no character between, and
+       both sides are alphanumeric, is a continuation — the alphanumeric test
+       keeps ``Neha`` + ``'s`` two words, which the touching test alone does
+       not). A word's slot is the first non-``O`` slot among its
+       pieces, and the span covers the whole word.
+    2. **Merge adjacent same-slot words.** A ``B-`` that directly follows a
+       word of the same slot continues that span instead of starting a new one,
+       since a genuine second value of the same slot in one request does not
+       occur in the catalogue.
+
+    Set ``JOINT_DECODE=legacy`` in the environment for the piece-by-piece
+    decoder these rules replaced, which is what `j-05`'s 60/74 was measured
+    with.
+    """
+    if os.environ.get("JOINT_DECODE") == "legacy":
+        return _decode_spans_legacy(request, tag_ids, offsets, request_positions)
+    words: list[tuple[int, int, str | None]] = []
+    for token_index in request_positions:
+        start, end = int(offsets[token_index][0]), int(offsets[token_index][1])
+        if end <= start:
+            continue
+        tag = BIO[tag_ids[token_index]]
+        slot = None if tag == "O" else tag.split("-", 1)[1]
+        touching = bool(words) and words[-1][1] == start
+        alphanumeric = request[start:end].isalnum() and request[words[-1][1] - 1].isalnum() if words else False
+        if touching and alphanumeric:
+            begin, _, held = words[-1]
+            words[-1] = (begin, end, held or slot)
+        else:
+            words.append((start, end, slot))
+    slots: dict[str, str] = {}
+    current: tuple[str, int, int] | None = None
+    for start, end, slot in words:
+        if slot is None:
+            if current:
+                held, begin, finish = current
+                slots.setdefault(held, request[begin:finish])
+                current = None
+            continue
+        if current and current[0] == slot:
+            current = (slot, current[1], end)
+        else:
+            if current:
+                held, begin, finish = current
+                slots.setdefault(held, request[begin:finish])
+            current = (slot, start, end)
+    if current:
+        slot, begin, finish = current
+        slots.setdefault(slot, request[begin:finish])
+    return slots
+
+
+def _decode_spans_legacy(request: str, tag_ids: list[int], offsets, request_positions: list[int]) -> dict[str, str]:
+    """The piece-by-piece decoder `j-05` was measured with; kept for comparison."""
+
     slots: dict[str, str] = {}
     current: tuple[str, int, int] | None = None
     for token_index in request_positions:
