@@ -23,9 +23,12 @@ This directory holds the parts that must exist **before** any model is run: the 
 | `protocol.md` | The frozen protocol: suite, scoring, ceilings, variants, change log. |
 | `runs/reference.json` | The reference run's report, committed as the freeze's evidence. |
 | `test_*.py` | Unit tests for the resolvers, the executor and the suite. |
-| `joint/` | Pipeline stages [1] and [2] in one model: a MiniLM encoder with an operation head, a BIO slot-span tagger and per-enum-slot heads, its span-annotated data generator, ONNX export and `predict_joint.predict(...)`. Results and reproduce commands in [`joint/RESULTS-joint.md`](joint/RESULTS-joint.md). |
-| `run_suite_joint.py` | The joint model end to end on the frozen suite, scored by outcome. |
+| `joint/` | Pipeline stages [1] and [2] in one model: a MiniLM encoder with an operation head, a BIO slot-span tagger and per-enum-slot heads, its span-annotated data generator, word-aware span decoding, ONNX export, int8 quantisation (`quantise_onnx.py`) and `predict_joint.predict(...)` / `predict_onnx.py`. Results and reproduce commands in [`joint/RESULTS-joint.md`](joint/RESULTS-joint.md). |
+| `run_suite_joint.py` | The joint model end to end on either suite (`--suite blind`), through torch or an ONNX graph (`--onnx {fp32,int8}`), scored by outcome. |
 | `selector/` | Pipeline stage [1], the operation selector: synthetic training world, data generator with sibling hard negatives, overlap guard, zero-shot and trained runs, `predict.select(...)`. Results and reproduce commands in [`selector/RESULTS-selector.md`](selector/RESULTS-selector.md). |
+| `needle/` | Pipeline stage [2] as a generative filler: Cactus Needle 3 scored by outcome through the real executor, oracle and selector-driven shapes. The comparison bar, not the target. Results in [`needle/RESULTS-needle.md`](needle/RESULTS-needle.md). |
+| `blind/` | The blind re-check set: 40 cases written after the lanes had run, with their reference calls and reachability run. Used by every lane via `--suite blind`. |
+| `RESULTS.md` | Cross-lane results, ceilings, costs and the recommendation. |
 
 ## Running it
 
@@ -56,7 +59,7 @@ user turn + last K turns
   → [5] rendering            by template, with a clarification path
 ```
 
-Steps 3 and 4 are what this directory implements and tests. Step 1 has run twice: `selector/` reaches 83.7% operation accuracy on the suite's 98 turns with a logistic regression over frozen MiniLM embeddings, and `joint/` folds steps 1 and 2 into **one** fine-tuned MiniLM encoder — 96.8% operation accuracy and **60/74 outcome accuracy end to end**, in 90.7 MB of ONNX at 3.5 ms per request. Step 2 as a separate generative filler is not needed: nothing in the suite's 132 reference slot values requires generation, and the span tagger copies them.
+Steps 3 and 4 are what this directory implements and tests. Step 1 has run twice: `selector/` reaches 83.7% operation accuracy on the suite's 98 turns with a logistic regression over frozen MiniLM embeddings, and `joint/` folds steps 1 and 2 into **one** fine-tuned MiniLM encoder — 96.8% operation accuracy and, for the recommended artifact `j-06` with word-aware span decoding, **61/74 on the frozen suite and 26/40 on the blind set**, in 23.0 MB of int8 ONNX at 6.5 ms per request. Step 2 as a separate generative filler is not needed: nothing in the suite's 132 reference slot values requires generation, and the span tagger copies them.
 
 Two constraints the code holds, not the model:
 
