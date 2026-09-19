@@ -124,6 +124,8 @@ def main() -> None:
     parser.add_argument("--weights", default=None, help="a tuned .cact")
     parser.add_argument("--max-new-tokens", type=int, default=192)
     parser.add_argument("--trace-dir", default="needle/runs")
+    parser.add_argument("--suite", default="frozen", choices=("frozen", "blind"),
+                        help="Which suite to score: the frozen one, or blind/blind_suite.json.")
     args = parser.parse_args()
 
     if args.weights:
@@ -136,7 +138,8 @@ def main() -> None:
         needle_pkg.Needle.__init__ = patched
 
     catalogue = load_catalogue(args.catalogue)
-    suite = load()
+    suite = (load() if args.suite == "frozen" else
+             json.loads(open(os.path.join(os.path.dirname(HERE), "blind", "blind_suite.json")).read()))
     started = time.time()
     scores, traces = [], []
     for case in suite["cases"]:

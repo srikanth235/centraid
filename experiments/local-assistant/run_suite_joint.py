@@ -41,6 +41,23 @@ from executor import execute  # noqa: E402
 from joint.predict_joint import predict_many  # noqa: E402
 from reference import REFERENCE  # noqa: E402
 
+# Which suite, and whose reference calls the gold operation comes from. The
+# frozen suite is the default; ``--suite blind`` swaps in the blind re-check
+# set (``blind/blind_suite.json`` + ``blind/reference_blind.py``), which is the
+# same schema scored by the same scorer.
+
+def suite_and_reference(name: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The suite document and its per-turn reference calls."""
+    if name == "frozen":
+        return load(), REFERENCE
+    if name == "blind":
+        sys.path.insert(0, str(HERE / "blind"))
+        from reference_blind import REFERENCE as BLIND_REFERENCE  # noqa: PLC0415
+
+        document = json.loads((HERE / "blind" / "blind_suite.json").read_text(encoding="utf-8"))
+        return document, BLIND_REFERENCE
+    raise SystemExit(f"no such suite: {name!r}")
+
 BUCKETS = (
     "wrong_op",
     "wrong_span",
@@ -52,8 +69,8 @@ BUCKETS = (
 )
 
 
-def gold_call(case_id: str, index: int) -> tuple[str, dict[str, Any]]:
-    operation, slots = REFERENCE[case_id][index][0]
+def gold_call(reference: dict[str, Any], case_id: str, index: int) -> tuple[str, dict[str, Any]]:
+    operation, slots = reference[case_id][index][0]
     return operation, dict(slots)
 
 
@@ -95,7 +112,7 @@ def bucket_for(
     return "other"
 
 
-def run_case(case: dict[str, Any], conn: sqlite3.Connection, label: str, margin: float, oracle: bool) -> dict[str, Any]:
+def run_case(case: dict[str, Any], conn: sqlite3.Connection, label: str, margin: float, oracle: bool, reference: dict[str, Any]) -> dict[str, Any]:
     score = scoring.CaseScore(case_id=case["id"], category=case["category"])
     context = R.Context()
     previous_request: str | None = None
@@ -126,7 +143,7 @@ def run_case(case: dict[str, Any], conn: sqlite3.Connection, label: str, margin:
         turn_score = scoring.score_turn(index, turn["expected"], result, conn)
         score.turns.append(turn_score)
 
-        gold_operation, gold_slots = gold_call(case["id"], index)
+        gold_operation, gold_slots = gold_call(reference, case["id"], index)
         record = {
             "turn": index,
             "request": request,
@@ -159,12 +176,12 @@ def run_case(case: dict[str, Any], conn: sqlite3.Connection, label: str, margin:
     return {"score": score, "turns": turns}
 
 
-def run(label: str, artifact: str, margin: float, oracle: bool) -> dict[str, Any]:
-    suite = load()
+def run(label: str, artifact: str, margin: float, oracle: bool, suite_name: str = "frozen") -> dict[str, Any]:
+    suite, reference = suite_and_reference(suite_name)
     started = time.time()
     cases = []
     for case in suite["cases"]:
-        cases.append(run_case(case, world.reset(), artifact, margin, oracle))
+        cases.append(run_case(case, world.reset(), artifact, margin, oracle, reference))
     scores = [c["score"] for c in cases]
     scoring.print_report(scores)
 
@@ -187,6 +204,7 @@ def run(label: str, artifact: str, margin: float, oracle: bool) -> dict[str, Any
     return {
         "lane": "joint",
         "kind": "end_to_end",
+        "suite": suite_name,
         "artifact": artifact,
         "margin_threshold": margin,
         "previous_operation": "oracle" if oracle else "model",
@@ -213,6 +231,7 @@ def main() -> int:
     parser.add_argument("--artifact", default="j-01", help="Checkpoint under joint/artifacts/.")
     parser.add_argument("--margin", type=float, default=0.0)
     parser.add_argument("--oracle-previous", action="store_true")
+    parser.add_argument("--suite", default="frozen", choices=("frozen", "blind"), help="Which suite to score.")
     args = parser.parse_args()
 
     runs = HERE / "runs"
@@ -220,7 +239,7 @@ def main() -> int:
     path = runs / f"{args.label}.json"
     if path.exists():
         raise SystemExit(f"run label {args.label!r} already exists at {path}")
-    payload = run(args.label, args.artifact, args.margin, args.oracle_previous)
+    payload = run(args.label, args.artifact, args.margin, args.oracle_previous, args.suite)
     path.write_text(json.dumps(payload, indent=1) + "\n")
     print(json.dumps({k: payload[k] for k in ("outcome_accuracy", "operation_accuracy", "slot_accuracy", "error_buckets")}, indent=1))
     print(f"wrote {path}")
