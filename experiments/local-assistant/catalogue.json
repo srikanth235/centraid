@@ -1,0 +1,1044 @@
+{
+  "version": 1,
+  "apps": [
+    "agenda",
+    "tasks",
+    "people",
+    "notes",
+    "photos",
+    "docs",
+    "locker",
+    "tally"
+  ],
+  "non_operations": {
+    "none": "The request is outside the vault's reach, or asks for something no operation covers; refuse.",
+    "clarify": "The request names a referent that resolves to more than one thing, or omits a required slot; ask one question."
+  },
+  "operations": [
+    {
+      "name": "agenda_upcoming",
+      "app": "agenda",
+      "kind": "read",
+      "description": "List events on the calendar inside a date window, ordered by start time, regardless of what they are about.",
+      "params": {
+        "window": {
+          "type": "string",
+          "required": true,
+          "description": "A date phrase: 'tomorrow', 'next week', 'this month', '2026-10-02'."
+        },
+        "calendar": {
+          "type": "string",
+          "required": false,
+          "enum": ["personal", "work", "family"]
+        }
+      },
+      "siblings": ["agenda_search", "agenda_day_context"],
+      "example_utterances": [
+        "what's on my calendar next week",
+        "show me tomorrow's schedule",
+        "anything on this month",
+        "what do I have on Friday"
+      ]
+    },
+    {
+      "name": "agenda_search",
+      "app": "agenda",
+      "kind": "read",
+      "description": "Find events whose title or notes mention a topic, across all dates rather than inside a window.",
+      "params": {
+        "topic": {
+          "type": "string",
+          "required": true,
+          "description": "Words that appear in the event title or its notes."
+        },
+        "window": {
+          "type": "string",
+          "required": false,
+          "description": "Optional date phrase narrowing the topic search."
+        }
+      },
+      "siblings": ["agenda_upcoming", "agenda_day_context"],
+      "example_utterances": [
+        "find the design review",
+        "when is the offsite",
+        "search my calendar for anything about onboarding"
+      ]
+    },
+    {
+      "name": "agenda_day_context",
+      "app": "agenda",
+      "kind": "read",
+      "description": "Give the full picture for one specific day: its events, the tasks due on it, and who is expected.",
+      "params": {
+        "day": {
+          "type": "string",
+          "required": true,
+          "description": "A single day phrase: 'today', 'last Friday', '2026-09-24'."
+        }
+      },
+      "siblings": ["agenda_upcoming", "agenda_search"],
+      "example_utterances": [
+        "what does my Thursday look like",
+        "brief me on today",
+        "give me the rundown for tomorrow"
+      ]
+    },
+    {
+      "name": "people_at",
+      "app": "agenda",
+      "kind": "read",
+      "description": "List the people attending one named event; the answer is a set of people, not the event itself.",
+      "params": {
+        "event": {
+          "type": "string",
+          "required": true,
+          "description": "An event phrase: its title, or a title plus a date word."
+        },
+        "response": {
+          "type": "string",
+          "required": false,
+          "enum": ["accepted", "declined", "pending", "any"]
+        }
+      },
+      "siblings": ["agenda_search", "agenda_attendee_add"],
+      "example_utterances": [
+        "who's coming to the design review",
+        "who was at the offsite",
+        "who accepted the sprint planning invite"
+      ]
+    },
+    {
+      "name": "agenda_create_event",
+      "app": "agenda",
+      "kind": "write",
+      "description": "Put a new event on the calendar at a stated time, optionally inviting people.",
+      "params": {
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "when": {
+          "type": "string",
+          "required": true,
+          "description": "A date-and-time phrase."
+        },
+        "attendees": {
+          "type": "string",
+          "required": false,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "calendar": {
+          "type": "string",
+          "required": false,
+          "enum": ["personal", "work", "family"]
+        }
+      },
+      "siblings": ["agenda_reschedule", "agenda_attendee_add"],
+      "example_utterances": [
+        "schedule a 1:1 with Neha tomorrow at 3",
+        "put a dentist appointment on Friday morning",
+        "book a retro next Tuesday with the Initech folks"
+      ]
+    },
+    {
+      "name": "agenda_reschedule",
+      "app": "agenda",
+      "kind": "write",
+      "description": "Move an event that already exists to a different time, leaving its title and guest list alone.",
+      "params": {
+        "event": {
+          "type": "string",
+          "required": true,
+          "description": "An event phrase, or a reference into the last result."
+        },
+        "when": {
+          "type": "string",
+          "required": true,
+          "description": "The new date-and-time phrase."
+        }
+      },
+      "siblings": ["agenda_create_event", "agenda_cancel_event"],
+      "example_utterances": [
+        "move the design review to Thursday",
+        "push the 1:1 back an hour",
+        "reschedule that to next week"
+      ]
+    },
+    {
+      "name": "agenda_cancel_event",
+      "app": "agenda",
+      "kind": "write",
+      "description": "Take an event off the calendar entirely, rather than changing when it happens.",
+      "params": {
+        "event": {
+          "type": "string",
+          "required": true,
+          "description": "An event phrase, or a reference into the last result."
+        }
+      },
+      "siblings": ["agenda_reschedule"],
+      "example_utterances": [
+        "cancel the offsite",
+        "drop tomorrow's standup",
+        "call off that meeting"
+      ]
+    },
+    {
+      "name": "agenda_attendee_add",
+      "app": "agenda",
+      "kind": "write",
+      "description": "Invite more people to an event that is already scheduled, without changing its time.",
+      "params": {
+        "event": {
+          "type": "string",
+          "required": true,
+          "description": "An event phrase, or a reference into the last result."
+        },
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        }
+      },
+      "siblings": ["agenda_create_event", "people_at"],
+      "example_utterances": [
+        "add Neha to the design review",
+        "invite everyone at Initech to the offsite",
+        "also invite those people to the retro"
+      ]
+    },
+    {
+      "name": "tasks_due",
+      "app": "tasks",
+      "kind": "read",
+      "description": "List open tasks sliced by when they are due, without regard to what they are about.",
+      "params": {
+        "window": {
+          "type": "string",
+          "required": true,
+          "description": "A date phrase bounding the due date."
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "enum": ["open", "done", "any"]
+        }
+      },
+      "siblings": ["tasks_about", "tasks_for_people", "tasks_by_project"],
+      "example_utterances": [
+        "what's due this week",
+        "anything overdue",
+        "tasks due tomorrow",
+        "what do I have to finish today"
+      ]
+    },
+    {
+      "name": "tasks_about",
+      "app": "tasks",
+      "kind": "read",
+      "description": "Find tasks whose title mentions a topic, whenever they happen to be due.",
+      "params": {
+        "topic": {
+          "type": "string",
+          "required": true,
+          "description": "Words appearing in the task title."
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "enum": ["open", "done", "any"]
+        }
+      },
+      "siblings": ["tasks_due", "tasks_by_project", "notes_search"],
+      "example_utterances": [
+        "find my tasks about the migration",
+        "anything on my list mentioning invoices",
+        "do I have a task about the visa"
+      ]
+    },
+    {
+      "name": "tasks_by_project",
+      "app": "tasks",
+      "kind": "read",
+      "description": "List the tasks filed under one named project or section, which is where they live rather than what they say.",
+      "params": {
+        "project": {
+          "type": "string",
+          "required": true,
+          "description": "A project name, e.g. 'Website refresh'."
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "enum": ["open", "done", "any"]
+        }
+      },
+      "siblings": ["tasks_about", "tasks_due"],
+      "example_utterances": [
+        "what's left in Website refresh",
+        "show me the Home project",
+        "tasks in Q4 planning"
+      ]
+    },
+    {
+      "name": "tasks_for_people",
+      "app": "tasks",
+      "kind": "read",
+      "description": "List tasks assigned to a person or a group of people, resolving the group phrase in code.",
+      "params": {
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "enum": ["open", "done", "any"]
+        }
+      },
+      "siblings": ["tasks_due", "tasks_about"],
+      "example_utterances": [
+        "what is Neha on the hook for",
+        "tasks assigned to the people at Initech",
+        "what do the design review attendees owe me"
+      ]
+    },
+    {
+      "name": "tasks_add",
+      "app": "tasks",
+      "kind": "write",
+      "description": "Create a new task with a title, optionally with a due date, project, or assignee.",
+      "params": {
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "due": {
+          "type": "string",
+          "required": false,
+          "description": "A date phrase."
+        },
+        "project": {
+          "type": "string",
+          "required": false
+        },
+        "assignee": {
+          "type": "string",
+          "required": false,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        }
+      },
+      "siblings": ["tasks_complete", "tasks_set_due", "notes_create"],
+      "example_utterances": [
+        "remind me to renew the domain on Friday",
+        "add a task to file the Initech invoice",
+        "new task: book flights, due next week"
+      ]
+    },
+    {
+      "name": "tasks_complete",
+      "app": "tasks",
+      "kind": "write",
+      "description": "Mark an existing task done; it changes a task's status rather than its schedule.",
+      "params": {
+        "task": {
+          "type": "string",
+          "required": true,
+          "description": "A task phrase, or a reference into the last result."
+        }
+      },
+      "siblings": ["tasks_set_due"],
+      "example_utterances": [
+        "mark the invoice task done",
+        "I finished that one",
+        "tick off the first two"
+      ]
+    },
+    {
+      "name": "tasks_set_due",
+      "app": "tasks",
+      "kind": "write",
+      "description": "Change when a task is due, leaving its title and status alone.",
+      "params": {
+        "task": {
+          "type": "string",
+          "required": true,
+          "description": "A task phrase, or a reference into the last result."
+        },
+        "due": {
+          "type": "string",
+          "required": true,
+          "description": "The new date phrase."
+        }
+      },
+      "siblings": ["tasks_complete", "tasks_assign", "tasks_add"],
+      "example_utterances": [
+        "push the domain renewal to next month",
+        "make that due tomorrow instead"
+      ]
+    },
+    {
+      "name": "tasks_assign",
+      "app": "tasks",
+      "kind": "write",
+      "description": "Hand a task to a person, leaving its due date alone.",
+      "params": {
+        "task": {
+          "type": "string",
+          "required": true,
+          "description": "A task phrase, or a reference into the last result."
+        },
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        }
+      },
+      "siblings": ["tasks_set_due", "tasks_add"],
+      "example_utterances": [
+        "give that to Neha",
+        "assign the invoice task to Marcus"
+      ]
+    },
+    {
+      "name": "people_find",
+      "app": "people",
+      "kind": "read",
+      "description": "Look up the people whose name matches, returning the matching person records themselves.",
+      "params": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "description": "A first name, full name, or nickname."
+        },
+        "company": {
+          "type": "string",
+          "required": false,
+          "description": "Narrows the match when a first name is shared."
+        }
+      },
+      "siblings": ["people_at_company", "people_profile"],
+      "example_utterances": [
+        "who is Neha",
+        "find Marcus",
+        "look up Priya Raman"
+      ]
+    },
+    {
+      "name": "people_profile",
+      "app": "people",
+      "kind": "read",
+      "description": "Show one person's stored detail — channels, company, important dates — for a person already pinned down.",
+      "params": {
+        "person": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "section": {
+          "type": "string",
+          "required": false,
+          "enum": ["channels", "dates", "relationships", "all"]
+        }
+      },
+      "siblings": ["people_find"],
+      "example_utterances": [
+        "what's Neha's email",
+        "show me Marcus's card",
+        "her phone number"
+      ]
+    },
+    {
+      "name": "people_at_company",
+      "app": "people",
+      "kind": "read",
+      "description": "List every person recorded as working at one company; the answer is a group, not one person.",
+      "params": {
+        "company": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "siblings": ["people_find", "people_profile"],
+      "example_utterances": [
+        "who do I know at Initech",
+        "everyone at Hooli",
+        "my Acme contacts"
+      ]
+    },
+    {
+      "name": "people_add",
+      "app": "people",
+      "kind": "write",
+      "description": "Create a new person record from a name, optionally with a company or a channel.",
+      "params": {
+        "name": {
+          "type": "string",
+          "required": true
+        },
+        "company": {
+          "type": "string",
+          "required": false
+        },
+        "email": {
+          "type": "string",
+          "required": false
+        }
+      },
+      "siblings": ["people_log_interaction"],
+      "example_utterances": [
+        "add Dev Sharma to my contacts",
+        "new contact: Rhea at Initech"
+      ]
+    },
+    {
+      "name": "people_log_interaction",
+      "app": "people",
+      "kind": "write",
+      "description": "Record that you were in touch with someone on a date, as a dated touchpoint rather than a note.",
+      "params": {
+        "person": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "when": {
+          "type": "string",
+          "required": false,
+          "description": "A date phrase; defaults to today."
+        },
+        "channel": {
+          "type": "string",
+          "required": false,
+          "enum": ["call", "email", "message", "met"]
+        }
+      },
+      "siblings": ["people_add_note"],
+      "example_utterances": [
+        "log that I called Neha",
+        "note that I met Marcus last Friday"
+      ]
+    },
+    {
+      "name": "people_add_note",
+      "app": "people",
+      "kind": "write",
+      "description": "Attach a free-text note to a person's record, as remembered detail rather than a dated touchpoint.",
+      "params": {
+        "person": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "body": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "siblings": ["people_log_interaction", "notes_create"],
+      "example_utterances": [
+        "note on Neha: allergic to shellfish",
+        "add to Marcus's card that he prefers mornings"
+      ]
+    },
+    {
+      "name": "notes_search",
+      "app": "notes",
+      "kind": "read",
+      "description": "Find notes whose title or body mentions a topic, wherever they are filed.",
+      "params": {
+        "topic": {
+          "type": "string",
+          "required": true
+        },
+        "notebook": {
+          "type": "string",
+          "required": false,
+          "description": "Optional notebook to narrow the search."
+        }
+      },
+      "siblings": ["notes_in_notebook", "notes_about_people", "docs_search"],
+      "example_utterances": [
+        "find my notes on the migration",
+        "any note mentioning Initech"
+      ]
+    },
+    {
+      "name": "notes_in_notebook",
+      "app": "notes",
+      "kind": "read",
+      "description": "List the notes filed in one named notebook, which is where they live rather than what they say.",
+      "params": {
+        "notebook": {
+          "type": "string",
+          "required": true
+        },
+        "window": {
+          "type": "string",
+          "required": false,
+          "description": "Optional date phrase over when they were written."
+        }
+      },
+      "siblings": ["notes_search", "notes_about_people"],
+      "example_utterances": [
+        "what's in my Work notebook",
+        "show the Journal notebook"
+      ]
+    },
+    {
+      "name": "notes_about_people",
+      "app": "notes",
+      "kind": "read",
+      "description": "List notes linked to a person or a group of people, resolving the group phrase in code.",
+      "params": {
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        }
+      },
+      "siblings": ["notes_search", "people_profile"],
+      "example_utterances": [
+        "notes about Neha",
+        "anything I wrote about the design review attendees"
+      ]
+    },
+    {
+      "name": "notes_create",
+      "app": "notes",
+      "kind": "write",
+      "description": "Write a new note with a body, optionally filed in a notebook or linked to people.",
+      "params": {
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "body": {
+          "type": "string",
+          "required": false
+        },
+        "notebook": {
+          "type": "string",
+          "required": false
+        },
+        "people": {
+          "type": "string",
+          "required": false,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        }
+      },
+      "siblings": ["notes_append", "tasks_add", "people_add_note"],
+      "example_utterances": [
+        "start a note called Offsite ideas",
+        "new note in Work: rework the onboarding"
+      ]
+    },
+    {
+      "name": "notes_append",
+      "app": "notes",
+      "kind": "write",
+      "description": "Add a line to a note that already exists, leaving what is there in place.",
+      "params": {
+        "note": {
+          "type": "string",
+          "required": true,
+          "description": "A note phrase, or a reference into the last result."
+        },
+        "body": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "siblings": ["notes_create"],
+      "example_utterances": [
+        "add to the offsite note: book the venue",
+        "append that to my migration note"
+      ]
+    },
+    {
+      "name": "photos_of_people",
+      "app": "photos",
+      "kind": "read",
+      "description": "Find photos in which named people appear, resolving the person or group phrase in code.",
+      "params": {
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "window": {
+          "type": "string",
+          "required": false,
+          "description": "Optional date phrase over when they were taken."
+        }
+      },
+      "siblings": ["photos_in_album", "photos_by_date", "photos_at_place"],
+      "example_utterances": [
+        "photos of Neha",
+        "pictures with the offsite attendees",
+        "shots of Marcus this month"
+      ]
+    },
+    {
+      "name": "photos_by_date",
+      "app": "photos",
+      "kind": "read",
+      "description": "List photos taken inside a date window, regardless of who or what is in them.",
+      "params": {
+        "window": {
+          "type": "string",
+          "required": true,
+          "description": "A date phrase."
+        }
+      },
+      "siblings": ["photos_of_people", "photos_in_album", "photos_at_place"],
+      "example_utterances": [
+        "photos from last week",
+        "what did I shoot in August"
+      ]
+    },
+    {
+      "name": "photos_in_album",
+      "app": "photos",
+      "kind": "read",
+      "description": "List the photos placed in one named album, which is where they were filed rather than when they were taken.",
+      "params": {
+        "album": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "siblings": ["photos_by_date", "photos_of_people"],
+      "example_utterances": ["show me the Goa album", "what's in Offsite 2026"]
+    },
+    {
+      "name": "photos_at_place",
+      "app": "photos",
+      "kind": "read",
+      "description": "List photos taken at a named place, which is where they were shot rather than where they were filed.",
+      "params": {
+        "place": {
+          "type": "string",
+          "required": true
+        },
+        "window": {
+          "type": "string",
+          "required": false,
+          "description": "Optional date phrase."
+        }
+      },
+      "siblings": ["photos_by_date", "photos_in_album"],
+      "example_utterances": [
+        "photos from Goa",
+        "anything I shot at the Bangalore office"
+      ]
+    },
+    {
+      "name": "photos_add_to_album",
+      "app": "photos",
+      "kind": "write",
+      "description": "Put existing photos into an album, usually the ones just returned.",
+      "params": {
+        "photos": {
+          "type": "string",
+          "required": true,
+          "description": "A photo phrase, or a reference into the last result."
+        },
+        "album": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "siblings": [],
+      "example_utterances": [
+        "put those in the Offsite album",
+        "add the first three to Goa"
+      ]
+    },
+    {
+      "name": "docs_search",
+      "app": "docs",
+      "kind": "read",
+      "description": "Find documents whose filename or extracted text mentions a topic, wherever they sit in the drive.",
+      "params": {
+        "topic": {
+          "type": "string",
+          "required": true
+        },
+        "kind": {
+          "type": "string",
+          "required": false,
+          "enum": ["pdf", "sheet", "doc", "image", "any"]
+        }
+      },
+      "siblings": ["docs_in_folder", "notes_search"],
+      "example_utterances": [
+        "find the Initech contract",
+        "any pdf about the lease"
+      ]
+    },
+    {
+      "name": "docs_in_folder",
+      "app": "docs",
+      "kind": "read",
+      "description": "List the documents sitting in one named folder, which is where they are filed rather than what they say.",
+      "params": {
+        "folder": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "siblings": ["docs_search"],
+      "example_utterances": [
+        "what's in the Contracts folder",
+        "list my Receipts folder"
+      ]
+    },
+    {
+      "name": "docs_star",
+      "app": "docs",
+      "kind": "write",
+      "description": "Mark documents as starred, which flags them rather than moving them.",
+      "params": {
+        "docs": {
+          "type": "string",
+          "required": true,
+          "description": "A document phrase, or a reference into the last result."
+        }
+      },
+      "siblings": ["docs_move"],
+      "example_utterances": ["star that contract", "flag the first one"]
+    },
+    {
+      "name": "docs_move",
+      "app": "docs",
+      "kind": "write",
+      "description": "Move documents into a different folder, changing where they are filed.",
+      "params": {
+        "docs": {
+          "type": "string",
+          "required": true,
+          "description": "A document phrase, or a reference into the last result."
+        },
+        "folder": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "siblings": ["docs_star"],
+      "example_utterances": [
+        "move that into Contracts",
+        "file those under Receipts"
+      ]
+    },
+    {
+      "name": "locker_find",
+      "app": "locker",
+      "kind": "read",
+      "description": "Find a stored credential or secure item by the service it belongs to, returning the item without its secret.",
+      "params": {
+        "service": {
+          "type": "string",
+          "required": true,
+          "description": "The site or service name."
+        },
+        "kind": {
+          "type": "string",
+          "required": false,
+          "enum": ["login", "card", "note", "identity", "any"]
+        }
+      },
+      "siblings": ["locker_weak"],
+      "example_utterances": [
+        "do I have a login for Initech VPN",
+        "find my bank card entry"
+      ]
+    },
+    {
+      "name": "locker_weak",
+      "app": "locker",
+      "kind": "read",
+      "description": "List locker items flagged by watchtower as reused, weak, or breached, which is a health judgement rather than a lookup.",
+      "params": {
+        "reason": {
+          "type": "string",
+          "required": false,
+          "enum": ["reused", "weak", "breached", "any"]
+        }
+      },
+      "siblings": ["locker_find"],
+      "example_utterances": [
+        "anything reused in my vault",
+        "show weak passwords"
+      ]
+    },
+    {
+      "name": "locker_add",
+      "app": "locker",
+      "kind": "write",
+      "description": "Store a new locker item for a service.",
+      "params": {
+        "service": {
+          "type": "string",
+          "required": true
+        },
+        "kind": {
+          "type": "string",
+          "required": true,
+          "enum": ["login", "card", "note", "identity"]
+        },
+        "username": {
+          "type": "string",
+          "required": false
+        }
+      },
+      "siblings": [],
+      "example_utterances": [
+        "save a login for Hooli",
+        "add a secure note for the safe code"
+      ]
+    },
+    {
+      "name": "tally_balance_with",
+      "app": "tally",
+      "kind": "read",
+      "description": "Show the net balance between you and named people or a group phrase, netting every shared expense.",
+      "params": {
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "direction": {
+          "type": "string",
+          "required": false,
+          "enum": ["owed_to_me", "i_owe", "any"]
+        }
+      },
+      "siblings": [
+        "tally_who_owes_me",
+        "tally_expenses_with",
+        "tally_group_balance"
+      ],
+      "example_utterances": [
+        "do I owe Neha anything",
+        "what's my balance with the design review attendees",
+        "am I square with Marcus"
+      ]
+    },
+    {
+      "name": "tally_who_owes_me",
+      "app": "tally",
+      "kind": "read",
+      "description": "List everyone with an outstanding balance in one direction, without naming anybody up front.",
+      "params": {
+        "direction": {
+          "type": "string",
+          "required": true,
+          "enum": ["owed_to_me", "i_owe"]
+        }
+      },
+      "siblings": ["tally_balance_with", "tally_group_balance"],
+      "example_utterances": [
+        "who owes me money",
+        "everyone I owe",
+        "who hasn't paid me back"
+      ]
+    },
+    {
+      "name": "tally_group_balance",
+      "app": "tally",
+      "kind": "read",
+      "description": "Show the balances inside one named tally group, which slices by group rather than by person.",
+      "params": {
+        "group": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "siblings": ["tally_balance_with", "tally_who_owes_me"],
+      "example_utterances": [
+        "how are we doing in the Goa trip group",
+        "balances for Flatmates"
+      ]
+    },
+    {
+      "name": "tally_expenses_with",
+      "app": "tally",
+      "kind": "read",
+      "description": "List the individual shared expenses involving named people, rather than the netted balance.",
+      "params": {
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "window": {
+          "type": "string",
+          "required": false,
+          "description": "Optional date phrase."
+        }
+      },
+      "siblings": ["tally_balance_with", "tally_group_balance"],
+      "example_utterances": [
+        "what have Neha and I split",
+        "list the expenses with Marcus this month"
+      ]
+    },
+    {
+      "name": "tally_add_expense",
+      "app": "tally",
+      "kind": "write",
+      "description": "Record a new shared expense with an amount and who it is split between.",
+      "params": {
+        "description": {
+          "type": "string",
+          "required": true
+        },
+        "amount": {
+          "type": "number",
+          "required": true
+        },
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "group": {
+          "type": "string",
+          "required": false
+        }
+      },
+      "siblings": ["tally_settle_up"],
+      "example_utterances": [
+        "I paid 1200 for dinner, split with Neha",
+        "add 4000 cab fare across the Goa trip group"
+      ]
+    },
+    {
+      "name": "tally_settle_up",
+      "app": "tally",
+      "kind": "write",
+      "description": "Record that a balance has been paid off, which zeroes it rather than adding a new expense.",
+      "params": {
+        "people": {
+          "type": "string",
+          "required": true,
+          "description": "A noun phrase resolved in code, never an id: a name, a group ('people at Initech'), or a reference into the last result ('those people')."
+        },
+        "amount": {
+          "type": "number",
+          "required": false,
+          "description": "Optional; defaults to the whole outstanding balance."
+        }
+      },
+      "siblings": ["tally_add_expense"],
+      "example_utterances": [
+        "Neha paid me back",
+        "settle up with Marcus",
+        "mark those as settled"
+      ]
+    }
+  ]
+}
