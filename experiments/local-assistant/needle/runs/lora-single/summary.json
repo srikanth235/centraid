@@ -1,0 +1,13 @@
+{
+  "n": 43,
+  "op_correct": 0.8372093023255814,
+  "slot_exact": 0.6511627906976745,
+  "markers": {
+    "malformed": 7
+  },
+  "seconds_total": 16.85,
+  "label": "lora-single",
+  "shape": "single",
+  "cases": "needle/dev_cases.jsonl",
+  "weights": "needle/adapters/r16e1n400/tuned.cact"
+}

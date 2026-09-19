@@ -1,0 +1,14 @@
+{
+  "n": 43,
+  "op_correct": 0.6511627906976745,
+  "slot_exact": 0.5348837209302325,
+  "markers": {
+    "suppressed": 2,
+    "malformed": 1
+  },
+  "seconds_total": 21.59,
+  "label": "lora-siblings",
+  "shape": "siblings",
+  "cases": "needle/dev_cases.jsonl",
+  "weights": "needle/adapters/r16e1n400/tuned.cact"
+}

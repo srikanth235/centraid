@@ -1,0 +1,12 @@
+{
+  "label": "base-val",
+  "val": "needle/data/val512.jsonl",
+  "weights": null,
+  "n": 247,
+  "n_call_rows": 247,
+  "n_abstain_rows": 0,
+  "op_correct": 0.6964,
+  "slot_exact": 0.4453,
+  "abstain_correct": 0.0,
+  "seconds": 1043.6
+}

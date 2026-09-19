@@ -1,0 +1,28 @@
+# CPU-only, Python 3.11. Install with:
+#   uv venv experiments/local-assistant/.venv
+#   uv pip install -r requirements.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cpu \
+#       --index-strategy unsafe-best-match
+#
+# Needle 3 is NOT a transformers model (custom `needle` architecture, C engine),
+# so peft cannot tune it: inference and LoRA both go through `cactus-needle`,
+# whose trainer is JAX. torch/transformers are listed only because the rest of
+# the experiment bed may want them; the Needle lane does not use them.
+
+cactus-needle==3.0.2
+sentencepiece==0.2.2
+huggingface_hub==0.26.3
+
+# Needle's LoRA trainer (needle.model.finetune)
+jax==0.4.35
+jaxlib==0.4.35
+flax==0.10.2
+optax==0.2.4
+safetensors
+
+# unused by the Needle lane; CPU wheels
+torch==2.5.1
+transformers==4.46.3
+peft==0.13.2
+datasets==3.1.0
+accelerate==1.1.1
