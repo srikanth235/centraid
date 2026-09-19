@@ -1,0 +1,746 @@
+{
+  "version": 1,
+  "today": "2026-09-19",
+  "category_counts": {
+    "single_read": 10,
+    "single_write": 8,
+    "cross_app_one_call": 6,
+    "chain": 4,
+    "follow_up": 4,
+    "reference_into_result": 4,
+    "refusal_none": 4
+  },
+  "cases": [
+    {
+      "id": "b01",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "anything next week on my calendar?",
+          "expected": {
+            "type": "ids",
+            "entity": "event",
+            "ids": ["e02", "e03", "e04", "e05"],
+            "ordered": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "b02",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "show me the photos taken in Goa",
+          "expected": {
+            "type": "ids",
+            "entity": "photo",
+            "ids": ["ph05", "ph06", "ph07", "ph13", "ph14", "ph19"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b03",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "which tasks are overdue",
+          "expected": {
+            "type": "ids",
+            "entity": "task",
+            "ids": ["t08"],
+            "ordered": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "b04",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "pull up the notes in my Journal notebook",
+          "expected": {
+            "type": "ids",
+            "entity": "note",
+            "ids": ["n05", "n08", "n11", "n15"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b05",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "whos at initech",
+          "expected": {
+            "type": "ids",
+            "entity": "person",
+            "ids": ["p01", "p03", "p05", "p08", "p13"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b06",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "any docs in the Contracts folder",
+          "expected": {
+            "type": "ids",
+            "entity": "document",
+            "ids": ["d1", "d2"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b07",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "which locker logins got flagged as reused",
+          "expected": {
+            "type": "ids",
+            "entity": "locker_item",
+            "ids": ["l1"],
+            "ordered": false
+          }
+        }
+      ],
+      "note": "needs canonical"
+    },
+    {
+      "id": "b08",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "who am i in the red with",
+          "expected": {
+            "type": "ids",
+            "entity": "person",
+            "ids": ["p03", "p06", "p07", "p09", "p11", "p14"],
+            "ordered": false
+          }
+        }
+      ],
+      "note": "needs canonical"
+    },
+    {
+      "id": "b09",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "tasks filed under Migration please",
+          "expected": {
+            "type": "ids",
+            "entity": "task",
+            "ids": ["t03", "t09", "t17", "t23", "t25"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b10",
+      "category": "single_read",
+      "turns": [
+        {
+          "request": "find my notes about onboarding",
+          "expected": {
+            "type": "ids",
+            "entity": "note",
+            "ids": ["n02", "n07"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b11",
+      "category": "single_write",
+      "turns": [
+        {
+          "request": "add a task to water the plants",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "task_exists",
+            "args": {
+              "title": "water the plants"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b12",
+      "category": "single_write",
+      "turns": [
+        {
+          "request": "Renew the domain is done",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "task_status",
+            "args": {
+              "task_id": "t01",
+              "status": "done"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b13",
+      "category": "single_write",
+      "turns": [
+        {
+          "request": "push Draft the migration plan to next friday",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "task_due",
+            "args": {
+              "task_id": "t03",
+              "due": "2026-09-25"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b14",
+      "category": "single_write",
+      "turns": [
+        {
+          "request": "put Team lunch on the calendar tuesday at 13:00",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "event_exists",
+            "args": {
+              "title": "Team lunch",
+              "starts": "2026-09-22T13:00"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b15",
+      "category": "single_write",
+      "turns": [
+        {
+          "request": "start a note called Grocery list",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "note_exists",
+            "args": {
+              "title": "Grocery list"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b16",
+      "category": "single_write",
+      "turns": [
+        {
+          "request": "log that i rang Priya yesterday",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "interaction_logged",
+            "args": {
+              "person_id": "p05",
+              "channel": "call",
+              "happened": "2026-09-18"
+            }
+          }
+        }
+      ],
+      "note": "needs canonical"
+    },
+    {
+      "id": "b17",
+      "category": "single_write",
+      "turns": [
+        {
+          "request": "save a login for Netflix in the locker",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "locker_item_exists",
+            "args": {
+              "service": "Netflix",
+              "kind": "login"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b18",
+      "category": "single_write",
+      "turns": [
+        {
+          "request": "new contact: Rahul Verma, he's at Acme",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "person_exists",
+            "args": {
+              "full_name": "Rahul Verma",
+              "company": "Acme"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b19",
+      "category": "cross_app_one_call",
+      "turns": [
+        {
+          "request": "do i owe anything to the people who came to the design review",
+          "expected": {
+            "type": "ids",
+            "entity": "person",
+            "ids": ["p03"],
+            "ordered": false
+          }
+        }
+      ],
+      "note": "needs canonical"
+    },
+    {
+      "id": "b20",
+      "category": "cross_app_one_call",
+      "turns": [
+        {
+          "request": "what's on the plate for the Initech people",
+          "expected": {
+            "type": "ids",
+            "entity": "task",
+            "ids": [
+              "t02",
+              "t03",
+              "t05",
+              "t09",
+              "t12",
+              "t17",
+              "t18",
+              "t23",
+              "t25"
+            ],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b21",
+      "category": "cross_app_one_call",
+      "turns": [
+        {
+          "request": "photos of everyone at the Initech offsite",
+          "expected": {
+            "type": "ids",
+            "entity": "photo",
+            "ids": [
+              "ph01",
+              "ph02",
+              "ph05",
+              "ph06",
+              "ph07",
+              "ph08",
+              "ph13",
+              "ph18",
+              "ph19"
+            ],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b22",
+      "category": "cross_app_one_call",
+      "turns": [
+        {
+          "request": "notes about the design review attendees",
+          "expected": {
+            "type": "ids",
+            "entity": "note",
+            "ids": ["n02", "n04", "n11"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b23",
+      "category": "cross_app_one_call",
+      "turns": [
+        {
+          "request": "invite the Acme people to the quarterly review",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "event_has_attendees",
+            "args": {
+              "event_id": "e09",
+              "person_ids": ["p04", "p07", "p10"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b24",
+      "category": "cross_app_one_call",
+      "turns": [
+        {
+          "request": "list the expenses with everyone who went to the Initech offsite",
+          "expected": {
+            "type": "ids",
+            "entity": "tally_entry",
+            "ids": [
+              "x01",
+              "x02",
+              "x03",
+              "x04",
+              "x05",
+              "x09",
+              "x10",
+              "x13",
+              "x18"
+            ],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b25",
+      "category": "chain",
+      "turns": [
+        {
+          "request": "find the Acme paperwork and star it",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "doc_starred",
+            "args": {
+              "doc_id": "d2"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b26",
+      "category": "chain",
+      "turns": [
+        {
+          "request": "take the photos in the Goa album and put them in Family too",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "photos_in_album",
+            "args": {
+              "album_id": "a3",
+              "photo_ids": ["ph05", "ph06", "ph07", "ph13", "ph14", "ph19"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b27",
+      "category": "chain",
+      "turns": [
+        {
+          "request": "who's coming to sprint planning — add them to the retro as well",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "event_has_attendees",
+            "args": {
+              "event_id": "e06",
+              "person_ids": ["p03", "p05", "p08"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b28",
+      "category": "chain",
+      "turns": [
+        {
+          "request": "look up the migration runbook and move it into Contracts",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "doc_in_folder",
+            "args": {
+              "doc_id": "d8",
+              "folder_id": "f1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b29",
+      "category": "follow_up",
+      "turns": [
+        {
+          "request": "what's due next week",
+          "expected": {
+            "type": "ids",
+            "entity": "task",
+            "ids": ["t02", "t03", "t18", "t05", "t24", "t01", "t12"],
+            "ordered": true
+          }
+        },
+        {
+          "request": "and next month?",
+          "expected": {
+            "type": "ids",
+            "entity": "task",
+            "ids": ["t14", "t07", "t25", "t17", "t10", "t11", "t06"],
+            "ordered": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "b30",
+      "category": "follow_up",
+      "turns": [
+        {
+          "request": "who works at Hooli",
+          "expected": {
+            "type": "ids",
+            "entity": "person",
+            "ids": ["p02", "p06", "p11", "p14"],
+            "ordered": false
+          }
+        },
+        {
+          "request": "what about Acme",
+          "expected": {
+            "type": "ids",
+            "entity": "person",
+            "ids": ["p04", "p07", "p10"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b31",
+      "category": "follow_up",
+      "turns": [
+        {
+          "request": "show me the Work notebook",
+          "expected": {
+            "type": "ids",
+            "entity": "note",
+            "ids": ["n01", "n02", "n04", "n06", "n07", "n10", "n12", "n13"],
+            "ordered": false
+          }
+        },
+        {
+          "request": "the Ideas one now",
+          "expected": {
+            "type": "ids",
+            "entity": "note",
+            "ids": ["n03", "n09", "n14"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b32",
+      "category": "follow_up",
+      "turns": [
+        {
+          "request": "does anyone owe me money",
+          "expected": {
+            "type": "ids",
+            "entity": "person",
+            "ids": ["p01", "p05", "p08", "p12", "p13", "p15"],
+            "ordered": false
+          }
+        },
+        {
+          "request": "other way round?",
+          "expected": {
+            "type": "ids",
+            "entity": "person",
+            "ids": ["p03", "p06", "p07", "p09", "p11", "p14"],
+            "ordered": false
+          }
+        }
+      ],
+      "note": "needs canonical"
+    },
+    {
+      "id": "b33",
+      "category": "reference_into_result",
+      "turns": [
+        {
+          "request": "photos taken in Koramangala",
+          "expected": {
+            "type": "ids",
+            "entity": "photo",
+            "ids": ["ph03", "ph04", "ph11", "ph12", "ph17"],
+            "ordered": false
+          }
+        },
+        {
+          "request": "only the ones with Lena",
+          "expected": {
+            "type": "ids",
+            "entity": "photo",
+            "ids": ["ph03", "ph04", "ph11", "ph17"],
+            "ordered": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "b34",
+      "category": "reference_into_result",
+      "turns": [
+        {
+          "request": "what's overdue",
+          "expected": {
+            "type": "ids",
+            "entity": "task",
+            "ids": ["t08"],
+            "ordered": true
+          }
+        },
+        {
+          "request": "mark the first one done",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "task_status",
+            "args": {
+              "task_id": "t08",
+              "status": "done"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b35",
+      "category": "reference_into_result",
+      "turns": [
+        {
+          "request": "find the events about migration",
+          "expected": {
+            "type": "ids",
+            "entity": "event",
+            "ids": ["e02", "e06"],
+            "ordered": true
+          }
+        },
+        {
+          "request": "move the last one to Thursday at 15:00",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "event_starts",
+            "args": {
+              "event_id": "e06",
+              "starts": "2026-09-24T15:00"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "b36",
+      "category": "reference_into_result",
+      "turns": [
+        {
+          "request": "who was at the offsite",
+          "expected": {
+            "type": "ids",
+            "entity": "person",
+            "ids": ["p01", "p03", "p05", "p08", "p13"],
+            "ordered": false
+          }
+        },
+        {
+          "request": "log that i met them today",
+          "expected": {
+            "type": "write_predicate",
+            "predicate": "interaction_logged",
+            "args": {
+              "person_id": "p01",
+              "channel": "met",
+              "happened": "2026-09-19"
+            }
+          }
+        }
+      ],
+      "note": "needs canonical"
+    },
+    {
+      "id": "b37",
+      "category": "refusal_none",
+      "turns": [
+        {
+          "request": "what's the weather in Goa tomorrow",
+          "expected": {
+            "type": "no_action",
+            "reason": "refuse"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b38",
+      "category": "refusal_none",
+      "turns": [
+        {
+          "request": "order me a pizza",
+          "expected": {
+            "type": "no_action",
+            "reason": "refuse"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b39",
+      "category": "refusal_none",
+      "turns": [
+        {
+          "request": "whats Neha's email",
+          "expected": {
+            "type": "no_action",
+            "reason": "clarify"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b40",
+      "category": "refusal_none",
+      "turns": [
+        {
+          "request": "note on Marcus's record that he prefers evenings",
+          "expected": {
+            "type": "no_action",
+            "reason": "clarify"
+          }
+        }
+      ]
+    }
+  ]
+}
