@@ -79,3 +79,9 @@ packages/blueprints/apps/*/queries/*.js
 experiments/local-assistant/runs/*.json
 !experiments/local-assistant/runs/reference.json
 experiments/local-assistant/**/__pycache__/
+
+# The selector lane's virtualenv (CPU torch + sentence-transformers) and its
+# trained artifacts. Both are rebuilt by the commands in
+# experiments/local-assistant/selector/RESULTS-selector.md.
+experiments/local-assistant/.venv-selector/
+experiments/local-assistant/selector/artifacts/

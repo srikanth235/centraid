@@ -1,0 +1,17 @@
+{
+ "val": {
+  "top1": 0.701,
+  "top1+siblings": 0.758,
+  "top3": 0.916
+ },
+ "dev_paraphrase": {
+  "top1": 0.81,
+  "top1+siblings": 0.856,
+  "top3": 0.941
+ },
+ "suite": {
+  "top1": 0.837,
+  "top1+siblings": 0.867,
+  "top3": 0.908
+ }
+}
