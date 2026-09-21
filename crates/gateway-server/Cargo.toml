@@ -18,9 +18,9 @@ path = "src/bin/centraid-gateway.rs"
 
 # THIS CRATE HOLDS NO RULES, AND THE DEPENDENCY LIST IS WHERE THAT STARTS.
 #
-# Every refusal, every floor, every checksum comparison and every scope check is
-# `centraid-gateway-core`'s. What is here is a socket, a SQLite file, two object
-# stores and a certificate — the four things a rule cannot be, which is exactly
+# Every refusal, every floor and every checksum comparison is
+# `centraid-gateway-core`'s. What is here is a socket, a SQLite file, an object
+# store and a certificate — the four things a rule cannot be, which is exactly
 # why the ports exist. If a change to this crate would make one of its answers
 # be a rule of the protocol rather than of this adapter, it belongs in
 # `gateway-core`.
@@ -42,17 +42,12 @@ clap.workspace = true
 # The ACME state machine is a `Stream`; this is the crate whose trait it is.
 futures.workspace = true
 hex.workspace = true
-# AWS Signature Version 4 — see `src/bytes/sigv4.rs` and the workspace comment
-# beside `sha2`. Confined to that one module.
-hmac.workspace = true
-sha2.workspace = true
 rand.workspace = true
 reqwest.workspace = true
 rusqlite.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 thiserror.workspace = true
-time.workspace = true
 tokio = { workspace = true, features = ["net", "fs", "signal"] }
 tokio-rustls.workspace = true
 tokio-rustls-acme.workspace = true

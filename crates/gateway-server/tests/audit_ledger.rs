@@ -12,12 +12,10 @@
 //! `contracts/gateway/queries/client_delete_insert.sql` — and does it carry the
 //! object it names?
 //!
-//! It asks it **once per byte store**. The ledger is state-store business and
-//! the byte store has no part in it, which is the claim rather than a reason to
-//! skip one: an adapter pointed at a bucket keeps the same audit trail as one
-//! pointed at a directory, and a delete path that quietly took a different
-//! branch under S3 would be caught here rather than by an owner who found the
-//! ledger empty.
+//! It asked it **once per byte store** while there were two; the S3 store is
+//! struck (scope amendment 2026-09-21) and the directory is the one left. The
+//! ledger is state-store business and the byte store has no part in it, which
+//! is what the surviving case pins.
 
 mod common;
 
@@ -140,9 +138,4 @@ async fn ledger_row_lands(store: Store) {
 #[tokio::test]
 async fn a_granted_tombstone_leaves_a_client_delete_row_over_a_directory() {
     ledger_row_lands(Store::Filesystem).await;
-}
-
-#[tokio::test]
-async fn a_granted_tombstone_leaves_a_client_delete_row_over_an_s3_store() {
-    ledger_row_lands(Store::S3).await;
 }

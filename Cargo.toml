@@ -92,11 +92,11 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # somebody else's protocol; `blake3` remains ONE HASH for everything this repo
 # defines itself. Two more crates joined them under #1029 and for the same
 # reason — an object store's API is not ours: `crates/gateway-core`
-# (`src/checksum.rs`, the SHA-256 an S3-compatible store attests) and
-# `crates/gateway-server` (`src/bytes/sigv4.rs`, AWS Signature Version 4, which
-# is HMAC-SHA256 over a SHA-256 payload digest). Each is ONE module, each has an
-# entry in `crates/vault/tests/one_hash.rs`'s allowlist carrying its reason, and
-# no other crate under `crates/` may depend on `sha2` or `hmac`. W0.5-R1 is a
+# (`src/checksum.rs`, the SHA-256 an object store attests). It is ONE module
+# with an entry in `crates/vault/tests/one_hash.rs`'s allowlist carrying its
+# reason, and no other crate under `crates/` may depend on `sha2` or `hmac`.
+# `crates/gateway-server/src/bytes/sigv4.rs` was the second of the two; the
+# scope amendment of 2026-09-21 struck the S3 byte store and it went with it. W0.5-R1 is a
 # ruling put to the owner with a recommendation, not yet a `docs/decisions.md`
 # supersession of D-1025-S4-5 (that entry is W9's).
 hmac = "0.13"
@@ -291,8 +291,10 @@ axum = { version = "0.8", default-features = false, features = [
   "query",
   "tokio",
 ] }
-# `reqwest` is the client half, and it exists for ONE caller: the S3-compatible
-# byte store. `default-features = false` drops the default TLS stack and the
+# `reqwest` is the client half. It existed for the S3-compatible byte store,
+# which the scope amendment of 2026-09-21 struck; its callers now are
+# `centraid-gateway status` and the tests that drive a live server over a real
+# socket. `default-features = false` drops the default TLS stack and the
 # cookie machinery; `rustls-tls` is the stack this workspace already links
 # through `tokio-rustls-acme`, so no second TLS implementation enters the graph.
 reqwest = { version = "0.12", default-features = false, features = [
@@ -312,26 +314,6 @@ tokio-rustls-acme = { version = "0.9" }
 tokio-rustls = { version = "0.26", default-features = false, features = [
   "ring",
 ] }
-# THE S3 SIGNATURE, AND THE ONE PLACE IT LIVES (#1025 S4, D-1025-S4-5; W0.5-R1).
-#
-# AWS Signature Version 4 is HMAC-SHA256 over a SHA-256 payload digest, all the
-# way down: it is somebody else's protocol in exactly the shape
-# `crates/gateway-core/src/checksum.rs` already carries, and a signature
-# restated in BLAKE3 would not open an S3 bucket. So `hmac` joins `sha2` in the
-# graph, both confined to `crates/gateway-server/src/bytes/sigv4.rs` — the one
-# module under `crates/gateway-server` that names that function at all, with the
-# allowlist entry in `crates/vault/tests/one_hash.rs` that says so. The boundary
-# is the point: every object NAME this server handles is BLAKE3, and so is every
-# request body digest it verifies.
-#
-# `time` is the SigV4 credential scope's own date arithmetic. Nothing here reads
-# a wall clock for a RULE: time is an input to `gateway-core`, and what this
-# crate reads is the server's own clock and hands in.
-time = { version = "0.3", default-features = false, features = [
-  "formatting",
-  "std",
-] }
-
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).
 #

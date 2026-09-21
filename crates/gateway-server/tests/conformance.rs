@@ -1,31 +1,23 @@
-//! `gateway-core`'s own conformance suite, against this adapter, **four times**
+//! `gateway-core`'s own conformance suite, against this adapter, **twice**
 //! (#1029 §3).
 //!
 //! The suite is a library function and not a `#[test]` precisely so that more
-//! than one adapter can drive it: `cargo test` cannot reach inside a Worker
-//! outside `cargo test`'s reach, and a suite only this adapter could run would be a
-//! suite that checks one of the two things it exists to compare. This file is
-//! one of its callers.
+//! than one adapter can drive it, and so that an adapter outside `cargo test`'s
+//! reach can be held to the same cases. This file is one of its callers.
 //!
-//! # WHY FOUR RUNS AND NOT ONE
+//! # WHY TWO RUNS AND NOT ONE
 //!
-//! Two stores and two checksum modes are **two independent axes**, and the
-//! combinations are not redundant:
+//! The two checksum modes are an axis of their own:
 //!
 //! | | attest | read-and-hash |
 //! | --- | --- | --- |
 //! | **filesystem** | the store attests what the adapter recorded at upload | the adapter reads and hashes; catches bytes that do not hash to their name |
-//! | **S3** | a real `HEAD`, a real attestation header, parsed | a real `GET`, hashed here |
 //!
-//! The S3 half runs against a real HTTP store over a real socket with a real
-//! SigV4 signature (`tests/common`), because the alternative — a mock
-//! `ByteStore` — would exercise the enum arm and skip the protocol, and the
-//! protocol is where the two modes actually differ.
-//!
-//! **What none of the four can prove** is interoperability with a particular
-//! vendor: `FakeS3` is not MinIO, not B2 and not R2. That is named here rather
-//! than left to be discovered, and it is the reason the modes are configuration
-//! rather than something the adapter sniffs.
+//! It was FOUR runs while an S3 byte store stood beside the directory, driven
+//! against a real HTTP double over a real socket with a real SigV4 signature.
+//! The scope amendment of 2026-09-21 strikes that store, and the two runs it
+//! owned go with it rather than being faked against a mock `ByteStore` — which
+//! would have exercised an enum arm and skipped the protocol.
 
 mod common;
 
@@ -95,16 +87,6 @@ async fn the_suite_is_green_against_a_directory_in_attest_mode() {
 #[tokio::test]
 async fn the_suite_is_green_against_a_directory_in_read_and_hash_mode() {
     run(Store::Filesystem, ChecksumMode::ReadAndHash).await;
-}
-
-#[tokio::test]
-async fn the_suite_is_green_against_an_s3_store_in_attest_mode() {
-    run(Store::S3, ChecksumMode::Attest).await;
-}
-
-#[tokio::test]
-async fn the_suite_is_green_against_an_s3_store_in_read_and_hash_mode() {
-    run(Store::S3, ChecksumMode::ReadAndHash).await;
 }
 
 /// A SUITE THAT CANNOT FAIL IS NOT A SUITE.

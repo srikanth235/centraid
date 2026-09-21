@@ -2,10 +2,10 @@
 //! it (#1029 §3).
 //!
 //! The rules are generic over `ByteStore`, so nothing above this file knows
-//! whether the bytes are in a directory or a bucket. What this file adds is the
+//! where the bytes are. What this file adds is the
 //! two things a *deployment* needs and a rule must never see:
 //!
-//! 1. **One type for either backend**, so the HTTP surface and the sweeps are
+//! 1. **One type for the backend**, so the HTTP surface and the sweeps are
 //!    not generic over a choice made in a config file;
 //! 2. **A second store beside the first**, which is what makes the blind scrub
 //!    able to *repair* rather than only report.
@@ -21,7 +21,7 @@
 //! operator's sweep did about it.
 //!
 //! **The mirror does not change what the gateway can see.** Both copies are the
-//! same ciphertext under the same name; a second bucket is a second place that
+//! same ciphertext under the same name; a second store is a second place that
 //! holds bytes nobody there can open.
 
 use centraid_gateway_core::checksum::{ChecksumEvidence, ChecksumMode};
@@ -32,22 +32,18 @@ use centraid_gateway_core::time::ServerTime;
 
 use crate::bytes::ProxyWrite;
 use crate::bytes::fs::FilesystemBytes;
-use crate::bytes::s3::S3Bytes;
 
 /// One backend.
 #[derive(Debug)]
 pub enum Backend {
     /// A directory. The default for a home box.
     Filesystem(FilesystemBytes),
-    /// Anything S3-compatible.
-    S3(Box<S3Bytes>),
 }
 
 impl ByteStore for Backend {
     fn checksum_mode(&self) -> ChecksumMode {
         match self {
             Self::Filesystem(store) => store.checksum_mode(),
-            Self::S3(store) => store.checksum_mode(),
         }
     }
 
@@ -60,7 +56,6 @@ impl ByteStore for Backend {
     ) -> Result<UploadTarget, StoreFault> {
         match self {
             Self::Filesystem(store) => store.presign_put(vault, name, padded_size, now).await,
-            Self::S3(store) => store.presign_put(vault, name, padded_size, now).await,
         }
     }
 
@@ -71,7 +66,6 @@ impl ByteStore for Backend {
     ) -> Result<ChecksumEvidence, StoreFault> {
         match self {
             Self::Filesystem(store) => store.evidence(vault, name).await,
-            Self::S3(store) => store.evidence(vault, name).await,
         }
     }
 
@@ -82,14 +76,12 @@ impl ByteStore for Backend {
     ) -> Result<Option<Vec<u8>>, StoreFault> {
         match self {
             Self::Filesystem(store) => store.read(vault, name).await,
-            Self::S3(store) => store.read(vault, name).await,
         }
     }
 
     async fn purge(&mut self, vault: &VaultId, name: &ObjectName) -> Result<(), StoreFault> {
         match self {
             Self::Filesystem(store) => store.purge(vault, name).await,
-            Self::S3(store) => store.purge(vault, name).await,
         }
     }
 }
@@ -104,22 +96,19 @@ impl ProxyWrite for Backend {
     ) -> Result<(), StoreFault> {
         match self {
             Self::Filesystem(store) => store.put(vault, name, &bytes, attested),
-            Self::S3(store) => store.put(vault, name, bytes, attested).await,
         }
     }
 }
 
 impl Backend {
-    /// Every object this backend holds, for the canary. `keys` is only read by
-    /// the S3 backend, which cannot walk a directory.
+    /// Every object this backend holds, for the canary.
     ///
     /// # Errors
     ///
     /// A store fault.
-    pub async fn stored(&self, keys: &[String]) -> Result<Vec<Vec<u8>>, StoreFault> {
+    pub async fn stored(&self) -> Result<Vec<Vec<u8>>, StoreFault> {
         match self {
             Self::Filesystem(store) => store.stored(),
-            Self::S3(store) => store.stored(keys).await,
         }
     }
 
@@ -131,7 +120,6 @@ impl Backend {
     pub async fn corrupt(&self, vault: &VaultId, name: &ObjectName) -> Result<(), StoreFault> {
         match self {
             Self::Filesystem(store) => store.corrupt(vault, name),
-            Self::S3(store) => store.corrupt(vault, name).await,
         }
     }
 }

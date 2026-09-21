@@ -24,7 +24,6 @@ use centraid_gateway_core::Gateway;
 use centraid_gateway_core::store::StoreFault;
 use centraid_gateway_server::bytes::configured::{Backend, ConfiguredBytes};
 use centraid_gateway_server::bytes::fs::FilesystemBytes;
-use centraid_gateway_server::bytes::s3::{S3Bytes, S3Config};
 use centraid_gateway_server::config::{Config, StoreConfig, TlsConfig};
 use centraid_gateway_server::http::Server;
 use centraid_gateway_server::service::{DEFAULT_LABEL, Platform, UnitSpec};
@@ -284,28 +283,6 @@ fn backend(store: &StoreConfig, data_dir: &Path, origin: &str) -> anyhow::Result
                 FilesystemBytes::open(&root, checksum_mode.to_core(), origin)
                     .map_err(store_error)?,
             ))
-        }
-        StoreConfig::S3 {
-            endpoint,
-            bucket,
-            virtual_host_style,
-            checksum_mode,
-            presign,
-            ..
-        } => {
-            let credentials = Config::credentials(store).context("S3 credentials")?;
-            Ok(Backend::S3(Box::new(
-                S3Bytes::new(S3Config {
-                    endpoint: endpoint.clone(),
-                    bucket: bucket.clone(),
-                    credentials,
-                    virtual_host_style: *virtual_host_style,
-                    checksum_mode: checksum_mode.to_core(),
-                    presign: *presign,
-                    origin: origin.to_owned(),
-                })
-                .map_err(store_error)?,
-            )))
         }
     }
 }

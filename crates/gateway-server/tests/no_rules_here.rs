@@ -13,9 +13,9 @@
 //!    shrink threshold, the retention floor's 7/4/6 and the one-per-day delete
 //!    window are `gateway-core`'s. An adapter that restated one would drift from
 //!    it silently, because both would still compile.
-//! 2. **A hash function decision.** An object's name is BLAKE3 and the store's
-//!    attested checksum is SHA-256, and the second of those is confined to one
-//!    module with an allowlist entry that says why.
+//! 2. **A hash function decision.** An object's name is BLAKE3, and with the S3
+//!    byte store struck (scope amendment 2026-09-21) this adapter names SHA-256
+//!    in no module at all.
 //!
 //! What it cannot catch is a rule reimplemented in different words, and that is
 //! the conformance suite's job — this catches the easy half loudly so the hard
@@ -130,14 +130,19 @@ fn no_rule_of_the_protocol_is_restated_with_a_literal_here() {
     );
 }
 
-/// ONE HASH, AND ONE EXCEPTION THAT IS SOMEBODY ELSE'S PROTOCOL.
+/// ONE HASH, AND NOW NO EXCEPTION AT ALL IN THIS CRATE.
 ///
 /// `crates/vault/tests/one_hash.rs` already enforces this over the whole
-/// workspace with an allowlist. This is the same claim stated locally and in
-/// the terms this crate's reader cares about: the boundary is **one file**, and
-/// a second one appearing is the thing to notice.
+/// workspace with an allowlist. This is the same claim stated locally. It
+/// asserted **one file** — `bytes/sigv4.rs`, AWS Signature Version 4, which is
+/// HMAC-SHA256 over a SHA-256 payload digest and would not open a bucket if it
+/// were respelled. The scope amendment of 2026-09-21 struck the S3 byte store,
+/// so the expected list is now EMPTY, which is a tighter assertion than the one
+/// it replaces: this adapter names SHA-256 nowhere. The store's attested
+/// checksum still lives in `gateway-core/src/checksum.rs`, which is W17's to
+/// collapse because it changes the wire.
 #[test]
-fn the_stores_own_checksum_is_named_in_exactly_one_module() {
+fn the_stores_own_checksum_is_named_in_no_module_of_this_adapter() {
     let mut naming = Vec::new();
     for path in sources() {
         let text = std::fs::read_to_string(&path)
@@ -150,11 +155,11 @@ fn the_stores_own_checksum_is_named_in_exactly_one_module() {
     }
     assert_eq!(
         naming,
-        vec!["bytes/sigv4.rs".to_owned()],
-        "an object's NAME is BLAKE3 everywhere and the store's attested \
-         checksum is SHA-256 in one module with an allowlist entry that says \
-         why (#1025 S4, D-1025-S4-5). A second module naming it is a boundary \
-         that has started moving"
+        Vec::<String>::new(),
+        "an object's NAME is BLAKE3 everywhere, and with the S3 byte store \
+         struck this adapter names SHA-256 in no module at all (#1025 S4, \
+         D-1025-S4-5). A module naming it is a boundary that has started \
+         moving"
     );
 }
 

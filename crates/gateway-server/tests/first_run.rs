@@ -37,10 +37,7 @@ async fn first_run(data_dir: &std::path::Path) -> (Config, Server) {
     let StoreConfig::Filesystem {
         path,
         checksum_mode,
-    } = &config.store
-    else {
-        panic!("a bare first run uses a directory");
-    };
+    } = &config.store;
     let bytes = ConfiguredBytes::new(Backend::Filesystem(
         FilesystemBytes::open(
             &config.data_dir.join(path),

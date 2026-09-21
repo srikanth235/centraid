@@ -1,54 +1,37 @@
-//! The two object stores a self-hoster can point this server at (#1029 §3).
+//! The object store this server keeps bytes in (#1029 §3).
 //!
-//! `ByteStore` is one of the two ports, and **which store is behind it is the
-//! only thing the two deployments genuinely differ about** besides admission.
-//! The hosted adapter puts R2 there. Here there are two:
+//! `ByteStore` is one of the two ports. Behind it is
+//! [`fs::FilesystemBytes`] — a directory — because the machine a member runs
+//! this on has a disk. An S3/SigV4 backend stood beside it, for MinIO, B2,
+//! Wasabi, Garage or R2 through its S3 endpoint; the scope amendment of
+//! 2026-09-21 strikes it, because v0's destination is the member's own laptop
+//! and its store is the filesystem.
 //!
-//! - [`fs::FilesystemBytes`] — a directory. A home box with one disk, which is
-//!   what most self-hosters actually have.
-//! - [`s3::S3Bytes`] — anything S3-compatible: MinIO, Backblaze B2, Wasabi,
-//!   Garage, or R2 through its S3 endpoint.
-//!
-//! and [`configured::ConfiguredBytes`] holds one of them with an **optional
-//! second store beside it** — the mirror, which is what gives the blind scrub
-//! something to repair *from*.
+//! [`configured::Backend`] still holds ONE of them with an **optional second
+//! store beside it** — the mirror, which is what gives the blind scrub
+//! something to repair *from*. Keeping the enum with one arm is deliberate: the
+//! HTTP surface and the sweeps stay non-generic over a choice made in a config
+//! file, and a second backend is an arm rather than a refactor.
 //!
 //! # BYTES ARE PROXIED BY DEFAULT, AND THE PRESIGNED URL IS THE OPT-IN
 //!
-//! This is the reverse of the hosted adapter's default, and it is deliberate.
-//! The hosted adapter presigns because R2 is reachable from every phone and the
-//! Worker is billed per request; a self-hoster's bucket usually is *not*
-//! reachable. The common shapes are a home box behind a Cloudflare Tunnel, a
-//! Tailscale Funnel, or a reverse proxy on one hostname — in every one of them
-//! the gateway's own name is the only name that resolves from outside, and a
-//! presigned `http://minio.lan:9000/...` handed to a phone on cellular is a
-//! transfer that hangs and then times out.
-//!
-//! So [`UploadTarget::url`] is a path on this server by default and the phone
-//! `PUT`s there; the server streams the bytes through to the store. Presigning
-//! is `presign = true` in the config, for the self-hoster who really does have
-//! a publicly reachable bucket and wants the bytes off their uplink.
-//!
-//! The rules do not know which was chosen and must not: `presign_put` returns
-//! a `UploadTarget` either way, and `evidence` answers the same question either
-//! way. That is what keeps [`crate::conformance`] able to run every combination.
+//! [`UploadTarget::url`] is a path on this server and the phone `PUT`s there;
+//! the server streams the bytes through to the store. Presigning was the
+//! opt-in for a self-hoster with a publicly reachable bucket; with no bucket
+//! backend it has no subject, and W17 decides what an upload target looks like
+//! over iroh.
 //!
 //! # THE CHECKSUM MODE IS A PROPERTY OF THE STORE
 //!
-//! `ChecksumMode` is an input to both stores rather than a branch inside them.
-//! A filesystem attests nothing on its own, so [`fs::FilesystemBytes`] can be
-//! built in either mode and answers honestly in the one it was built in; B2 and
-//! MinIO differ on which checksum headers they attest, so
-//! [`s3::S3Bytes`] takes the mode from its configuration. An operator who
-//! points this at a store that does not attest and configures `attest` gets
-//! `ChecksumEvidence::None` and a refused commit — which is the rule working,
-//! not a bug, and is why the conformance suite runs both modes against both
-//! stores.
+//! `ChecksumMode` is an input to the store rather than a branch inside it. A
+//! filesystem attests nothing on its own, so [`fs::FilesystemBytes`] can be
+//! built in either mode and answers honestly in the one it was built in. The
+//! amendment also rules that the attested checksum goes and the gateway hashes
+//! what it stores; **that is W17's change, because it changes the wire**, and
+//! this module does not start it.
 
 pub mod configured;
 pub mod fs;
-pub mod s3;
-pub mod sigv4;
 
 use centraid_gateway_core::ids::{ObjectName, VaultId};
 use centraid_gateway_core::store::StoreFault;

@@ -8,8 +8,7 @@
 //!
 //! | Setting | Default | Why that way round |
 //! |---|---|---|
-//! | byte store | a directory under the data dir | a home box has one disk, not a bucket |
-//! | `presign` | **off** — bytes are proxied | a self-hoster's bucket is usually unreachable from a phone on cellular |
+//! | byte store | a directory under the data dir | the machine a member runs this on has a disk |
 //! | `append_only` | **off** (Q24) | a household that never heard of it must not discover it as a backup that grows without bound |
 //! | checksum mode | `read-and-hash` for a directory | a filesystem attests nothing; claiming `attest` over one would be claiming a check nobody ran |
 //! | mirror | none | a second store is a decision about somebody else's disk |
@@ -25,8 +24,6 @@ use centraid_gateway_core::checksum::ChecksumMode;
 use centraid_gateway_core::retention::Policy;
 use serde::{Deserialize, Serialize};
 
-use crate::bytes::sigv4::Credentials;
-
 /// A gibibyte, the unit an operator writes a quota in.
 pub const GIB: u64 = 1_024 * 1_024 * 1_024;
 
@@ -41,22 +38,6 @@ pub enum StoreConfig {
         path: PathBuf,
         #[serde(default = "default_filesystem_mode")]
         checksum_mode: Mode,
-    },
-    /// Anything S3-compatible.
-    S3 {
-        endpoint: String,
-        bucket: String,
-        access_key_id: String,
-        secret_access_key: String,
-        #[serde(default = "default_region")]
-        region: String,
-        #[serde(default)]
-        virtual_host_style: bool,
-        #[serde(default = "default_s3_mode")]
-        checksum_mode: Mode,
-        /// **Off by default**: bytes are proxied. See [`crate::bytes`].
-        #[serde(default)]
-        presign: bool,
     },
 }
 
@@ -90,18 +71,6 @@ fn default_objects_dir() -> PathBuf {
 /// nobody runs — the rule would pass on evidence the adapter made up.
 const fn default_filesystem_mode() -> Mode {
     Mode::ReadAndHash
-}
-
-/// An S3-compatible store usually does attest, and `attest` is the mode that
-/// costs no read per commit. An operator whose store turns out not to attest
-/// gets refused commits with `GATEWAY_CHECKSUM_MISSING`, which is the rule
-/// working and is the signal to switch to `read-and-hash`.
-const fn default_s3_mode() -> Mode {
-    Mode::Attest
-}
-
-fn default_region() -> String {
-    "us-east-1".to_owned()
 }
 
 /// How this server is reached, and whether it terminates TLS itself.
@@ -232,24 +201,6 @@ impl Config {
     pub fn retention(&self) -> Policy {
         Policy::default()
     }
-
-    /// The S3 credentials of a store config, if it is one.
-    #[must_use]
-    pub fn credentials(store: &StoreConfig) -> Option<Credentials> {
-        match store {
-            StoreConfig::Filesystem { .. } => None,
-            StoreConfig::S3 {
-                access_key_id,
-                secret_access_key,
-                region,
-                ..
-            } => Some(Credentials {
-                access_key_id: access_key_id.clone(),
-                secret_access_key: secret_access_key.clone(),
-                region: region.clone(),
-            }),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -278,33 +229,6 @@ mod tests {
                 "a directory attests nothing, so the honest mode over one is to \
                  read and hash"
             ),
-            StoreConfig::S3 { .. } => panic!("the default store is a directory"),
-        }
-    }
-
-    /// An S3 store that says nothing about presigning gets the proxy, because a
-    /// self-hoster's bucket is usually unreachable from a phone.
-    #[test]
-    fn an_s3_store_does_not_presign_unless_it_was_asked_to() {
-        let store: StoreConfig = serde_json::from_str(
-            r#"{"kind":"s3","endpoint":"http://minio.lan:9000","bucket":"vault",
-                "access_key_id":"k","secret_access_key":"s"}"#,
-        )
-        .expect("an S3 store with only its required fields");
-        match store {
-            StoreConfig::S3 {
-                presign,
-                checksum_mode,
-                virtual_host_style,
-                region,
-                ..
-            } => {
-                assert!(!presign, "bytes are proxied by default");
-                assert_eq!(checksum_mode, Mode::Attest);
-                assert!(!virtual_host_style, "MinIO and Garage are path style");
-                assert_eq!(region, "us-east-1");
-            }
-            StoreConfig::Filesystem { .. } => panic!("that was an S3 store"),
         }
     }
 
