@@ -11,6 +11,18 @@ Two mechanisms, both real and both observed under [#1020](https://github.com/sri
 
 The consequence worth stating plainly: **no gate verdict taken from a shared target directory is worth anything**, whichever lane produced it.
 
+### The symptom, as it actually appears
+
+Mechanism 2 is not loud, and it is not confined to `xtask`. `CARGO_MANIFEST_DIR` is baked into **every** binary the directory builds, so a test that addresses a fixture relative to it reads that fixture out of the other worktree. Under [#1029](https://github.com/srikanth235/centraid/issues/1029) that appeared as **eleven file-not-found panics on a tree where `git status` was clean and every file the panics named was present** — present *here*, while around fifty test binaries were looking *there*.
+
+A run that cannot find files you can see is this trap until proven otherwise. The check is one command:
+
+```sh
+strings "$CARGO_TARGET_DIR"/debug/deps/<a_test_binary> | grep -o '[^ ]*/crates/[a-z-]*' | sort -u | head
+```
+
+If that names a path outside this worktree, the directory is shared and nothing built in it is evidence.
+
 ## Correct setup
 
 One target directory per worktree, exported before any cargo or xtask command:

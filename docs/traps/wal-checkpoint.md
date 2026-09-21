@@ -2,37 +2,41 @@
 
 ## What goes wrong
 
-Copying `vault.db` with `cp` while SQLite is in WAL mode, or closing the last connection under a running capture, produces a **torn, incomplete or empty** result. Backup/restore then "succeeds" with corrupt or stale data, or a generation ships with no WAL tail and an RPO of "since the last snapshot".
+Copying `vault.db` with `cp` while the core has it open, or letting a second opener checkpoint the WAL under a running capture, produces a **torn, incomplete or empty** result. A backup then "succeeds" with stale data, or a generation ships with frames that were silently dropped.
+
+Under [#1029](https://github.com/srikanth235/centraid/issues/1029) the vault moved to the phone and the gateway became a blind store, so who holds the connection changed — the trap did not.
 
 ## Invariants (code)
 
-- A data directory has one layout: `<data-dir>/vault/<vaultId>/vault.db`, `<data-dir>/keys/` beside it, and `<data-dir>/blobs/` for the store (`crates/centraid/src/cmd/mod.rs`). `keys/` is deliberately what export, backup and copy gestures do **not** move, which is what makes a copied vault ciphertext.
-- **The gateway is the vault's single writer, and it holds its one writable connection for the life of the process** (`crates/centraid/src/run.rs`). In WAL mode SQLite checkpoints and removes the `-wal` file when the last connection closes, so a gateway that closed its connection would leave the capture tick nothing to read.
-- **The WAL capture tick runs in the gateway** and reads the `-wal` file, not a connection (`crates/centraid/src/cmd/capture.rs`). Each tick seals the new byte range into the blob store and appends one line to `<data-dir>/wal/pending.jsonl`; `centraid backup now` reads that index. A segment's address is `{db, generation, group, startOffset, endOffset, tickMs}`, with both offsets in the nonce (`crates/vault/src/backup/wal.rs`). When the WAL file gets **shorter** than the last offset, SQLite has checkpointed and restarted it, so the capture bumps the group and resets the offset to zero — without that, two different byte ranges would seal under one address and one nonce.
-- `Vault::close` checkpoints the WAL; a core is closed, not dropped-and-hoped (`crates/core/src/handle.rs`).
-- **Restore is into a fresh directory only.** `centraid recover` refuses a live gateway's data directory by pid through the lock file, and refuses a target that already holds a `vault.db` ([recovery/backup-restore.md](../recovery/backup-restore.md)). Never "fix in place" over a live vault.
+- **The phone is the vault's single writer.** `crates/vault`'s `Vault::wrap` is the one funnel that opens a connection, and it states the whole pragma set on every one: `journal_mode = wal`, `synchronous = FULL`, `wal_autocheckpoint = 0`, `journal_size_limit`, `SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE`, `foreign_keys`. `page_size` is pinned at 4096 and `auto_vacuum` is `NONE`, both stated in `Vault::create_with` where a header pragma can take.
+- **`synchronous = FULL` is the durability order and it is explicit, never inherited** (F11). Under WAL the compiled default is `NORMAL`, which acknowledges a commit before its frames reach the disk — and that leaves the spool holding a commit the phone lost, whose txid the next one collides with.
+- **`wal_autocheckpoint = 0` means nothing checkpoints behind the capture's back.** Any other opener with the default — an iOS share extension, a debugging tool, a second process "just reading" — restarts the WAL under the capture. **One opener, one pragma set, one connection per vault.**
+- **Capture is commit-driven and debounced, not on an RPO timer** (`crates/vault/src/backup/capture.rs`). It reads the `-wal` file's frames, respects the byte order the header magic names, follows the checksum chain, and ignores trailing frames that fail it exactly as SQLite does — those are a crash mid-write, not corruption.
+- **A WAL restart with new salts is normal** after every truncate. The break rule is a salt mismatch mid-cursor, not a file that got shorter: SQLite restarts the WAL *in place* with new salts at the same length, which is the defect a length comparison missed (B6). `(salt1, salt2, frame index)` is recorded durably before the checkpoint that makes it stale.
+- **A base is page-aligned ranges of the live file, sealed.** `VACUUM INTO` renumbers pages, which is why WAL frames could not be replayed onto the old base (B4), and why `VACUUM` never runs and `auto_vacuum` stays `NONE`. `PRAGMA optimize` writes `sqlite_stat1`, so it is a commit: run it, capture, then checkpoint.
+- **A gateway holds no key and no plaintext.** The laptop's data directory holds `node.key`, the state file and the object store; there is no vault there to copy.
 
 ## How agents get it wrong
 
-1. **`cp vault.db vault.db.bak` while the gateway is running** — WAL frames not in the main file; the copy is incomplete.
-2. **Copying only `vault.db` without its WAL sidecars** (`-wal`, `-shm`) when the process was not cleanly closed.
-3. **Opening and closing a second connection "just to read" and assuming nothing changed** — if it was the last connection, the close checkpointed the WAL out from under the capture's offsets. Reads against a serving gateway go through `centraid doctor`, which is read-only and lock-free.
-4. **Treating a filesystem snapshot of a live data directory as a backup product** — use `centraid backup now`, `centraid export` and `centraid recover`.
-5. **Deleting `wal/pending.jsonl`** thinking it is a log — the index is the next generation's WAL tail ([logs.md](../logs.md#what-is-not-a-log)).
+1. **`cp vault.db vault.db.bak` while the core is open** — WAL frames are not in the main file; the copy is incomplete.
+2. **Copying only `vault.db` without its `-wal` and `-shm` sidecars** when the process was not cleanly closed.
+3. **Opening a second connection "just to read".** If it is the last one to close, it checkpoints the WAL out from under the capture's offsets; if it uses the default `wal_autocheckpoint`, it restarts the WAL while the capture is mid-cursor.
+4. **Editing a migration rung to fix a comment.** The ladder's bytes train the backup dictionary — see [migration-header-is-a-format.md](migration-header-is-a-format.md).
+5. **Treating a filesystem snapshot of the phone's vault directory as a backup product.** The product is the drain: sealed objects committed to the laptop under a manifest head.
 
 ## Safe patterns
 
 | Goal | Do |
 | --- | --- |
-| Product backup | `centraid backup now --data-dir <dir>` (a snapshot, the sealed WAL tail, a manifest); `centraid export --data-dir <dir> --out <file> --password-file <file>` for a portable copy plus a password-wrapped recovery kit |
-| Blank-machine recovery | `centraid recover --kit <file> --password-file <file> --data-dir <fresh dir>`, with a kit you exported **in advance** — nothing mints one for you ([recovery/backup-restore.md](../recovery/backup-restore.md)) |
-| Health check against a serving gateway | `centraid doctor --data-dir <dir> [--json]` |
-| Dev fixture | Stop the gateway and copy from a **closed** vault, or seed a fresh one with `cargo run -p centraid --bin seed-demo-vault` |
-| Tests | temp directories per test — never the developer's live vault |
+| Product backup | The phone drains its spool to the paired laptop — in the foreground, or in the background window the OS grants ([R-1029-2](../decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21)). There is no copy gesture. |
+| Blank-phone recovery | The 24 words, on a fresh install. Nothing else is needed and nothing else is kept — see [../recovery/backup-restore.md](../recovery/backup-restore.md). |
+| Health check on a gateway | `centraid doctor --data-dir <dir> [--json]` — read-only and lock-free, which is why the container health check runs it. |
+| Bit-rot check on stored objects | `centraid-gateway scrub --data-dir <dir> [--repair]`, or the quarterly sweep the server runs itself. No key is involved. |
+| Tests | Temp directories per test — never a live vault. |
 
 ## Related
 
-- `crates/centraid/src/cmd/capture.rs` — the capture tick
-- `crates/vault/src/backup/` — seal, manifest, restore ordering
-- `crates/centraid/tests/restore_drill.rs` — the drill the `release` profile runs
-- [recovery/backup-restore.md](../recovery/backup-restore.md)
+- `crates/vault/src/backup/` — capture, seal, manifest, restore ordering
+- `crates/vault/src/backup/drill.rs` — the drill the `release` profile runs
+- [../recovery/backup-restore.md](../recovery/backup-restore.md)
+- [migration-header-is-a-format.md](migration-header-is-a-format.md)

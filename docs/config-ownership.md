@@ -45,7 +45,7 @@ Code: [`desktop/electron/src/main.ts`](../desktop/electron/src/main.ts), [`deskt
 
 ### Mobile — the platform secure store wins
 
-One enrollment record per vault — the device's private identity key, the vault id, dialling hints — in the platform store, written and moved as one unit ([`Enrolments.kt`](../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/Enrolments.kt)). The replica file is named by the vault id ([traps/seat-identity.md](traps/seat-identity.md)).
+One enrollment record per vault — the device's private identity key, the vault id, dialling hints — in the platform store, written and moved as one unit ([`Enrolments.kt`](../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/Enrolments.kt)). The replica file is named by the vault id.
 
 ### App manifests — files win
 
