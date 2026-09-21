@@ -36,7 +36,7 @@
 //! its own would be a `BEGIN` inside a `BEGIN`.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
@@ -102,8 +102,20 @@ pub struct CommitResult<T> {
     pub tables: Vec<String>,
 }
 
-/// The set the hook fills and the guard reads.
-type Census = Arc<Mutex<(BTreeSet<String>, usize)>>;
+/// What the hook fills and the guard reads: the tables, the row count, and the
+/// **signed per-table delta** the running census is moved by (#1029 line 99).
+#[derive(Debug, Default)]
+struct Tally {
+    tables: BTreeSet<String>,
+    rows: usize,
+    /// `+1` per insert, `−1` per delete, nothing for an update. Applied to
+    /// [`crate::log::census::RunningCensus`] **only when the COMMIT succeeds**,
+    /// which is how a rolled-back transaction leaves no increment behind.
+    deltas: BTreeMap<String, i64>,
+}
+
+/// The tally the hook fills and the guard reads.
+type Census = Arc<Mutex<Tally>>;
 
 impl Vault {
     /// Run a write inside the commit pair.
@@ -138,7 +150,7 @@ impl Vault {
         // THE HOOK IS INSTALLED INSIDE THE TRANSACTION and removed before the
         // guard returns, so a read between commits carries no hook at all and
         // one commit's census can never absorb another's.
-        let census: Census = Arc::new(Mutex::new((BTreeSet::new(), 0)));
+        let census: Census = Arc::new(Mutex::new(Tally::default()));
         if let Err(error) = install_hook(connection, &census) {
             self.depth.set(0);
             let _ = connection.execute_batch("ROLLBACK");
@@ -164,7 +176,14 @@ impl Vault {
                 // READ AFTER THE COMMIT, and cleared only then. A census read
                 // before it would be a screen redrawn from a transaction that
                 // could still roll back.
-                let (tables, rows) = take_census(connection, &census);
+                let tally = take_census(connection, &census);
+                // APPLIED HERE AND NOWHERE ELSE: after the COMMIT returned, on
+                // the success path only. The rollback arm below drops the same
+                // tally on the floor, which is the whole of why a rolled-back
+                // transaction's increments do not survive.
+                self.running_census.apply(&tally.deltas);
+                let rows = tally.rows;
+                let tables: Vec<String> = tally.tables.into_iter().collect();
                 tracing::debug!(rows, tables = tables.len(), "commit");
                 Ok(CommitResult {
                     value,
@@ -200,27 +219,7 @@ impl Vault {
     /// `sqlite_%` tables are excluded: they are SQLite's own bookkeeping and a
     /// member has no app whose rows they are.
     pub fn census(&self) -> Result<Vec<(String, i64)>> {
-        self.read(|connection| {
-            let mut statement = connection.prepare(
-                r"SELECT name FROM sqlite_master
-                    WHERE type = 'table'
-                      AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
-                    ORDER BY name",
-            )?;
-            let tables: Vec<String> = statement
-                .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            let mut census = Vec::with_capacity(tables.len());
-            for table in tables {
-                let sql = format!(
-                    "SELECT count(*) FROM {}",
-                    crate::log::identifiers::quoted(&table)
-                );
-                let rows: i64 = connection.query_row(&sql, [], |row| row.get(0))?;
-                census.push((table, rows));
-            }
-            Ok(census)
-        })
+        self.read(|connection| self.running_census.read(connection))
     }
 }
 
@@ -235,7 +234,7 @@ impl Vault {
 const FTS_SHADOW_SUFFIXES: [&str; 5] = ["_content", "_data", "_docsize", "_idx", "_config"];
 
 /// Whether a table name is a change a screen could care about.
-fn is_reportable(table: &str) -> bool {
+pub(crate) fn is_reportable(table: &str) -> bool {
     if table.starts_with("sqlite_") {
         return false;
     }
@@ -249,14 +248,24 @@ fn is_reportable(table: &str) -> bool {
 fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
     let shared = Arc::clone(census);
     connection.update_hook(Some(
-        move |_action: Action, _database: &str, table: &str, _row_id: i64| {
+        move |action: Action, _database: &str, table: &str, _row_id: i64| {
             if !is_reportable(table) {
                 return;
             }
             if let Ok(mut held) = shared.lock() {
-                held.1 += 1;
-                if !held.0.contains(table) {
-                    held.0.insert(table.to_owned());
+                held.rows += 1;
+                if !held.tables.contains(table) {
+                    held.tables.insert(table.to_owned());
+                }
+                // THE SIGNED HALF (#1029 line 99). An update moves no count:
+                // the row was there before and is there after.
+                let delta = match action {
+                    Action::SQLITE_INSERT => 1,
+                    Action::SQLITE_DELETE => -1,
+                    _ => 0,
+                };
+                if delta != 0 {
+                    *held.deltas.entry(table.to_owned()).or_insert(0) += delta;
                 }
             }
         },
@@ -269,14 +278,12 @@ fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
 /// The hook is removed FIRST: the closure owns a clone of the `Arc`, and
 /// leaving it installed would leave one commit's set alive to be written to by
 /// the next statement on this connection.
-fn take_census(connection: &Connection, census: &Census) -> (Vec<String>, usize) {
+fn take_census(connection: &Connection, census: &Census) -> Tally {
     let _ = connection.update_hook(None::<fn(Action, &str, &str, i64)>);
     let Ok(mut held) = census.lock() else {
-        return (Vec::new(), 0);
+        return Tally::default();
     };
-    let tables = std::mem::take(&mut held.0).into_iter().collect();
-    let rows = std::mem::replace(&mut held.1, 0);
-    (tables, rows)
+    std::mem::take(&mut *held)
 }
 
 #[cfg(test)]

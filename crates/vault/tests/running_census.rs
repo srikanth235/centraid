@@ -19,12 +19,13 @@
 //!    rolled-back body wrote, and none of those rows exists afterwards. A
 //!    counter that took its increments at hook time rather than at COMMIT would
 //!    keep them.
-//! 3. **The counters and the guard agree about what a table is.** The census
-//!    now reads the same counters `CommitResult::tables` is built from, so
-//!    FTS5's shadow tables — `_content`, `_data`, `_docsize`, `_idx`,
-//!    `_config`, which every write to an indexed table touches through a
-//!    trigger — are out of both. The scan had them in, so a member's census
-//!    carried four bookkeeping "tables" no app of theirs owns.
+//! 3. **The census counts a member's rows and not SQLite's working out.** It
+//!    reads the same counters `CommitResult::tables` is built from, so FTS5's
+//!    shadow tables — `_content`, `_data`, `_docsize`, `_idx`, `_config` — are
+//!    out; and so is the FTS5 virtual table itself, which holds one row per row
+//!    of the table it indexes, so counting it counted that table twice. The
+//!    scan had all of them in: ninety shadow tables and eighteen duplicated
+//!    counts in every member's generation manifest.
 //!
 //! Property 3 is the one that fails before the fix.
 
@@ -70,7 +71,7 @@ fn scan(vault: &centraid_vault::file::Vault, census: &[(String, i64)]) -> Vec<(S
 
 /// **Property 3, and it is red before the fix.**
 ///
-/// A census built by scanning `sqlite_master` reports FTS5's shadow tables. A
+/// A census built by scanning `sqlite_master` reports FTS5's whole index. A
 /// census read off the counters the `update_hook` maintains does not, because
 /// the guard's `is_reportable` has always excluded them — and the whole of
 /// finding 15's fix is that those are the same numbers.
@@ -94,18 +95,15 @@ fn the_census_names_no_fts5_shadow_table() {
     let shadows: Vec<&String> = census
         .iter()
         .map(|(table, _)| table)
-        .filter(|table| {
-            table.starts_with("fts_")
-                && ["_content", "_data", "_docsize", "_idx", "_config"]
-                    .iter()
-                    .any(|suffix| table.ends_with(suffix))
-        })
+        .filter(|table| table.starts_with("fts_"))
         .collect();
     assert!(
         shadows.is_empty(),
         "the census carries SQLite's index bookkeeping as if it were a \
          member's rows, so it does not come from the counters: {shadows:?}"
     );
+    // The virtual table goes with its shadows: FTS5 holds one row per row of
+    // the table it indexes, so counting it counted `core_party` twice.
     assert!(
         census.iter().any(|(table, _)| table == "core_party"),
         "the census lost a real table"

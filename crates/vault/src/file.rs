@@ -74,6 +74,11 @@ pub struct Vault {
     /// a photograph in a row is a photograph in the journal. See
     /// [`Vault::with_blobs`].
     blobs: Option<Box<dyn crate::backup::store::BlobStore + Send + Sync>>,
+    /// THE RUNNING ROW CENSUS (#1029 line 99, W13 finding 15). Maintained by
+    /// the commit guard's `update_hook` and read by [`Vault::census`], so the
+    /// question "how many rows does this vault hold" costs arithmetic rather
+    /// than a `count(*)` per table at every capture tick.
+    pub(crate) running_census: crate::log::census::RunningCensus,
 }
 
 impl Vault {
@@ -301,6 +306,7 @@ impl Vault {
             read_depth: Cell::new(0),
             fault: Cell::new(None),
             blobs: None,
+            running_census: crate::log::census::RunningCensus::default(),
         })
     }
 

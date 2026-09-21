@@ -20,9 +20,11 @@
 //! `commit_seq` went with the plane. It was the position a seat's cursor
 //! chased; nothing else ever read it.
 
+pub mod census;
 pub mod guard;
 pub mod identifiers;
 
+pub use census::RunningCensus;
 pub use guard::{ChangeCensus, CommitResult, CommitTx};
 pub use identifiers::{primary_key_of, quoted, table_columns};
 
