@@ -3033,13 +3033,13 @@ seam that no longer exists.
 
 | # | Command | Outcome |
 | --- | --- | --- |
-| 1 | `cargo xtask gate --profile mobile-jvm` | **PASS**, 165.4 s of a 420 s budget; its own check `git diff --exit-code -- design copy mobile contracts/screens` clean |
+| 1 | `cargo xtask gate --profile mobile-jvm` | **PASS**, 100.9 s of a 420 s budget (165.4 s before the merge); its own check `git diff --exit-code -- design copy mobile contracts/screens` clean |
 | 2 | the identifier guard | `BackgroundIdentifierSpec`, 6 cases, **2 red on the base `project.yml`** |
 | 3 | `grep -rn 'forTaskWithIdentifier' mobile/iosApp/Sources` | `BackgroundPasses.swift:79`, in the helper `register()` calls once per identifier |
 | 4 | `grep -rn 'BackgroundTransfers\|backgroundTransfers\|NSURLSessionUploadTask' mobile --include=*.kt --include=*.swift` | **no code hit.** Six prose hits remain — five KDoc lines naming where the seam went and one assertion in `BackgroundPassLawSpec` that it stays gone. They are supersession markers, which this repository treats as state |
 | 5 | `grep -rn 'FORCE_QUIT_SENTENCE\|ANDROID_UNMETERED_SENTENCE' mobile/shared/src` | `sync/DrainPass.kt:236,245` and five assertions in `DrainPassSpec` |
 | 6 | `grep -rn 'Drain\|BackupStatus' mobile/shared/src/commonMain` | `sync/DrainPass.kt` and `custody/PairAndRestore.kt` (its doc naming the door shape), nowhere else |
-| 7 | `./gradlew -p mobile mobileJvm --no-daemon` | **BUILD SUCCESSFUL**, 258 tests, 0 failed (floor 236). `contracts/screens` drift: none — no screen proto was touched |
+| 7 | `./gradlew -p mobile mobileJvm --no-daemon` | **BUILD SUCCESSFUL**, **269 tests, 0 failed** after the W15-1 merge (258 before it; floor 236). `contracts/screens` drift: none — no screen proto was touched |
 | 8 | `bun install --frozen-lockfile && bun run check:push:static` | **4/4 gates passed in 5.8 s** |
 | 9 | `node .governance/law/run.mjs --brief-digest 4cf9a5a8690a` | **10 rules, no findings**; no drift line — the law is at the brief's digest |
 | 10 | the iOS inventory | 7 rows above, a grep each |
@@ -3086,3 +3086,56 @@ its rescheduling, the claim fold, every sentence, both flows' state machines —
 JVM. **Hand-off: when `Drain`, `Pair`, `Restore` and `BackupStatus` exist, the remaining work is
 three adapters over `CentraidCore.call`, `BackgroundPasses.pass = …` in `ShellModel`,
 `SyncPass.install { … }` on Android, and a foreground trigger on becoming active.**
+
+### After the merge of W15-1 (`b4f0e03e`)
+
+The request contract landed mid-lane and was merged into this branch (`a25e6fd6`; one conflict,
+in `CHANGELOG.md`, where both lanes added an entry — both kept). **W15 touched nothing under
+`mobile/`**: `git diff --name-only 5d4ac8a5 b4f0e03e -- mobile/` is empty. The Kotlin bindings
+are Wire's, generated from `crates/api-proto/proto` by `:core`'s own task; nothing was written by
+hand.
+
+`CoreDoors.kt` is the whole of what crosses — `drain = 15`, `pair_phone = 16`, `restore = 17`,
+`backup_status = 18`, one `Envelope` each. **At HEAD: 269 jvm tests, 0 failed** (floor 236).
+
+Three alignments, each of which changed the shell rather than the contract:
+
+1. **There is no safety number on the wire.** `PairResponse` carries `gateway_endpoint` and
+   `record_published`; `centraid_identity::safety_number` exists in Rust and is not part of the
+   answer. The paired screen shows the endpoint id — which the laptop's own terminal prints, so
+   it is comparable by eye — in eight-character groups with **every character present**. The
+   shell computes no number of its own: that would be a second answer to "who did I pair with".
+   **Owner question, with a recommendation.** Should `PairResponse` carry
+   `identity::safety_number` over the two identities instead? *Recommend yes:* a safety number is
+   designed to be read aloud and compared, and a 64-character hex id is not — members will
+   compare the first four characters and stop. The endpoint id is what is available today and it
+   is honest; it is not what this comparison should be made of.
+2. **A restore reports rows**, not just a vault count: `RestoredVault.rows` is the census the
+   generation promised, and "2 vaults" reads identically over two empty files.
+3. **The three `stopped` sentences are W15's own words**, with `pending_bytes` rendered in
+   decimal units — a phone's own storage screen is decimal, and two numbers for one amount is
+   worse than either. Neither DEADLINE nor UNREACHABLE may contain "failed", and a case asserts it.
+
+**The drain's behaviour is not real yet** — W15's note says it seals and answers `UNREACHABLE` —
+and **no test in this lane is gated on bytes moving.** Every case here is about shape, refusal,
+copy and state.
+
+`VaultSecrets` is the plumbing for the two secrets `centraid_open` takes, and it exists because
+they look alike and have opposite rules: the **seed** goes to `SyncedSecrets` (synchronised: it
+is the 24 words) and the **device secret** to `SecureStore` (this device only: a copy on a second
+phone enrols both as one device, which is what F1's freeze is keyed on). A stored value of the
+wrong shape is read as absent rather than handed to the ABI as a `BAD_ARGUMENT`.
+`CoreConfiguration` carries both; `ConfigurationJsonSpec` pins that absent is absent and not an
+empty string, and that `device` is its own object and never nested inside `vault`.
+
+**One thing is still provisional and is built in exactly one line.** `CONTRACT.md` §4b carries
+the seed half today; the `device` object is W15's in-flight extension and is spelled
+`"device":{"secret":"<hex>"}` as its author stated it, at
+`mobile/core/src/commonMain/kotlin/dev/centraid/core/CentraidCore.kt:127-129`. If the landed
+contract spells it otherwise, that line moves and nothing else does.
+
+**What is still not wired, and it is the same hand-off as before, narrowed.** No shell trigger
+calls the pass: `BackgroundPasses.pass = …` in `ShellModel`, `SyncPass.install { … }` on Android,
+and a foreground trigger on becoming active are three call sites in files no toolchain here
+compiles, and each needs the shelf to hand over a core supplier and a vault id. The doors, the
+pass, the claim fold, the copy and both custody machines are done and tested.
