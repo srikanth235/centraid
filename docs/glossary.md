@@ -2,7 +2,9 @@
 
 Authoritative product vocabulary. Prefer these terms in code, docs, commits, and review. When a concept has a canonical type, table or file, the pointer is listed. Table names resolve in [`contracts/schema/vault-ddl.sql`](../contracts/schema/vault-ddl.sql), the baseline DDL every crate reads.
 
-## Runtime model (never "chat" for the ledger)
+## Runtime model (never "chat" for the ledger) — retired
+
+> **Superseded, 2026-09-21.** The conversation ledger band was dropped in rung five with the assistant and automation planes it recorded ([#1029](https://github.com/srikanth235/centraid/issues/1029) W19). No table below exists and nothing writes one. Kept as vocabulary for old receipts.
 
 | Term | Meaning | Code |
 | --- | --- | --- |
@@ -142,9 +144,9 @@ Invariants:
 - **Revoking a device deletes its key row.** Unknown and revoked are the same refusal, and the member's device list keeps the replicated row (`Vault::revoke_device`).
 - **Sharing is residency, not filtering.** Data crosses only into another vault, under a standing **grant** (#825). No one queries another person's vault.
 
-## Sharing: the grant plane, subscriptions and links (#726, #731, #825, #929)
+## Sharing: the grant plane, subscriptions and links (#726, #731, #825, #929) — retired
 
-The vocabulary for what a member shares with whom. The tables are in the baseline DDL and are read by Docs' share fold and People's sharing reading; no crate delivers a grant across vaults or runs a peer plane between gateways ([ARCHITECTURE.md](../ARCHITECTURE.md#authorization-and-sharing)).
+> **Superseded, 2026-09-21.** The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) struck **sharing in full** — share feeds, share capabilities, the link ceremony, the mailbox and every `share_*` table — **deleted, not parked**: rung five drops the tables and W16 deleted the readers. The vocabulary below is kept because it is in old receipts and old rulings, and a reader who meets one of these words needs to be told the plane is gone rather than to find nothing. **Nothing here describes current state.**
 
 | Term | Meaning | Code |
 | --- | --- | --- |

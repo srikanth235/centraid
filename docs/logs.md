@@ -60,12 +60,6 @@ CI uploads, from the gate workflows:
 
 The job log itself is on GitHub Actions; every gate step prints exactly one line unless it fails.
 
-## Centraid Assist Worker
-
-Cloudflare Analytics Engine dataset `centraid_oauth` is the canonical Assist edge signal. It stores only route, outcome, HTTP status, and count. The Worker emits no console events.
-
-Keep Workers Logs, invocation logs, and automatic traces disabled for `oauth.centraid.dev`: callback query strings contain authorization code/state, and automatic traces retain full URLs. Any zone Logpush dataset must omit or redact query strings, headers, and request bodies. Never paste a raw start/bind/callback/exchange/refresh request into a ticket. Failure-ratio/429/5xx alert setup and incident handling are in [recovery/oauth-assist.md](recovery/oauth-assist.md).
-
 ## What is not a log
 
 | Path | Role |

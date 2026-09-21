@@ -67,20 +67,12 @@ Without the keystore the lane runs `assembleDebug` only and reports it.
 
 ## 4. Cloudflare (public site)
 
-The public marketing and docs site is the apex `centraid` Workers static-assets project ([`wrangler.json`](../wrangler.json)).
+The public marketing and docs site is the apex `centraid` Workers static-assets project ([`wrangler.json`](../wrangler.json)). **This is the only Cloudflare surface the product has**: the Centraid Assist OAuth Worker and its `oauth-production` environment were deleted with the hosted tier ([#1029](https://github.com/srikanth235/centraid/issues/1029)).
 
 | Name                    | Purpose         |
 | ----------------------- | --------------- |
 | `CLOUDFLARE_API_TOKEN`  | Wrangler deploy |
 | `CLOUDFLARE_ACCOUNT_ID` | Account         |
-
-### Centraid Assist OAuth edge
-
-- [ ] Bind **`oauth.centraid.dev`** as the only custom route for the OAuth worker; disable `workers.dev` and preview URLs.
-- [ ] Create protected GitHub Environment **`oauth-production`** with the maintainer as required reviewer.
-- [ ] Set repository variable `OAUTH_WORKER_DEPLOY_ENABLED=true` only after [the Google/Cloudflare evidence gates](release/oauth-assist-google.md) pass.
-- [ ] Store `GOOGLE_CLIENT_SECRET` and `CALLBACK_RECEIPT_SECRET` with Cloudflare Worker Secrets, not GitHub or the gateway. The public `GOOGLE_CLIENT_ID` is a Worker variable and gateway coordinate.
-- [ ] Establish two alert recipients and a rotation owner; exercise the [Assist recovery runbook](recovery/oauth-assist.md).
 
 ## 5. Cross-cutting
 
