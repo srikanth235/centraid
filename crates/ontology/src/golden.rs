@@ -21,7 +21,7 @@ use crate::snapshot::TableSnapshot;
 /// at the ladder head, which is the shape v1 founds its files from
 /// ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-D1-1).
 ///
-/// It is what `open_golden` opens and what `contracts/schema/vault-ddl.sql` is
+/// It is what `open_golden` opens and what `contracts/golden/issue-1020/vault-ddl.sql` is
 /// generated from. There is ONE baseline; the checkpoint label below is kept
 /// beside it because it is the low end of the accepted `user_version` window,
 /// not a second baseline.

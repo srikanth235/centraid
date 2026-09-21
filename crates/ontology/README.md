@@ -14,7 +14,7 @@ Everything above this crate needs the same three answers before it can do anythi
 | `golden` | Inflating a frozen corpus into a scratch directory. `GOLDEN_LABEL` is the baseline (`issue-1020`, the ladder head); `GOLDEN_LABEL_CHECKPOINT` is `issue-929`, the window's low end. The committed file is never opened in place ([`docs/traps/wal-checkpoint.md`](../../docs/traps/wal-checkpoint.md)). |
 | `doctor` | `PRAGMA integrity_check` and `PRAGMA foreign_key_check`. |
 | `registries` | The model's registries, embedded from `contracts/schema/v0-registries.json`. |
-| `ddl` + `bin/export-ddl` | Rendering and regenerating `contracts/schema/vault-ddl.sql`. |
+| `ddl` + `bin/export-ddl` | Rendering and regenerating `contracts/golden/issue-1020/vault-ddl.sql`, the corpus's own description. |
 | `bin/export-golden-manifest` | Regenerating a corpus's `manifest.json` from the corpus itself. |
 
 ## What it does not do
@@ -37,7 +37,7 @@ The registries and the corpora were produced by the TypeScript tree removed in [
 ```sh
 cargo test -p centraid-ontology                 # the checkpoint, the commitments, the fixtures
 cargo run -p centraid-ontology --bin export-ddl -- \
-  contracts/golden/issue-1020/vault.db.gz > contracts/schema/vault-ddl.sql
+  contracts/golden/issue-1020/vault.db.gz > contracts/golden/issue-1020/vault-ddl.sql
 ```
 
 `#![forbid(unsafe_code)]`; there is no `unsafe` in this crate and there is no reason for there ever to be.

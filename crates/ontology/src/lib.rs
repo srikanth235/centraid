@@ -21,7 +21,7 @@ pub mod registries;
 pub mod snapshot;
 pub mod vault;
 
-pub use ddl::{DDL_FIXTURE_HEADER, ddl_fixture};
+pub use ddl::{DDL_FIXTURE_HEADER, ddl_fixture, render_ddl};
 pub use doctor::{DoctorReport, format_doctor_report, vault_doctor};
 pub use error::{OntologyError, Result};
 pub use snapshot::{

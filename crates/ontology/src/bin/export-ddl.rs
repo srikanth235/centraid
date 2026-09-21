@@ -1,10 +1,11 @@
-//! Export a vault's `sqlite_master` DDL as the `contracts/schema` fixture.
+//! Export the golden corpus's `sqlite_master` DDL as the fixture beside it.
 //!
 //! The fixture is a REGENERATED file, never a hand-edited one:
 //!
 //! ```sh
 //! cargo run -p centraid-ontology --bin export-ddl -- \
-//!   contracts/golden/issue-1020/vault.db.gz > contracts/schema/vault-ddl.sql
+//!   contracts/golden/issue-1020/vault.db.gz \
+//!     > contracts/golden/issue-1020/vault-ddl.sql
 //! ```
 //!
 //! The argument may be a `.gz` (inflated into a scratch directory first, never
