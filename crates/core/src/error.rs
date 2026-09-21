@@ -336,23 +336,14 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
             "Another phone holds this vault now, so this one cannot back it up."
         }
         C::GatewayQuotaExceeded => {
-            "This vault has used all its backup space. Free some up, or move to a larger plan."
-        }
-        // READ-ONLY, NOT DELETED, and the sentence leads with that: the whole
-        // reason the rule exists is that a member who let a plan lapse finds
-        // their backup where they left it (F13).
-        C::GatewayPlanLapsed => {
-            "This plan has lapsed. The backup is still there and can still be restored; nothing \
-             new is being saved."
+            "This vault has used all its backup space. Free some up, or raise the limit on the \
+             machine holding the backup."
         }
         C::GatewayDeleteRefused => {
             "The backup service kept that rather than deleting it. Backups are held for a set \
              time so an older one can always be restored."
         }
-        C::GatewayCapabilityScope => "That share is no longer available.",
-        C::GatewayMailboxRefused => {
-            "That could not be delivered right now. It will be tried again later."
-        }
+        C::GatewayCapabilityScope => "That is no longer available.",
     }
 }
 

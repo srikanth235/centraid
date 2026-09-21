@@ -281,14 +281,12 @@ const fn status_for(code: ErrorCode) -> StatusCode {
         | ErrorCode::GatewayAlreadyCommitted
         | ErrorCode::GatewayLeaseStale
         | ErrorCode::VaultMoved => StatusCode::CONFLICT,
-        ErrorCode::GatewayQuotaExceeded | ErrorCode::GatewayPlanLapsed => {
-            StatusCode::PAYMENT_REQUIRED
-        }
+        ErrorCode::GatewayQuotaExceeded => StatusCode::PAYMENT_REQUIRED,
         ErrorCode::GatewayObjectTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
         ErrorCode::GatewayObjectUnknown => StatusCode::NOT_FOUND,
-        ErrorCode::GatewayDeleteRefused
-        | ErrorCode::GatewayCapabilityScope
-        | ErrorCode::GatewayMailboxRefused => StatusCode::FORBIDDEN,
+        ErrorCode::GatewayDeleteRefused | ErrorCode::GatewayCapabilityScope => {
+            StatusCode::FORBIDDEN
+        }
         // WHICH SIDE IS AT FAULT, SAID IN THE STATUS. `GATEWAY_CHECKSUM_MISSING`
         // is the commonest refusal a new client meets — it uploaded every
         // object without an attestation header and the commit refused the lot —
@@ -913,7 +911,6 @@ mod tests {
             ErrorCode::GatewayNotLeaseHolder,
             ErrorCode::VaultMoved,
             ErrorCode::GatewayQuotaExceeded,
-            ErrorCode::GatewayPlanLapsed,
             ErrorCode::GatewayDeleteRefused,
             ErrorCode::GatewayObjectTooLarge,
             ErrorCode::GatewayObjectUnknown,

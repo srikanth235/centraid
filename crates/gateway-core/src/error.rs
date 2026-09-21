@@ -94,15 +94,6 @@ pub enum Refusal {
         wanted_bytes: u64,
     },
 
-    /// The plan lapsed: read-only, and retained for a stated period. Restore
-    /// still works (F13).
-    #[error("gateway: plan lapsed")]
-    PlanLapsed,
-
-    /// The stated retention period after a lapse ended.
-    #[error("gateway: plan expired")]
-    PlanExpired,
-
     /// A tombstone was refused by the floor, the size guard, the rate limit or
     /// the append-only flag (F4, F10).
     #[error("gateway: tombstone refused")]
@@ -112,27 +103,6 @@ pub enum Refusal {
     /// expired.
     #[error("gateway: capability scope")]
     CapabilityScope,
-
-    /// A mailbox deposit exceeded the capability's size cap or its rate limit,
-    /// or the capability has expired. Deposits are unsigned, so one leaked
-    /// capability must not fill a mailbox.
-    #[error("gateway: mailbox refused")]
-    MailboxRefused(MailboxFault),
-}
-
-/// Why a mailbox deposit was refused.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MailboxFault {
-    /// The capability's signature did not verify against the mailbox's own key.
-    NotIssuedByRecipient,
-    /// Past `expires_at_ms`.
-    CapabilityExpired,
-    /// The capability was revoked. Revocation takes effect immediately.
-    CapabilityRevoked,
-    /// Over the per-deposit size cap.
-    TooLarge,
-    /// Over the per-capability rate limit.
-    RateLimited,
 }
 
 /// THE VAULT MOVED, AND WHEN.
@@ -339,11 +309,8 @@ impl Refusal {
             | Self::MalformedGeneration
             | Self::NotLeaseHolder
             | Self::UnknownVault
-            | Self::PlanLapsed
-            | Self::PlanExpired
             | Self::DeleteRefused(_)
-            | Self::CapabilityScope
-            | Self::MailboxRefused(_) => Companions::default(),
+            | Self::CapabilityScope => Companions::default(),
         }
     }
 
@@ -373,10 +340,8 @@ impl Refusal {
             // identity keys it holds.
             Self::UnknownVault => ErrorCode::Unauthorized,
             Self::QuotaExceeded { .. } => ErrorCode::GatewayQuotaExceeded,
-            Self::PlanLapsed | Self::PlanExpired => ErrorCode::GatewayPlanLapsed,
             Self::DeleteRefused(_) => ErrorCode::GatewayDeleteRefused,
             Self::CapabilityScope => ErrorCode::GatewayCapabilityScope,
-            Self::MailboxRefused(_) => ErrorCode::GatewayMailboxRefused,
         }
     }
 

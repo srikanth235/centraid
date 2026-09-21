@@ -28,15 +28,11 @@
 CREATE TABLE IF NOT EXISTS account (
   account_key      BLOB PRIMARY KEY NOT NULL,   -- 32-byte Ed25519 public key
   admitted_at_ms   INTEGER NOT NULL,
-  -- 'active' | 'lapsed' | 'expired'. A LAPSED PLAN IS READ-ONLY AND RETAINED
-  -- for a stated period, never deleted inside it (F13): restore still works
-  -- while lapsed, which is the whole reason somebody comes back.
-  plan_state       TEXT NOT NULL,
-  -- Keys are free to mint, so an unbounded free tier is unbounded Sybil
-  -- storage (F13). Zero is a legitimate free tier and is not "no limit".
-  quota_bytes      INTEGER NOT NULL,
-  lapse_at_ms      INTEGER,
-  retain_until_ms  INTEGER
+  -- The bound the owner set when they minted the invite. Zero is a legitimate
+  -- bound and is not "no limit". `plan_state`, `lapse_at_ms` and
+  -- `retain_until_ms` were here while a purchase could lapse (F13); the scope
+  -- amendment of 2026-09-21 struck the account's purchase half from v0.
+  quota_bytes      INTEGER NOT NULL
 ) STRICT;
 
 -- ----------------------------------------------------------------- vaults --

@@ -167,18 +167,21 @@ enum ErrorCode {
   // The vault's quota is spent. Keys are free to mint, so an unbounded free
   // tier is unbounded Sybil storage (F13).
   ERROR_CODE_GATEWAY_QUOTA_EXCEEDED = 90;
-  // The plan lapsed: the vault is READ-ONLY and retained for a stated period.
-  // Restore still works. A `Plan` rides with it.
-  ERROR_CODE_GATEWAY_PLAN_LAPSED = 91;
+  // RESERVED. Held `ERROR_CODE_GATEWAY_PLAN_LAPSED` until the scope amendment
+  // of 2026-09-21 struck the account, purchases and plan lapse from v0. The
+  // number is not re-used: a phone carrying an older build reads 91 as "plan
+  // lapsed", and giving it a second meaning is how a refusal becomes a lie.
+  reserved 91;
   // A delete was refused. A `DeleteRefusal` says which of the floor, the size
   // guard, the rate limit or the append-only flag held it (F4, F10).
   ERROR_CODE_GATEWAY_DELETE_REFUSED = 92;
   // A capability does not cover the object or the pack range being read, or it
   // was revoked or has expired.
   ERROR_CODE_GATEWAY_CAPABILITY_SCOPE = 93;
-  // A mailbox deposit exceeded the capability's size cap or its rate limit.
-  // Deposits are unsigned, so one leaked capability must not fill a mailbox.
-  ERROR_CODE_GATEWAY_MAILBOX_REFUSED = 94;
+  // RESERVED. Held `ERROR_CODE_GATEWAY_MAILBOX_REFUSED` until the scope
+  // amendment of 2026-09-21 struck the mailbox. Not re-used, for the same
+  // reason as 91 above.
+  reserved 94;
 }
 
 message Error {

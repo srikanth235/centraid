@@ -29,10 +29,12 @@
 //! ## PATH INDICES, AND THE ONE THAT IS RESERVED
 //!
 //! A vault index is the level-1 index **as written** — vault 3 is `m/3'` — so
-//! the number in the account record and the number in the path are the same
-//! number and there is no offset to get wrong. The account key takes the top of
-//! the hardened space, [`ACCOUNT_INDEX`], which is therefore not a vault index
-//! any allocator may hand out; [`VaultMint`] refuses it.
+//! the number a caller asks for and the number in the path are the same number
+//! and there is no offset to get wrong. The top of the hardened space,
+//! [`ACCOUNT_INDEX`], is **retired and permanently reserved**: it held the
+//! account key until the scope amendment of 2026-09-21 struck the account, and
+//! it is not handed out as a vault index because a seed that once derived an
+//! account there must never derive a vault there. [`VaultMint`] refuses it.
 
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -45,10 +47,15 @@ const MASTER_KEY_TAG: &[u8] = b"ed25519 seed";
 /// SLIP-0010 hardens by setting the top bit of the index.
 const HARDENED: u32 = 0x8000_0000;
 
-/// The account key's level-1 index: the last index in the hardened space.
+/// THE RETIRED SLOT: the last index in the hardened space.
 ///
-/// It sits at the top rather than at 0 so that vault indices can be the plain
-/// counting numbers starting at 0 and still never collide with it.
+/// It held the account key (`seed / account'`) until the scope amendment of
+/// 2026-09-21 struck the account — v0 has no account, no signed vault listing
+/// and no purchase, so nothing derives a key here any more. **The slot is not
+/// re-used.** It sits at the top rather than at 0, so vault indices are the
+/// plain counting numbers starting at 0 and never collide with it; keeping it
+/// reserved is what stops a seed that once derived an account here from later
+/// deriving a *vault* here.
 pub const ACCOUNT_INDEX: u32 = 0x7fff_ffff;
 
 /// The largest vault index that is not [`ACCOUNT_INDEX`].
@@ -137,14 +144,6 @@ fn hmac_sha512(key: &[u8], parts: &[&[u8]]) -> [u8; 64] {
     bytes
 }
 
-/// The person's account key: what a gateway account is keyed by, and what signs
-/// "vault V belongs to account A".
-///
-/// Contacts never see it (#1029 F2) — it is the one key whose publication would
-/// link a person's vaults to each other.
-#[derive(Clone)]
-pub struct AccountKey(SigningKey);
-
 /// A vault's identity key. Its public half **is** `vault_id` and the address;
 /// there is no second id to map (#1029 §0).
 #[derive(Clone)]
@@ -170,30 +169,9 @@ macro_rules! redacted_debug {
     };
 }
 
-redacted_debug!(AccountKey, "AccountKey");
 redacted_debug!(VaultIdentityKey, "VaultIdentityKey");
 redacted_debug!(BoxKey, "BoxKey");
 redacted_debug!(VaultRootKey, "VaultRootKey");
-
-impl AccountKey {
-    /// The public half, which the account's own pkarr record is published
-    /// under.
-    pub fn public(&self) -> VerifyingKey {
-        self.0.verifying_key()
-    }
-
-    /// The signing key, for "vault V belongs to account A".
-    pub const fn signing(&self) -> &SigningKey {
-        &self.0
-    }
-
-    /// `seed / account'`.
-    pub fn derive(seed: &crate::phrase::Seed) -> Self {
-        Self(SigningKey::from_bytes(
-            &Node::master(seed).child(ACCOUNT_INDEX).key,
-        ))
-    }
-}
 
 impl VaultIdentityKey {
     /// The public half: the vault id, the address, and the pkarr record's name.
@@ -389,13 +367,11 @@ mod tests {
     }
 
     #[test]
-    fn the_four_keys_of_a_vault_are_four_different_secrets() {
+    fn the_three_keys_of_a_vault_are_three_different_secrets() {
         let seed = seed();
-        let account = AccountKey::derive(&seed);
         let keys = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
 
         let bytes: Vec<[u8; 32]> = vec![
-            account.signing().to_bytes(),
             keys.identity.signing().to_bytes(),
             keys.box_key.secret().to_bytes(),
             *keys.root.as_bytes(),
@@ -503,10 +479,6 @@ mod tests {
     fn no_key_prints_itself() {
         let seed = seed();
         let keys = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
-        assert_eq!(
-            format!("{:?}", AccountKey::derive(&seed)),
-            "AccountKey(<redacted>)"
-        );
         assert_eq!(
             format!("{:?}", keys.identity),
             "VaultIdentityKey(<redacted>)"

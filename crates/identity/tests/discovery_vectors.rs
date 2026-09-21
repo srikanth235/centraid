@@ -19,10 +19,6 @@
 //! - **the `cert=` payload**, so the base64url alphabet and the 104-byte
 //!   certificate layout are pinned separately from the packet that carries
 //!   them;
-//! - **the account record**, which is a different entry name (`gateway=`) for a
-//!   different thing, and would otherwise only be tested against itself;
-//! - **the vault listing's wire form**, whose fixed-width layout is what a
-//!   restore parses on a phone that has nothing else.
 //!
 //! ## THE TWO INPUTS THAT ARE NOT DERIVED, AND WHY THEY ARE CONSTANTS
 //!
@@ -43,11 +39,10 @@
 
 use std::path::{Path, PathBuf};
 
-use centraid_identity::account::{VaultClaim, VaultListing};
 use centraid_identity::certificate::{DeviceCertificate, Epoch};
-use centraid_identity::derive::{AccountKey, VaultMint};
+use centraid_identity::derive::VaultMint;
 use centraid_identity::phrase::RecoveryPhrase;
-use centraid_identity::record::{AccountRecord, GatewayUrl, IdentityRecord};
+use centraid_identity::record::{GatewayUrl, IdentityRecord};
 use serde_json::{Value, json};
 
 fn fixture_path() -> PathBuf {
@@ -77,33 +72,17 @@ const TIMESTAMP_MICROS: u64 = 1_700_000_000_000_000;
 /// fixture can be mistaken for a live host.
 const GATEWAY: &str = "https://gateway.example/";
 
-/// Vault indices, matching `identity-vectors.json`: first, sibling, sparse.
-const VAULT_INDICES: [u32; 3] = [0, 1, 4];
-
 fn generated() -> Value {
     let seed = RecoveryPhrase::parse(PHRASE)
         .expect("the BIP39 vector parses")
         .seed();
-    let account = AccountKey::derive(&seed);
     let gateway = GatewayUrl::parse(GATEWAY).expect("a gateway URL");
     let timestamp = pkarr::Timestamp::from(TIMESTAMP_MICROS);
     let device = ed25519_dalek::SigningKey::from_bytes(&DEVICE_SECRET).verifying_key();
 
     let keys = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
     let certificate = DeviceCertificate::issue(&keys.identity, &device, Epoch::new(2));
-    let record = IdentityRecord::new(gateway.clone(), certificate);
-
-    // The listing a restore parses, over the same three indices the identity
-    // vectors pin.
-    let mut mint = VaultMint::fresh();
-    let claims: Vec<VaultClaim> = VAULT_INDICES
-        .iter()
-        .map(|index| {
-            let vault = mint.mint(&seed, *index).expect("a fresh index");
-            VaultClaim::issue(&account, &vault.identity.public(), *index)
-        })
-        .collect();
-    let listing = VaultListing::sign(&account, &claims).expect("signs");
+    let record = IdentityRecord::new(gateway, certificate);
 
     json!({
         "schema": "centraid-discovery-vectors/1",
@@ -126,19 +105,6 @@ fn generated() -> Value {
             "signedPacketHex": hex::encode(
                 record.sign_at(&keys.identity, timestamp).expect("signs").as_bytes(),
             ),
-        },
-        "accountRecord": {
-            "accountPublicHex": hex::encode(account.public().to_bytes()),
-            "signedPacketHex": hex::encode(
-                AccountRecord::new(account.public(), gateway)
-                    .sign_at(&account, timestamp)
-                    .expect("signs")
-                    .as_bytes(),
-            ),
-        },
-        "vaultListing": {
-            "indices": VAULT_INDICES,
-            "listingHex": hex::encode(listing.to_bytes()),
         },
     })
 }
@@ -205,7 +171,7 @@ fn the_pinned_packet_reads_back_as_the_record_it_pins() {
         .expect("a signed packet");
     let record = IdentityRecord::read(&packet).expect("reads back");
 
-    assert_eq!(record.mailbox().as_str(), GATEWAY);
+    assert_eq!(record.gateway().as_str(), GATEWAY);
     assert_eq!(record.certificate().epoch(), Epoch::new(2));
     assert_eq!(
         hex::encode(record.identity().to_bytes()),
@@ -218,30 +184,5 @@ fn the_pinned_packet_reads_back_as_the_record_it_pins() {
         vectors["identityRecord"]["certBase64Url"]
             .as_str()
             .expect("base64url"),
-    );
-}
-
-/// The listing's pinned bytes verify as a document, not just parse as one.
-#[test]
-fn the_pinned_listing_verifies_under_its_account_key() {
-    let vectors = generated();
-    let bytes =
-        hex::decode(vectors["vaultListing"]["listingHex"].as_str().expect("hex")).expect("hex");
-
-    let listing = VaultListing::from_bytes(&bytes).expect("reads back");
-    listing.verify().expect("still signed");
-    assert_eq!(
-        hex::encode(listing.account().to_bytes()),
-        vectors["accountRecord"]["accountPublicHex"]
-            .as_str()
-            .expect("hex"),
-    );
-    assert_eq!(
-        listing
-            .vaults()
-            .iter()
-            .map(VaultClaim::index)
-            .collect::<Vec<_>>(),
-        VAULT_INDICES,
     );
 }

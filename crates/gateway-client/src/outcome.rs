@@ -223,10 +223,8 @@ const GATEWAY_CODES: &[ErrorCode] = &[
     ErrorCode::GatewayLeaseStale,
     ErrorCode::GatewayNotLeaseHolder,
     ErrorCode::GatewayQuotaExceeded,
-    ErrorCode::GatewayPlanLapsed,
     ErrorCode::GatewayDeleteRefused,
     ErrorCode::GatewayCapabilityScope,
-    ErrorCode::GatewayMailboxRefused,
 ];
 
 /// Read a wire spelling back into a code.
@@ -248,7 +246,6 @@ pub fn spelling_of(refusal: &Refusal) -> String {
 #[cfg(test)]
 mod tests {
     use centraid_gateway_core::checksum::ChecksumFault;
-    use centraid_gateway_core::error::MailboxFault;
     use centraid_gateway_core::ids::ObjectName;
     use centraid_gateway_core::retention::DeleteRefusal;
     use centraid_gateway_core::time::{Duration, ServerTime};
@@ -291,11 +288,8 @@ mod tests {
                 used_bytes: 1,
                 wanted_bytes: 1,
             },
-            Refusal::PlanLapsed,
-            Refusal::PlanExpired,
             Refusal::DeleteRefused(DeleteRefusal::AppendOnly),
             Refusal::CapabilityScope,
-            Refusal::MailboxRefused(MailboxFault::TooLarge),
         ]
     }
 

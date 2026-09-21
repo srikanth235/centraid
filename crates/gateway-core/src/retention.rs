@@ -106,9 +106,6 @@ pub enum DeleteRefusal {
     RateLimited { retry_after: ServerTime },
     /// The server owner disabled device deletes entirely.
     AppendOnly,
-    /// The plan lapsed: read-only, and nothing is deleted inside the stated
-    /// retention period.
-    PlanLapsed,
 }
 
 /// The bases the floor keeps, newest first.
@@ -253,7 +250,6 @@ pub struct DeleteContext<'a> {
     pub now: ServerTime,
     pub policy: Policy,
     pub append_only: bool,
-    pub plan_read_only: bool,
     /// The moment of the most recent client-directed **base** tombstone in this
     /// vault, if there is one.
     pub last_client_base_delete: Option<ServerTime>,
@@ -288,10 +284,6 @@ pub fn judge(candidate: &DeleteCandidate, context: &DeleteContext<'_>) -> Verdic
     if context.append_only {
         return Verdict::Refused(DeleteRefusal::AppendOnly);
     }
-    if context.plan_read_only {
-        return Verdict::Refused(DeleteRefusal::PlanLapsed);
-    }
-
     let purge_after = context.now + context.policy.grace;
 
     if candidate.kind == ObjectKind::Base {
@@ -362,7 +354,6 @@ mod tests {
             now: now(),
             policy: Policy::default(),
             append_only: false,
-            plan_read_only: false,
             last_client_base_delete: None,
             member_confirmed_shrink: false,
         }
@@ -605,25 +596,6 @@ mod tests {
     /// A LAPSED PLAN IS READ-ONLY AND NOTHING IS DELETED INSIDE THE STATED
     /// PERIOD (F13). A member who let a subscription lapse must find their
     /// backup where they left it.
-    #[test]
-    fn a_lapsed_plan_deletes_nothing() {
-        let bases = vec![base(1, 300, 1_000), base(2, 0, 1_000)];
-        let mut context = context(&bases);
-        context.plan_read_only = true;
-        assert_eq!(
-            judge(
-                &DeleteCandidate {
-                    name: bases[0].id,
-                    kind: ObjectKind::Base,
-                    received_at: bases[0].received_at,
-                    base: Some(bases[0].id),
-                },
-                &context,
-            ),
-            Verdict::Refused(DeleteRefusal::PlanLapsed)
-        );
-    }
-
     #[test]
     fn a_tombstone_is_purgeable_only_after_the_grace_period() {
         let purge_after = now() + Duration::from_days(7);

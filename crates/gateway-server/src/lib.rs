@@ -12,7 +12,7 @@
 //!
 //! The checksum comparison in both modes, the refusal to presign a committed
 //! name, the manifest compare-and-set, delayed deletes, the retention floor,
-//! the size guard, the delete rate limit, plan lapse, blind scrubbing and
+//! the size guard, the delete rate limit, blind scrubbing and
 //! capability scope are all in `gateway-core` and are reached through
 //! [`centraid_gateway_core::Gateway`]. If the conformance suite checks a
 //! behaviour this crate would have to add, the fix goes **into `gateway-core`**:

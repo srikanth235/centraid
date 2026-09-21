@@ -34,7 +34,7 @@ use centraid_gateway_core::checksum::AttestedChecksum;
 use centraid_gateway_core::commit;
 use centraid_gateway_core::ids::{AccountId, Generation, Key32, ObjectKind, ObjectName, VaultId};
 use centraid_gateway_core::lease::{Lease, LeaseState};
-use centraid_gateway_core::plan::{self, Plan};
+use centraid_gateway_core::plan::Plan;
 use centraid_gateway_core::retention::BaseRecord;
 use centraid_gateway_core::store::{ObjectState, StateStore, StoreFault, StoredObject, VaultState};
 use centraid_gateway_core::time::ServerTime;
@@ -207,25 +207,6 @@ fn key32(bytes: &[u8]) -> Result<Key32, StoreFault> {
     Key32::from_slice(bytes).ok_or_else(|| StoreFault::new("a stored key is not 32 bytes"))
 }
 
-/// The column value for a plan state. The words are
-/// `contracts/gateway/schema.sql`'s.
-const fn plan_state_word(state: plan::State) -> &'static str {
-    match state {
-        plan::State::Active => "active",
-        plan::State::Lapsed => "lapsed",
-        plan::State::Expired => "expired",
-    }
-}
-
-fn plan_state_of(word: &str) -> Result<plan::State, StoreFault> {
-    match word {
-        "active" => Ok(plan::State::Active),
-        "lapsed" => Ok(plan::State::Lapsed),
-        "expired" => Ok(plan::State::Expired),
-        other => Err(StoreFault::new(format!("unknown plan state {other:?}"))),
-    }
-}
-
 /// The column value for an object state.
 const fn object_state_word(state: ObjectState) -> &'static str {
     match state {
@@ -318,9 +299,7 @@ impl StateStore for SqliteState {
                     row.get::<_, Option<i64>>(6)?,
                     row.get::<_, i64>(7)?,
                     row.get::<_, i64>(8)?,
-                    row.get::<_, String>(9)?,
-                    row.get::<_, i64>(10)?,
-                    row.get::<_, Option<i64>>(11)?,
+                    row.get::<_, i64>(9)?,
                 ))
             })
             .optional()
@@ -335,9 +314,7 @@ impl StateStore for SqliteState {
             moved_at,
             append_only,
             used_bytes,
-            plan_word,
             quota_bytes,
-            retain_until,
         )) = row
         else {
             return Ok(None);
@@ -364,10 +341,8 @@ impl StateStore for SqliteState {
             head: head.as_deref().map(key32).transpose()?,
             append_only: append_only != 0,
             plan: Plan {
-                state: plan_state_of(&plan_word)?,
                 quota_bytes: quota_bytes.try_into().unwrap_or(0),
                 used_bytes: used_bytes.try_into().unwrap_or(0),
-                retain_until: retain_until.map(ServerTime::from_millis),
             },
         }))
     }
@@ -382,9 +357,7 @@ impl StateStore for SqliteState {
                 params![
                     state.account.as_bytes().as_slice(),
                     now,
-                    plan_state_word(state.plan.state),
                     as_i64(state.plan.quota_bytes),
-                    state.plan.retain_until.map(ServerTime::millis),
                 ],
             )
             .map_err(fault)?;

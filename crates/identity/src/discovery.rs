@@ -44,8 +44,8 @@ use ed25519_dalek::VerifyingKey;
 use pkarr::errors::{PublishError, ResolveError};
 use pkarr::{Client, PublicKey, ResolvePolicy, SignedPacket};
 
-use crate::derive::{AccountKey, VaultIdentityKey};
-use crate::record::{AccountRecord, GatewayUrl, IdentityRecord, RecordError};
+use crate::derive::VaultIdentityKey;
+use crate::record::{GatewayUrl, IdentityRecord, RecordError};
 
 /// n0's `iroh-dns-server`, the default (#1029 §0: "Decided: option (a)").
 ///
@@ -200,16 +200,6 @@ impl Discovery {
         self.put(&record.sign(identity)?).await
     }
 
-    /// Publish the account's own record, naming the gateway that holds its
-    /// vault listing (F2).
-    pub async fn publish_account(
-        &self,
-        record: &AccountRecord,
-        account: &AccountKey,
-    ) -> Result<(), DiscoveryError> {
-        self.put(&record.sign(account)?).await
-    }
-
     /// Resolve a vault by its identity key — which is its address and its
     /// `vault_id`, so this is the whole of "find this person".
     pub async fn resolve_identity(
@@ -219,36 +209,31 @@ impl Discovery {
         Ok(IdentityRecord::read(&self.get(identity).await?)?)
     }
 
-    /// Resolve an account's own record.
-    pub async fn resolve_account(
-        &self,
-        account: &VerifyingKey,
-    ) -> Result<AccountRecord, DiscoveryError> {
-        Ok(AccountRecord::read(&self.get(account).await?)?)
-    }
-
-    /// **The restore path**: find the gateway holding an account, from either
+    /// **The restore path**: find the gateway holding a vault, from either
     /// source.
     ///
     /// One function, two sources. A typed URL is not a second-class answer —
     /// it is the answer when the network cannot give one, and #1029 §0 requires
-    /// that it be enough to proceed.
-    pub async fn locate_account(
+    /// that it be enough to proceed. It located an ACCOUNT until the scope
+    /// amendment of 2026-09-21 struck the account and its signed vault listing;
+    /// the key it takes is now the vault's own identity key, which is the only
+    /// key a seed still publishes a record under.
+    pub async fn locate_vault(
         &self,
-        account: &VerifyingKey,
+        identity: &VerifyingKey,
         source: &ResolutionSource,
     ) -> Result<Located, DiscoveryError> {
         match source {
             ResolutionSource::Published => {
-                let record = self.resolve_account(account).await?;
+                let record = self.resolve_identity(identity).await?;
                 Ok(Located {
-                    key: *account,
+                    key: *identity,
                     gateway: record.gateway().clone(),
                     source: SourceUsed::Published,
                 })
             }
             ResolutionSource::Typed(gateway) => Ok(Located {
-                key: *account,
+                key: *identity,
                 gateway: gateway.clone(),
                 source: SourceUsed::Typed,
             }),
@@ -298,6 +283,7 @@ impl Discovery {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::derive::VaultMint;
     use crate::phrase::RecoveryPhrase;
 
     const PHRASE: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -329,18 +315,19 @@ mod tests {
     /// THE TYPED-URL FALLBACK (#1029 §0). No network is touched, and the result
     /// is the same type a successful resolution returns.
     #[tokio::test]
-    async fn a_typed_gateway_url_locates_an_account_without_the_network() {
+    async fn a_typed_gateway_url_locates_a_vault_without_the_network() {
         let seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
-        let account = AccountKey::derive(&seed).public();
+        let vault = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
+        let identity = vault.identity.public();
         let typed = GatewayUrl::parse("https://typed.example/").expect("a gateway URL");
 
         let located = Discovery::new()
             .expect("builds")
-            .locate_account(&account, &ResolutionSource::Typed(typed.clone()))
+            .locate_vault(&identity, &ResolutionSource::Typed(typed.clone()))
             .await
             .expect("the typed source always answers");
 
-        assert_eq!(located.key(), &account);
+        assert_eq!(located.key(), &identity);
         assert_eq!(located.gateway(), &typed);
         assert_eq!(located.source(), SourceUsed::Typed);
     }
@@ -351,12 +338,13 @@ mod tests {
     #[tokio::test]
     async fn an_unresolvable_key_is_unreachable_and_never_unknown() {
         let seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
-        let account = AccountKey::derive(&seed).public();
+        let vault = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
+        let identity = vault.identity.public();
         let discovery = Discovery::with_server("http://127.0.0.1:1/pkarr")
             .expect("a syntactically fine server");
 
         let error = discovery
-            .locate_account(&account, &ResolutionSource::Published)
+            .locate_vault(&identity, &ResolutionSource::Published)
             .await
             .expect_err("nothing is listening");
         assert!(

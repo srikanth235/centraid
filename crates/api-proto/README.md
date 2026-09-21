@@ -30,7 +30,6 @@ The split is not cosmetic: it is why the gateway can promise stability to seats 
 | `gateway.proto` | `ProtocolRange`, `SignedRequest`, `ClockSkew`, `VersionRefusal` — the gateway envelope ([#1029](https://github.com/srikanth235/centraid/issues/1029) §3) |
 | `backup.proto` | `ObjectKind`, `ObjectDeclaration`, `UploadRequest`/`UploadTarget`, `CommitRequest`/`HeadConflict`, `GenerationList`, `DeleteRequest`/`DeleteRefusal`, `ScrubReport` |
 | `lease.proto` | `LeaseClaim`, `Lease`, `VaultMoved`, `VaultRegistration`, `VaultsResponse`, `AdmissionRequest`, `Plan` |
-| `mailbox.proto` | `DepositCapability`, `DepositRequest`, `MailboxEntry`, `DrainResponse`, `AckRequest`, `ShareCapability`, `PackRange`, `Feed` |
 | `screen/v1/screen.proto` | `ScreenState`, `ScreenEvent`, the per-screen states and `SeatState` — one file by design (D-1020-E3a) |
 
 Each file carries its own reasoning in comments.

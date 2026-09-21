@@ -61,9 +61,8 @@
 //! | [`checksum`] | attest and read-and-hash, the two modes |
 //! | [`commit`] | the manifest head moves only by compare-and-set |
 //! | [`retention`] | the floor over bases, the grace period, the size guard, the rate limit |
-//! | [`plan`] | quota and lapse |
+//! | [`plan`] | the quota a vault's account is held to |
 //! | [`share`] | capability scope over whole objects and pack ranges |
-//! | [`mailbox`] | the TTL, the per-deposit cap and the per-capability rate limit |
 //! | [`scrub`] | blind re-hashing |
 //! | [`store`] | the two ports, and the one SQL schema both adapters apply |
 //! | [`engine`] | the orchestration that calls the rules in order |
@@ -78,7 +77,6 @@ pub mod engine;
 pub mod error;
 pub mod ids;
 pub mod lease;
-pub mod mailbox;
 pub mod memory;
 pub mod plan;
 pub mod retention;

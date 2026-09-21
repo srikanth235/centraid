@@ -7,9 +7,8 @@
 //! anyone holding the key can read it back.
 //!
 //! ```text
-//! _centraid.<z-base32 of the vault identity key>  TXT  "mailbox=<gateway base URL>"
+//! _centraid.<z-base32 of the vault identity key>  TXT  "gateway=<gateway base URL>"
 //!                                                      "cert=<device certificate, base64url>"
-//! _centraid.<z-base32 of the account key>         TXT  "gateway=<gateway base URL>"
 //! ```
 //!
 //! ## WHY THERE IS NO ADDRESS ENTRY
@@ -19,6 +18,12 @@
 //! the current one, not so anyone can open a connection to it. A record that
 //! carried an IP or a relay URL for the phone would be the first half of an
 //! inbound endpoint, and there is no second half to build.
+//!
+//! The entry was spelled `mailbox=` while a mailbox was what a contact looked
+//! up here. The mailbox is struck from v0 (scope amendment 2026-09-21) and the
+//! entry is `gateway=`: where this vault's backup lives. There is no second
+//! record — the account, and the account record that named its gateway, are
+//! struck with it.
 //!
 //! ## THE RECORD IS SIGNED TWICE, BY TWO DIFFERENT THINGS
 //!
@@ -49,7 +54,7 @@ use pkarr::dns::{Name, ResourceRecord};
 use pkarr::{Keypair, SignedPacket, Timestamp};
 
 use crate::certificate::{CertificateError, DeviceCertificate};
-use crate::derive::{AccountKey, VaultIdentityKey};
+use crate::derive::VaultIdentityKey;
 
 /// The owner name both records live at, relative to the key's own zone.
 ///
@@ -58,20 +63,11 @@ use crate::derive::{AccountKey, VaultIdentityKey};
 /// hold both without either shadowing the other.
 pub const RECORD_NAME: &str = "_centraid";
 
-/// A vault's entry: where this identity's mailbox and backup live.
-pub const MAILBOX_ENTRY: &str = "mailbox";
+/// A vault's entry: where this vault's backup lives.
+pub const GATEWAY_ENTRY: &str = "gateway";
 
 /// A vault's entry: which device key holds the vault now.
 pub const CERT_ENTRY: &str = "cert";
-
-/// The account record's entry.
-///
-/// Deliberately **not** `mailbox=`: an account has no mailbox. A mailbox is
-/// addressed `/m/{identity_key}` and belongs to one vault; what the account
-/// record names is the gateway that holds the account and can be asked for its
-/// vault listing (#1029 §0, F2). Two names because they are two things — one
-/// name reused would invite a reader to treat an account key as a vault key.
-pub const GATEWAY_ENTRY: &str = "gateway";
 
 /// How long a resolver may treat a record as fresh, in seconds.
 ///
@@ -226,15 +222,15 @@ pub enum RecordError {
 /// so a record cannot be built that disagrees with itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentityRecord {
-    mailbox: GatewayUrl,
+    gateway: GatewayUrl,
     certificate: DeviceCertificate,
 }
 
 impl IdentityRecord {
     /// The record a phone publishes for one vault.
-    pub const fn new(mailbox: GatewayUrl, certificate: DeviceCertificate) -> Self {
+    pub const fn new(gateway: GatewayUrl, certificate: DeviceCertificate) -> Self {
         Self {
-            mailbox,
+            gateway,
             certificate,
         }
     }
@@ -245,9 +241,9 @@ impl IdentityRecord {
         self.certificate.identity()
     }
 
-    /// Where this identity's mailbox and backup live.
-    pub const fn mailbox(&self) -> &GatewayUrl {
-        &self.mailbox
+    /// Where this vault's backup lives.
+    pub const fn gateway(&self) -> &GatewayUrl {
+        &self.gateway
     }
 
     /// Which device key holds the vault, according to this record. Read it
@@ -283,11 +279,11 @@ impl IdentityRecord {
             "{CERT_ENTRY}={}",
             CERT_BASE64.encode(self.certificate.to_bytes())
         );
-        let mailbox = format!("{MAILBOX_ENTRY}={}", self.mailbox);
+        let gateway = format!("{GATEWAY_ENTRY}={}", self.gateway);
         sign_txt(
             &keypair(identity.signing()),
             &[
-                (MAILBOX_ENTRY, mailbox.as_str()),
+                (GATEWAY_ENTRY, gateway.as_str()),
                 (CERT_ENTRY, cert.as_str()),
             ],
             timestamp,
@@ -303,7 +299,7 @@ impl IdentityRecord {
     pub fn read(packet: &SignedPacket) -> Result<Self, RecordError> {
         let key = packet.public_key().to_z32();
         let entries = entries(packet);
-        let mailbox = GatewayUrl::parse(&one(&entries, &key, MAILBOX_ENTRY)?)?;
+        let gateway = GatewayUrl::parse(&one(&entries, &key, GATEWAY_ENTRY)?)?;
 
         let raw = one(&entries, &key, CERT_ENTRY)?;
         let bytes = CERT_BASE64
@@ -333,77 +329,8 @@ impl IdentityRecord {
             })?;
 
         Ok(Self {
-            mailbox,
+            gateway,
             certificate,
-        })
-    }
-}
-
-/// What an account publishes under its own account key: the gateway that holds
-/// the account, and nothing else.
-///
-/// **Nothing about the person's vaults is in here** (#1029 F2, F9). The listing
-/// of "which vaults belong to this account" is fetched *from* the gateway this
-/// record names, signed by the account key — see [`crate::account`]. Putting
-/// the listing in DNS would publish, to anyone who ever learns the account key,
-/// exactly the set of vault addresses that a person's vaults were kept separate
-/// to hide from each other.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AccountRecord {
-    account: VerifyingKey,
-    gateway: GatewayUrl,
-}
-
-impl AccountRecord {
-    /// The record the phone publishes for the account.
-    pub const fn new(account: VerifyingKey, gateway: GatewayUrl) -> Self {
-        Self { account, gateway }
-    }
-
-    /// The account key this record belongs under.
-    pub const fn account(&self) -> &VerifyingKey {
-        &self.account
-    }
-
-    /// The gateway holding the account, and therefore its vault listing.
-    pub const fn gateway(&self) -> &GatewayUrl {
-        &self.gateway
-    }
-
-    /// Sign and encode, at the current time.
-    pub fn sign(&self, account: &AccountKey) -> Result<SignedPacket, RecordError> {
-        self.sign_at(account, Timestamp::now())
-    }
-
-    /// Sign and encode at a caller-chosen timestamp. See
-    /// [`IdentityRecord::sign_at`].
-    pub fn sign_at(
-        &self,
-        account: &AccountKey,
-        timestamp: Timestamp,
-    ) -> Result<SignedPacket, RecordError> {
-        let public = account.public();
-        if public != self.account {
-            return Err(RecordError::ForeignCertificate {
-                key: z32(&public),
-                certified: z32(&self.account),
-            });
-        }
-        let gateway = format!("{GATEWAY_ENTRY}={}", self.gateway);
-        sign_txt(
-            &keypair(account.signing()),
-            &[(GATEWAY_ENTRY, gateway.as_str())],
-            timestamp,
-        )
-    }
-
-    /// Read one back.
-    pub fn read(packet: &SignedPacket) -> Result<Self, RecordError> {
-        let key = packet.public_key().to_z32();
-        let entries = entries(packet);
-        Ok(Self {
-            account: *packet.public_key().verifying_key(),
-            gateway: GatewayUrl::parse(&one(&entries, &key, GATEWAY_ENTRY)?)?,
         })
     }
 }
@@ -538,7 +465,7 @@ mod tests {
         assert_eq!(packet.public_key().verifying_key(), &keys.identity.public());
         let read = IdentityRecord::read(&packet).expect("reads back");
         assert_eq!(read, built);
-        assert_eq!(read.mailbox().as_str(), GATEWAY);
+        assert_eq!(read.gateway().as_str(), GATEWAY);
         assert_eq!(read.certificate().device(), &device.public());
         assert_eq!(read.certificate().epoch(), Epoch::new(3));
     }
@@ -586,7 +513,7 @@ mod tests {
         let packet = sign_txt(
             &keypair(mine.identity.signing()),
             &[
-                (MAILBOX_ENTRY, &format!("{MAILBOX_ENTRY}={GATEWAY}")),
+                (GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}={GATEWAY}")),
                 (
                     CERT_ENTRY,
                     &format!("{CERT_ENTRY}={}", CERT_BASE64.encode(foreign)),
@@ -616,7 +543,7 @@ mod tests {
         let packet = sign_txt(
             &keypair(keys.identity.signing()),
             &[
-                (MAILBOX_ENTRY, &format!("{MAILBOX_ENTRY}={GATEWAY}")),
+                (GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}={GATEWAY}")),
                 (
                     CERT_ENTRY,
                     &format!("{CERT_ENTRY}={}", CERT_BASE64.encode(bytes)),
@@ -666,7 +593,7 @@ mod tests {
         let keys = vault(0);
         let packet = sign_txt(
             &keypair(keys.identity.signing()),
-            &[(MAILBOX_ENTRY, &format!("{MAILBOX_ENTRY}={GATEWAY}"))],
+            &[(GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}={GATEWAY}"))],
             Timestamp::now(),
         )
         .expect("signs");
@@ -680,7 +607,7 @@ mod tests {
         );
     }
 
-    /// Two `mailbox=` entries are a publisher saying two things. Taking the
+    /// Two `gateway=` entries are a publisher saying two things. Taking the
     /// first would make which gateway a contact reaches depend on wire order.
     #[test]
     fn a_repeated_entry_is_refused_rather_than_resolved_by_order() {
@@ -689,8 +616,8 @@ mod tests {
         let packet = sign_txt(
             &keypair(keys.identity.signing()),
             &[
-                (MAILBOX_ENTRY, &format!("{MAILBOX_ENTRY}={GATEWAY}")),
-                (MAILBOX_ENTRY, &format!("{MAILBOX_ENTRY}=https://other/")),
+                (GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}={GATEWAY}")),
+                (GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}=https://other/")),
                 (
                     CERT_ENTRY,
                     &format!(
@@ -707,7 +634,7 @@ mod tests {
             IdentityRecord::read(&packet),
             Err(RecordError::RepeatedEntry {
                 key: z32(&keys.identity.public()),
-                entry: MAILBOX_ENTRY,
+                entry: GATEWAY_ENTRY,
             })
         );
     }
@@ -739,50 +666,6 @@ mod tests {
         assert_eq!(
             GatewayUrl::parse("https://gateway.example").expect("parses"),
             GatewayUrl::parse("https://gateway.example/").expect("parses")
-        );
-    }
-
-    #[test]
-    fn an_account_record_round_trips_and_names_only_a_gateway() {
-        let seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
-        let account = AccountKey::derive(&seed);
-        let built = AccountRecord::new(
-            account.public(),
-            GatewayUrl::parse(GATEWAY).expect("a gateway URL"),
-        );
-        let packet = built.sign(&account).expect("signs");
-
-        assert_eq!(AccountRecord::read(&packet).expect("reads"), built);
-        assert_eq!(
-            entries(&packet)
-                .iter()
-                .map(|(key, _)| key.as_str())
-                .collect::<Vec<_>>(),
-            vec![GATEWAY_ENTRY],
-            "an account record says where the account is and nothing else"
-        );
-    }
-
-    /// F2, at the byte level. A contact resolves a vault's record; the account
-    /// key is the one key whose publication would link a person's vaults, so it
-    /// must not be anywhere in what a contact receives.
-    #[test]
-    fn a_vault_record_carries_no_trace_of_the_account_key() {
-        let seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
-        let account = AccountKey::derive(&seed).public();
-        let keys = vault(0);
-        let (built, _) = record(&keys, Epoch::FIRST);
-        let bytes = built.sign(&keys.identity).expect("signs").serialize();
-
-        assert!(
-            !bytes
-                .windows(32)
-                .any(|window| window == account.to_bytes().as_slice()),
-            "the account key's bytes are in a contact-facing record"
-        );
-        assert!(
-            !String::from_utf8_lossy(&bytes).contains(&z32(&account)),
-            "the account key's z-base32 is in a contact-facing record"
         );
     }
 }

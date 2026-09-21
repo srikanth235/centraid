@@ -31,12 +31,11 @@
 
 use std::net::{IpAddr, Ipv4Addr};
 
-use centraid_identity::account::{VaultClaim, VaultListing};
 use centraid_identity::certificate::{DeviceCertificate, DeviceKey, DeviceTrust, Epoch};
-use centraid_identity::derive::{AccountKey, VaultMint};
+use centraid_identity::derive::VaultMint;
 use centraid_identity::discovery::{Discovery, DiscoveryError, ResolutionSource, SourceUsed};
 use centraid_identity::phrase::RecoveryPhrase;
-use centraid_identity::record::{AccountRecord, GatewayUrl, IdentityRecord};
+use centraid_identity::record::{GatewayUrl, IdentityRecord};
 use iroh_dns_server::Server;
 use iroh_dns_server::config::{Config, MetricsConfig};
 
@@ -115,64 +114,13 @@ async fn a_record_published_to_a_local_iroh_dns_server_resolves_back() {
         .expect("the server gives it back");
 
     assert_eq!(resolved, published);
-    assert_eq!(resolved.mailbox().as_str(), GATEWAY);
+    assert_eq!(resolved.gateway().as_str(), GATEWAY);
 
     // What a contact does with it: the certificate that came off the wire is
     // the one that decides which phone holds the vault.
     let mut trust = DeviceTrust::new(keys.identity.public());
     trust.accept(resolved.certificate()).expect("genuine");
     assert_eq!(trust.trusted_device(), Some(&device.public()));
-
-    dns.stop().await;
-}
-
-/// THE RESTORE, END TO END, THROUGH A REAL SERVER (#1029 F2). The account key
-/// resolves to the gateway; the listing that gateway holds re-derives every
-/// vault — and none of it needed the phone that was lost.
-#[tokio::test]
-async fn a_restore_finds_every_vault_from_the_account_record_and_its_listing() {
-    let dns = LocalDnsServer::start().await;
-    let discovery = dns.discovery();
-
-    let seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
-    let account = AccountKey::derive(&seed);
-    let mut mint = VaultMint::fresh();
-    let claims: Vec<VaultClaim> = [0u32, 1, 4]
-        .iter()
-        .map(|index| {
-            let keys = mint.mint(&seed, *index).expect("a fresh index");
-            VaultClaim::issue(&account, &keys.identity.public(), *index)
-        })
-        .collect();
-    // Held by the gateway, never by DNS (F9).
-    let listing = VaultListing::sign(&account, &claims).expect("signs");
-
-    let record = AccountRecord::new(
-        account.public(),
-        GatewayUrl::parse(GATEWAY).expect("a gateway URL"),
-    );
-    discovery
-        .publish_account(&record, &account)
-        .await
-        .expect("the server accepts it");
-
-    // The fresh phone: the phrase, and nothing else.
-    let restored_seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
-    let restored_account = AccountKey::derive(&restored_seed);
-    let located = discovery
-        .locate_account(&restored_account.public(), &ResolutionSource::Published)
-        .await
-        .expect("the account record resolves");
-
-    assert_eq!(located.source(), SourceUsed::Published);
-    assert_eq!(located.gateway().as_str(), GATEWAY);
-
-    let vaults = listing.restore(&restored_seed).expect("restores");
-    assert_eq!(
-        vaults.iter().map(|keys| keys.index).collect::<Vec<_>>(),
-        vec![0, 1, 4]
-    );
-    assert_eq!(listing.resume_mint().next_index(), 5);
 
     dns.stop().await;
 }
@@ -186,11 +134,15 @@ async fn the_typed_url_fallback_answers_where_resolution_could_not() {
     let discovery = dns.discovery();
 
     let seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
-    let account = AccountKey::derive(&seed).public();
+    let identity = VaultMint::fresh()
+        .mint(&seed, 0)
+        .expect("vault 0")
+        .identity
+        .public();
 
-    // Nothing has been published for this account.
+    // Nothing has been published for this vault.
     let unreachable = discovery
-        .locate_account(&account, &ResolutionSource::Published)
+        .locate_vault(&identity, &ResolutionSource::Published)
         .await
         .expect_err("no record was published");
     assert!(
@@ -200,11 +152,11 @@ async fn the_typed_url_fallback_answers_where_resolution_could_not() {
 
     let typed = GatewayUrl::parse(GATEWAY).expect("a gateway URL");
     let located = discovery
-        .locate_account(&account, &ResolutionSource::Typed(typed.clone()))
+        .locate_vault(&identity, &ResolutionSource::Typed(typed.clone()))
         .await
         .expect("the typed source proceeds");
 
-    assert_eq!(located.key(), &account);
+    assert_eq!(located.key(), &identity);
     assert_eq!(located.gateway(), &typed);
     assert_eq!(located.source(), SourceUsed::Typed);
 

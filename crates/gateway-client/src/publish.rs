@@ -11,7 +11,7 @@
 //! | Trigger | Why |
 //! |---|---|
 //! | [`Reason::Timer`] | the record expires; resolvers stop believing it |
-//! | [`Reason::GatewayChanged`] | the `gateway=` or `mailbox=` entry names somewhere that is no longer where this vault is |
+//! | [`Reason::GatewayChanged`] | the `gateway=` entry names somewhere that is no longer where this vault is |
 //! | [`Reason::DeviceChanged`] | a restore reissued the certificate at `epoch + 1`, and `cert=` names the phone that no longer holds the vault |
 //!
 //! The last one is the one the mechanism exists for. #1029 §0 requires a refresh
@@ -32,8 +32,7 @@
 //! party that learns it is the one already holding the objects.
 
 use centraid_identity::{
-    AccountKey, AccountRecord, Discovery, DiscoveryError, GatewayUrl, IdentityRecord,
-    RECORD_TTL_SECONDS, VaultIdentityKey,
+    Discovery, DiscoveryError, IdentityRecord, RECORD_TTL_SECONDS, VaultIdentityKey,
 };
 
 /// Why a republish is due.
@@ -41,7 +40,7 @@ use centraid_identity::{
 pub enum Reason {
     /// The record's TTL is running out.
     Timer,
-    /// This vault, or this account, moved to another gateway.
+    /// This vault moved to another gateway.
     GatewayChanged,
     /// The certificate changed — a restore, or a device swap.
     DeviceChanged,
@@ -66,13 +65,12 @@ pub const fn timer_due(last_published_ms: i64, now_ms: i64) -> bool {
     now_ms >= next_timer_ms(last_published_ms)
 }
 
-/// Publish a vault's record and its account's, together.
+/// Publish a vault's record.
 ///
-/// **Together, because they are one fact from a member's side**: "this vault is
-/// on that gateway". Publishing the identity record alone leaves an account
-/// record naming a gateway that no longer holds the vault, and a restore starts
-/// from the account record (F2) — so the half that gets missed would be exactly
-/// the half the worst day depends on.
+/// It published an ACCOUNT record alongside it until the scope amendment of
+/// 2026-09-21 struck the account: a restore started from the account record and
+/// its signed vault listing (F2), and now starts from the vault's own record.
+/// One record, one fact — "this vault is on that gateway".
 ///
 /// # Errors
 ///
@@ -84,15 +82,9 @@ pub async fn refresh(
     discovery: &Discovery,
     identity_record: &IdentityRecord,
     identity: &VaultIdentityKey,
-    account_gateway: &GatewayUrl,
-    account: &AccountKey,
     _reason: Reason,
 ) -> Result<(), DiscoveryError> {
-    discovery
-        .publish_identity(identity_record, identity)
-        .await?;
-    let account_record = AccountRecord::new(account.public(), account_gateway.clone());
-    discovery.publish_account(&account_record, account).await
+    discovery.publish_identity(identity_record, identity).await
 }
 
 #[cfg(test)]

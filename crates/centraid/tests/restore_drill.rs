@@ -62,7 +62,7 @@ use centraid_gateway_core::{
     AttestedChecksum, ChecksumMode, Gateway, Generation, ObjectKind, ObjectName, Refusal,
     ServerTime, StoredObject, VaultId, VaultState,
 };
-use centraid_identity::{AccountKey, RecoveryPhrase, Seed, VaultClaim, VaultListing, VaultMint};
+use centraid_identity::{RecoveryPhrase, Seed, VaultMint};
 use centraid_vault::Vault;
 use centraid_vault::backup::objects::ObjectKeys;
 use centraid_vault::backup::store::{BlobStore as _, FsBlobStore};
@@ -299,34 +299,26 @@ struct Restored {
 async fn restore_onto_a_fresh_phone(
     phrase: &str,
     engine: &mut TestGateway,
-    listing_bytes: &[u8],
+    indices: &[u32],
     root: &Path,
     now: ServerTime,
 ) -> Vec<Restored> {
     let seed: Seed = RecoveryPhrase::parse(phrase)
         .expect("24 words parse")
         .seed();
-    let account = AccountKey::derive(&seed);
 
-    // THE LISTING IS VERIFIED AGAINST THE PHONE'S OWN KEY. A gateway that
-    // served a listing naming a vault this account never had would be a
-    // gateway that could make a restore fetch somebody else's objects.
-    let listing = VaultListing::from_bytes(listing_bytes).expect("the listing decodes");
-    listing.verify().expect("the listing's signature holds");
-    assert_eq!(
-        listing.account(),
-        &account.public(),
-        "the listing is this account's, checked against the key the seed just \
-         produced and not against anything the gateway said"
-    );
-
-    let vaults = listing
-        .restore(&seed)
-        .expect("every vault's keys come back");
-    assert!(
-        !vaults.is_empty(),
-        "an account with no vaults is not a restore"
-    );
+    // THE KEYS COME OUT OF THE SEED AND NOTHING ELSE. A signed vault listing
+    // told a fresh phone which indices existed until the scope amendment of
+    // 2026-09-21 struck the account; WHERE THE INDEX LIST COMES FROM IS W15's
+    // (the laptop serves the vaults it holds, and a restore asks it). What this
+    // drill pins either way is that the KEYS are re-derived on the phone, so a
+    // gateway can never point a restore at a vault it has no key for.
+    let mut mint = VaultMint::fresh();
+    let vaults: Vec<_> = indices
+        .iter()
+        .map(|index| mint.mint(&seed, *index).expect("a fresh index"))
+        .collect();
+    assert!(!vaults.is_empty(), "no vaults is not a restore");
 
     // A FRESH DEVICE KEY. The lost phone's is lost, which is the point: the
     // lease moves to a new device at the next epoch, and the old certificate
@@ -489,27 +481,12 @@ async fn lose_the_phone_type_twenty_four_words_get_every_vault_back() {
 
     // ---- day one: one seed, one account, TWO vaults ----------------------
     let seed = RecoveryPhrase::parse(PHRASE).expect("24 words").seed();
-    let account = AccountKey::derive(&seed);
-    let account_id = VaultId::from_slice(&account.public().to_bytes()).expect("an account id");
+    let account_id = VaultId::from_slice(&[0xAC; 32]).expect("an account id");
 
     let mut mint = VaultMint::fresh();
     let first_keys = mint.mint_next(&seed).expect("vault 0");
     let second_keys = mint.mint_next(&seed).expect("vault 1");
     assert_eq!((first_keys.index, second_keys.index), (0, 1));
-
-    // THE ACCOUNT'S OWN SIGNED LISTING, which is why a restore needs no
-    // operator and no lost phone (F2): the account key signs "these vaults, at
-    // these indices", and a fresh phone verifies it against the key the seed
-    // gives it.
-    let listing = VaultListing::sign(
-        &account,
-        &[
-            VaultClaim::issue(&account, &first_keys.identity.public(), first_keys.index),
-            VaultClaim::issue(&account, &second_keys.identity.public(), second_keys.index),
-        ],
-    )
-    .expect("the account signs its listing");
-    let listing_bytes = listing.to_bytes();
 
     let phones = [
         found_and_back_up(&old_phone_root, &first_keys, "Household"),
@@ -555,7 +532,7 @@ async fn lose_the_phone_type_twenty_four_words_get_every_vault_back() {
     let restored = restore_onto_a_fresh_phone(
         PHRASE,
         &mut engine,
-        &listing_bytes,
+        &[0, 1],
         &fresh_root,
         ServerTime::from_millis(START + DAY),
     )
@@ -708,61 +685,6 @@ async fn lose_the_phone_type_twenty_four_words_get_every_vault_back() {
     }
 
     let _ = std::fs::remove_dir_all(&root);
-}
-
-/// The listing is what makes a restore need no operator — and the check on it
-/// is what makes it safe to take one from a gateway.
-///
-/// A gateway that served a listing signed by a different account, or one whose
-/// claims were re-signed, would be a gateway that could point a restore at
-/// objects it has no key for — or, worse, at a vault index that collides with
-/// one this account already has. The refusal is the signature's, not a
-/// heuristic's.
-#[test]
-fn a_listing_this_account_did_not_sign_is_refused() {
-    let seed = RecoveryPhrase::parse(PHRASE).expect("24 words").seed();
-    let account = AccountKey::derive(&seed);
-
-    let other_phrase = "legal winner thank year wave sausage worth useful legal winner thank \
-                        year wave sausage worth useful legal will";
-    let other_seed = RecoveryPhrase::parse(other_phrase)
-        .map(|phrase| phrase.seed())
-        .unwrap_or_else(|_| {
-            // An 18-word phrase is not 24 words; if this build refuses it, mint
-            // the other account from a different valid 24-word vector instead.
-            RecoveryPhrase::parse(
-                "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo \
-                 zoo zoo zoo zoo vote",
-            )
-            .expect("a second 24-word vector")
-            .seed()
-        });
-    let other = AccountKey::derive(&other_seed);
-    let mut mint = VaultMint::fresh();
-    let keys = mint.mint_next(&other_seed).expect("a vault");
-
-    let listing = VaultListing::sign(
-        &other,
-        &[VaultClaim::issue(
-            &other,
-            &keys.identity.public(),
-            keys.index,
-        )],
-    )
-    .expect("the other account signs");
-
-    // The signature is valid — it is simply not THIS account's, which is the
-    // check a restoring phone must make and the reason it holds the account key
-    // before it asks anyone anything.
-    listing
-        .verify()
-        .expect("a valid signature, by somebody else");
-    assert_ne!(
-        listing.account(),
-        &account.public(),
-        "the restoring phone compares the listing's account against the key its \
-         own seed produced, and refuses on a mismatch"
-    );
 }
 
 /// The object index the drill leans on: a committed object is one the gateway
@@ -1043,19 +965,8 @@ async fn the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_s
 
     // ---- day one -----------------------------------------------------------
     let seed = RecoveryPhrase::parse(PHRASE).expect("24 words").seed();
-    let account = AccountKey::derive(&seed);
-    let account_id = VaultId::from_slice(&account.public().to_bytes()).expect("an account id");
+    let account_id = VaultId::from_slice(&[0xAC; 32]).expect("an account id");
     let keys = VaultMint::fresh().mint_next(&seed).expect("vault 0");
-    let listing = VaultListing::sign(
-        &account,
-        &[VaultClaim::issue(
-            &account,
-            &keys.identity.public(),
-            keys.index,
-        )],
-    )
-    .expect("the account signs its listing");
-    let listing_bytes = listing.to_bytes();
 
     let phone = found_and_back_up(&root.join("old-phone"), &keys, "Ada's notes");
     let live = live_gateway(&[phone.gateway_id], account_id).await;
@@ -1065,8 +976,8 @@ async fn the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_s
     // cannot give one, and the restore path has one code path for both.
     let located = centraid_identity::Discovery::with_server(centraid_identity::DEFAULT_DNS_SERVER)
         .expect("a discovery client")
-        .locate_account(
-            &account.public(),
+        .locate_vault(
+            &keys.identity.public(),
             &ResolutionSource::Typed(
                 centraid_identity::GatewayUrl::parse(&live.origin).expect("a gateway URL"),
             ),
@@ -1117,18 +1028,14 @@ async fn the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_s
     std::fs::create_dir_all(&restored_dir).expect("the restore directory");
 
     let restored_seed = RecoveryPhrase::parse(PHRASE).expect("24 words").seed();
-    let restored_account = AccountKey::derive(&restored_seed);
-    let restored_listing = VaultListing::from_bytes(&listing_bytes).expect("the listing decodes");
-    restored_listing.verify().expect("its signature holds");
+    let restored_keys = VaultMint::fresh()
+        .mint(&restored_seed, 0)
+        .expect("vault 0 comes back out of the phrase");
     assert_eq!(
-        restored_listing.account(),
-        &restored_account.public(),
-        "the listing is this account's, checked against the key the seed produced"
+        restored_keys.identity.public(),
+        keys.identity.public(),
+        "the fresh phone re-derived the SAME vault from the phrase alone"
     );
-    let restored_keys = restored_listing
-        .restore(&restored_seed)
-        .expect("every vault's keys come back")
-        .remove(0);
 
     // A FRESH DEVICE KEY AT EPOCH + 1 (F3), and the server is the one that
     // decides whether it may have the lease.
@@ -1299,12 +1206,11 @@ async fn a_wrong_clock_is_recovered_against_a_real_server_in_one_retry() {
     let root = centraid_ontology::golden::scratch_dir().join("skew");
     std::fs::create_dir_all(&root).expect("the scratch root is made");
     let seed = RecoveryPhrase::parse(PHRASE).expect("24 words").seed();
-    let account = AccountKey::derive(&seed);
     let keys = VaultMint::fresh().mint_next(&seed).expect("vault 0");
     let vault = VaultId::from_slice(&keys.identity.public().to_bytes()).expect("a vault id");
     let live = live_gateway(
         &[vault],
-        VaultId::from_slice(&account.public().to_bytes()).expect("an account id"),
+        VaultId::from_slice(&[0xAC; 32]).expect("an account id"),
     )
     .await;
 

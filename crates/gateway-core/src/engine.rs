@@ -126,7 +126,7 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
 
     /// Declare objects and receive an upload target for each.
     ///
-    /// The order is the rule: **lease, then plan, then quota, then the
+    /// The order is the rule: **lease, then quota, then the
     /// per-object checks, and only then a target.** A presigned URL for bytes
     /// the gateway will refuse is a phone spending a member's cellular data to
     /// earn a rejection.
@@ -134,7 +134,7 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
     /// # Errors
     ///
     /// Any of [`Refusal::VaultMoved`], [`Refusal::NotLeaseHolder`],
-    /// [`Refusal::PlanLapsed`], [`Refusal::QuotaExceeded`],
+    /// [`Refusal::QuotaExceeded`],
     /// [`Refusal::ObjectTooLarge`] or [`Refusal::Checksum`].
     pub async fn declare(
         &mut self,
@@ -361,7 +361,6 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
                 now: caller.now,
                 policy: self.retention,
                 append_only: state.append_only,
-                plan_read_only: state.plan.is_read_only(),
                 last_client_base_delete: last_base_delete,
                 member_confirmed_shrink,
             };
@@ -472,7 +471,6 @@ pub const fn refusal_reason(
             DeleteRefusal::SizeGuard => Reason::SizeGuard,
             DeleteRefusal::RateLimited { .. } => Reason::RateLimited,
             DeleteRefusal::AppendOnly => Reason::AppendOnly,
-            DeleteRefusal::PlanLapsed => Reason::PlanLapsed,
         }),
     }
 }

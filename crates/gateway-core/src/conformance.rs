@@ -43,7 +43,7 @@ use crate::engine::{Caller, CommitInput, Fault, Gateway};
 use crate::error::Refusal;
 use crate::ids::{Generation, Key32, ObjectKind, ObjectName, VaultId};
 use crate::lease::LeaseState;
-use crate::plan::{self, Plan};
+use crate::plan::Plan;
 use crate::retention::{DeleteRefusal, Policy, Verdict};
 use crate::store::{ByteStore, StateStore, StoreFault, UploadTarget, VaultState};
 use crate::time::{Duration, ServerTime};
@@ -911,31 +911,6 @@ async fn plan_and_quota<H: Harness>(harness: &mut H, report: &mut Report) {
         name,
         matches!(outcome, Err(Fault::Refused(Refusal::QuotaExceeded { .. }))),
         format!("a declaration above the quota was accepted: {outcome:?}"),
-    );
-
-    let lapsed = "plan/a-lapsed-plan-reads-but-writes-nothing-and-deletes-nothing";
-    let plan = Plan {
-        state: plan::State::Lapsed,
-        ..Plan::active(1_024 * 1_024)
-    };
-    if founded(harness, ChecksumMode::Attest, Policy::default(), plan)
-        .await
-        .is_err()
-    {
-        report.fail(lapsed, "setup failed");
-        return;
-    }
-    let write = harness
-        .gateway()
-        .declare(
-            caller(1, START),
-            &[declaration(b"a write while lapsed", ObjectKind::Segment)],
-        )
-        .await;
-    report.check(
-        lapsed,
-        matches!(write, Err(Fault::Refused(Refusal::PlanLapsed))),
-        format!("a lapsed plan accepted a write: {write:?}"),
     );
 }
 
