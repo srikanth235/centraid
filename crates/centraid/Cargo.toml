@@ -52,6 +52,10 @@ centraid-gateway-core = { path = "../gateway-core" }
 # dev-only: this binary is not a gateway and does not sign a gateway request.
 centraid-gateway-server = { path = "../gateway-server" }
 centraid-gateway-client = { path = "../gateway-client" }
+# THE CARRIER, in `tests/drain_wire.rs` only: naming the loopback address the
+# test hands the phone through the laptop record's `direct_addrs`. Dev-only and
+# dial-only — this crate's tests offer no ALPN and call no `accept`.
+iroh.workspace = true
 centraid-ontology = { path = "../ontology" }
 hex.workspace = true
 rusqlite.workspace = true

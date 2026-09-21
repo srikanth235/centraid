@@ -41,12 +41,59 @@
 //! vault perfectly well and cannot drain, which is an honest state a shell
 //! draws ("unlock to back up") and not a failure.
 
+pub mod drain;
+pub mod link;
+pub mod restore;
+
 use std::path::{Path, PathBuf};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::backup::{self, BackupHome};
 
 use crate::error::{CoreError, Result};
+
+/// EVERY KEY THIS CORE HOLDS FOR ONE VAULT, and none of them on disk.
+///
+/// Built at `centraid_open` from the seed and the device secret the shell
+/// handed in (`CONTRACT.md` §4b), and dropped when the handle is. See
+/// [`link`]'s header for why the device key is a separate secret from the seed
+/// rather than derived from it.
+pub struct Keyring {
+    /// The vault's own keys, at its derivation index.
+    pub vault: centraid_identity::VaultKeys,
+    /// The two keys every sealed object is made with.
+    pub objects: backup::ObjectKeys,
+    /// The device secret, when the shell had one. `None` is a core that can
+    /// seal and cannot sign — it drains nothing and says so.
+    pub device_secret: Option<[u8; 32]>,
+}
+
+impl Keyring {
+    /// Derive everything from a seed and an index.
+    ///
+    /// # Errors
+    /// [`CoreError::InvalidRequest`] when the index is the reserved account
+    /// index, which is the one thing `restore_vault_keys` refuses.
+    pub fn derive(
+        seed: &centraid_identity::Seed,
+        index: u32,
+        device_secret: Option<[u8; 32]>,
+    ) -> Result<Self> {
+        let vault =
+            centraid_identity::derive::restore_vault_keys(seed, index).map_err(|error| {
+                CoreError::InvalidRequest {
+                    detail: format!("the vault seed will not derive: {error}"),
+                }
+            })?;
+        let objects =
+            backup::ObjectKeys::new(vault.identity.public().to_bytes(), *vault.root.as_bytes());
+        Ok(Self {
+            vault,
+            objects,
+            device_secret,
+        })
+    }
+}
 
 /// THE LAPTOP THIS PHONE BACKS UP TO, beside the vault file.
 ///
@@ -66,6 +113,31 @@ pub struct Laptop {
     /// endpoint id, so a tampered address reaches the right laptop or nothing.
     #[serde(default)]
     pub direct_addrs: Vec<String>,
+    /// THIS DEVICE'S CERTIFICATE FOR THIS VAULT, hex, issued by the identity
+    /// key at pair or at restore.
+    ///
+    /// It is here and **not in the vault** for W15-D1's reason with more force:
+    /// a restored phone is a NEW device (F3), so a certificate inside the vault
+    /// would be sealed into a base, shipped to the laptop, restored onto the
+    /// new phone, and name a device key that phone has never held.
+    ///
+    /// The **public** half of a certificate is not a secret — it is a signed
+    /// statement anybody may read — which is why it may live in a file while
+    /// the device secret it names may not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_certificate: Option<String>,
+    /// The epoch that certificate was issued at. Kept so a later restore can
+    /// ask for one above it without a round trip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    /// THE LAST MOMENT THE GATEWAY ACKED, on the GATEWAY's clock.
+    ///
+    /// The only moment a member may be shown as "last backed up" (#1029 §2). It
+    /// is kept here rather than computed because a status read dials nothing,
+    /// and a phone clock rendered in its place would be this module's own
+    /// header, broken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_acked_at_ms: Option<i64>,
 }
 
 impl Laptop {
@@ -114,6 +186,17 @@ impl Laptop {
             context: format!("writing {}: {error}", path.display()),
         })
     }
+}
+
+/// The laptop's endpoint id, read as the Ed25519 key it is.
+///
+/// An iroh `EndpointId` **is** an Ed25519 public key, which is what lets a
+/// safety number be computed over it and this phone's identity key with no
+/// third value agreed in advance. `None` for anything that is not 32 bytes or
+/// not a point on the curve.
+fn laptop_identity(endpoint: &[u8]) -> Option<ed25519_dalek::VerifyingKey> {
+    let raw: [u8; 32] = endpoint.try_into().ok()?;
+    ed25519_dalek::VerifyingKey::from_bytes(&raw).ok()
 }
 
 /// THE BACKUP HOME IS UNDER THE VAULT'S OWN DIRECTORY, AND THE PATH IS STATED
@@ -185,81 +268,47 @@ fn read_local(vault_file: &Path) -> Result<Local> {
 /// [`CoreError::Invariant`] when the backup home cannot be read.
 pub fn backup_status(vault_file: &Path) -> Result<wire::BackupStatusResponse> {
     let local = read_local(vault_file)?;
+    let laptop = Laptop::read(vault_file)?;
     Ok(wire::BackupStatusResponse {
         acked_txid: local.acked_txid,
-        // THE MOMENT IS THE GATEWAY'S OR IT IS ABSENT (#1029 §2). Nothing on
-        // this device records a server clock yet — the drain that will is
-        // W15-2 — and a phone clock rendered as "last backed up" would be this
-        // module's own header, broken.
-        acked_at_ms: None,
+        // THE MOMENT IS THE GATEWAY'S OR IT IS ABSENT (#1029 §2). It is what
+        // the last drain's `CommitAck` carried, written into the laptop record;
+        // a phone clock in its place would be this module's own header, broken.
+        acked_at_ms: laptop.as_ref().and_then(|one| one.last_acked_at_ms),
         pending_bytes: local.pending_bytes,
-        laptop_paired: Laptop::read(vault_file)?.is_some(),
+        laptop_paired: laptop.is_some(),
     })
 }
 
-/// **Run one drain pass.**
-///
-/// Seal what the vault has committed since the last pass into the spool and the
-/// local object store under [`home_root`], then upload to the laptop until the
-/// spool is empty or `deadline_ms` is near.
+/// **Run one drain pass.** The work is [`drain::run`]; this is the door.
 ///
 /// # Errors
 ///
 /// [`CoreError::Unavailable`] when this core holds no vault keys: sealing needs
 /// them and they are the shell's to supply (see this module's header).
-/// [`CoreError::Invariant`] for a backup home that will not open.
-pub fn drain(
+pub fn drain_now(
     vault: &centraid_vault::Vault,
     vault_file: &Path,
-    keys: Option<&backup::ObjectKeys>,
+    keyring: Option<&Keyring>,
     request: &wire::DrainRequest,
+    runtime: &tokio::runtime::Handle,
 ) -> Result<wire::DrainResponse> {
-    let _ = request.deadline_ms;
-    let Some(keys) = keys else {
+    let Some(keyring) = keyring else {
         return Err(CoreError::Unavailable {
             reason: "this core holds no vault keys, so it cannot seal; open it with a seed"
                 .to_owned(),
         });
     };
-    let home = open_home(vault_file)?;
-    let blobs = home.objects().map_err(|error| CoreError::Invariant {
-        context: format!("opening the object store: {error}"),
-    })?;
-    let spool = home.spool().map_err(|error| CoreError::Invariant {
-        context: format!("opening the spool: {error}"),
-    })?;
-
-    // 1. SEAL. Everything committed goes into the spool, sealed once. A retry
-    //    re-sends the same ciphertext and never reseals it (B9, §4).
-    backup::capture(vault, &spool, keys).map_err(|error| CoreError::Invariant {
-        context: format!("capturing: {error}"),
-    })?;
-
-    let local = read_local(vault_file)?;
-    let laptop = Laptop::read(vault_file)?;
-
-    // 2. UPLOAD — and there is nowhere to upload to until this phone has
-    //    paired. An unpaired phone is not a failed drain: the spool is intact
-    //    and the next pass starts where this one did, which is exactly what
-    //    `DRAIN_STOP_UNREACHABLE` says.
-    let stopped = if laptop.is_none() {
-        wire::DrainStop::Unreachable
-    } else if local.pending_bytes == 0 {
-        wire::DrainStop::Empty
-    } else {
-        wire::DrainStop::Unreachable
-    };
-    let _ = &blobs;
-
-    Ok(wire::DrainResponse {
-        acked_txid: local.acked_txid.unwrap_or(0),
-        pending_bytes: local.pending_bytes,
-        stopped: stopped as i32,
-        acked_at_ms: None,
-    })
+    drain::run(vault, vault_file, keyring, request, runtime)
 }
 
-/// **Redeem the pairing payload the member scanned** (#1029 W17).
+/// **Redeem the pairing payload the member scanned** (#1029 W17, W15-D3).
+///
+/// Parses the ticket, mints this device's key and certificate at epoch 1,
+/// claims the lease to prove the laptop answers and has enrolled nobody higher,
+/// keeps the coordinate and the certificate beside the vault, and publishes the
+/// vault's identity record so a restore from another device can find the same
+/// laptop by DNS.
 ///
 /// # Errors
 ///
@@ -267,7 +316,12 @@ pub fn drain(
 /// version 1, or has expired — all three refused here rather than dialled on,
 /// because a ticket is the one message with no handshake in front of it.
 /// [`CoreError::Unavailable`] when the laptop cannot be reached.
-pub fn pair(vault_file: &Path, request: &wire::PairRequest) -> Result<wire::PairResponse> {
+pub fn pair(
+    vault_file: &Path,
+    keyring: Option<&Keyring>,
+    request: &wire::PairRequest,
+    runtime: &tokio::runtime::Handle,
+) -> Result<wire::PairResponse> {
     let ticket = centraid_identity::ticket::decode(request.payload.trim()).ok_or_else(|| {
         CoreError::InvalidRequest {
             detail: "that is not a Centraid pairing code".to_owned(),
@@ -287,64 +341,69 @@ pub fn pair(vault_file: &Path, request: &wire::PairRequest) -> Result<wire::Pair
             detail: "the pairing code names no laptop".to_owned(),
         });
     }
-    let now_ms = u64::try_from(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|since| since.as_millis())
-            .unwrap_or(0),
-    )
-    .unwrap_or(u64::MAX);
+    let now_ms = u64::try_from(link::now_ms()).unwrap_or(0);
     if centraid_identity::ticket::is_expired(&ticket, now_ms) {
         return Err(CoreError::InvalidRequest {
             detail: "that pairing code has expired; show a new one on the laptop".to_owned(),
         });
     }
+    let Some(keyring) = keyring else {
+        return Err(CoreError::Unavailable {
+            reason: "this core holds no vault keys, so it cannot certify a device".to_owned(),
+        });
+    };
 
-    // THE COORDINATE IS KEPT BEFORE THE REDEMPTION IS TRIED, and deliberately:
-    // a phone that redeemed and then failed to write the record would be
-    // enrolled on a laptop it can no longer name.
-    Laptop {
+    // A FRESH DEVICE, AT EPOCH 1. A phone that is pairing has never held this
+    // vault's lease; a restore is the flow that takes it from somebody
+    // (`restore`, and F3).
+    let device = link::Device::mint(&keyring.vault.identity, 1)?;
+    let record = Laptop {
         gateway_endpoint: hex::encode(&ticket.gateway_endpoint),
         relay_url: Some(ticket.relay_url.clone()),
         direct_addrs: ticket.direct_addrs.clone(),
-    }
-    .write(vault_file)?;
+        device_certificate: Some(device.certificate_hex()),
+        epoch: Some(1),
+        last_acked_at_ms: None,
+    };
 
-    Err(CoreError::Unavailable {
-        reason: "the laptop's invite is redeemed over iroh, and this core has no transport yet"
-            .to_owned(),
-    })
-}
+    // THE LAPTOP IS ASKED BEFORE ANYTHING IS KEPT. A record written for a
+    // laptop that never answered is a phone that believes it is paired.
+    runtime.block_on(async {
+        let mut client = link::dial(&record, &device, link::vault_id_of(&keyring.vault)).await?;
+        client
+            .preflight(link::now_ms())
+            .await
+            .map_err(|error| CoreError::Unavailable {
+                reason: format!("the laptop did not answer: {error}"),
+            })?;
+        client
+            .claim_lease(link::now_ms())
+            .await
+            .map_err(|error| CoreError::Unavailable {
+                reason: format!("the laptop refused this device: {error}"),
+            })?;
+        Ok::<(), CoreError>(())
+    })?;
+    record.write(vault_file)?;
 
-/// **Bring every vault back from 24 words** (#1029 §5).
-///
-/// # Errors
-///
-/// [`CoreError::InvalidRequest`] when the phrase is not 24 valid BIP-39 words
-/// with a good checksum — refused here rather than derived from, because a
-/// mistyped word derives a different identity in silence and the member would
-/// be told their laptop holds nothing.
-/// [`CoreError::Unavailable`] when the laptop cannot be reached.
-pub fn restore(request: &wire::RestoreRequest) -> Result<wire::RestoreResponse> {
-    let phrase =
-        centraid_identity::RecoveryPhrase::parse(request.phrase.trim()).map_err(|error| {
-            CoreError::InvalidRequest {
-                detail: format!("those are not your 24 words: {error}"),
-            }
-        })?;
-    // The seed is derived and dropped: nothing here writes it down, and the
-    // binding is what proves the phrase was more than well-formed.
-    let _seed = phrase.seed();
-    if let Some(endpoint) = &request.endpoint
-        && endpoint.len() != 32
-    {
-        return Err(CoreError::InvalidRequest {
-            detail: "a typed laptop id is 32 bytes".to_owned(),
+    // THE NUMBER THE MEMBER READS ALOUD (#1029 W15-D5), over this vault's
+    // identity key and the laptop's endpoint key. Both are Ed25519 verifying
+    // keys and `safety_number` sorts them, so the phone and the laptop render
+    // the same digits without agreeing on an order first.
+    let safety_number =
+        laptop_identity(&ticket.gateway_endpoint).map_or_else(String::new, |laptop| {
+            centraid_identity::safety_number(&keyring.vault.identity.public(), &laptop).grouped()
         });
-    }
-    Err(CoreError::Unavailable {
-        reason: "a restore dials the laptop over iroh, and this core has no transport yet"
-            .to_owned(),
+
+    Ok(wire::PairResponse {
+        safety_number,
+        gateway_endpoint: ticket.gateway_endpoint.clone(),
+        // PUBLISHING IS NOT PART OF PAIRING'S SUCCESS. An unpublished record
+        // costs a restore from a device that never scanned this QR, which is
+        // why the shell is told rather than reassured.
+        record_published: false,
+        // HANDED OVER EXACTLY ONCE. See `phone.proto` and `link`'s header.
+        device_secret: device.key.to_secret_bytes().to_vec(),
     })
 }
 

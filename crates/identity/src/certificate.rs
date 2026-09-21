@@ -88,6 +88,33 @@ impl DeviceKey {
         Ok(Self(SigningKey::from_bytes(&bytes)))
     }
 
+    /// Rebuild a device key from the 32 secret bytes a shell kept for it
+    /// (#1029 W15, W15-D3).
+    ///
+    /// **The counterpart of [`Self::generate`], and the reason this type needed
+    /// one.** A device key is minted once and then has to come back on every
+    /// later launch, because a phone that minted a fresh one each time would
+    /// need a fresh epoch each time — and an epoch bump is what F1 spells
+    /// `VAULT_MOVED`. Where the bytes are kept is the shell's: the platform
+    /// secure store, marked "this device only" and never synced, because a
+    /// synced device key makes two phones one device, which is exactly the
+    /// failure the lease exists to prevent.
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8; 32]) -> Self {
+        Self(SigningKey::from_bytes(bytes))
+    }
+
+    /// The 32 secret bytes, for the ONE hand-off to the shell that persists
+    /// them.
+    ///
+    /// Named `to_secret_bytes` rather than `as_bytes` so a call site that did
+    /// not mean to copy a private key reads as what it is. There is exactly one
+    /// caller in the workspace: the answer to the flow that minted the key.
+    #[must_use]
+    pub fn to_secret_bytes(&self) -> [u8; 32] {
+        self.0.to_bytes()
+    }
+
     /// The public half, which the certificate names.
     pub fn public(&self) -> VerifyingKey {
         self.0.verifying_key()

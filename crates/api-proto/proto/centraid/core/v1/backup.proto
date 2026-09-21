@@ -32,30 +32,39 @@ enum ObjectKind {
   reserved 6;
 }
 
-// AN OBJECT NAMED TWICE, AND THE SECOND NAME IS SOMEBODY ELSE'S PROTOCOL.
+// AN OBJECT IS NAMED ONCE, AND THE SECOND NAME IS RETIRED.
 //
 // `name` is the object's identity everywhere in this repository: the BLAKE3-256
 // of its ciphertext, which is what `centraid_media::object::ObjectName::of`
 // computes and what a manifest, a base range list and a pack reference record.
 // ONE HASH (#1025 S4): everything Centraid defines for itself is BLAKE3.
 //
-// `attested_checksum` is the SHA-256 of the same bytes, and it is here because
-// the object store's API is not ours. R2 and every S3-compatible store attest
-// SHA-256 and nothing else, and R2 records `checksums.sha256` only when the
-// client supplied it — so a commit must fail on "no checksum", not only on
-// "wrong checksum". The client therefore declares it UP FRONT, at the moment it
-// declares the name, and the declaration is what binds the two: a gateway that
-// later reads an attested SHA-256 off the store compares it against the value
-// recorded here, and a second declaration of the same `name` with a different
-// checksum is refused. That binding is the whole of what an attest-only store
-// can give a blind verifier, and `crates/gateway-core`'s read-and-hash mode is
-// what closes the rest of it (B2 and MinIO differ on which headers they
-// attest, so both modes are rules and both are in the conformance suite).
+// **`attested_checksum` (field 2) STOOD HERE AND IS GONE** (#1029 W17,
+// completed in W15). It was the SHA-256 of the same bytes, declared up front so
+// that a gateway which could not read its own object store had something to
+// compare a store-attested digest against — R2 and every S3-compatible store
+// attest SHA-256 and nothing else. The [scope amendment of
+// 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+// struck the hosted adapter and the S3 byte store: **every upload target is now
+// a path on the member's own laptop, and the gateway hashes what it stores**,
+// refusing a name that is not its bytes' hash at the upload, a round trip
+// before the commit (`gateway-core`'s `commit`). A second digest in a message
+// is the most an attest-only store would ever have given a blind verifier, and
+// there is no attest-only store left.
+//
+// W17 removed it from every Rust type, the client's headers, the server's
+// schema and the conformance suite; `grep -rn 'AttestedChecksum|checksum::'
+// crates` is empty. This message was the last copy, and a field that no code
+// reads is a field the next reader implements against.
+//
+// **The number is reserved, not reused.** An object a phone already declared
+// carries it, and a second meaning for 2 is how an old build reads a new
+// message as a shape it recognises — the same rule `ObjectKind`'s reserved 6
+// is under, two dozen lines above.
 message ObjectDeclaration {
+  reserved 2;
   // 32 bytes. BLAKE3-256 of the sealed bytes.
   bytes name = 1;
-  // 32 bytes. SHA-256 of the same sealed bytes, for the store to attest.
-  bytes attested_checksum = 2;
   ObjectKind kind = 3;
   // The sealed length in bytes, after zstd and Padmé. It is PADDED and
   // therefore a size class, not a size: that is the only size a gateway is

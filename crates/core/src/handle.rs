@@ -135,7 +135,7 @@ pub struct Handle {
     /// `None` is a core that reads and writes its vault and cannot seal, which
     /// is an honest state (see [`crate::phone`]'s header for why this library
     /// writes no key down).
-    keys: Option<centraid_vault::backup::ObjectKeys>,
+    keys: Option<crate::phone::Keyring>,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -170,6 +170,7 @@ impl Core {
             ids,
             expected_digest,
             seed,
+            device,
         } = config;
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
@@ -226,23 +227,9 @@ impl Core {
         };
         // THE VAULT KEYS, IF THE SHELL HAD THEM (#1029 W15). Derived here and
         // never written down: see `crate::phone`'s header.
-        let keys = seed.map(|(seed, index)| {
-            let derived = centraid_identity::derive::restore_vault_keys(&seed, index);
-            derived.map(|keys| {
-                centraid_vault::backup::ObjectKeys::new(
-                    keys.identity.public().to_bytes(),
-                    *keys.root.as_bytes(),
-                )
-            })
-        });
-        let keys = match keys {
+        let keys = match seed {
             None => None,
-            Some(Ok(keys)) => Some(keys),
-            Some(Err(error)) => {
-                return Err(CoreError::InvalidRequest {
-                    detail: format!("the vault seed will not derive: {error}"),
-                });
-            }
+            Some((seed, index)) => Some(crate::phone::Keyring::derive(&seed, index, device)?),
         };
         Ok(Handle {
             path,
@@ -415,6 +402,42 @@ impl Handle {
         }
         self.attach_bytes(door);
         Ok(())
+    }
+
+    /// A tokio handle for the flows that dial the laptop (#1029 W15).
+    ///
+    /// Reuses the runtime `open_own_bytes` built when there is one, and builds
+    /// one otherwise, **keeping it in the same slot**: a drain and a byte store
+    /// on two runtimes would be two thread pools on a phone, and a runtime
+    /// dropped while a store still holds its handle is a store whose next call
+    /// panics.
+    ///
+    /// It is multi-threaded for `open_own_bytes`'s reason, which applies here
+    /// too: a current-thread runtime under `block_on` is a deadlock the moment
+    /// anything it drives blocks on another task, and the iroh transport's
+    /// connection driver is exactly such a task.
+    ///
+    /// # Errors
+    /// [`CoreError::Invariant`] when a runtime will not start.
+    pub fn runtime_handle(&self) -> Result<tokio::runtime::Handle> {
+        let mut held = self
+            .runtime
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(runtime) = held.as_ref() {
+            return Ok(runtime.handle().clone());
+        }
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("centraid-phone")
+            .enable_all()
+            .build()
+            .map_err(|error| CoreError::Invariant {
+                context: format!("the phone's runtime would not start: {error}"),
+            })?;
+        let handle = runtime.handle().clone();
+        *held = Some(Arc::new(runtime));
+        Ok(handle)
     }
 
     /// Whether this core opened and owns its own byte store.
@@ -653,8 +676,13 @@ impl Handle {
     /// Whether this core holds a copy of the vault.
     ///
     /// The fact a shell draws its first screen from, alongside
-    /// [`Self::has_network`] and [`crate::link::SeatNetwork::gateway`]: no
-    /// file, versus a file with no gateway, versus both.
+    /// [`crate::phone::backup_status`]'s `laptop_paired`: no file, versus a
+    /// file with no laptop, versus both.
+    ///
+    /// It pointed at `crate::link::SeatNetwork::gateway` until #1029 W15, and
+    /// that module went with the seat plane — this crate's own `lib.rs` header
+    /// says so in the same breath. A doc link to a deleted module is a stale
+    /// doc, and stale docs are bugs.
     #[must_use]
     pub fn holds_a_replica(&self) -> bool {
         self.vault
@@ -772,20 +800,34 @@ impl Handle {
             // THE PHONE'S TWO FLOWS, AND THE TWO SCREENS BESIDE THEM (#1029
             // W15). `BackupNow` stood here and answered `NotYetAvailable` for
             // the whole of its life; `Drain` is the door it stood in for.
-            K::Drain(request) => Ok(response(wire::response::Kind::Drain(self.with_vault(
-                |vault| crate::phone::drain(vault, &self.path, self.keys.as_ref(), request),
-            )?))),
+            K::Drain(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::Drain(self.with_vault(
+                    |vault| {
+                        crate::phone::drain_now(
+                            vault,
+                            &self.path,
+                            self.keys.as_ref(),
+                            request,
+                            &runtime,
+                        )
+                    },
+                )?)))
+            }
             // PAIRING NEEDS NO VAULT TO BE OPEN. A phone pairs the laptop it
             // will restore ONTO, which by definition has no vault yet, so this
             // arm deliberately does not go through `with_vault`.
-            K::PairPhone(request) => Ok(response(wire::response::Kind::PairPhone(
-                crate::phone::pair(&self.path, request)?,
-            ))),
+            K::PairPhone(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::PairPhone(
+                    crate::phone::pair(&self.path, self.keys.as_ref(), request, &runtime)?,
+                )))
+            }
             // NOR DOES A RESTORE, and for the same reason with more force: the
             // vault it is about does not exist on this device yet. That is the
             // whole of what it is for (F2).
             K::Restore(request) => Ok(response(wire::response::Kind::Restore(
-                crate::phone::restore(request)?,
+                crate::phone::restore::run(request)?,
             ))),
             K::BackupStatus(_) => Ok(response(wire::response::Kind::BackupStatus(
                 crate::phone::backup_status(&self.path)?,

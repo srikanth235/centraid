@@ -116,12 +116,39 @@ message PairResponse {
   // The laptop's iroh `EndpointId`, 32 raw bytes — what this phone will dial
   // from now on without re-resolving DNS.
   bytes gateway_endpoint = 1;
+  // THE DEVICE SECRET, HANDED OVER EXACTLY ONCE (#1029 W15-D3).
+  //
+  // 32 raw bytes. Present **only on the call that minted it** — the shell puts
+  // it in the platform secure store, marked "this device only" and never
+  // synced, and hands it back at every later `centraid_open`
+  // (`CONTRACT.md` §4b). Absent means this core was opened with one already
+  // and nothing was minted.
+  //
+  // It is answered here rather than pushed as an event, and that is the whole
+  // of why minting happens at pair and at restore and never at open: the event
+  // queue is bounded and a shell may not be draining it yet when a core opens,
+  // and a device secret the shell MISSED is a phone that silently re-mints next
+  // launch — a fresh epoch on every launch, which is F1's `VAULT_MOVED` fired
+  // at nobody. A response cannot be missed.
+  bytes device_secret = 3;
   // Whether the identity record reached the pkarr resolver. **False is not a
   // failure of the pairing**: the phone is paired and can back up over the
   // endpoint it just learned. What an unpublished record costs is a RESTORE
   // from a device that never scanned this QR, which is why the shell is told
   // rather than reassured.
   bool record_published = 2;
+  // WHAT THE MEMBER COMPARES, AND IT IS NOT A HEX ID (#1029 W15-D5).
+  //
+  // `centraid_identity::safety_number` over this phone's vault identity key
+  // and the laptop's endpoint key, grouped for reading aloud. A 64-character
+  // hex endpoint id is a string people check four characters of and stop —
+  // which catches a typo and misses an attacker, who gets to choose the other
+  // sixty. The safety number is short enough to be read out in full, and being
+  // read out in full is the whole of what it is for.
+  //
+  // Empty means this build could not compute one, and is drawn as that — never
+  // as "it matched".
+  string safety_number = 4;
 }
 
 // ---------------------------------------------------------------- restore --
@@ -165,9 +192,17 @@ message RestoredVault {
   // that makes "your vault is back" a claim rather than a hope: a perfect page
   // tree over no rows passes `integrity_check` and is a total loss (§2).
   int64 rows = 5;
+  // See `PairResponse.safety_number`. **Per vault**, because each vault has its
+  // own identity key — one number for all of them would confirm nothing about
+  // any of them.
+  string safety_number = 6;
 }
 
 message RestoreResponse {
+  // See `PairResponse.device_secret`. A restore ALWAYS mints: the lost phone's
+  // device key is lost, which is the point, and the restored phone takes the
+  // lease at the next epoch as a new device (F3).
+  bytes device_secret = 3;
   // Every vault the laptop holds for this identity, restored. Empty is a real
   // answer and not a failure: an identity the laptop has never seen has no
   // vaults, and a shell that drew an error would tell a member their words

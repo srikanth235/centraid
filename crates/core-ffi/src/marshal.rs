@@ -144,6 +144,10 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // here writes it anywhere. Absent is a core that cannot seal and says
         // so — see `centraid_core::config::CoreConfig::seed`.
         seed: vault_seed(&parsed)?,
+        // THIS DEVICE'S SECRET (#1029 W15-D3). Minted by this library at pair
+        // or at restore and handed to the shell once, on that flow's own
+        // answer; handed back here at every later open.
+        device: device_secret(&parsed)?,
     };
     // DEFAULTS TO CREATING, because a shell that named a path and said nothing
     // else is founding a vault there — which is what the phone does now
@@ -187,6 +191,30 @@ fn vault_seed(parsed: &serde_json::Value) -> Result<Option<(Seed, u32)>, CoreErr
     let index = u32::try_from(index)
         .map_err(|_| refuse("a vault index is a 32-bit unsigned integer".to_owned()))?;
     Ok(Some((Seed::from_bytes(raw), index)))
+}
+
+/// `{"device": {"secret": "<64 lowercase hex>"}}`.
+///
+/// Present and unreadable is an error for clause 4b's reason: a shell that
+/// handed back a truncated Keychain item and was silently given a core that
+/// minted a second device would bump the vault's epoch under a phone that has
+/// not moved, and `VAULT_MOVED` would freeze nobody while looking like it had
+/// fired.
+fn device_secret(parsed: &serde_json::Value) -> Result<Option<[u8; 32]>, CoreError> {
+    let Some(device) = parsed.get("device") else {
+        return Ok(None);
+    };
+    let refuse = |detail: String| CoreError::InvalidRequest { detail };
+    let hex_text = device
+        .get("secret")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| refuse("`device` carries no `secret`".to_owned()))?;
+    let raw = hex::decode(hex_text.trim())
+        .map_err(|error| refuse(format!("the device secret is not hex: {error}")))?;
+    let raw: [u8; 32] = raw
+        .try_into()
+        .map_err(|_| refuse("a device secret is 32 bytes".to_owned()))?;
+    Ok(Some(raw))
 }
 
 // --------------------------------------------------------------- unsafe -----

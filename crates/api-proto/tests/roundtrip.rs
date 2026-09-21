@@ -295,16 +295,20 @@ fn a_live_object_and_a_tombstone_at_time_zero_are_different_facts() {
 /// declaration is the narrowest place to hold the line: a name, a checksum, a
 /// kind and a PADDED size, and nothing whose value depends on what the object
 /// says.
+///
+/// **Three fields since #1029 W15**, not four: `attested_checksum` is retired
+/// with the attest-only object store that needed it, and its number is
+/// reserved. One fewer field is one fewer place plaintext could arrive.
 #[test]
 fn an_object_declaration_carries_no_plaintext_shaped_field() {
     let declaration = core::ObjectDeclaration {
         name: vec![4_u8; 32],
-        attested_checksum: vec![5_u8; 32],
         kind: core::ObjectKind::Segment as i32,
         padded_size: 65_536,
     };
     roundtrip(&declaration);
-    // Four fields, and the encoding proves there is no fifth to smuggle one in.
+    // Three fields, and the encoding proves there is no fourth to smuggle one
+    // in.
     let bytes = declaration.encode_to_vec();
     let decoded = core::ObjectDeclaration::decode(bytes.as_slice()).expect("decode");
     assert_eq!(decoded, declaration);

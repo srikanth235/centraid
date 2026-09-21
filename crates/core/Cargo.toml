@@ -37,6 +37,24 @@ centraid-blobs = { path = "../blobs" }
 # parser in a shell — a ticket is the one message with no handshake in front of
 # it, so two parsers is two chances to half-accept one.
 centraid-identity = { path = "../identity" }
+# THE PHONE'S HALF OF THE GATEWAY PROTOCOL (#1029 W15-2). A drain signs a
+# request, reads a refusal, and knows which refusals it may act on; that is
+# this crate and nothing above it assembles a preimage.
+centraid-gateway-client = { path = "../gateway-client" }
+# The rules' own vocabulary: `VaultId`, `ALPN`, `PROTOCOL_MIN`. Imported rather
+# than respelled so a phone and a laptop cannot disagree about whose fault a
+# mismatch is (`gateway-client`'s header).
+centraid-gateway-core = { path = "../gateway-core" }
+# `ObjectName` and `Kind`: an object's name is the BLAKE3 of its ciphertext on
+# both sides of the wire, and this is the one type that computes it.
+centraid-media = { path = "../media" }
+# THE CARRIER (#1029 W17). Only to BIND A DIAL-ONLY ENDPOINT and name an
+# address: this crate offers no ALPN and calls no `accept`, which is what
+# `no-listening-socket` checks on every gate run.
+iroh.workspace = true
+# ONE TYPE: `VerifyingKey`. An iroh `EndpointId` IS an Ed25519 public key, and
+# a safety number is computed over two of them (W15-D5).
+ed25519-dalek.workspace = true
 # The laptop's endpoint id is stored as hex beside the vault; `hex` is what
 # writes and reads it.
 hex.workspace = true

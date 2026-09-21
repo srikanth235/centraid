@@ -75,6 +75,18 @@ pub struct CoreConfig {
     /// beside the vault it protects, in a place no shell asked for and no
     /// backup excludes.
     pub seed: Option<(centraid_identity::Seed, u32)>,
+    /// THIS DEVICE'S SECRET FOR THIS VAULT (#1029 W15-D3, `CONTRACT.md` §4b).
+    ///
+    /// 32 bytes, **minted by this library and kept by the shell** in the
+    /// platform secure store, marked "this device only" and never synced — a
+    /// synced device key makes two phones one device, which is the failure the
+    /// lease exists to prevent.
+    ///
+    /// `None` on the launch that pairs or restores, which is the launch that
+    /// mints it; `None` afterwards is a core that can seal and cannot sign, and
+    /// a drain over one refuses rather than minting a second device and bumping
+    /// the epoch under a phone that has not moved.
+    pub device: Option<[u8; 32]>,
 }
 
 impl CoreConfig {
@@ -88,6 +100,7 @@ impl CoreConfig {
             ids: None,
             expected_digest: None,
             seed: None,
+            device: None,
         }
     }
 
@@ -106,6 +119,13 @@ impl CoreConfig {
     #[must_use]
     pub fn with_seed(mut self, seed: centraid_identity::Seed, index: u32) -> Self {
         self.seed = Some((seed, index));
+        self
+    }
+
+    /// Resume this device's signing identity from the secret the shell kept.
+    #[must_use]
+    pub fn with_device_secret(mut self, secret: [u8; 32]) -> Self {
+        self.device = Some(secret);
         self
     }
 
