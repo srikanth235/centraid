@@ -47,24 +47,51 @@
 //! `crates/identity`, and because a restore holds the key before it holds a
 //! vault to ask.
 //!
-//! ## The dictionary
+//! ## The dictionary (#1029 W13, finding 3)
 //!
-//! `base`, `segment` and `manifest` plaintext is zstd'd against a trained
-//! dictionary (§4). The corpus is the vault's own baseline DDL, which is the
-//! best available stand-in for "this schema's pages" and, being compiled in, is
-//! the same on every device without a fixture to ship or a training run to
-//! reproduce. The dictionary's id is in every header, so replacing the corpus
-//! later is a versioned change and not a silent one.
+//! `base` and `segment` plaintext is zstd'd against a trained dictionary (§4).
+//! The corpus is the vault's own baseline DDL, which is the best available
+//! stand-in for "this schema's pages" and, being compiled in, needs no fixture
+//! to ship. The dictionary's id is in every header, so replacing the corpus is
+//! a versioned change and not a silent one.
+//!
+//! **A trained dictionary is not a constant, and this used to treat it as
+//! one.** [`shipped_dictionary`] trains from a compiled-in corpus, and zstd's
+//! trainer is not contractually stable across versions: a zstd bump or a DDL
+//! edit moves the bytes, which moves the BLAKE3 id, which makes every object
+//! sealed against the old id refuse to open — with no copy of the old bytes
+//! kept anywhere. Three things close that:
+//!
+//! 1. **The dictionary an [`ObjectKeys`] seals with is a field**, not a
+//!    process-wide static. A restore adopts the one it read out of the backup
+//!    ([`ObjectKeys::with_dictionary`]) and opens every object of that
+//!    generation against it, whatever this build's trainer would produce.
+//! 2. **The bytes are persisted inside the generation manifest**
+//!    (`crate::backup::manifest`), so the only object a restore must open
+//!    before it holds a dictionary is the one that carries it.
+//! 3. **Training failure is a refusal.** It used to `or_else` into a *different*
+//!    dictionary cut out of the DDL text — a silent substitution that seals
+//!    objects nothing else in the fleet can open. There is no fallback now.
+//!
+//! A golden vector (`crates/media/tests/object_vectors.rs`) pins the shipped
+//! dictionary's id, so trainer drift is a failing test rather than a format
+//! break discovered on somebody's restore.
 
 use centraid_media::object::{
     self, Custody, Dictionary, Kind, ObjectError, Role, SealOptions, Sealed, VaultId,
 };
 
-/// A vault root key and a vault identity key: everything sealing needs.
+/// A vault root key, a vault identity key and the dictionary this seals with:
+/// everything sealing needs.
+///
+/// `None` means "whatever [`shipped_dictionary`] trains", resolved on use so
+/// that [`ObjectKeys::new`] stays infallible; `Some` is a dictionary read back
+/// out of a backup, which is what a restore uses.
 #[derive(Clone)]
 pub struct ObjectKeys {
     identity_key: [u8; object::VAULT_ID_BYTES],
     root_key: [u8; object::KEY_BYTES],
+    dictionary: Option<std::sync::Arc<Dictionary>>,
 }
 
 impl std::fmt::Debug for ObjectKeys {
@@ -106,6 +133,48 @@ impl ObjectKeys {
         Self {
             identity_key,
             root_key,
+            dictionary: None,
+        }
+    }
+
+    /// Adopt the dictionary a generation was sealed against.
+    ///
+    /// This is what a restore calls the moment it has opened the manifest: from
+    /// here on every base range and every segment of that generation opens
+    /// against the bytes the backup carried, not against whatever this build's
+    /// trainer would produce today (#1029 W13, finding 3).
+    #[must_use]
+    pub fn with_dictionary(
+        identity_key: [u8; object::VAULT_ID_BYTES],
+        root_key: [u8; object::KEY_BYTES],
+        dictionary: Dictionary,
+    ) -> Self {
+        Self {
+            identity_key,
+            root_key,
+            dictionary: Some(std::sync::Arc::new(dictionary)),
+        }
+    }
+
+    /// The same keys, sealing and opening against `dictionary`.
+    #[must_use]
+    pub fn adopting(&self, dictionary: Dictionary) -> Self {
+        Self {
+            dictionary: Some(std::sync::Arc::new(dictionary)),
+            ..self.clone()
+        }
+    }
+
+    /// The dictionary these keys seal with.
+    ///
+    /// # Errors
+    /// [`ObjectError::DictionaryTraining`] when no dictionary was adopted and
+    /// the shipped one cannot be trained. **Never a substitute** — see the
+    /// module header.
+    pub fn dictionary(&self) -> Result<&Dictionary> {
+        match &self.dictionary {
+            Some(dictionary) => Ok(dictionary),
+            None => Ok(shipped_dictionary()?),
         }
     }
 
@@ -127,13 +196,18 @@ impl ObjectKeys {
     /// Whatever [`object::seal`] refused — most often
     /// [`ObjectError::TooLarge`], which means the caller should have split.
     pub fn seal(&self, kind: Kind, role: Role, plaintext: &[u8]) -> Result<Sealed> {
+        let dictionary = if kind.compresses() {
+            Some(self.dictionary()?)
+        } else {
+            None
+        };
         Ok(object::seal(
             self.vault(),
             Custody::Wrapped(&self.root_key),
             &SealOptions {
                 kind,
                 role,
-                dictionary: kind.compresses().then(page_dictionary),
+                dictionary,
             },
             plaintext,
         )?)
@@ -144,11 +218,16 @@ impl ObjectKeys {
     /// # Errors
     /// [`ObjectError::Open`] for the key, the associated data or a tag.
     pub fn open(&self, kind: Kind, sealed: &[u8]) -> Result<Vec<u8>> {
+        let dictionary = if kind.compresses() {
+            Some(self.dictionary()?)
+        } else {
+            None
+        };
         Ok(object::open(
             self.vault(),
             Custody::Wrapped(&self.root_key),
             sealed,
-            kind.compresses().then(page_dictionary),
+            dictionary,
         )?)
     }
 
@@ -187,12 +266,17 @@ impl ObjectKeys {
             path: path.to_path_buf(),
             source,
         })?;
+        let dictionary = if kind.compresses() {
+            Some(self.dictionary()?)
+        } else {
+            None
+        };
         object::verify_read_back(
             self.vault(),
             Custody::Wrapped(&self.root_key),
             sealed,
             &from_disk,
-            kind.compresses().then(page_dictionary),
+            dictionary,
         )
         .map_err(|_| ObjectsError::Corrupt {
             path: path.to_path_buf(),
@@ -200,25 +284,43 @@ impl ObjectKeys {
     }
 }
 
-/// The trained dictionary every compressing kind seals against.
+/// **The dictionary this build ships**, trained once per process from the
+/// baseline DDL.
 ///
-/// Trained once per process from the baseline DDL. A page of this schema is
-/// mostly its own structure — table names, column names, the `core_` prefix —
-/// which is exactly what a dictionary buys on a one-row edit's segment.
-pub fn page_dictionary() -> &'static Dictionary {
-    static TRAINED: std::sync::OnceLock<Dictionary> = std::sync::OnceLock::new();
-    TRAINED.get_or_init(|| {
-        let samples: Vec<&[u8]> = crate::migrations::BASELINE_SQL
-            .split(";\n")
-            .filter(|statement| statement.len() > 32)
-            .map(str::as_bytes)
-            .collect();
-        Dictionary::train(&samples, 16 * 1024)
-            .or_else(|_| {
-                Dictionary::from_bytes(crate::migrations::BASELINE_SQL.as_bytes()[..4096].to_vec())
-            })
-            .expect("a dictionary can always be built from a compiled-in corpus")
-    })
+/// A page of this schema is mostly its own structure — table names, column
+/// names, the `core_` prefix — which is exactly what a dictionary buys on a
+/// one-row edit's segment.
+///
+/// ## A REFUSAL, NEVER A SUBSTITUTE (#1029 W13, finding 3)
+///
+/// Training used to `or_else` into `Dictionary::from_bytes(BASELINE_SQL[..4096])`
+/// and then `expect`. Both halves were wrong. The fallback is a *different*
+/// dictionary with a different id, so a device whose trainer failed would seal
+/// objects that no other device — and no later run of the same device — could
+/// open, silently; and the `expect` turned a recoverable refusal into a panic
+/// on the write path. A dictionary that cannot be trained is an error the
+/// caller is told about.
+///
+/// The result is cached whichever way it went, so a refusal is stable rather
+/// than intermittent: a build that cannot train cannot train.
+///
+/// # Errors
+/// [`ObjectError::DictionaryTraining`] when zstd will not train on the
+/// compiled-in corpus.
+pub fn shipped_dictionary() -> std::result::Result<&'static Dictionary, ObjectError> {
+    static TRAINED: std::sync::OnceLock<std::result::Result<Dictionary, ObjectError>> =
+        std::sync::OnceLock::new();
+    TRAINED
+        .get_or_init(|| {
+            let samples: Vec<&[u8]> = crate::migrations::BASELINE_SQL
+                .split(";\n")
+                .filter(|statement| statement.len() > 32)
+                .map(str::as_bytes)
+                .collect();
+            Dictionary::train(&samples, 16 * 1024)
+        })
+        .as_ref()
+        .map_err(Clone::clone)
 }
 
 #[cfg(test)]
@@ -296,8 +398,18 @@ mod tests {
 
     #[test]
     fn the_dictionary_is_the_same_one_every_time_and_earns_its_place() {
-        assert_eq!(page_dictionary().id(), page_dictionary().id());
+        let shipped = shipped_dictionary().expect("this build can train one");
+        assert_eq!(
+            shipped.id(),
+            shipped_dictionary().expect("cached").id(),
+            "the shipped dictionary is trained once and cached"
+        );
         let keys = keys();
+        assert_eq!(
+            keys.dictionary().expect("resolves").id(),
+            shipped.id(),
+            "keys that adopted nothing seal against the shipped dictionary"
+        );
         let plain = "INSERT INTO core_entity (entity_id, entity_kind) VALUES ('e-1','note');\n"
             .repeat(64)
             .into_bytes();

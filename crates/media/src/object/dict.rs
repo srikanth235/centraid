@@ -13,6 +13,15 @@
 //! sealed against. A dictionary is therefore versioned by its content: train a
 //! new one and old objects keep opening against the old one, which the vault
 //! stores alongside the generation that used it.
+//!
+//! **That last sentence used to be a promise nothing kept** (#1029 W13,
+//! finding 3). The dictionary was trained per process out of the baseline DDL
+//! and stored nowhere, so any zstd bump or DDL edit that moved the trainer's
+//! output moved the id, and every base, segment and manifest sealed against the
+//! old one refused to open — permanently, with no copy of the old bytes
+//! anywhere. It is true now: the bytes ride inside the **generation manifest**,
+//! uncompressed and sealed, and `crates/vault/src/backup/manifest.rs` says why
+//! there and not somewhere else.
 
 use super::ObjectError;
 

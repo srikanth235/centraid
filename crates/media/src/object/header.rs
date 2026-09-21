@@ -140,13 +140,23 @@ impl Kind {
 
     /// Whether this kind's plaintext is zstd'd before it is padded and sealed.
     ///
-    /// `base`, `segment` and `manifest` are database pages and JSON — a one-row
-    /// edit's segment is mostly page structure the dictionary already knows.
-    /// Photos and thumbnails are already-compressed codecs and a pack is a
-    /// concatenation of sealed items, so both would only grow (#1029 §4).
+    /// `base` and `segment` are database pages — a one-row edit's segment is
+    /// mostly page structure the dictionary already knows. Photos and
+    /// thumbnails are already-compressed codecs and a pack is a concatenation
+    /// of sealed items, so both would only grow (#1029 §4).
+    ///
+    /// ## THE MANIFEST IS THE ONE THAT DOES NOT, AND THAT IS DELIBERATE
+    ///
+    /// A `manifest` compressed until #1029 W13. It cannot any more, because the
+    /// manifest is where the **dictionary bytes now travel**: a phone restoring
+    /// from 24 words has to open a manifest *before* it holds any dictionary at
+    /// all, and a manifest compressed against the dictionary it carries cannot
+    /// be opened by anybody who does not already have it.
+    /// `crates/vault/src/backup/manifest.rs` states the whole design; the cost
+    /// is the zstd of one small JSON document per generation.
     #[must_use]
     pub const fn compresses(self) -> bool {
-        matches!(self, Self::Base | Self::Segment | Self::Manifest)
+        matches!(self, Self::Base | Self::Segment)
     }
 }
 
@@ -418,13 +428,18 @@ mod tests {
         assert_eq!(Role::from_byte(9), Err(ObjectError::UnknownRole(9)));
     }
 
-    /// Only the three database-shaped kinds compress. If this list ever grows a
-    /// photo, the size-class leak the module header bounds grows with it.
+    /// Only the two page-shaped kinds compress. If this list ever grows a
+    /// photo, the size-class leak the module header bounds grows with it — and
+    /// if it ever grows the manifest back, a phone restoring from 24 words
+    /// loses the one object it can open before it holds a dictionary.
     #[test]
-    fn only_base_segment_and_manifest_compress() {
+    fn only_base_and_segment_compress_and_the_manifest_does_not() {
         assert!(Kind::Base.compresses());
         assert!(Kind::Segment.compresses());
-        assert!(Kind::Manifest.compresses());
+        assert!(
+            !Kind::Manifest.compresses(),
+            "the manifest carries the dictionary; it cannot be sealed against it"
+        );
         assert!(!Kind::Blob.compresses());
         assert!(!Kind::Thumbnail.compresses());
         assert!(!Kind::Pack.compresses());

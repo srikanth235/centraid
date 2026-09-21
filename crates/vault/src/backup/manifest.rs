@@ -27,6 +27,49 @@
 //! manifest from another vault does not merely look wrong — it does not open.
 //! An attacker who edits the field gets a tag failure, not a wrong restore.
 //!
+//! ## THE MANIFEST CARRIES THE DICTIONARY (#1029 W13, finding 3)
+//!
+//! Every `base` and `segment` object is zstd'd against a trained dictionary
+//! whose BLAKE3 id is in its header, and opening refuses any other dictionary.
+//! Until W13 that dictionary was trained per process out of the compiled-in
+//! baseline DDL and **stored nowhere**, so a zstd bump or a DDL edit that moved
+//! the trainer's output moved the id and every object sealed against the old one
+//! became permanently unopenable. A phone restoring from 24 words is the case
+//! that makes it undeniable: it holds a seed and a gateway full of ciphertext,
+//! and no vault to have kept a dictionary in.
+//!
+//! So the dictionary is part of the backup. A manifest's **plaintext** is
+//!
+//! ```text
+//! ┌────────────┬──────────────────────┬────────────────────────────────────┐
+//! │ u32be len  │ dictionary bytes     │ the canonical manifest JSON        │
+//! └────────────┴──────────────────────┴────────────────────────────────────┘
+//! ```
+//!
+//! and [`Kind::Manifest`] therefore **no longer compresses**: an object sealed
+//! against the dictionary it carries cannot be opened by anybody who does not
+//! already have it.
+//!
+//! ### Why inside the manifest, and not as an object of its own
+//!
+//! The root weighed two shapes. A separate object — a `blob` whose name a
+//! manifest or the head carries — costs 16 KiB once per generation instead of
+//! once per manifest, and a second fetch before anything can be read. **It also
+//! reintroduces the failure it is meant to close**: a dictionary that lives in
+//! its own object is a thing that can be absent, garbage-collected, or not
+//! uploaded yet, and a generation whose dictionary object is gone is exactly as
+//! unopenable as one whose dictionary was never written. Carrying the bytes
+//! inside the manifest makes the two inseparable — if you can open the manifest
+//! you can open the generation, with no second thing to be missing — and the
+//! manifest is already the one object a restore must open first. 16 KiB per
+//! generation against that is not a trade worth making.
+//!
+//! The bytes are not trusted on sight: [`Dictionary::from_bytes`] re-derives the
+//! id as their BLAKE3, and every base range and segment header names the id it
+//! was sealed against, so a substituted dictionary is a
+//! `DictionaryMismatch` and never a wrong plaintext. And they are inside the
+//! seal, so the gateway is as blind to them as to everything else.
+//!
 //! ## What is gone
 //!
 //! The v0-derived manifest seal, with its JSON envelope and base64
@@ -36,7 +79,7 @@
 
 use serde_json::{Value, json};
 
-use centraid_media::object::{Kind, Role};
+use centraid_media::object::{Dictionary, Kind, Role};
 
 use crate::backup::base::{BaseHead, BaseRange};
 use crate::backup::objects::{ObjectKeys, ObjectsError};
@@ -69,6 +112,49 @@ type Result<T> = std::result::Result<T, ManifestError>;
 
 fn invalid(reason: &str) -> ManifestError {
     ManifestError::Format(reason.to_owned())
+}
+
+/// The length prefix in front of the dictionary bytes.
+const DICTIONARY_LENGTH_BYTES: usize = 4;
+
+/// `u32be len ‖ dictionary ‖ json` — a manifest's plaintext (#1029 W13).
+///
+/// Length-prefixed rather than delimited for the reason every other frame in
+/// this repository is: a delimiter can occur inside the dictionary's bytes,
+/// which are arbitrary binary, and a length cannot.
+fn frame(dictionary: &[u8], json: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(DICTIONARY_LENGTH_BYTES + dictionary.len() + json.len());
+    // The dictionary is at most 16 KiB by construction (`shipped_dictionary`),
+    // so the cast cannot lose bytes; `u32::MAX` would fail `unframe` loudly
+    // rather than silently truncating if one ever grew past 4 GiB.
+    out.extend_from_slice(
+        &u32::try_from(dictionary.len())
+            .unwrap_or(u32::MAX)
+            .to_be_bytes(),
+    );
+    out.extend_from_slice(dictionary);
+    out.extend_from_slice(json);
+    out
+}
+
+/// Read [`frame`] back.
+fn unframe(plain: &[u8]) -> Result<(&[u8], &[u8])> {
+    let prefix = plain
+        .get(..DICTIONARY_LENGTH_BYTES)
+        .ok_or_else(|| invalid("the manifest is shorter than its dictionary length prefix"))?;
+    let length = usize::try_from(u32::from_be_bytes(
+        prefix
+            .try_into()
+            .map_err(|_| invalid("the manifest's dictionary length prefix"))?,
+    ))
+    .map_err(|_| invalid("the manifest's dictionary does not fit this machine"))?;
+    let end = DICTIONARY_LENGTH_BYTES
+        .checked_add(length)
+        .ok_or_else(|| invalid("the manifest's dictionary length overflows the frame"))?;
+    if end > plain.len() {
+        return Err(invalid("the manifest's dictionary runs past the manifest"));
+    }
+    Ok((&plain[DICTIONARY_LENGTH_BYTES..end], &plain[end..]))
 }
 
 /// One segment, as a manifest lists it.
@@ -299,10 +385,14 @@ impl GenerationManifest {
     ///
     /// # Errors
     /// Whatever sealing refused.
+    /// The manifest's plaintext also carries the dictionary the generation was
+    /// sealed against — see the module header for the frame and for why it
+    /// lives here.
     pub fn seal(&self, keys: &ObjectKeys) -> Result<(Vec<u8>, String)> {
-        let plain = crate::intents::canonical_json(&self.to_json())
+        let json = crate::intents::canonical_json(&self.to_json())
             .map_err(|error| invalid(&error.to_string()))?;
-        let sealed = keys.seal(Kind::Manifest, Role::Whole, plain.as_bytes())?;
+        let plain = frame(keys.dictionary()?.bytes(), json.as_bytes());
+        let sealed = keys.seal(Kind::Manifest, Role::Whole, &plain)?;
         Ok((sealed.bytes, sealed.name.hex()))
     }
 
@@ -315,8 +405,31 @@ impl GenerationManifest {
     /// # Errors
     /// [`ManifestError::Objects`] when the bytes are not this vault's manifest.
     pub fn open(keys: &ObjectKeys, sealed: &[u8]) -> Result<Self> {
+        Ok(Self::open_with_dictionary(keys, sealed)?.0)
+    }
+
+    /// Open a sealed manifest **and recover the dictionary it carries**.
+    ///
+    /// This is the restore path's entry point: a phone that holds only the seed
+    /// opens the manifest — which needs no dictionary, because
+    /// [`Kind::Manifest`] does not compress — and hands the dictionary it finds
+    /// to [`ObjectKeys::adopting`], after which every base range and segment of
+    /// that generation opens against the bytes the backup carried rather than
+    /// against whatever this build's trainer would produce today (#1029 W13).
+    ///
+    /// # Errors
+    /// [`ManifestError::Objects`] when the bytes are not this vault's manifest,
+    /// [`ManifestError::Format`] when the frame or the dictionary is malformed.
+    pub fn open_with_dictionary(keys: &ObjectKeys, sealed: &[u8]) -> Result<(Self, Dictionary)> {
         let plain = keys.open(Kind::Manifest, sealed)?;
-        let value: Value = serde_json::from_slice(&plain)?;
+        let (dictionary_bytes, json) = unframe(&plain)?;
+        let dictionary = Dictionary::from_bytes(dictionary_bytes.to_vec())
+            .map_err(|error| invalid(&format!("the manifest's dictionary: {error}")))?;
+        Ok((Self::from_plain_json(keys, json)?, dictionary))
+    }
+
+    fn from_plain_json(keys: &ObjectKeys, plain: &[u8]) -> Result<Self> {
+        let value: Value = serde_json::from_slice(plain)?;
         let manifest = Self::from_json(&value)?;
         if manifest.vault_id != keys.vault_id_hex() {
             // Belt as well as the AAD's braces: a manifest that opened under

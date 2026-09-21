@@ -20,9 +20,9 @@
 //! 2. what it carries is the dictionary the generation was sealed against, so a
 //!    build whose trainer has since moved still opens every object.
 
-use centraid_media::object::{self, Custody};
-use centraid_vault::backup::{BaseRange, GenerationManifest, ObjectKeys, SegmentRef};
+use centraid_media::object::{self, Custody, Dictionary, Kind, Role};
 use centraid_vault::backup::segment::GenerationId;
+use centraid_vault::backup::{BaseRange, GenerationManifest, ObjectKeys, SegmentRef};
 
 const VAULT: [u8; 32] = [0x31; 32];
 const ROOT: [u8; 32] = [0x32; 32];
@@ -83,5 +83,96 @@ fn a_manifest_opens_with_the_root_key_and_no_dictionary_at_all() {
         opened.is_ok(),
         "a restore cannot bootstrap: opening the manifest needs a dictionary \
          the phone does not have yet — {opened:?}"
+    );
+}
+
+/// **A TRAINER THAT MOVED MUST NOT COST A MEMBER THEIR BACKUP.**
+///
+/// The generation is sealed by one build. A later build — a zstd bump, a DDL
+/// edit, anything that moves what `Dictionary::train` produces — restores it.
+/// Simulated by sealing against a dictionary trained on a *different* corpus
+/// from the one this build ships, which is exactly what trainer drift is: the
+/// bytes differ, so the id differs, so nothing sealed against the old id opens
+/// against the new one.
+///
+/// The property under test is that the restore never consults this build's
+/// trainer at all. It opens the manifest, reads the dictionary out of it, and
+/// opens the segment against *that*.
+///
+/// On the base commit this fails: there is no way to seal a generation against
+/// a dictionary other than the process-wide trained one, and no way to get one
+/// back out of the backup.
+#[test]
+fn a_generation_opens_against_the_dictionary_its_manifest_carries() {
+    // The dictionary a DIFFERENT build trained. Nothing in this build can
+    // produce it, which is the point.
+    let corpus: Vec<Vec<u8>> = (0..128_u32)
+        .map(|row| {
+            format!("CREATE TABLE other_shape_{row} (a TEXT, b TEXT, c INTEGER, d BLOB);")
+                .into_bytes()
+        })
+        .collect();
+    let refs: Vec<&[u8]> = corpus.iter().map(Vec::as_slice).collect();
+    let theirs = Dictionary::train(&refs, 8 * 1024).expect("trains");
+
+    let sealing = ObjectKeys::with_dictionary(VAULT, ROOT, theirs.clone());
+    assert_ne!(
+        sealing.dictionary().expect("has one").id(),
+        keys().dictionary().expect("has one").id(),
+        "the simulated drift did not move the id, so this test proves nothing"
+    );
+
+    let pages = b"core_entity rows and more core_entity rows".repeat(64);
+    let segment = sealing
+        .seal(Kind::Segment, Role::Whole, &pages)
+        .expect("seals a segment");
+    let (sealed_manifest, _) = manifest().seal(&sealing).expect("seals the manifest");
+
+    // THE RESTORE STARTS HERE, holding only the two keys.
+    let fresh = keys();
+    let (_, recovered) = GenerationManifest::open_with_dictionary(&fresh, &sealed_manifest)
+        .expect("the manifest opens with no dictionary in hand");
+    assert_eq!(recovered.id(), theirs.id(), "the bytes came back changed");
+
+    assert!(
+        fresh.open(Kind::Segment, &segment.bytes).is_err(),
+        "this build's trainer opened an object it was never sealed against"
+    );
+    assert_eq!(
+        fresh
+            .adopting(recovered)
+            .open(Kind::Segment, &segment.bytes)
+            .expect("the backup's own dictionary opens its own segment"),
+        pages
+    );
+}
+
+/// **THE GOLDEN VECTOR: THE SHIPPED DICTIONARY'S ID IS PINNED.**
+///
+/// `shipped_dictionary` trains from `migrations::BASELINE_SQL`, and zstd's
+/// trainer makes no promise of stability across versions. A zstd bump or a DDL
+/// edit that moves its output moves this id — which is a **format change**,
+/// because the id is the name every `base` and `segment` header carries and
+/// opening refuses any other.
+///
+/// Carrying the dictionary in the manifest means such a change no longer costs
+/// anybody their old generations. It is still a change somebody should have
+/// decided to make, so it fails here rather than being discovered by a restore
+/// that produced larger objects for no stated reason.
+///
+/// **Moving this constant is the whole procedure** — there is nothing to
+/// re-key. Move it deliberately, and say in the commit what moved the trainer.
+#[test]
+fn the_shipped_dictionarys_id_is_the_one_this_build_is_pinned_to() {
+    const PINNED: &str = "84f64d4aa6ab33c496ffaec1ced1f7a6be84d62904de9a5fd9ef7a20f8b43bd9";
+    let shipped = centraid_vault::backup::objects::shipped_dictionary()
+        .expect("this build trains its own dictionary");
+    assert_eq!(
+        hex::encode(shipped.id()),
+        PINNED,
+        "the trained dictionary moved: zstd, the baseline DDL, or the sample \
+         filter. Every object sealed against the old id still opens — the \
+         manifest carries its dictionary — but this is a format change and it \
+         is made on purpose, not noticed later"
     );
 }

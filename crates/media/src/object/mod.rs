@@ -977,8 +977,10 @@ mod tests {
 
     #[test]
     fn a_compressing_kind_without_a_dictionary_is_refused() {
+        // `Segment` and not `Manifest`: the manifest stopped compressing in
+        // #1029 W13 because it is what carries the dictionary.
         let options = SealOptions {
-            kind: Kind::Manifest,
+            kind: Kind::Segment,
             role: Role::Whole,
             dictionary: None,
         };
@@ -992,8 +994,9 @@ mod tests {
     fn the_wrong_dictionary_is_named_rather_than_guessed_at() {
         let dictionary = dictionary();
         let other = Dictionary::from_bytes(b"not the trained one".to_vec()).expect("adopts");
+        // `Segment` and not `Manifest` — see above (#1029 W13).
         let options = SealOptions {
-            kind: Kind::Manifest,
+            kind: Kind::Segment,
             role: Role::Whole,
             dictionary: Some(&dictionary),
         };

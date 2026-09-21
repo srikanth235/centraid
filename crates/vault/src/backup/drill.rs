@@ -155,8 +155,15 @@ pub fn run_drill(
     let manifest_bytes = blobs
         .get(&outcome.manifest)
         .map_err(|error| fail(error.to_string()))?;
-    let manifest = backup::GenerationManifest::open(keys, &manifest_bytes)
-        .map_err(|error| fail(error.to_string()))?;
+    // THE DICTIONARY COMES OUT OF THE MANIFEST, NOT OUT OF THIS BUILD (#1029
+    // W13, finding 3). Everything else about this step is unchanged; what is
+    // new is that the keys the base ranges and the segments are opened with
+    // carry the dictionary this generation was actually sealed against, so a
+    // build whose trainer has moved still restores.
+    let (manifest, dictionary) =
+        backup::GenerationManifest::open_with_dictionary(keys, &manifest_bytes)
+            .map_err(|error| fail(error.to_string()))?;
+    let keys = &keys.adopting(dictionary);
     let restored_dir = root.join("restored");
     std::fs::create_dir_all(&restored_dir).map_err(|error| fail(error.to_string()))?;
     let restored_file = restored_dir.join("vault.db");
