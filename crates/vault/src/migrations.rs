@@ -369,8 +369,8 @@ pub const BASELINE_HEADER: &str = "\
 --     contracts/golden/issue-1020/vault.db.gz > contracts/migrations/001_baseline.sql
 --
 -- Ordered by DEPENDENCY (tables, views, indexes, triggers), not by name, so it
--- is runnable; `contracts/schema/vault-ddl.sql` is the ladder head's shape
--- ordered for READING and is not. FTS shadow tables, `sqlite_sequence` and
+-- is runnable; `contracts/schema/vault-ddl.sql` is the same shape ordered for
+-- READING and is not. FTS shadow tables, `sqlite_sequence` and
 -- `sqlite_autoindex_*` are omitted: SQLite creates each of them itself and
 -- refuses the hand-written DDL. `crates/vault/tests/baseline.rs` founds a
 -- vault from this file and diffs its schema against the corpus (#1020).

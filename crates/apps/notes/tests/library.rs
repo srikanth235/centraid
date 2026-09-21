@@ -416,9 +416,11 @@ fn history_is_the_notes_own_occurrences_newest_first() {
     assert!(blank.versions.is_empty());
 }
 
-/// **THE CYCLE REFUSAL** (D-1020-N2). The fixture writes a chain the DDL
-/// permits — `parent_revision_id` has no constraint against one — and the reader
-/// refuses instead of drawing a partial history as a whole one.
+/// **THE CYCLE REFUSAL** (D-1020-N2). Rung two's guards make a cycle unwritable
+/// in a vault this build founds, and rung two refuses to RUN over a file that
+/// already carries one — so a malformed chain is a file a reader meets, not a
+/// row it can create. The fixture takes the guards off to write one, and the
+/// reader refuses instead of drawing a partial history as a whole one.
 #[test]
 fn a_cyclic_revision_chain_is_refused_rather_than_truncated() {
     let connection = vault();

@@ -170,16 +170,46 @@ fn insert_rows(connection: &Connection, rows_json: &str) -> KitResult<()> {
         let mut prepared = connection
             .prepare(&statement)
             .map_err(|error| KitError::Door(format!("{name}: {error}")))?;
-        for row in values {
-            let cells: Vec<rusqlite::types::Value> = row
-                .as_array()
-                .ok_or_else(|| KitError::Door(format!("{name}: a row is a list of cells")))?
-                .iter()
-                .map(cell_of)
-                .collect();
-            prepared
-                .execute(rusqlite::params_from_iter(cells))
-                .map_err(|error| KitError::Door(format!("{name}: {error}")))?;
+        // A ROW THAT REFERS TO A LATER ROW IS DEFERRED, NEVER SKIPPED.
+        //
+        // `rows.json` is frozen (TESTING.md, "Fixtures and parity") and its row
+        // order is v0's read order, not a dependency order:
+        // `contracts/apps/notes/rows.json` carries a `core_entity_revision`
+        // whose parent is a row further down. That cost nothing while the
+        // fixture vault was built from a schema with no guards. The vault a
+        // test builds is now the schema a real vault founds
+        // (`contracts/schema/vault-ddl.sql`, #1029), and rung two's
+        // `core_entity_revision_parent_is_same_object` looks the parent up at
+        // insert time (#1020, D-1020-N2).
+        //
+        // So a refused row goes to the back of the queue and the pass runs
+        // again; a pass that places nothing raises its first refusal unchanged.
+        // Every row in the file still lands, and a refusal that is not about
+        // ordering still fails — this reorders the inserts, it does not filter
+        // them, and it never edits the frozen file.
+        let mut pending: Vec<&serde_json::Value> = values.iter().collect();
+        while !pending.is_empty() {
+            let before = pending.len();
+            let mut deferred: Vec<&serde_json::Value> = Vec::new();
+            let mut first_refusal: Option<String> = None;
+            for row in std::mem::take(&mut pending) {
+                let cells: Vec<rusqlite::types::Value> = row
+                    .as_array()
+                    .ok_or_else(|| KitError::Door(format!("{name}: a row is a list of cells")))?
+                    .iter()
+                    .map(cell_of)
+                    .collect();
+                if let Err(error) = prepared.execute(rusqlite::params_from_iter(cells)) {
+                    first_refusal.get_or_insert_with(|| format!("{name}: {error}"));
+                    deferred.push(row);
+                }
+            }
+            if deferred.len() == before {
+                return Err(KitError::Door(first_refusal.unwrap_or_else(|| {
+                    format!("{name}: a pass placed no row and named no refusal")
+                })));
+            }
+            pending = deferred;
         }
     }
     Ok(())

@@ -3432,11 +3432,19 @@ fn day_after(start: &str, count: usize) -> String {
 
 /// A CYCLIC REVISION CHAIN — the fixture the cycle refusal needs (D-1020-N2).
 ///
-/// `parent_revision_id` has no constraint that forbids a cycle: the DDL's only
-/// guard is the foreign key, so A→B→A is representable today and caught by a
-/// reader. This writes exactly that, so the refusal has something to refuse —
-/// and `contracts/migrations/002_revisions.sql` is the proposal that would make
-/// the row unwritable instead.
+/// **THE SCHEMA NOW FORBIDS THIS, AND THE READER STILL HAS TO SURVIVE IT.**
+/// `contracts/migrations/002_revisions.sql` is rung two of the ladder, so a
+/// vault this build founds cannot be written into a cycle: the guards refuse
+/// A→B→A at insert time. The reader's refusal is not thereby dead code — rung
+/// two REFUSES TO RUN over a file that already carries a malformed chain rather
+/// than deciding which of two histories a member keeps, so such files exist and
+/// are exactly what a reader meets.
+///
+/// So this fixture takes the guards off `core_entity_revision`, writes the
+/// cycle, and puts each trigger back from its own `sqlite_master` text. It is
+/// building a corrupt file ON PURPOSE, which is the only way to hand the reader
+/// the state it defends against; nothing about the schema is relaxed for the
+/// vault the test then reads (#1029).
 ///
 /// # Errors
 ///
@@ -3457,6 +3465,31 @@ pub fn notes_revision_cycle(
             |row| row.get(0),
         )
         .map_err(door)?;
+    // The guards, captured verbatim so they go back exactly as they were.
+    let guards: Vec<String> = {
+        let mut statement = connection
+            .prepare(
+                "SELECT sql FROM sqlite_master
+                   WHERE type = 'trigger' AND tbl_name = 'core_entity_revision'
+                     AND sql IS NOT NULL
+                   ORDER BY name",
+            )
+            .map_err(door)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(door)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(door)?;
+        rows
+    };
+    for sql in &guards {
+        let name = trigger_name(sql).ok_or_else(|| {
+            KitError::Door(format!("a trigger on core_entity_revision has no name: {sql}"))
+        })?;
+        connection
+            .execute_batch(&format!("DROP TRIGGER {name}"))
+            .map_err(door)?;
+    }
     for (revision_id, parent) in [(&head, &tail), (&tail, &head)] {
         connection
             .execute(
@@ -3479,7 +3512,21 @@ pub fn notes_revision_cycle(
             rusqlite::params![head, note_id],
         )
         .map_err(door)?;
+    for sql in &guards {
+        connection.execute_batch(sql).map_err(door)?;
+    }
     Ok((head, tail))
+}
+
+/// The name in `CREATE TRIGGER <name> …`, as `sqlite_master` spells it.
+fn trigger_name(sql: &str) -> Option<&str> {
+    let mut words = sql.split_whitespace();
+    let create = words.next()?;
+    let trigger = words.next()?;
+    if !create.eq_ignore_ascii_case("create") || !trigger.eq_ignore_ascii_case("trigger") {
+        return None;
+    }
+    words.next()
 }
 
 /// The declared shape of year-3 Notes volume.
