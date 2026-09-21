@@ -218,8 +218,7 @@ pub fn node_key_path(data_dir: &Path) -> PathBuf {
 pub fn node_secret(data_dir: &Path) -> anyhow::Result<SecretKey> {
     let path = node_key_path(data_dir);
     if path.exists() {
-        let bytes = std::fs::read(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let bytes = std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
         let bytes: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
             anyhow::anyhow!(
                 "{} is {} bytes and an endpoint secret key is 32. Refusing to mint a second \
@@ -232,7 +231,8 @@ pub fn node_secret(data_dir: &Path) -> anyhow::Result<SecretKey> {
     }
     std::fs::create_dir_all(data_dir).context("creating the data directory")?;
     let secret = SecretKey::generate();
-    std::fs::write(&path, secret.to_bytes()).with_context(|| format!("writing {}", path.display()))?;
+    std::fs::write(&path, secret.to_bytes())
+        .with_context(|| format!("writing {}", path.display()))?;
     restrict(&path)?;
     Ok(secret)
 }
@@ -292,8 +292,7 @@ pub async fn serve_iroh(endpoint: Endpoint, server: Shared) -> anyhow::Result<()
 
 /// One accepted bidirectional stream, as `axum::serve` wants it: one thing that
 /// reads and one that writes, joined.
-pub type IrohStream =
-    tokio::io::Join<iroh::endpoint::RecvStream, iroh::endpoint::SendStream>;
+pub type IrohStream = tokio::io::Join<iroh::endpoint::RecvStream, iroh::endpoint::SendStream>;
 
 /// A listener that yields one iroh bi-stream per HTTP connection.
 ///
@@ -347,7 +346,11 @@ impl IrohListener {
                     };
                     let peer = connection.remote_id();
                     while let Ok((send, recv)) = connection.accept_bi().await {
-                        if sender.send((tokio::io::join(recv, send), peer)).await.is_err() {
+                        if sender
+                            .send((tokio::io::join(recv, send), peer))
+                            .await
+                            .is_err()
+                        {
                             return;
                         }
                     }

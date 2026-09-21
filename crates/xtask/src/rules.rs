@@ -303,10 +303,10 @@ fn function_name(signature: &str) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Rule 3 — no crate opens a listening TCP socket
+// Rule 3 — nothing but the gateway accepts an inbound connection
 // ---------------------------------------------------------------------------
 
-/// THE ONE FILE THAT IS ALLOWED TO BIND, AND WHY.
+/// THE ONE FILE THAT IS ALLOWED TO ACCEPT, AND WHY.
 ///
 /// The rule as #1020 wrote it said the blob door was "the only listener the
 /// product may ever have". That was true of the product #1020 described — a
@@ -323,16 +323,44 @@ fn function_name(signature: &str) -> Option<String> {
 /// statement than "no crate listens" was, because it names where the socket is
 /// instead of only asserting there is none.
 ///
+/// # THE RULE IS RESTATED TO THE AMENDMENT'S WORDING (#1029, 2026-09-21)
+///
+/// It used to grep for `TcpListener` alone, and against a product whose one
+/// server spoke TCP that was the whole question. The
+/// [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+/// carries the gateway API over iroh, and **a grep for `TcpListener` cannot
+/// see an iroh listener at all** — so a phone that started accepting inbound
+/// QUIC connections would have passed this rule in silence. That is a check
+/// passing for the wrong reason, which is the failure the constitution's
+/// 2026-09-21 Evolution Log entry was written about from the other side.
+///
+/// So the rule's subject is restated to the amendment's own sentence — **"the
+/// phone dials; it accepts no inbound connection"** — and its patterns follow
+/// it. A QUIC endpoint binds a UDP socket because QUIC must, and that is not
+/// what is forbidden: what is forbidden is *accepting*, which takes two things
+/// an endpoint has to do on purpose — **offer an ALPN** (`.alpns(…)`, or there
+/// is nothing an inbound handshake could negotiate) and **call `accept`**
+/// (or there is nothing to hand one to). Either, outside this allowlist, is a
+/// finding.
+///
+/// **This is a restatement, not a loosening.** Every TCP pattern the rule had
+/// is still a pattern; the rule now catches strictly more than it did, and the
+/// exemption is still ONE FILE with a reason. `gateway_client`'s endpoint is
+/// what it is checked against: see
+/// [`tests::a_gateway_client_endpoint_that_offers_an_alpn_or_accepts_is_a_finding`].
+///
 /// A file lands here only with a reason, and
 /// [`tests::the_listener_allowlist_has_no_dead_entries`] fails if an entry
-/// stops binding — an exemption nobody is looking at is how the next one gets
+/// stops accepting — an exemption nobody is looking at is how the next one gets
 /// added quietly.
 const LISTENER_ALLOWED: &[(&str, &str)] = &[(
     "crates/gateway-server/src/serve.rs",
     "THE GATEWAY'S LISTENER (#1029 §3). The gateway is the server a \
          member runs on their own laptop; the hosted adapter is struck from v0 \
-         (scope amendment 2026-09-21). The bind is confined to this file, which accepts connections and \
-         hands them to `crates/gateway-server/src/http.rs` — it decides nothing \
+         (scope amendment 2026-09-21). Both carriers are confined to this file \
+         — the TCP bind for a self-hoster with a domain, and the iroh endpoint \
+         that offers `centraid-gateway/1` and accepts — and it hands every \
+         connection to `crates/gateway-server/src/http.rs`: it decides nothing \
          about a request, and every rule it serves is `crates/gateway-core`'s",
 )];
 
@@ -363,7 +391,7 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
         };
         for (line, pattern) in listener_hits(&source) {
             findings.push(format!(
-                "{rel}:{line}: `{pattern}`. iroh QUIC is the transport, and the only listener this product has is the standalone gateway's, which is confined to {} (#1020, #1029 §3)",
+                "{rel}:{line}: `{pattern}`. The phone dials; it accepts no inbound connection (#1029, scope amendment 2026-09-21). The only thing in this product that accepts one is the gateway a member runs on their own laptop, confined to {} (#1020, #1029 §3)",
                 LISTENER_ALLOWED
                     .iter()
                     .map(|(path, _)| *path)
@@ -377,7 +405,20 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
     ))
 }
 
-/// Every listener construction in a source file.
+/// Every place a source file could accept an inbound connection.
+///
+/// ## WHAT IS SCANNED, AND WHY EACH PATTERN IS THERE
+///
+/// | Pattern | What it would be |
+/// |---|---|
+/// | `TcpListener::bind`, `tokio::net::TcpListener` | a TCP listener, the rule's original subject |
+/// | `.alpns(` | an iroh endpoint offering a protocol for an inbound handshake to negotiate |
+/// | `.accept()` | an accept loop, on either carrier |
+///
+/// An iroh endpoint that does **neither** is a dialler, and a dialler is what
+/// every Centraid client is. `crates/gateway-client`'s `IrohTransport` binds an
+/// endpoint with no `.alpns(…)` and never calls `accept`, and that is the shape
+/// this rule exists to keep it in.
 ///
 /// ## THE `blob-door` ESCAPE HATCH IS GONE, AND IT WAS ALREADY DEAD (#1029 W13)
 ///
@@ -393,16 +434,21 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
 /// The rule is stricter without it: the ONE way to land a listener is a row in
 /// [`LISTENER_ALLOWED`], which carries a reason and which
 /// [`tests::the_listener_allowlist_has_no_dead_entries`] fails on when it stops
-/// binding. An exemption somebody has to write down is an exemption somebody
+/// accepting. An exemption somebody has to write down is an exemption somebody
 /// can read.
 pub fn listener_hits(source: &str) -> Vec<(usize, &'static str)> {
-    const PATTERNS: [&str; 2] = ["TcpListener::bind", "tokio::net::TcpListener"];
+    const PATTERNS: [&str; 4] = [
+        "TcpListener::bind",
+        "tokio::net::TcpListener",
+        ".alpns(",
+        ".accept()",
+    ];
     source
         .lines()
         .enumerate()
         .filter_map(|(index, line)| {
             let code = line.split("//").next().unwrap_or(line);
-            // One hit per line: `tokio::net::TcpListener::bind(…)` matches both
+            // One hit per line: `tokio::net::TcpListener::bind(…)` matches two
             // patterns, and one line of code is one finding.
             PATTERNS
                 .iter()
@@ -809,7 +855,73 @@ fn door() {
         );
     }
 
-    /// An allowlisted file that stopped binding is an exemption nobody is
+    /// THE RESTATED RULE'S OWN TEST (#1029, scope amendment 2026-09-21).
+    ///
+    /// "The phone dials; it accepts no inbound connection." A `gateway-client`
+    /// endpoint that **offers an ALPN** or **calls `accept`** is doing the two
+    /// things an endpoint has to do on purpose to become a listener, and each
+    /// is a finding. Before the restatement both passed in silence: an iroh
+    /// endpoint binds a UDP socket, and the rule only ever grepped for
+    /// `TcpListener`.
+    #[test]
+    fn a_gateway_client_endpoint_that_offers_an_alpn_or_accepts_is_a_finding() {
+        for (what, line) in [
+            (
+                "offering an ALPN",
+                "    let endpoint = Endpoint::builder(presets::N0).alpns(vec![ALPN.to_vec()]);",
+            ),
+            (
+                "calling accept",
+                "    while let Some(incoming) = endpoint.accept().await {}",
+            ),
+        ] {
+            let root = fixture_dir(&format!("listener-client-{}", what.replace(' ', "-")));
+            write(
+                &root,
+                "crates/gateway-client/src/transport.rs",
+                &format!("async fn dial() {{\n{line}\n}}\n"),
+            );
+            let report = no_listening_socket(&root);
+            assert_eq!(
+                report.findings.len(),
+                1,
+                "{what} went unnoticed: {:?}",
+                report.findings
+            );
+            assert!(
+                report.findings[0].contains("crates/gateway-client/src/transport.rs:2"),
+                "{:?}",
+                report.findings
+            );
+            assert!(
+                report.findings[0].contains("accepts no inbound connection"),
+                "the finding must say what the rule is: {:?}",
+                report.findings
+            );
+        }
+    }
+
+    /// AND THE SHAPE THE PHONE ACTUALLY TAKES IS CLEAN. A dial-only endpoint
+    /// binds a UDP socket because QUIC must, and that is not a listener — a
+    /// rule that called it one would be a rule nobody could ship the phone
+    /// under.
+    #[test]
+    fn a_dial_only_endpoint_is_not_a_listener() {
+        let root = fixture_dir("listener-client-green");
+        write(
+            &root,
+            "crates/gateway-client/src/transport.rs",
+            "async fn dial() {\n    let endpoint = \
+             Endpoint::builder(presets::N0).bind().await?;\n    \
+             endpoint.connect(gateway, ALPN).await\n}\n",
+        );
+        assert!(
+            no_listening_socket(&root).findings.is_empty(),
+            "a dialler is not a listener"
+        );
+    }
+
+    /// An allowlisted file that stopped accepting is an exemption nobody is
     /// looking at, which is how the next one gets added quietly.
     #[test]
     fn the_listener_allowlist_has_no_dead_entries() {
@@ -822,7 +934,7 @@ fn door() {
                 .unwrap_or_else(|error| panic!("{path} is allowlisted and unreadable: {error}"));
             assert!(
                 !listener_hits(&source).is_empty(),
-                "{path} no longer opens a listener; drop its allowlist entry ({reason})"
+                "{path} no longer accepts an inbound connection; drop its allowlist entry ({reason})"
             );
         }
     }

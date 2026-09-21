@@ -413,7 +413,12 @@ fn print_pairing(
         .into_iter()
         .filter(|record| record.redeemed_at.is_none() && record.expires_at > now)
         .collect();
-    if live.is_empty() && !tenancy::list(store).map_err(store_error)?.iter().any(|r| r.redeemed_at.is_some()) {
+    if live.is_empty()
+        && !tenancy::list(store)
+            .map_err(store_error)?
+            .iter()
+            .any(|r| r.redeemed_at.is_some())
+    {
         let invite = tenancy::mint(store, config.default_quota.bytes, now).map_err(store_error)?;
         println!("invite    {}", invite.code);
         print_ticket(endpoint, &invite.code, invite.expires_at.millis())?;
