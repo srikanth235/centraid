@@ -191,6 +191,24 @@ public class CentraidSyncWorker(
 
 /** The pass body, installed by the shell at launch. See [CentraidSyncWorker]. */
 public object SyncPass {
+
+    /**
+     * WHAT A WORKER MAY SPEND, AND IT IS WORKMANAGER'S NUMBER (#1029 W18-6).
+     *
+     * WorkManager gives a worker about ten minutes before it calls `onStopped`
+     * and stops caring what happens next. This is that, minus a minute, so the
+     * object in flight finishes and the pass stops at a boundary rather than
+     * being killed mid-upload.
+     *
+     * **A drain of a full generation may not fit, and does not need to.** The
+     * spool never loses a sealed object and the periodic work is every fifteen
+     * minutes, so a pass that stops short resumes at the next window from the
+     * txid the laptop acked. A foreground service would buy uninterrupted
+     * minutes at the cost of a permanent notification for a backup nobody asked
+     * to watch — the honest shape only if a resumable drain turns out to make
+     * no progress across windows, which is a measurement nobody has taken.
+     */
+    public const val WORK_MANAGER_BUDGET_MS: Long = 9L * 60L * 1_000L
     internal var installed: (suspend () -> Boolean)? = null
         private set
 

@@ -80,6 +80,12 @@ struct CentraidApp: App {
                 // takes is of whatever is on screen at that moment.
                 case .active:
                     shell.unmask()
+                    // AND DRAIN. The amendment's foreground half (#1029 W18-6):
+                    // the phone backs up while the member is in the app, not
+                    // only in the windows iOS grants. `ShelfDrain` refuses a
+                    // second pass while one runs, so an `inactive` → `active`
+                    // flicker costs nothing.
+                    shell.becameActive()
                 case .inactive, .background:
                     shell.mask()
                 @unknown default:

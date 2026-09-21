@@ -23,6 +23,8 @@ import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.TallyListEvent
 import android.os.Build
+import dev.centraid.shared.platform.SyncPass
+import dev.centraid.shared.sync.DrainPass
 import dev.centraid.android.kit.MakeVaultSheet
 import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.HomeScreen
@@ -109,6 +111,25 @@ public class MainActivity : ComponentActivity() {
     //
     // `onTrimMemory` STAYS, and it is now the only lifecycle hook here: giving
     // the OS its memory back is a fact about a device, not about a link.
+
+    /**
+     * THE FOREGROUND TRIGGER (#1029 W18-6).
+     *
+     * `onResume` came back, and it is not what it was. It used to run
+     * `HomeSession.foreground()` — catch every holding up and hold the
+     * foreground one's log stream open — and that whole shape left with the
+     * gateway. What it does now is the amendment's foreground half: the phone
+     * drains **while the member is in the app**, not only in the windows
+     * WorkManager grants.
+     *
+     * Fire-and-forget on the IO dispatcher. `ShelfDrain` refuses a second pass
+     * while one runs, so a rotation or a permission dialog costs nothing.
+     */
+    override fun onResume() {
+        super.onResume()
+        val open = session ?: return
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.drain.onBecameActive() }
+    }
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
@@ -197,6 +218,30 @@ public class MainActivity : ComponentActivity() {
                         uiThreadName = Thread.currentThread().name,
                     ).also { opened ->
                         session = opened
+                        // THE BACKGROUND WINDOW NOW HAS SOMETHING TO RUN
+                        // (#1029 W18-6). `AndroidBackgroundTasks.register()`
+                        // enqueues `CentraidSyncWorker` every 15 minutes and
+                        // that worker runs `SyncPass.installed` — which was
+                        // null on every device, so every window was a
+                        // `Result.success()` over nothing. This is the install.
+                        //
+                        // **WorkManager's stop signal IS the deadline.** A
+                        // worker gets about ten minutes before `onStopped`, so
+                        // the budget is that minus a margin to finish the
+                        // object in flight; a drain stopped short resumes next
+                        // window, because the spool never loses a sealed
+                        // object.
+                        SyncPass.install {
+                            opened.drain.run(SyncPass.WORK_MANAGER_BUDGET_MS)
+                                .all { outcome ->
+                                    val done = outcome.outcome
+                                    done is DrainPass.Outcome.Ran && done.answer.drained
+                                }
+                        }
+                        // AND THE FIRST FOREGROUND PASS, which `onResume` below
+                        // would otherwise miss: the activity resumed before the
+                        // session existed.
+                        opened.drain.onBecameActive()
                         // THE APP SCREENS GO ON THE SAME CORE (#1025 S5, lane
                         // L5). R-1020-24 is one core per VAULT FILE, so Tally,
                         // Photos and Notes read through the handle this session

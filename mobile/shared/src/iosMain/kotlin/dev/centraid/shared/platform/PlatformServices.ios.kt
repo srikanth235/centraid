@@ -20,6 +20,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.BackgroundTasks.BGAppRefreshTaskRequest
 import platform.BackgroundTasks.BGProcessingTaskRequest
+import platform.BackgroundTasks.BGTaskRequest
 import platform.BackgroundTasks.BGTaskScheduler
 import platform.CoreFoundation.CFDataCreate
 import platform.CoreFoundation.CFDataGetBytePtr
@@ -316,23 +317,43 @@ public class IosBackgroundTasks : BackgroundTasks {
         processing.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(EARLIEST_SECONDS)
         processing.requiresNetworkConnectivity = true
         processing.requiresExternalPower = false
+        // BOTH ARE SUBMITTED, AND THE COMMENT USED TO LIE ABOUT THAT
+        // (#1029 W18-6). What stood here was
+        // `submit(refresh) && submit(processing)` under a comment reading
+        // "BOTH OR NEITHER" — and `&&` short-circuits, so a refused refresh
+        // meant the processing request was never submitted **at all**. That is
+        // not "neither": it is "the first was refused and the second was never
+        // asked", and the processing task is the one that uploads bytes. iOS
+        // grants the two independently, so a phone whose refresh is refused may
+        // still be granted a processing window.
         var refusal = ""
-        val submitted = try {
-            // BOTH OR NEITHER. A phone that took the refresh and refused the
-            // processing task would catch up on rows and never upload bytes,
-            // which is the state a member reads as "backed up" and is not.
-            BGTaskScheduler.sharedScheduler.submitTaskRequest(refresh, null) &&
-                BGTaskScheduler.sharedScheduler.submitTaskRequest(processing, null)
+        fun submit(request: BGTaskRequest, which: String): Boolean = try {
+            BGTaskScheduler.sharedScheduler.submitTaskRequest(request, null)
         } catch (error: Throwable) {
-            refusal = error.message ?: "BGTaskScheduler refused"
+            refusal = listOf(refusal, "$which: ${error.message ?: "refused"}")
+                .filter { it.isNotEmpty() }
+                .joinToString("; ")
             false
         }
+        val refreshTaken = submit(refresh, REFRESH_IDENTIFIER)
+        val processingTaken = submit(processing, PROCESSING_IDENTIFIER)
+        // WHICH ONE WAS REFUSED IS WHAT A MEMBER IS OWED. "Background App
+        // Refresh is off" is the whole truth only when NEITHER was taken; a
+        // phone that will upload but not catch up early, or the reverse, is a
+        // different product to use and saying so is the difference between a
+        // member who understands their backup and one who does not.
         return BackgroundTasks.Registration(
-            registered = submitted,
-            sentence = if (submitted) {
-                "Centraid catches up in the background."
-            } else {
-                "Background App Refresh is off, so Centraid only catches up when you open it."
+            registered = refreshTaken || processingTaken,
+            sentence = when {
+                refreshTaken && processingTaken -> "Centraid catches up in the background."
+                processingTaken ->
+                    "Centraid backs up in the background. It only catches up on changes when " +
+                        "you open it."
+                refreshTaken ->
+                    "Centraid catches up on changes in the background. It only uploads when " +
+                        "you open it."
+                else ->
+                    "Background App Refresh is off, so Centraid only catches up when you open it."
             },
             refusal = refusal,
         )

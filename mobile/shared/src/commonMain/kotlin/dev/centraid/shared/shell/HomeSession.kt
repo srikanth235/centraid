@@ -9,6 +9,8 @@ import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.sync.ChangeStream
+import dev.centraid.shared.sync.CoreDrainDoor
+import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
@@ -22,6 +24,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * HOME, WIRED TO A REAL VAULT — AND TO THE OTHERS THE DEVICE HOLDS
@@ -85,6 +89,32 @@ public class HomeSession private constructor(
     private var changeReader: Job?,
 ) {
     public val state: StateFlow<HomeState> get() = host.state
+
+    /** The monotonic origin the commit debounce measures from. See [drain]. */
+    private val sinceOpen: TimeMark = TimeSource.Monotonic.markNow()
+
+    /**
+     * THE DRAIN OVER THIS DEVICE'S SHELF (#1029 W18-6).
+     *
+     * It lives on the session and not on either shell, because a pass is over
+     * the SHELF — every held vault, not the one screen a member left open — and
+     * the shelf is this object's. Both shells reach it the same way: iOS
+     * through `HomeBridge.drain`/`becameActive`, Android by calling it
+     * directly, the way Android already collects the `StateFlow` directly.
+     *
+     * Its third trigger is wired here too ([open]): a `ChangeEvent` is the one
+     * signal in this process that says there is something new to send.
+     */
+    public val drain: ShelfDrain = ShelfDrain(
+        holdings = { shelf.all() },
+        doorFor = { core -> CoreDrainDoor(core) },
+        // MONOTONIC, NOT THE WALL CLOCK. The only thing it measures is "how
+        // long since the last pass": a phone whose clock moves — a timezone, a
+        // network correction, a member setting it — would either debounce for
+        // hours or stop debouncing at all. It is never a backup claim; those
+        // moments are the gateway's.
+        nowMs = { sinceOpen.elapsedNow().inWholeMilliseconds },
+    )
 
     /**
      * THE FOREGROUND HOLDING'S CORE, ASKED OF THE SHELF EVERY TIME.
@@ -510,6 +540,11 @@ public class HomeSession private constructor(
                 changeReader = null,
             )
             session.changes.route(host)
+            // THE COMMIT TRIGGER. Debounced inside `ShelfDrain`, and launched
+            // rather than awaited: the listener runs on the one consumer of the
+            // core's bounded, drop-nothing event queue, and a listener that
+            // waited for a network there would stall it.
+            session.changes.onCommit = { scope.launch { session.drain.afterCommit() } }
             session.serveSwitches()
             // THE ROSTER COLLECTOR BEFORE THE REBIND, so the roster the shelf
             // is already holding reaches Home rather than being the one value

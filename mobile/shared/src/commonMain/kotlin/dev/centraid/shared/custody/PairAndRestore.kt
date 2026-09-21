@@ -245,6 +245,15 @@ public object CustodyCopy {
      * it says the second half plainly: matching numbers mean nobody is in the
      * middle.
      */
+    // TODO(#1029, W15): swap `answer.gatewayEndpoint` below for
+    //  `PairResponse.safety_number` the moment W15 lands it — the root has
+    //  ruled that `identity::safety_number` joins that message. It is ONE line:
+    //  `CorePairDoor` fills `PairAnswer.gatewayEndpoint` from
+    //  `paired.gateway_endpoint`, and it becomes `paired.safety_number`. A
+    //  safety number is designed to be read aloud and compared; a 64-character
+    //  hex endpoint id is not, and a member will check four characters and
+    //  stop. Until then this shows the endpoint id, which is what the laptop's
+    //  own terminal prints, and the shell computes no number of its own.
     public fun pairedLine(answer: PairAnswer): String {
         val who = answer.laptopName.ifBlank { "your laptop" }
         val warning = if (answer.recordPublished) {

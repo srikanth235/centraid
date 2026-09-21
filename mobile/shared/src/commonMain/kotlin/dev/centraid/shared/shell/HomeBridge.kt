@@ -3,6 +3,8 @@ package dev.centraid.shared.shell
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
 import dev.centraid.shared.platform.platformServices
+import dev.centraid.shared.sync.DrainPass
+import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.TransferRule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +44,17 @@ public class HomeBridge {
      */
     private var session: HomeSession? = null
     private var onState: ((ByteArray) -> Unit)? = null
+
+    /**
+     * The drain over this device's shelf, once there is one.
+     *
+     * The SESSION's, not this bridge's: a pass is over the shelf and the shelf
+     * is the session's, and Android reaches the same object without going
+     * through this adapter at all. Null before the session exists, for the same
+     * reason [session] is — a background window that arrives before the app has
+     * finished launching has nothing to drain, which is not a failure.
+     */
+    private val shelfDrain: ShelfDrain? get() = session?.drain
 
     /**
      * Who is waiting for the session, so the app screens can be attached to it
@@ -155,6 +168,61 @@ public class HomeBridge {
     public fun vaultMoved(vaultId: String, atIso: String, unacked: Long) {
         val session = this.session ?: return
         scope.launch { session.vaultMoved(vaultId, atIso, unacked) }
+    }
+
+    /**
+     * THE DRAIN, AS THE ONE DOOR BOTH SHELLS CALL (#1029 W18-6).
+     *
+     * A pass nobody invokes is the state W5B left with better copy, so the
+     * trigger lives here rather than in either shell: iOS calls [drain] from
+     * its two `BGTaskScheduler` handlers and [becameActive] from the scene
+     * phase; Android calls [drain] from its `CoroutineWorker` and
+     * [becameActive] from the lifecycle owner. What a pass IS stays in
+     * `commonMain` ([ShelfDrain]).
+     *
+     * Not `suspend` and callback-shaped, for the same reason [send] is not: a
+     * SwiftUI view cannot await, and a `BGTask` handler is a completion
+     * callback already. [onDone] is handed whether every held vault's spool is
+     * empty — which is exactly what `setTaskCompleted(success:)` takes.
+     *
+     * **`deadlineMs` is the WINDOW's, not a preference.** `0` is the
+     * foreground's "no deadline" (`phone.proto`); a background handler passes
+     * what the OS said it had.
+     */
+    public fun drain(deadlineMs: Long, onDone: (Boolean) -> Unit) {
+        val drain = shelfDrain ?: return onDone(false)
+        scope.launch { onDone(drained(drain.run(deadlineMs))) }
+    }
+
+    /** The app became active. See [drain]. */
+    public fun becameActive(onDone: (Boolean) -> Unit = {}) {
+        val drain = shelfDrain ?: return onDone(false)
+        scope.launch { onDone(drained(drain.onBecameActive())) }
+    }
+
+    /**
+     * A commit landed, debounced ([ShelfDrain.afterCommit]).
+     *
+     * Fire-and-forget: its caller is the change stream, which has nothing to
+     * do with the answer and must not be made to wait for a network.
+     */
+    public fun afterCommit() {
+        val drain = shelfDrain ?: return
+        scope.launch { drain.afterCommit() }
+    }
+
+    /**
+     * Every vault's spool empty.
+     *
+     * **A device holding nothing is drained**, which is true and is what a
+     * background window should report: there was nothing to send and the task
+     * finished. A vault whose pass was refused as busy is NOT drained — another
+     * pass is still working, and claiming success would let iOS believe a
+     * window did more than it did.
+     */
+    private fun drained(outcomes: List<ShelfDrain.Outcome>): Boolean = outcomes.all {
+        val outcome = it.outcome
+        outcome is DrainPass.Outcome.Ran && outcome.answer.drained
     }
 
     /**

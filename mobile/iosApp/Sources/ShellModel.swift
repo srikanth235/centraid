@@ -54,6 +54,23 @@ final class ShellModel: ObservableObject {
     func mask() { masked = true }
 
     func unmask() { masked = false }
+
+    /// THE FOREGROUND TRIGGER (#1029 W18-6).
+    ///
+    /// The amendment's posture is that the phone drains **in the foreground and
+    /// inside the background window iOS grants**, so the foreground half needs a
+    /// caller and this is it: `CentraidApp`'s scene phase already observes
+    /// `.active` for the switcher mask, and becoming active is the one moment
+    /// worth spending a drain on without asking whether one ran recently.
+    ///
+    /// Fire-and-forget. A member who has just opened Centraid is looking at
+    /// their vault, not at a progress bar for a pass they did not ask for; the
+    /// backup row updates from the claim when the answer lands.
+    func becameActive() {
+        #if canImport(CentraidShared)
+        home.becameActive(onDone: { _ in })
+        #endif
+    }
     /// Whether the vault sheet is up.
     @Published var vaultSheetOpen = false
     /// Whether the transfer-rules sheet is up (#1025 S4).
@@ -127,6 +144,30 @@ final class ShellModel: ObservableObject {
             self.tally.attach(session: session)
             self.photos.attach(session: session)
             self.notes.attach(session: session)
+            // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
+            //
+            // `BackgroundPasses` registered both handlers at launch — it has to,
+            // before the app finishes launching — but what a pass IS belongs to
+            // `commonMain`, and there was no shelf to drain until this moment.
+            // So the handler is installed here, when the session exists, and a
+            // window that opens before it completes honestly rather than
+            // claiming a drain ran.
+            //
+            // `Bool` in, `Bool` out: the answer is handed straight to
+            // `setTaskCompleted(success:)`.
+            BackgroundPasses.pass = { deadline in
+                await withCheckedContinuation { continuation in
+                    self.home.drain(
+                        deadlineMs: Int64(deadline * 1000),
+                        onDone: { drained in continuation.resume(returning: drained.boolValue) }
+                    )
+                }
+            }
+            // AND THE FIRST FOREGROUND PASS. `becameActive` below runs on every
+            // later activation; this is the one at launch, which would otherwise
+            // be missed because the session did not exist when the scene became
+            // active.
+            self.home.becameActive(onDone: { _ in })
         }
         // THE DEVICE MAKES ITS OWN VAULT (#1025 S5; #1029 §1).
         //

@@ -152,7 +152,33 @@ public class ChangeStream {
         // with the log plane; the field stays on the wire until
         // `crates/api-proto`'s own lane retires it with its producers.
         routes.toList().forEach { it.deliver(change.table, keys) }
+        // A COMMIT LANDED, SO THERE IS SOMETHING TO BACK UP (#1029 W18-6).
+        //
+        // THE SMALLEST CHANGE THAT GIVES THE DRAIN ITS THIRD TRIGGER. A
+        // `ChangeEvent` is the one signal in this process that says the vault
+        // moved, and the alternative was a second collector on the core's
+        // `SharedFlow` in the bridge — a second coroutine per vault to learn a
+        // fact this one already has.
+        //
+        // The listener is **not** the screens' route list: a route is a screen
+        // that re-reads, this is not a screen, and putting it in that list
+        // would make a backup pass something every routed `deliver` waits on.
+        // It is called AFTER the screens, for the same reason: a member's list
+        // must not redraw a moment later because a spool was being emptied.
+        onCommit?.invoke()
     }
+
+    /**
+     * Called once per delivered change, after every routed screen has been
+     * told. `HomeBridge` sets it to the debounced drain.
+     *
+     * **Not suspending, and it must not block.** Its one implementation
+     * launches on the session's scope and returns; a listener that awaited a
+     * network here would stall the one consumer of the core's event queue, and
+     * that queue is bounded and drops nothing — a stalled reader is reported by
+     * the core as a stall, which is the correct behaviour and the wrong reason.
+     */
+    public var onCommit: (() -> Unit)? = null
 
     /**
      * A single-column TEXT key, as the one string a screen recognises its own
