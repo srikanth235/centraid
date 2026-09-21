@@ -22,10 +22,16 @@ use crate::bytes::object_key;
 /// How long an upload target is good for.
 ///
 /// **Seven days, and the number is not a taste.** It must exceed the longest
-/// background deferral a phone can be put through — an iOS device that has been
-/// off charge and off Wi-Fi for a week comes back to finish a transfer — and
-/// SigV4 caps a presigned URL at exactly seven days, so anything longer would
-/// be a promise the S3 store cannot keep and the two stores would differ.
+/// background deferral a phone can be put through: an iOS device that has been
+/// off charge and off Wi-Fi for a week comes back to finish a transfer, and a
+/// target that expired in a pocket is a silent failure.
+///
+/// It used to cite SigV4's seven-day presign cap as the other half of the
+/// reason. With the S3 byte store struck from v0 (scope amendment 2026-09-21)
+/// nothing presigns anything — every target is a path on this server — so the
+/// deferral is the whole of it, and it matches
+/// `centraid_gateway_client::spool::LONGEST_DEFERRAL_MS`, which is the number
+/// the phone compares against.
 pub const TARGET_LIFETIME: Duration = Duration::from_days(7);
 
 /// A directory of sealed objects.

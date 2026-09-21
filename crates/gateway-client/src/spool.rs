@@ -35,12 +35,23 @@ use crate::client::UploadTarget;
 
 /// The longest a background upload may sit before the OS runs it.
 ///
-/// Seven days, which is AWS Signature Version 4's own maximum presign lifetime
-/// — somebody else's limit, so it is the ceiling rather than a number this
-/// product chose. A target whose life is shorter than the deferral it may
-/// suffer is a target [`Batch::usable_for`] refuses to hand to a background
-/// task; the phone uploads it in the foreground instead, where it can re-declare
-/// when it expires.
+/// **Seven days, and it is now this product's number** — re-judged, because the
+/// reason it used to give is gone. It was "AWS Signature Version 4's own
+/// maximum presign lifetime, somebody else's limit", and with the S3 byte store
+/// and the hosted adapter struck from v0 (scope amendment 2026-09-21) nothing
+/// presigns anything: every upload target is a path on the member's own laptop.
+///
+/// What the number is for is the half that was always true and is now the whole
+/// of it: **a target must outlive the longest deferral a phone can suffer.** An
+/// iOS device off charge and off Wi-Fi for a week comes back to finish a
+/// transfer, and a target that expired in a pocket is a silent failure — the
+/// task completes, the server refuses, and the member sees a backup that never
+/// finished. Seven days is the week that case is about.
+///
+/// A target whose life is shorter than the deferral it may suffer is one
+/// [`Batch::usable_for`] refuses to hand to a background task; the phone
+/// uploads it in the foreground instead, where it can re-declare when it
+/// expires.
 pub const LONGEST_DEFERRAL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 
 /// At most this many objects in one declare.
@@ -257,10 +268,12 @@ mod tests {
         assert!(BackupState::acked(1_770_000_000_000, 0).is_backed_up());
     }
 
-    /// Seven days is SigV4's cap, not a number this product picked. If the
-    /// constant ever drifted above it, presigned targets would be unbuildable.
+    /// Seven days, and the test says what the number is FOR rather than which
+    /// other protocol it used to be borrowed from: the week an iOS device can
+    /// be off charge and off Wi-Fi before it comes back to finish a transfer.
     #[test]
-    fn the_longest_deferral_is_the_sigv4_cap() {
+    fn the_longest_deferral_is_a_week() {
+        assert_eq!(LONGEST_DEFERRAL_MS, 7 * 24 * 60 * 60 * 1000);
         assert_eq!(LONGEST_DEFERRAL_MS, 604_800_000);
     }
 }
