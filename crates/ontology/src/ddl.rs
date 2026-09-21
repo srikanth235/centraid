@@ -43,8 +43,19 @@ pub const DDL_FIXTURE_HEADER: &str = "\
 /// names. A shared renderer with two headers is one answer to "what does this
 /// file look like"; two renderers would be two.
 pub fn render_ddl(vault: &Vault, header: &str) -> Result<String> {
+    Ok(render_ddl_objects(&vault.schema_objects()?, header))
+}
+
+/// The same, over schema objects read from anywhere.
+///
+/// The ladder-head fixture is rendered from a file this build just founded,
+/// which [`Vault`] will not open (its `user_version` is on v1's axis, not the
+/// v0 window this crate accepts), so the renderer takes the objects rather
+/// than the opener.
+#[must_use]
+pub fn render_ddl_objects(objects: &[crate::vault::SchemaObject], header: &str) -> String {
     let mut out = String::from(header);
-    for object in vault.schema_objects()? {
+    for object in objects {
         out.push_str(&format!(
             "\n-- {} {} on {}\n{};\n",
             object.kind,
@@ -53,7 +64,7 @@ pub fn render_ddl(vault: &Vault, header: &str) -> Result<String> {
             object.sql.trim_end().trim_end_matches(';')
         ));
     }
-    Ok(out)
+    out
 }
 
 /// Render the corpus's DDL fixture.

@@ -21,7 +21,7 @@ pub mod registries;
 pub mod snapshot;
 pub mod vault;
 
-pub use ddl::{DDL_FIXTURE_HEADER, ddl_fixture, render_ddl};
+pub use ddl::{DDL_FIXTURE_HEADER, ddl_fixture, render_ddl, render_ddl_objects};
 pub use doctor::{DoctorReport, format_doctor_report, vault_doctor};
 pub use error::{OntologyError, Result};
 pub use snapshot::{
@@ -30,4 +30,5 @@ pub use snapshot::{
 };
 pub use vault::{
     ONTOLOGY_VERSION, SchemaObject, Vault, expected_user_version, ladder_user_version,
+    schema_objects_of,
 };

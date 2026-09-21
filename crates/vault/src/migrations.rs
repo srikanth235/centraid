@@ -306,6 +306,52 @@ pub fn render_baseline(corpus: &Path) -> Result<String> {
     rendered
 }
 
+/// The header the ladder-head DDL fixture carries, naming its own generator.
+pub const LADDER_DDL_HEADER: &str = "\
+-- GENERATED — do not edit. THE SCHEMA A NEW VAULT GETS: the `sqlite_master` of
+-- a file founded at the ladder head, one statement per block.
+--
+--   cargo run -p centraid-vault --bin export-ladder-ddl \\
+--     > contracts/schema/vault-ddl.sql
+--
+-- Not the corpus. `contracts/golden/issue-1020/vault-ddl.sql` describes the
+-- frozen v0 file as it was, and a rung is allowed to move this file away from
+-- it — which is exactly what rung five does (#1029, the owner's ruling of
+-- 2026-09-21). Ordered by type then name, for READING; the runnable ordering
+-- is `contracts/migrations/001_baseline.sql`.
+--
+-- Source: sqlite_master (type, name, tbl_name, sql) where sql is not null.
+-- `sqlite_stat*` is excluded: it is the planner's own statistics, so it says
+-- how much data a file holds and nothing about its shape.
+-- `crates/vault/tests/ladder_ddl.rs` founds a vault and diffs this file
+-- against its live schema on every run.
+";
+
+/// Render the ladder head's DDL: found a vault in a scratch directory and read
+/// its `sqlite_master` back.
+///
+/// **Founded, not transcribed.** The question this fixture answers is "what
+/// does a file this build writes actually look like", and the only honest way
+/// to answer it is to write one. The scratch file is removed before returning;
+/// it is opened a second time, through `centraid_ontology`, because the
+/// renderer is the one the corpus's own description uses and two renderers
+/// would be two answers to "what does this file look like".
+pub fn render_ladder_ddl() -> Result<String> {
+    use centraid_ontology::golden::scratch_dir;
+    use centraid_ontology::{render_ddl_objects, schema_objects_of};
+
+    let dir = scratch_dir();
+    std::fs::create_dir_all(&dir)?;
+    let db_path = dir.join("vault.db");
+    let rendered = (|| -> Result<String> {
+        let vault = crate::Vault::create(&db_path)?;
+        let objects = vault.read(|connection| Ok(schema_objects_of(connection)?))?;
+        Ok(render_ddl_objects(&objects, LADDER_DDL_HEADER))
+    })();
+    let _ = std::fs::remove_dir_all(&dir);
+    rendered
+}
+
 /// Is this object a virtual table? Matched on the DDL rather than on a name
 /// pattern, the same reason the snapshot pipeline matches FTS triggers by
 /// BODY: a name convention is a convention and a `USING` clause is a fact.

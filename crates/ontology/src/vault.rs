@@ -118,23 +118,7 @@ impl Vault {
     /// gives: it is the planner's own statistics over the corpus rows, so its
     /// presence says how much data a file has and nothing about its shape.
     pub fn schema_objects(&self) -> Result<Vec<SchemaObject>> {
-        let mut statement = self.connection.prepare(
-            r"SELECT type, name, tbl_name, sql FROM sqlite_master
-                WHERE sql IS NOT NULL
-                  AND name NOT LIKE 'sqlite\_stat%' ESCAPE '\'
-                ORDER BY type, name",
-        )?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok(SchemaObject {
-                    kind: row.get(0)?,
-                    name: row.get(1)?,
-                    table: row.get(2)?,
-                    sql: row.get(3)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(rows)
+        schema_objects_of(&self.connection)
     }
 
     /// Every base table the file carries, FTS shadow tables and SQLite's own
@@ -161,4 +145,32 @@ pub struct SchemaObject {
     pub name: String,
     pub table: String,
     pub sql: String,
+}
+
+/// The same read, over a bare connection.
+///
+/// A v1 file is not openable through [`Vault`] — its `user_version` is on v1's
+/// own axis and this crate's window is v0's (D-1020-D1-2) — and rendering the
+/// schema of a file this build FOUNDED is exactly what
+/// `centraid_vault::migrations::render_ladder_ddl` has to do. So the query
+/// lives here, in the crate that owns what a schema object is, and both callers
+/// share it rather than each keeping a copy that could disagree.
+pub fn schema_objects_of(connection: &rusqlite::Connection) -> Result<Vec<SchemaObject>> {
+    let mut statement = connection.prepare(
+        r"SELECT type, name, tbl_name, sql FROM sqlite_master
+            WHERE sql IS NOT NULL
+              AND name NOT LIKE 'sqlite\_stat%' ESCAPE '\'
+            ORDER BY type, name",
+    )?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(SchemaObject {
+                kind: row.get(0)?,
+                name: row.get(1)?,
+                table: row.get(2)?,
+                sql: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
