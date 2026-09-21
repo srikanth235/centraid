@@ -3139,3 +3139,84 @@ calls the pass: `BackgroundPasses.pass = …` in `ShellModel`, `SyncPass.install
 and a foreground trigger on becoming active are three call sites in files no toolchain here
 compiles, and each needs the shelf to hand over a core supplier and a vault id. The doors, the
 pass, the claim fold, the copy and both custody machines are done and tested.
+
+### W18-6 — the three triggers, and the pass has callers
+
+The root's judgement on the first report was right: "no shell trigger calls the pass" is the whole
+product, and a pass nobody invokes is W5B's state with better copy. `SyncPass.installed` was null
+on every Android device and `BackgroundPasses.pass` had nothing to be set to, so every granted
+window ran nothing. Commit `ca8ab51e`. **278 jvm tests, 0 failed** (floor 236).
+
+**`ShelfDrain` is the join**, in `commonMain`: it walks **every held vault, not the one in
+front** — a background window backs up the device, not the screen the member left open — with the
+deadline **divided**, because a window that spent its whole budget on the first vault would leave
+a second one permanently unbacked-up on a phone that never gets a long window. The foreground's
+`0` ("no deadline", `phone.proto`) passes through undivided, since a budget of nothing divided is
+still nothing. Two holdings are skipped and neither is a failure: **resting** (no core; waking one
+opens SQLite, and a background window is the worst moment for that) and **frozen** (F1 — the
+laptop would refuse its next put with `VAULT_MOVED`, so draining it is this phone arguing with a
+decision already made).
+
+**The design change was the smallest one, and it was not to `Shelf`.** The shelf already hands
+over a core supplier (`Shelf.core()`, `Shelf.all()`), so nothing there moved. Two things did:
+
+1. `ShelfDrain` takes **a supplier of holdings rather than the `Shelf`** — nothing in it opens,
+   closes, wakes or reorders a vault, and the narrower dependency is what makes it testable on the
+   one toolchain this container has.
+2. `ChangeStream` gained **one nullable `onCommit` listener**, called after every routed screen
+   has been told. A `ChangeEvent` is the one signal in this process that says the vault moved; the
+   alternative was a second collector on the core's `SharedFlow` per vault, to learn a fact this
+   consumer already has. It is deliberately **not** in the screens' route list — a route is a
+   screen that re-reads — and it is called last, so a member's list does not redraw a moment later
+   because a spool was being emptied.
+
+The drain lives on `HomeSession`, which owns the shelf, so Android reaches it directly (the way it
+already collects the `StateFlow` directly) and iOS through `HomeBridge.drain`/`becameActive`.
+
+**A real bug the spec caught, in this lane's own new code.** The debounce used `Long.MIN_VALUE` as
+the "never run" sentinel, and `now - Long.MIN_VALUE` overflows negative — so every commit after
+launch read as inside the debounce and the third trigger was dead until something else ran a pass.
+It is nullable now, and `a commit inside the debounce is DROPPED, not queued` asserts the first
+commit after launch runs. Nothing about the shape of the code would have shown this.
+
+#### The trigger inventory — **7 rows, a grep each**
+
+| # | Claim | Grep | Result |
+| --- | --- | --- | --- |
+| 1 | iOS installs the pass when the session exists | `grep -n 'BackgroundPasses.pass' mobile/iosApp/Sources/ShellModel.swift` | `:158`, inside `home.onSession { … }` |
+| 2 | iOS drains on becoming active | `grep -n 'shell.becameActive()' mobile/iosApp/Sources/CentraidApp.swift` | `:88`, in the `.active` arm the switcher mask already used |
+| 3 | …and that reaches the bridge | `grep -n 'func becameActive' mobile/iosApp/Sources/ShellModel.swift` | `:69`, guarded by `#if canImport(CentraidShared)` |
+| 4 | Android installs the worker's pass | `grep -n 'SyncPass.install' mobile/androidApp/.../MainActivity.kt` | `:234`, at the session open, with `SyncPass.WORK_MANAGER_BUDGET_MS` |
+| 5 | Android drains on becoming active | `grep -n 'override fun onResume' mobile/androidApp/.../MainActivity.kt` | `:128` — `onResume` returns, doing the amendment's foreground half rather than the gateway catch-up it used to do |
+| 6 | the commit trigger is wired | `grep -n 'onCommit' .../shell/HomeSession.kt` | `:547`, launched rather than awaited (the core's event queue is bounded and drops nothing) |
+| 7 | both task requests are submitted | `grep -n 'refreshTaken = submit\|processingTaken = submit' .../PlatformServices.ios.kt` | `:338`, `:339` |
+
+Rows 1-5 and 7 are in files no toolchain here compiles, and are verified by reading and by these
+greps — the same standing this lane's `BackgroundPasses.swift` and W13's `VaultFileProtection.swift`
+have. Row 6 is `commonMain` and is covered by `ShelfDrainSpec`.
+
+#### Find (2), fixed — the `&&` that short-circuited
+
+`IosBackgroundTasks.register()` ran `submit(refresh) && submit(processing)` under a comment
+reading "BOTH OR NEITHER". `&&` short-circuits: a refused refresh meant the processing request —
+**the one that uploads bytes** — was never submitted at all. That is not "neither"; it is "the
+first was refused and the second was never asked", and iOS grants the two independently, so a
+phone whose refresh is refused may still be granted a processing window. Both are now submitted,
+both results collected, `registered` is `refreshTaken || processingTaken`, and the sentence says
+**which** was refused — a phone that will upload but not catch up early is a different product to
+use, and saying so is the difference between a member who understands their backup and one who
+does not. A `jvmTest` cannot reach `BGTaskScheduler`; this is inventory row 7.
+
+#### The safety number
+
+The root has ruled: `identity::safety_number` joins `PairResponse`. Not blocked on, and the swap
+is one line — `PairAndRestore.kt:248` carries the TODO naming the field, and `CorePairDoor` fills
+`PairAnswer.gatewayEndpoint` from `paired.gateway_endpoint` in one place, which becomes
+`paired.safety_number`.
+
+#### What is left
+
+Nothing in this lane's scope. The remaining unknowns are measurements, not code: whether iOS
+grants the windows, whether a drain fits inside one, and whether a resumable Android drain makes
+progress across WorkManager windows (which is what the foreground-service recommendation turns
+on). None is answerable without a physical device.
