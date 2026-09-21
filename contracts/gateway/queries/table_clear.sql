@@ -8,5 +8,5 @@
 -- The suite resets between cases so that no case can pass on another's
 -- leftovers. A reset that dropped and recreated tables would re-run the schema
 -- on every case; emptying them keeps the schema applied once and is what a
--- Durable Object, which has no `DROP DATABASE`, can actually do.
+-- store with no `DROP DATABASE` can actually do.
 DELETE FROM "{table}";

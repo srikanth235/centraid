@@ -2,7 +2,7 @@
 //!
 //! *Neither deployment is the reference implementation: the protocol and its
 //! conformance suite are.* So the suite is a **library function**, not a
-//! `#[test]`: `cargo test` cannot reach inside a Worker under Miniflare, and a
+//! `#[test]`: an adapter may live outside `cargo test`'s reach entirely, and a
 //! suite that only the standalone adapter could run would be a suite that
 //! checks one of the two things it exists to compare.
 //!
@@ -160,7 +160,7 @@ pub trait Harness {
     async fn stored_bytes(&self) -> Result<Vec<Vec<u8>>, StoreFault>;
 
     /// Everything the state store holds, rendered however the adapter renders
-    /// it — a `Debug` dump, a row dump, a serialised Durable Object. The
+    /// it — a `Debug` dump, a row dump, a serialised store. The
     /// canary's second window, and the reason it is a `String` is that the
     /// canary asks only one question of it: does a plaintext appear in here?
     async fn state_text(&self) -> Result<String, StoreFault>;

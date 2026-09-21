@@ -1,20 +1,22 @@
-//! WASM-CLEAN BY CONSTRUCTION, as a scan (#1029 §3).
+//! THE RULES ARE A PURE STATE MACHINE, as a scan (#1029 §3).
 //!
-//! W4c compiles this crate to `wasm32-unknown-unknown` for a Cloudflare Worker.
-//! `cargo check --target wasm32-unknown-unknown` proves the crate *compiles*
-//! there, and that is the exit item — but it is not enough on its own, and that
-//! is the point of this file:
+//! `SystemTime::now()`, a thread, a file, a socket and an ambient RNG are all
+//! things a rule could reach for, and none of them belongs in this crate: time
+//! and randomness are **inputs** to the rules, never globals they take for
+//! themselves, because a rule that reads a clock is a rule no test can pin and
+//! no adapter can replay.
 //!
-//! - **`SystemTime::now()` compiles for that target and panics when called.** A
-//!   rule that reached for it would pass every test here and die in production,
-//!   in a Worker somebody is paying for, with a trace nobody can read.
-//! - `std::thread`, `std::fs`, `std::net` and `std::process` mostly do not
-//!   compile there, so the check would catch them — but only once somebody runs
-//!   it, and the whole reason this is held now rather than in W4c is that a
-//!   retrofit is a rewrite.
+//! THIS SCAN USED TO BE `wasm_clean.rs`, and its stated reason was that the
+//! hosted adapter compiled this crate to `wasm32-unknown-unknown`, where
+//! `SystemTime::now()` compiles and then panics. That adapter is struck from v0
+//! (#1029, scope amendment 2026-09-21) and the `wasm32` target went with it. The property did not go with it: purity is
+//! what makes `time::ServerTime` an argument and `conformance` a suite that can
+//! run anywhere, and it is the same property W17 needs when the transport
+//! changes underneath these rules. The deployment-discriminator half of the old
+//! file DID go — one protocol with two deployments was its whole subject, and
+//! there is one deployment.
 //!
-//! So the scan and the target check answer different halves, and both are
-//! cheap. A CLAIM NAMES ITS GREP, and this file is the grep.
+//! A CLAIM NAMES ITS GREP, and this file is the grep.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -98,26 +100,8 @@ const FORBIDDEN: &[(&str, &str)] = &[
     ),
     (
         "rusqlite",
-        "the SQL is `contracts/gateway/schema.sql` and the adapters apply it. \
-         A Durable Object's SQLite is not this one",
+        "the SQL is `contracts/gateway/schema.sql` and the adapter applies it",
     ),
-];
-
-/// A gateway-mode discriminator, which this crate does not have and is not
-/// going to.
-///
-/// The repository already carries this rule for v0's `packages/server/`
-/// (`.governance/.../gateway-engine-mode-agnostic`): *the "same code, three
-/// hosts" property breaks the moment the engine starts checking which host it
-/// is living in.* The subject moved to this crate with #1029 and the reasoning
-/// did not change — "one protocol, two deployments" is the same promise.
-const MODE_DISCRIMINATORS: [&str; 6] = [
-    "GatewayMode",
-    "gateway_mode",
-    "is_hosted",
-    "is_standalone",
-    "is_cloudflare",
-    "deployment_mode",
 ];
 
 #[test]
@@ -147,40 +131,9 @@ fn no_rule_reaches_for_a_thread_a_file_an_ambient_clock_or_ambient_randomness() 
     }
     assert!(
         findings.is_empty(),
-        "`crates/gateway-core` compiles to wasm32-unknown-unknown for a \
-         Cloudflare Worker (#1029 §3). These lines would break that, or would \
-         compile and then panic there:\n{}",
-        findings.join("\n")
-    );
-}
-
-#[test]
-fn no_rule_branches_on_which_deployment_it_is_running_in() {
-    let mut findings = Vec::new();
-    for path in sources() {
-        let text = fs::read_to_string(&path).expect("a source file reads");
-        let file = path
-            .strip_prefix(source_root())
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        for (number, line) in text.lines().enumerate() {
-            if line.trim_start().starts_with("//") {
-                continue;
-            }
-            for needle in MODE_DISCRIMINATORS {
-                if line.contains(needle) {
-                    findings.push(format!("{file}:{}: `{needle}`", number + 1));
-                }
-            }
-        }
-    }
-    assert!(
-        findings.is_empty(),
-        "one protocol, two deployments (#1029 §3): a rule that knows which \
-         adapter it is inside is a rule that will differ between them. What \
-         genuinely differs goes behind `ByteStore`, `StateStore` or \
-         `ChecksumMode`:\n{}",
+        "`crates/gateway-core` is a pure state machine (#1029 §3): time and \
+         randomness are inputs to the rules, never globals they reach for. \
+         These lines break that:\n{}",
         findings.join("\n")
     );
 }
@@ -193,11 +146,5 @@ fn the_scan_would_catch_a_real_reach() {
     assert!(
         FORBIDDEN.iter().any(|(needle, _)| sample.contains(needle)),
         "the forbidden list no longer matches the reach it exists to catch"
-    );
-    let sample = "if self.gateway_mode == Hosted {";
-    assert!(
-        MODE_DISCRIMINATORS
-            .iter()
-            .any(|needle| sample.contains(needle))
     );
 }

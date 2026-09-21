@@ -105,7 +105,7 @@ impl StateStore for MemoryState {
     /// THE COMPARE-AND-SET, THROUGH THE ONE RULE.
     ///
     /// `&mut self` is this adapter's atomicity: the borrow checker is the lock.
-    /// A Durable Object gets the same property from running one request at a
+    /// A single-request-at-a-time store gets the same property from running one request at a
     /// time, and the standalone adapter from an immediate transaction — three
     /// mechanisms, one rule, and the rule is
     /// [`crate::commit::compare_and_set`] in every case.

@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
-//! THE STANDALONE GATEWAY: ONE BINARY ANYONE CAN RUN (#1029 §3).
+//! THE GATEWAY: ONE BINARY ANYONE CAN RUN (#1029 §3).
 //!
-//! One protocol, two deployments — a paid hosted offering on Cloudflare and
-//! this, a server a household runs on a box in a cupboard. **The phone cannot
-//! tell which it is talking to**, and that is the property this crate exists to
-//! keep rather than to implement: every rule a gateway enforces already lives
+//! One protocol, and in v0 one deployment of it — a server a member runs on
+//! their own machine (scope amendment 2026-09-21 struck the hosted sibling).
+//! The rules are still not this crate's to implement: every rule a gateway
+//! enforces lives
 //! in [`centraid_gateway_core`], and what is here is a socket, a SQLite file,
 //! two object stores, a certificate and a service unit.
 //!

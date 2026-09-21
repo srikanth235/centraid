@@ -1,10 +1,10 @@
--- THE GATEWAY'S STATE, AND BOTH ADAPTERS HOLD IT IN THIS SHAPE (#1029 §3).
+-- THE GATEWAY'S STATE, AND AN ADAPTER HOLDS IT IN THIS SHAPE (#1029 §3).
 --
--- One schema, because Durable Objects are SQLite too: the Cloudflare adapter's
--- per-vault Durable Object and the standalone adapter's SQLite file run the
--- same statements. A second schema would be a second place for the rules in
--- `crates/gateway-core` to be wrong in only one deployment, which is the exact
--- failure "one protocol, two deployments" exists to prevent.
+-- One schema, kept as a contract rather than folded into the adapter: a second
+-- schema would be a second place for the rules in `crates/gateway-core` to be
+-- wrong, and the conformance suite could not tell. It was written for two
+-- adapters; the hosted one is struck (scope amendment 2026-09-21) and the
+-- separation is kept because the suite, not an adapter, defines the protocol.
 --
 -- It lives under `contracts/` and not inside the crate for two reasons. It is a
 -- contract between two adapters neither of which is the reference

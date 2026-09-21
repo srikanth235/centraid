@@ -1,13 +1,14 @@
 #![forbid(unsafe_code)]
 //! EVERY RULE A GATEWAY ENFORCES, WRITTEN ONCE (#1029 §3).
 //!
-//! The gateway is a **protocol** with two deployments — a paid hosted offering
-//! on Cloudflare and a standalone server anyone can run — and *neither
-//! deployment is the reference implementation: the protocol and its conformance
-//! suite are*. This crate is the protocol's rules, and
-//! [`conformance`] is the suite. An adapter that reimplements one of these
-//! rules is an adapter that will disagree with the other one, on a phone
-//! somebody is restoring.
+//! The gateway is a **protocol**, and the server a member runs on their own
+//! laptop is a deployment of it, not the definition of it: *the protocol and
+//! its conformance suite are the reference*. This crate is the protocol's
+//! rules and [`conformance`] is the suite. A second, hosted deployment was the
+//! other half of this shape until the scope amendment of 2026-09-21 struck it;
+//! the separation stands because an adapter
+//! that reimplements one of these rules is an adapter that drifts from the
+//! suite, on a phone somebody is restoring.
 //!
 //! # THE GATEWAY IS BLIND
 //!
@@ -32,34 +33,22 @@
 //! `tests/canary.rs` opens a wider window still, onto the raw SQLite file and
 //! the log.
 //!
-//! # WASM-CLEAN BY CONSTRUCTION
+//! # A PURE STATE MACHINE BY CONSTRUCTION
 //!
-//! The Cloudflare adapter compiles this crate to `wasm32-unknown-unknown` for a
-//! Worker. So:
+//! These rules take their world as arguments. So:
 //!
 //! - **no threads, no filesystem, no sockets** — there is no `std::thread`,
 //!   `std::fs`, `std::net` or `std::process` in this crate;
 //! - **no ambient clock** — [`ServerTime`] is an *input* to every rule that
-//!   needs one. `SystemTime::now()` compiles on `wasm32-unknown-unknown` and
-//!   then panics at run time, so a rule that reached for it would be a rule
-//!   that works in `cargo test` and dies in a Worker;
+//!   needs one. A rule that read a clock would be a rule no test can pin and
+//!   no adapter can replay;
 //! - **no ambient randomness** — anything random (an entry id, a capability id)
 //!   is passed in by the adapter, which has the platform's generator.
 //!
-//! `tests/wasm_clean.rs` scans the source for exactly those reaches, and
-//! `cargo check -p centraid-gateway-core --target wasm32-unknown-unknown` is
-//! the proof. Both are cheaper held now than retrofitted.
-//!
-//! # NO RULE BRANCHES ON WHICH DEPLOYMENT IT IS IN
-//!
-//! There is no `GatewayMode` in this crate and there is not going to be one.
-//! What differs between the adapters is where bytes live and how a member is
-//! admitted, and both are behind [`store::ByteStore`] and a proof in
-//! [`centraid_api_proto::core_v1::AdmissionRequest`]. The one honest difference
-//! is [`checksum::ChecksumMode`], and it is a property of the *store* the
-//! adapter was pointed at — B2 and MinIO attest different headers — not of the
-//! adapter, which is why it is an input and why the conformance suite runs both
-//! modes.
+//! `tests/pure_rules.rs` scans the source for exactly those reaches. The list
+//! was first drawn by the struck hosted adapter's `wasm32` build, where
+//! `SystemTime::now()` compiles and then panics (scope amendment 2026-09-21);
+//! the property is kept on its own merits.
 //!
 //! # The shape
 //!

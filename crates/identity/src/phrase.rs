@@ -72,7 +72,6 @@ impl RecoveryPhrase {
     /// Behind the `mint` feature: a Worker verifies rather than mints, and
     /// `wasm32-unknown-unknown` has no operating-system generator to reach for
     /// (#1029 §3, W4C-1).
-    #[cfg(feature = "mint")]
     pub fn generate() -> Result<Self, PhraseError> {
         use rand::TryRngCore as _;
 

@@ -8,13 +8,12 @@ import {
   resolveShipSurfaces,
 } from "./surfaces.mjs";
 
-test("default ship is tag surfaces only (not mobile/continuous)", () => {
+test("default ship is tag surfaces only (not mobile)", () => {
   const ids = defaultShipSurfaceIds();
   assert.ok(ids.includes("desktop"));
   assert.ok(ids.includes("gateway-image"));
   assert.ok(ids.includes("prebuilt-core"));
   assert.ok(!ids.includes("mobile"));
-  assert.ok(!ids.includes("oauth-worker"));
 });
 
 test("resolveShipSurfaces rejects unknown ids", () => {

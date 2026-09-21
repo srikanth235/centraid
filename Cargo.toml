@@ -237,18 +237,16 @@ x25519-dalek = { version = "3", default-features = false, features = [
 # additionally pull in `mlkem`, `chacha` and `shake` (a post-quantum KEM, a
 # second AEAD, three more hash families) that no ciphersuite here uses.
 #
-# **`getrandom` IS NOT HERE, AND THAT IS THE WASM SPLIT** (#1029 §3, W4C-1).
-# It is what draws the ephemeral encapsulation key, once per seal — the one
-# place this repository lets a dependency touch the system RNG directly rather
-# than going through `rand`, because `hpke`'s convenience entry point is what
-# keeps its `rand_core 0.10` off our own call sites. But `getrandom` has no
-# backend on `wasm32-unknown-unknown` unless one is named in RUSTFLAGS, and a
-# Cloudflare Worker that verifies a device certificate must not need one. A
-# feature named in this table is unioned into every member that inherits the
-# dependency and cannot be switched off downstream, so it is named by
-# `centraid-identity`'s own `mint` feature instead (`crates/identity/Cargo.toml`),
-# which is default-on: nothing in this workspace changes, and the
-# `--no-default-features` half compiles to wasm with no RNG in its graph at all.
+# **`getrandom` IS NOT HERE, AND THAT IS DELIBERATE.** It is what draws the
+# ephemeral encapsulation key, once per seal — the one place this repository
+# lets a dependency touch the system RNG directly rather than going through
+# `rand`, because `hpke`'s convenience entry point is what keeps its
+# `rand_core 0.10` off our own call sites. A feature named in this table is
+# unioned into every member that inherits the dependency, so it is named by the
+# one crate that seals instead (`crates/identity/Cargo.toml`). It used to be a
+# `mint` feature there so the hosted adapter could link the crate on `wasm32`
+# without an RNG backend; that adapter is struck from v0 (#1029, scope amendment
+# 2026-09-21) and the feature is gone.
 hpke = { version = "0.14", default-features = false, features = [
   "x25519",
   "aes",

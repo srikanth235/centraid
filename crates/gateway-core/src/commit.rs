@@ -18,7 +18,7 @@
 //! gateway cannot move it behind the phone's back, and two phones that both
 //! hold the seed cannot both win — the loser is told the current head.
 //!
-//! On Cloudflare this is one line on a Durable Object, which runs one request
+//! On a single-request-at-a-time store this is one line, which runs one request
 //! at a time. **The standalone adapter has no such property, and this is what
 //! gives it the same guarantee.**
 

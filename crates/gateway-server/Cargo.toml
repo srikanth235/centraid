@@ -22,7 +22,8 @@ path = "src/bin/centraid-gateway.rs"
 # `centraid-gateway-core`'s. What is here is a socket, a SQLite file, two object
 # stores and a certificate — the four things a rule cannot be, which is exactly
 # why the ports exist. If a change to this crate would make one of its answers
-# differ from the Cloudflare adapter's, the change belongs in `gateway-core`.
+# be a rule of the protocol rather than of this adapter, it belongs in
+# `gateway-core`.
 [dependencies]
 centraid-gateway-core = { path = "../gateway-core" }
 # The wire's error codes and object kinds. The MAPPING from a rule to its code

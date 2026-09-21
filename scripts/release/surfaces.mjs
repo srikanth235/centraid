@@ -3,7 +3,7 @@
  * One product version stamps the monorepo; ship selection is per surface.
  */
 
-/** @typedef {'tag' | 'store' | 'continuous' | 'sideline'} SurfaceCadence */
+/** @typedef {'tag' | 'store' | 'sideline'} SurfaceCadence */
 
 /**
  * @typedef {{
@@ -61,16 +61,6 @@ export const RELEASE_SURFACES = [
     secretGroups: ["mobile"],
     notes:
       "release.yml dispatch with surfaces: mobile only (J7) — never implied by a tag. Same product version stamp; ship is opt-in.",
-  },
-  {
-    id: "oauth-worker",
-    title: "Centraid Assist OAuth Worker",
-    cadence: "continuous",
-    defaultOnProductTag: false,
-    workflow: "oauth-worker.yml",
-    secretGroups: ["web"],
-    notes:
-      "Protected main deploy only after Google production/verification and Cloudflare edge evidence gates pass.",
   },
   {
     id: "companion",

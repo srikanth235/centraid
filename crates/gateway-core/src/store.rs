@@ -6,11 +6,13 @@
 //!
 //! # Why the ports are `async` with no `Send` bound
 //!
-//! A Cloudflare Worker's futures are `!Send`: a Durable Object runs on one
-//! isolate and its storage API hands back futures that never cross a thread. A
-//! `Send` bound here would make this crate unimplementable in the deployment it
-//! was written for. The standalone adapter's futures *are* `Send`, and nothing
-//! stops it: a bound that is not required is not a bound that is missing.
+//! The bound is absent because nothing here needs it, and a bound that is not
+//! required is not a bound that is missing. It was first left off because the
+//! struck hosted adapter's futures were `!Send` and a `Send` bound would have
+//! made the crate unimplementable there (scope amendment 2026-09-21). The
+//! server's own futures *are* `Send` and
+//! nothing here stops them, so adding the bound back is a decision W17 may take
+//! with the transport rather than one this seam forces.
 //!
 //! # Why one error type instead of two associated ones
 //!
@@ -27,8 +29,8 @@
 //! *atomicity* to the adapter, because atomicity is the one thing a pure
 //! function cannot provide. The rule itself is still written once —
 //! [`crate::commit::compare_and_set`] — and an adapter implements the port by
-//! calling it under whatever makes it atomic: a Durable Object runs one request
-//! at a time, and the standalone adapter uses an immediate transaction.
+//! calling it under whatever makes it atomic; the server uses an immediate
+//! transaction.
 
 use crate::checksum::{AttestedChecksum, ChecksumEvidence, ChecksumMode};
 use crate::ids::{AccountId, Generation, ObjectKind, ObjectName, VaultId};
@@ -37,7 +39,7 @@ use crate::plan::Plan;
 use crate::retention::BaseRecord;
 use crate::time::ServerTime;
 
-/// The one SQL schema both adapters apply. See [`crate::SCHEMA_SQL`].
+/// The one SQL schema an adapter applies. See [`crate::SCHEMA_SQL`].
 pub use crate::SCHEMA_SQL;
 
 /// Something went wrong inside the adapter's storage.
@@ -119,10 +121,9 @@ pub struct UploadTarget {
 /// delete ledger. **Never a vault's contents.**
 #[expect(
     async_fn_in_trait,
-    reason = "a `Send` bound here would make this crate unimplementable in a \
-              Cloudflare Worker, whose Durable Object futures are !Send — and \
-              that deployment is half of what the trait exists for (§3). The \
-              standalone adapter's futures are Send and nothing here stops them."
+    reason = "these ports carry no `Send` bound because nothing here needs \
+              one; see the module header. The server's own futures are Send \
+              and nothing here stops them."
 )]
 pub trait StateStore {
     /// The vault, or `None` if this gateway does not hold it. A stranger and an
@@ -156,8 +157,8 @@ pub trait StateStore {
     /// head as it stands afterwards, whichever branch was taken.
     ///
     /// This is the one operation whose correctness is the adapter's, and the
-    /// only one. Implement it with [`crate::commit::compare_and_set`] under a
-    /// Durable Object's single-request execution, or under `BEGIN IMMEDIATE`.
+    /// only one. Implement it with [`crate::commit::compare_and_set`] under
+    /// `BEGIN IMMEDIATE` or whatever else makes it atomic.
     /// An implementation that reads, decides in application code and then
     /// writes without a transaction is the bug this port exists to prevent.
     async fn compare_and_set_head(

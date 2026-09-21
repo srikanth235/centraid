@@ -32,7 +32,6 @@ use hpke::{Deserializable as _, OpModeR};
 // `single_shot_seal` draws the ephemeral encapsulation key from the system RNG
 // inside `hpke`, so it — and `SealedBox::seal` with it — is behind `mint`
 // (#1029 §3, W4C-1). Opening needs no entropy and stays on the wasm half.
-#[cfg(feature = "mint")]
 use hpke::{OpModeS, Serializable as _, single_shot_seal};
 
 use crate::derive::BoxKey;
@@ -117,7 +116,6 @@ impl SealedBox {
     /// two seals of the same plaintext to the same recipient different
     /// ciphertexts — which is why this is behind the `mint` feature and
     /// [`SealedBox::open`] is not (#1029 §3, W4C-1).
-    #[cfg(feature = "mint")]
     pub fn seal(
         recipient: &x25519_dalek::PublicKey,
         aad: &AssociatedData<'_>,

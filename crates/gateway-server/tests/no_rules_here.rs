@@ -1,22 +1,19 @@
 //! NO RULE IS REIMPLEMENTED IN THIS ADAPTER, AS A SCAN (#1029 §3).
 //!
 //! The architecture's whole point is that `crates/gateway-core` holds every
-//! rule once and both adapters reach them: two adapters that each carry half a
-//! rule are two adapters that will disagree about it, on a phone somebody is
+//! rule once and an adapter reaches them: an adapter that carries half a rule
+//! is an adapter that drifts from the conformance suite, on a phone somebody is
 //! restoring. That is stated in this crate's README and in its `lib.rs`, and a
 //! statement is not a check.
 //!
 //! **A claim names its grep, and this file is the grep.** It scans this crate's
 //! sources for the shapes a reimplemented rule takes:
 //!
-//! 1. **A deployment discriminator.** `gateway-core/tests/wasm_clean.rs`
-//!    forbids one in the rules; this forbids one in the adapter, which is where
-//!    somebody would actually be tempted to put it.
-//! 2. **A second copy of a rule's numbers.** The 16 MiB object cap, the 50%
+//! 1. **A second copy of a rule's numbers.** The 16 MiB object cap, the 50%
 //!    shrink threshold, the retention floor's 7/4/6 and the one-per-day delete
 //!    window are `gateway-core`'s. An adapter that restated one would drift from
 //!    it silently, because both would still compile.
-//! 3. **A hash function decision.** An object's name is BLAKE3 and the store's
+//! 2. **A hash function decision.** An object's name is BLAKE3 and the store's
 //!    attested checksum is SHA-256, and the second of those is confined to one
 //!    module with an allowlist entry that says why.
 //!
@@ -77,41 +74,6 @@ fn scan(mut judge: impl FnMut(&str, usize, &str)) {
             judge(&file, number + 1, line);
         }
     }
-}
-
-/// ONE PROTOCOL, TWO DEPLOYMENTS, AND NEITHER HALF KNOWS WHICH IT IS.
-///
-/// `gateway-core` forbids a discriminator among the rules. This forbids one
-/// here, because an adapter that learned to branch on "am I the hosted one"
-/// would be an adapter whose answers differ from the other one's — and the
-/// adapter is where the temptation actually lives.
-#[test]
-fn this_adapter_never_asks_which_deployment_it_is() {
-    const DISCRIMINATORS: [&str; 7] = [
-        "GatewayMode",
-        "gateway_mode",
-        "is_hosted",
-        "is_standalone",
-        "is_cloudflare",
-        "is_worker",
-        "deployment_mode",
-    ];
-    let mut findings = Vec::new();
-    scan(|file, number, line| {
-        for needle in DISCRIMINATORS {
-            if line.contains(needle) {
-                findings.push(format!("{file}:{number}: `{needle}`"));
-            }
-        }
-    });
-    assert!(
-        findings.is_empty(),
-        "one protocol, two deployments (#1029 §3). What genuinely differs goes \
-         behind `ByteStore`, `StateStore` or `ChecksumMode` — and the one honest \
-         difference, admission, is `src/tenancy.rs` and ends in the same \
-         `VaultState` either way:\n{}",
-        findings.join("\n")
-    );
 }
 
 /// A RULE'S NUMBER LIVES ONCE.

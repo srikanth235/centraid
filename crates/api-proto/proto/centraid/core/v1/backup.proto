@@ -97,7 +97,7 @@ message UploadResponse {
 // "newest" is whatever its index says, and a FRESH PHONE HAS NO MEMORY OF THE
 // LAST HEAD. `prev_head` is what makes rolling the head backwards impossible
 // for the gateway to do quietly: the head moves only from the value the writer
-// last saw. It is one line on a Durable Object, which runs one request at a
+// last saw. It is one line on a single-request-at-a-time store, which runs one request at a
 // time, and it is the ONLY thing that gives the standalone adapter — which has
 // no such property — the same guarantee.
 message CommitRequest {

@@ -1,6 +1,6 @@
 # `centraid-gateway-server` — the gateway anyone can run
 
-One protocol, two deployments (#1029 §3). This is the second one: a single binary a household runs on a box in a cupboard, passing the same conformance suite the hosted Cloudflare adapter will. **The phone cannot tell which one it is talking to**, and everything below exists to keep that true.
+One protocol, one deployment in v0 (#1029 §3, scope amendment 2026-09-21): a single binary a member runs on their own machine, passing `crates/gateway-core`'s conformance suite. The hosted adapter this was the sibling of is struck; the separation between rules and adapter stays, because the suite and not this binary is what the protocol means.
 
 ## Run it
 

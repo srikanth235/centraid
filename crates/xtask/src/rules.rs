@@ -330,10 +330,9 @@ fn function_name(signature: &str) -> Option<String> {
 const LISTENER_ALLOWED: &[(&str, &str)] = &[
     (
         "crates/gateway-server/src/serve.rs",
-        "THE STANDALONE GATEWAY'S LISTENER (#1029 §3). One protocol, two \
-         deployments: the hosted one is a Cloudflare Worker and this one is a \
-         server a household runs, and a phone cannot tell which it is talking \
-         to. The bind is confined to this file, which accepts connections and \
+        "THE GATEWAY'S LISTENER (#1029 §3). The gateway is the server a \
+         member runs on their own laptop; the hosted adapter is struck from v0 \
+         (scope amendment 2026-09-21). The bind is confined to this file, which accepts connections and \
          hands them to `crates/gateway-server/src/http.rs` — it decides nothing \
          about a request, and every rule it serves is `crates/gateway-core`'s",
     ),

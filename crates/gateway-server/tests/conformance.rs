@@ -3,7 +3,7 @@
 //!
 //! The suite is a library function and not a `#[test]` precisely so that more
 //! than one adapter can drive it: `cargo test` cannot reach inside a Worker
-//! under Miniflare, and a suite only the standalone adapter could run would be a
+//! outside `cargo test`'s reach, and a suite only this adapter could run would be a
 //! suite that checks one of the two things it exists to compare. This file is
 //! one of its callers.
 //!

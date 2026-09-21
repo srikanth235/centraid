@@ -2,11 +2,11 @@
 
 One home for the artifacts that put a Centraid gateway on a host: the container images, the OS service units, and the VPS installer ([#1020][issue], [#1029][gateway]).
 
-**There are two gateways in this tree and they are not variants of each other.** `centraid` (#1020) served an iroh QUIC endpoint to paired seats on the same network; `centraid-gateway` (#1029 §3) is the standalone half of "one protocol, two deployments" — an HTTP server a phone dials over a name, the self-hosted sibling of a paid offering on Cloudflare. Everything below that says "no listener" is about the first.
+**There are two gateways in this tree and they are not variants of each other.** `centraid` (#1020) served an iroh QUIC endpoint to paired seats on the same network; `centraid-gateway` (#1029 §3) is an HTTP server a phone dials over a name, run by the member on their own machine. Everything below that says "no listener" is about the first.
 
 | Path | What it is |
 | --- | --- |
-| `gateway-server/Dockerfile` | **The standalone gateway image** (#1029 §3): one `centraid-gateway` binary, an unprivileged user, a volume at `/var/lib/centraid` and an `EXPOSE`. |
+| `gateway-server/Dockerfile` | **The gateway image** (#1029 §3): one `centraid-gateway` binary, an unprivileged user, a volume at `/var/lib/centraid` and an `EXPOSE`. |
 | `gateway-server/README.md` | Self-hosting it: a tunnel, a Funnel or a reverse proxy; ACME; a bucket; the defaults and what turning each one off means. |
 | `docker/Dockerfile` | The `centraid` image: a Rust build stage on the pinned toolchain, a debian-slim runtime carrying one stripped `centraid` binary. `lane-release-gateway-image.yml` builds and ships it. |
 | `systemd/centraid-gateway.service` | The per-**user** unit: a desktop or a laptop, where somebody logs in. |

@@ -5,7 +5,7 @@
 //! one of the three callers it will have: W4b's standalone server and W4c's
 //! Worker are the other two, and they call the same function with their own
 //! [`Harness`]. A suite that lived in a `#[test]` could never be one of those,
-//! because `cargo test` cannot reach inside a Worker under Miniflare.
+//! because an adapter may live outside `cargo test`'s reach entirely.
 
 use std::future::Future;
 use std::pin::pin;

@@ -13,12 +13,9 @@
 //!    The allowlist is tiny and each entry carries its reason, because an
 //!    allowlist without reasons is a place to hide the next one.
 //!
-//! "The Rust tree" is `crates/` **and `gateway/`** (#1029 §3). The second root
-//! is not a convenience: `gateway/cloudflare` is an adapter of the same protocol
-//! as `crates/gateway-server`, it has the same reason to name SigV4, and a scan
-//! that stopped at `crates/` would have let the third carve-out in without
-//! anybody writing down why. A rule that covers one of two adapters is a rule
-//! the other one is exempt from by accident.
+//! "The Rust tree" is `crates/`. It was `crates/` and `gateway/` while there
+//! were two adapters of one protocol; the hosted adapter is struck from v0
+//! (#1029, scope amendment 2026-09-21) and `gateway/` no longer exists.
 //!
 //! Neither scan is clever, and that is the point: a clever scan is one somebody
 //! silences.
@@ -39,13 +36,11 @@ fn crates_root() -> PathBuf {
 
 /// Every root of Rust source this repository ships.
 ///
-/// `crates/` is the workspace; `gateway/` is the Cloudflare adapter, which is
-/// its OWN cargo workspace (it compiles only to `wasm32-unknown-unknown`) and is
-/// therefore reached by path rather than by workspace membership. A file under
-/// either is scanned the same way and is named in the allowlist by its path from
-/// the repository root.
+/// One root, `crates/`, since the hosted adapter left (#1029, scope amendment
+/// 2026-09-21). A file under it is named in the allowlist by its path from the
+/// repository root.
 fn source_roots() -> Vec<PathBuf> {
-    vec![crates_root(), repository_root().join("gateway")]
+    vec![crates_root()]
 }
 
 fn rust_files() -> Vec<PathBuf> {
@@ -381,30 +376,6 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          and are declared here so that no other file has to spell them; every \
          object NAME this server handles is BLAKE3; and the request body digest \
          it verifies is BLAKE3 because THAT digest is ours",
-    ),
-    (
-        "gateway/cloudflare/src/r2.rs",
-        "R2'S OWN FIELD NAME, AND NOTHING COMPUTED (#1029 §3). `checksums.sha256` \
-         is a field on a type the Workers runtime defines, not a digest this \
-         file chooses: it is read, and its `Option` IS the rule — R2 records the \
-         attestation only when the client sent it, so `None` is a refused commit. \
-         The entry is here rather than silenced with a citation because the \
-         distinction is worth a reader's attention: this file NAMES a store's \
-         field, `sigv4.rs` beside it COMPUTES a signature, and only the second \
-         is a hash decision. Every object NAME this adapter handles is BLAKE3",
-    ),
-    (
-        "gateway/cloudflare/src/sigv4.rs",
-        "AWS SIGNATURE VERSION 4 AGAIN, on the other adapter and for a different \
-         half of it (#1029 §3). `gateway-server` signs HEADERS for requests it \
-         makes itself; this signs a QUERY STRING for a request the gateway never \
-         makes — the presigned URL a phone uploads to, because on the hosted \
-         adapter bytes never pass through gateway code at all. Same reason, same \
-         boundary: this is the ONLY module in `gateway/cloudflare` that names the \
-         function, every object NAME it handles is BLAKE3, and the request body \
-         digest it verifies is BLAKE3 because THAT digest is ours. The \
-         duplication between the two SigV4 modules is real and is filed as a \
-         find in this lane\'s receipt with a recommendation to extract it",
     ),
     (
         "xtask/src/artifact.rs",

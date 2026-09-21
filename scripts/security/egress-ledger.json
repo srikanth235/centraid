@@ -4,14 +4,8 @@
     "enrichment-live-weekly.yml": {
       "reason": "Weekly lane that deliberately talks to live third-party enrichment endpoints; a block policy needs those destinations enumerated first. Priority 5."
     },
-    "lane-release-desktop.yml": {
-      "reason": "Holds APPLE_API_KEY and the Azure Trusted Signing client secret. A dependency that reached the network during `bun run dist` would be sitting next to the signing identity. Priority 1 — harden this lane first."
-    },
     "lane-release-mobile.yml": {
       "reason": "Holds the Android upload keystore, the Play service account and the App Store Connect API key, and submits to both stores from CI. Its allowlist must include the Gradle/Maven and Apple/Google store endpoints. Priority 2."
-    },
-    "oauth-worker.yml": {
-      "reason": "Holds the Cloudflare deploy token for the Assist OAuth courier — the one worker that brokers user Google tokens. Small workflow, narrow allowlist (Cloudflare API), so it is the cheapest priority-1 win."
     },
     "sonarcloud.yml": {
       "reason": "Token-gated configurator; talks only to sonarcloud.io, so its allowlist is nearly a one-liner. Priority 3."

@@ -2,7 +2,7 @@
 --
 -- `head_object` is deliberately NOT written here: the head moves only through
 -- `head_update.sql`, under BEGIN IMMEDIATE, which is what gives a plain SQLite
--- server the guarantee a Durable Object gets from single-threading (F7).
+-- server the guarantee a single-request-at-a-time store gets for free (F7).
 INSERT INTO vault (vault_key, account_key, registered_at_ms, lease_device,
                    lease_epoch, lease_taken_at_ms, head_object, head_set_at_ms,
                    moved_at_ms, append_only, used_bytes)

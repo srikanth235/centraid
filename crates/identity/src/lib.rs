@@ -29,24 +29,11 @@
 //! **Do not spend this carve-out on anything else.** A digest inside this crate
 //! that is not pinned by a published specification is `blake3`.
 
-//! ## THE WASM-CLEAN HALF, AND WHAT IS BEHIND A FEATURE (#1029 §3, W4C-1)
-//!
-//! A Cloudflare Worker must verify a [`certificate::DeviceCertificate`] and
-//! must not carry a DNS client. [`discovery`] and [`record`] are therefore
-//! behind the **`discovery`** feature, which is what `pkarr`, `url` and
-//! `base64` hang off; the two `generate` constructors that draw operating-system
-//! entropy are behind **`mint`**. Both are default-on, so nothing in this
-//! workspace changes; `--no-default-features` is the half that compiles to
-//! `wasm32-unknown-unknown`. `Cargo.toml` carries why this is a feature rather
-//! than a second crate.
-
 pub mod account;
 pub mod certificate;
 pub mod derive;
-#[cfg(feature = "discovery")]
 pub mod discovery;
 pub mod phrase;
-#[cfg(feature = "discovery")]
 pub mod record;
 pub mod safety_number;
 pub mod sealed_box;
@@ -61,12 +48,10 @@ pub use certificate::{
 pub use derive::{
     AccountKey, BoxKey, DeriveError, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey,
 };
-#[cfg(feature = "discovery")]
 pub use discovery::{
     DEFAULT_DNS_SERVER, Discovery, DiscoveryError, Located, ResolutionSource, SourceUsed,
 };
 pub use phrase::{PhraseError, RecoveryPhrase, Seed};
-#[cfg(feature = "discovery")]
 pub use record::{
     AccountRecord, CERT_ENTRY, GATEWAY_ENTRY, GatewayUrl, IdentityRecord, MAILBOX_ENTRY,
     RECORD_NAME, RECORD_TTL_SECONDS, RecordError,

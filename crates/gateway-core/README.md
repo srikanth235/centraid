@@ -1,15 +1,14 @@
 # `crates/gateway-core` — every rule a gateway enforces
 
-The gateway is a **protocol with two deployments** ([#1029](https://github.com/srikanth235/centraid/issues/1029) §3): a paid hosted offering on Cloudflare, and a standalone server anyone can run. _Neither deployment is the reference implementation: the protocol and its conformance suite are._ This crate is the protocol's rules, written once, with no I/O.
+The gateway is a **protocol** ([#1029](https://github.com/srikanth235/centraid/issues/1029) §3), and the server a member runs on their own laptop is a deployment of it: _the deployment is not the reference implementation; the protocol and its conformance suite are._ A second, hosted deployment was the other half of this shape until the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) struck it. This crate is the protocol's rules, written once, with no I/O.
 
 | Half | Where |
 | --- | --- |
-| The messages | `crates/api-proto` — `gateway.proto`, `backup.proto`, `lease.proto`, `mailbox.proto`, in `centraid.core.v1` |
+| The messages | `crates/api-proto` — `gateway.proto`, `backup.proto`, `lease.proto`, in `centraid.core.v1` |
 | The rules | here |
-| The suite both adapters must pass | `src/conformance.rs`, a **library function**, not a `#[test]` |
-| The one SQL schema both adapters apply | `contracts/gateway/schema.sql`, re-exported as `SCHEMA_SQL` |
-| The standalone adapter | W4b, `crates/gateway-server` |
-| The Cloudflare adapter | W4c, `gateway/cloudflare` |
+| The suite an adapter must pass | `src/conformance.rs`, a **library function**, not a `#[test]` |
+| The one SQL schema an adapter applies | `contracts/gateway/schema.sql`, re-exported as `SCHEMA_SQL` |
+| The adapter | W4b, `crates/gateway-server` |
 
 ## The three invariants this crate exists to hold
 

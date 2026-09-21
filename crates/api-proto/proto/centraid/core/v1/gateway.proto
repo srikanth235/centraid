@@ -1,10 +1,9 @@
 // The gateway envelope: versioning, request signing, and the two refusals a
 // phone has to be able to act on (#1029 §3).
 //
-// **One protocol, two deployments.** A phone cannot tell a Cloudflare Worker
-// from somebody's standalone binary, and nothing in this file names either. The
-// rules that read these messages live in `crates/gateway-core`; this file is
-// only their vocabulary.
+// **One protocol.** Nothing in this file names a deployment of it. The rules
+// that read these messages live in `crates/gateway-core`; this file is only
+// their vocabulary.
 //
 // **Transport is HTTPS, not iroh** (#1029 §3). These messages are protobuf
 // BODIES of ordinary HTTP requests — there is no `Envelope` here and no frame:

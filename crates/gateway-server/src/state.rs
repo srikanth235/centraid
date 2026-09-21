@@ -9,7 +9,7 @@
 //! # THE COMPARE-AND-SET IS `BEGIN IMMEDIATE` (F7)
 //!
 //! [`StateStore::compare_and_set_head`] is the one operation whose atomicity a
-//! pure function cannot supply. A Durable Object gets it from running one
+//! pure function cannot supply. A single-request-at-a-time store gets it from running one
 //! request at a time; this gets it from taking SQLite's write lock *before* the
 //! read, so the read and the write are one step and a second writer waits
 //! instead of reading a head that is about to move. The rule inside the
