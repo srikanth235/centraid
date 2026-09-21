@@ -389,7 +389,7 @@ impl GenerationManifest {
     /// sealed against — see the module header for the frame and for why it
     /// lives here.
     pub fn seal(&self, keys: &ObjectKeys) -> Result<(Vec<u8>, String)> {
-        let json = crate::intents::canonical_json(&self.to_json())
+        let json = crate::canonical::canonical_json(&self.to_json())
             .map_err(|error| invalid(&error.to_string()))?;
         let plain = frame(keys.dictionary()?.bytes(), json.as_bytes());
         let sealed = keys.seal(Kind::Manifest, Role::Whole, &plain)?;
@@ -496,7 +496,7 @@ impl ManifestHead {
     /// # Errors
     /// [`ManifestError::Io`].
     pub fn write(&self, path: &std::path::Path) -> Result<()> {
-        let text = crate::intents::canonical_json(&json!({
+        let text = crate::canonical::canonical_json(&json!({
             "vaultId": self.vault_id,
             "manifest": self.manifest,
             "generation": self.generation.hex(),

@@ -1737,165 +1737,6 @@ fn seed_year3_photos(
 // exactly as [`crate::contract_vault::open_contract_vault`] does.
 // ===========================================================================
 
-/// One standing answer, as `share_authority` holds it.
-///
-/// A SHARE IS A STANDING ANSWER, NOT A ROSTER (#929): this row says who MAY
-/// reach a subject, and `share_fulfillment` says whether it has.
-#[derive(Debug, Clone)]
-pub struct ShareSeed<'a> {
-    pub authority_id: &'a str,
-    /// `person` or `circle` for a Docs audience.
-    pub principal_kind: &'a str,
-    pub principal_id: &'a str,
-    /// `core.document` or `docs.folder` — two namespaces, never interchangeable.
-    pub subject_type: &'a str,
-    pub subject_id: &'a str,
-    /// `view` or `edit`.
-    pub verb: &'a str,
-    /// `None` is a standing grant; `Some` makes it `until-date`, which the
-    /// table's own CHECK pairs with `duration`.
-    pub expires_at: Option<&'a str>,
-    /// Who made the grant. `NOT NULL` for every principal but a harness, by the
-    /// table's own CHECK: a grant nobody made is not a grant.
-    pub granted_by: &'a str,
-    pub at: &'a str,
-}
-
-/// Write one standing answer.
-pub fn seed_share_authority(connection: &Connection, seed: &ShareSeed<'_>) -> KitResult<()> {
-    connection
-        .execute(
-            "INSERT INTO share_authority
-               (authority_id, principal_kind, principal_id, subject_type, subject_id,
-                verb, duration, expires_at, decision, granted_at, granted_by, revoked_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'granted', ?9, ?10, NULL)",
-            rusqlite::params![
-                seed.authority_id,
-                seed.principal_kind,
-                seed.principal_id,
-                seed.subject_type,
-                seed.subject_id,
-                seed.verb,
-                if seed.expires_at.is_some() {
-                    "until-date"
-                } else {
-                    "standing"
-                },
-                seed.expires_at,
-                seed.at,
-                seed.granted_by,
-            ],
-        )
-        .map_err(|error| KitError::Door(error.to_string()))?;
-    Ok(())
-}
-
-/// Revoke or time-box an answer already written, so a fold's `live` rule can be
-/// exercised against the same row rather than a second one.
-pub fn amend_share_authority(
-    connection: &Connection,
-    authority_id: &str,
-    expires_at: Option<&str>,
-    revoked_at: Option<&str>,
-) -> KitResult<()> {
-    connection
-        .execute(
-            "UPDATE share_authority
-                SET duration = ?2, expires_at = ?3, revoked_at = ?4
-              WHERE authority_id = ?1",
-            rusqlite::params![
-                authority_id,
-                if expires_at.is_some() {
-                    "until-date"
-                } else {
-                    "standing"
-                },
-                expires_at,
-                revoked_at,
-            ],
-        )
-        .map_err(|error| KitError::Door(error.to_string()))?;
-    Ok(())
-}
-
-/// Bind a party to the vault that is theirs, so a delivery can be attributed.
-///
-/// A REVOKED BINDING NO LONGER SAYS WHICH VAULT IS THEIRS, which is why the
-/// readers filter on `revoked_at IS NULL` rather than folding it out.
-pub fn seed_party_vault_binding(
-    connection: &Connection,
-    binding_id: &str,
-    party_id: &str,
-    vault_id: &str,
-    at: &str,
-) -> KitResult<()> {
-    connection
-        .execute(
-            "INSERT INTO share_party_vault_binding
-               (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
-             VALUES (?1, ?2, ?3, NULL, ?4, NULL)",
-            rusqlite::params![binding_id, party_id, vault_id, at],
-        )
-        .map_err(|error| KitError::Door(error.to_string()))?;
-    Ok(())
-}
-
-/// Record that a grant reached a peer vault.
-///
-/// DELIVERED IS THE DURABLE FACT, NOT THE LIVE STATE (#846): `delivered_at` is
-/// what a fold reads, and `state` may have dropped back to `syncing` since.
-pub fn seed_share_fulfillment(
-    connection: &Connection,
-    grant_id: &str,
-    peer_vault_id: &str,
-    state: &str,
-    delivered_at: Option<&str>,
-    at: &str,
-) -> KitResult<()> {
-    connection
-        .execute(
-            "INSERT INTO share_fulfillment
-               (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
-             VALUES (?1, ?2, ?3, ?4, NULL, ?5)",
-            rusqlite::params![grant_id, peer_vault_id, state, at, delivered_at],
-        )
-        .map_err(|error| KitError::Door(error.to_string()))?;
-    Ok(())
-}
-
-/// Seed `count` standing answers over one subject, for a fan-out ceiling test.
-///
-/// Returns how many landed. Deterministic ids, zero-padded to six as every
-/// generator in this module pads, so the rows a run writes never move.
-pub fn seed_standing_answers(
-    connection: &Connection,
-    subject_type: &str,
-    subject_id: &str,
-    range: std::ops::Range<usize>,
-    granted_by: &str,
-    at: &str,
-) -> KitResult<usize> {
-    let mut seeded = 0;
-    for index in range {
-        seed_share_authority(
-            connection,
-            &ShareSeed {
-                authority_id: &id("grant", index),
-                principal_kind: "person",
-                principal_id: &id("party", index),
-                subject_type,
-                subject_id,
-                verb: "view",
-                expires_at: None,
-                granted_by,
-                at,
-            },
-        )?;
-        seeded += 1;
-    }
-    Ok(seeded)
-}
-
 /// Stage bytes the way `POST /_vault/blobs` does, so a claim has a row to read.
 ///
 /// The bytes themselves belong in a content-addressed store beside this; the
@@ -2407,23 +2248,15 @@ pub struct Year3DocsShape {
     pub labelled: usize,
     /// Occurrences beyond the first, spread over the documents.
     pub extra_versions: usize,
-    /// Standing share answers, and how many of them name a FOLDER.
-    pub shares: usize,
-    pub folder_shares: usize,
 }
 
-/// THE YEAR-3 DOCS PROFILE: 8,000 documents over 400 folders four levels deep,
-/// with 2,000 standing share answers — half of them on folders.
+/// THE YEAR-3 DOCS PROFILE: 8,000 documents over 400 folders four levels deep.
 ///
 /// The numbers a ceiling is stated at, and each one is the reason it is here:
 ///
 /// * **8,000 documents against a 2,000-row window.** The drive's declared
 ///   maximum is 2,000 (`drive.limit`), so a year-3 drive is four windows deep
 ///   and `truncated` has to be the page's own cursor rather than a row count.
-/// * **1,000 folder shares over a four-level tree.** Every drive row's share
-///   decoration walks the chain above it, so the fold's cost is the window
-///   times the depth — and `SHARE_FAN_OUT`'s 4,000-row cap is what that walk
-///   runs into first.
 /// * **2,000 labels over 4,000 documents.** `docs.labels.tags` is a
 ///   `(document, concept)` pair read over the window, which is why its bound is
 ///   `DOC_PAIR_BOUND` (500 × 32) and not the join bound.
@@ -2436,8 +2269,6 @@ pub const YEAR3_DOCS: Year3DocsShape = Year3DocsShape {
     labels: 2_000,
     labelled: 4_000,
     extra_versions: 2_000,
-    shares: 2_000,
-    folder_shares: 1_000,
 };
 
 /// What one year-3 Docs seeding wrote.
@@ -2451,7 +2282,6 @@ pub struct Year3DocsCounts {
     pub content_items: usize,
     pub revisions: usize,
     pub tags: usize,
-    pub shares: usize,
 }
 
 /// Seed the Docs axis of year-3 volume.
@@ -2713,44 +2543,6 @@ fn seed_year3_docs(
         }
     }
 
-    // --- the share plane: half the answers on documents, half on folders.
-    for index in 0..shape.shares {
-        let on_folder = index < shape.folder_shares;
-        let party_id = format!("y3-party-{index:06}");
-        connection
-            .execute(
-                "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-                 VALUES (?1, 'person', ?2, ?3, ?3)",
-                rusqlite::params![party_id, format!("Peer {index:06}"), created],
-            )
-            .map_err(door)?;
-        connection
-            .execute(
-                "INSERT INTO share_authority
-                   (authority_id, principal_kind, principal_id, subject_type, subject_id,
-                    verb, duration, expires_at, decision, granted_at, granted_by, revoked_at)
-                 VALUES (?1, 'person', ?2, ?3, ?4, 'view', 'standing', NULL, 'granted',
-                         ?5, ?6, NULL)",
-                rusqlite::params![
-                    id("y3-grant", index),
-                    party_id,
-                    if on_folder {
-                        "docs.folder"
-                    } else {
-                        "core.document"
-                    },
-                    if on_folder {
-                        id("y3-folder", index % shape.folders.max(1))
-                    } else {
-                        id("y3-document", index % shape.documents.max(1))
-                    },
-                    created,
-                    YEAR3_OWNER_PARTY
-                ],
-            )
-            .map_err(door)?;
-        counts.shares += 1;
-    }
     Ok(counts)
 }
 
@@ -4021,10 +3813,6 @@ pub struct Year3PeopleShape {
     pub interactions: usize,
     /// The owner's own notes on people.
     pub notes: usize,
-    /// Live share bindings, which is what `linked` counts. **At most one per
-    /// party** — the DDL's partial unique index says so — so this is also the
-    /// number of linked people.
-    pub bindings: usize,
     /// Open obligations, the cross-app table People reads and Tally owns.
     pub obligations: usize,
     /// The first day a person was added; every person is one day later.
@@ -4060,7 +3848,6 @@ pub const YEAR3_PEOPLE: Year3PeopleShape = Year3PeopleShape {
     reminders: 6_000,
     interactions: 20_000,
     notes: 4_000,
-    bindings: 900,
     obligations: 600,
     start: "2097-01-01",
 };
@@ -4080,7 +3867,6 @@ pub struct Year3PeopleCounts {
     pub activities: usize,
     pub links: usize,
     pub annotations: usize,
-    pub bindings: usize,
     pub obligations: usize,
 }
 
@@ -4418,25 +4204,6 @@ fn seed_year3_people(
         counts.annotations += 1;
     }
 
-    // --- the share plane. AT MOST ONE LIVE BINDING PER PARTY: the DDL carries a
-    // partial unique index on `(party_id) WHERE revoked_at IS NULL`, which is
-    // why `vault_count` is 0 or 1 and never more (finding PE-F6).
-    for index in 0..shape.bindings.min(shape.people) {
-        connection
-            .execute(
-                "INSERT INTO share_party_vault_binding
-                   (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
-                 VALUES (?1, ?2, ?3, NULL, ?4, NULL)",
-                rusqlite::params![
-                    id("y3-binding", index),
-                    id("y3-person", index * 5 % shape.people),
-                    id("y3-vault", index),
-                    created
-                ],
-            )
-            .map_err(door)?;
-        counts.bindings += 1;
-    }
 
     // --- the obligations. TALLY'S TABLE, and the only cross-app read in the
     // tree: an empty one would make the person sheet's debts rail unmeasurable.

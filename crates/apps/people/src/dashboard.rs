@@ -53,13 +53,12 @@ use centraid_apps_kit::row::{Cell, Row, text_of};
 use crate::dates::{CivilDate, days_since_contact, days_until_month_day, is_overdue};
 use crate::queries::{
     ACTIVITY_TARGET_TYPE, DASHBOARD_WINDOW, PARTY_PAIR_BOUND, PersonCard, RECENT_ACTIVITY_ROWS,
-    ROSTER_FAN_OUT, UNKNOWN_NAME, Walked, activities_statement, activity_links_statement,
+    ROSTER_FAN_OUT, UNKNOWN_NAME, activities_statement, activity_links_statement,
     annotations_statement, dashboard_profiles_statement, fold_party_tags,
     important_dates_statement, names_by_party, parties_statement, party_tags_statement,
-    read_taxonomy, reminder_on, walk, walked,
+    read_taxonomy, reminder_on, walked,
 };
-use crate::roster::VaultLinks;
-use crate::{Denial, ReadState};
+use crate::Denial;
 
 /// One row of the Upcoming rail: a person's card plus the date itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,14 +98,6 @@ pub struct Counts {
     pub starred: usize,
 }
 
-/// How many of the window's people have a vault of their own, and how many do
-/// not. Absent, never zero.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LinkCounts {
-    pub linked: usize,
-    pub to_link: usize,
-}
-
 /// What `dashboard` answers.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DashboardData {
@@ -114,8 +105,6 @@ pub struct DashboardData {
     pub upcoming: Vec<UpcomingRow>,
     pub recent: Vec<RecentRow>,
     pub counts: Counts,
-    /// `linked` / `to_link`, or the denial that means "we cannot see".
-    pub links: ReadState<LinkCounts>,
     /// **More live people exist than the window read.** v0's payload cannot say
     /// this at all; see finding PE-F3.
     pub truncated: bool,
@@ -136,7 +125,6 @@ pub fn load_dashboard(
     now_ms: i64,
 ) -> KitResult<(DashboardData, Option<Denial>)> {
     let empty = DashboardData {
-        links: ReadState::Denied(Denial::default()),
         window: DASHBOARD_WINDOW,
         ..DashboardData::default()
     };
@@ -177,15 +165,8 @@ pub fn load_dashboard(
         .filter_map(|row| text_of(row, "party_id"))
         .collect();
     if party_ids.is_empty() {
-        // AN EMPTY VAULT'S COUNTS ARE ALL ZERO AND ALL KNOWN. v0 answers
-        // `linked: 0, to_link: 0` here without reading the plane, which is the
-        // one place its zero is honest — nobody is here to be linked.
         return Ok((
             DashboardData {
-                links: ReadState::Ready(LinkCounts {
-                    linked: 0,
-                    to_link: 0,
-                }),
                 window: DASHBOARD_WINDOW,
                 ..DashboardData::default()
             },
@@ -217,16 +198,6 @@ pub fn load_dashboard(
         ROSTER_FAN_OUT,
         empty.clone()
     );
-    // THE ONE READING THAT DENIES ALONE.
-    let links_reading = match walk(
-        door,
-        &crate::queries::live_bindings_statement(&party_ids)?,
-        ROSTER_FAN_OUT,
-    )? {
-        Walked::Rows(rows) => ReadState::Ready(VaultLinks::of_bindings(&rows)),
-        Walked::Denied(denial) => ReadState::Denied(denial),
-    };
-
     let names = names_by_party(&parties);
     let cards: BTreeMap<String, PersonCard> = profiles
         .iter()
@@ -396,27 +367,12 @@ pub fn load_dashboard(
         upcoming: upcoming.len(),
         starred,
     };
-    let links = match links_reading {
-        ReadState::Ready(vault_links) => {
-            let linked = vault_links.linked_in(&party_ids);
-            ReadState::Ready(LinkCounts {
-                linked,
-                // `all - linked`, never a second count: the two always agree
-                // because they are one subtraction (`format.ts:110`-`:112`).
-                to_link: counts.all.saturating_sub(linked),
-            })
-        }
-        ReadState::Denied(denial) => ReadState::Denied(denial),
-        ReadState::Loading => ReadState::Loading,
-    };
-
     Ok((
         DashboardData {
             reconnect,
             upcoming,
             recent,
             counts,
-            links,
             truncated: window.filled,
             window: DASHBOARD_WINDOW,
         },
@@ -427,43 +383,3 @@ pub fn load_dashboard(
 /// The label a touch shows when its kind concept resolves to none.
 pub const DEFAULT_TOUCH_LABEL: &str = "Touch";
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_denied_share_plane_leaves_the_four_counts_standing_and_the_pair_absent() {
-        let data = DashboardData {
-            counts: Counts {
-                all: 12,
-                reconnect: 3,
-                upcoming: 2,
-                starred: 4,
-            },
-            links: ReadState::Denied(Denial::default()),
-            ..DashboardData::default()
-        };
-        assert_eq!(data.counts.all, 12);
-        assert_eq!(data.counts.starred, 4);
-        // THERE IS NO `linked: 0` TO READ. v0 answers `null` for the pair and
-        // the port answers with a state that has no pair in it.
-        assert!(data.links.ready().is_none());
-        assert!(data.links.denied());
-    }
-
-    #[test]
-    fn to_link_is_all_minus_linked_and_never_a_second_count() {
-        let counts = LinkCounts {
-            linked: 5,
-            to_link: 12usize.saturating_sub(5),
-        };
-        assert_eq!(counts.linked + counts.to_link, 12);
-    }
-
-    #[test]
-    fn a_reading_with_no_read_behind_it_is_loading() {
-        let data = DashboardData::default();
-        assert!(!data.links.known());
-        assert!(!data.links.denied(), "not asked yet is not a refusal");
-    }
-}

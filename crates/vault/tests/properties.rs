@@ -4,7 +4,7 @@
 //! test; these are the places where the SPACE is the point — every integer, not
 //! the three a table remembered.
 
-use centraid_vault::intents::{BaseVersion, IntentPayload, canonical_json, compare_utf16};
+use centraid_vault::canonical::{canonical_json, compare_utf16};
 use centraid_vault::value::{RowImage, Value, row_image_from_json, row_image_to_json};
 use proptest::prelude::*;
 
@@ -109,33 +109,5 @@ proptest! {
             at = found.expect("just checked");
         }
     }
-
-    /// The payload hash does not depend on the order base versions arrived in.
-    ///
-    /// The seat sorts them and the gateway sorts them; if the two disagreed,
-    /// every well-formed intent would be refused as a hash mismatch.
-    #[test]
-    fn the_payload_hash_ignores_base_version_order(
-        ids in prop::collection::vec(r"[a-z0-9\x{10000}]{1,8}", 1..6)
-    ) {
-        let make = |order: Vec<String>| IntentPayload {
-            app_id: "tally".to_owned(),
-            action: "tally.add_expense".to_owned(),
-            input: serde_json::json!({"amount_minor": 1}),
-            needs: Vec::new(),
-            base_versions: order
-                .into_iter()
-                .map(|row_id| BaseVersion {
-                    entity: "tally.expense".to_owned(),
-                    row_id,
-                    shape_id: None,
-                    version: 1,
-                })
-                .collect(),
-            depends_on: Vec::new(),
-        };
-        let forward = make(ids.clone()).hash().expect("it hashes");
-        let reversed = make(ids.iter().rev().cloned().collect()).hash().expect("it hashes");
-        prop_assert_eq!(forward, reversed);
-    }
 }
+

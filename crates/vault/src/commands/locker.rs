@@ -591,35 +591,6 @@ fn set_alias(ctx: &CommandCtx<'_, '_>, item_id: &str, alias: &str) -> Result<()>
     Ok(())
 }
 
-/// Set or clear (`''`) the service anchor (#310). **Validated live** — never an
-/// opaque pointer.
-fn set_connection(ctx: &CommandCtx<'_, '_>, item_id: &str, connection_id: &str) -> Result<()> {
-    let trimmed = connection_id.trim();
-    if trimmed.is_empty() {
-        ctx.connection().execute(
-            "UPDATE locker_item SET connection_id = NULL WHERE item_id = ?1",
-            [item_id],
-        )?;
-        return Ok(());
-    }
-    let live = count(
-        ctx,
-        "SELECT COUNT(*) FROM sync_connection WHERE connection_id = ?1",
-        &[trimmed],
-    )?;
-    if live == 0 {
-        return Err(invalid(
-            "connection_id",
-            format!("there is no connection with the id {trimmed}"),
-        ));
-    }
-    ctx.connection().execute(
-        "UPDATE locker_item SET connection_id = ?1 WHERE item_id = ?2",
-        rusqlite::params![trimmed, item_id],
-    )?;
-    Ok(())
-}
-
 /// One custom field, created or rewritten.
 ///
 /// A rewrite keeps its `field_id`, which is what lets the round-tripped
@@ -938,26 +909,6 @@ const ALIAS_IS_FREE: CommandCondition = CommandCondition {
     },
 };
 
-/// A named `connection_id` is a live connection.
-const CONNECTION_IS_LIVE: CommandCondition = CommandCondition {
-    predicate: "connection_is_live",
-    check: |ctx| {
-        let Some(connection_id) = ctx.optional_str("connection_id") else {
-            return Ok(None);
-        };
-        let trimmed = connection_id.trim();
-        if trimmed.is_empty() {
-            return Ok(None);
-        }
-        let live = count(
-            ctx,
-            "SELECT COUNT(*) FROM sync_connection WHERE connection_id = ?1",
-            &[trimmed],
-        )?;
-        Ok((live == 0).then(|| format!("there is no connection with the id {trimmed}")))
-    },
-};
-
 /// A custom field's sealed value is ciphertext, and a NEW sealed field carries
 /// the id it was sealed against.
 const FIELD_VALUE_IS_SEALED: CommandCondition = CommandCondition {
@@ -1256,7 +1207,6 @@ static ADD_ITEM_PRE: &[CommandCondition] = &[
     KEY_GENERATION_IS_LIVE,
     PASSWORD_ROTATION_IS_DECLARED,
     ALIAS_IS_FREE,
-    CONNECTION_IS_LIVE,
 ];
 
 static EDIT_ITEM_PRE: &[CommandCondition] = &[
@@ -1265,7 +1215,6 @@ static EDIT_ITEM_PRE: &[CommandCondition] = &[
     KEY_GENERATION_IS_LIVE,
     PASSWORD_ROTATION_IS_DECLARED,
     ALIAS_IS_FREE,
-    CONNECTION_IS_LIVE,
 ];
 
 static DUPLICATE_ITEM_PRE: &[CommandCondition] = &[
@@ -1474,7 +1423,6 @@ fn add_item() -> CommandDefinition {
             "tags": { "type": "array", "items": { "type": "string" } },
             "compromised": { "type": "boolean" },
             "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
-            "connection_id": { "type": "string" },
             "url_match_policy": { "type": "string",
               "enum": ["registrable-domain", "exact-host"] },
             "#,
@@ -1554,9 +1502,6 @@ fn add_item() -> CommandDefinition {
             if let Some(alias) = ctx.optional_str("alias") {
                 set_alias(ctx, &item_id, alias)?;
             }
-            if let Some(connection_id) = ctx.optional_str("connection_id") {
-                set_connection(ctx, &item_id, connection_id)?;
-            }
             if let Some(tags) = tag_list(ctx) {
                 set_tags(ctx, &item_id, &tags)?;
             }
@@ -1601,7 +1546,6 @@ fn edit_item() -> CommandDefinition {
             "tags": { "type": "array", "items": { "type": "string" } },
             "compromised": { "type": "boolean" },
             "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{0,64}$" },
-            "connection_id": { "type": "string" },
             "url_match_policy": { "type": "string",
               "enum": ["registrable-domain", "exact-host"] },
             "#,
@@ -1721,9 +1665,6 @@ fn edit_item() -> CommandDefinition {
                 // README-Locker §8 names: a member could set one and never
                 // take it back.
                 set_alias(ctx, &item_id, alias)?;
-            }
-            if let Some(connection_id) = ctx.optional_str("connection_id") {
-                set_connection(ctx, &item_id, connection_id)?;
             }
             if let Some(tags) = tag_list(ctx) {
                 set_tags(ctx, &item_id, &tags)?;
@@ -1949,7 +1890,7 @@ fn unarchive_item() -> CommandDefinition {
 }
 
 /// Every column a duplicate copies verbatim, minus the sealed ones.
-const PLAIN_COPY_COLUMNS: [&str; 15] = [
+const PLAIN_COPY_COLUMNS: [&str; 14] = [
     "type",
     "username",
     "url",
@@ -1963,7 +1904,6 @@ const PLAIN_COPY_COLUMNS: [&str; 15] = [
     "phone",
     "address",
     "network",
-    "connection_id",
     "compromised",
 ];
 

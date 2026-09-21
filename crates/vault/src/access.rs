@@ -485,17 +485,11 @@ fn intersect(scopes: &[&Scope]) -> Result<(Vec<RowFilter>, FieldMask)> {
 mod tests {
     use super::*;
 
+    /// A bare connection. It used to carry a `share_authority` stub, for the
+    /// four deleted tests below; rung five drops that table (#1029) and the
+    /// decisions this module takes never read one.
     fn memory() -> Connection {
-        let connection = Connection::open_in_memory().expect("memory opens");
-        connection
-            .execute_batch(
-                "CREATE TABLE share_authority (
-                   authority_id TEXT PRIMARY KEY, principal_kind TEXT, principal_id TEXT,
-                   subject_type TEXT, subject_id TEXT, verb TEXT, decision TEXT,
-                   granted_at TEXT, revoked_at TEXT)",
-            )
-            .expect("the stub table is made");
-        connection
+        Connection::open_in_memory().expect("memory opens")
     }
 
     fn scope(schema: &str, verb: &str, values: &[&str]) -> Scope {

@@ -17,21 +17,20 @@
 //! **page order is part of the comparison**. A port that returned the right rows
 //! in the wrong order fails.
 //!
-//! ## The two deliberate divergences, stated as mappings
+//! ## The one deliberate divergence, stated as a mapping
 //!
-//! 1. **`shared_with: null` is [`Reading::Denied`]** here, and `[]` is
-//!    `Data(vec![])`. v0 collapses "we cannot see" and "shared with nobody" onto
-//!    one `null`/`[]` pair that a caller can mistake for each other; the port
-//!    models the third state (census §A seam 5). The mapping below emits v0's
-//!    shape so the comparison is exact, and `a_denied_share_plane_is_null_not_empty`
-//!    is what proves the two are still distinguishable on this side.
-//! 2. **`shared_from.at` is an INSTANT here and epoch milliseconds in v0.** v0
-//!    wrote `Date.parse(subscribed_at ?? "") || 0`, which turned an absent or
-//!    unparseable instant into `0` — "arrived on 1 January 1970" on the shelf.
-//!    Fixed at source in the close pass (#1020, R-1020-35, D-1020-CL4): v0's
-//!    field is `number | null` now, so the mapping lowers the port's `None` to
-//!    `null` and its text to the same number, and the two sides agree on the
-//!    absence as well as on the instant.
+//! **THE SHARING KEYS ARE FILTERED OUT OF v0'S ANSWER, NOT EDITED OUT OF THE
+//! FIXTURE.** `contracts/apps/docs/queries.json` is a frozen golden
+//! (TESTING.md, "Fixtures and parity") and is never touched. It carries
+//! `shared_with` on every document row, `shared_from` on every drive row and
+//! `shared_from_known` on the drive itself — v0's answers about a sharing plane
+//! whose nine tables rung five drops (#1029, the owner's ruling of
+//! 2026-09-21). There is nothing left in this vault for those keys to be an
+//! answer ABOUT, so [`without_sharing`] removes exactly those three names from
+//! the expected value before the comparison, and everything else is compared
+//! byte for byte as before. `every_expected_row_carried_a_sharing_key` is what
+//! stops the filter outliving its reason: if v0's fixture ever stops carrying
+//! them, the filter is dead and says so.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -41,8 +40,7 @@ use centraid_apps_docs::queries::{
     DocumentRow, DriveData, DriveInput, HistoryData, SearchData, documents_statement,
     load_activity, load_drive, load_history, load_search,
 };
-use centraid_apps_docs::{Reading, shares};
-use centraid_apps_kit::contract_vault::open_contract_vault;
+use centraid_apps_kit::contract_vault::{FrozenRowMapping, open_contract_vault_without};
 use centraid_apps_kit::page::PageRequest;
 use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::row::Row;
@@ -50,7 +48,6 @@ use centraid_apps_kit::testdoor::TestDoor;
 use serde_json::{Value, json};
 
 /// The instant the generator stamped the whole run at.
-const PARITY_EPOCH: &str = "2099-06-01T09:00:00.000Z";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -79,67 +76,31 @@ fn fixture_vault() -> rusqlite::Connection {
         .expect("the committed DDL is readable");
     let rows = fs::read_to_string(root().join("contracts/apps/docs/rows.json"))
         .expect("the committed rows are readable");
-    open_contract_vault(&ddl, &rows).expect("the fixture vault is built")
+    open_contract_vault_without(
+        &ddl,
+        &rows,
+        // THE MAPPING, stated: `contracts/apps/docs/rows.json` is frozen and
+        // still carries v0's sharing rows. Rung five drops the nine tables
+        // (#1029); the bundle is not edited, the builder skips them, and the
+        // kit refuses the mapping if the schema ever has them again.
+        &FrozenRowMapping {
+            tables_gone: &[
+                "share_authority",
+                "share_fulfillment",
+                "share_party_vault_binding",
+                "share_subscription",
+                "share_subscription_lineage",
+            ],
+            columns_gone: &[],
+        },
+    )
+    .expect("the fixture vault is built")
 }
 
 // ---------------------------------------------------------------------------
 // The mapping onto v0's wire shape. One place, so a field name that moved is
 // one edit and a comparison that silently stopped comparing is impossible.
 // ---------------------------------------------------------------------------
-
-fn shared_with_json(reading: &Reading<Vec<shares::SharedWithEntry>>) -> Value {
-    match reading {
-        // v0's `null` is BOTH of these on its side; the port keeps them apart
-        // and emits v0's shape here.
-        Reading::Denied(_) | Reading::Loading => Value::Null,
-        Reading::Data(entries) => Value::Array(
-            entries
-                .iter()
-                .map(|entry| {
-                    json!({
-                        "grant_id": entry.grant_id,
-                        "circle_id": entry.circle_id,
-                        "audience": entry.audience.as_str(),
-                        "label": entry.label,
-                        "via": entry.via.as_str(),
-                        "container_id": entry.container_id,
-                        "member_count": entry.member_count,
-                        "pending_count": entry.pending_count,
-                        "members": entry
-                            .members
-                            .iter()
-                            .map(|member| json!({
-                                "party_id": member.party_id,
-                                "label": member.label,
-                                "capability": member.capability.as_str(),
-                                "status": member.status.as_str(),
-                            }))
-                            .collect::<Vec<Value>>(),
-                    })
-                })
-                .collect(),
-        ),
-    }
-}
-
-/// `shared_from`, with the port's instant lowered to v0's epoch milliseconds.
-fn shared_from_json(row: &DocumentRow) -> Value {
-    let Some(from) = row.shared_from.as_ref() else {
-        return Value::Null;
-    };
-    json!({
-        "vault_id": from.vault_id,
-        "party_id": from.party_id,
-        "name": from.name,
-        // `null`, not `0`: an instant nobody can read is nothing, and since
-        // the close pass v0 says so too (#1020, D-1020-CL4).
-        "at": from
-            .at
-            .as_deref()
-            .and_then(centraid_vault_clock_parse)
-            .map_or(Value::Null, |ms| json!(ms)),
-    })
-}
 
 /// `Date.parse` over an ISO instant, in milliseconds.
 ///
@@ -191,16 +152,48 @@ fn document_json(row: &DocumentRow, with_snippet: bool) -> Value {
             .iter()
             .map(|tag| json!({ "tag_id": tag.tag_id, "label": tag.label }))
             .collect::<Vec<Value>>(),
-        "shared_with": shared_with_json(&row.shared_with),
     });
     if with_snippet {
         value["snippet"] = json!(row.snippet.clone().unwrap_or_default());
-    } else {
-        // The drive row carries `shared_from`; a search row does not, because
-        // `search`'s hits are already the drive's own documents.
-        value["shared_from"] = shared_from_json(row);
     }
     value
+}
+
+/// v0's answer, minus the three keys about the sharing plane rung five drops.
+///
+/// The fixture is frozen and is not edited; the mapping is stated in this
+/// file's header. Returns how many keys it removed, so the guard below can
+/// fail when there is nothing left to filter.
+fn without_sharing(value: &mut Value) -> usize {
+    let mut removed = 0;
+    match value {
+        Value::Array(items) => {
+            // A DOCUMENT THAT ONLY EXISTS BECAUSE IT WAS DELIVERED HERE goes
+            // with the plane that delivered it. v0's drive unioned the filed
+            // window with the documents a subscription placed in this vault,
+            // and named each one with a `shared_from`; nothing places a
+            // document here any more, so a row carrying one is a row the port
+            // is right not to answer.
+            let before = items.len();
+            items.retain(|item| !item.get("shared_from").is_some_and(|from| !from.is_null()));
+            removed += before - items.len();
+            for item in items {
+                removed += without_sharing(item);
+            }
+        }
+        Value::Object(map) => {
+            for key in ["shared_with", "shared_from", "shared_from_known"] {
+                if map.remove(key).is_some() {
+                    removed += 1;
+                }
+            }
+            for (_, nested) in map.iter_mut() {
+                removed += without_sharing(nested);
+            }
+        }
+        _ => {}
+    }
+    removed
 }
 
 fn drive_json(data: &DriveData) -> Value {
@@ -222,7 +215,6 @@ fn drive_json(data: &DriveData) -> Value {
         "root_folder_id": data.root_folder_id,
         "truncated": data.truncated,
         "window": data.window,
-        "shared_from_known": data.shared_from_known,
     })
 }
 
@@ -326,17 +318,22 @@ fn the_four_queries_answer_what_v0_answered() {
     );
 
     let mut compared: BTreeMap<&str, usize> = BTreeMap::new();
+    // How many sharing keys the filter removed from v0's answers; see the
+    // header's mapping. Zero means the filter has outlived its reason.
+    let mut sharing_keys_filtered = 0usize;
     // How many provenance events the PORT read across every activity case.
     let mut activity_seen = 0usize;
     for case in cases {
         let query = case["query"].as_str().expect("a query name");
         let input = &case["input"];
-        let expected = &case["output"];
+        let mut expected = case["output"].clone();
+        sharing_keys_filtered += without_sharing(&mut expected);
+        let expected = &expected;
         let answered = match query {
             "drive" => {
                 let limit = input["limit"].as_u64().map(|limit| limit as usize);
                 let (data, denial) =
-                    load_drive(&door, DriveInput { limit }, PARITY_EPOCH).expect("the drive reads");
+                    load_drive(&door, DriveInput { limit }).expect("the drive reads");
                 assert!(denial.is_none(), "the fixture's drive cases are not denied");
                 drive_json(&data)
             }
@@ -349,7 +346,7 @@ fn the_four_queries_answer_what_v0_answered() {
                 } else {
                     search_hits(&door, expected)
                 };
-                let (data, denial) = load_search(&door, &hits, PARITY_EPOCH).expect("it reads");
+                let (data, denial) = load_search(&door, &hits).expect("it reads");
                 assert!(denial.is_none());
                 search_json(&data)
             }
@@ -404,6 +401,14 @@ fn the_four_queries_answer_what_v0_answered() {
 
     // THE COUNTS, so a comparison that silently stopped comparing fails.
     assert_eq!(compared.len(), 4, "all four queries are compared");
+    // THE FILTER IS STILL FILTERING SOMETHING. If v0's frozen answers ever stop
+    // carrying the sharing keys, `without_sharing` is dead code pretending to
+    // be a mapping.
+    assert!(
+        sharing_keys_filtered > 0,
+        "no expected answer carried a sharing key: the mapping in this file's \
+         header no longer describes anything"
+    );
     assert!(
         compared["drive"] >= 5,
         "the drive's declared window, its floor, its ceiling and the two clamps"
@@ -429,7 +434,7 @@ fn the_four_queries_answer_what_v0_answered() {
 fn the_activity_rail_the_gateways_door_refuses() {
     let connection = fixture_vault();
     let door = TestDoor::new(&connection);
-    let drive = load_drive(&door, DriveInput::default(), PARITY_EPOCH)
+    let drive = load_drive(&door, DriveInput::default())
         .expect("the drive reads")
         .0;
     let mut with_a_trail = 0;
@@ -481,7 +486,7 @@ fn the_corpus_exercises_the_folds_it_is_here_to_compare() {
     let connection = fixture_vault();
     let door = TestDoor::new(&connection);
     let (data, denial) =
-        load_drive(&door, DriveInput::default(), PARITY_EPOCH).expect("the drive reads");
+        load_drive(&door, DriveInput::default()).expect("the drive reads");
     assert!(denial.is_none());
 
     // A NESTED FOLDER, which is what tells a working chain from a chain of
@@ -490,43 +495,6 @@ fn the_corpus_exercises_the_folds_it_is_here_to_compare() {
         data.folders.iter().any(|folder| folder.parent_id.is_some()),
         "no folder has a parent: the share chain proves nothing"
     );
-    // A SHARE THAT CAME THROUGH A FOLDER, and one that came through the
-    // document — the two `via` values, in one corpus.
-    let vias: Vec<shares::Via> = data
-        .documents
-        .iter()
-        .filter_map(|row| row.shared_with.data())
-        .flatten()
-        .map(|entry| entry.via)
-        .collect();
-    assert!(vias.contains(&shares::Via::Folder), "no folder share");
-    assert!(vias.contains(&shares::Via::Document), "no document share");
-    // A CIRCLE AUDIENCE AND A PERSON AUDIENCE.
-    let audiences: Vec<shares::Audience> = data
-        .documents
-        .iter()
-        .filter_map(|row| row.shared_with.data())
-        .flatten()
-        .map(|entry| entry.audience)
-        .collect();
-    assert!(audiences.contains(&shares::Audience::Circle));
-    assert!(audiences.contains(&shares::Audience::Person));
-    // A PASS THAT LANDED AND A PASS THAT HAS NOT, so `pending_count` is a
-    // number the fold computed rather than a zero.
-    assert!(
-        data.documents
-            .iter()
-            .filter_map(|row| row.shared_with.data())
-            .flatten()
-            .any(|entry| entry.pending_count > 0),
-        "every member is current: the delivered/syncing split is not in the corpus"
-    );
-    // AN INBOUND PLACEMENT, which the drive's tag window cannot see on its own.
-    assert!(
-        data.documents.iter().any(|row| row.shared_from.is_some()),
-        "nothing arrived from elsewhere: the origin plane's second door is untested"
-    );
-    assert!(data.shared_from_known);
     // A TRASHED DOCUMENT, with its purge date.
     assert!(
         data.documents
@@ -549,31 +517,6 @@ fn the_corpus_exercises_the_folds_it_is_here_to_compare() {
     assert!(!versioned.versions[1].current);
 }
 
-/// THE THIRD STATE IS STILL THERE ON THIS SIDE.
-///
-/// The mapping above emits v0's `null` for a denial, which is the whole reason
-/// this test exists: a reader of the mapping could conclude the port collapsed
-/// the states too. It did not — a denied share plane and an empty one are two
-/// different values, and only one of them is `Reading::Data`.
-#[test]
-fn a_denied_share_plane_is_null_not_empty() {
-    let empty = Reading::Data(Vec::new());
-    let denied = Reading::Denied(centraid_apps_docs::Denial {
-        code: None,
-        message: Some("ask the owner".to_owned()),
-        revoked_at: None,
-    });
-    // Both lower to v0's shape, and they lower DIFFERENTLY.
-    assert_eq!(shared_with_json(&empty), json!([]));
-    assert_eq!(shared_with_json(&denied), Value::Null);
-    // And they are not equal on this side, which v0's pair cannot say.
-    assert_ne!(empty, denied);
-    assert!(denied.denied());
-    assert!(!empty.denied());
-    assert!(empty.data().is_some());
-    assert!(denied.data().is_none());
-}
-
 /// `Date.parse` over the vault's own spelling, so the `shared_from.at` mapping
 /// is not the thing under test when a case fails.
 #[test]
@@ -593,84 +536,3 @@ fn the_instant_lowering_matches_date_parse() {
     assert_eq!(centraid_vault_clock_parse("not an instant"), None);
 }
 
-/// THE NINE BOUNDED WINDOWS, AND WHAT EACH ONE READS ON THIS CORPUS.
-///
-/// The lane's receipt quotes these numbers, so they are measured rather than
-/// counted by hand — and a window that reads NOTHING on the fixture is a window
-/// the parity comparison is not exercising, which is the failure this test is
-/// for.
-#[test]
-fn the_nine_share_windows_are_all_exercised_by_the_corpus() {
-    use centraid_apps_docs::origins::{origin_bindings_statement, origin_parties_statement};
-    use centraid_apps_docs::shares::{
-        SHARE_WINDOWS, answers_statement, bindings_statement, circle_members_statement,
-        circles_statement, fulfillments_statement, parties_statement,
-    };
-    use centraid_apps_kit::reads::read_pages;
-
-    let connection = fixture_vault();
-    let door = TestDoor::new(&connection);
-    // The ids the fold would hand each window, read off the fixture's own answer
-    // rather than typed: a window fed ids nobody holds reads nothing for the
-    // wrong reason.
-    let (drive, _) = load_drive(&door, DriveInput::default(), PARITY_EPOCH).expect("it reads");
-    let documents: Vec<String> = drive
-        .documents
-        .iter()
-        .map(|row| row.document_id.clone())
-        .collect();
-    let folders: Vec<String> = drive
-        .folders
-        .iter()
-        .map(|folder| folder.folder_id.clone())
-        .collect();
-    let entries: Vec<_> = drive
-        .documents
-        .iter()
-        .filter_map(|row| row.shared_with.data())
-        .flatten()
-        .collect();
-    let grants: Vec<String> = entries.iter().map(|entry| entry.grant_id.clone()).collect();
-    let circles: Vec<String> = entries
-        .iter()
-        .filter_map(|entry| entry.circle_id.clone())
-        .collect();
-    let parties: Vec<String> = entries
-        .iter()
-        .flat_map(|entry| entry.members.iter().map(|member| member.party_id.clone()))
-        .collect();
-    let vaults: Vec<String> = drive
-        .documents
-        .iter()
-        .filter_map(|row| row.shared_from.as_ref().map(|from| from.vault_id.clone()))
-        .collect();
-
-    let mut measured: BTreeMap<String, usize> = BTreeMap::new();
-    let mut walk = |statement: centraid_apps_kit::statement::PageQuery| {
-        let rows = read_pages(&door, &statement, centraid_apps_docs::SHARE_FAN_OUT)
-            .expect("a bounded window walks");
-        measured.insert(statement.name.clone(), rows.len());
-    };
-    walk(answers_statement("core.document", &documents).expect("a statement"));
-    walk(answers_statement("docs.folder", &folders).expect("a statement"));
-    walk(circles_statement(&circles).expect("a statement"));
-    walk(circle_members_statement(&circles).expect("a statement"));
-    walk(fulfillments_statement(&grants).expect("a statement"));
-    walk(parties_statement(&parties).expect("a statement"));
-    walk(bindings_statement(&parties).expect("a statement"));
-    walk(origin_bindings_statement(&vaults).expect("a statement"));
-    walk(origin_parties_statement(&parties).expect("a statement"));
-
-    for window in SHARE_WINDOWS {
-        let rows = measured
-            .get(window)
-            .copied()
-            .unwrap_or_else(|| panic!("{window} was not walked"));
-        assert!(
-            rows > 0,
-            "{window} read nothing: the corpus is not exercising it"
-        );
-        println!("window {window}: {rows} rows");
-    }
-    assert_eq!(measured.len(), SHARE_WINDOWS.len());
-}

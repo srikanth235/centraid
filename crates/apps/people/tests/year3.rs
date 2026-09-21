@@ -55,7 +55,6 @@ const SHRUNKEN: Year3PeopleShape = Year3PeopleShape {
     reminders: 240,
     interactions: 800,
     notes: 160,
-    bindings: 36,
     obligations: 24,
     start: "2097-01-01",
 };
@@ -74,7 +73,6 @@ fn a_shrunken_axis_is_readable_through_the_roster_the_shelf_and_the_dashboard() 
     // own notes are annotations too.
     assert_eq!(counts.links, SHRUNKEN.interactions);
     assert_eq!(counts.annotations, SHRUNKEN.interactions + SHRUNKEN.notes);
-    assert_eq!(counts.bindings, SHRUNKEN.bindings);
     assert_eq!(counts.obligations, SHRUNKEN.obligations);
 
     let door = TestDoor::new(&connection);
@@ -88,33 +86,6 @@ fn a_shrunken_axis_is_readable_through_the_roster_the_shelf_and_the_dashboard() 
     assert_eq!(roster.people.len(), SHRUNKEN.people - SHRUNKEN.trashed);
     assert!(!roster.truncated);
     assert_eq!(roster.lists.len(), SHRUNKEN.lists);
-    assert!(roster.links.known(), "the share plane answered");
-    let linked = roster
-        .people
-        .iter()
-        .filter(|row| {
-            roster
-                .links
-                .ready()
-                .is_some_and(|links| links.linked(&row.party_id))
-        })
-        .count();
-    assert!(
-        linked > 0,
-        "no roster row is linked: the plane proves nothing"
-    );
-    // AT MOST ONE LIVE BINDING PER PARTY (finding PE-F6): `vault_count` is a
-    // boolean wearing a number's clothes, and the fixture holds the DDL to it.
-    assert!(
-        roster.people.iter().all(|row| {
-            roster
-                .links
-                .ready()
-                .is_some_and(|links| links.vault_count(&row.party_id) <= 1)
-        }),
-        "a party holds two live bindings, which the partial unique index forbids"
-    );
-
     let (shelf, denial) = load_trash(&door).expect("the shelf reads");
     assert!(denial.is_none());
     assert_eq!(shelf.people.len(), SHRUNKEN.trashed);
@@ -136,10 +107,6 @@ fn a_shrunken_axis_is_readable_through_the_roster_the_shelf_and_the_dashboard() 
         "nobody is overdue: the cadence fold proves nothing"
     );
     assert!(dashboard.recent.len() <= 30, "the recent rail is a window");
-    // THE PAIR IS KNOWN AND CONSISTENT.
-    let links = dashboard.links.ready().expect("the plane answered");
-    assert_eq!(links.linked + links.to_link, dashboard.counts.all);
-
     // THE LEAP-DAY CASE IS IN THE CORPUS, because a birthday rail without one
     // cannot show the clamp (D-1020-PE7).
     assert!(

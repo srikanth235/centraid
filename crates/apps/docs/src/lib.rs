@@ -47,19 +47,15 @@
 pub mod bytes;
 pub mod commands;
 pub mod manifest;
-pub mod origins;
 pub mod queries;
-pub mod shares;
 
 pub use bytes::{ByteDoor, ByteRequest, NEVER_INLINE, StagedBlob, may_serve_inline};
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};
-pub use origins::SharedFromEntry;
 pub use queries::{
     ActivityData, DriveData, DriveInput, HistoryData, MAX_CHAIN_STEPS, SearchData, load_activity,
     load_drive, load_history, load_search,
 };
-pub use shares::{SHARE_FAN_OUT, SHARE_WINDOWS, SharedMember, SharedWithEntry};
 
 /// A CONSENT DENIAL, as the payload carries it.
 ///

@@ -71,11 +71,13 @@ impl Vault {
 
     /// Revoke a device. Returns whether it was enrolled.
     ///
-    /// The protocol state goes first, while the ownership rows still exist.
+    /// It used to sweep the device's rows out of the replay-outcome ledger
+    /// first, "while the ownership rows still exist". That ledger is
+    /// `replica_intent_outcome`, dropped with the replica plane (#1029, rung
+    /// five), so revoking is now the one DELETE it always was underneath.
     pub fn revoke_device(&self, device_id: &str) -> Result<bool> {
         let outcome = self.commit(|tx| {
             tx.set_producer("devices.revoke");
-            crate::intents::delete_outcomes_for_device(tx.connection(), device_id)?;
             let removed = tx.connection().execute(
                 "DELETE FROM access_device_secret WHERE device_id = ?1",
                 [device_id],

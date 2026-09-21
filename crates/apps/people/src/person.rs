@@ -71,7 +71,7 @@ use crate::queries::{
     Taxonomy, UNKNOWN_NAME, Walked, activities_statement, annotations_statement,
     duplicate_channels_statement, fold_party_tags, history_statement, important_dates_statement,
     incoming_links_statement, names_by_party, obligations_statement, outgoing_links_statement,
-    parties_statement, person_channels_statement, person_links_statement, person_notes_statement,
+    parties_statement, person_channels_statement, person_notes_statement,
     person_profile_statement, person_tags_statement, read_taxonomy, reminder_on, tasks_statement,
     vault_statement, walk, walked,
 };
@@ -215,14 +215,6 @@ pub struct Debt {
     pub reason: String,
 }
 
-/// One vault this person is linked to.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VaultBinding {
-    pub binding_id: String,
-    pub vault_id: String,
-    pub linked_at: String,
-}
-
 /// THE PROFILE, which stands whatever the three readings say.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
@@ -258,17 +250,10 @@ pub struct Obligations {
     pub debts: Vec<Debt>,
 }
 
-/// The share plane's answer for one person.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Sharing {
-    pub vaults: Vec<VaultBinding>,
-}
-
 /// One person, as the sheet renders them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Person {
     pub profile: Profile,
-    pub sharing: ReadState<Sharing>,
     pub links: ReadState<Links>,
     pub obligations: ReadState<Obligations>,
 }
@@ -478,16 +463,16 @@ pub fn load_person(door: &dyn PageDoor, party_id: &str) -> KitResult<(PersonData
             .collect(),
     };
 
-    // THE THREE READINGS. Each one's failure is its own.
+    // THE TWO READINGS. Each one's failure is its own. There was a third —
+    // the share plane, `share_party_vault_binding` — which rung five drops
+    // (#1029).
     let links = read_links(door, party_id, &taxonomy)?;
     let obligations = read_obligations(door, party_id, &owner_party_id)?;
-    let sharing = read_sharing(door, party_id)?;
 
     Ok((
         PersonData {
             person: Some(Person {
                 profile,
-                sharing,
                 links,
                 obligations,
             }),
@@ -908,27 +893,6 @@ fn read_obligations(
     Ok(ReadState::Ready(Obligations { debts }))
 }
 
-/// THE SHARE PLANE, for one person. The one reading v0 already keeps apart.
-fn read_sharing(door: &dyn PageDoor, party_id: &str) -> KitResult<ReadState<Sharing>> {
-    Ok(
-        match walk(door, &person_links_statement(party_id), PERSON_JOIN_BOUND)? {
-            Walked::Denied(denial) => ReadState::Denied(denial),
-            Walked::Rows(rows) => ReadState::Ready(Sharing {
-                vaults: rows
-                    .iter()
-                    .filter_map(|row| {
-                        Some(VaultBinding {
-                            binding_id: text_of(row, "binding_id")?,
-                            vault_id: text_of(row, "vault_id").unwrap_or_default(),
-                            linked_at: text_of(row, "linked_at").unwrap_or_default(),
-                        })
-                    })
-                    .collect(),
-            }),
-        },
-    )
-}
-
 /// The reminders of one person's sheet, for the surfaces that draw the roster's
 /// chip on a detail screen.
 #[must_use]
@@ -1011,11 +975,6 @@ mod tests {
                 dates: Vec::new(),
                 notes: Vec::new(),
             },
-            sharing: ReadState::Denied(Denial {
-                code: Some("VAULT_DENIED".to_owned()),
-                message: Some("ask the owner".to_owned()),
-                revoked_at: None,
-            }),
             links: ReadState::Ready(Links::default()),
             obligations: ReadState::Denied(Denial::default()),
         };
@@ -1025,9 +984,8 @@ mod tests {
         // AND THE DENIED READS CARRY NO DATA. There is no `vaults: []` to
         // mistake for "linked to nothing" and no `debts: []` to mistake for
         // "owes nothing".
-        assert!(person.sharing.ready().is_none());
         assert!(person.obligations.ready().is_none());
-        assert!(person.sharing.denied());
+        assert!(person.obligations.denied());
         // The one that DID answer says so, and its empty list is a fact.
         assert!(person.links.known());
         assert_eq!(person.links.ready().map(|links| links.tasks.len()), Some(0));

@@ -785,7 +785,7 @@ impl Handle {
                 };
                 self.with_vault(|vault| {
                     vault
-                        .stage_bytes(&[centraid_vault::intents::NeededBytes {
+                        .stage_bytes(&[centraid_vault::content::NeededBytes {
                             hash: staged.content_hash.clone(),
                             byte_size: staged.byte_size as i64,
                             media_type: staged.media_type.clone(),

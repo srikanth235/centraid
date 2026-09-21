@@ -3350,13 +3350,13 @@ fn find_or_create_concept(
 //    `schema/entity-refs.ts`'s `ENTITY_POINTERS`; reading the schema instead
 //    means the list and the DDL cannot drift, which is the whole failure the
 //    registry existed to prevent.
-// 3. **The pointers the engine cannot see** — [`PARTY_POINTERS`], which is one
-//    column: `share_authority.principal_id` under `principal_kind = 'person'`.
-//    It is polymorphic on a kind that selects a party, a circle, a harness or
-//    an automation, so **no single `REFERENCES` clause can express it** and
-//    neither walk above can find it. A merge that skipped it would delete the
-//    folded-in party out from under a LIVE standing answer, and a share the
-//    owner had already granted would silently stop being delivered.
+// 3. **The pointers the engine cannot see** — [`PARTY_POINTERS`], which is
+//    EMPTY. Its one entry was `share_authority.principal_id` under
+//    `principal_kind = 'person'`, polymorphic on a kind no single `REFERENCES`
+//    clause could express; rung five drops the sharing plane with that table
+//    (#1029). The list stays rather than being deleted, because it is the seam
+//    the two mechanical walks above cannot cover, and the next column like it
+//    needs somewhere to be enumerated on the day it arrives.
 //
 // `merge_party_sweep` returns all three as one list, and
 // `the_sweep_finds_every_column_that_names_a_party` asserts that no column in
@@ -3373,7 +3373,7 @@ fn find_or_create_concept(
 //   `core_attachment`, `knowledge_annotation`,
 //   `schedule_recurrence_exception`, the four `enrich_*` tables, `outbox_item`,
 //   `sync_external_entity` and `share_subscription_lineage` — thirteen tables,
-//   every one of which points at *any* entity kind. A typed reference table per
+//   of which points at *any* entity kind. A typed reference table per
 //   (pointer × target kind) would be thirteen tables times the entity kinds
 //   each admits, and `core_tag` alone tags documents, notes, tasks, assets and
 //   parties.
@@ -3386,13 +3386,10 @@ fn find_or_create_concept(
 //   engine — which is exactly why this sweep has to read the pair shape rather
 //   than the parent name. That cost is real and it is paid once, here.
 //
-// **Verdict: the polymorphic reference stays, and the finding is elsewhere** —
-// it is that `share_authority.principal_id` is NOT one of them. It is the one
-// pointer with no type column the engine can read, it is the one a merge can
-// silently break, and it is enumerated in a hand-kept list. Making it a real
-// `(principal_type, principal_id)` pair into `core_entity` is the change that
-// would retire [`PARTY_POINTERS`] entirely; it is an owner hand-off in this
-// lane's receipt, not a schema edit from an app slot.
+// **Verdict: the polymorphic reference stays.** The finding used to be
+// elsewhere — `share_authority.principal_id`, the one pointer with no type
+// column the engine could read — and rung five removed it by removing its
+// table (#1029). The two mechanical walks are now the whole sweep.
 //
 // ### What a collision means, per table
 //
@@ -3411,37 +3408,19 @@ fn find_or_create_concept(
 /// A column that holds a party id with **no foreign key on it**, plus the
 /// predicate that says which of its rows do.
 ///
-/// One entry, and the header says why it cannot be discovered. A second entry
+/// EMPTY since rung five (#1029): the one entry was
+/// `share_authority.principal_id`, and the sharing plane is dropped. An entry
 /// arriving here is a schema change that should have been a composite FK.
-const PARTY_POINTERS: &[(&str, &str, &str, PointerCollision)] = &[(
-    "share_authority",
-    "principal_id",
-    "principal_kind = 'person'",
-    // A STANDING ANSWER IS NEVER SILENTLY DELETED: it is dated shut and THEN
-    // re-pointed, which is also the only order that works where the constraint
-    // covers live rows only.
-    PointerCollision::Revoke,
-)];
+const PARTY_POINTERS: &[(&str, &str, &str)] = &[];
 
 /// Columns whose NAME reads as a party pointer and which hold something else.
 ///
 /// The audit in `crates/vault/tests/people_commands.rs` scans every column in
 /// the file for a party-shaped name and asserts each one is either in the sweep
-/// or here. One entry, with the DDL's own reason:
-/// `share_authority_request.principal_id` carries **an automation's enrolment
-/// key** — the table has no `principal_kind` column and the baseline says
-/// outright that the id is "the same principal id
-/// `share_authority.principal_id` carries for an 'automation' row"
-/// (`contracts/migrations/001_baseline.sql`). A merge that re-pointed it would
-/// hand one automation's pending scope request to a person.
-pub const NOT_A_PARTY_POINTER: &[(&str, &str)] = &[("share_authority_request", "principal_id")];
-
-/// What happens to the loser when a pointer's re-point collides.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PointerCollision {
-    /// The row is an ANSWER: date it shut, then re-point it.
-    Revoke,
-}
+/// or here. EMPTY since rung five (#1029): its one entry was
+/// `share_authority_request.principal_id`, which carried an automation's
+/// enrolment key rather than a party, and the sharing plane is dropped.
+pub const NOT_A_PARTY_POINTER: &[(&str, &str)] = &[];
 
 /// What a UNIQUE collision means for a table the engine's FK walk reaches.
 ///
@@ -3610,7 +3589,7 @@ pub fn merge_party_sweep(connection: &rusqlite::Connection) -> Result<Vec<PartyR
             }
         }
     }
-    for (table, column, predicate, _) in PARTY_POINTERS {
+    for (table, column, predicate) in PARTY_POINTERS {
         refs.push(PartyRef {
             table: (*table).to_owned(),
             column: (*column).to_owned(),
@@ -3677,7 +3656,6 @@ fn repoint_row(
     reference: &PartyRef,
     key_values: &[rusqlite::types::Value],
     survivor: &str,
-    now: &str,
     tally: &mut FoldTally,
 ) -> Result<()> {
     let where_key = quoted(&reference.key);
@@ -3773,27 +3751,9 @@ fn repoint_row(
         Collision::Sum(_) | Collision::DropDuplicate => {}
     }
 
-    if let Some(PointerCollision::Revoke) = PARTY_POINTERS
-        .iter()
-        .find(|(table, column, _, _)| *table == reference.table && *column == reference.column)
-        .map(|(_, _, _, policy)| *policy)
-    {
-        let mut binds: Vec<rusqlite::types::Value> = vec![
-            rusqlite::types::Value::Text(now.to_owned()),
-            rusqlite::types::Value::Text(survivor.to_owned()),
-        ];
-        binds.extend(key_values.iter().cloned());
-        connection.execute(
-            &format!(
-                "UPDATE \"{}\" SET revoked_at = ?, \"{}\" = ? WHERE {where_key}",
-                reference.table, reference.column
-            ),
-            rusqlite::params_from_iter(binds.iter()),
-        )?;
-        tally.repointed += 1;
-        tally.revoked += 1;
-        return Ok(());
-    }
+    // A pointer with a policy of its own — a standing answer dated shut and
+    // then re-pointed — used to be handled here. `PARTY_POINTERS` is empty
+    // since rung five (#1029) and the policy left with the table it was for.
 
     connection.execute(
         &format!("DELETE FROM \"{}\" WHERE {where_key}", reference.table),
@@ -3935,7 +3895,6 @@ pub fn fold_party(
                 &reference,
                 &key_values,
                 survivor,
-                now,
                 &mut tally,
             )?;
         }

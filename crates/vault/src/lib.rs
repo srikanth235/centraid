@@ -51,7 +51,7 @@ pub mod custody;
 pub mod devices;
 pub mod error;
 pub mod file;
-pub mod intents;
+pub mod canonical;
 pub mod log;
 pub mod migrations;
 pub mod operations;

@@ -28,7 +28,6 @@ use centraid_search::{
 use centraid_vault::custody::locker_key::{
     LOCKER_CIPHERTEXT_PREFIX, encrypt_under_locker_key, is_locker_ciphertext, locker_aad,
 };
-use centraid_vault::custody::seal::{SEALED_PREFIX, is_sealed_value, seal_aad, seal_value};
 use rusqlite::Connection;
 
 /// THE SECRETS THIS FIXTURE PLANTS, AS THE PRODUCT WRITES THEM.
@@ -257,34 +256,23 @@ fn seed(connection: &Connection) {
             ],
         )
         .expect("a passkey is inserted");
-    let credential = |column: &str| {
-        seal_value(
-            &KEY,
-            &seal_aad("sync_connection_credential", column, "connection-1"),
-            PLAINTEXT,
-        )
-        .unwrap_or_else(|error| panic!("{column} seals: {error}"))
-    };
-    connection
-        .execute(
-            "INSERT INTO sync_connection_credential
-               (connection_id, cred_kind, allowed_hosts, client_secret, access_token,
-                refresh_token, api_key, refresh_capability)
-             VALUES ('connection-1', 'oauth2', '[]', ?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![
-                credential("client_secret"),
-                credential("access_token"),
-                credential("refresh_token"),
-                credential("api_key"),
-                credential("refresh_capability")
-            ],
-        )
-        .expect("a connector credential is inserted");
 }
 
 /// The key id every planted locker cell is bound to. The AAD carries it, so a
 /// cell cannot be replayed under another key.
 const LOCKER_KEY_ID: &str = "key-000001";
+
+/// Does this fixture's schema carry that table?
+fn table_exists(connection: &rusqlite::Connection, table: &str) -> bool {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0
+}
 
 /// Every sealed cell this fixture holds, as `(table, column, row_id)`.
 ///
@@ -300,23 +288,6 @@ fn planted_rows() -> Vec<(&'static str, &'static str, &'static str)> {
         ("locker_item", "content", "item-1"),
         ("locker_item_field", "value_sealed", "field-1"),
         ("locker_item_passkey", "private_key", "item-1"),
-        (
-            "sync_connection_credential",
-            "client_secret",
-            "connection-1",
-        ),
-        ("sync_connection_credential", "access_token", "connection-1"),
-        (
-            "sync_connection_credential",
-            "refresh_token",
-            "connection-1",
-        ),
-        ("sync_connection_credential", "api_key", "connection-1"),
-        (
-            "sync_connection_credential",
-            "refresh_capability",
-            "connection-1",
-        ),
     ]
 }
 
@@ -346,9 +317,25 @@ fn targets(answer: &Answer) -> Vec<Target> {
 #[test]
 fn every_sealed_column_in_this_fixture_really_holds_a_secret() {
     let connection = vault();
+    // THE MAPPING, STATED. `contracts/schema/v0-registries.json` is the v0
+    // record and is checked against the FROZEN v0 corpus
+    // (`crates/ontology/tests/commitments.rs`), so it still names
+    // `sync_connection_credential`'s five sealed columns. Rung five drops that
+    // table with the connector plane (#1029), and this fixture is built from
+    // the schema a NEW vault gets — there is no column here to plant. The
+    // registry is filtered by what the fixture's own schema has, which is a
+    // stronger read than a hard-coded skip: a sealed column that arrives in a
+    // table this vault DOES have is still unplanted and still fails.
     let mut registry: Vec<(String, String)> =
-        centraid_ontology::registries::sealed_physical_columns();
+        centraid_ontology::registries::sealed_physical_columns()
+            .into_iter()
+            .filter(|(table, _)| table_exists(&connection, table))
+            .collect();
     registry.sort_unstable();
+    assert!(
+        registry.len() < centraid_ontology::registries::sealed_physical_columns().len(),
+        "nothing was filtered: the mapping above no longer describes anything"
+    );
     let mut planted: Vec<(String, String)> = planted_rows()
         .into_iter()
         .map(|(table, column, _)| (table.to_owned(), column.to_owned()))
@@ -363,7 +350,7 @@ fn every_sealed_column_in_this_fixture_really_holds_a_secret() {
         let pk = match table {
             "locker_item" | "locker_item_passkey" => "item_id",
             "locker_item_field" => "field_id",
-            _ => "connection_id",
+            other => panic!("`{other}` has no primary key named here"),
         };
         let held: String = connection
             .query_row(
@@ -374,17 +361,10 @@ fn every_sealed_column_in_this_fixture_really_holds_a_secret() {
             .unwrap_or_else(|error| panic!("{table}.{column}: {error}"));
         // REAL CIPHERTEXT, not a string that begins with the prefix: both
         // checks decode the envelope and measure it.
-        if table == "sync_connection_credential" {
-            assert!(
-                is_sealed_value(&held),
-                "{table}.{column} is not a `{SEALED_PREFIX}` envelope"
-            );
-        } else {
-            assert!(
-                is_locker_ciphertext(&held),
-                "{table}.{column} is not a `{LOCKER_CIPHERTEXT_PREFIX}` cell"
-            );
-        }
+        assert!(
+            is_locker_ciphertext(&held),
+            "{table}.{column} is not a `{LOCKER_CIPHERTEXT_PREFIX}` cell"
+        );
         assert!(
             !held.contains(PLAINTEXT),
             "{table}.{column} holds the plaintext"

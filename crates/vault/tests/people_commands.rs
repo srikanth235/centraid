@@ -869,11 +869,13 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
         .filter(|reference| reference.predicate.is_some())
         .count();
 
-    // Forty-four engine foreign keys onto `core_party` in the committed DDL
-    // (`grep -c 'REFERENCES core_party' contracts/migrations/001_baseline.sql`).
-    assert_eq!(engine, 44, "the engine FK walk found a different set");
-    // FIFTEEN `(type, id)` pairs over fourteen tables — `core_link` carries
-    // two, its from- and to- endpoints.
+    // Forty engine foreign keys onto `core_party` in the committed DDL
+    // (`grep -c 'REFERENCES core_party' contracts/schema/vault-ddl.sql`). It was
+    // 44 before rung five dropped the sharing and connector planes (#1029).
+    assert_eq!(engine, 40, "the engine FK walk found a different set");
+    // TWELVE `(type, id)` pairs — `core_link` carries two, its from- and to-
+    // endpoints. It was fifteen before rung five dropped `outbox_item`,
+    // `sync_external_entity` and `share_subscription_lineage` (#1029).
     //
     // **v0's registry lists fourteen pairs over thirteen tables and omits
     // `core_content_representation.(owner_type, owner_id)`** (finding PE-F5):
@@ -881,10 +883,12 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
     // representation table, and v0's merge walks that list. The column carries
     // `ON DELETE CASCADE`, so in v0 a merge DELETES a party's representation
     // instead of re-pointing it. This sweep reads the schema, so it finds it.
-    assert_eq!(polymorphic, 15, "the polymorphic pointer set moved");
-    // ONE pointer the engine cannot see: `share_authority.principal_id`.
-    assert_eq!(hand_kept, 1);
-    assert_eq!(sweep.len(), 60);
+    assert_eq!(polymorphic, 12, "the polymorphic pointer set moved");
+    // NO pointer the engine cannot see. There was one —
+    // `share_authority.principal_id` — and rung five drops its table (#1029),
+    // so the two mechanical walks are now the whole sweep.
+    assert_eq!(hand_kept, 0);
+    assert_eq!(sweep.len(), 52);
     assert!(
         sweep
             .iter()
@@ -911,9 +915,9 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
 /// THE MECHANICAL SWEEP (AGENTS.md): no column in the file whose NAME reads as
 /// a party pointer is outside the generated set.
 ///
-/// This is the test that would have caught `share_authority.principal_id` before
-/// somebody remembered it, and it is what makes the hand-kept list auditable
-/// rather than trusted.
+/// This is the test that caught `share_authority.principal_id` before somebody
+/// remembered it, and it is what keeps the hand-kept list — empty since rung
+/// five (#1029) — auditable rather than trusted.
 #[test]
 fn no_column_that_names_a_party_is_outside_the_sweep() {
     let circle = Circle::open("sweep-audit");
@@ -970,13 +974,13 @@ fn no_column_that_names_a_party_is_outside_the_sweep() {
         "these columns name a party and no walk re-points them: {missing:?}"
     );
     // A floor, so a scan that suddenly matches nothing fails rather than
-    // passing vacuously. It is BELOW the sweep's 44 engine columns on purpose:
+    // passing vacuously. It is BELOW the sweep's 40 engine columns on purpose:
     // the audit matches on NAME and four of those columns are called `paid_by`,
     // `granted_by`, `from_party` and `to_party` — which is itself the reason a
     // name-shaped audit cannot be the only check, and why the sweep is
     // generated from foreign keys rather than from names.
     assert!(
-        candidates.len() >= 40,
+        candidates.len() >= 36,
         "the audit found only {} candidate columns",
         candidates.len()
     );
@@ -1188,7 +1192,7 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
         "exactly one referencing column is excluded, and the reason is in the loop"
     );
     assert_eq!(planted.len() + refused_by_the_merge.len(), sweep.len());
-    assert_eq!(planted.len(), 59);
+    assert_eq!(planted.len(), 51);
 
     // THE MERGE.
     let output = circle.run(
@@ -1355,48 +1359,6 @@ fn folding_both_ends_of_a_debt_drops_it_as_degenerate_rather_than_failing() {
     assert_eq!(
         circle.count("SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = 'o1'"),
         0
-    );
-}
-
-/// A STANDING ANSWER IS DATED SHUT AND KEPT, never silently deleted — and the
-/// pointer the engine cannot see is the one this proves.
-#[test]
-fn folding_a_party_with_a_standing_answer_revokes_the_duplicate_rather_than_dropping_it() {
-    let circle = Circle::open("merge-authority");
-    let survivor = circle.person("Maya Alvarez", 30);
-    let merged = circle.person("M. Alvarez", 30);
-    circle
-        .vault()
-        .commit(|tx| {
-            tx.set_producer("test.authority");
-            let connection = tx.connection();
-            for (authority_id, principal) in [("a1", &survivor), ("a2", &merged)] {
-                connection.execute(
-                    "INSERT INTO share_authority (authority_id, principal_kind, principal_id,
-                       subject_type, subject_id, verb, duration, expires_at, decision,
-                       granted_by, granted_at, revoked_at)
-                     VALUES (?1, 'person', ?2, 'core.document', 'd1', 'view', 'standing', NULL,
-                             'granted', ?3, '2099-01-02T00:00:00.000Z', NULL)",
-                    rusqlite::params![authority_id, principal, circle.owner_party_id()],
-                )?;
-            }
-            Ok(())
-        })
-        .expect("the answers land");
-
-    circle.run(
-        "core.merge_party",
-        json!({ "survivor_party_id": survivor, "merged_party_id": merged }),
-    );
-    // BOTH ROWS SURVIVE and both now name the survivor. One of them is dated
-    // shut, because two live answers to one question is what the constraint
-    // refuses.
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM share_authority WHERE principal_id = '{survivor}'"
-        )),
-        2,
-        "an answer is history and is meant to outlive the row it names"
     );
 }
 

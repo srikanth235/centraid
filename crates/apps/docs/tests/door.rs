@@ -5,15 +5,11 @@
 //! committed schema, and answers what the fold expects. A fold that is right
 //! over rows nobody could read is a fold that is wrong.
 //!
-//! Four claims here are not reachable any other way:
+//! Three claims here are not reachable any other way:
 //!
 //! 1. **The wrapper-identity property** (D-1020-DC1): a property test generates
 //!    *n* wrappers over ONE content id and asserts *n* distinct drive rows.
-//! 2. **`SHARE_FAN_OUT` is a REACHABLE bound** (D-1020-D3-12): 4,000 rows walk
-//!    and the 4,001st errors with the cap it names — not with a short answer.
-//! 3. **A denied read is a value.** A door that refuses the share plane leaves
-//!    `shared_with` as `Denied` on every row while the drive still draws.
-//! 4. **The staged-PDF round trip through the byte door** (D-1020-DC4): bytes
+//! 2. **The staged-PDF round trip through the byte door** (D-1020-DC4): bytes
 //!    in through `stage`, a URL out through `url`, and the never-inline rule
 //!    applied to what the document reads them as.
 
@@ -27,14 +23,12 @@ use centraid_apps_docs::bytes::{
 use centraid_apps_docs::queries::{
     DriveInput, load_activity, load_drive, load_history, load_search,
 };
-use centraid_apps_docs::shares::{Audience, SHARE_FAN_OUT, Via};
 use centraid_apps_docs::{Reading, commands};
-use centraid_apps_kit::error::{KitError, KitResult};
+use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::fixtures;
 use centraid_apps_kit::page::PageRequest;
 use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::row::{Cell, Row};
-use centraid_apps_kit::statement::PageQuery;
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_media::format::content_hash_hex;
 use centraid_vault::access::Principal;
@@ -180,11 +174,10 @@ fn the_four_queries_answer_over_rows_the_commands_wrote() {
     drive.run("core.trash_document", json!({ "document_id": trashed }));
 
     let (data, denial) =
-        drive.read(|door| load_drive(door, DriveInput::default(), EPOCH).expect("the drive reads"));
+        drive.read(|door| load_drive(door, DriveInput::default()).expect("the drive reads"));
     assert!(denial.is_none(), "nothing was denied: {denial:?}");
     assert_eq!(data.window, 200, "the declared default");
     assert!(!data.truncated, "two documents is not a full window");
-    assert!(data.shared_from_known, "the origin plane was readable");
     assert!(data.root_folder_id.is_some());
 
     // THE FOLDER RAIL, with the nesting v0's own read cannot see.
@@ -226,9 +219,6 @@ fn the_four_queries_answer_over_rows_the_commands_wrote() {
     );
     // SHARED WITH NOBODY IS `Data(vec![])`, and it is not the same fact as a
     // denial.
-    assert_eq!(row.shared_with, Reading::Data(Vec::new()));
-    assert!(!row.shared_with.denied());
-    assert!(row.shared_from.is_none(), "this one was not delivered here");
     // A `data:` URI passes through; there is no derivative to poster.
     assert!(
         row.content_uri
@@ -306,7 +296,7 @@ fn the_four_queries_answer_over_rows_the_commands_wrote() {
         .expect("the hit rows read")
         .rows
     });
-    let (found, denial) = drive.read(|door| load_search(door, &hits, EPOCH).expect("it reads"));
+    let (found, denial) = drive.read(|door| load_search(door, &hits).expect("it reads"));
     assert!(denial.is_none());
     assert_eq!(
         found.documents.len(),
@@ -327,267 +317,10 @@ fn the_four_queries_answer_over_rows_the_commands_wrote() {
         "current_content_id".to_owned(),
         Cell::Text("c-stray".to_owned()),
     );
-    let (none, _) = drive.read(|door| load_search(door, &[stray], EPOCH).expect("it reads"));
+    let (none, _) = drive.read(|door| load_search(door, &[stray]).expect("it reads"));
     assert!(none.documents.is_empty());
-    let (none, _) = drive.read(|door| load_search(door, &[], EPOCH).expect("it reads"));
+    let (none, _) = drive.read(|door| load_search(door, &[]).expect("it reads"));
     assert!(none.documents.is_empty());
-}
-
-/// THE SHARE FOLD, over real `share_*` rows, both ways in.
-#[test]
-fn a_share_over_a_folder_above_a_document_reaches_it() {
-    let drive = Drive::founded("docs-shares");
-    let leases = drive.run("core.create_folder", json!({ "name": "Leases" }))["folder_id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
-    let nested = drive.run(
-        "core.create_folder",
-        json!({ "name": "2024", "parent_folder_id": leases }),
-    )["folder_id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
-    let document_id = drive.run(
-        "core.add_document",
-        json!({ "title": "Lease", "data_uri": text_uri("rent"), "folder_id": nested }),
-    )["document_id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
-    let ana = drive.run("core.add_party", json!({ "display_name": "Ana" }))["party_id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
-
-    // A STANDING ANSWER over the GRANDPARENT folder, plus a live binding and a
-    // delivered pass. The statements are the KIT's, because an app crate holds
-    // no SQL and the share plane has no command surface in this build.
-    let grandparent = leases.clone();
-    let party = ana.clone();
-    drive.seed(move |connection| {
-        let owner = fixtures::owner_party_id(connection)?.expect("a founded vault has an owner");
-        fixtures::seed_share_authority(
-            connection,
-            &fixtures::ShareSeed {
-                authority_id: "g1",
-                principal_kind: "person",
-                principal_id: &party,
-                subject_type: "docs.folder",
-                subject_id: &grandparent,
-                verb: "edit",
-                expires_at: None,
-                granted_by: &owner,
-                at: EPOCH,
-            },
-        )?;
-        fixtures::seed_party_vault_binding(connection, "b1", &party, "vault-ana", EPOCH)?;
-        fixtures::seed_share_fulfillment(
-            connection,
-            "g1",
-            "vault-ana",
-            "delivered",
-            Some(EPOCH),
-            EPOCH,
-        )
-    });
-
-    let (data, denial) =
-        drive.read(|door| load_drive(door, DriveInput::default(), EPOCH).expect("the drive reads"));
-    assert!(denial.is_none());
-    let row = data
-        .documents
-        .iter()
-        .find(|row| row.document_id == document_id)
-        .expect("the document");
-    let entries = row
-        .shared_with
-        .data()
-        .expect("the share plane was readable");
-    assert_eq!(entries.len(), 1, "the grandparent's answer reaches it");
-    let entry = &entries[0];
-    assert_eq!(
-        entry.via,
-        Via::Folder,
-        "never `document` for a folder share"
-    );
-    assert_eq!(entry.container_id, leases);
-    assert_eq!(entry.audience, Audience::Person);
-    assert_eq!(entry.label, "Ana");
-    assert_eq!(entry.member_count, 1);
-    assert_eq!(
-        entry.pending_count, 0,
-        "a delivered pass makes the member current"
-    );
-    assert_eq!(entry.members[0].capability.as_str(), "read+write");
-
-    // AN EXPIRED ANSWER IS NOT A LIVE ONE, even though the read returned it.
-    drive.seed(|connection| {
-        fixtures::amend_share_authority(connection, "g1", Some("2099-05-01T00:00:00.000Z"), None)
-    });
-    let (data, _) =
-        drive.read(|door| load_drive(door, DriveInput::default(), EPOCH).expect("the drive reads"));
-    let row = data
-        .documents
-        .iter()
-        .find(|row| row.document_id == document_id)
-        .expect("the document");
-    assert_eq!(
-        row.shared_with,
-        Reading::Data(Vec::new()),
-        "an answer that ran out is not an audience"
-    );
-
-    // A REVOKED ANSWER NEVER REACHES THE FOLD AT ALL — the read filters it.
-    drive.seed(|connection| fixtures::amend_share_authority(connection, "g1", None, Some(EPOCH)));
-    let (data, _) =
-        drive.read(|door| load_drive(door, DriveInput::default(), EPOCH).expect("the drive reads"));
-    assert_eq!(
-        data.documents
-            .iter()
-            .find(|row| row.document_id == document_id)
-            .expect("the document")
-            .shared_with,
-        Reading::Data(Vec::new())
-    );
-}
-
-/// D-1020-D3-12: THE BOUND REACHES THE SIZE IT NAMES, AND ERRORS THERE.
-///
-/// 4,000 standing answers walk; the 4,001st makes the walk error with the cap
-/// it named. Not a short answer — a document quietly losing an audience is the
-/// defect `SHARE_FAN_OUT` replaced.
-#[test]
-fn the_share_fan_out_reaches_four_thousand_and_errors_at_the_next_row() {
-    let drive = Drive::founded("docs-fanout");
-    let document_id = drive.run(
-        "core.add_document",
-        json!({ "title": "Popular", "data_uri": text_uri("many") }),
-    )["document_id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
-
-    let seed = |drive: &Drive, range: std::ops::Range<usize>, document_id: &str| {
-        let document_id = document_id.to_owned();
-        drive.seed(move |connection| {
-            let owner = fixtures::owner_party_id(connection)?.expect("an owner");
-            fixtures::seed_standing_answers(
-                connection,
-                "core.document",
-                &document_id,
-                range,
-                &owner,
-                EPOCH,
-            )
-            .map(|_| ())
-        });
-    };
-
-    let statement = centraid_apps_docs::shares::answers_statement(
-        "core.document",
-        std::slice::from_ref(&document_id),
-    )
-    .expect("a bounded statement");
-
-    // Exactly the cap: it walks.
-    seed(&drive, 0..SHARE_FAN_OUT.cap(), &document_id);
-    let rows =
-        drive.read(|door| centraid_apps_kit::reads::read_pages(door, &statement, SHARE_FAN_OUT));
-    assert_eq!(
-        rows.expect("the cap walks").len(),
-        SHARE_FAN_OUT.cap(),
-        "4,000 rows is the bound's own number and it reaches it"
-    );
-
-    // One more: it errors, and the error names the reachable cap.
-    seed(
-        &drive,
-        SHARE_FAN_OUT.cap()..SHARE_FAN_OUT.cap() + 1,
-        &document_id,
-    );
-    let refused =
-        drive.read(|door| centraid_apps_kit::reads::read_pages(door, &statement, SHARE_FAN_OUT));
-    match refused {
-        Err(KitError::FanOutExceeded { query, cap }) => {
-            assert_eq!(query, "docs.shares.answers.core.document");
-            assert_eq!(cap, 4_000, "the cap it names is the cap it reached");
-        }
-        other => panic!("the bound must error at its own size, not answer short: {other:?}"),
-    }
-
-    // AND THE WHOLE QUERY SURFACES IT rather than drawing a document with
-    // fewer audiences than it has: `load_drive` answers `Err`, which the
-    // surface renders as a failure, never as an empty share list.
-    let surfaced = drive.read(|door| load_drive(door, DriveInput::default(), EPOCH));
-    assert!(
-        matches!(surfaced, Err(KitError::FanOutExceeded { .. })),
-        "a reached ceiling is not a denial and not a short answer"
-    );
-}
-
-/// A DENIED READ IS A VALUE. The drive still draws; `shared_with` says it
-/// cannot be seen.
-#[test]
-fn a_refused_share_plane_leaves_the_drive_drawable() {
-    /// A door that answers every share statement with a refusal and passes
-    /// everything else through — the shape of a newly declared scope parked for
-    /// the owner to approve (#821).
-    struct Parked<'a> {
-        inner: TestDoor<'a>,
-    }
-    impl PageDoor for Parked<'_> {
-        fn page(
-            &self,
-            query: &PageQuery,
-            request: &PageRequest,
-        ) -> centraid_apps_kit::error::KitResult<centraid_apps_kit::page::Page<Row>> {
-            if query.name.starts_with("docs.shares.") {
-                return Err(KitError::Door(
-                    "ask the owner to approve sharing".to_owned(),
-                ));
-            }
-            self.inner.page(query, request)
-        }
-    }
-
-    let drive = Drive::founded("docs-parked");
-    let document_id = drive.run(
-        "core.add_document",
-        json!({ "title": "Lease", "data_uri": text_uri("rent") }),
-    )["document_id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
-
-    let (data, denial) = drive
-        .vault
-        .read(|connection| {
-            let door = Parked {
-                inner: TestDoor::new(connection),
-            };
-            Ok(load_drive(&door, DriveInput::default(), EPOCH).expect("the drive still reads"))
-        })
-        .expect("the read runs");
-    assert!(
-        denial.is_none(),
-        "the DRIVE was not denied, the shares were"
-    );
-    let row = data
-        .documents
-        .iter()
-        .find(|row| row.document_id == document_id)
-        .expect("the document is still drawn");
-    assert!(row.shared_with.denied(), "we cannot see");
-    assert!(
-        row.shared_with.data().is_none(),
-        "and `data()` is not a default: a caller must decide what unknown prints as"
-    );
-    assert_eq!(
-        row.title.as_deref(),
-        Some("Lease"),
-        "the row is otherwise whole"
-    );
 }
 
 /// D-1020-DC4: THE STAGED-PDF ROUND TRIP, through the byte door.
@@ -687,7 +420,7 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
 
     // OUT: `blobUrl`, with the document's own reading of the bytes.
     let (data, _) = drive.read(|read_door| {
-        load_drive(read_door, DriveInput::default(), EPOCH).expect("the drive reads")
+        load_drive(read_door, DriveInput::default()).expect("the drive reads")
     });
     let row = &data.documents[0];
     assert_eq!(row.media_type.as_deref(), Some("application/pdf"));
@@ -795,7 +528,7 @@ mod wrapper_identity {
             prop_assert_eq!(content_ids.len(), 1, "one sha is one content item");
 
             let (data, denial) = drive.read(|door| {
-                load_drive(door, DriveInput::default(), EPOCH).expect("the drive reads")
+                load_drive(door, DriveInput::default()).expect("the drive reads")
             });
             prop_assert!(denial.is_none());
             prop_assert_eq!(data.documents.len(), count, "n wrappers are n rows");

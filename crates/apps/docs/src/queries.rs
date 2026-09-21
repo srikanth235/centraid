@@ -11,7 +11,6 @@
 //! | Read | What it is |
 //! |---|---|
 //! | `docs.drive.filed` | **the drive's window is a PAGE.** One page of `core_tag`, newest `tagged_at` first, sized by the caller. Everything below joins over what it returned |
-//! | `docs.origins.subscriptions` | the SECOND door in ([`crate::origins`]): a delivered copy carries no folders-scheme tag, so the tag window cannot see it |
 //! | `ctx.vault.search` | `search`'s own FTS read, which is `crates/search`'s and not a [`PageQuery`] — the hits arrive here in RANK ORDER and the fold keeps that order |
 //!
 //! Everything else — the documents themselves, the stars, the labels, the
@@ -45,9 +44,7 @@ use centraid_apps_kit::representations::{RepresentationIndex, read_representatio
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
-use crate::origins::{SharedFromEntry, read_origins_by_document};
-use crate::shares::{DOCUMENT_TARGET_TYPE, ShareWindow, SharedWithEntry, read_shares_by_document};
-use crate::{Denial, Reading};
+use crate::Denial;
 
 /// The folders scheme. **An `https` URI, not a `urn:`, and that is not drift**:
 /// the literal is interpolated into condition SQL on the command side, where
@@ -302,13 +299,16 @@ pub struct DocumentRow {
     pub purge_at: Option<String>,
     pub tags: Vec<LabelEntry>,
     pub custody_state: Option<String>,
-    /// **`Denied` is "we cannot see"; `Data(vec![])` is "shared with nobody".**
-    pub shared_with: Reading<Vec<SharedWithEntry>>,
-    /// The placement that brought it here, where it arrived from elsewhere.
-    pub shared_from: Option<SharedFromEntry>,
     /// The hit snippet, on a `search` row only.
     pub snippet: Option<String>,
 }
+
+/// Tags and provenance name a document by this type.
+///
+/// It lived in `shares.rs`, which leaves with the sharing plane (#1029, rung
+/// five); it was never about sharing — it is the `target_type` every
+/// document-scoped row in this vault carries.
+pub const DOCUMENT_TARGET_TYPE: &str = "core.document";
 
 /// What `drive` answers.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -320,8 +320,6 @@ pub struct DriveData {
     /// a row count.
     pub truncated: bool,
     pub window: usize,
-    /// ABSENT IS NOT EMPTY: whether the origin plane could be read at all.
-    pub shared_from_known: bool,
 }
 
 /// What `search` answers: the same rows, in **vault rank order**.
@@ -585,8 +583,6 @@ struct Decorations {
     custody: BTreeMap<String, String>,
     representations: RepresentationIndex,
     contents: BTreeMap<String, ContentRow>,
-    shares: Reading<BTreeMap<String, Vec<SharedWithEntry>>>,
-    origins: BTreeMap<String, SharedFromEntry>,
     snippets: BTreeMap<String, String>,
 }
 
@@ -622,15 +618,6 @@ fn fold_row(wrapper: &Row, decorations: &Decorations) -> Option<DocumentRow> {
             .cloned()
             .unwrap_or_default(),
         custody_state: decorations.custody.get(&content_id).cloned(),
-        // `Denied` is "reads denied"; `Data(vec![])` is "shared with nobody".
-        shared_with: match &decorations.shares {
-            Reading::Denied(denial) => Reading::Denied(denial.clone()),
-            Reading::Loading => Reading::Loading,
-            Reading::Data(by_document) => {
-                Reading::Data(by_document.get(&document_id).cloned().unwrap_or_default())
-            }
-        },
-        shared_from: decorations.origins.get(&document_id).cloned(),
         snippet: decorations.snippets.get(&document_id).cloned(),
         document_id,
         content_id,
@@ -662,7 +649,6 @@ fn read_decorations(
     wrappers: &[Row],
     folder_by_document: BTreeMap<String, String>,
     root_folder_id: Option<String>,
-    now: &str,
 ) -> KitResult<Result<Decorations, Denial>> {
     let document_ids: Vec<String> = wrappers
         .iter()
@@ -744,16 +730,6 @@ fn read_decorations(
     let representations =
         read_representations(door, &content_ids, DOC_JOIN_BOUND).unwrap_or_default();
 
-    let shares = read_shares_by_document(
-        door,
-        &ShareWindow {
-            document_ids: &document_ids,
-            folder_by_document: &folder_by_document,
-            parent_of: &taxonomy.folder_parents(),
-            now,
-        },
-    )?;
-
     Ok(Ok(Decorations {
         folder_by_document,
         root_folder_id,
@@ -762,8 +738,6 @@ fn read_decorations(
         custody,
         representations,
         contents,
-        shares,
-        origins: BTreeMap::new(),
         snippets: BTreeMap::new(),
     }))
 }
@@ -786,7 +760,6 @@ fn denied_drive(denial: Denial, window: usize) -> (DriveData, Option<Denial>) {
 pub fn load_drive(
     door: &dyn PageDoor,
     input: DriveInput,
-    now: &str,
 ) -> KitResult<(DriveData, Option<Denial>)> {
     let window = input.window();
     let taxonomy = match read_taxonomy(door) {
@@ -804,13 +777,6 @@ pub fn load_drive(
         Err(other) => return Err(other),
     };
     let (folders, root_folder_id) = fold_folders(&taxonomy);
-
-    // READ BEFORE THE FOLDERS-SCHEME GATE (`drive.ts:76`-`:80`). The scheme is
-    // created on first use, so a member who has never filed a document of their
-    // own has none — and returning early there told someone who HAD received one
-    // that nothing arrived, which is the exact claim this door exists to
-    // prevent.
-    let origins = read_origins_by_document(door, window)?;
 
     let folder_concept_ids: Vec<String> = taxonomy
         .concepts_in(FOLDER_SCHEME_URI)
@@ -864,10 +830,11 @@ pub fn load_drive(
         }
     }
 
-    let origin_map = origins.data().cloned().unwrap_or_default();
+    // THE FILED WINDOW IS THE WHOLE WINDOW. It used to be unioned with the
+    // documents a share placed here, which is the plane rung five drops
+    // (#1029): nothing delivers a copy into this vault any more.
     let windowed: Vec<String> = folder_by_document
         .keys()
-        .chain(origin_map.keys())
         .cloned()
         .collect::<BTreeSet<String>>()
         .into_iter()
@@ -880,7 +847,6 @@ pub fn load_drive(
                 root_folder_id,
                 truncated: false,
                 window,
-                shared_from_known: origins.known(),
             },
             None,
         ));
@@ -890,18 +856,16 @@ pub fn load_drive(
         Walked::Denied(denial) => return Ok(denied_drive(denial, window)),
         Walked::Rows(rows) => rows,
     };
-    let mut decorations = match read_decorations(
+    let decorations = match read_decorations(
         door,
         &taxonomy,
         &wrappers,
         folder_by_document,
         root_folder_id.clone(),
-        now,
     )? {
         Err(denial) => return Ok(denied_drive(denial, window)),
         Ok(decorations) => decorations,
     };
-    decorations.origins = origin_map;
 
     let mut documents: Vec<DocumentRow> = wrappers
         .iter()
@@ -926,7 +890,6 @@ pub fn load_drive(
             root_folder_id,
             truncated,
             window,
-            shared_from_known: origins.known(),
         },
         None,
     ))
@@ -946,7 +909,6 @@ pub fn load_drive(
 pub fn load_search(
     door: &dyn PageDoor,
     hits: &[Row],
-    now: &str,
 ) -> KitResult<(SearchData, Option<Denial>)> {
     if hits.is_empty() {
         return Ok((SearchData::default(), None));
@@ -1010,7 +972,6 @@ pub fn load_search(
         &wrappers,
         folder_by_document,
         root_folder_id,
-        now,
     )? {
         Err(denial) => return Ok((SearchData::default(), Some(denial))),
         Ok(decorations) => decorations,
@@ -1249,10 +1210,7 @@ pub fn statement_names() -> Vec<&'static str> {
         "docs.history.revisions",
         "docs.history.contents",
         "docs.activity.provenance",
-        "docs.origins.subscriptions",
-        "docs.origins.lineage",
     ];
-    names.extend(crate::shares::SHARE_WINDOWS);
     names.sort_unstable();
     names.dedup();
     names
@@ -1282,88 +1240,6 @@ mod tests {
         assert_eq!(DriveInput { limit: Some(9_000) }.window(), DRIVE_MAX);
     }
 
-    /// THE ROOT IS THE DRIVE, NOT A FOLDER. It is out of the rail, and a folder
-    /// filed under it is top-level.
-    #[test]
-    fn the_root_concept_is_not_a_folder_and_its_children_are_top_level() {
-        let taxonomy = Taxonomy {
-            schemes: vec![row(&[("scheme_id", "s1"), ("uri", FOLDER_SCHEME_URI)])],
-            concepts: vec![
-                row(&[
-                    ("concept_id", "root-1"),
-                    ("scheme_id", "s1"),
-                    ("notation", ROOT_FOLDER_NOTATION),
-                    ("pref_label", "Documents"),
-                ]),
-                row(&[
-                    ("concept_id", "leases"),
-                    ("scheme_id", "s1"),
-                    ("notation", "leases"),
-                    ("pref_label", "Leases"),
-                    ("broader_concept_id", "root-1"),
-                ]),
-                row(&[
-                    ("concept_id", "2024"),
-                    ("scheme_id", "s1"),
-                    ("notation", "2024"),
-                    ("pref_label", "2024"),
-                    ("broader_concept_id", "leases"),
-                ]),
-            ],
-        };
-        let (folders, root) = fold_folders(&taxonomy);
-        assert_eq!(root.as_deref(), Some("root-1"));
-        assert_eq!(folders.len(), 2, "the root is not in the rail");
-        // Sorted by name: "2024" before "Leases".
-        assert_eq!(folders[0].folder_id, "2024");
-        assert_eq!(folders[0].parent_id.as_deref(), Some("leases"));
-        assert_eq!(folders[1].folder_id, "leases");
-        assert_eq!(
-            folders[1].parent_id, None,
-            "a folder under the root is top-level"
-        );
-    }
-
-    /// THE COLUMN v0 DOES NOT SELECT. Without `broader_concept_id` in the
-    /// projection every folder reads as top-level AND the folder chain a share
-    /// walks up is one step long — so a share on a grandparent never reaches
-    /// the document. This is the red for R-1020-35 finding 1.
-    #[test]
-    fn the_taxonomy_read_selects_the_column_the_folder_chain_needs() {
-        let select = taxonomy_concepts_statement().select;
-        assert!(
-            select.contains("broader_concept_id"),
-            "v0's projection is `concept_id, scheme_id, pref_label, notation` and the two \
-             readers of `broader_concept_id` then see undefined: {select}"
-        );
-        // And the chain is what would be one step long without it.
-        let taxonomy = Taxonomy {
-            schemes: vec![row(&[("scheme_id", "s1"), ("uri", FOLDER_SCHEME_URI)])],
-            concepts: vec![
-                row(&[
-                    ("concept_id", "root-1"),
-                    ("scheme_id", "s1"),
-                    ("notation", "root"),
-                ]),
-                row(&[
-                    ("concept_id", "leases"),
-                    ("scheme_id", "s1"),
-                    ("broader_concept_id", "root-1"),
-                ]),
-                row(&[
-                    ("concept_id", "2024"),
-                    ("scheme_id", "s1"),
-                    ("broader_concept_id", "leases"),
-                ]),
-            ],
-        };
-        let chain = crate::shares::folder_chain(Some("2024"), &taxonomy.folder_parents());
-        assert_eq!(
-            chain,
-            ["2024", "leases", "root-1"],
-            "a share on `root-1` has to reach a document filed in `2024`"
-        );
-    }
 
     /// A tag from another scheme is not a label. Printing one would put
     /// "Leases" and "Starred" in the chip rail.
@@ -1569,15 +1445,12 @@ mod tests {
         assert_eq!(chain, ["c1"]);
     }
 
-    /// Every statement this app runs is named once, and the nine share windows
-    /// are among them.
+    /// Every statement this app runs is named once. The nine share windows
+    /// used to be among them; rung five drops the tables they read (#1029).
     #[test]
-    fn every_statement_is_named_and_the_share_windows_are_included() {
+    fn every_statement_is_named_once() {
         let names = statement_names();
-        assert_eq!(names.len(), 14 + crate::shares::SHARE_WINDOWS.len());
-        for window in crate::shares::SHARE_WINDOWS {
-            assert!(names.contains(&window), "{window}");
-        }
+        assert_eq!(names.len(), 12);
         for name in &names {
             assert!(
                 name.starts_with("docs.") || name.starts_with("_shared/"),

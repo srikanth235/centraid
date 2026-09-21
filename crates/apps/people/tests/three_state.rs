@@ -24,21 +24,17 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use centraid_apps_kit::contract_vault::open_contract_vault;
+use centraid_apps_kit::contract_vault::{FrozenRowMapping, open_contract_vault_without};
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::{Page, PageRequest};
 use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::PageQuery;
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_people::dashboard::load_dashboard;
-use centraid_apps_people::dates::{CivilDate, parse_instant};
 use centraid_apps_people::person::load_person;
 use centraid_apps_people::roster::{PeopleInput, load_people};
 use centraid_apps_people::{Denial, ReadState};
 
-const PARITY_EPOCH: &str = "2099-06-01T09:00:00.000Z";
-const PARITY_TODAY: CivilDate = CivilDate::new(2099, 6, 1);
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -53,7 +49,17 @@ fn fixture_vault() -> rusqlite::Connection {
         .expect("the committed DDL is readable");
     let rows = fs::read_to_string(root().join("contracts/apps/people/rows.json"))
         .expect("the committed rows are readable");
-    open_contract_vault(&ddl, &rows).expect("the fixture vault is built")
+    open_contract_vault_without(
+        &ddl,
+        &rows,
+        // THE MAPPING, stated: the frozen bundle still carries v0's
+        // `share_party_vault_binding` rows, which rung five drops (#1029).
+        &FrozenRowMapping {
+            tables_gone: &["share_party_vault_binding"],
+            columns_gone: &[],
+        },
+    )
+    .expect("the fixture vault is built")
 }
 
 /// A door that refuses every statement reading a named table, the way a revoked
@@ -106,56 +112,6 @@ fn a_person_with_everything(connection: &rusqlite::Connection) -> String {
         .expect("the corpus carries Maya Alvarez")
 }
 
-/// THE HEADLINE: a denied share plane leaves the profile standing, and `linked`
-/// is unrepresentable.
-#[test]
-fn a_denied_sharing_read_leaves_the_profile_intact_and_linked_unrepresentable() {
-    let connection = fixture_vault();
-    let party_id = a_person_with_everything(&connection);
-    let door = door(&connection, &["share_party_vault_binding"]);
-
-    let (data, denial) = load_person(&door, &party_id).expect("the sheet reads");
-    assert!(denial.is_none(), "the sheet itself must not be denied");
-    let person = data.person.expect("the person is still there");
-
-    // 1. THE PROFILE STANDS.
-    assert_eq!(person.profile.name, "Maya Alvarez");
-    assert_eq!(person.profile.cadence_days, 30);
-    assert!(
-        !person.profile.dates.is_empty(),
-        "their important dates are still on the screen"
-    );
-    assert!(!person.profile.contact.is_empty());
-
-    // 2. THE REFUSED READING SAYS SO, in the door's own words.
-    assert!(person.sharing.denied());
-    assert!(
-        person
-            .sharing
-            .denial()
-            .and_then(|denial| denial.message.as_deref())
-            .is_some_and(|message| message.contains("share_party_vault_binding")),
-        "the denial has to name what was refused: {:?}",
-        person.sharing.denial()
-    );
-
-    // 3. `linked` IS UNREPRESENTABLE. There is no `vaults: []` to mistake for
-    // "linked to nothing" — the list lives inside `Ready` and this is `Denied`.
-    assert!(person.sharing.ready().is_none());
-
-    // AND THE OTHER TWO READINGS ANSWERED, which is the whole claim: three
-    // planes, three states, one denial.
-    assert!(person.links.known());
-    assert!(person.obligations.known());
-    assert!(
-        person
-            .links
-            .ready()
-            .is_some_and(|links| !links.interactions.is_empty()),
-        "the interaction rail still has rows"
-    );
-}
-
 /// TALLY'S TABLE IS ANOTHER APP'S, and revoking it must not blank the person.
 /// v0 answers `{person: null, vaultDenied}` here.
 #[test]
@@ -170,8 +126,7 @@ fn a_denied_obligations_read_costs_the_debts_rail_and_nothing_else() {
     assert_eq!(person.profile.name, "Maya Alvarez");
     assert!(person.obligations.denied());
     assert!(person.obligations.ready().is_none());
-    // The share plane and the linked plane are untouched.
-    assert!(person.sharing.known());
+    // The linked plane is untouched.
     assert!(person.links.known());
 }
 
@@ -189,7 +144,6 @@ fn a_denied_linked_plane_costs_the_relationship_rail_and_nothing_else() {
     assert_eq!(person.profile.name, "Maya Alvarez");
     assert!(person.links.denied());
     assert!(person.links.ready().is_none());
-    assert!(person.sharing.known());
     assert!(person.obligations.known());
 }
 
@@ -214,46 +168,6 @@ fn a_denied_contact_plane_is_a_denied_sheet() {
     );
     // AND IT IS A DENIAL, NOT AN ERROR. A surface renders the ask.
     assert!(denial.is_some());
-}
-
-/// THE ROSTER'S OWN THREE STATES: `links_available` false, every row still
-/// drawn, and no `vault_count` to read.
-#[test]
-fn a_denied_roster_share_plane_keeps_every_row_and_drops_no_chip_on_a_null() {
-    let connection = fixture_vault();
-    let door = door(&connection, &["share_party_vault_binding"]);
-    let (data, denial) =
-        load_people(&door, PeopleInput { limit: Some(100) }).expect("the roster reads");
-    assert!(denial.is_none(), "the roster itself must not darken");
-    assert!(
-        data.people.len() >= 3,
-        "every person is still on the screen"
-    );
-    assert!(!data.links.known(), "`links_available` is false");
-    assert!(data.links.denied());
-    // v0 ships `linked: null` AND `vault_count: 0` on the same row
-    // (`people.ts:212`-`:213`). Here there is no count at all.
-    assert!(data.links.ready().is_none());
-    // The lists and the reminders are untouched: the denial is one read's.
-    assert!(!data.lists.is_empty());
-    assert!(data.people.iter().any(|row| !row.reminders.is_empty()));
-}
-
-/// AND THE DASHBOARD'S PAIR STAYS NULL TOGETHER while the four counts stand.
-#[test]
-fn a_denied_dashboard_share_plane_leaves_the_four_counts_and_drops_the_pair() {
-    let connection = fixture_vault();
-    let door = door(&connection, &["share_party_vault_binding"]);
-    let now_ms = parse_instant(PARITY_EPOCH).expect("an instant");
-    let (data, denial) = load_dashboard(&door, PARITY_TODAY, now_ms).expect("the summary reads");
-    assert!(denial.is_none());
-    assert!(data.counts.all >= 3, "the headline count still stands");
-    assert!(data.counts.upcoming >= 1);
-    assert!(data.links.denied());
-    assert!(
-        data.links.ready().is_none(),
-        "`linked` and `to_link` are absent together, never zero"
-    );
 }
 
 /// A DENIAL IS NEVER AN EMPTY ANSWER. The type makes the two different values,

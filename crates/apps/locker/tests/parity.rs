@@ -68,7 +68,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use centraid_apps_kit::contract_vault::open_contract_vault;
+use centraid_apps_kit::contract_vault::{FrozenRowMapping, open_contract_vault_without};
 use centraid_apps_kit::reads::read_window;
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_locker::queries::{self, Decorated, Decorations, Severity, Shelf, Vocabulary};
@@ -96,7 +96,19 @@ fn v0_vault() -> Connection {
         .expect("the committed DDL is readable");
     let rows = fs::read_to_string(root().join("contracts/apps/locker/rows.json"))
         .expect("the fixture rows are readable");
-    open_contract_vault(&ddl, &rows).expect("the fixture vault is built")
+    open_contract_vault_without(
+        &ddl,
+        &rows,
+        // THE MAPPING, stated: `contracts/apps/locker/rows.json` is frozen and
+        // still carries `locker_item.connection_id`, the foreign key into
+        // `sync_connection` that rung five drops with the connector plane
+        // (#1029). Every one of its cells is NULL in the bundle.
+        &FrozenRowMapping {
+            tables_gone: &[],
+            columns_gone: &[("locker_item", "connection_id")],
+        },
+    )
+    .expect("the fixture vault is built")
 }
 
 /// Every query case in the bundle, in the order the generator wrote them.

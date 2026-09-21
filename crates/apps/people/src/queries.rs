@@ -351,40 +351,6 @@ pub fn important_dates_statement(name: &str, party_ids: &[String]) -> KitResult<
     ))
 }
 
-/// `people.shared.liveBindings` — THE SHARE PLANE, for a whole roster.
-///
-/// `revoked_at IS NULL` is the live half: a revoked binding is history, and a
-/// person whose only binding was revoked is **not** linked. The read denies
-/// independently of everything above it (see [`crate::ReadState`]).
-pub fn live_bindings_statement(party_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("party_id", party_ids)?;
-    Ok(PageQuery::new(
-        "people.shared.liveBindings",
-        "binding_id, party_id, vault_id, linked_at",
-        "share_party_vault_binding",
-        PageOrder::asc("binding_id", "binding_id"),
-    )
-    .filter(
-        &format!("{} AND revoked_at IS NULL", fragment.sql),
-        fragment.bind,
-    ))
-}
-
-/// `people.shared.personLinks` — the same plane for one person.
-#[must_use]
-pub fn person_links_statement(party_id: &str) -> PageQuery {
-    PageQuery::new(
-        "people.shared.personLinks",
-        "binding_id, party_id, vault_id, linked_at",
-        "share_party_vault_binding",
-        PageOrder::asc("binding_id", "binding_id"),
-    )
-    .filter(
-        "party_id = ? AND revoked_at IS NULL",
-        vec![PageBindValue::Text(party_id.to_owned())],
-    )
-}
-
 // ---------------------------------------------------------------------------
 // The trash shelf.
 // ---------------------------------------------------------------------------
@@ -1079,7 +1045,6 @@ mod tests {
             journal_tags_statement("c1"),
             journal_concepts_all_statement(),
             history_statement("p1"),
-            person_links_statement("p1"),
             trash_profiles_statement(),
         ];
         // The DDL's nullable columns among these sort keys, by name.

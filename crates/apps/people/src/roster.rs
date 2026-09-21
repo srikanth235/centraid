@@ -36,10 +36,10 @@ use centraid_apps_kit::row::{Cell, Row, text_of};
 use crate::queries::{
     PARTY_PAIR_BOUND, ROSTER_FAN_OUT, ROSTER_MAX, ROSTER_MIN, Reminder, TRASH_ROWS, Taxonomy,
     UNKNOWN_NAME, Walked, fold_party_tags, fold_reminders, important_dates_statement,
-    live_bindings_statement, names_by_party, parties_statement, party_tags_statement,
+    names_by_party, parties_statement, party_tags_statement,
     read_taxonomy, roster_profiles_statement, trash_profiles_statement, walk, walked,
 };
-use crate::{Denial, ReadState};
+use crate::Denial;
 
 /// What the roster was asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -66,48 +66,6 @@ impl PeopleInput {
     }
 }
 
-/// The share plane's answer for a whole roster: live bindings by party.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct VaultLinks {
-    counts: BTreeMap<String, usize>,
-}
-
-impl VaultLinks {
-    /// Count the live bindings a `people.shared.liveBindings` walk returned.
-    #[must_use]
-    pub fn of_bindings(rows: &[Row]) -> Self {
-        let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-        for row in rows {
-            if let Some(party_id) = text_of(row, "party_id") {
-                *counts.entry(party_id).or_insert(0) += 1;
-            }
-        }
-        Self { counts }
-    }
-
-    /// Whether this person has a vault of their own.
-    #[must_use]
-    pub fn linked(&self, party_id: &str) -> bool {
-        self.counts.contains_key(party_id)
-    }
-
-    /// How many vaults they are bound to. Only reachable through a `Ready`
-    /// reading, which is what stops a denial being drawn as a zero.
-    #[must_use]
-    pub fn vault_count(&self, party_id: &str) -> usize {
-        self.counts.get(party_id).copied().unwrap_or(0)
-    }
-
-    /// How many of a window's parties are linked. The dashboard's `linked`
-    /// count, which is a `Set` size in v0 and a key count here.
-    #[must_use]
-    pub fn linked_in(&self, party_ids: &[String]) -> usize {
-        party_ids
-            .iter()
-            .filter(|party_id| self.counts.contains_key(party_id.as_str()))
-            .count()
-    }
-}
 
 /// One roster row.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,9 +98,6 @@ pub struct PeopleData {
     /// row count and not one page's cursor.
     pub truncated: bool,
     pub window: usize,
-    /// **Denied is "we cannot see"; `Ready` with no entry for a party is
-    /// "linked to no vault".** `links_available` on the wire.
-    pub links: ReadState<VaultLinks>,
 }
 
 /// What `search` answers: the same rows, in **vault rank order**.
@@ -234,7 +189,6 @@ pub fn load_people(
     let window = input.window();
     let empty = PeopleData {
         window,
-        links: ReadState::Denied(Denial::default()),
         ..PeopleData::default()
     };
 
@@ -288,7 +242,6 @@ pub fn load_people(
                 lists,
                 truncated: false,
                 window,
-                links: ReadState::Ready(VaultLinks::default()),
             },
             None,
         ));
@@ -297,7 +250,6 @@ pub fn load_people(
     let empty = PeopleData {
         lists: lists.clone(),
         window,
-        links: ReadState::Denied(Denial::default()),
         ..PeopleData::default()
     };
     let parties = walked!(
@@ -318,12 +270,6 @@ pub fn load_people(
         ROSTER_FAN_OUT,
         empty.clone()
     );
-    // THE ONE READ THAT DENIES ALONE.
-    let links = match walk(door, &live_bindings_statement(&party_ids)?, ROSTER_FAN_OUT)? {
-        Walked::Rows(rows) => ReadState::Ready(VaultLinks::of_bindings(&rows)),
-        Walked::Denied(denial) => ReadState::Denied(denial),
-    };
-
     let names = names_by_party(&parties);
     let (list_by_party, starred) = fold_party_tags(&tags, &taxonomy);
     let reminders = fold_reminders(&dates);
@@ -360,7 +306,6 @@ pub fn load_people(
             lists,
             truncated: walked_window.filled,
             window,
-            links,
         },
         None,
     ))
@@ -564,45 +509,6 @@ mod tests {
             ROSTER_MAX
         );
         assert_ne!(ROSTER_MAX, V0_ROSTER_MAX);
-    }
-
-    #[test]
-    fn a_denied_share_plane_has_no_count_to_draw_a_chip_on() {
-        let denied: ReadState<VaultLinks> = ReadState::Denied(Denial::default());
-        assert!(denied.ready().is_none());
-        // There is no `linked` and no `vault_count` reachable here at all: the
-        // fields live inside the reading, which is the whole point.
-        let ready = ReadState::Ready(VaultLinks::of_bindings(&[]));
-        assert!(ready.known());
-        assert_eq!(
-            ready.ready().map(|links| links.vault_count("p1")),
-            Some(0),
-            "a KNOWN zero is a different claim from a denied read"
-        );
-    }
-
-    #[test]
-    fn live_bindings_count_per_party_and_a_party_with_none_is_unlinked() {
-        let binding = |id: &str, party: &str| {
-            let mut row = Row::new();
-            row.insert("binding_id".to_owned(), Cell::Text(id.to_owned()));
-            row.insert("party_id".to_owned(), Cell::Text(party.to_owned()));
-            row
-        };
-        let links = VaultLinks::of_bindings(&[
-            binding("b1", "p1"),
-            binding("b2", "p1"),
-            binding("b3", "p2"),
-        ]);
-        assert!(links.linked("p1"));
-        assert_eq!(links.vault_count("p1"), 2);
-        assert!(!links.linked("p3"));
-        assert_eq!(links.vault_count("p3"), 0);
-        // The dashboard's `linked` count is DISTINCT parties, not bindings.
-        assert_eq!(
-            links.linked_in(&["p1".to_owned(), "p2".to_owned(), "p3".to_owned()]),
-            2
-        );
     }
 
     #[test]

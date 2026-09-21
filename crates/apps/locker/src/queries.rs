@@ -54,7 +54,7 @@ use crate::watchtower::WatchEntry;
 /// A statement names its columns, and **no sealed cell is on this list**.
 pub const ITEM_COLUMNS: &str = "item_id, type, title, username, url, url_match_policy, notes, \
      cardholder, expiry, brand, fullname, email, phone, address, network, \
-     connection_id, compromised, password_set_at, created_at, updated_at, \
+     compromised, password_set_at, created_at, updated_at, \
      archived_at, deleted_at, purge_at";
 
 /// The five columns of `locker_item` that hold ciphertext under `K`, named here
@@ -291,7 +291,6 @@ pub struct ItemRow {
     pub phone: Option<String>,
     pub address: Option<String>,
     pub network: Option<String>,
-    pub connection_id: Option<String>,
     /// The **one stored security fact**. Weak and reused are derived.
     pub compromised: bool,
     /// When the CURRENT password was set. `None` honestly says "unknown"
@@ -324,7 +323,6 @@ impl ItemRow {
             phone: text_of(row, "phone"),
             address: text_of(row, "address"),
             network: text_of(row, "network"),
-            connection_id: text_of(row, "connection_id"),
             compromised: truthy(row, "compromised"),
             password_set_at: text_of(row, "password_set_at"),
             created_at: text_of(row, "created_at"),

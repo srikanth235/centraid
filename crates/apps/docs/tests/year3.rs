@@ -69,18 +69,12 @@ fn the_demo_drive_is_readable_through_the_four_queries() {
     assert_eq!(counts.tags, DEMO_DOCUMENTS.len() + 2);
 
     let door = TestDoor::new(&connection);
-    let (data, denial) = load_drive(
-        &door,
-        DriveInput::default(),
-        &format!("{NOW}T09:00:00.000Z"),
-    )
-    .expect("the drive reads");
+    let (data, denial) = load_drive(&door, DriveInput::default()).expect("the drive reads");
     assert!(denial.is_none(), "the demo drive is not denied: {denial:?}");
     assert_eq!(data.documents.len(), DEMO_DOCUMENTS.len());
     assert_eq!(data.folders.len(), DEMO_FOLDERS.len());
     assert!(data.root_folder_id.is_some(), "the drive has a top level");
     assert!(!data.truncated, "three documents is not a full window");
-    assert!(data.shared_from_known, "nothing was denied");
 
     // THE ROW THAT IS ALL THREE FACTS AT ONCE — starred, labelled, and two
     // versions deep — which is the row a renderer gets wrong.
@@ -134,8 +128,6 @@ fn the_shrunken_axis_goes_through_the_same_statements() {
         labels: 6,
         labelled: 40,
         extra_versions: 20,
-        shares: 12,
-        folder_shares: 6,
     };
     let counts = year3_docs(&connection, shape, 679_003).expect("the axis seeds");
     assert_eq!(counts.documents, shape.documents);
@@ -143,7 +135,6 @@ fn the_shrunken_axis_goes_through_the_same_statements() {
     assert_eq!(counts.live_documents, shape.documents - shape.trashed);
     assert_eq!(counts.starred, shape.starred);
     assert_eq!(counts.folders, shape.folders);
-    assert_eq!(counts.shares, shape.shares);
     // One content item per document, plus one for each second version.
     assert_eq!(
         counts.content_items,
@@ -154,27 +145,12 @@ fn the_shrunken_axis_goes_through_the_same_statements() {
 
     let door = TestDoor::new(&connection);
     let (data, denial) =
-        load_drive(&door, DriveInput::default(), "2097-06-01T09:00:00.000Z").expect("it reads");
+        load_drive(&door, DriveInput::default()).expect("it reads");
     assert!(denial.is_none());
     // THE WINDOW IS THE DECLARED DEFAULT, and 120 documents fit inside it.
     assert_eq!(data.window, 200);
     assert!(!data.truncated);
     assert_eq!(data.documents.len(), shape.documents);
-    // THE SHARE FOLD RAN over a four-level tree, and some of its answers came
-    // through a folder.
-    let entries: Vec<_> = data
-        .documents
-        .iter()
-        .filter_map(|row| row.shared_with.data())
-        .flatten()
-        .collect();
-    assert!(!entries.is_empty(), "the axis writes standing answers");
-    assert!(
-        entries
-            .iter()
-            .any(|entry| entry.via == centraid_apps_docs::shares::Via::Folder),
-        "half the axis's answers are on folders"
-    );
     // AND THE TRASH IS IN THE WINDOW, with purge dates.
     assert_eq!(
         data.documents.iter().filter(|row| row.trashed).count(),
@@ -202,22 +178,16 @@ fn a_window_smaller_than_the_drive_reports_truncated_from_its_cursor() {
         labels: 2,
         labelled: 0,
         extra_versions: 0,
-        shares: 0,
-        folder_shares: 0,
     };
     year3_docs(&connection, shape, 679_003).expect("the axis seeds");
     let door = TestDoor::new(&connection);
 
-    let (whole, _) = load_drive(&door, DriveInput::default(), "2097-06-01T09:00:00.000Z")
+    let (whole, _) = load_drive(&door, DriveInput::default())
         .expect("the drive reads");
     assert_eq!(whole.documents.len(), 80);
     assert!(!whole.truncated, "80 documents fit in a 200-row window");
 
-    let (short, _) = load_drive(
-        &door,
-        DriveInput { limit: Some(20) },
-        "2097-06-01T09:00:00.000Z",
-    )
+    let (short, _) = load_drive(&door, DriveInput { limit: Some(20) })
     .expect("the drive reads");
     assert_eq!(short.window, 20);
     assert!(short.truncated, "there are sixty more");
@@ -242,8 +212,6 @@ fn the_generator_writes_the_same_rows_twice() {
         labels: 4,
         labelled: 20,
         extra_versions: 8,
-        shares: 4,
-        folder_shares: 2,
     };
     let digest = |seed: u64| -> String {
         let connection = empty_vault();
@@ -255,7 +223,7 @@ fn the_generator_writes_the_same_rows_twice() {
             centraid_apps_docs::queries::DOC_PAIR_BOUND,
         )
         .expect("the taxonomy reads");
-        let (data, _) = load_drive(&door, DriveInput::default(), "2097-06-01T09:00:00.000Z")
+        let (data, _) = load_drive(&door, DriveInput::default())
             .expect("the drive reads");
         format!(
             "{}|{}|{:?}",
@@ -296,11 +264,7 @@ fn the_year3_docs_axis_measures_the_drives_own_ceilings() {
 
     let door = TestDoor::new(&connection);
     let at = std::time::Instant::now();
-    let (data, denial) = load_drive(
-        &door,
-        DriveInput { limit: Some(2_000) },
-        "2097-06-01T09:00:00.000Z",
-    )
+    let (data, denial) = load_drive(&door, DriveInput { limit: Some(2_000) })
     .expect("the drive reads");
     let read = at.elapsed();
     assert!(denial.is_none());

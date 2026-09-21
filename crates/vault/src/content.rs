@@ -90,6 +90,24 @@ pub fn content_digest(bytes: &[u8]) -> String {
 /// **A list that grew here would be a security rule widened from a helper.**
 pub const NEVER_INLINE: [&str; 3] = ["text/html", "application/xhtml+xml", "image/svg+xml"];
 
+/// The three facts about a set of bytes that the vault cannot work out for
+/// itself, declared by whoever is staging them.
+///
+/// It lived in `intents.rs` as the declaration inside an intent's payload hash;
+/// that plane is deleted (#1029, rung five) and the type is not about intents.
+/// It is the argument [`ContentPlane::stage_bytes`] takes: the size and the
+/// media type are the CALLER'S reading of its own bytes — there is no sniffer
+/// here, and a photograph staged as `application/octet-stream` is a photograph
+/// a grid will not embed — while the hash is verified absolutely.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NeededBytes {
+    /// 64 lowercase hex. The BLAKE3 root hash, the same value
+    /// `core_content_item.content_hash` takes.
+    pub hash: String,
+    pub byte_size: i64,
+    pub media_type: String,
+}
+
 /// Where one content item's bytes are, and how this reader reads them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentLocation {
@@ -148,7 +166,7 @@ impl Vault {
     /// item, is left exactly as it is. A pull that is retried after a window
     /// closed must not stage the same bytes twice, and a `blob_staging` row
     /// over bytes a content row already owns would be promoted a second time.
-    pub fn stage_bytes(&self, staged: &[crate::intents::NeededBytes]) -> Result<usize> {
+    pub fn stage_bytes(&self, staged: &[NeededBytes]) -> Result<usize> {
         if staged.is_empty() {
             return Ok(0);
         }

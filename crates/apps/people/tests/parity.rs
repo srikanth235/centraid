@@ -42,7 +42,19 @@
 //! days-over), the journal's `entries` (by instant), `search`'s `people` (FTS
 //! RANK, which the fixture preserves because the hits arrive ranked), `trash`'s
 //! shelf (by `deleted_at DESC`), `history`'s rail (by `recorded_at DESC`) and
-//! the person sheet's `notes`, `interactions` and `vaults`.
+//! the person sheet's `notes` and `interactions`.
+//!
+//! ## THE SHARING KEYS ARE FILTERED OUT OF v0'S ANSWER, NOT EDITED OUT
+//!
+//! `contracts/apps/people/queries.json` is a frozen golden (TESTING.md,
+//! "Fixtures and parity") and is never touched. It carries `linked` and
+//! `vault_count` on every roster row, `links_available` on the roster,
+//! `linked` / `to_link` in the dashboard's counts and `vaults` on the person
+//! sheet — v0's answers about `share_party_vault_binding`, which rung five
+//! drops (#1029, the owner's ruling of 2026-09-21). There is nothing left for
+//! those keys to be an answer ABOUT, so [`expected`] removes exactly those five
+//! names and everything else is compared as before. `SHARING_KEYS_FILTERED`
+//! is what stops the filter outliving its reason.
 //!
 //! ## The three stated divergences
 //!
@@ -63,7 +75,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use centraid_apps_kit::contract_vault::open_contract_vault;
+use centraid_apps_kit::contract_vault::{FrozenRowMapping, open_contract_vault_without};
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_people::dashboard::{DashboardData, load_dashboard};
 use centraid_apps_people::dates::CivilDate;
@@ -74,7 +86,7 @@ use centraid_apps_people::roster::{
     PeopleData, PeopleInput, RosterRow, SearchData, SearchHit, TrashData, load_people, load_search,
     load_trash,
 };
-use centraid_apps_people::{Denial, ReadState};
+use centraid_apps_people::Denial;
 use serde_json::{Value, json};
 
 /// The instant the generator stamped the whole run at, and the civil date the
@@ -105,7 +117,18 @@ fn fixture_vault() -> rusqlite::Connection {
         .expect("the committed DDL is readable");
     let rows = fs::read_to_string(root().join("contracts/apps/people/rows.json"))
         .expect("the committed rows are readable");
-    open_contract_vault(&ddl, &rows).expect("the fixture vault is built")
+    open_contract_vault_without(
+        &ddl,
+        &rows,
+        // THE MAPPING, stated: `contracts/apps/people/rows.json` is frozen and
+        // still carries v0's `share_party_vault_binding` rows, which rung five
+        // drops (#1029).
+        &FrozenRowMapping {
+            tables_gone: &["share_party_vault_binding"],
+            columns_gone: &[],
+        },
+    )
+    .expect("the fixture vault is built")
 }
 
 /// Every case the fixture recorded for one query, in the order it recorded them.
@@ -145,11 +168,8 @@ fn canonical_text(value: &Value) -> String {
     centraid_apps_kit::canonical_json(value)
 }
 
-fn roster_row_json(
-    row: &RosterRow,
-    links: &ReadState<centraid_apps_people::roster::VaultLinks>,
-) -> Value {
-    let mut value = json!({
+fn roster_row_json(row: &RosterRow) -> Value {
+    let value = json!({
         "party_id": row.party_id,
         "name": row.name,
         "role": row.role,
@@ -170,18 +190,6 @@ fn roster_row_json(
                 .collect::<Vec<Value>>()
         )),
     });
-    // v0's `linked` is `null` when the plane is denied and `vault_count` is `0`
-    // beside it; here both live inside the reading.
-    match links.ready() {
-        Some(links) => {
-            value["linked"] = json!(links.linked(&row.party_id));
-            value["vault_count"] = json!(links.vault_count(&row.party_id));
-        }
-        None => {
-            value["linked"] = Value::Null;
-            value["vault_count"] = json!(0);
-        }
-    }
     value
 }
 
@@ -190,7 +198,7 @@ fn people_json(data: &PeopleData) -> Value {
         "people": data
             .people
             .iter()
-            .map(|row| roster_row_json(row, &data.links))
+            .map(roster_row_json)
             .collect::<Vec<Value>>(),
         "lists": data
             .lists
@@ -200,7 +208,6 @@ fn people_json(data: &PeopleData) -> Value {
         "truncated": data.truncated,
         // D-1020-PE4: v0 clamps the declared 10,000 to 9,999.
         "window": if data.window == ROSTER_MAX { V0_ROSTER_MAX } else { data.window },
-        "links_available": data.links.known(),
     })
 }
 
@@ -255,22 +262,12 @@ fn card_json(card: &centraid_apps_people::queries::PersonCard) -> serde_json::Ma
 }
 
 fn dashboard_json(data: &DashboardData) -> Value {
-    let mut counts = json!({
+    let counts = json!({
         "all": data.counts.all,
         "reconnect": data.counts.reconnect,
         "upcoming": data.counts.upcoming,
         "starred": data.counts.starred,
     });
-    match data.links.ready() {
-        Some(links) => {
-            counts["linked"] = json!(links.linked);
-            counts["to_link"] = json!(links.to_link);
-        }
-        None => {
-            counts["linked"] = Value::Null;
-            counts["to_link"] = Value::Null;
-        }
-    }
     json!({
         "reconnect": data.reconnect.iter().map(|card| Value::Object(card_json(card))).collect::<Vec<Value>>(),
         "upcoming": data
@@ -465,20 +462,6 @@ fn person_body(person: &Person) -> Value {
                 }))
                 .collect::<Vec<Value>>())
     );
-    value["vaults"] = match person.sharing.ready() {
-        Some(sharing) => json!(
-            sharing
-                .vaults
-                .iter()
-                .map(|binding| json!({
-                    "binding_id": binding.binding_id,
-                    "vault_id": binding.vault_id,
-                    "linked_at": binding.linked_at,
-                }))
-                .collect::<Vec<Value>>()
-        ),
-        None => Value::Null,
-    };
     value
 }
 
@@ -535,8 +518,44 @@ fn expected(output: &Value) -> Value {
     if let Some(map) = value.as_object_mut() {
         map.remove("vaultDenied");
     }
+    SHARING_KEYS_FILTERED.fetch_add(
+        without_sharing(&mut value),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     sort_sets(&mut value);
     value
+}
+
+/// How many sharing keys [`without_sharing`] has removed in this binary. Zero
+/// after a suite has run means the filter no longer describes anything.
+static SHARING_KEYS_FILTERED: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// v0's answer, minus the five keys about the share plane rung five drops.
+///
+/// The fixture is frozen and is not edited; the mapping is stated in this
+/// file's header.
+fn without_sharing(value: &mut Value) -> usize {
+    let mut removed = 0;
+    match value {
+        Value::Object(map) => {
+            for key in ["linked", "vault_count", "links_available", "to_link", "vaults"] {
+                if map.remove(key).is_some() {
+                    removed += 1;
+                }
+            }
+            for (_, nested) in map.iter_mut() {
+                removed += without_sharing(nested);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                removed += without_sharing(item);
+            }
+        }
+        _ => {}
+    }
+    removed
 }
 
 // ---------------------------------------------------------------------------
