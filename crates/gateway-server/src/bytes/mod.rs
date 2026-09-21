@@ -23,7 +23,7 @@
 //!
 //! # THE CHECKSUM MODE IS A PROPERTY OF THE STORE
 //!
-//! `ChecksumMode` is an input to the store rather than a branch inside it. A
+//! The checksum mode was an input to the store rather than a branch inside it. A
 //! filesystem attests nothing on its own, so [`fs::FilesystemBytes`] can be
 //! built in either mode and answers honestly in the one it was built in. The
 //! amendment also rules that the attested checksum goes and the gateway hashes
@@ -68,7 +68,7 @@ pub fn object_key(vault: &VaultId, name: &ObjectName) -> String {
               unused degree of freedom."
 )]
 pub trait ProxyWrite {
-    /// Write the bytes, recording whether the client attested a checksum.
+    /// Write the bytes.
     ///
     /// # Errors
     ///
@@ -78,7 +78,6 @@ pub trait ProxyWrite {
         vault: &VaultId,
         name: &ObjectName,
         bytes: Vec<u8>,
-        attested: bool,
     ) -> Result<(), StoreFault>;
 }
 

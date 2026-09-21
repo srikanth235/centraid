@@ -224,7 +224,7 @@ pub fn spelling_of(refusal: &Refusal) -> String {
 
 #[cfg(test)]
 mod tests {
-    use centraid_gateway_core::checksum::ChecksumFault;
+    use centraid_gateway_core::error::ChecksumFault;
     use centraid_gateway_core::ids::ObjectName;
     use centraid_gateway_core::retention::DeleteRefusal;
     use centraid_gateway_core::time::{Duration, ServerTime};
@@ -242,7 +242,6 @@ mod tests {
                 server: (1, 1),
                 client: 9,
             },
-            Refusal::Checksum(ChecksumFault::Missing),
             Refusal::Checksum(ChecksumFault::Mismatch),
             Refusal::AlreadyCommitted(ObjectName::of(b"a")),
             Refusal::ObjectUnknown(ObjectName::of(b"a")),

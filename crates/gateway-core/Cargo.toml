@@ -37,8 +37,4 @@ hex.workspace = true
 # hand-rolled JSON writer, which is a second serializer to disagree with the
 # first.
 serde = { workspace = true }
-# The store's attested checksum, and the ONE place this crate names it. See
-# `src/checksum.rs`, and the `crates/vault/tests/one_hash.rs` allowlist entry
-# that carries the reason.
-sha2.workspace = true
 thiserror.workspace = true

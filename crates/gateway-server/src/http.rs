@@ -39,8 +39,8 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use centraid_api_proto::core_v1::ErrorCode;
-use centraid_gateway_core::checksum::{AttestedChecksum, ChecksumFault};
 use centraid_gateway_core::engine::{Caller, CommitInput, Fault, Gateway};
+use centraid_gateway_core::error::ChecksumFault;
 use centraid_gateway_core::error::Refusal;
 use centraid_gateway_core::ids::{Generation, Key32, ObjectKind, ObjectName, VaultId};
 use centraid_gateway_core::store::ByteStore as _;
@@ -64,19 +64,6 @@ pub const SIGNATURE_HEADER: &str = "centraid-signature";
 pub const TIMESTAMP_HEADER: &str = "centraid-timestamp";
 /// The protocol version, inside the signature so a middlebox cannot rewrite it.
 pub const PROTOCOL_HEADER: &str = "centraid-protocol";
-/// The checksum a client attests for the bytes it is uploading, hex.
-///
-/// Which digest that is, is `centraid_gateway_core::checksum`'s — the one
-/// module the one-hash boundary allows — and deliberately not here.
-///
-/// **Optional, and its absence is a refusal one step later**: an object store
-/// records the attestation only when the client sent it, so a commit fails on *no
-/// checksum* and not only on *wrong checksum*. A client that omits it uploads
-/// successfully and is then refused `GatewayChecksumMissing` at commit — which
-/// is a 4xx and a CLIENT fault, not this server failing. See
-/// [`status_for`] and `put_object`.
-pub const ATTESTED_CHECKSUM_HEADER: &str = "centraid-attested-checksum";
-
 /// Everything a running server holds.
 pub struct Server {
     pub gateway: Gateway<SqliteState, ConfiguredBytes>,
@@ -389,7 +376,6 @@ struct DeclareRequest {
 #[derive(Debug, Deserialize)]
 struct DeclaredObject {
     name: String,
-    checksum: String,
     kind: String,
     padded_size: u64,
 }
@@ -434,18 +420,11 @@ async fn declare(
 
     let mut declarations = Vec::with_capacity(request.objects.len());
     for object in &request.objects {
-        let (Some(name), Some(checksum), Some(kind)) = (
-            key_of(&object.name),
-            hex::decode(&object.checksum)
-                .ok()
-                .and_then(|bytes| AttestedChecksum::from_slice(&bytes)),
-            kind_of(&object.kind),
-        ) else {
+        let (Some(name), Some(kind)) = (key_of(&object.name), kind_of(&object.kind)) else {
             return refused(&Refusal::SignatureInvalid);
         };
         declarations.push(Declaration {
             name,
-            checksum,
             kind,
             padded_size: object.padded_size,
         });
@@ -602,29 +581,30 @@ async fn delete(
     }
 }
 
-/// Did the client attest a checksum for these bytes, and is it true?
+/// DO THESE BYTES HASH TO THE NAME THEY ARE BEING FILED UNDER?
+///
+/// The check the commit makes, made one round trip earlier. The proxy is
+/// holding the bytes and the name is in its own path, so this is the cheapest
+/// place in the whole path to find out — and a client that learns at the
+/// upload rather than at the commit has not yet paid for a generation's worth
+/// of transfer.
+///
+/// It replaces an `attestation` helper that read a client-supplied digest
+/// header and compared it against the body. That header existed because a
+/// blind store attested a digest of its own and the gateway could not read the
+/// bytes; with
+/// the hosted adapter struck from v0 (scope amendment 2026-09-21) the bytes
+/// are right here, so the check is against the **name**, which is the thing
+/// that has to be true, rather than against a second digest a client wrote.
 ///
 /// # Errors
 ///
-/// [`Refusal::Checksum`] with a mismatch when the header is present and either
-/// is not a checksum at all or is one for some other bytes — both are the
-/// client saying something untrue about what it is uploading, and the proxy is
-/// holding the bytes, so this is the cheapest place in the whole path to find
-/// out rather than one round trip later at the commit.
-fn attestation(headers: &HeaderMap, body: &[u8]) -> Result<bool, Refusal> {
-    let Some(text) = header(headers, ATTESTED_CHECKSUM_HEADER) else {
-        // ABSENT IS ALLOWED THROUGH ON PURPOSE. That is exactly what R2
-        // produces for a client that sent no checksum; the commit refuses it in
-        // both deployments, and a proxy that refused it here instead would be a
-        // proxy whose answer differs from the hosted adapter's (§3).
-        return Ok(false);
-    };
-    let claimed = hex::decode(text.trim())
-        .ok()
-        .and_then(|bytes| AttestedChecksum::from_slice(&bytes));
-    match claimed {
-        Some(claimed) if claimed == AttestedChecksum::of(body) => Ok(true),
-        _ => Err(Refusal::Checksum(ChecksumFault::Mismatch)),
+/// [`Refusal::Checksum`] with a name mismatch.
+fn bytes_hash_to_their_name(name: &ObjectName, body: &[u8]) -> Result<(), Refusal> {
+    if ObjectName::of(body) == *name {
+        Ok(())
+    } else {
+        Err(Refusal::Checksum(ChecksumFault::NameMismatch))
     }
 }
 
@@ -643,33 +623,17 @@ async fn put_object(
         return refused(&refusal);
     }
 
-    // A CLIENT THAT SENT NO CHECKSUM HEADER IS THE CASE R2 REALLY PRODUCES, and
-    // the store must record that it attested nothing rather than inventing an
-    // attestation — because "no attestation" is a REJECTION at commit, not a
-    // shrug, and an adapter that filled one in would be an adapter that had
-    // quietly turned write-once into a comment.
-    //
-    // **AND THE HEADER'S VALUE IS READ, not merely counted.** A presence check
-    // makes the header a flag a client can set to any string at all, so an
-    // operator debugging a commit that failed on the checksum finds a header
-    // that means nothing and learns nothing from it. Here the value is compared
-    // against the bytes that just arrived, and a lie is refused *at the upload*
-    // rather than one round trip later at the commit — the proxy is holding the
-    // bytes, so it is the cheapest place in the whole path to find out.
-    //
-    // An ABSENT header is still allowed through on purpose: that is exactly
-    // what R2 produces for a client that sent no checksum, the commit refuses
-    // it in both deployments, and a proxy that refused it here instead would be
-    // a proxy whose answer differs from the hosted adapter's (§3).
-    let attested = match attestation(&headers, &body) {
-        Ok(attested) => attested,
-        Err(refusal) => return refused(&refusal),
-    };
+    // THE GATEWAY HASHES WHAT IT STORES, and it may as well do it while it is
+    // holding the bytes. A name that is not its bytes' hash is refused at the
+    // upload rather than a round trip later at the commit.
+    if let Err(refusal) = bytes_hash_to_their_name(&name, &body) {
+        return refused(&refusal);
+    }
     let server = server.lock().await;
     match server
         .gateway
         .bytes
-        .write(&vault, &name, body.to_vec(), attested)
+        .write(&vault, &name, body.to_vec())
         .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -717,45 +681,16 @@ mod tests {
     #[test]
     fn an_attestation_is_believed_only_when_it_matches_the_bytes() {
         let body = b"the bytes a phone is uploading".to_vec();
-        let mut headers = HeaderMap::new();
         assert_eq!(
-            attestation(&headers, &body),
-            Ok(false),
-            "no header is not a refusal here: it is what R2 produces, and the \
-             commit is where both deployments refuse it"
-        );
-
-        headers.insert(
-            ATTESTED_CHECKSUM_HEADER,
-            AttestedChecksum::of(&body)
-                .hex()
-                .parse()
-                .expect("a header value"),
-        );
-        assert_eq!(attestation(&headers, &body), Ok(true));
-
-        headers.insert(
-            ATTESTED_CHECKSUM_HEADER,
-            AttestedChecksum::of(b"quite different bytes")
-                .hex()
-                .parse()
-                .expect("a header value"),
+            bytes_hash_to_their_name(&ObjectName::of(&body), &body),
+            Ok(()),
+            "bytes filed under their own hash are what the store is for"
         );
         assert_eq!(
-            attestation(&headers, &body),
-            Err(Refusal::Checksum(ChecksumFault::Mismatch)),
-            "an attestation for other bytes is a lie, not a shrug"
-        );
-
-        headers.insert(
-            ATTESTED_CHECKSUM_HEADER,
-            "not a checksum".parse().expect("a header value"),
-        );
-        assert_eq!(
-            attestation(&headers, &body),
-            Err(Refusal::Checksum(ChecksumFault::Mismatch)),
-            "a header that is not a checksum at all is refused rather than \
-             counted as an attestation"
+            bytes_hash_to_their_name(&ObjectName::of(b"quite different bytes"), &body),
+            Err(Refusal::Checksum(ChecksumFault::NameMismatch)),
+            "bytes filed under somebody else's name are refused AT THE UPLOAD, \
+             a round trip before the commit would have caught it"
         );
     }
 

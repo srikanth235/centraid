@@ -26,7 +26,6 @@ use std::future::Future;
 use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 
-use centraid_gateway_core::checksum::{AttestedChecksum, ChecksumMode};
 use centraid_gateway_core::engine::{Caller, CommitInput, Gateway};
 use centraid_gateway_core::ids::{Generation, Key32, ObjectKind, ObjectName};
 use centraid_gateway_core::lease::LeaseState;
@@ -69,11 +68,7 @@ fn generation() -> Generation {
 }
 
 fn founded() -> Gateway<MemoryState, MemoryBytes> {
-    let mut gateway = Gateway::new(
-        MemoryState::new(),
-        MemoryBytes::new(ChecksumMode::Attest),
-        Policy::default(),
-    );
+    let mut gateway = Gateway::new(MemoryState::new(), MemoryBytes::new(), Policy::default());
     gateway.state.register(VaultState {
         vault: vault(),
         account: Key32::from_bytes([0x22; 32]),
@@ -97,7 +92,6 @@ fn land(
 ) -> ObjectName {
     let declaration = Declaration {
         name: ObjectName::of(bytes),
-        checksum: AttestedChecksum::of(bytes),
         kind,
         padded_size: bytes.len() as u64,
     };

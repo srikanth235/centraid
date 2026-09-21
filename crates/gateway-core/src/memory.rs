@@ -7,19 +7,22 @@
 //!
 //! What it is *for* is proving that the suite runs against the ports rather
 //! than against one adapter's internals: a suite that only passes on the
-//! implementation it was written beside proves nothing about the other one. It
-//! also carries the honest version of the checksum modes — the same object
-//! store answers [`ChecksumEvidence::Attested`] or
-//! [`ChecksumEvidence::ReadAndHashed`] depending on how it was built, which is
-//! exactly the difference between R2 and a MinIO that does not attest.
+//! implementation it was written beside proves nothing about the other one.
+//!
+//! It used to carry the two checksum modes, because the store's attestation was a
+//! property of whichever bucket an adapter was pointed at. The
+//! [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+//! retires the attestation: the gateway hashes what it stores, so there is one
+//! mode and this holds bytes and hashes them.
 
 use std::collections::BTreeMap;
 
-use crate::checksum::{AttestedChecksum, ChecksumEvidence, ChecksumMode};
 use crate::commit;
 use crate::ids::{ObjectKind, ObjectName, VaultId};
 use crate::retention::BaseRecord;
-use crate::store::{ByteStore, StateStore, StoreFault, StoredObject, UploadTarget, VaultState};
+use crate::store::{
+    ByteStore, StateStore, StoreFault, StoredBytes, StoredObject, UploadTarget, VaultState,
+};
 use crate::time::{Duration, ServerTime};
 
 /// How long an in-memory presigned target is good for. The real adapters use
@@ -168,39 +171,21 @@ impl MemoryState {
     }
 }
 
-/// The byte store, in memory, in one of the two checksum modes.
-#[derive(Debug)]
+/// The byte store, in memory.
+#[derive(Debug, Default)]
 pub struct MemoryBytes {
-    mode: ChecksumMode,
     blobs: BTreeMap<(VaultId, ObjectName), Vec<u8>>,
-    /// Names whose stored bytes carry no attestation.
-    ///
-    /// **R2 records the attested checksum only when the client sent it**, so this
-    /// is not a contrived state: it is what a real bucket looks like after an
-    /// upload that omitted the header, and the suite needs to be able to build
-    /// one.
-    unattested: Vec<(VaultId, ObjectName)>,
 }
 
 impl MemoryBytes {
-    /// A store in the given mode.
+    /// An empty store.
     #[must_use]
-    pub fn new(mode: ChecksumMode) -> Self {
-        Self {
-            mode,
-            blobs: BTreeMap::new(),
-            unattested: Vec::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// The `PUT` the phone would make to the presigned target.
     pub fn upload(&mut self, vault: VaultId, name: ObjectName, bytes: Vec<u8>) {
-        self.blobs.insert((vault, name), bytes);
-    }
-
-    /// The same upload, by a client that sent no checksum header.
-    pub fn upload_without_attestation(&mut self, vault: VaultId, name: ObjectName, bytes: Vec<u8>) {
-        self.unattested.push((vault, name));
         self.blobs.insert((vault, name), bytes);
     }
 
@@ -214,16 +199,12 @@ impl MemoryBytes {
     }
 
     /// Everything the store holds, for the canary.
-    pub fn stored(&self) -> impl Iterator<Item = (&(VaultId, ObjectName), &Vec<u8>)> {
+    pub fn every_stored_object(&self) -> impl Iterator<Item = (&(VaultId, ObjectName), &Vec<u8>)> {
         self.blobs.iter()
     }
 }
 
 impl ByteStore for MemoryBytes {
-    fn checksum_mode(&self) -> ChecksumMode {
-        self.mode
-    }
-
     async fn presign_put(
         &self,
         vault: &VaultId,
@@ -239,29 +220,17 @@ impl ByteStore for MemoryBytes {
         })
     }
 
-    async fn evidence(
+    async fn stored(
         &self,
         vault: &VaultId,
         name: &ObjectName,
-    ) -> Result<ChecksumEvidence, StoreFault> {
-        let Some(bytes) = self.blobs.get(&(*vault, *name)) else {
-            return Ok(ChecksumEvidence::None);
-        };
-        if self.unattested.contains(&(*vault, *name)) {
-            return Ok(ChecksumEvidence::None);
-        }
-        let stored_size = bytes.len() as u64;
-        Ok(match self.mode {
-            ChecksumMode::Attest => ChecksumEvidence::Attested {
-                checksum: AttestedChecksum::of(bytes),
-                stored_size,
-            },
-            ChecksumMode::ReadAndHash => ChecksumEvidence::ReadAndHashed {
-                checksum: AttestedChecksum::of(bytes),
-                name: ObjectName::of(bytes),
-                stored_size,
-            },
-        })
+    ) -> Result<Option<StoredBytes>, StoreFault> {
+        Ok(self.blobs.get(&(*vault, *name)).map(|bytes| StoredBytes {
+            // HASHED, never read off a header: a header is something a client
+            // wrote, and the point of the check is not to take its word.
+            name: ObjectName::of(bytes),
+            size: bytes.len() as u64,
+        }))
     }
 
     async fn read(

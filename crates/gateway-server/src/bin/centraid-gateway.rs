@@ -332,18 +332,14 @@ fn open_state(data_dir: &Path) -> anyhow::Result<state::SqliteState> {
 /// Build one backend from its config.
 fn backend(store: &StoreConfig, data_dir: &Path, origin: &str) -> anyhow::Result<Backend> {
     match store {
-        StoreConfig::Filesystem {
-            path,
-            checksum_mode,
-        } => {
+        StoreConfig::Filesystem { path } => {
             let root = if path.is_absolute() {
                 path.clone()
             } else {
                 data_dir.join(path)
             };
             Ok(Backend::Filesystem(
-                FilesystemBytes::open(&root, checksum_mode.to_core(), origin)
-                    .map_err(store_error)?,
+                FilesystemBytes::open(&root, origin).map_err(store_error)?,
             ))
         }
     }

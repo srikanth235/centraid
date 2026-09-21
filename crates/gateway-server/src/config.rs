@@ -10,7 +10,6 @@
 //! |---|---|---|
 //! | byte store | a directory under the data dir | the machine a member runs this on has a disk |
 //! | `append_only` | **off** (Q24) | a household that never heard of it must not discover it as a backup that grows without bound |
-//! | checksum mode | `read-and-hash` for a directory | a filesystem attests nothing; claiming `attest` over one would be claiming a check nobody ran |
 //! | mirror | none | a second store is a decision about somebody else's disk |
 //! | quota | a stated number, never "unlimited" | keys are free to mint, so an unbounded tier is unbounded Sybil storage (F13) |
 //!
@@ -20,7 +19,6 @@
 
 use std::path::{Path, PathBuf};
 
-use centraid_gateway_core::checksum::ChecksumMode;
 use centraid_gateway_core::retention::Policy;
 use serde::{Deserialize, Serialize};
 
@@ -36,41 +34,11 @@ pub enum StoreConfig {
         /// Relative to the data directory unless absolute.
         #[serde(default = "default_objects_dir")]
         path: PathBuf,
-        #[serde(default = "default_filesystem_mode")]
-        checksum_mode: Mode,
     },
-}
-
-/// The checksum mode, in the spelling a config file uses.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Mode {
-    /// The store attests and the gateway never reads the bytes.
-    Attest,
-    /// The gateway reads the bytes and hashes them itself.
-    ReadAndHash,
-}
-
-impl Mode {
-    /// The rules' own type.
-    #[must_use]
-    pub const fn to_core(self) -> ChecksumMode {
-        match self {
-            Self::Attest => ChecksumMode::Attest,
-            Self::ReadAndHash => ChecksumMode::ReadAndHash,
-        }
-    }
 }
 
 fn default_objects_dir() -> PathBuf {
     PathBuf::from("objects")
-}
-
-/// A DIRECTORY ATTESTS NOTHING, so the honest default over one is to read and
-/// hash. Configuring `attest` over a filesystem would be configuring a check
-/// nobody runs — the rule would pass on evidence the adapter made up.
-const fn default_filesystem_mode() -> Mode {
-    Mode::ReadAndHash
 }
 
 /// WHICH CARRIER THIS SERVER IS DIALLED OVER.
@@ -106,6 +74,23 @@ pub struct IrohConfig {
     /// `None` is n0's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dns_origin: Option<String>,
+    /// **No relay and no address lookup at all.**
+    ///
+    /// A household whose phone and laptop are only ever on the same network,
+    /// and who would rather nothing of theirs reached n0's mesh or n0's DNS
+    /// server. The cost is stated rather than implied: an endpoint id alone is
+    /// then not dialable, so the phone reaches this laptop only by the direct
+    /// addresses the pairing ticket carries, and only from the same network.
+    ///
+    /// It is also the shape `tests/wire_iroh.rs` binds, which is why it is a
+    /// setting and not a test-only constructor: the one test that moves real
+    /// bytes drives the same code an operator does.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub local_only: bool,
+    /// Bind the UDP socket here rather than on every interface. `None` is
+    /// iroh's default; `127.0.0.1:0` is what a test wants.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bind_addr: Option<String>,
 }
 
 /// How this server is reached, and whether it terminates TLS itself.
@@ -186,7 +171,6 @@ fn default_bind() -> String {
 fn default_store() -> StoreConfig {
     StoreConfig::Filesystem {
         path: default_objects_dir(),
-        checksum_mode: default_filesystem_mode(),
     }
 }
 
@@ -282,14 +266,11 @@ mod tests {
             config.default_quota.bytes > 0,
             "a quota is a number, never absent (F13)"
         );
-        match config.store {
-            StoreConfig::Filesystem { checksum_mode, .. } => assert_eq!(
-                checksum_mode,
-                Mode::ReadAndHash,
-                "a directory attests nothing, so the honest mode over one is to \
-                 read and hash"
-            ),
-        }
+        // THE ATTESTED CHECKSUM IS GONE and there is no mode to configure: the
+        // gateway reads what it stores and hashes it (scope amendment
+        // 2026-09-21). A directory attested nothing, which is why the honest
+        // default over one was always read-and-hash; now it is the only rule.
+        assert!(matches!(config.store, StoreConfig::Filesystem { .. }));
     }
 
     /// A config round-trips, so an operator can read back what the installer

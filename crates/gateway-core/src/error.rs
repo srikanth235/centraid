@@ -11,7 +11,6 @@
 
 use centraid_api_proto::core_v1::ErrorCode;
 
-use crate::checksum::ChecksumFault;
 use crate::ids::ObjectName;
 use crate::retention::DeleteRefusal;
 use crate::time::{Duration, ServerTime};
@@ -127,6 +126,38 @@ pub struct ProtocolWindow {
     pub server_min: u32,
     pub server_max: u32,
     pub client: u32,
+}
+
+/// Why a commit's verification of the stored bytes failed.
+///
+/// # THE ATTESTED CHECKSUM IS GONE, AND SO IS THE REASON IT EXISTED
+///
+/// A module of its own carried an attested digest — one the object
+/// *store* computed — and the one carve-out in this repository's "one hash"
+/// rule. It existed because R2 and S3 attest that one digest and nothing else,
+/// and on
+/// the hosted adapter the bytes never passed through gateway code, so the
+/// store's own word was all there was. With the hosted adapter struck from v0
+/// ([scope amendment 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795))
+/// that reason is gone: **the gateway holds the bytes, so it hashes them.**
+///
+/// What is left is the check that was always the stronger one and that only
+/// read-and-hash mode could ever make: an object's name is the BLAKE3 of its
+/// bytes, and the gateway refuses a name that is not its bytes' hash before it
+/// acks. There is no mode to be in and no attestation to be missing, so
+/// `Missing` and `WrongMode` go with the field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChecksumFault {
+    /// **The one rule.** The stored bytes do not hash to the name they are
+    /// filed under.
+    NameMismatch,
+    /// A name was re-declared at a different size. The declaration is a
+    /// binding, and a size that moved under a committed name is the one way a
+    /// content-addressed store can be asked to hold two different things at
+    /// one name.
+    Mismatch,
+    /// The stored length is not the declared padded size.
+    SizeMismatch,
 }
 
 /// What a quota refusal has to say for a member to act on it: the ceiling, what
@@ -322,7 +353,12 @@ impl Refusal {
             Self::SignatureInvalid => ErrorCode::GatewaySignatureInvalid,
             Self::ClockSkew { .. } => ErrorCode::GatewayClockSkew,
             Self::VersionWindow { .. } => ErrorCode::VersionWindow,
-            Self::Checksum(ChecksumFault::Missing) => ErrorCode::GatewayChecksumMissing,
+            // ONE CODE NOW. `GATEWAY_CHECKSUM_MISSING` existed because R2
+            // records its attestation only when the client sent it, so silence
+            // and a wrong answer were different failures an operator had to
+            // tell apart. With the gateway hashing what it stores there is no
+            // silence to report: the bytes are there and hash to the name, or
+            // they do not.
             Self::Checksum(_) => ErrorCode::GatewayChecksumMismatch,
             Self::AlreadyCommitted(_) => ErrorCode::GatewayAlreadyCommitted,
             Self::ObjectUnknown(_) => ErrorCode::GatewayObjectUnknown,
@@ -546,19 +582,21 @@ mod tests {
         assert_ne!(moved.code(), Refusal::UnknownVault.code());
     }
 
-    /// "No checksum" and "wrong checksum" are different codes, because R2
-    /// stores the attestation only when the client sent it and an operator
-    /// debugging one has to be able to tell them apart.
+    /// EVERY VERIFICATION FAULT IS ONE CODE, because there is one rule left:
+    /// the bytes hash to the name or they do not. `GATEWAY_CHECKSUM_MISSING`
+    /// existed for a store that could decline to attest, and v0 has none.
     #[test]
-    fn a_missing_attestation_and_a_wrong_one_are_different_codes() {
-        assert_eq!(
-            Refusal::Checksum(ChecksumFault::Missing).code(),
-            ErrorCode::GatewayChecksumMissing
-        );
-        assert_eq!(
-            Refusal::Checksum(ChecksumFault::Mismatch).code(),
-            ErrorCode::GatewayChecksumMismatch
-        );
+    fn every_verification_fault_is_the_mismatch_code() {
+        for fault in [
+            ChecksumFault::NameMismatch,
+            ChecksumFault::Mismatch,
+            ChecksumFault::SizeMismatch,
+        ] {
+            assert_eq!(
+                Refusal::Checksum(fault).code(),
+                ErrorCode::GatewayChecksumMismatch
+            );
+        }
     }
 
     /// A MOVED VAULT CARRIES *WHEN*, NOT ONLY *THAT*.

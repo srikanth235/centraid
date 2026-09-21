@@ -59,8 +59,8 @@ use centraid_gateway_core::engine::{Caller, CommitInput, Fault};
 use centraid_gateway_core::memory::{MemoryBytes, MemoryState};
 use centraid_gateway_core::upload::Declaration;
 use centraid_gateway_core::{
-    AttestedChecksum, ChecksumMode, Gateway, Generation, ObjectKind, ObjectName, Refusal,
-    ServerTime, StoredObject, VaultId, VaultState,
+    Gateway, Generation, ObjectKind, ObjectName, Refusal, ServerTime, StoredObject, VaultId,
+    VaultState,
 };
 use centraid_identity::{RecoveryPhrase, Seed, VaultMint};
 use centraid_vault::Vault;
@@ -161,10 +161,9 @@ fn gateway() -> TestGateway {
     Gateway::new(
         MemoryState::new(),
         // ATTEST, which is the hosted adapter's mode: the client sends the
-        // checksum and the store records it. `ReadAndHash` is the standalone
         // one. The stricter of the two for a commit is this one, because the
         // gateway is blind and has to take the attestation.
-        MemoryBytes::new(ChecksumMode::Attest),
+        MemoryBytes::new(),
         centraid_gateway_core::retention::Policy::default(),
     )
 }
@@ -221,7 +220,6 @@ async fn upload_generation(
         );
         declarations.push(Declaration {
             name,
-            checksum: AttestedChecksum::of(&bytes),
             kind: if *digest == manifest_digest {
                 ObjectKind::Manifest
             } else {
@@ -370,7 +368,7 @@ async fn restore_onto_a_fresh_phone(
         // GET and the filter is the vault, which is the same scoping a
         // presigned URL has.
         let mut manifest_bytes = Vec::new();
-        for ((vault, name), bytes) in engine.bytes.stored() {
+        for ((vault, name), bytes) in engine.bytes.every_stored_object() {
             if *vault != vault_id {
                 continue;
             }
@@ -598,7 +596,6 @@ async fn lose_the_phone_type_twenty_four_words_get_every_vault_back() {
                 },
                 &[Declaration {
                     name: ObjectName::of(b"a write the old phone will never land"),
-                    checksum: AttestedChecksum::of(b"a write the old phone will never land"),
                     kind: ObjectKind::Segment,
                     padded_size: 64,
                 }],
@@ -714,7 +711,6 @@ async fn a_committed_object_is_not_presigned_again() {
     let name = ObjectName::of(&bytes);
     let declaration = Declaration {
         name,
-        checksum: AttestedChecksum::of(&bytes),
         kind: ObjectKind::Segment,
         padded_size: bytes.len() as u64,
     };
@@ -799,7 +795,6 @@ use centraid_gateway_client::client::GatewayClient;
 use centraid_gateway_client::outcome::ClientError;
 use centraid_gateway_client::signer::DeviceSigner;
 use centraid_gateway_client::transport::ReqwestTransport;
-use centraid_gateway_core::checksum::ChecksumMode as WireChecksumMode;
 use centraid_gateway_core::plan::Plan;
 use centraid_gateway_core::retention::Policy;
 use centraid_gateway_server::bytes::configured::{Backend, ConfiguredBytes};
@@ -830,14 +825,12 @@ async fn live_gateway(vaults: &[VaultId], account: VaultId) -> LiveGateway {
         .await
         .expect("a registered vault");
     }
-    // READ-AND-HASH, which is the standalone deployment's mode: the server
-    // holds the bytes, so it re-derives the checksum rather than taking the
-    // client's word. The library arm above runs `Attest`, the hosted mode — so
-    // between them the drill covers both, which is the split the conformance
-    // suite is built around.
+    // THE GATEWAY HASHES WHAT IT STORES. There is one mode now: the
+    // store-attested checksum and its second, weaker arm existed for a store
+    // the gateway could not read, and v0's store is a directory on the
+    // member's own laptop (scope amendment 2026-09-21).
     let bytes = ConfiguredBytes::new(Backend::Filesystem(
-        FilesystemBytes::open(objects.path(), WireChecksumMode::ReadAndHash, "")
-            .expect("an object directory"),
+        FilesystemBytes::open(objects.path(), "").expect("an object directory"),
     ));
     let bound = serve::bind("127.0.0.1:0").await.expect("a free port");
     let origin = format!("http://{}", bound.address);
@@ -888,7 +881,6 @@ async fn upload_over_the_wire(
         let name = ObjectName::of(&bytes);
         declarations.push(serde_json::json!({
             "name": name.hex(),
-            "checksum": AttestedChecksum::of(&bytes).hex(),
             "kind": if digest == manifest_digest {
                 ObjectKind::Manifest.as_str()
             } else {
@@ -910,14 +902,11 @@ async fn upload_over_the_wire(
     );
 
     for (name, bytes) in bodies {
-        // THE ATTESTATION RIDES WITH THE BYTES. A store that was neither read
-        // nor attested says `ChecksumEvidence::None` at commit, which is a
-        // rejection: an upload that omitted this would succeed object by object
-        // and fail at the end with `GatewayChecksumMissing`, reading like a
-        // server fault.
-        let checksum = AttestedChecksum::of(&bytes);
+        // The name IS the hash, and the gateway re-hashes what it stores: a
+        // name that is not its bytes' hash is refused at the upload, a round
+        // trip before the commit.
         client
-            .put_object(&name, bytes, &checksum, now_ms)
+            .put_object(&name, bytes, now_ms)
             .await
             .expect("the bytes cross the socket");
     }
@@ -1152,7 +1141,6 @@ async fn the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_s
             &serde_json::json!({
                 "objects": [{
                     "name": retried,
-                    "checksum": AttestedChecksum::of(&retried_bytes).hex(),
                     "kind": ObjectKind::Segment.as_str(),
                     "padded_size": retried_bytes.len() as u64,
                 }]

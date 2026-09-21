@@ -13,9 +13,8 @@
 
 use std::path::{Path, PathBuf};
 
-use centraid_gateway_core::checksum::{AttestedChecksum, ChecksumEvidence, ChecksumMode};
 use centraid_gateway_core::ids::{ObjectName, VaultId};
-use centraid_gateway_core::store::{ByteStore, StoreFault, UploadTarget};
+use centraid_gateway_core::store::{ByteStore, StoreFault, StoredBytes, UploadTarget};
 use centraid_gateway_core::time::{Duration, ServerTime};
 
 use crate::bytes::object_key;
@@ -33,7 +32,6 @@ pub const TARGET_LIFETIME: Duration = Duration::from_days(7);
 #[derive(Debug)]
 pub struct FilesystemBytes {
     root: PathBuf,
-    mode: ChecksumMode,
     /// The origin a proxied upload target is built on, e.g.
     /// `https://vault.example.org`. Empty for a store that is only ever driven
     /// in-process, as the conformance harness drives it.
@@ -46,11 +44,10 @@ impl FilesystemBytes {
     /// # Errors
     ///
     /// A store fault if the root cannot be created.
-    pub fn open(root: &Path, mode: ChecksumMode, origin: &str) -> Result<Self, StoreFault> {
+    pub fn open(root: &Path, origin: &str) -> Result<Self, StoreFault> {
         std::fs::create_dir_all(root).map_err(io)?;
         Ok(Self {
             root: root.to_path_buf(),
-            mode,
             origin: origin.trim_end_matches('/').to_owned(),
         })
     }
@@ -61,34 +58,20 @@ impl FilesystemBytes {
 
     /// The `PUT` a phone makes to a proxied target, as the server performs it.
     ///
-    /// `attested` is false for the case an S3 store really produces: a client
-    /// that sent no checksum header, so the store holds bytes and attests
-    /// nothing. Here it is recorded as a sidecar marker, because a filesystem
-    /// has no header to omit and the distinction is a rule
-    /// (`ChecksumEvidence::None` is a rejection, not a shrug).
+    /// It records no attestation sidecar any more: the store-attested checksum
+    /// and its "no checksum is a rejection" rule existed for a store the gateway
+    /// could not read, and v0's store is a directory on the member's own
+    /// laptop (scope amendment 2026-09-21). `stored` reads and hashes.
     ///
     /// # Errors
     ///
     /// A store fault if the bytes cannot be written.
-    pub fn put(
-        &self,
-        vault: &VaultId,
-        name: &ObjectName,
-        bytes: &[u8],
-        attested: bool,
-    ) -> Result<(), StoreFault> {
+    pub fn put(&self, vault: &VaultId, name: &ObjectName, bytes: &[u8]) -> Result<(), StoreFault> {
         let path = self.path(vault, name);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(io)?;
         }
-        std::fs::write(&path, bytes).map_err(io)?;
-        let marker = path.with_extension("unattested");
-        if attested {
-            let _ = std::fs::remove_file(&marker);
-        } else {
-            std::fs::write(&marker, []).map_err(io)?;
-        }
-        Ok(())
+        std::fs::write(&path, bytes).map_err(io)
     }
 
     /// Flip one stored object's first bit, for the scrub's own test.
@@ -110,7 +93,7 @@ impl FilesystemBytes {
     /// # Errors
     ///
     /// A store fault if the tree cannot be walked.
-    pub fn stored(&self) -> Result<Vec<Vec<u8>>, StoreFault> {
+    pub fn every_stored_object(&self) -> Result<Vec<Vec<u8>>, StoreFault> {
         let mut out = Vec::new();
         let Ok(vaults) = std::fs::read_dir(&self.root) else {
             return Ok(out);
@@ -121,9 +104,6 @@ impl FilesystemBytes {
             };
             for object in objects.flatten() {
                 let path = object.path();
-                if path.extension().is_some_and(|ext| ext == "unattested") {
-                    continue;
-                }
                 out.push(std::fs::read(&path).map_err(io)?);
             }
         }
@@ -143,10 +123,6 @@ fn io(error: std::io::Error) -> StoreFault {
 }
 
 impl ByteStore for FilesystemBytes {
-    fn checksum_mode(&self) -> ChecksumMode {
-        self.mode
-    }
-
     async fn presign_put(
         &self,
         vault: &VaultId,
@@ -166,33 +142,21 @@ impl ByteStore for FilesystemBytes {
         })
     }
 
-    async fn evidence(
+    async fn stored(
         &self,
         vault: &VaultId,
         name: &ObjectName,
-    ) -> Result<ChecksumEvidence, StoreFault> {
-        let path = self.path(vault, name);
-        let Ok(bytes) = std::fs::read(&path) else {
-            return Ok(ChecksumEvidence::None);
+    ) -> Result<Option<StoredBytes>, StoreFault> {
+        // READ AND HASH. There is one mode, and this is it: the name a commit
+        // is judged against is computed from the bytes on disk, never read off
+        // anything a client wrote.
+        let Ok(bytes) = std::fs::read(self.path(vault, name)) else {
+            return Ok(None);
         };
-        if path.with_extension("unattested").exists() {
-            // The store holds bytes and attests nothing, which is a REJECTION
-            // and not a shrug: R2 records the checksum only when the client
-            // sent it, so silence has to be refused in both deployments.
-            return Ok(ChecksumEvidence::None);
-        }
-        let stored_size = bytes.len() as u64;
-        Ok(match self.mode {
-            ChecksumMode::Attest => ChecksumEvidence::Attested {
-                checksum: AttestedChecksum::of(&bytes),
-                stored_size,
-            },
-            ChecksumMode::ReadAndHash => ChecksumEvidence::ReadAndHashed {
-                checksum: AttestedChecksum::of(&bytes),
-                name: ObjectName::of(&bytes),
-                stored_size,
-            },
-        })
+        Ok(Some(StoredBytes {
+            name: ObjectName::of(&bytes),
+            size: bytes.len() as u64,
+        }))
     }
 
     async fn read(
@@ -214,7 +178,6 @@ impl ByteStore for FilesystemBytes {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(io(error)),
         }
-        let _ = std::fs::remove_file(path.with_extension("unattested"));
         Ok(())
     }
 }

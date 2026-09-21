@@ -17,10 +17,8 @@
 //! - the data directory contains no private key of any kind.
 
 use centraid_gateway_core::Gateway;
-use centraid_gateway_core::checksum::ChecksumMode;
 use centraid_gateway_core::ids::Key32;
 use centraid_gateway_core::retention::Policy;
-use centraid_gateway_core::store::ByteStore as _;
 use centraid_gateway_server::bytes::configured::{Backend, ConfiguredBytes};
 use centraid_gateway_server::bytes::fs::FilesystemBytes;
 use centraid_gateway_server::config::{Config, StoreConfig, TlsConfig};
@@ -34,17 +32,10 @@ async fn first_run(data_dir: &std::path::Path) -> (Config, Server) {
     let config = Config::defaults(data_dir, "https://vault.example.org");
     std::fs::create_dir_all(&config.data_dir).expect("the data directory");
     let state = SqliteState::open(&config.state_path()).expect("a state file");
-    let StoreConfig::Filesystem {
-        path,
-        checksum_mode,
-    } = &config.store;
+    let StoreConfig::Filesystem { path } = &config.store;
     let bytes = ConfiguredBytes::new(Backend::Filesystem(
-        FilesystemBytes::open(
-            &config.data_dir.join(path),
-            checksum_mode.to_core(),
-            &config.origin,
-        )
-        .expect("an object directory"),
+        FilesystemBytes::open(&config.data_dir.join(path), &config.origin)
+            .expect("an object directory"),
     ));
     let retention = config.retention();
     (
@@ -79,12 +70,10 @@ async fn a_bare_first_run_holds_no_vault_no_account_and_no_invite() {
         "a first run's state file holds no row at all"
     );
 
-    // A DIRECTORY ATTESTS NOTHING, so the bare default is read-and-hash rather
-    // than a mode that would claim a check nobody runs.
-    assert_eq!(
-        server.gateway.bytes.checksum_mode(),
-        ChecksumMode::ReadAndHash
-    );
+    // THERE IS NO CHECKSUM MODE TO CONFIGURE. The store-attested checksum existed for
+    // a store the gateway could not read; v0's store is a directory on the
+    // member's own laptop, so the gateway reads and hashes what it holds
+    // (scope amendment 2026-09-21).
     assert!(
         !server.gateway.bytes.has_mirror(),
         "a mirror is a decision about somebody else's disk"

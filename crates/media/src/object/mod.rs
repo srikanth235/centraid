@@ -77,7 +77,14 @@ pub use dict::Dictionary;
 pub use header::{FORMAT_NAME, FORMAT_VERSION, HEADER_MAGIC, Header, Kind, Role, SALT_BYTES};
 
 /// Every object is at most 16 MiB (F6).
-pub const MAX_OBJECT_BYTES: usize = 16 * 1024 * 1024;
+///
+/// **One declaration, and it is the gateway's.** It was restated here, with a
+/// comment saying the conformance suite held the two equal "in practice"; two
+/// numbers held equal by a suite are two numbers. The cap is a rule — the
+/// gateway refuses an object above it — so it lives with the rules and this
+/// casts it. An object the phone can seal and the gateway refuses is a bug
+/// either way round, and now it cannot happen by arithmetic.
+pub const MAX_OBJECT_BYTES: usize = centraid_gateway_core::upload::MAX_OBJECT_BYTES as usize;
 
 /// The most plaintext one object carries.
 ///

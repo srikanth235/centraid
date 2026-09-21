@@ -11,7 +11,7 @@
 //! which checksum evidence the store can produce — is a property of the store
 //! the adapter was pointed at.
 
-use crate::checksum::{self, ChecksumFault};
+use crate::error::ChecksumFault;
 use crate::error::Refusal;
 use crate::ids::{DeviceId, Generation, ObjectKind, ObjectName, VaultId};
 use crate::lease;
@@ -174,7 +174,6 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
                                 &caller.vault,
                                 &StoredObject {
                                     name: declaration.name,
-                                    checksum: declaration.checksum,
                                     kind: declaration.kind,
                                     padded_size: declaration.padded_size,
                                     state: ObjectState::Declared,
@@ -225,7 +224,6 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
         lease::authorize_write(state.lease, caller.device, caller.epoch)?;
         state.plan.authorize_write(0)?;
 
-        let mode = self.bytes.checksum_mode();
         let mut verified = Vec::with_capacity(input.objects.len());
         let mut already = Vec::new();
         let mut base_objects = Vec::new();
@@ -251,9 +249,26 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
                 continue;
             }
 
-            let evidence = self.bytes.evidence(&caller.vault, name).await?;
-            checksum::verify(mode, *name, held.checksum, held.padded_size, &evidence)
-                .map_err(|fault: ChecksumFault| Fault::Refused(Refusal::Checksum(fault)))?;
+            // THE ONE RULE: the gateway hashes what it stores, and refuses a
+            // name that is not its bytes' hash BEFORE it acks. The
+            // acknowledgement is the only backup claim there is, so anything
+            // this cannot vouch for must not be acked (scope amendment
+            // 2026-09-21).
+            let Some(stored) = self.bytes.stored(&caller.vault, name).await? else {
+                // Declared, never uploaded. Not a checksum fault: there is
+                // nothing at this name to have the wrong hash.
+                return Err(Fault::Refused(Refusal::ObjectUnknown(*name)));
+            };
+            if stored.name != *name {
+                return Err(Fault::Refused(Refusal::Checksum(
+                    ChecksumFault::NameMismatch,
+                )));
+            }
+            if stored.size != held.padded_size {
+                return Err(Fault::Refused(Refusal::Checksum(
+                    ChecksumFault::SizeMismatch,
+                )));
+            }
 
             if held.kind == ObjectKind::Base {
                 base_objects.push(*name);

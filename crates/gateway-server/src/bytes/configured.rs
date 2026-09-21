@@ -24,10 +24,9 @@
 //! same ciphertext under the same name; a second store is a second place that
 //! holds bytes nobody there can open.
 
-use centraid_gateway_core::checksum::{ChecksumEvidence, ChecksumMode};
 use centraid_gateway_core::ids::{ObjectName, VaultId};
 use centraid_gateway_core::scrub;
-use centraid_gateway_core::store::{ByteStore, StoreFault, UploadTarget};
+use centraid_gateway_core::store::{ByteStore, StoreFault, StoredBytes, UploadTarget};
 use centraid_gateway_core::time::ServerTime;
 
 use crate::bytes::ProxyWrite;
@@ -41,12 +40,6 @@ pub enum Backend {
 }
 
 impl ByteStore for Backend {
-    fn checksum_mode(&self) -> ChecksumMode {
-        match self {
-            Self::Filesystem(store) => store.checksum_mode(),
-        }
-    }
-
     async fn presign_put(
         &self,
         vault: &VaultId,
@@ -59,13 +52,13 @@ impl ByteStore for Backend {
         }
     }
 
-    async fn evidence(
+    async fn stored(
         &self,
         vault: &VaultId,
         name: &ObjectName,
-    ) -> Result<ChecksumEvidence, StoreFault> {
+    ) -> Result<Option<StoredBytes>, StoreFault> {
         match self {
-            Self::Filesystem(store) => store.evidence(vault, name).await,
+            Self::Filesystem(store) => store.stored(vault, name).await,
         }
     }
 
@@ -92,10 +85,9 @@ impl ProxyWrite for Backend {
         vault: &VaultId,
         name: &ObjectName,
         bytes: Vec<u8>,
-        attested: bool,
     ) -> Result<(), StoreFault> {
         match self {
-            Self::Filesystem(store) => store.put(vault, name, &bytes, attested),
+            Self::Filesystem(store) => store.put(vault, name, &bytes),
         }
     }
 }
@@ -106,9 +98,9 @@ impl Backend {
     /// # Errors
     ///
     /// A store fault.
-    pub async fn stored(&self) -> Result<Vec<Vec<u8>>, StoreFault> {
+    pub async fn every_stored_object(&self) -> Result<Vec<Vec<u8>>, StoreFault> {
         match self {
-            Self::Filesystem(store) => store.stored(),
+            Self::Filesystem(store) => store.every_stored_object(),
         }
     }
 
@@ -184,16 +176,12 @@ impl ConfiguredBytes {
         if scrub::examine(*name, Some(&bytes)) != scrub::Finding::Intact {
             return Ok(false);
         }
-        self.primary.write(vault, name, bytes, true).await?;
+        self.primary.write(vault, name, bytes).await?;
         Ok(true)
     }
 }
 
 impl ByteStore for ConfiguredBytes {
-    fn checksum_mode(&self) -> ChecksumMode {
-        self.primary.checksum_mode()
-    }
-
     async fn presign_put(
         &self,
         vault: &VaultId,
@@ -206,12 +194,12 @@ impl ByteStore for ConfiguredBytes {
             .await
     }
 
-    async fn evidence(
+    async fn stored(
         &self,
         vault: &VaultId,
         name: &ObjectName,
-    ) -> Result<ChecksumEvidence, StoreFault> {
-        self.primary.evidence(vault, name).await
+    ) -> Result<Option<StoredBytes>, StoreFault> {
+        self.primary.stored(vault, name).await
     }
 
     async fn read(
@@ -244,13 +232,10 @@ impl ProxyWrite for ConfiguredBytes {
         vault: &VaultId,
         name: &ObjectName,
         bytes: Vec<u8>,
-        attested: bool,
     ) -> Result<(), StoreFault> {
-        self.primary
-            .write(vault, name, bytes.clone(), attested)
-            .await?;
+        self.primary.write(vault, name, bytes.clone()).await?;
         if let Some(mirror) = &self.mirror {
-            mirror.write(vault, name, bytes, attested).await?;
+            mirror.write(vault, name, bytes).await?;
         }
         Ok(())
     }

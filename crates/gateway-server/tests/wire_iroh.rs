@@ -64,13 +64,12 @@ use centraid_gateway_client::client::GatewayClient;
 use centraid_gateway_client::signer::DeviceSigner;
 use centraid_gateway_client::transport::{HttpRequest, IrohTransport, Transport as _};
 use centraid_gateway_core::Gateway;
-use centraid_gateway_core::checksum::{AttestedChecksum, ChecksumMode};
 use centraid_gateway_core::ids::{Key32, ObjectName, VaultId};
 use centraid_gateway_core::plan::Plan;
 use centraid_gateway_core::retention::Policy;
 use centraid_gateway_server::bytes::configured::{Backend, ConfiguredBytes};
 use centraid_gateway_server::bytes::fs::FilesystemBytes;
-use centraid_gateway_server::config::Config;
+use centraid_gateway_server::config::{Config, IrohConfig};
 use centraid_gateway_server::http::Server;
 use centraid_gateway_server::state::{SqliteState, register};
 use centraid_gateway_server::{clock, serve};
@@ -130,18 +129,37 @@ struct Live {
     _served: tokio::task::JoinHandle<()>,
 }
 
-/// **Relay off, address lookup off.** `presets::Minimal` sets the crypto
-/// provider and nothing else, so no n0 service is contacted and this test is
-/// green on a machine with no internet.
-async fn local_endpoint(alpn: Option<&[u8]>) -> iroh::Endpoint {
-    let mut builder = iroh::Endpoint::builder(iroh::endpoint::presets::Minimal)
+/// **The phone's endpoint: no ALPN offered, and nothing here ever accepts.**
+///
+/// Bound to loopback with no relay and no address lookup, so this test
+/// contacts no n0 service and is green on a machine with no internet.
+async fn dialling_endpoint() -> iroh::Endpoint {
+    iroh::Endpoint::builder(iroh::endpoint::presets::Minimal)
         .clear_ip_transports()
         .bind_addr("127.0.0.1:0")
-        .expect("loopback is a socket address");
-    if let Some(alpn) = alpn {
-        builder = builder.alpns(vec![alpn.to_vec()]);
-    }
-    builder.bind().await.expect("a bound endpoint")
+        .expect("loopback is a socket address")
+        .bind()
+        .await
+        .expect("a bound endpoint")
+}
+
+/// **The laptop's endpoint, built by the production path.**
+///
+/// `serve::bind_iroh` with `local_only` and a loopback `bind_addr`, not a
+/// second construction written here: an endpoint that offers an ALPN outside
+/// `serve.rs` is a `no-listening-socket` finding, and it should be — the one
+/// test that moves real bytes ought to drive the same code an operator does.
+async fn listening_endpoint(data_dir: &std::path::Path) -> iroh::Endpoint {
+    serve::bind_iroh(
+        data_dir,
+        &IrohConfig {
+            local_only: true,
+            bind_addr: Some("127.0.0.1:0".to_owned()),
+            ..IrohConfig::default()
+        },
+    )
+    .await
+    .expect("a bound endpoint")
 }
 
 /// Bring up a real server with one registered vault, served over iroh.
@@ -159,15 +177,14 @@ async fn live(phone: &Phone, quota_bytes: u64) -> Live {
     .expect("a registered vault");
 
     let bytes = ConfiguredBytes::new(Backend::Filesystem(
-        FilesystemBytes::open(objects.path(), ChecksumMode::ReadAndHash, "")
-            .expect("an object directory"),
+        FilesystemBytes::open(objects.path(), "").expect("an object directory"),
     ));
     let server = Server {
         gateway: Gateway::new(state, bytes, Policy::default()),
         config: Config::defaults(objects.path(), ""),
     };
 
-    let endpoint = local_endpoint(Some(centraid_gateway_core::ALPN)).await;
+    let endpoint = listening_endpoint(objects.path()).await;
     // THE DIRECT ADDRESS, handed over rather than resolved: with no relay and
     // no address lookup there is nothing an endpoint id alone could be dialled
     // through, which is exactly the case `PairTicket::direct_addrs` exists for.
@@ -190,7 +207,7 @@ async fn live(phone: &Phone, quota_bytes: u64) -> Live {
 }
 
 async fn dial(live: &Live, phone: &Phone) -> GatewayClient<IrohTransport> {
-    let endpoint = local_endpoint(None).await;
+    let endpoint = dialling_endpoint().await;
     GatewayClient::new(
         IrohTransport::new(endpoint, live.address.clone()),
         phone.signer(),
@@ -242,13 +259,11 @@ async fn the_whole_client_path_moves_sixteen_mebibytes_over_iroh() {
 
     let sealed = sealed_bytes();
     let name = ObjectName::of(&sealed);
-    let checksum = AttestedChecksum::of(&sealed);
     let targets = client
         .declare(
             &serde_json::json!({
                 "objects": [{
                     "name": name.hex(),
-                    "checksum": checksum.hex(),
                     "kind": "base",
                     "padded_size": sealed.len(),
                 }]
@@ -262,7 +277,7 @@ async fn the_whole_client_path_moves_sixteen_mebibytes_over_iroh() {
 
     // THE BYTES. 16 MiB up one iroh bidirectional stream.
     client
-        .put_object(&name, sealed.clone(), &checksum, now)
+        .put_object(&name, sealed.clone(), now)
         .await
         .expect("16 MiB uploaded over iroh");
 
@@ -301,7 +316,7 @@ async fn the_whole_client_path_moves_sixteen_mebibytes_over_iroh() {
 async fn an_unsigned_request_is_refused_across_the_wire() {
     let phone = Phone::new(0, 0xA1);
     let live = live(&phone, 1_024 * 1_024 * 1_024).await;
-    let endpoint = local_endpoint(None).await;
+    let endpoint = dialling_endpoint().await;
     let transport = IrohTransport::new(endpoint, live.address.clone());
 
     let response = transport
@@ -344,7 +359,7 @@ async fn a_version_window_refusal_parses_on_the_client() {
     // A request that is correct in every way except its version, signed at a
     // protocol the server does not speak.
     let too_new = centraid_gateway_core::PROTOCOL_MAX + 7;
-    let endpoint = local_endpoint(None).await;
+    let endpoint = dialling_endpoint().await;
     let mut client = GatewayClient::new(
         IrohTransport::new(endpoint, live.address.clone()),
         phone.signer_at(too_new),
@@ -378,7 +393,7 @@ async fn a_version_window_refusal_parses_on_the_client() {
 
     // And the same thing one layer down, so a failure says WHICH field moved
     // rather than only that the type came out wrong.
-    let transport = IrohTransport::new(local_endpoint(None).await, live.address.clone());
+    let transport = IrohTransport::new(dialling_endpoint().await, live.address.clone());
     let raw = transport
         .send(HttpRequest {
             method: "POST".to_owned(),

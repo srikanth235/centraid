@@ -19,7 +19,6 @@
 
 mod common;
 
-use centraid_gateway_core::checksum::{AttestedChecksum, ChecksumMode};
 use centraid_gateway_core::conformance::Harness as _;
 use centraid_gateway_core::engine::{Caller, CommitInput};
 use centraid_gateway_core::ids::{Generation, Key32, ObjectKind, ObjectName};
@@ -29,7 +28,7 @@ use centraid_gateway_core::retention::{Policy, Verdict};
 use centraid_gateway_core::store::VaultState;
 use centraid_gateway_core::time::ServerTime;
 use centraid_gateway_core::upload::Declaration;
-use common::{ServerHarness, Store, mode_label};
+use common::{ServerHarness, Store};
 
 const START: i64 = 400 * 86_400_000;
 
@@ -47,13 +46,9 @@ fn caller(now: i64) -> Caller {
 }
 
 async fn ledger_row_lands(store: Store) {
-    let mode = ChecksumMode::Attest;
-    let combination = format!("{} × {}", store.label(), mode_label(mode));
+    let combination = store.label().to_owned();
     let mut harness = ServerHarness::new(store).await;
-    harness
-        .reset(mode, Policy::default())
-        .await
-        .expect("a reset");
+    harness.reset(Policy::default()).await.expect("a reset");
     harness
         .register(VaultState {
             vault: vault(),
@@ -74,7 +69,6 @@ async fn ledger_row_lands(store: Store) {
     let bytes = b"a blob this server cannot open".to_vec();
     let declaration = Declaration {
         name: ObjectName::of(&bytes),
-        checksum: AttestedChecksum::of(&bytes),
         kind: ObjectKind::Blob,
         padded_size: bytes.len() as u64,
     };
@@ -84,7 +78,7 @@ async fn ledger_row_lands(store: Store) {
         .await
         .expect("a target");
     harness
-        .upload(vault(), declaration.name, bytes, true)
+        .upload(vault(), declaration.name, bytes)
         .await
         .expect("the upload");
     harness

@@ -58,7 +58,7 @@
 //! | [`auth`] | the signed preimage, the replay window, and the skew answer |
 //! | [`lease`] | epochs, and `VAULT_MOVED` as a tombstone |
 //! | [`upload`] | refusing to presign a committed name; the 16 MiB cap |
-//! | [`checksum`] | attest and read-and-hash, the two modes |
+//! | [`store`]'s `stored` | the gateway hashes what it holds: `name == blake3(bytes)` |
 //! | [`commit`] | the manifest head moves only by compare-and-set |
 //! | [`retention`] | the floor over bases, the grace period, the size guard, the rate limit |
 //! | [`plan`] | the quota a vault's account is held to |
@@ -69,7 +69,6 @@
 //! | [`conformance`] | the suite both adapters must pass |
 
 pub mod auth;
-pub mod checksum;
 pub mod commit;
 pub mod conformance;
 pub mod engine;
@@ -85,11 +84,10 @@ pub mod time;
 pub mod upload;
 pub mod version;
 
-pub use checksum::{AttestedChecksum, ChecksumEvidence, ChecksumMode};
 pub use engine::Gateway;
-pub use error::Refusal;
+pub use error::{ChecksumFault, ErrorBody, Refusal};
 pub use ids::{AccountId, DeviceId, Generation, ObjectKind, ObjectName, VaultId};
-pub use store::{ByteStore, StateStore, StoredObject, VaultState};
+pub use store::{ByteStore, StateStore, StoredBytes, StoredObject, VaultState};
 pub use time::{Duration, ServerTime};
 
 /// THE ONE ALPN THE GATEWAY API IS CARRIED UNDER.

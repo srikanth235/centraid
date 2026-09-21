@@ -64,15 +64,18 @@ CREATE TABLE IF NOT EXISTS vault (
 -- ---------------------------------------------------------------- objects --
 --
 -- Write-once and self-verifying. `name` is the BLAKE3-256 of the sealed bytes —
--- the id everything in this repository uses. `attested_checksum` is the SHA-256
--- of the same bytes, declared UP FRONT, because the object store's API is not
--- ours: R2 and every S3-compatible store attest SHA-256 and nothing else, and
--- R2 records it only when the client sent it. The declaration is what binds the
--- two names together for a gateway that can only ever see one of them.
+-- the id everything in this repository uses, and now the ONLY one.
+--
+-- `attested_checksum` (the SHA-256 the object store attested) was here because
+-- the object store's API was not ours: R2 and every S3-compatible store attest
+-- SHA-256 and nothing else, and on the hosted adapter the bytes never passed
+-- through gateway code, so the store's word was all there was. The scope
+-- amendment of 2026-09-21 strikes that adapter and its store, so the gateway
+-- holds the bytes and hashes them at commit — one hash, and no column for a
+-- second name that only one deployment could ever check.
 CREATE TABLE IF NOT EXISTS object (
   vault_key         BLOB NOT NULL REFERENCES vault(vault_key) ON DELETE CASCADE,
   name              BLOB NOT NULL,
-  attested_checksum BLOB NOT NULL,
   -- 'base' | 'segment' | 'manifest' | 'blob' | 'pack' | 'share-entry'
   kind              TEXT NOT NULL,
   -- After zstd and Padmé. A SIZE CLASS, not a size, and the only census a

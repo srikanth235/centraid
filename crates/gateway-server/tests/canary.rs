@@ -30,7 +30,6 @@
 //! exactly how a blind store stops being blind.
 
 use centraid_gateway_core::Gateway;
-use centraid_gateway_core::checksum::{AttestedChecksum, ChecksumMode};
 use centraid_gateway_core::engine::{Caller, CommitInput};
 use centraid_gateway_core::ids::{Generation, Key32, ObjectKind, ObjectName};
 use centraid_gateway_core::plan::Plan;
@@ -125,8 +124,7 @@ async fn no_plaintext_and_no_plaintext_hash_is_anywhere_on_disk() {
         let invite = tenancy::mint(&state, 1_024 * 1_024, clock::now()).expect("an invite");
 
         let bytes = ConfiguredBytes::new(Backend::Filesystem(
-            FilesystemBytes::open(&objects_dir, ChecksumMode::ReadAndHash, "")
-                .expect("an object directory"),
+            FilesystemBytes::open(&objects_dir, "").expect("an object directory"),
         ));
         let mut gateway = Gateway::new(state, bytes, Policy::default());
         let now = clock::now();
@@ -140,7 +138,6 @@ async fn no_plaintext_and_no_plaintext_hash_is_anywhere_on_disk() {
 
         let declaration = Declaration {
             name,
-            checksum: AttestedChecksum::of(&sealed),
             kind: ObjectKind::Blob,
             padded_size: sealed.len() as u64,
         };
@@ -150,7 +147,7 @@ async fn no_plaintext_and_no_plaintext_hash_is_anywhere_on_disk() {
             .expect("a target");
         gateway
             .bytes
-            .write(&vault, &name, sealed.clone(), true)
+            .write(&vault, &name, sealed.clone())
             .await
             .expect("stored");
         let head = ObjectName::of(b"the canary's manifest head");
@@ -262,8 +259,8 @@ async fn nothing_the_gateway_logs_carries_a_plaintext_or_a_whole_key() {
         // rules use, which are what a `tracing` field would print.
         tracing::info!(?vault, object = ?name, "an object passed through");
         tracing::debug!(
-            checksum = ?AttestedChecksum::of(&sealed),
-            "the store attested"
+            hashed = ?ObjectName::of(&sealed),
+            "the gateway hashed what it stored"
         );
     });
 

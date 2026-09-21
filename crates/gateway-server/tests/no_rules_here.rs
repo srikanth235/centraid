@@ -138,9 +138,11 @@ fn no_rule_of_the_protocol_is_restated_with_a_literal_here() {
 /// HMAC-SHA256 over a SHA-256 payload digest and would not open a bucket if it
 /// were respelled. The scope amendment of 2026-09-21 struck the S3 byte store,
 /// so the expected list is now EMPTY, which is a tighter assertion than the one
-/// it replaces: this adapter names SHA-256 nowhere. The store's attested
-/// checksum still lives in `gateway-core/src/checksum.rs`, which is W17's to
-/// collapse because it changes the wire.
+/// it replaces: this adapter names SHA-256 nowhere. W17 then collapsed the
+/// store's attested checksum itself — `gateway-core/src/checksum.rs` is
+/// deleted and `cargo tree -i sha2` names only `crates/identity`, whose three
+/// hash families are somebody else's published specifications (W0.5-R1). There
+/// is no exception left anywhere on this path.
 #[test]
 fn the_stores_own_checksum_is_named_in_no_module_of_this_adapter() {
     let mut naming = Vec::new();

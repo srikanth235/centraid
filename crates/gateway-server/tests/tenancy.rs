@@ -18,7 +18,6 @@
 //! never asked.
 
 use centraid_gateway_core::Gateway;
-use centraid_gateway_core::checksum::{AttestedChecksum, ChecksumMode};
 use centraid_gateway_core::ids::{Key32, ObjectKind, ObjectName, VaultId};
 use centraid_gateway_core::plan::Plan;
 use centraid_gateway_core::retention::Policy;
@@ -130,8 +129,7 @@ async fn two_tenants() -> (Live, Member, Member, ObjectName, ObjectName) {
     }
 
     let bytes = ConfiguredBytes::new(Backend::Filesystem(
-        FilesystemBytes::open(objects.path(), ChecksumMode::ReadAndHash, "")
-            .expect("an object directory"),
+        FilesystemBytes::open(objects.path(), "").expect("an object directory"),
     ));
     let mut gateway = Gateway::new(state, bytes, Policy::default());
 
@@ -148,7 +146,7 @@ async fn two_tenants() -> (Live, Member, Member, ObjectName, ObjectName) {
     ] {
         gateway
             .bytes
-            .write(&member.vault, &name, blob.clone(), true)
+            .write(&member.vault, &name, blob.clone())
             .await
             .expect("stored");
         gateway
@@ -157,7 +155,6 @@ async fn two_tenants() -> (Live, Member, Member, ObjectName, ObjectName) {
                 &member.vault,
                 &centraid_gateway_core::store::StoredObject {
                     name,
-                    checksum: AttestedChecksum::of(blob),
                     kind: ObjectKind::Blob,
                     padded_size: blob.len() as u64,
                     state: centraid_gateway_core::store::ObjectState::Committed,

@@ -32,7 +32,6 @@
 //! calling it under whatever makes it atomic; the server uses an immediate
 //! transaction.
 
-use crate::checksum::{AttestedChecksum, ChecksumEvidence, ChecksumMode};
 use crate::ids::{AccountId, Generation, ObjectKind, ObjectName, VaultId};
 use crate::lease::LeaseState;
 use crate::plan::Plan;
@@ -74,14 +73,13 @@ pub enum ObjectState {
 /// One object as the gateway holds it.
 ///
 /// **Read this list as the answer to "what does the gateway see?"** A name, a
-/// checksum, a kind, a padded size, a state, a receipt time and a generation.
+/// kind, a padded size, a state, a receipt time and a generation.
 /// There is no plaintext, no plaintext hash, no table name, no exact size and
 /// no key — and there is nowhere for one to arrive, because a field is the only
 /// way it could.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredObject {
     pub name: ObjectName,
-    pub checksum: AttestedChecksum,
     pub kind: ObjectKind,
     pub padded_size: u64,
     pub state: ObjectState,
@@ -218,17 +216,25 @@ pub trait StateStore {
 /// The objects. **Bytes never pass through gateway code on the hosted
 /// adapter**: they go straight to R2 by presigned URL, and the gateway learns
 /// about them only through [`ByteStore::evidence`].
+/// What a store found at one name: the BLAKE3 of the bytes it is holding, and
+/// how many of them.
+///
+/// The name is computed from the bytes, never read from a header — a header is
+/// something a client wrote, and the whole point of the check is not to take
+/// the client's word for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StoredBytes {
+    /// `ObjectName::of(bytes)`.
+    pub name: ObjectName,
+    /// How many bytes are there.
+    pub size: u64,
+}
+
 #[expect(
     async_fn_in_trait,
     reason = "see StateStore — a Worker's futures are !Send"
 )]
 pub trait ByteStore {
-    /// What this store can be verified with. **A property of the store, not of
-    /// the adapter**: B2 and MinIO differ on which checksum headers they
-    /// attest, which is why this is an input and why the conformance suite runs
-    /// both.
-    fn checksum_mode(&self) -> ChecksumMode;
-
     /// Issue an upload target for a name that is not yet committed.
     async fn presign_put(
         &self,
@@ -238,42 +244,31 @@ pub trait ByteStore {
         now: ServerTime,
     ) -> Result<UploadTarget, StoreFault>;
 
-    /// What the store can say about the bytes at this name, in whichever mode
-    /// **the adapter was built in**.
+    /// WHAT THE GATEWAY FINDS WHEN IT READS BACK WHAT IT STORED.
     ///
-    /// The mode is [`Self::checksum_mode`] and it is the whole of what decides
-    /// which answer is owed:
+    /// `None` when this name has no bytes at all, which is a commit of
+    /// something nobody uploaded.
     ///
-    /// - [`ChecksumMode::Attest`] — answer [`ChecksumEvidence::Attested`] from
-    ///   the store's own attestation, typically a `HEAD`.
-    /// - [`ChecksumMode::ReadAndHash`] — read the bytes and answer
-    ///   [`ChecksumEvidence::ReadAndHashed`], which is the only mode that can
-    ///   see whether the bytes hash to the *name* they are filed under.
-    /// - **Either mode**, when the store has nothing to say about this object:
-    ///   [`ChecksumEvidence::None`], which [`crate::checksum::verify`] refuses.
+    /// # THE ONE RULE, AND WHY THERE IS NO LONGER A MODE
     ///
-    /// # AN UNATTESTED UPLOAD IS A REFUSAL IN BOTH MODES, NOT A READ
+    /// This port used to be `checksum_mode` plus `evidence`, and an adapter
+    /// answered in one of two shapes: the digest its *store* attested, or the
+    /// hashes it computed itself. Two modes existed because R2 and S3 attest
+    /// that one digest and the hosted adapter never saw the bytes. The
+    /// [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+    /// strikes that adapter and its store, so **the gateway holds the bytes and
+    /// hashes them**: one mode, one answer, and no `ChecksumEvidence::None`
+    /// that an adapter could hand back for an object it simply had not looked
+    /// at.
     ///
-    /// R2 records its attested checksum **only if the client sent it** (the
-    /// field is an `Option`, and [`crate::checksum`] is the one module here
-    /// that names which digest it is), so a commit must fail on *no checksum*
-    /// and not merely on *wrong checksum* —
-    /// and the conformance suite asserts that in both modes
-    /// (`checksum/no-attestation-is-a-rejection`). **A read-and-hash adapter
-    /// must therefore not treat a missing attestation as an invitation to read
-    /// and hash the bytes anyway.** Doing so accepts an object the hosted
-    /// adapter refuses, which is precisely the divergence the shared suite
-    /// exists to catch — and W4b's S3 store was doing it (that lane's receipt,
-    /// "Two defects the four runs found"). Read-and-hash is the stronger check
-    /// *over an attested object*, never a substitute for the attestation.
-    ///
-    /// The suite is the authority here, and this paragraph is the port saying
-    /// the same thing so an adapter author does not have to infer it.
-    async fn evidence(
+    /// The implementation reads and hashes. That costs a full read per commit,
+    /// which is the price of the only check that was ever worth making — that
+    /// the bytes at this name really are the bytes this name means.
+    async fn stored(
         &self,
         vault: &VaultId,
         name: &ObjectName,
-    ) -> Result<ChecksumEvidence, StoreFault>;
+    ) -> Result<Option<StoredBytes>, StoreFault>;
 
     /// The stored bytes, for the blind scrub. `None` when there are none.
     async fn read(&self, vault: &VaultId, name: &ObjectName)

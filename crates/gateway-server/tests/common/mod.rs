@@ -11,7 +11,6 @@
 //! the store an operator will have.
 
 use centraid_gateway_core::Gateway;
-use centraid_gateway_core::checksum::ChecksumMode;
 use centraid_gateway_core::conformance::Harness;
 use centraid_gateway_core::ids::{ObjectName, VaultId};
 use centraid_gateway_core::retention::Policy;
@@ -32,13 +31,6 @@ impl Store {
         match self {
             Self::Filesystem => "filesystem",
         }
-    }
-}
-
-pub const fn mode_label(mode: ChecksumMode) -> &'static str {
-    match mode {
-        ChecksumMode::Attest => "attest",
-        ChecksumMode::ReadAndHash => "read-and-hash",
     }
 }
 
@@ -64,12 +56,8 @@ impl ServerHarness {
             gateway: Gateway::new(
                 SqliteState::in_memory().expect("a state file"),
                 ConfiguredBytes::new(Backend::Filesystem(
-                    FilesystemBytes::open(
-                        objects_dir.path(),
-                        ChecksumMode::ReadAndHash,
-                        "https://vault.example.org",
-                    )
-                    .expect("an object directory"),
+                    FilesystemBytes::open(objects_dir.path(), "https://vault.example.org")
+                        .expect("an object directory"),
                 )),
                 Policy::default(),
             ),
@@ -77,15 +65,15 @@ impl ServerHarness {
             store,
         };
         harness
-            .reset(ChecksumMode::Attest, Policy::default())
+            .reset(Policy::default())
             .await
             .expect("the first reset");
         harness
     }
 
-    fn backend(&self, mode: ChecksumMode) -> Backend {
+    fn backend(&self) -> Backend {
         Backend::Filesystem(
-            FilesystemBytes::open(self.objects_dir.path(), mode, "https://vault.example.org")
+            FilesystemBytes::open(self.objects_dir.path(), "https://vault.example.org")
                 .expect("an object directory"),
         )
     }
@@ -95,7 +83,7 @@ impl Harness for ServerHarness {
     type State = SqliteState;
     type Bytes = ConfiguredBytes;
 
-    async fn reset(&mut self, mode: ChecksumMode, policy: Policy) -> Result<(), StoreFault> {
+    async fn reset(&mut self, policy: Policy) -> Result<(), StoreFault> {
         // A FRESH STORE FOR EVERY CASE, both halves of it. The state file is a
         // new in-memory database; the object store is emptied. A case that
         // passed on the previous one's leftovers would be a case that proves
@@ -110,7 +98,7 @@ impl Harness for ServerHarness {
         }
         self.gateway = Gateway::new(
             SqliteState::in_memory()?,
-            ConfiguredBytes::new(self.backend(mode)),
+            ConfiguredBytes::new(self.backend()),
             policy,
         );
         Ok(())
@@ -131,12 +119,8 @@ impl Harness for ServerHarness {
         vault: VaultId,
         name: ObjectName,
         bytes: Vec<u8>,
-        attested: bool,
     ) -> Result<(), StoreFault> {
-        self.gateway
-            .bytes
-            .write(&vault, &name, bytes, attested)
-            .await
+        self.gateway.bytes.write(&vault, &name, bytes).await
     }
 
     /// THE REAL SERIALIZER, not a restatement of it.
@@ -162,7 +146,7 @@ impl Harness for ServerHarness {
         // store's back would let the canary pass against a client that cannot
         // fetch what it wrote — the window has to be opened the way an
         // operator's would be.
-        self.gateway.bytes.primary().stored().await
+        self.gateway.bytes.primary().every_stored_object().await
     }
 
     async fn state_text(&self) -> Result<String, StoreFault> {

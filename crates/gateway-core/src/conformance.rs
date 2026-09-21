@@ -14,7 +14,7 @@
 //!
 //! # What it proves, and what it cannot
 //!
-//! It proves the rules: the checksum in **both** modes, refusing to presign a
+//! It proves the rules: the gateway hashes what it stores, refusing to presign a
 //! committed name, the manifest compare-and-set under a two-device race,
 //! version skew both ways, the retention floor and the size guard and the
 //! delete rate limit under an abuse run, the lease's two different refusals,
@@ -29,16 +29,17 @@
 //!    that the *rule* refuses the loser; that the adapter applies it under
 //!    something that serialises is [`crate::store::StateStore::compare_and_set_head`]'s
 //!    contract and the adapter's own tests.
-//! 2. **That attest mode catches a name that lies about its bytes.** It cannot,
-//!    and that is a property of attest-only stores rather than a gap in the
-//!    suite — [`crate::checksum::ChecksumMode`] says so, and the suite asserts
-//!    the difference between the modes instead of pretending it away.
+//! 2. ~~**That attest mode catches a name that lies about its bytes.**~~ There
+//!    is no attest mode. The store-attested checksum existed because R2 and S3 attest
+//!    it and the hosted adapter never saw the bytes; the
+//!    [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+//!    strikes that adapter, so the gateway reads and hashes what it stores and
+//!    the check attest mode could never make is the only one left.
 //! 3. **That the ciphertext is really ciphertext.** The canary proves that
 //!    nothing the gateway path touches copies a plaintext or a plaintext hash
 //!    into the store. It cannot prove the phone sealed properly; that is
 //!    `crates/media`'s vectors.
 
-use crate::checksum::{AttestedChecksum, ChecksumMode};
 use crate::engine::{Caller, CommitInput, Fault, Gateway};
 use crate::error::Refusal;
 use crate::ids::{Generation, Key32, ObjectKind, ObjectName, VaultId};
@@ -131,9 +132,9 @@ pub trait Harness {
     type Bytes: ByteStore;
 
     /// Throw everything away and come back with a gateway whose byte store is
-    /// in `mode`. Called at the start of every case that touches storage, so no
+    /// Called at the start of every case that touches storage, so no
     /// case can pass on another's leftovers.
-    async fn reset(&mut self, mode: ChecksumMode, policy: Policy) -> Result<(), StoreFault>;
+    async fn reset(&mut self, policy: Policy) -> Result<(), StoreFault>;
 
     /// The gateway under test.
     fn gateway(&mut self) -> &mut Gateway<Self::State, Self::Bytes>;
@@ -142,15 +143,12 @@ pub trait Harness {
     /// deployments differ and which ends in the same state either way.
     async fn register(&mut self, state: VaultState) -> Result<(), StoreFault>;
 
-    /// The `PUT` a phone makes to a presigned target. `attested` is false for
-    /// the case R2 really produces: a client that did not send a checksum
-    /// header, so the store has bytes and attests nothing.
+    /// The `PUT` a phone makes to a presigned target.
     async fn upload(
         &mut self,
         vault: VaultId,
         name: ObjectName,
         bytes: Vec<u8>,
-        attested: bool,
     ) -> Result<(), StoreFault>;
 
     /// Flip a stored object's bits, for the scrub.
@@ -224,7 +222,6 @@ fn caller(epoch: u64, now: i64) -> Caller {
 fn declaration(bytes: &[u8], kind: ObjectKind) -> Declaration {
     Declaration {
         name: ObjectName::of(bytes),
-        checksum: AttestedChecksum::of(bytes),
         kind,
         padded_size: bytes.len() as u64,
     }
@@ -245,7 +242,7 @@ async fn land<H: Harness>(
         .declare(caller(1, now), core::slice::from_ref(&declaration))
         .await?;
     harness
-        .upload(vault_id(), declaration.name, bytes.to_vec(), true)
+        .upload(vault_id(), declaration.name, bytes.to_vec())
         .await?;
     harness
         .gateway()
@@ -265,13 +262,8 @@ async fn land<H: Harness>(
 }
 
 /// Register a vault and take the lease at epoch 1.
-async fn founded<H: Harness>(
-    harness: &mut H,
-    mode: ChecksumMode,
-    policy: Policy,
-    plan: Plan,
-) -> Result<(), Fault> {
-    harness.reset(mode, policy).await?;
+async fn founded<H: Harness>(harness: &mut H, policy: Policy, plan: Plan) -> Result<(), Fault> {
+    harness.reset(policy).await?;
     harness.register(vault_state(plan)).await?;
     harness.gateway().claim_lease(caller(1, START)).await?;
     Ok(())
@@ -416,105 +408,79 @@ fn version_skew(report: &mut Report) {
     );
 }
 
-/// BOTH CHECKSUM MODES, because B2 and MinIO differ on which headers they
-/// attest and without both the adapters diverge on the one rule the whole
-/// scheme rests on.
+/// THE GATEWAY HASHES WHAT IT STORES, AND REFUSES A NAME THAT IS NOT ITS
+/// BYTES' HASH BEFORE IT ACKS.
+///
+/// This was two cases over two modes and a third for "no attestation is a
+/// rejection". All three existed because the store's own attestation was the most a
+/// *blind* store could offer: R2 records it only when the client sent it, so
+/// silence had to be a refusal, and only a read-and-hash adapter could see
+/// whether the bytes hashed to the name at all. The
+/// [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+/// strikes the store that could not be read, so what is left is the one check
+/// that was always the real one — and it is a rule rather than a mode.
 async fn checksum_modes<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan) {
-    for (mode, label) in [
-        (ChecksumMode::Attest, "attest"),
-        (ChecksumMode::ReadAndHash, "read-and-hash"),
-    ] {
-        let name: &'static str = if label == "attest" {
-            "checksum/attest-mode-commits-verified-bytes"
-        } else {
-            "checksum/read-and-hash-mode-commits-verified-bytes"
-        };
-        if let Err(fault) = founded(harness, mode, Policy::default(), plan).await {
-            report.fail(name, format!("setup failed: {fault:?}"));
-            continue;
-        }
-        let bytes = b"sealed base range, mode one".to_vec();
-        let head = ObjectName::of(b"manifest one");
-        match land(harness, &bytes, ObjectKind::Base, head, None, START).await {
-            Ok(()) => report.pass(name),
-            Err(fault) => report.fail(name, format!("a good commit was refused: {fault:?}")),
-        }
+    let name = "checksum/a-good-commit-is-acked";
+    if let Err(fault) = founded(harness, Policy::default(), plan).await {
+        report.fail(name, format!("setup failed: {fault:?}"));
+        return;
+    }
+    let bytes = b"sealed base range".to_vec();
+    let head = ObjectName::of(b"manifest one");
+    match land(harness, &bytes, ObjectKind::Base, head, None, START).await {
+        Ok(()) => report.pass(name),
+        Err(fault) => report.fail(name, format!("a good commit was refused: {fault:?}")),
     }
 
-    // R2 RECORDS THE ATTESTED CHECKSUM ONLY IF THE CLIENT SENT IT, so "no
-    // checksum" must be a rejection and not a shrug. `checksum.rs` says which
-    // checksum that is, and why it is the one thing here that is not BLAKE3.
-    for mode in [ChecksumMode::Attest, ChecksumMode::ReadAndHash] {
-        let name = "checksum/no-attestation-is-a-rejection";
-        if founded(harness, mode, Policy::default(), plan)
-            .await
-            .is_err()
-        {
-            report.fail(name, "setup failed");
-            return;
-        }
-        let bytes = b"bytes uploaded with no checksum header".to_vec();
-        let declared = declaration(&bytes, ObjectKind::Segment);
-        if harness
-            .gateway()
-            .declare(caller(1, START), core::slice::from_ref(&declared))
-            .await
-            .is_err()
-        {
-            report.fail(name, "the declaration itself was refused");
-            return;
-        }
-        if harness
-            .upload(vault_id(), declared.name, bytes.clone(), false)
-            .await
-            .is_err()
-        {
-            report.fail(name, "the upload failed");
-            return;
-        }
-        let outcome = harness
-            .gateway()
-            .commit(
-                caller(1, START),
-                &CommitInput {
-                    generation: generation(),
-                    objects: vec![declared.name],
-                    manifest_head: ObjectName::of(b"manifest two"),
-                    prev_head: None,
-                    first_txid: 1,
-                    last_txid: 1,
-                },
-            )
-            .await;
-        let refused = matches!(
-            outcome,
-            Err(Fault::Refused(Refusal::Checksum(
-                crate::checksum::ChecksumFault::Missing
-            )))
-        );
-        if !refused {
-            report.fail(
-                name,
-                format!("a commit with no attested checksum was not refused: {outcome:?}"),
-            );
-            return;
-        }
+    // A COMMIT OF SOMETHING NOBODY UPLOADED. There is nothing at this name to
+    // have the wrong hash, and it is refused before the ack rather than acked
+    // as a backup that does not exist.
+    let name = "checksum/a-commit-of-bytes-nobody-uploaded-is-refused";
+    if founded(harness, Policy::default(), plan).await.is_err() {
+        report.fail(name, "setup failed");
+        return;
     }
-    report.pass("checksum/no-attestation-is-a-rejection");
-
-    // The half only read-and-hash can see.
-    let name = "checksum/read-and-hash-catches-bytes-that-do-not-hash-to-their-name";
-    if founded(harness, ChecksumMode::ReadAndHash, Policy::default(), plan)
+    let bytes = b"bytes the phone declared and never sent".to_vec();
+    let declared = declaration(&bytes, ObjectKind::Segment);
+    if harness
+        .gateway()
+        .declare(caller(1, START), core::slice::from_ref(&declared))
         .await
         .is_err()
     {
+        report.fail(name, "the declaration itself was refused");
+        return;
+    }
+    let outcome = harness
+        .gateway()
+        .commit(
+            caller(1, START),
+            &CommitInput {
+                generation: generation(),
+                objects: vec![declared.name],
+                manifest_head: ObjectName::of(b"manifest two"),
+                prev_head: None,
+                first_txid: 1,
+                last_txid: 1,
+            },
+        )
+        .await;
+    report.check(
+        name,
+        matches!(outcome, Err(Fault::Refused(Refusal::ObjectUnknown(_)))),
+        format!("a commit of bytes nobody uploaded was not refused: {outcome:?}"),
+    );
+
+    // THE ONE RULE. Bytes filed under a name that is not their hash are
+    // refused, and only a gateway that reads them can see it.
+    let name = "checksum/bytes-that-do-not-hash-to-their-name-are-refused";
+    if founded(harness, Policy::default(), plan).await.is_err() {
         report.fail(name, "setup failed");
         return;
     }
     let honest = b"the bytes the phone actually sealed".to_vec();
     let lie = declaration(b"a name for entirely other bytes", ObjectKind::Blob);
     let declared = Declaration {
-        checksum: AttestedChecksum::of(&honest),
         padded_size: honest.len() as u64,
         ..lie
     };
@@ -527,9 +493,7 @@ async fn checksum_modes<H: Harness>(harness: &mut H, report: &mut Report, plan: 
         report.fail(name, "the declaration was refused");
         return;
     }
-    let _ = harness
-        .upload(vault_id(), declared.name, honest, true)
-        .await;
+    let _ = harness.upload(vault_id(), declared.name, honest).await;
     let outcome = harness
         .gateway()
         .commit(
@@ -549,7 +513,7 @@ async fn checksum_modes<H: Harness>(harness: &mut H, report: &mut Report, plan: 
         matches!(
             outcome,
             Err(Fault::Refused(Refusal::Checksum(
-                crate::checksum::ChecksumFault::NameMismatch
+                crate::error::ChecksumFault::NameMismatch
             )))
         ),
         format!("bytes that do not hash to their name committed: {outcome:?}"),
@@ -560,10 +524,7 @@ async fn checksum_modes<H: Harness>(harness: &mut H, report: &mut Report, plan: 
 /// hash of its bytes.
 async fn presign_refusal<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan) {
     let name = "upload/a-committed-name-is-never-presigned";
-    if founded(harness, ChecksumMode::Attest, Policy::default(), plan)
-        .await
-        .is_err()
-    {
+    if founded(harness, Policy::default(), plan).await.is_err() {
         report.fail(name, "setup failed");
         return;
     }
@@ -590,9 +551,12 @@ async fn presign_refusal<H: Harness>(harness: &mut H, report: &mut Report, plan:
         ),
     }
 
-    // The binding: the same name with another checksum is refused outright.
+    // The binding: the same name at another size is refused outright. A
+    // content-addressed name means one string of bytes, so a second
+    // declaration claiming a different length for it is a client asking the
+    // store to hold two things at one name.
     let swapped = Declaration {
-        checksum: AttestedChecksum::of(b"quite different bytes"),
+        padded_size: declared.padded_size + 1,
         ..declared
     };
     let outcome = harness
@@ -600,7 +564,7 @@ async fn presign_refusal<H: Harness>(harness: &mut H, report: &mut Report, plan:
         .declare(caller(1, START), core::slice::from_ref(&swapped))
         .await;
     report.check(
-        "upload/a-name-cannot-be-re-declared-with-another-checksum",
+        "upload/a-name-cannot-be-re-declared-at-another-size",
         matches!(outcome, Err(Fault::Refused(Refusal::Checksum(_)))),
         format!("a name was re-bound to other bytes: {outcome:?}"),
     );
@@ -610,10 +574,7 @@ async fn presign_refusal<H: Harness>(harness: &mut H, report: &mut Report, plan:
 /// validly (F1); exactly one wins, and the other is told.
 async fn head_race<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan) {
     let name = "commit/two-devices-racing-leave-exactly-one-winner";
-    if founded(harness, ChecksumMode::Attest, Policy::default(), plan)
-        .await
-        .is_err()
-    {
+    if founded(harness, Policy::default(), plan).await.is_err() {
         report.fail(name, "setup failed");
         return;
     }
@@ -685,10 +646,7 @@ async fn head_race<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan)
 /// requests, and the floor, the size guard and the rate limit all hold.
 async fn retention_abuse<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan) {
     let name = "retention/fifty-empty-generations-cannot-push-a-real-base-out";
-    if founded(harness, ChecksumMode::Attest, Policy::default(), plan)
-        .await
-        .is_err()
-    {
+    if founded(harness, Policy::default(), plan).await.is_err() {
         report.fail(name, "setup failed");
         return;
     }
@@ -757,10 +715,7 @@ async fn retention_abuse<H: Harness>(harness: &mut H, report: &mut Report, plan:
     // THE RATE LIMIT, on its own: at most one client-directed base tombstone
     // per vault per day, even in one batch.
     let rate = "retention/one-client-base-tombstone-per-vault-per-day";
-    if founded(harness, ChecksumMode::Attest, Policy::default(), plan)
-        .await
-        .is_err()
-    {
+    if founded(harness, Policy::default(), plan).await.is_err() {
         report.fail(rate, "setup failed");
         return;
     }
@@ -835,10 +790,7 @@ async fn retention_abuse<H: Harness>(harness: &mut H, report: &mut Report, plan:
 /// them.
 async fn lease_refusals<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan) {
     let name = "lease/a-superseded-device-is-told-the-vault-moved";
-    if founded(harness, ChecksumMode::Attest, Policy::default(), plan)
-        .await
-        .is_err()
-    {
+    if founded(harness, Policy::default(), plan).await.is_err() {
         report.fail(name, "setup failed");
         return;
     }
@@ -888,14 +840,9 @@ async fn lease_refusals<H: Harness>(harness: &mut H, report: &mut Report, plan: 
 /// rather than deleted (F13).
 async fn plan_and_quota<H: Harness>(harness: &mut H, report: &mut Report) {
     let name = "plan/a-quota-refuses-the-byte-that-crosses-it";
-    if founded(
-        harness,
-        ChecksumMode::Attest,
-        Policy::default(),
-        Plan::active(1_024),
-    )
-    .await
-    .is_err()
+    if founded(harness, Policy::default(), Plan::active(1_024))
+        .await
+        .is_err()
     {
         report.fail(name, "setup failed");
         return;
@@ -918,10 +865,7 @@ async fn plan_and_quota<H: Harness>(harness: &mut H, report: &mut Report) {
 async fn scrub_and_purge<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan) {
     let name = "scrub/bit-rot-is-reported-without-any-key";
     let policy = Policy::default();
-    if founded(harness, ChecksumMode::Attest, policy, plan)
-        .await
-        .is_err()
-    {
+    if founded(harness, policy, plan).await.is_err() {
         report.fail(name, "setup failed");
         return;
     }
@@ -1002,10 +946,7 @@ async fn scrub_and_purge<H: Harness>(harness: &mut H, report: &mut Report, plan:
 /// exactly how a blind store stops being blind.
 async fn canary<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan) {
     let name = "canary/no-plaintext-or-plaintext-hash-is-anywhere-in-the-store";
-    if founded(harness, ChecksumMode::Attest, Policy::default(), plan)
-        .await
-        .is_err()
-    {
+    if founded(harness, Policy::default(), plan).await.is_err() {
         report.fail(name, "setup failed");
         return;
     }

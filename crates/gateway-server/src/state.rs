@@ -30,7 +30,6 @@
 
 use std::path::Path;
 
-use centraid_gateway_core::checksum::AttestedChecksum;
 use centraid_gateway_core::commit;
 use centraid_gateway_core::ids::{AccountId, Generation, Key32, ObjectKind, ObjectName, VaultId};
 use centraid_gateway_core::lease::{Lease, LeaseState};
@@ -239,15 +238,12 @@ fn object_kind_of(word: &str) -> Result<ObjectKind, StoreFault> {
 
 fn stored_object(row: &Row<'_>) -> Result<StoredObject, StoreFault> {
     let name = key32(&row.get::<_, Vec<u8>>(0).map_err(fault)?)?;
-    let checksum_bytes: Vec<u8> = row.get(1).map_err(fault)?;
-    let checksum = AttestedChecksum::from_slice(&checksum_bytes)
-        .ok_or_else(|| StoreFault::new("a stored checksum is not 32 bytes"))?;
-    let kind = object_kind_of(&row.get::<_, String>(2).map_err(fault)?)?;
-    let padded_size: i64 = row.get(3).map_err(fault)?;
-    let state_word: String = row.get(4).map_err(fault)?;
-    let received_at: i64 = row.get(5).map_err(fault)?;
-    let purge_after: Option<i64> = row.get(6).map_err(fault)?;
-    let generation_text: String = row.get(7).map_err(fault)?;
+    let kind = object_kind_of(&row.get::<_, String>(1).map_err(fault)?)?;
+    let padded_size: i64 = row.get(2).map_err(fault)?;
+    let state_word: String = row.get(3).map_err(fault)?;
+    let received_at: i64 = row.get(4).map_err(fault)?;
+    let purge_after: Option<i64> = row.get(5).map_err(fault)?;
+    let generation_text: String = row.get(6).map_err(fault)?;
 
     let state = match state_word.as_str() {
         "declared" => ObjectState::Declared,
@@ -263,7 +259,6 @@ fn stored_object(row: &Row<'_>) -> Result<StoredObject, StoreFault> {
 
     Ok(StoredObject {
         name,
-        checksum,
         kind,
         padded_size: padded_size.try_into().unwrap_or(0),
         state,
@@ -427,7 +422,6 @@ impl StateStore for SqliteState {
                 params![
                     vault.as_bytes().as_slice(),
                     object.name.as_bytes().as_slice(),
-                    object.checksum.as_bytes().as_slice(),
                     object.kind.as_str(),
                     as_i64(object.padded_size),
                     object_state_word(object.state),

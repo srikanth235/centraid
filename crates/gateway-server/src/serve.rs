@@ -265,9 +265,25 @@ fn restrict(_path: &Path) -> anyhow::Result<()> {
 /// cannot bind its UDP socket.
 pub async fn bind_iroh(data_dir: &Path, config: &IrohConfig) -> anyhow::Result<Endpoint> {
     let secret = node_secret(data_dir)?;
-    let mut builder = Endpoint::builder(presets::N0)
-        .secret_key(secret)
-        .alpns(vec![centraid_gateway_core::ALPN.to_vec()]);
+    // `Minimal` sets the crypto provider and nothing else: no relay, no
+    // address lookup, nothing of this household's reaching n0. `N0` is the
+    // default because a phone on a foreign network needs both.
+    let mut builder = if config.local_only {
+        Endpoint::builder(presets::Minimal)
+    } else {
+        Endpoint::builder(presets::N0)
+    }
+    .secret_key(secret)
+    // THE ONE PLACE IN THIS WORKSPACE THAT OFFERS A PROTOCOL FOR AN INBOUND
+    // HANDSHAKE TO NEGOTIATE. `no-listening-socket` allows this file and no
+    // other; the phone's endpoint offers none.
+    .alpns(vec![centraid_gateway_core::ALPN.to_vec()]);
+    if let Some(bind) = &config.bind_addr {
+        builder = builder
+            .clear_ip_transports()
+            .bind_addr(bind.as_str())
+            .with_context(|| format!("{bind} is not a socket address"))?;
+    }
     if let Some(relay) = &config.relay_url {
         let url: iroh::RelayUrl = relay
             .parse()

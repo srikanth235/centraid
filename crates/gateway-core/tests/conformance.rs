@@ -11,7 +11,6 @@ use std::future::Future;
 use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 
-use centraid_gateway_core::checksum::ChecksumMode;
 use centraid_gateway_core::conformance::{self, Harness};
 use centraid_gateway_core::engine::Gateway;
 use centraid_gateway_core::error::Refusal;
@@ -46,11 +45,7 @@ struct MemoryHarness {
 impl MemoryHarness {
     fn new() -> Self {
         Self {
-            gateway: Gateway::new(
-                MemoryState::new(),
-                MemoryBytes::new(ChecksumMode::Attest),
-                Policy::default(),
-            ),
+            gateway: Gateway::new(MemoryState::new(), MemoryBytes::new(), Policy::default()),
         }
     }
 }
@@ -59,8 +54,8 @@ impl Harness for MemoryHarness {
     type State = MemoryState;
     type Bytes = MemoryBytes;
 
-    async fn reset(&mut self, mode: ChecksumMode, policy: Policy) -> Result<(), StoreFault> {
-        self.gateway = Gateway::new(MemoryState::new(), MemoryBytes::new(mode), policy);
+    async fn reset(&mut self, policy: Policy) -> Result<(), StoreFault> {
+        self.gateway = Gateway::new(MemoryState::new(), MemoryBytes::new(), policy);
         Ok(())
     }
 
@@ -78,15 +73,8 @@ impl Harness for MemoryHarness {
         vault: VaultId,
         name: ObjectName,
         bytes: Vec<u8>,
-        attested: bool,
     ) -> Result<(), StoreFault> {
-        if attested {
-            self.gateway.bytes.upload(vault, name, bytes);
-        } else {
-            self.gateway
-                .bytes
-                .upload_without_attestation(vault, name, bytes);
-        }
+        self.gateway.bytes.upload(vault, name, bytes);
         Ok(())
     }
 
@@ -99,7 +87,7 @@ impl Harness for MemoryHarness {
         Ok(self
             .gateway
             .bytes
-            .stored()
+            .every_stored_object()
             .map(|(_, bytes)| bytes.clone())
             .collect())
     }
@@ -155,10 +143,9 @@ fn the_conformance_suite_is_green_against_the_in_memory_adapter() {
         "commit/two-devices-racing-leave-exactly-one-winner",
         "retention/fifty-empty-generations-cannot-push-a-real-base-out",
         "retention/one-client-base-tombstone-per-vault-per-day",
-        "checksum/attest-mode-commits-verified-bytes",
-        "checksum/read-and-hash-mode-commits-verified-bytes",
-        "checksum/no-attestation-is-a-rejection",
-        "checksum/read-and-hash-catches-bytes-that-do-not-hash-to-their-name",
+        "checksum/a-good-commit-is-acked",
+        "checksum/a-commit-of-bytes-nobody-uploaded-is-refused",
+        "checksum/bytes-that-do-not-hash-to-their-name-are-refused",
         "version-skew/server-too-old-writes-nothing",
         "version-skew/client-too-old",
         "canary/no-plaintext-or-plaintext-hash-is-anywhere-in-the-store",
@@ -186,8 +173,8 @@ fn the_suite_goes_red_against_a_harness_that_does_not_store_what_it_was_given() 
         type State = MemoryState;
         type Bytes = MemoryBytes;
 
-        async fn reset(&mut self, mode: ChecksumMode, policy: Policy) -> Result<(), StoreFault> {
-            self.0.reset(mode, policy).await
+        async fn reset(&mut self, policy: Policy) -> Result<(), StoreFault> {
+            self.0.reset(policy).await
         }
 
         fn gateway(&mut self) -> &mut Gateway<Self::State, Self::Bytes> {
@@ -203,10 +190,9 @@ fn the_suite_goes_red_against_a_harness_that_does_not_store_what_it_was_given() 
             _vault: VaultId,
             _name: ObjectName,
             _bytes: Vec<u8>,
-            _attested: bool,
         ) -> Result<(), StoreFault> {
-            // The bytes go nowhere. Every commit should now fail on "no
-            // attested checksum", which is the rule R2's behaviour forced.
+            // The bytes go nowhere, so every commit fails: a gateway that
+            // hashes what it stores has nothing at that name to hash.
             Ok(())
         }
 

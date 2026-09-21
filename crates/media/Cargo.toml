@@ -8,6 +8,12 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+# ONE DECLARATION OF THE 16 MiB CAP (F6, #1029 W17-5). It is a PROTOCOL number
+# — the gateway refuses an object above it — so it is declared with the rules
+# and imported here rather than restated. The dependency is light and one-way:
+# `gateway-core` is a pure state machine over api-proto, blake3, ed25519-dalek,
+# hex, serde and thiserror, and it does not know this crate exists.
+centraid-gateway-core = { path = "../gateway-core" }
 aes-gcm.workspace = true
 anyhow.workspace = true
 base64.workspace = true
