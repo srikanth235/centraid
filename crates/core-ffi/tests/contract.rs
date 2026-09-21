@@ -643,6 +643,123 @@ fn a_panic_in_open_hands_back_no_handle() {
     );
 }
 
+/// **A REFUSAL AT `open` SAYS WHY, IN THE LOG, BECAUSE THE CODE CANNOT**
+/// (#1029 W6b).
+///
+/// ## What is under test
+///
+/// `code_for_open`'s own documentation ends "the reason is in the log line the
+/// core already emits" — and no line was emitted, which made that sentence a
+/// promise the code did not keep. The ABI has six status codes and `CONTRACT.md`
+/// governs the table, so every refusal that is not one of the five named arms
+/// is [`CENTRAID_BAD_ARGUMENT`]: `-1` answers "the path is wrong", "this file is
+/// not a vault" and "this core is older than this vault" alike. Widening the
+/// table is not the fix — a second, smaller error vocabulary for three shells to
+/// learn is what `code_for` exists to refuse. The LINE is where the difference
+/// lives, so the line has to be written.
+///
+/// ## Why this refusal and not an easier one
+///
+/// `VaultError::DowngradeRefused` — a file a NEWER core migrated, handed to an
+/// OLDER one — is the refusal that most needs the line. It is the most
+/// actionable thing a shell author can hit (their library is behind their vault)
+/// and, through six status codes, it is indistinguishable from a typo in a path.
+/// That the refusal itself is correct is `crates/vault`'s `file.rs` and
+/// `crates/ontology`'s `golden_vault.rs`; what is asserted here is what crosses
+/// the ABI: a negative code, no handle written, and a line that names the reason.
+#[test]
+fn a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why() {
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct Captured(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Captured {
+        fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .lock()
+                .expect("the log lock")
+                .extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let dir = centraid_ontology::golden::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    let path = dir.join("from-the-future.db");
+
+    // A REAL, FOUNDED VAULT — then stamped as having run a rung this build does
+    // not have. It has to be a real file: the downgrade check happens AFTER the
+    // application id and the header have been accepted, so a hand-written file
+    // would be refused earlier, as `NotAVault`, and would test a different arm.
+    {
+        let handle =
+            centraid_core::Core::open(centraid_core::CoreConfig::new(&path)).expect("a core opens");
+        handle
+            .with_vault(|vault| Ok(vault.found("Ahead", "Owner")?))
+            .expect("it founds");
+        handle.close();
+    }
+    // Through `centraid_vault`'s own re-exported `rusqlite`, and NOT by writing
+    // byte 60 of the SQLite header: the vault runs in WAL mode with
+    // `NO_CKPT_ON_CLOSE`, so after a close the main file is a 4KiB header and
+    // the rows — and the authoritative page one — are in the `-wal` sidecar. A
+    // patched header is read straight past, which is a test that silently
+    // measures nothing. `sql-confinement` is untouched: this is a pragma name,
+    // not a query.
+    let ahead = centraid_vault::head_version() + 1;
+    {
+        let connection = centraid_vault::rusqlite::Connection::open(&path).expect("the file opens");
+        connection
+            .pragma_update(None, "user_version", ahead)
+            .expect("the stamp writes");
+    }
+
+    let config = format!(
+        r#"{{"path":{:?},"create":false}}"#,
+        path.display().to_string()
+    );
+    let sentinel = 0x1234_usize as *mut centraid_core::Handle;
+    let mut handle = sentinel;
+    let captured = Captured::default();
+    let sink = captured.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(move || sink.clone())
+        .with_max_level(tracing::Level::TRACE)
+        .finish();
+    let code = tracing::subscriber::with_default(subscriber, || {
+        // SAFETY: live config bytes and a live out-pointer.
+        unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) }
+    });
+
+    assert_eq!(
+        code, CENTRAID_BAD_ARGUMENT,
+        "a vault from a newer core must refuse with a negative code"
+    );
+    assert!(
+        std::ptr::eq(handle, sentinel),
+        "a failed open wrote a handle the caller would then close"
+    );
+
+    let log = captured.0.lock().expect("the log lock").clone();
+    let log = String::from_utf8_lossy(&log);
+    assert!(
+        log.contains("centraid_open refused"),
+        "the refusal emitted no line, so `-1` is again the whole story: {log}"
+    );
+    // THE LINE CARRIES THE REASON, NOT JUST THE CODE. A line that said only
+    // "refused with -1" would restate the number the caller already has.
+    assert!(
+        log.contains(&ahead.to_string()) && log.contains("schema version"),
+        "the line does not name the version this file is at: {log}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `open` NEVER ANSWERS `OK` WITHOUT A HANDLE — over an ordinary refusal, not
 /// a malformed configuration (#1029 W5).
 ///

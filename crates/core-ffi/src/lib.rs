@@ -187,11 +187,38 @@ pub unsafe extern "C" fn centraid_open(
             CENTRAID_OK
         }
         // NEVER `OK` WITHOUT A HANDLE. See [`code_for_open`].
-        Ok(Err(error)) => code_for_open(&error),
+        //
+        // **AND NEVER A BARE NUMBER** (#1029 W6b). `code_for_open`'s own
+        // documentation says "the reason is in the log line the core already
+        // emits" — and no log line was emitted here, which made that sentence a
+        // promise the code did not keep. Every refusal that is not one of the
+        // five named arms comes back as `CENTRAID_BAD_ARGUMENT`, so `-1` is the
+        // answer to "the path is wrong", "this file is not a vault" AND "this
+        // core is older than this vault" alike. The status code cannot tell
+        // them apart by ruling — the ABI has six codes and `CONTRACT.md`
+        // governs the table — so the LINE is where the difference lives, and it
+        // has to actually be written.
+        //
+        // The case that made this bite: `VaultError::DowngradeRefused`, which
+        // is a file a NEWER core migrated being handed to an OLDER one. It is
+        // the most actionable refusal a shell author can hit and it looked
+        // exactly like a typo in a path.
+        Ok(Err(error)) => {
+            let code = code_for_open(&error);
+            tracing::warn!("centraid_open refused with {code}: {error}");
+            code
+        }
         // THERE IS NO HANDLE TO POISON YET. A panic in `open` is reported as
         // such and the caller gets no handle at all, which is the only honest
         // answer: a poisoned handle it never received cannot be restarted.
-        Err(_) => CENTRAID_PANICKED,
+        //
+        // **A PANIC IS NOT A `-1`.** It has its own code and always did, so the
+        // two are already distinguishable by a caller; what was missing is the
+        // line above, not a code. Asserted in `tests/contract.rs`.
+        Err(_) => {
+            tracing::warn!("centraid_open panicked; no handle was produced");
+            CENTRAID_PANICKED
+        }
     }
 }
 

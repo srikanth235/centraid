@@ -234,7 +234,8 @@ fn table_cost(entries: &[PackEntry], next_id: &str) -> usize {
 ///
 /// # Errors
 /// [`ObjectError::TooLarge`] if the items do not fit under [`MAX_PACK_BYTES`],
-/// otherwise whatever sealing an item refused.
+/// [`ObjectError::PackTable`] for an item id the table's length prefix cannot
+/// name, otherwise whatever sealing an item refused.
 pub fn build(
     vault: VaultId<'_>,
     root: &[u8; super::KEY_BYTES],
@@ -277,7 +278,7 @@ fn finish(
             role: Role::ItemTable,
             dictionary,
         },
-        &encode_table(&entries),
+        &encode_table(&entries)?,
     )?;
     let table_len = u32::try_from(table.bytes.len()).map_err(|_| ObjectError::Seal)?;
     bytes.extend_from_slice(&table.bytes);
@@ -457,7 +458,10 @@ pub fn repack(
 }
 
 /// `count ‖ (id_len ‖ id ‖ offset ‖ length)*`, all big-endian.
-fn encode_table(entries: &[PackEntry]) -> Vec<u8> {
+///
+/// # Errors
+/// [`ObjectError::PackTable`] for an item id a `u16` length prefix cannot name.
+fn encode_table(entries: &[PackEntry]) -> ObjectResult<Vec<u8>> {
     let mut out = Vec::new();
     out.extend_from_slice(
         &u32::try_from(entries.len())
@@ -466,13 +470,25 @@ fn encode_table(entries: &[PackEntry]) -> Vec<u8> {
     );
     for entry in entries {
         let id = entry.id.as_bytes();
-        out.extend_from_slice(&u16::try_from(id.len()).unwrap_or(u16::MAX).to_be_bytes());
+        // REFUSED, NOT CLAMPED (#1029 W6b). `unwrap_or(u16::MAX)` wrote 65535
+        // as the prefix and then wrote the WHOLE id after it, so the table no
+        // longer described the bytes it sat in: [`decode_table`] takes 65535
+        // bytes as the id and then reads the tail of the real id as the
+        // 32-byte name, the offset and the length — and every row after that
+        // one shifts with it. A silent clamp inside a length prefix survives
+        // the write and survives the read, and surfaces as the wrong
+        // photograph rather than as an error. A pack that cannot name its own
+        // item is refused here, while there is still somebody to tell.
+        let id_len = u16::try_from(id.len()).map_err(|_| ObjectError::PackTable {
+            reason: "an item id is longer than its length prefix can name",
+        })?;
+        out.extend_from_slice(&id_len.to_be_bytes());
         out.extend_from_slice(id);
         out.extend_from_slice(entry.name.as_bytes());
         out.extend_from_slice(&entry.offset.to_be_bytes());
         out.extend_from_slice(&entry.length.to_be_bytes());
     }
-    out
+    Ok(out)
 }
 
 fn decode_table(bytes: &[u8]) -> ObjectResult<Vec<PackEntry>> {
@@ -581,6 +597,31 @@ mod tests {
             read_table(vault(), &ROOT, &pack.bytes, None).expect("reads"),
             pack.entries
         );
+    }
+
+    /// **A LENGTH PREFIX THAT CANNOT NAME ITS ID IS A REFUSAL, NOT A SMALLER
+    /// NUMBER** (#1029 W6b).
+    ///
+    /// The clamp this replaces wrote 65535 into the prefix and the whole id
+    /// after it, which is not a truncated table but a MISALIGNED one: every row
+    /// past the long id decodes as somebody else's name, offset and length. The
+    /// pack still sealed, still read back its own trailer, and handed out the
+    /// wrong bytes — so the assertion is on `build` refusing, not on
+    /// `read_table` catching it afterwards.
+    #[test]
+    fn an_item_id_longer_than_its_length_prefix_is_refused() {
+        let id = "i".repeat(usize::from(u16::MAX) + 1);
+        let bodies: [(&str, &[u8]); 1] = [(id.as_str(), b"one thumbnail")];
+        assert!(matches!(
+            build(vault(), &ROOT, &items(&bodies), None),
+            Err(ObjectError::PackTable { .. })
+        ));
+        // The boundary itself still packs: 65535 is nameable and is not the
+        // error, or the refusal would be off by one in the direction nobody
+        // tests.
+        let longest = "i".repeat(usize::from(u16::MAX));
+        let bodies: [(&str, &[u8]); 1] = [(longest.as_str(), b"one thumbnail")];
+        assert!(build(vault(), &ROOT, &items(&bodies), None).is_ok());
     }
 
     #[test]

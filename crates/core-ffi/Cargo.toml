@@ -47,3 +47,8 @@ centraid-ontology = { path = "../ontology" }
 libloading = "0.8"
 cbindgen = "0.29"
 centraid-protocol = { path = "../protocol" }
+# Only to READ what this crate logs. `tests/contract.rs` asserts that a refusal
+# at `open` writes the line `code_for_open`'s documentation promises — which is
+# the only place the reason behind a `-1` exists, so an untested promise there
+# is how it went unwritten in the first place.
+tracing-subscriber.workspace = true

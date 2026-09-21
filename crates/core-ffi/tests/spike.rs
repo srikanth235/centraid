@@ -45,6 +45,52 @@ fn library_dir() -> Option<PathBuf> {
     None
 }
 
+/// **WHY A FAILING HARNESS IS USUALLY A STALE LIBRARY, AND HOW TO SAY SO**
+/// (#1029 W6b).
+///
+/// This test seeds its vault with THIS BINARY'S core and then hands the file to
+/// the **prebuilt cdylib**, which `cargo test` does not reliably relink: a
+/// `cdylib` is an artifact, not a dependency of the test binary, so a
+/// `cargo test -p centraid-core-ffi --test spike` on its own can run a harness
+/// built against a library from an older commit. When the ladder has since grown
+/// a rung the two halves disagree about `user_version`, `Vault::open` answers
+/// `DowngradeRefused`, and the harness prints `centraid_open failed: -1` —
+/// which reads exactly like a bad path and has cost at least one reviewer an
+/// hour and a wrong accusation of regression.
+///
+/// So the failure message asks the question the reader would: **does the same
+/// vault open in THIS binary?** If it does, the two halves are different builds
+/// and the remedy is a `cargo build`, not a bisect. `cargo xtask gate` already
+/// runs that build before its test step (`gate.rs`), so this bites the bare
+/// `cargo test` loop only — which is where it was found.
+fn stale_library_hint(library_dir: &Path, vault_path: &Path) -> String {
+    use centraid_core_ffi::{CENTRAID_OK, centraid_close, centraid_open};
+
+    let config = format!(
+        r#"{{"path":{:?},"create":false}}"#,
+        vault_path.display().to_string()
+    );
+    let mut handle: *mut centraid_core::Handle = std::ptr::null_mut();
+    // SAFETY: live config bytes and a live out-pointer.
+    let code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+    if code != CENTRAID_OK {
+        return format!(
+            "this test binary's own `centraid_open` refuses the same vault with {code}, \
+             so the harness and this binary agree and the fault is a real one — not a \
+             stale library. The reason is in the `centraid_open refused` line above."
+        );
+    }
+    // SAFETY: the handle came from `centraid_open` and is closed exactly once.
+    unsafe { centraid_close(handle) };
+    format!(
+        "THE LIBRARY IS PROBABLY STALE. This test binary opens the same vault fine, so the \
+         `{}` the harness linked against was built from different sources — `cargo test` does \
+         not relink a `cdylib`. Run `cargo build -p centraid-core-ffi` and try again; \
+         `cargo xtask gate` does that for you.",
+        library_dir.join("libcentraid_core_ffi.so").display()
+    )
+}
+
 #[test]
 fn the_c_harness_crosses_the_abi_ten_thousand_times() {
     let Some(library_dir) = library_dir() else {
@@ -161,7 +207,8 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
     let err = String::from_utf8_lossy(&run.stderr);
     assert!(
         run.status.success(),
-        "the C harness failed:\nstdout: {out}\nstderr: {err}"
+        "the C harness failed:\nstdout: {out}\nstderr: {err}\n{}",
+        stale_library_hint(&library_dir, &vault_path)
     );
     println!("binding spike — C harness (ci-linux-x64-4c):\n{out}");
 
