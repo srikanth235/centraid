@@ -30,6 +30,19 @@ struct CentraidApp: App {
     /// the OS keeps (`docs/mobile-offline.md:253`).
     @Environment(\.scenePhase) private var scenePhase
 
+    /// REGISTER THE BACKGROUND HANDLERS BEFORE ANYTHING SUBMITS ONE (#1029 W18-1).
+    ///
+    /// iOS requires every `BGTaskScheduler` launch handler to be installed
+    /// before the app finishes launching, and raises
+    /// `NSInternalInconsistencyException` — which **terminates the app**, rather
+    /// than failing the task — for a submit whose identifier has no handler.
+    /// `ShellModel()` is what eventually submits, and an `init` body runs before
+    /// any of this type's property-wrapper storage is read, so this is the one
+    /// place in the app that is unambiguously launch.
+    init() {
+        BackgroundPasses.register()
+    }
+
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $shell.path) {

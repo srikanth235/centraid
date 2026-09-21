@@ -96,11 +96,21 @@ targets:
         # whole declaration: the launch screen is the app's own background, and
         # nothing else belongs on it.
         UILaunchScreen: {}
-        # BGTaskScheduler refuses an identifier that is not declared here, and
-        # the refusal is what `BackgroundTasks.Registration` reports to a member
-        # as "Background App Refresh is off".
+        # BGTaskScheduler does NOT refuse an undeclared identifier politely: it
+        # raises an NSInternalInconsistencyException on `register` and on
+        # `submit`, and the app TERMINATES. This file is the SOURCE — the
+        # committed `Resources/Info.plist` is xcodegen's output of it — so an
+        # identifier that is in the plist and not here ships as not there at all,
+        # which is what `dev.centraid.upload-pass` did: the plist named it, this
+        # array did not, and the first `submitTaskRequest` on a generated build
+        # would have killed the app on launch.
+        #
+        # BOTH IDENTIFIERS, and they are `IosBackgroundTasks.PERMITTED_IDENTIFIERS`
+        # in `mobile/shared/src/iosMain/.../PlatformServices.ios.kt`. One fact in
+        # three files, and `BackgroundIdentifierSpec` is what compares them.
         BGTaskSchedulerPermittedIdentifiers:
           - dev.centraid.sync-pass
+          - dev.centraid.upload-pass
         UIBackgroundModes:
           - fetch
           - processing
