@@ -1,13 +1,20 @@
--- GENERATED — do not edit. The golden corpus's schema, one statement per block.
+-- GENERATED — do not edit. THE SCHEMA A NEW VAULT GETS: the `sqlite_master` of
+-- a file founded at the ladder head, one statement per block.
 --
---   cargo run -p centraid-ontology --bin export-ddl -- \
---     contracts/golden/issue-1020/vault.db.gz > contracts/schema/vault-ddl.sql
+--   cargo run -p centraid-vault --bin export-ladder-ddl \
+--     > contracts/schema/vault-ddl.sql
 --
--- Source: sqlite_master (type, name, tbl_name, sql) where sql is not null,
--- ordered by type then name. `sqlite_stat*` is excluded: it is the planner's
--- own statistics over the corpus rows, so it says how much data a file holds
--- and nothing about its shape. Regenerate in the same slice as any change to
--- the corpus; tests/fixtures.rs diffs this file against the live schema (#1020).
+-- Not the corpus. `contracts/golden/issue-1020/vault-ddl.sql` describes the
+-- frozen v0 file as it was, and a rung is allowed to move this file away from
+-- it — which is exactly what rung five does (#1029, the owner's ruling of
+-- 2026-09-21). Ordered by type then name, for READING; the runnable ordering
+-- is `contracts/migrations/001_baseline.sql`.
+--
+-- Source: sqlite_master (type, name, tbl_name, sql) where sql is not null.
+-- `sqlite_stat*` is excluded: it is the planner's own statistics, so it says
+-- how much data a file holds and nothing about its shape.
+-- `crates/vault/tests/ladder_ddl.rs` founds a vault and diffs this file
+-- against its live schema on every run.
 
 -- index access_provenance_occurred_page_idx on access_provenance
 CREATE INDEX access_provenance_occurred_page_idx
@@ -16,6 +23,18 @@ CREATE INDEX access_provenance_occurred_page_idx
 -- index access_receipt_occurred_page_idx on access_receipt
 CREATE INDEX access_receipt_occurred_page_idx
   ON access_receipt(occurred_at, receipt_id);
+
+-- index backup_base_range_by_hash on backup_base_range
+CREATE INDEX backup_base_range_by_hash ON backup_base_range (plaintext_hash);
+
+-- index backup_blob_custody_by_role on backup_blob_custody
+CREATE INDEX backup_blob_custody_by_role ON backup_blob_custody (blob_role);
+
+-- index backup_blob_placement_by_object on backup_blob_placement
+CREATE INDEX backup_blob_placement_by_object ON backup_blob_placement (object_name);
+
+-- index backup_object_range_by_object on backup_object_range
+CREATE INDEX backup_object_range_by_object ON backup_object_range (object_name);
 
 -- index core_attachment_target_role_page_idx on core_attachment
 CREATE INDEX core_attachment_target_role_page_idx
@@ -1160,6 +1179,45 @@ CREATE TABLE automation_trigger_cursor (
   gap_reason   TEXT,
   updated_at   INTEGER NOT NULL, dead_letter_json TEXT,
   PRIMARY KEY (automation_id, trigger_index)
+) STRICT;
+
+-- table backup_base_range on backup_base_range
+CREATE TABLE backup_base_range (
+  generation      TEXT NOT NULL CHECK (length(generation) = 32),
+  range_index     INTEGER NOT NULL CHECK (range_index >= 0),
+  byte_offset     INTEGER NOT NULL CHECK (byte_offset >= 0),
+  byte_length     INTEGER NOT NULL CHECK (byte_length > 0),
+  plaintext_hash  TEXT NOT NULL CHECK (length(plaintext_hash) = 64),
+  object_name     TEXT NOT NULL CHECK (length(object_name) = 64),
+  PRIMARY KEY (generation, range_index)
+) STRICT;
+
+-- table backup_blob_custody on backup_blob_custody
+CREATE TABLE backup_blob_custody (
+  plaintext_hash  TEXT PRIMARY KEY CHECK (length(plaintext_hash) = 64 AND plaintext_hash NOT GLOB '*[^0-9a-f]*'),
+  file_key        BLOB NOT NULL CHECK (length(file_key) = 32),
+  plaintext_bytes INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
+  blob_role       TEXT NOT NULL CHECK (blob_role IN ('original','thumbnail')),
+  created_at      TEXT NOT NULL
+) STRICT;
+
+-- table backup_blob_placement on backup_blob_placement
+CREATE TABLE backup_blob_placement (
+  plaintext_hash TEXT NOT NULL REFERENCES backup_blob_custody(plaintext_hash) ON DELETE CASCADE,
+  part_index     INTEGER NOT NULL CHECK (part_index >= 0),
+  object_name    TEXT NOT NULL CHECK (length(object_name) = 64 AND object_name NOT GLOB '*[^0-9a-f]*'),
+  byte_offset    INTEGER NOT NULL CHECK (byte_offset >= 0),
+  byte_length    INTEGER NOT NULL CHECK (byte_length >= 0),
+  PRIMARY KEY (plaintext_hash, part_index)
+) STRICT;
+
+-- table backup_object_range on backup_object_range
+CREATE TABLE backup_object_range (
+  plaintext_hash  TEXT PRIMARY KEY CHECK (length(plaintext_hash) = 64),
+  object_name     TEXT NOT NULL CHECK (length(object_name) = 64),
+  object_bytes    INTEGER NOT NULL CHECK (object_bytes >= 0),
+  plaintext_bytes INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
+  created_at      TEXT NOT NULL
 ) STRICT;
 
 -- table blob_access on blob_access
@@ -4462,6 +4520,36 @@ BEGIN
   VALUES (NEW.revision_id, 'core.entity_revision', COALESCE(NEW.recorded_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
 END;
 
+-- trigger core_entity_revision_no_self_parent on core_entity_revision
+CREATE TRIGGER core_entity_revision_no_self_parent
+BEFORE INSERT ON core_entity_revision
+WHEN NEW.parent_revision_id IS NOT NULL AND NEW.parent_revision_id = NEW.revision_id
+BEGIN
+  SELECT RAISE(ABORT, 'a revision cannot be its own ancestor (issue #1020, D-1020-N2)');
+END;
+
+-- trigger core_entity_revision_parent_is_immutable on core_entity_revision
+CREATE TRIGGER core_entity_revision_parent_is_immutable
+BEFORE UPDATE OF parent_revision_id ON core_entity_revision
+WHEN NEW.parent_revision_id IS NOT OLD.parent_revision_id
+BEGIN
+  SELECT RAISE(ABORT, 'a revision occurrence is immutable: history is appended to, never re-pointed (issue #916, R3)');
+END;
+
+-- trigger core_entity_revision_parent_is_same_object on core_entity_revision
+CREATE TRIGGER core_entity_revision_parent_is_same_object
+BEFORE INSERT ON core_entity_revision
+WHEN NEW.parent_revision_id IS NOT NULL
+ AND NEW.parent_revision_id <> NEW.revision_id
+ AND NOT EXISTS(
+       SELECT 1 FROM core_entity_revision p
+        WHERE p.revision_id = NEW.parent_revision_id
+          AND p.entity_type = NEW.entity_type
+          AND p.entity_id = NEW.entity_id)
+BEGIN
+  SELECT RAISE(ABORT, 'a revision belongs to one object: its parent must be a revision of the same entity (issue #1020, D-1020-N2)');
+END;
+
 -- trigger core_entity_revision_touch_updated_at on core_entity_revision
 CREATE TRIGGER core_entity_revision_touch_updated_at
 AFTER UPDATE ON core_entity_revision
@@ -4586,6 +4674,19 @@ BEGIN
       WHERE entity_id = NEW.link_id AND entity_type <> 'core.link');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.link_id, 'core.link', COALESCE(NEW.valid_from, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger core_link_no_revises_edge on core_link
+CREATE TRIGGER core_link_no_revises_edge
+BEFORE INSERT ON core_link
+WHEN EXISTS(
+       SELECT 1 FROM core_concept c
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE c.concept_id = NEW.relation_concept_id
+          AND c.notation = 'revises'
+          AND s.uri = 'urn:duaility:relations')
+BEGIN
+  SELECT RAISE(ABORT, 'version lineage is core_entity_revision, not a content-to-content link (issue #996, R20(a))');
 END;
 
 -- trigger core_link_touch_updated_at on core_link

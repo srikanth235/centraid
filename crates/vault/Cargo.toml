@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "export-baseline"
 path = "src/bin/export-baseline.rs"
 
+[[bin]]
+name = "export-ladder-ddl"
+path = "src/bin/export-ladder-ddl.rs"
+
 [dependencies]
 aes-gcm.workspace = true
 anyhow.workspace = true
