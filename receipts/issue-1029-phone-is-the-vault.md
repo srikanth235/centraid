@@ -3600,3 +3600,144 @@ touched.
 | `for i in $(seq 1 30); do cargo test -p centraid-core-ffi --test contract; done` | **1 FAILED / 30** | **0 failed / 30** |
 | `cargo test -p centraid-core-ffi` | — | 39 passed / 0 failed |
 | `cargo xtask gate --profile local --lane fmt` / `--lane clippy` / `--lane rules` | — | PASS / PASS / PASS |
+## W9 — the close
+
+Branch `claude/1029-w9-close`, base `427741b4`. The doc pass for the umbrella:
+the state layer made true, the decisions recorded where decisions live, the
+release catalog repaired, and this close. **No behaviour change**: the only
+non-documentation edit is one comment in `backup.proto`.
+
+### What landed
+
+| Commit | What |
+| --- | --- |
+| `96aa99c8` | W9-1 + W9-3 — `docs/decisions.md`'s close section, and three traps |
+| `39a4d48c` | W9-2 — `ARCHITECTURE.md`, `SECURITY.md`, the new `docs/gateway.md`, the recovery runbooks, `mobile-offline`, `protocol`, `vault-ontology`, `contracts/README`, `AGENTS.md`, two crate READMEs, the OAuth banners, one proto comment |
+| `d39c34e9` | W9-4 — `scripts/release/surfaces.mjs` and its test, `.gitignore`, `README.md`, the published privacy policy and terms |
+| `2b07b511` | W9-2 continued — the residue the exit greps found across `TESTING.md`, `docs/` and `docs/traps/` |
+| this commit | W9-5 — the `CHANGELOG.md` entries and this section |
+
+### The checklist, re-judged
+
+The `## Checklist` at the top of this receipt is inside `doc-integrity`'s frozen
+region (`frozen-files receipts/*.md`) and is **not edited**. It is re-judged here
+instead, line by line, against the acceptance criteria as the [scope amendment of
+2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+amended them.
+
+| Checklist line | Verdict | What proves it |
+| --- | --- | --- |
+| **W0.5 — `crates/identity`** | **done** | The phrase, SLIP-0010 derivation, device certificates with monotonic epochs, HPKE and safety numbers all exist and are pinned against published vectors — BIP39's zero-entropy phrase, SLIP-0010 ed25519 vector 1, RFC 9180 Appendix A.1 (`crates/identity/tests/rfc9180.rs`). Lane B added the signed pkarr record, publish and resolve. **The account listing is struck**, not owed: the amendment deleted the account. |
+| **W1 — phone authority (§1)** | **done, across two waves** | `Role` is gone and there is one role; the locker is `crates/core/src/locker`; the pragma set is stated on every connection in `Vault::wrap` (`synchronous = FULL`, `wal_autocheckpoint = 0`, `NO_CKPT_ON_CLOSE`, page size 4096, `auto_vacuum NONE`); `api::invoke` takes its principal from the handle. W1 filed the wave-ordering block honestly and W2 cleared it. `SQLITE_FCNTL_PERSIST_WAL` is **not** set and that is [Q-1029-8](../docs/decisions.md#open-questions-for-the-owner-1029), not an omission. |
+| **W2 — deletions (§8)** | **done, and wider than briefed** | `crates/{seat,seat-link,sim,automations,assist,net}` are gone, as are `desktop/` and `extension/`. `cargo tree -i centraid-net` → `did not match any packages`. The iroh plane came **back** in a different role (W17), which is a supersession rather than a reversal — recorded as [D-1025-S2-1, re-judged](../docs/decisions.md#supersessions-closed-by-1029). |
+| **W3 — capture** | **done** | Commit-bounded page segments, spooled before checkpoint, capture commit-driven and debounced. Proven end to end by the restore drill, which destroys the live vault, its WAL and its spool and restores a **byte-identical** file. |
+| **W4 — the standalone adapter** | **done, and it is now the only one** | `crates/gateway-core` holds the rules with no I/O, no clock and no ambient randomness; `crates/gateway-server` is one adapter over them, passing the conformance suite. Lane C's hosted adapter was built and then **deleted** by the amendment (W16). |
+| **W9 — `docs/decisions.md`** | **done** | Eight rulings, ten supersessions and nine open questions in [the close section](../docs/decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21), plus three trap rows. Rows earlier lanes wrote are linked, not duplicated. |
+| **W10 — reminders** | **not started, and not this umbrella's blocker** | `centraid_vault::time::{zone,rrule,recurrence,occurrence,temporal}` exists and is the tree's one recurrence engine; nothing drives it from the `update_hook`, and no local notification is scheduled. It is the largest single piece of §2 still owed. |
+
+### What v0 is
+
+A phone that holds its vault and is its only writer, a laptop the member owns
+that holds an encrypted backup it cannot read, iroh between them, and 24 words
+as the whole of the recovery chain. No account, no subscription, no hosted
+tier, no sharing, no second client.
+
+### What landed, by wave
+
+| Wave | What |
+| --- | --- |
+| W0.5 A / B | `crates/identity` — the phrase, the derivation tree, device certificates, HPKE, safety numbers; the signed pkarr record and its resolver |
+| W1 | The phone as authority: one role, the pragma set, the locker's move, the principal from the handle |
+| W2 (A / M) | The seat plane, the assistant and automation planes, the desktop shell and the Companion deleted; the mobile half cut to match |
+| W3 A / B | The `centraid-object/1` format; capture, the spool and restore |
+| W4 A / B / C | The protocol and `gateway-core`; the standalone adapter; the hosted adapter (since deleted) |
+| W5 / W5B | Keys, restore and the phone's client |
+| W6 | Blobs, file keys and thumbnails |
+| W13 | Durability and crypto — the dictionary in the manifest, the running census, the iOS exclusion sweep |
+| W16 | **The cut** — the hosted adapter, the account, sharing, the mailbox, the S3 store |
+| W17 | **The transport** — iroh as the carrier, BLAKE3 names, the checksum retired, `_centraid2` |
+| W19 | **The baseline** — the corpus and the ladder head split, rung five drops 43 tables |
+| W15 | **Restore, for real** — the four request kinds, the device key's custody, commit-per-entry, the safety number, purge and scrub on a schedule |
+| W18 | **The drain pass** — the background identifiers, the launch handlers, one pass both platforms schedule |
+| W20 | The open-refusal contract test's `tracing` interest-cache race |
+| W9 | This close |
+
+### Measured only on a device
+
+Four claims this container cannot make. Each is stated in the doc that carries
+it rather than assumed away.
+
+1. **Every vault-derived path on iOS is excluded from the OS backup** (W13, F5). The
+   inventory names all eight derived paths, proves the exclusion call reaches the
+   directory and every item under it, and proves the sweep runs at three moments
+   including the one before iOS takes a backup. **Nothing in this container compiled
+   or ran that Swift**, and what is unproven is that iOS accepted the resource value.
+2. **The background identifiers and their launch handlers** (W18). The spec compares
+   the one identifier fact across all three files it is written in and checks each has
+   a handler that completes its task on the expiration path. That a granted window
+   actually runs the pass is a device fact.
+3. **How much gets through per night** (W18, and open since #1020). The threshold is
+   500 assets, charging, on Wi-Fi, on a named reference device — never a simulator.
+   The protocol is `mobile/maestro/ios-transfer-experiment.md`; until it runs, the
+   member-facing sentence for that row is the one the product may not yet say.
+4. **Battery per background pass.** Cannot be automated on either platform; the gate
+   step skips with the owner's manual procedure.
+
+### The open list
+
+| Item | Where |
+| --- | --- |
+| Nine owner questions — the ladder squash, the upload target's expiry, the `agent_command` rename, `Plan` → `quota::Allowance`, the privacy and terms text, the off-site copy, `ObjectState::Purged`, `PERSIST_WAL`, the absent vault-listing endpoint | [docs/decisions.md](../docs/decisions.md#open-questions-for-the-owner-1029) |
+| **W10 — reminders.** Nothing drives `time::rrule` from the `update_hook`; no local notification is scheduled | §2 of the issue |
+| **Owed shell work, named because W18 landed before both.** The shell does **not** freeze on `ERROR_CODE_VAULT_MOVED` returned from a `Drain` — W15 made a drain answer `CoreError::VaultMoved` instead of a `DRAIN_STOP_UNREACHABLE`, and nothing on the phone acts on it yet. And `RestoreRequest.direct_addrs` (field 3) exists for a scanned pairing code and **the shell never fills it**, so a LAN-only laptop that no relay can reach is not dialable from a restore. Both are code, not docs | `crates/core/src/phone.rs`, `mobile/shared/.../sync` |
+| **`backup.proto`'s `ObjectDeclaration.attested_checksum`** (field 2, with a nine-line comment about R2 and SigV4) survives a protocol W17 retired everywhere in Rust. A `buf breaking` judgement belongs with whoever owns the schema rung | W18 find 2 |
+| **`ryu_js` is still the canonical-JSON number spelling.** Reference A judged it vestigial — its only purpose was byte parity with a TypeScript tree that no longer exists — and no lane changed it | `crates/media/src/format.rs` |
+| **Six dangling fixture references remain in Rust comments**, naming `contracts/golden/format-golden.json`, which does not exist: `crates/identity/tests/identity_vectors.rs:16`, `crates/vault/src/custody/member_key.rs:59`, `crates/vault/src/backup/store.rs:97`, `crates/vault/src/commands/core.rs:4226`, `crates/blobs/src/store.rs:20`, and `crates/protocol/src/lib.rs:24` (which correctly says the file is gone). This lane's code footprint was capped at the comment sites its brief named, so the docs half is repaired and these are not | W13 find 3 |
+| **Three mobile bridges cite `R-1020-24`, "one core per process"**, while `Shelf` runs one core per **vault**: `NotesBridge.kt:54`, `TallyBridge.kt:54`, `PhotosBridge.kt:59` | comments only |
+| **The `ledgers` gate step cannot run in a worktree.** `git merge-base HEAD origin/main` is empty — the umbrella branch shares no ancestor with `origin/main` — so the down-only check refuses to pass without a comparison. Identical on the base; no ledger file was touched | W17 find 4, re-confirmed |
+| **`contracts/handoff/`** holds hand-off notes for planes since deleted (assist, automations, the extension, the desktop e2e lane). Kept as evidence and marked as such in `contracts/README.md`; nothing reads them | this lane |
+
+**Closed since it was filed:** the load-sensitive `a_refusal_at_open_is_a_negative_code…`
+in `core-ffi/tests/contract.rs`, which W15 named as flaky under two concurrent cargo
+runs, was fixed by W20 — `tracing` caches one `Interest` per callsite process-wide, and
+a thread-local dispatcher another test registered left that callsite cached at `never`.
+1 failure in 30 runs became 0 in 30, in the test file alone.
+
+### Draft of the issue's closing comment
+
+The root posts this; this lane does not.
+
+> ## Closing — v0 is a phone backing up to a laptop you own
+>
+> Fifteen waves under the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) and the [corpus/baseline ruling](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5756495615). One receipt: [`receipts/issue-1029-phone-is-the-vault.md`](https://github.com/srikanth235/centraid/blob/main/receipts/issue-1029-phone-is-the-vault.md).
+>
+> **What v0 is.** The phone holds `vault.db` and is its only writer — it works offline because there is nothing to be offline from. The member's own laptop runs `centraid-gateway` and holds sealed objects it cannot open: no key, no plaintext, no schema. The carrier between them is iroh, so a laptop behind NAT needs no port forwarding and no certificate. Recovery is 24 words.
+>
+> **What was struck, and deleted rather than parked.** The hosted adapter on Cloudflare; the account and its signed vault listing; sharing in full; the mailbox; the S3/SigV4 byte store; the desktop shell; the browser Companion; the assistant and automation planes; and 43 tables, in rung five.
+>
+> **What the umbrella built.** `crates/identity` — one phrase, a hardened derivation tree, device certificates with monotonic epochs, HPKE and safety numbers, every primitive pinned against a published vector. The `centraid-object/1` format, capture, the spool, generations and restore, proven by a drill that destroys a live vault and brings back a byte-identical file. `crates/gateway-core`, the protocol as rules with no I/O and a conformance suite, and one adapter over it. The four request kinds the shell actually needs — `Pair`, `Restore`, `Drain`, `BackupStatus` — all arms of one `call` symbol, because the ABI is five symbols and a new flow will never be a sixth. Purge on a timer and scrub quarterly, both written months ago and never once called.
+>
+> **Five durability findings**, one of which could have made every sealed backup permanently unopenable: the zstd dictionary now rides inside the generation manifest. The row census is a running counter rather than a scan per tick, and no longer reports SQLite's own index bookkeeping as a member's rows. Every vault-derived path on iPhone is excluded from iCloud backup, which nothing did before on any path.
+>
+> **What the state layer says now.** [ARCHITECTURE.md](https://github.com/srikanth235/centraid/blob/main/ARCHITECTURE.md) and [SECURITY.md](https://github.com/srikanth235/centraid/blob/main/SECURITY.md) are rewritten; [docs/gateway.md](https://github.com/srikanth235/centraid/blob/main/docs/gateway.md) is new. Eight rulings, ten supersessions and nine open questions are in [docs/decisions.md](https://github.com/srikanth235/centraid/blob/main/docs/decisions.md).
+>
+> **What is honestly not done.**
+> - **W10, reminders.** The recurrence engine exists; nothing drives it from the `update_hook` and no local notification is scheduled.
+> - **Two shell behaviours the phone owes**: freezing on `VAULT_MOVED` returned from a `Drain`, and filling `RestoreRequest.direct_addrs` so a LAN-only laptop is reachable from a restore.
+> - **Four claims measured only on a device**: the iOS backup exclusion, the background launch handlers, how much gets through per night, and battery per background pass.
+> - **Nine questions for you**, each with options and a recommendation, in `docs/decisions.md`. The two I would answer first are the **ladder squash before the first release** and the **privacy policy and terms**, which currently describe a service this product does not have.
+>
+> **And the sentence the amendment asked for, which the product now says in its own copy:** a laptop-only backup is a local backup. Fire or theft takes phone and laptop together. v0 accepts that; an off-site copy is a later proposal.
+
+### Verification
+
+| Command | Outcome |
+| --- | --- |
+| `node --test scripts/release/surfaces.test.mjs` | **5 passed / 0 failed** — red on the base |
+| `git diff --stat 427741b4..HEAD -- crates mobile` | one file: `crates/api-proto/proto/centraid/core/v1/backup.proto`, a comment |
+| `grep -rn -i 'cloudflare\|durable object\|wrangler' docs ARCHITECTURE.md SECURITY.md README.md CLAUDE.md CONTRIBUTING.md TESTING.md DESIGN.md` | only supersession markers and the still-live public-site deploy in `docs/enrollment.md` |
+| `grep -rn 'format-golden.json\|framing-golden.json' crates docs contracts` | no doc or fixture reference left; six Rust comments remain, listed in the open list above |
+| `bun install --frozen-lockfile && bun run check:push:static` | **4/4 gates passed in 4.3s** — `format:check` was red on the first run over 25 rewritten markdown files and `bun run format` fixed it |
+| `cargo xtask gate --profile local --lane rules` | **PASS** — `sql-confinement` 220 files clean, `abi-five-symbols` clean, `no-listening-socket` 340 files clean with one allowlisted listener, `commonmain-no-platform-import` clean |
+| `node .governance/law/run.mjs --brief-digest 4cf9a5a8690a` | **10 rules, no findings**, and **no drift** — `node .governance/law/brief.mjs` still reads `4cf9a5a8690a` |
+| `node --test scripts/release/surfaces.test.mjs` (again, after format) | 5 passed / 0 failed |

@@ -89,8 +89,6 @@ Two things to know about `useFakeClock`:
 
 **Not** banned: `Date.now()`. oxlint 1.76 has no `no-restricted-syntax`, so the shape that actually hurts — wall clock read inside an assertion's expected value — is not expressible; only a blanket ban is, and the sampled majority of call sites are relative offsets, unique-id suffixes, and elapsed measurement, which a fake clock makes wrong rather than better. Prefer `clock.now()` where a clock is already installed.
 
-
-
 ## One law, one home (mechanically enforced)
 
 A named product law gets a machine-readable tag in its test title:

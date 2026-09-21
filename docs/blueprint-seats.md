@@ -15,14 +15,9 @@ Form factor says how wide the window is. The byte seat says where bytes live. Th
 
 ## The byte seats
 
-> **Superseded, 2026-09-21.** The `origin` / `custodian` split described two devices — a phone where
-> bytes are born and a desktop beside the gateway that holds them. The [scope amendment of
-> 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) leaves
-> **one device**: the phone is the vault, it owns its bytes with eviction, and the laptop holds
-> sealed parts it cannot open. There is no custodian console and no viewer. What survives is the
-> shared machinery below, read as the phone's.
+> **Superseded, 2026-09-21.** The `origin` / `custodian` split described two devices — a phone where bytes are born and a desktop beside the gateway that holds them. The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) leaves **one device**: the phone is the vault, it owns its bytes with eviction, and the laptop holds sealed parts it cannot open. There is no custodian console and no viewer. What survives is the shared machinery below, read as the phone's.
 
-| | **Mobile (KMP: `mobile/`)** — the only seat |
+|  | **Mobile (KMP: `mobile/`)** — the only seat |
 | --- | --- |
 | Byte flow | up, when a drain runs; down on demand for an original the member asks for |
 | Danger state | bytes the spool still holds that the laptop has not acked |

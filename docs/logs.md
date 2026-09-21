@@ -30,7 +30,7 @@ The unit paths are written by `crates/centraid/src/cmd/gateway_install.rs` throu
 
 ## Mobile
 
-The phone links the core through `centraid-core-ffi`, which emits `tracing` events  but **installs no subscriber**, so those events are dropped on a device. What a failing call carries back is the error the C ABI returns to the shell.
+The phone links the core through `centraid-core-ffi`, which emits `tracing` events but **installs no subscriber**, so those events are dropped on a device. What a failing call carries back is the error the C ABI returns to the shell.
 
 What the shells write to the platform log:
 

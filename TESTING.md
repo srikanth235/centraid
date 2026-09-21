@@ -96,11 +96,7 @@ Each crate carries its own tests; `cargo test -p <crate>` (or `cargo nextest run
 
 ### Simulation — retired
 
-`crates/sim` proved the convergence of one gateway and N seats under a scripted network. There is
-one writer and it is the phone ([#1029](https://github.com/srikanth235/centraid/issues/1029)), so
-there is nothing to converge. What replaces the claim is two things that are not simulations: the
-**restore drill**, which destroys a live vault and proves the restored file is byte-identical, and
-`crates/gateway-core`'s **conformance suite**, which is what "implements the protocol" means.
+`crates/sim` proved the convergence of one gateway and N seats under a scripted network. There is one writer and it is the phone ([#1029](https://github.com/srikanth235/centraid/issues/1029)), so there is nothing to converge. What replaces the claim is two things that are not simulations: the **restore drill**, which destroys a live vault and proves the restored file is byte-identical, and `crates/gateway-core`'s **conformance suite**, which is what "implements the protocol" means.
 
 ### Fixtures and parity
 

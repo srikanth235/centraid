@@ -1,13 +1,6 @@
 # Recognition automations
 
-> **Partly superseded, 2026-09-21.** Recognition survives — OCR, transcription, embeddings and faces
-> are bundled deterministic derivations the **phone** runs on its own bytes — but every
-> `packages/server`, `packages/blueprints` and `packages/model-runtime` path below names the v0
-> TypeScript tree, removed in [#1020](https://github.com/srikanth235/centraid/issues/1020), and the
-> `ctx.delegate` / provider-egress half went with the assistant plane in
-> [#1029](https://github.com/srikanth235/centraid/issues/1029). The current implementation is
-> `crates/vault/src/commands/enrich.rs`, with no separate inference process, no HTTP service and no
-> provider to egress to. Read the shapes here, not the paths.
+> **Partly superseded, 2026-09-21.** Recognition survives — OCR, transcription, embeddings and faces are bundled deterministic derivations the **phone** runs on its own bytes — but every `packages/server`, `packages/blueprints` and `packages/model-runtime` path below names the v0 TypeScript tree, removed in [#1020](https://github.com/srikanth235/centraid/issues/1020), and the `ctx.delegate` / provider-egress half went with the assistant plane in [#1029](https://github.com/srikanth235/centraid/issues/1029). The current implementation is `crates/vault/src/commands/enrich.rs`, with no separate inference process, no HTTP service and no provider to egress to. Read the shapes here, not the paths.
 
 OCR, transcription, image/text embeddings, and faces are bundled automations whose handlers own model execution.
 

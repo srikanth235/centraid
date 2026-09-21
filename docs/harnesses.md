@@ -1,11 +1,6 @@
 # Harnesses
 
-> **Superseded, 2026-09-21 — not current state.** The assistant plane (`crates/assist`), the harness
-> registry and every `packages/server` path below were deleted from v0 by the [scope amendment of
-> 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) and the
-> waves under [#1029](https://github.com/srikanth235/centraid/issues/1029). **Nothing in this
-> repository drives a harness.** This document is kept as the design of record should the plane
-> return; read every sentence below in the past tense.
+> **Superseded, 2026-09-21 — not current state.** The assistant plane (`crates/assist`), the harness registry and every `packages/server` path below were deleted from v0 by the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) and the waves under [#1029](https://github.com/srikanth235/centraid/issues/1029). **Nothing in this repository drives a harness.** This document is kept as the design of record should the plane return; read every sentence below in the past tense.
 
 A **harness** is a coding CLI Centraid can drive to produce a turn — `codex`, `claude-code`, `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, `pi`, or a custom `acp` binary. The user-facing ids (`HarnessKind`) are stable; how we talk to them is not.
 

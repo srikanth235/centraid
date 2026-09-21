@@ -1,12 +1,6 @@
 # Centraid Assist OAuth
 
-> **Superseded, 2026-09-21 — not current state.** Centraid Assist, its OAuth courier Worker and the
-> Cloudflare deployment that hosted it were deleted from v0 by the [scope amendment of
-> 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795), together
-> with the assistant plane and the hosted tier. **No code in this repository implements any of it.**
-> This document is kept as the design of record should the ceremony return; read every sentence below
-> in the past tense. Current state: [SECURITY.md](../SECURITY.md) and
-> [docs/gateway.md](gateway.md).
+> **Superseded, 2026-09-21 — not current state.** Centraid Assist, its OAuth courier Worker and the Cloudflare deployment that hosted it were deleted from v0 by the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795), together with the assistant plane and the hosted tier. **No code in this repository implements any of it.** This document is kept as the design of record should the ceremony return; read every sentence below in the past tense. Current state: [SECURITY.md](../SECURITY.md) and [docs/gateway.md](gateway.md).
 
 Centraid Assist is the default Google connection path for desktop and the PWA. It works when the paired gateway has no public DNS name: the browser carries a short-lived authorization code back to the initiating client, and that client delivers it over its existing authenticated gateway transport.
 

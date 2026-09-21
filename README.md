@@ -20,7 +20,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 ## What it does
 
 - **First-party apps** — Docs, Photos, Notes, People, Locker, Tally, Agenda and Tasks, one crate each under [`crates/apps`](crates/apps). They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
-- **The phone is the vault** — the Rust core on your phone holds `vault.db` and is its only writer. It works fully offline because there is nothing to be offline *from*.
+- **The phone is the vault** — the Rust core on your phone holds `vault.db` and is its only writer. It works fully offline because there is nothing to be offline _from_.
 - **Backed up to hardware you own** — your laptop runs `centraid-gateway`, which holds sealed objects it cannot open: no key, no plaintext, no schema. Pair by scanning a QR the laptop prints.
 - **Recoverable from 24 words** — every key derives from one BIP39 phrase. A fresh install plus the phrase brings the vault back. There is no kit file, no password and no escrow.
 - **Nothing hosted** — no account, no subscription, no Centraid-operated service, no sharing plane. See the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795).
@@ -61,9 +61,7 @@ cargo run -p centraid-gateway-server --bin centraid-gateway -- serve --data-dir 
 cargo run -p centraid-gateway-server --bin centraid-gateway -- invite --data-dir ./gw-data --quota-gib 64
 ```
 
-Scan the QR from a phone build and compare the safety number on both screens. An invite is one-shot,
-so a second device needs a second invite. Recovery from a bad pairing:
-[docs/recovery/pairing.md](docs/recovery/pairing.md).
+Scan the QR from a phone build and compare the safety number on both screens. An invite is one-shot, so a second device needs a second invite. Recovery from a bad pairing: [docs/recovery/pairing.md](docs/recovery/pairing.md).
 
 ## Layout
 
@@ -120,8 +118,7 @@ cargo run -p centraid -- doctor --data-dir ./gw-data --json   # read-only, lock-
 cargo run -p centraid -- gateway install --dry-run            # writes a unit; never enables it
 ```
 
-The vault itself has no CLI: it lives on the phone, and every verb that used to reach it —
-`seat`, `pair`, `backup`, `export`, `recover`, `native-host` — went with the seat plane.
+The vault itself has no CLI: it lives on the phone, and every verb that used to reach it — `seat`, `pair`, `backup`, `export`, `recover`, `native-host` — went with the seat plane.
 
 The full verb table, with what each one's state is in this build, is [`crates/centraid/README.md`](crates/centraid/README.md#subcommands).
 

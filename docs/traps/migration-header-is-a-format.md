@@ -4,7 +4,7 @@
 
 You edit a comment at the top of `contracts/migrations/001_baseline.sql` — fixing a typo, repointing a stale issue link, adding a line saying what a rung now drops. Every test passes. Then a build that ships after your edit cannot open a backup generation a build before it sealed, and the failure reads `DictionaryMismatch` from somewhere in `crates/vault/src/backup`, nowhere near a migration.
 
-**The zstd dictionary a backup is compressed against is trained from the migration ladder's text, and the training corpus is the file's *bytes* — comment lines included.** A one-character edit to a header moves the trained dictionary, the dictionary's id is its BLAKE3, and every base and segment header names the id it was sealed against. So a comment is a format decision, and nothing about the file says so.
+**The zstd dictionary a backup is compressed against is trained from the migration ladder's text, and the training corpus is the file's _bytes_ — comment lines included.** A one-character edit to a header moves the trained dictionary, the dictionary's id is its BLAKE3, and every base and segment header names the id it was sealed against. So a comment is a format decision, and nothing about the file says so.
 
 Paid for by [#1029](https://github.com/srikanth235/centraid/issues/1029) W19, deviation 3: an edit to `001_baseline.sql`'s header moved the shipped dictionary's id, and the file was restored to its committed bytes rather than the dictionary being re-shipped.
 
