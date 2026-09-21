@@ -9,7 +9,7 @@
 | Mobile iOS + Android (decided) | `dev.centraid.mobile` |
 | Mobile debug variant (decided) | `dev.centraid.mobile.debug` |
 | iOS share extension (decided) | `dev.centraid.mobile.share` |
-| Desktop (electron-builder `appId`) | `dev.centraid.desktop` ([`electron-builder.yml`](../desktop/electron/electron-builder.yml)) |
+| Desktop | **Reserved, unused.** `dev.centraid.desktop` is held for the deferred desktop shell ([R-1029-1](decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21)) and nothing ships under it. |
 | Gateway LaunchAgent label (H5) | `dev.centraid.gateway` ([`deploy/launchd/dev.centraid.gateway.plist`](../deploy/launchd/dev.centraid.gateway.plist)) |
 | Automation scheduler labels | `dev.centraid.<appId>.<name>` |
 | Deep-link scheme | `centraid://` (debug: `centraid-debug://`) |

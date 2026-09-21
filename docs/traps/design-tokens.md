@@ -19,7 +19,7 @@ Barrel: `@centraid/design` (`packages/design/src/index.ts`). Prefer `themes.ligh
 
 **Generated artifacts are regenerated, never edited.** The gate's `emitters` step (`pr`) and `mobile-jvm` step both rerun the emitters, run `bun run format`, and fail on `git diff --exit-code -- copy design mobile`. `copy/*.json` and `mobile/.../design/Copy.kt` are the exception: their upstream was retired and they are now edited by hand, as their own banners say.
 
-`desktop/renderer/public/styles.css` holds layout and a small set of named `--seat-*` neutrals, not a second palette; a new colour there is a token that belongs in `packages/design`.
+Every surface lowers `packages/design`; a colour written anywhere else is a token that belongs there instead.
 
 ## Two themes, and the key must equal the kind
 

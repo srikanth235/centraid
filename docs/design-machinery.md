@@ -46,8 +46,6 @@ Two blocks read records, and the difference is the question being asked. **Doc t
 | --- | --- | --- | --- |
 | Mobile (Compose, SwiftUI) | the emitted native table and catalogue | Compose and SwiftUI read the emitted tables; neither holds a literal | the drift gate below, `NativeThemeSpec` over the emitted table in both schemes, `CatalogSpec`, and `NativeAccessibilityLintSpec` over both view trees (`mobile/shared/src/jvmTest`) |
 | Rust | `crates/design` | none | `crates/design/tests/corpus.rs` asserts every corpus row; `copy::route_gaps` names a route id present on one side and not the other ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-T1) |
-| Desktop seat (`desktop/renderer`) | **none yet** | `desktop/renderer/public/styles.css` holds layout and a handful of named neutrals, and says so in its header | none — the renderer does not consume `packages/design` |
-| Companion (`extension/static`) | **none** — its popup sheet carries no product tokens by design (its header) | — | `lint:design-tokens` walks `extension/static` and `packages/design/src/elements` |
 | Public site (`centraid.dev`, `/docs/`) | the generated `centraid-tokens.css` — `toCss()` verbatim, plus `toFontFaceCss()` | `scripts/home-site/public/index.html`'s inline sheet and `scripts/docs-site/public/assets/docs.css` | `lint:site-tokens` — emitter freshness by bytes, unresolvable `var()`s, literal font families, font-CDN references, retired theme names. **Not** `lint:design-tokens`: see [the public web surfaces](#the-public-web-surfaces) |
 
 Pointer versus touch changes density, type, margin, and target values; host names and viewport width do not create more design modes.

@@ -1,6 +1,6 @@
 # Toolchain contract
 
-This is the durable command and ownership contract for quality work. Rust, Kotlin and TypeScript are gated by one entrypoint, `cargo xtask gate` ([below](#cargo-xtask-gate-1020)); the TypeScript that remains — `packages/design`, `packages/test-kit`, `desktop/`, `extension/` and the repo tooling scripts — additionally has the Bun-script contract in the first half of this page. Its executable sources of truth are the root `package.json`, `oxlint.config.ts`, and `oxfmt.config.ts`; this document explains the policy without duplicating their rule catalog.
+This is the durable command and ownership contract for quality work. Rust, Kotlin and TypeScript are gated by one entrypoint, `cargo xtask gate` ([below](#cargo-xtask-gate-1020)); the TypeScript that remains — `packages/design`, `packages/test-kit` and the repo tooling scripts — additionally has the Bun-script contract in the first half of this page. Its executable sources of truth are the root `package.json`, `oxlint.config.ts`, and `oxfmt.config.ts`; this document explains the policy without duplicating their rule catalog.
 
 ## Toolchain pins
 
@@ -25,7 +25,7 @@ The flake pins every toolchain except the Android SDK and Xcode, and says so in 
 | Compiler diagnostics and type correctness | pinned TypeScript |
 | Task graph execution | pinned Turbo |
 | Dead code and dependency hygiene | Knip |
-| Runtime behaviour | Vitest and the Playwright suites under `desktop/e2e` and `extension/e2e` |
+| Runtime behaviour | Vitest, and the Rust suites the gate runs |
 | DESIGN.md spec conformance | `@google/design.md` (pinned exact) — see `lint:design-md` |
 | Second-opinion security / reliability (PR check) | SonarCloud Autoscan — see [SonarCloud Autoscan](#sonarcloud-autoscan) |
 
@@ -60,7 +60,7 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `governance:law` | the law's ESLint pass over the arrival record and the governance documents a change touched |
 | `governance:law:test` | the law's rule and generator tests, under `node --test` |
 
-The workspaces with their own `build`, `test` and `typecheck` scripts are `packages/*`, `desktop/electron` and `extension`; run one with `bun run --cwd <dir> <script>`.
+The workspaces with their own `build`, `test` and `typecheck` scripts are `packages/*`; run one with `bun run --cwd <dir> <script>`.
 
 ### Where the caches live
 
@@ -125,7 +125,7 @@ All diagnostics are errors or off; warning debt is not a supported state. Fix co
 
 ## Runtime profiles and exclusions
 
-The root Oxlint config owns production TypeScript, React/TSX, Vitest, Playwright, Node/Bun scripts, browser workers, and Electron. The Playwright specs under `desktop/e2e` and `extension/e2e` are named `*.e2e.ts`, so the vitest-owned globs never reach them.
+The root Oxlint config owns the production TypeScript, Vitest and the Node/Bun scripts that remain.
 
 Generated output, vendored code, build trees, immutable snapshots, negative lint fixtures, and governance-managed files may be excluded with a concrete owner in the config. Scripts, tests, and e2e code are source and remain in scope. Generated files are regenerated, never hand-edited.
 
@@ -155,8 +155,8 @@ The repository is three languages, so its cross-cutting layer cannot live in any
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test` (the workspace minus `centraid-sim`), `rules` (the structural rules), `ledgers` (the down-only check) | < 120 s **warm**, < 3200 s **cold** | by hand, on the edit-run loop |
-| `pr` | `buf`, `deny` (cargo-deny), `ci-policy` (the workflow and path-filter linters plus actionlint), `secrets` (gitleaks), `osv` (the `bun.lock` advisory inventory), `release-build`, `ts-static` (`bun run check:push:static`), `emitters` (regenerates `copy/`, `design/` and the Kotlin copy table and fails on drift), `desktop-unit` (the desktop seat's pure cores plus its three tsconfigs), `extension-unit` (the Companion's two type programs and its lint — its vitest files ride `desktop-unit`'s project), `advisory` (every step that announces it will never fail carries an owner, an issue and an unexpired date), `lockfile` (**both** lockfiles: TLS-only sources, every registry package pinned by content), `prompt-injection` (the [#842](https://github.com/srikanth235/centraid/issues/842) corpus, named separately so the count is visible in the gate's output), `sim` (25 turmoil seeds), `call-budget` (p95 over 200 calls of one bounded read), `fault-door` (ABI clause 9 against a real panic, the one place the tree is compiled with `debug-fault`) | < 1500 s | [`gate.yml`](../.github/workflows/gate.yml) on every pull request and every push to `main` |
-| `nightly` | `sim-nightly` (250 seeds, on top of `pr`'s 25 rather than replacing them), `desktop-e2e` (a real Electron app over a real sidecar, and a `<video>` that seeks inside a blob still arriving), `extension-e2e` (a real headed Chromium, which needs a display), `device-lanes` | unbounded | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) at 05:30 UTC |
+| `pr` | `buf`, `deny` (cargo-deny), `ci-policy` (the workflow and path-filter linters plus actionlint), `secrets` (gitleaks), `osv` (the `bun.lock` advisory inventory), `release-build`, `ts-static` (`bun run check:push:static`), `emitters` (regenerates `copy/`, `design/` and the Kotlin copy table and fails on drift), `artifact-identity`, `prebuilt-core-required`, `advisory` (every step that announces it will never fail carries an owner, an issue and an unexpired date), `lockfile` (**both** lockfiles: TLS-only sources, every registry package pinned by content), `call-budget` (p95 over 200 calls of one bounded read), `fault-door` (ABI clause 9 against a real panic, the one place the tree is compiled with `debug-fault`) | < 1500 s | [`gate.yml`](../.github/workflows/gate.yml) on every pull request and every push to `main` |
+| `nightly` | `pr` plus `device-lanes` (real attached devices on the self-hosted runner) | unbounded | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) at 05:30 UTC |
 | `release` | `restore-drill`, `artifact-identity`, `prebuilt-core-required`, `vps-smoke` | unbounded | [`release.yml`](../.github/workflows/release.yml)'s lanes |
 | `mobile-jvm` | `mobile-jvm` — `cargo build -p centraid-core-ffi`, then `mobile/gradlew mobileJvm` (`:shared:jvmTest`, `:core:jvmTest` over the real cdylib, `:shared:koverXmlReport`), then the generated-artifact drift check | < 420 s | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml); on demand from `mobile/`. **Not** a superset of any other profile and not folded into `pr`: a different toolchain with a different cold cost ([D-1020-B2-3](decisions.md#decisions--lane-b2-1020)). A missing `mobile/gradlew` FAILS rather than skips |
 

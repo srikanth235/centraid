@@ -32,20 +32,9 @@ Operator inputs are flags and environment, read at start: `--data-dir`, `--vault
 | `core_vault.settings_json` and related rows | Journalled vault commands | The seal-key fingerprint is stamped here inside the sealing transaction. Direct SQL against `vault.db` bypasses consent and is unsupported |
 | `enrich_policy` | Vault founding ([`crates/vault/src/bootstrap.rs`](../crates/vault/src/bootstrap.rs)) | Seeded `gateway` for `photos` and `docs`; no command in this build changes it, and Photos reads it without being able to set it |
 
-### Desktop — the Electron main process wins
-
-| Path | Owner | Notes |
-| --- | --- | --- |
-| `<userData>/vaultdata/` | The `centraid seat` sidecar the main process spawns (`--data-dir`) | The seat's replica. `CENTRAID_DATA_DIR` overrides the path |
-| `<userData>/seat.sock` | The sidecar | Unix socket, mode 0600, peer-uid checked. `CENTRAID_SEAT_SOCKET` overrides the path |
-| `<userData>/seat.nonce` | The main process, rewritten on every spawn | Mode 0600; a file rather than a flag so it is in no `ps` listing |
-| `<userData>/install-id` | The updater's rollout bucket | Stable per install |
-
-Code: [`desktop/electron/src/main.ts`](../desktop/electron/src/main.ts), [`desktop/electron/src/main/sidecar.ts`](../desktop/electron/src/main/sidecar.ts).
-
 ### Mobile — the platform secure store wins
 
-One enrollment record per vault — the device's private identity key, the vault id, dialling hints — in the platform store, written and moved as one unit ([`Enrolments.kt`](../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/Enrolments.kt)). The replica file is named by the vault id.
+Two secrets per vault in the platform store, and their sync postures are deliberately opposite ([#1029](https://github.com/srikanth235/centraid/issues/1029)): the **64-byte seed** is synced by default, because iCloud Keychain is end-to-end encrypted and a seed that does not survive a lost phone is a product with no recovery; the **device key** is `ThisDeviceOnly` and **never synced**, because a device key in a synced keychain would make two phones one device. Beside them sits the paired laptop's endpoint id in `backup/laptop.json`, which is derived state and not a secret.
 
 ### App manifests — files win
 

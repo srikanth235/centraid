@@ -8,72 +8,36 @@ Settled **2026-08-05** (Photos v4 design session), restated for the one tree by 
 
 The word names two different things, and they must not be confused ([glossary.md](glossary.md#hosts-and-clients)):
 
-- **The runtime seat** — a role of the one core, the thing that is not the gateway. Its axis is **replicated or thin**: whether it holds a local copy of the vault. Every device is one, desktop included ([R-1020-2](decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020)).
-- **The byte seat** — `origin` / `custodian` / `viewer`, the subject of this file. Its axis is **where bytes live and which way they flow**.
+- **The runtime seat** — **retired** with the replica plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)). There is one core and it holds the vault.
+- **The byte seat** — `origin` / `custodian` / `viewer`, the subject of this file. **Collapsed to one** by [#1029](https://github.com/srikanth235/centraid/issues/1029); see below.
 
 Form factor says how wide the window is. The byte seat says where bytes live. They are orthogonal: never branch custody logic on width, and never branch layout on seat.
 
 ## The byte seats
 
-|  | **Mobile (KMP: `mobile/`)** | **Desktop (Electron: `desktop/`)** |
-| --- | --- | --- |
-| Seat | **origin** — content is born here (camera, scanner, mic) and cached here | **custodian's console** — the gateway holds the bytes; the desktop is where a member curates and imports beside it |
-| Default byte flow | up (device → gateway, which pulls) | down, on demand |
-| Danger state | bytes a queued write names that the gateway does not hold yet | gateway disk / backup health |
-| Offline means | the replica reads fully and writes queue; bytes cross later | the same replica behaviour, through the `centraid seat` sidecar |
-| "Free up space" | core feature (release originals with a proved copy elsewhere) | rarely meaningful |
+> **Superseded, 2026-09-21.** The `origin` / `custodian` split described two devices — a phone where
+> bytes are born and a desktop beside the gateway that holds them. The [scope amendment of
+> 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) leaves
+> **one device**: the phone is the vault, it owns its bytes with eviction, and the laptop holds
+> sealed parts it cannot open. There is no custodian console and no viewer. What survives is the
+> shared machinery below, read as the phone's.
 
-`viewer` has no seat: [R-1020-1](decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020) retired the web PWA, and the manifests' `disabledOn` lists are all empty.
-
-## Two classes of app
-
-| Class | Apps | What the seats must do |
-| --- | --- | --- |
-| **record-only** | tasks, agenda, people, tally | Payloads are rows. The replica gives every seat offline reads and queued writes for free. No custody states, no upload queue, no download gate. |
-| **byte-bearing** | photos, docs; notes and locker via attachments | Needs custody, the upward pull, the downward plan, free-up-space, and the metered rule. |
-
-Every hard per-seat question in the Photos v4 audit was a byte-bearing problem. An agent building a record-only app should not touch any of that machinery.
-
-Where each half lives:
-
-- **The record-only half is a crate.** One crate per app under `crates/apps/*`, holding the read plane (queries as pure folds over `PageQuery` values) and the action table. An app crate holds **no SQL and no `Connection`** — its reads go through the paged door and its writes are one typed vault command each ([`crates/apps/kit`](../crates/apps/kit/README.md), [ARCHITECTURE.md](../ARCHITECTURE.md#the-crates)). The same crate runs on the seat and on the gateway, so a derivation (Tally's "who owes whom", `crates/apps/tally/src/balance.rs`) exists once.
-- **The byte-bearing half is a door the app crate does not hold.** Bytes ride `centraid://` on desktop and a materialised path on phones (`seat_blob_held` plus `thumbnail_path` on a page read — [mobile-offline.md](mobile-offline.md#bytes-both-ways-one-store)); the app crate never opens the store. **No type is not permission** — a document whose representation this vault cannot read is offered, never embedded.
-- **The three-state read is the contract, per plane.** A failed read is _loading_, _denied-or-unavailable_, or _data_ — never an empty list and never a `0`. `Option<T>` collapses two of the three; the app crates carry the third explicitly (`Reading::Denied` in `crates/apps/docs/src/shares.rs`, `StorageSummary` in `crates/apps/photos/src/storage.rs`).
-
-## Byte custody vocabulary
-
-The gateway's standing sweep counts every content item into one of five custody states — `pending-offsite`, `local-only`, `replicated`, `remote-only`, `missing` — plus two views over the locally resident ones: `freeable` (a copy elsewhere is proved) and `local-unproven` (no such proof). The CHECK vocabulary is `blob_custody_state`'s; the reader is `crates/apps/photos/src/storage.rs`, where "not counted yet" is a type rather than a row of zeroes and `local-unproven` is unreachable from the type a free-up-space surface consumes.
-
-**The vocabulary is a data model; a tile is a binary.** The rule is about ALTITUDE, and it is the part that keeps getting re-litigated, so it is written down rather than left to taste:
-
-- **Per-tile** — the exception only, as a **mark, never a sentence**. Bytes a member can still lose are the one state that earns a glyph; the normal states say nothing.
-- **Per-shelf** — the population fact, as a count ("N on this device only"). This is where an anxious member actually looks, and where the mark is taught.
-- **Per-photograph** — the full story, on demand, in the viewer's info sheet.
-
-Why not a line per tile: it labels the steady state (`remote-only` is where bytes are _designed_ to live) and the default (in a fresh camera roll every photograph is local), in prose, under every tile — chrome inside the grid. Both Apple Photos and Google Photos independently arrived at the same answer: annotate the exception, never the norm, and never with words.
-
-## North stars
-
-| App | North star | Settled consequences |
-| --- | --- | --- |
-| **Photos** | Google Photos | One timeline over the vault; the camera roll goes up through the frame's pass ([mobile-offline.md](mobile-offline.md#the-per-state-promise--the-camera-roll-backup-on-ios-provisional)). Backup is **automatic-with-policy**: one per-device transfer rule, never per-photo. Download runs the other way on the same plan, and "fetch this one now" overrides the rule for one item. |
-| **Docs** | Google Drive | Fully feature-rich: folders, sharing, versions. Mobile's origin act is the scanner; desktop gets bulk import. |
-| **Notes** | Apple Notes | Folder hierarchy (not labels). Offline-first editing on every seat; mobile origin acts: quick capture, voice. |
-| **Agenda** | Google Calendar | Full replica on all seats; offline read + queued writes; notifications are a mobile-seat act. |
-| **Tasks** | Todoist | Same shape as Agenda: tiny payloads, all seats equal, write queue. One north star per app, and Todoist is the depth bar ([R-northstar](decisions.md#rebuilding-agenda-notes-and-tasks-834)). The backend keeps its Things-shaped vocabulary; the north star names the depth, not the words. |
-| **People** | Google Contacts | Full replica; mobile wants OS-contacts import and share-sheet in/out. |
-| **Locker** | 1Password | Biometric unlock + OS autofill on mobile (`originActs: ["autofill"]`). Enabled on every seat. |
-| **Tally** | Splitwise | Shared expense splitting: multi-party balances ("who owes whom"), naturally at home in a shared/household vault. Record-only and offline in both directions: writes queue, and the derived reads run on the device from the same crate the gateway runs. Mobile origin act: receipt photo (byte-bearing only at that edge). |
+| | **Mobile (KMP: `mobile/`)** — the only seat |
+| --- | --- |
+| Byte flow | up, when a drain runs; down on demand for an original the member asks for |
+| Danger state | bytes the spool still holds that the laptop has not acked |
+| Offline means | everything reads and writes; bytes cross later |
+| "Free up space" | core feature — release originals with a proved copy on the laptop |
 
 ## Shared machinery (build once, per-app never)
 
 1. **One transfer rule per device.** `TransferRule` (`mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/TransferRule.kt`) is the member's one setting, because what it governs is a data plan and a phone has one. What each rule admits is `centraid_blobs::Budget::admits_original` (`crates/blobs/src/plan.rs`) and nowhere else; no shell computes any part of it ([mobile-offline.md](mobile-offline.md#background-work-and-push-privacy)).
-2. **One byte store per vault, and pins are structural.** `ByteStore::sweep` (`crates/blobs/src/store.rs`) subtracts the bytes an unsettled intent names (`centraid_seat::outbox::pinned_blobs`) **before** it orders anything, so a pin is never an eviction candidate, and a store over budget _because of_ pins reports `over_budget_by` instead of breaking the promise.
-3. **One seat state.** A surface reads connectivity, durability and pending work from the core's own events, never from a poll: the desktop's four states ([desktop/README.md](../desktop/README.md#the-four-states)) and the mobile lockup ([mobile-offline.md](mobile-offline.md#one-stream-three-occasions)).
+2. **One byte store per vault, and pins are structural.** `ByteStore::sweep` (`crates/blobs/src/store.rs`) subtracts the bytes a pending upload still needs **before** it orders anything, so a pin is never an eviction candidate, and a store over budget _because of_ pins reports `over_budget_by` instead of breaking the promise.
+3. **One durability state.** A surface reads connectivity, durability and pending work from the core's own events, never from a poll ([mobile-offline.md](mobile-offline.md#one-stream-three-occasions)).
 4. **Origin acts live on the frame; apps register targets.** The camera roll is `mobile/shared/.../shell/CameraRoll.kt`, and bytes enter the core only through the staging door (`Staging.kt`), so the core names them. Camera, scanner, share-sheet-in, notifications and autofill are frame capabilities an app declares in `seats.originActs` — one door for every app.
 5. **The refusal grammar.** Outcomes go to the one status line in the member sentence the producer built ([protocol.md](protocol.md#the-member-sentence-and-its-detail-1015-r-ny-10)); disabled controls are visible, inert at the handler, and explained inline (never a tooltip).
-6. **One read path.** Every read on every seat is a page (#996, R8), defined once in `crates/apps/kit/src/page.rs`: `PageRequest.limit` is required, the answer carries a `(sort_key, pk)` cursor rather than a `truncated` flag, and `page_statement` (`statement.rs`) is the only assembler, so the seat, the shell and the gateway cannot drift into three keyset dialects. A window past the ceiling is clamped, and the clamp is a work-counter fact, never a message.
-7. **One pending write, and it is an apply.** A seat runs the real command against its replica and applies what it produced through the gateway's own applier, journalling each prior image in `seat_pending_rows` (`crates/seat/src/pending.rs`). There is no overlay and no per-app projection to declare: an app's pending state is the replica ([mobile-offline.md](mobile-offline.md#how-an-intent-settles)). A command that must not queue says so on the intent (`Intent.online_only`), where the payload is built.
+6. **One read path.** Every read is a page (#996, R8), defined once in `crates/apps/kit/src/page.rs`: `PageRequest.limit` is required, the answer carries a `(sort_key, pk)` cursor rather than a `truncated` flag, and `page_statement` (`statement.rs`) is the only assembler, so no two callers can drift into two keyset dialects. A window past the ceiling is clamped, and the clamp is a work-counter fact, never a message.
+7. **A write is a local transaction.** The phone is the authority, so there is no overlay, no outbox, no per-app projection to declare and nothing to settle: a command runs against the vault and the row is the answer ([protocol.md](protocol.md#canonical-json-and-where-a-hash-is-taken)).
 8. **One concept-scheme vocabulary.** A scheme is matched by its `https://centraid.dev/schemes/…` URI, and a typo there is not a crash but a silently empty shelf; the URIs live beside the queries and commands that use them in `crates/apps/*` and `crates/vault/src/commands`.
 
 ## App admission

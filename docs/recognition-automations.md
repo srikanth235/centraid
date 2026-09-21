@@ -1,5 +1,14 @@
 # Recognition automations
 
+> **Partly superseded, 2026-09-21.** Recognition survives — OCR, transcription, embeddings and faces
+> are bundled deterministic derivations the **phone** runs on its own bytes — but every
+> `packages/server`, `packages/blueprints` and `packages/model-runtime` path below names the v0
+> TypeScript tree, removed in [#1020](https://github.com/srikanth235/centraid/issues/1020), and the
+> `ctx.delegate` / provider-egress half went with the assistant plane in
+> [#1029](https://github.com/srikanth235/centraid/issues/1029). The current implementation is
+> `crates/vault/src/commands/enrich.rs`, with no separate inference process, no HTTP service and no
+> provider to egress to. Read the shapes here, not the paths.
+
 OCR, transcription, image/text embeddings, and faces are bundled automations whose handlers own model execution.
 
 ## Three provenance tiers
@@ -128,7 +137,7 @@ OCR accepts both image media types and `application/pdf`. For a PDF, the handler
 
 Weights are release assets, so a fresh gateway has none. That is **preparing**, not off. After the first scheduler reconcile the gateway calls `ensureModelAssets` in the background ([`enrich/system-model-assets.ts`](../packages/server/src/enrich/system-model-assets.ts)) for exactly the capabilities the three system handlers' own model constants are pinned under — `faces` from `FACES_MODEL_ID`, `ocr` from `OCR_MODEL_ID`, both read from [`model-ids.ts`](../packages/model-runtime/src/model-ids.ts) rather than restated, and the capability list itself derived from `models.lock.json`. `doc-text-extractor` ships no bundled deterministic engine, so it carries no weights and is never preparing.
 
-**Whether this host may fetch at all is the host's call, not the gateway's.** `BuildGatewayOptions.modelAssets.provision` is `"fetch"` or `"verify-only"`, and it **defaults to `"verify-only"`**: an unconfigured gateway — a test, an e2e harness, an embedded build someone forgot to configure — verifies what is on disk, reports anything missing as `preparing` with "model assets are not provisioned on this host", opens no connection and arms no retry (there is nothing on that box that would make the weights appear). The production hosts say `"fetch"` out loud: `centraid-gateway` ([`cli/cli.ts`](../packages/server/src/cli/cli.ts)) and the desktop's embedded gateway ([`embedded-gateway.ts`](../apps/desktop/src/main/embedded-gateway.ts)). The paragraph below describes a `"fetch"` host.
+**Whether this host may fetch at all is the host's call.** Model assets are verified against `models.lock.json` — a digest, a byte length and an immutable upstream URL per file — and a host that is not configured to fetch verifies what is on disk, reports anything missing as `preparing`, opens no connection and arms no retry. On v0 the host is the phone, and the fetch is the shell's ([#1029](https://github.com/srikanth235/centraid/issues/1029)).
 
 Boot never waits on a download. Until a capability's every pinned file is present and digest-verified, its automation reports `modelState: "preparing"` on the automations status surface, the component `recognition-models` reads degraded in Diagnostics with the reason, and the recipe's **scheduled** fire is skipped with that reason in the log — the registration and the cursors are untouched, so the tick after the assets land simply proceeds and the walk catches up on its own. A manual run is never skipped: the owner asking is the answer, and the handler's own "model assets unavailable" summary is the honest one. An unreachable upstream is reported and retried on a backoff (30 s, doubling to a 30-minute ceiling), never in a tight loop, and the weights land in the directory that automation's handler actually reads — the one `resolveAutomationRuntimeDir` resolves for the sandbox, `CENTRAID_AUTOMATION_RUNTIME_DIR` when set.
 

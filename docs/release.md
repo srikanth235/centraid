@@ -145,17 +145,14 @@ Do not fork process text into skills.
 
 | Workflow | Trigger | Notes |
 | --- | --- | --- |
-| `release.yml` | `v*` / `companion-v*` tags, dispatch | **the only tag listener**; fans out to the lanes below, `release-check` is the one verdict |
-| `lane-release-desktop.yml` | `workflow_call` | macOS + Windows + Linux; Environment `release` |
+| `release.yml` | `v*` tags, dispatch | **the only tag listener**; fans out to the lanes below, `release-check` is the one verdict |
 | `lane-release-mobile.yml` | `workflow_call` (dispatch only, never a tag) | Environment `mobile-release`; Gradle (Android) and XcodeGen + Xcode (iOS) builds of `mobile/` |
-| `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional image, built from [`deploy/docker/Dockerfile`](../deploy/docker/Dockerfile) |
+| `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional image, built from [`deploy/gateway-server/Dockerfile`](../deploy/gateway-server/Dockerfile) |
 | `lane-prebuilt-core.yml` | `workflow_call` | **the prebuilt core** ([#1020](https://github.com/srikanth235/centraid/issues/1020)): six binary triples, the four Android ABIs, the iOS XCFramework, a symbol file beside each, and `prebuilt-core-required` as the one verdict. Also invoked by `gate.yml` on pushes to `main` with `binary-only: true` |
-| `lane-release-extension.yml` | `workflow_call` (`companion-v*`) | packages `extension/`, the browser Companion |
 | `gate.yml` | PR / main push | `cargo xtask gate --profile pr`, plus `dependency-review` |
 | `candidate.yml` | main push / dispatch | rung 3 — the promotion lanes; on green its `promote` job moves `refs/candidates/latest`, publishes `test-report/candidate.json` and appends to `test-report/candidates.json`. `release.yml`'s `require-candidate` reads both |
-| `oauth-worker.yml` | path-filtered main push | protected deploy only when explicit flag + production evidence gates pass |
 
-Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the desktop signing identity, the mobile store credentials and GHCR push never reach a lane that has no business with them.
+Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the mobile store credentials and GHCR push never reach a lane that has no business with them. The desktop and Companion lanes were deleted with their surfaces ([#1029](https://github.com/srikanth235/centraid/issues/1029)); `scripts/release/surfaces.mjs` is the catalog, and its test refuses a row naming a workflow that is not on disk.
 
 ## The prebuilt core: triples, keys, identity, symbols
 

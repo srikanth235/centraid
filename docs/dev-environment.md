@@ -5,10 +5,9 @@ Stand up Centraid development without tribal knowledge. **Do not invent a new ma
 ## Prerequisites
 
 - Rust at the channel pinned in `rust-toolchain.toml` (rustup reads it; [`flake.nix`](../flake.nix)'s dev shell reads it through `rust-overlay`)
-- [Bun](https://bun.sh) matching root `packageManager` (pinned in `package.json`) — for `packages/design`, `packages/test-kit`, `desktop/electron`, `extension` and the repo tooling scripts
+- [Bun](https://bun.sh) matching root `packageManager` (pinned in `package.json`) — for `packages/design`, `packages/test-kit` and the repo tooling scripts
 - Node 24.4.1 — `.node-version` and `package.json#engines.node` must agree, and CI runs exactly this version. Locally a different Node only **warns** (#668); match it with `nvm use` if you hit a toolchain difference
 - For mobile: a JDK for the committed Gradle wrapper (`mobile/gradlew`); the Android SDK for `:androidApp`; Xcode at `.xcode-version` plus `xcodegen` for the iOS shell ([mobile/README.md](../mobile/README.md#the-toolchain))
-- For desktop: platform deps for Electron; `xvfb-run` on Linux for the Playwright runs
 
 ## Fresh clone
 
@@ -16,7 +15,7 @@ Stand up Centraid development without tribal knowledge. **Do not invent a new ma
 git clone <repo-url> centraid && cd centraid
 git config core.hooksPath .githooks   # once per clone
 bun install
-cargo build -p centraid               # the one binary: gateway, seat, pair, backup, doctor, …
+cargo build --workspace               # the core, the gateway and the two CLI binaries
 ```
 
 `CLAUDE.md` is a symlink to `AGENTS.md` (`ln -sf AGENTS.md CLAUDE.md`), so every agent CLI reads one manual with no sync burden. Restore the symlink if a tool ever replaces it with a copy.
@@ -25,21 +24,18 @@ cargo build -p centraid               # the one binary: gateway, seat, pair, bac
 
 | Name | Command | Notes |
 | --- | --- | --- |
-| **gateway** | `cargo run -p centraid -- gateway --data-dir <dir> [--print-qr [N]] [--no-relay]` | The vault's authority: iroh endpoint, device allowlist, pairing lane. Headless. Without `--data-dir` it runs in memory and every pairing is lost on exit. `--print-qr N` mints N one-shot tickets at startup; `--no-relay` keeps it on direct paths (LAN, simulator). `centraid pair --mint --data-dir <dir>` mints a ticket later |
-| **seat** | `cargo run -p centraid -- seat --data-dir <dir> [--socket <path>] [--thin]` | A replica plus the applier, outbox and every app's reads and commands. `centraid seat --data-dir <dir> pair <ticket>` redeems a ticket. `--print-catalogue` prints the statements the socket serves |
+| **gateway** | `cargo run -p centraid-gateway-server --bin centraid-gateway -- serve --data-dir <dir>` | The laptop's blind store. Headless, iroh by default, and it prints its `endpoint` line on every start. `centraid-gateway invite --data-dir <dir>` mints a one-shot invite and prints a pairing QR; `invites` lists what became of each ([gateway.md](gateway.md)) |
 | **demo data** | `cargo run -p centraid --bin seed-demo-vault -- <data-dir>/vault/<id> --file vault.db --name <name>` | Writes rows through the real command plane into a gateway's vault ([mobile/README.md](../mobile/README.md#seeing-it-with-real-data-pair-with-a-gateway)); `mobile/scripts/demo-vault.sh` wraps it for the emulator and simulator |
-| **desktop** | `bun run --cwd desktop/electron build`, then `CENTRAID_BINARY=${CARGO_TARGET_DIR:-$PWD/target}/debug/centraid bun run --cwd desktop/electron start` | Electron owns a `centraid seat` sidecar over `<userData>/seat.sock`. `CENTRAID_DATA_DIR`, `CENTRAID_SEAT_SOCKET` and `CENTRAID_SEAT_THIN=1` override the defaults ([desktop/README.md](../desktop/README.md#running-it)) |
 | **mobile (JVM)** | `cd mobile && ./gradlew mobileJvm` | `:shared:jvmTest`, `:core:jvmTest` over the real `centraid-core-ffi` cdylib, and the kover report — the gate's `mobile-jvm` step |
 | **mobile (Android)** | `cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug` | Needs `ANDROID_HOME`; `mobile/scripts/android-core.sh` cross-compiles the core into `jniLibs` first |
 | **mobile (iOS)** | the numbered steps in [mobile/README.md](../mobile/README.md#the-ios-hand-off) | Rust slice → `:shared:assembleCentraidSharedDebugXCFramework` → `protoc` → `xcodegen generate` → `swift test`. Skipping the first two links stale code with no error ([traps/stale-core-slice.md](traps/stale-core-slice.md)) |
 | **mobile flows** | `maestro test mobile/maestro/flows` | Needs a running simulator or emulator with the app installed |
-| **extension** | `bun run --cwd extension build -- --browser chrome --out dist/chrome`, then `cargo run -p centraid -- native-host install --browser chrome --extension-id <id> --out <file>` | The Companion talks to `centraid native-host`; `test`, `typecheck`, `lint` and `e2e` are the other scripts ([extension/README.md](../extension/README.md#setting-it-up)) |
-| **service unit** | `centraid gateway install` | Writes a launchd or systemd unit and prints the enable command; never enables it ([deploy/README.md](../deploy/README.md)) |
+| **service unit** | `centraid-gateway install --data-dir <dir>` (or `centraid gateway install`) | Writes a launchd or systemd unit and prints the enable command; never enables it ([deploy/README.md](../deploy/README.md)) |
 | **docs site** | `bun run docs:build` then `bun run docs:serve` | **4173** on 127.0.0.1 |
 
-Every `centraid` verb logs through `tracing` to stderr, filtered by `--log` / `CENTRAID_LOG` — where those lines end up per host is [logs.md](logs.md).
+Every verb logs through `tracing` to stderr, filtered by `--log` / `CENTRAID_LOG` — where those lines end up per host is [logs.md](logs.md).
 
-Do not point two processes at one data directory: the gateway is the vault's single writer, and `centraid recover` refuses a live gateway's directory by pid.
+Do not point two processes at one vault directory: the core holds the one writable connection and the whole pragma set depends on being the only opener ([traps/wal-checkpoint.md](traps/wal-checkpoint.md)). Two `centraid-gateway` processes over one data directory is fine and expected — `serve` and `invite` share it through the state file.
 
 ## Worktrees
 
@@ -47,7 +43,7 @@ Agents often work in git worktrees (including under `.claude/worktrees/`).
 
 1. **Install** — each worktree needs its own `bun install` (do not assume root `node_modules` is visible unless you deliberately symlink — prefer install).
 2. **One `CARGO_TARGET_DIR` per worktree** — sharing one is not only lock contention. A build script's `OUT_DIR` is keyed by package identity, which is the same in every worktree, so a lane that edits a `.proto` hands its generated Rust to every other lane; and a gate verdict taken from a shared directory is worth nothing. Export `CARGO_TARGET_DIR=<something unique>` and `touch crates/api-proto/build.rs` before the first build in a fresh one ([traps/shared-cargo-target.md](traps/shared-cargo-target.md)).
-3. **Do not share** writable `--data-dir` trees, Electron `userData`, or seat sockets across concurrent agents.
+3. **Do not share** writable `--data-dir` trees across concurrent agents, and give each worktree its own `CARGO_TARGET_DIR` ([traps/shared-cargo-target.md](traps/shared-cargo-target.md)).
 4. **Seed data** — use a dedicated `--data-dir` and `seed-demo-vault` rather than copying a live vault (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
 
 More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-agent.md](multi-agent.md).
@@ -60,7 +56,7 @@ Two things the driver does not do. It cannot tell an append from an edit — it 
 
 ## `.claude/launch.json`
 
-If a local `.claude/launch.json` exists (may be gitignored), treat it as the **named service list** for Claude/desktop launch integrations (ports, cwd, commands). Keep it in sync when you add a long-lived dev process. If absent, the table above is the source of truth until someone adds the file.
+If a local `.claude/launch.json` exists (may be gitignored), treat it as the **named service list** for launch integrations (ports, cwd, commands). Keep it in sync when you add a long-lived dev process. If absent, the table above is the source of truth until someone adds the file.
 
 ## The local gate loop
 
@@ -72,9 +68,9 @@ One command gates the tree ([#1020](https://github.com/srikanth235/centraid/issu
 | a narrower answer | `cargo test -p <crate>`, `cargo xtask rules`, `SIM_SEED=<n> cargo test -p centraid-sim` to replay one simulation seed | by hand |
 | commit | the pre-commit hook | `.githooks/pre-commit` |
 | push | the pre-push hook | `.githooks/pre-push` |
-| want CI's answer early | `cargo xtask gate --profile pr` — `local` plus supply chain, CI policy, secrets, release build, the TypeScript static tier, emitters, the desktop and extension unit suites, the prompt-injection corpus, 25 simulation seeds, the call budget and the fault door | [`gate.yml`](../.github/workflows/gate.yml), required on every pull request and push to `main`, beside `dependency-review` |
+| want CI's answer early | `cargo xtask gate --profile pr` — `local` plus supply chain, CI policy, secrets, release build, the TypeScript static tier, emitters, the call budget and the fault door | [`gate.yml`](../.github/workflows/gate.yml), required on every pull request and push to `main`, beside `dependency-review` |
 | Kotlin changed | `cargo xtask gate --profile mobile-jvm` — builds `centraid-core-ffi`, runs `./gradlew mobileJvm`, regenerates the native theme and screen fixtures and fails on drift. Budget 420 s | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) |
-| nightly | `cargo xtask gate --profile nightly` — `pr` plus 250 simulation seeds, `desktop-e2e`, `extension-e2e` and `device-lanes`. One lane alone: `--lane <name>` | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml), 05:30 UTC |
+| nightly | `cargo xtask gate --profile nightly` — `pr` plus `device-lanes` and the deeper suites. One lane alone: `--lane <name>` | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml), 05:30 UTC |
 | release | `cargo xtask gate --profile release` — `nightly` plus `restore-drill`, `artifact-identity`, `prebuilt-core-required`, `vps-smoke` | [`release.yml`](../.github/workflows/release.yml)'s lanes |
 
 A failing step writes its command, stdout and stderr under `target/xtask/<profile>/<step>/` and names that directory on its one line. **Every cargo and xtask command needs its own `CARGO_TARGET_DIR`** when more than one worktree is in flight — see the worktree rules above.
@@ -116,7 +112,7 @@ All three are legitimate for a WIP branch or a spike, and all three leave CI as 
 
 ### What deliberately does not run locally
 
-`deny` without `cargo-deny` installed, `ci-policy` without `actionlint`, `secrets` without `gitleaks`, `osv` without `osv-scanner`, and `buf` without `buf` — each prints a loud `SKIP` naming what turns it into a real run, and each is required in CI. `desktop-e2e` and `extension-e2e` need a display (`xvfb-run -a` on Linux); `device-lanes` need attached devices and run only on the self-hosted runner.
+`deny` without `cargo-deny` installed, `ci-policy` without `actionlint`, `secrets` without `gitleaks`, `osv` without `osv-scanner`, and `buf` without `buf` — each prints a loud `SKIP` naming what turns it into a real run, and each is required in CI. `device-lanes` need attached devices and run only on the self-hosted runner.
 
 ## Tools only via repo scripts
 
@@ -126,9 +122,7 @@ Never raw `npx vitest`, `npx tsc`, etc. Use:
 cargo xtask gate --profile local
 cargo test -p <crate>
 bun run format
-bun run --cwd desktop/electron test
-bun run --cwd desktop/electron typecheck
-bun run --cwd extension typecheck
+bun run typecheck
 ```
 
 Pinned toolchains live in `rust-toolchain.toml`, `mobile/gradle/libs.versions.toml` and the root `package.json`. The complete ownership and command contract is [toolchain.md](toolchain.md).
