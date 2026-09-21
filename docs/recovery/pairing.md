@@ -1,64 +1,93 @@
-# Recovery: founding and enrollment
+# Recovery: pairing a phone to a laptop
 
-Use this runbook when a gateway's first boot did not produce the vault you expect, a pair ticket expired, or a device lost its identity. The pairing wire is [`crates/net/src/pairing.rs`](../../crates/net/src/pairing.rs); its end-to-end test is [`crates/net/tests/pair_and_stream.rs`](../../crates/net/tests/pair_and_stream.rs). The full enrollment model is [enrollment.md](../enrollment.md).
+Use this runbook when pairing did not take, an invite expired, or a phone stopped being able to find
+its laptop. The protocol is [../gateway.md](../gateway.md); the rulings are
+[decisions.md](../decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21).
+
+**The vault is on the phone.** The laptop is a blind store. Losing the laptop loses the backup, not
+the vault; losing the phone is [backup-restore.md](backup-restore.md).
 
 ## Founding
 
-There is no founding ceremony, no founding ticket, and no `uninitialized` state. `centraid gateway --data-dir <dir>` founds a vault the first time it finds none:
+A vault is founded **on the phone**, at first launch. It mints 24 words, derives the vault's keys
+from them and creates `vault.db` in the directory the shell hands the core. Nothing on a laptop
+founds anything: `centraid-gateway serve` on an empty directory creates a state file, listens, and
+serves nothing to nobody until an invite is redeemed.
 
-1. Under `<dir>/vault/` it stages a new `vault.db` in `.founding/`, writes the vault and owner rows, and renames the directory to `<dir>/vault/<vaultId>/`. The vault's display name is `--vault-name` (default `Centraid`). stderr says `FOUNDED a new vault <id> (owner party <id>)`.
-2. On every later start it opens the one vault it finds. A data dir holding two vaults is refused, never guessed at; a `vault.db` with a schema and no vault row is refused with the reason ("created and never founded").
-3. Nothing else happens. No kit is minted and no ticket is issued unless `--print-qr` asks for one.
+## Ordinary pairing
 
-Without `--data-dir` the gateway runs entirely in memory and says so on stderr: no vault, and every pairing is lost on exit.
+1. On the laptop: `centraid-gateway serve --data-dir <dir>` in one terminal, and
+   `centraid-gateway invite --data-dir <dir> --quota-gib <n>` in another. The invite command prints
+   the invite code, a `pair` payload, and that payload as a **half-block Unicode QR** a phone camera
+   can read straight off the terminal. Both commands must point at the same `--data-dir`: the invite
+   must be redeemable while `serve` is running, and two processes share it through the state file.
+2. On the phone: the `Pair` flow scans the QR. The phone admits itself, claims the lease and writes
+   the laptop's endpoint id to `backup/laptop.json` beside its vault.
+3. **Compare the safety number.** 60 digits in 12 groups of 5, shown on both sides. It is BLAKE3 over
+   the two identity keys sorted by their bytes, so both sides render the same digits without agreeing
+   an order first. An empty safety number means the phone could not compute one and is drawn as that
+   — never as "it matched". A hex endpoint id is **not** the thing to compare: it is a string people
+   check the first four characters of and stop.
+4. `centraid-gateway invites --data-dir <dir>` lists the invites and what became of each.
 
-Restoring an existing vault onto a blank machine is the backup plane, not founding: see [backup-restore.md](backup-restore.md). Run `recover` **before** the first `centraid gateway` against that data dir, or the gateway founds a new vault there.
-
-## Ordinary enrollment
-
-1. On the gateway host, start the gateway with tickets: `centraid gateway --data-dir <dir> --print-qr [N]`. `--print-qr` with no value mints one ticket; a count mints that many, because a ticket is one-shot and a phone and a tablet need two. Each is printed as a QR and as a `base64url` line.
-2. The device scans the QR (mobile) or runs `centraid seat pair <ticket>` (a desktop or headless seat). The redeeming connection is accepted provisionally, may carry only a `pair` request, and is promoted in place on success, so pairing and the first bootstrap share one dial.
-3. Redemption burns the ticket and enrols the device in one critical section. Enrollment lives in the vault's own `access_device` / `access_device_secret` rows, so it survives a gateway restart.
-4. Every later connection is admitted by the device's proven iroh EndpointId. Unknown and revoked are one refusal.
-
-`centraid pair --mint` mints from a process that exits immediately, so nothing can redeem its ticket; it says so on stderr. Use `centraid gateway --print-qr`.
+An invite is **one-use and expires**. A second phone needs a second invite.
 
 ## Durable state
 
 | Location | Role |
 | --- | --- |
-| `<data-dir>/vault/<vaultId>/vault.db` | the vault, including the enrolled devices (`access_device`, `access_device_secret`) |
-| `<data-dir>/keys/gateway.endpoint.key` | the gateway's long-term iroh identity. Losing it changes the EndpointId and every paired device must pair again |
-| Device platform secure store | one enrollment record per vault: the device's private identity key, the vault id, dialling hints ([`Enrolments.kt`](../../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/Enrolments.kt)) |
-| Device replica | named by `vault_id` only, never by the gateway ([traps/seat-identity.md](../traps/seat-identity.md)) |
+| The phone's `vault.db` | **the vault.** Everything. Backed up as sealed objects and by nothing else |
+| The phone's platform secure store | the 64-byte seed (synced by default — iCloud Keychain is end-to-end encrypted) and the **device key** (this-device-only, **never synced**) |
+| The phone's `backup/laptop.json` | the paired laptop's `EndpointId`. Device-local derived state, deliberately not in the vault ([W15-D1](../decisions.md#w15--the-phones-request-contract-1029)) — lose it and the phone re-pairs |
+| `<data-dir>/node.key` on the laptop | the laptop's long-term iroh identity. Losing it changes the endpoint id and **every paired phone must pair again** |
+| `<data-dir>` state file on the laptop | the object index, the manifest heads, the leases, the invites and the quotas |
 
-Tickets are **not** durable: only the secret's hash is held, in memory, for 15 minutes (`TICKET_TTL_MS`). A gateway restart invalidates every outstanding QR. Relay hints are refreshable address cache, not identity.
+An invite's secret is held **only as its hash**. Relay and DNS hints are a refreshable address cache,
+never identity.
 
 ## Recovery steps
 
-### Ticket expired, consumed, or minted before a restart
+### The invite expired or was already redeemed
 
-Mint a new one by restarting with `--print-qr`. Never try to revive or edit the old value. A wrong secret and an unknown ticket are the same refusal; an expired or already-burnt ticket says so.
+Mint a new one: `centraid-gateway invite --data-dir <dir>`. Never try to revive or edit the old
+value. A wrong code and an unknown invite are the same refusal.
 
-### Device enrolled but cannot connect
+### The phone cannot find the laptop
 
-1. Check the gateway's stderr for the ready line (`centraid gateway ready`) and for the endpoint-identity warning — a gateway that could not keep its identity says it minted a fresh one and every seat must pair again.
-2. Run `centraid doctor --data-dir <dir>` to confirm the vault opens cleanly.
-3. If the device's secure store was cleared, its identity is gone: pair it again with a new ticket. The old device row stays in the vault until it is revoked.
-4. For relay-only failures, try `--no-relay` on a LAN or pass `--relay <url>` for a self-hosted relay, and read [logs.md](../logs.md) with `--log centraid_net=debug`.
+1. Confirm `centraid-gateway serve` is running and printed its `endpoint` line. Compare that id
+   against what the phone holds.
+2. `centraid-gateway health --url …` for the TCP carrier; under the iroh carrier the endpoint line
+   `serve` prints on every start is the equivalent, and it is the same id on every start unless
+   `node.key` moved.
+3. If `serve` warned that it **minted a fresh node key**, the laptop's identity changed and every
+   phone must pair again. That happens only if `node.key` was deleted or could not be read.
+4. n0's DNS or relay being unreachable is a denial of service, not a compromise: the record is signed
+   by the vault's identity key, so a hostile resolver can make a phone fail to find its laptop and
+   cannot make it find the wrong one. Read [../logs.md](../logs.md).
 
-### Revoking a lost device
+### The phone says `VAULT_MOVED`
 
-Revocation is the `devices.revoke` admin command ([`admin.proto`](../../crates/api-proto/proto/centraid/core/v1/admin.proto)): it deletes the device's private key sibling and keeps its row, so the device list still shows it and the door no longer admits it. `centraid devices list` and `centraid devices revoke <device>` exit `3` in this build — the verbs are owed, not silent stubs.
+A device at a higher epoch has claimed the lease — normally a restore onto a new phone. This phone
+freezes read-only with its unacked commits visible. That is the design (F1): the lease cannot
+*enforce* one writer, because both phones can hold the seed, so it shows the conflict rather than
+hiding it. Taking the vault back is a deliberate takeover from the phone you want to keep, not a
+repair on the one that was superseded.
 
-### Gateway identity is corrupt or lost
+### The laptop's disk is gone
 
-Stop the gateway before custody work. Restore the original `keys/gateway.endpoint.key` from wherever you keep `keys/` out of band; deleting it deliberately mints a new identity and every device must pair again. The key store is never part of a backup generation or an export.
+The vault is unaffected. Set up a new laptop, mint a fresh invite, pair again, and let the phone
+drain from its spool. **What is lost is the history the old laptop held**, which is what
+[Q-1029-6](../decisions.md#open-questions-for-the-owner-1029) — the off-site copy — is about.
+
+### An object on the laptop is corrupt
+
+`centraid-gateway scrub --data-dir <dir>` re-hashes every stored object and reports bit rot;
+`--repair` restores what a mirror still holds intact. It needs no key.
 
 ## Do not
 
-- Hand-edit `vault.db` while the gateway runs.
-- Persist pair tickets anywhere.
-- Copy device credentials into the gateway data directory.
-- Commit real pair tickets, endpoint secrets, or recovery kits.
-- Delete `vault/` to "reset" a gateway — the next start founds a new vault over the directory.
+- Hand-edit the phone's `vault.db`, or copy it anywhere. See
+  [../traps/wal-checkpoint.md](../traps/wal-checkpoint.md).
+- Persist an invite payload anywhere, or commit one.
+- Delete `node.key` to "reset" a laptop — every phone re-pairs.
+- Treat the laptop's data directory as a second vault. It holds no key and nothing that opens one.

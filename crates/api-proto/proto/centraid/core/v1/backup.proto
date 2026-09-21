@@ -154,8 +154,13 @@ message ObjectEntry {
   ObjectKind kind = 2;
   uint64 padded_size = 3;
   int64 received_at_ms = 4;
-  // Set when the object is tombstoned but not yet purged. Until the purge a
-  // restored phone can undelete, or restore an older generation.
+  // Set when the object is tombstoned: the moment its bytes become purgeable.
+  // Until then a restored phone can undelete, or restore an older generation.
+  //
+  // It does NOT mean "not yet purged". The hourly purge sweep unlinks the
+  // bytes and leaves the row TOMBSTONED with this field still set, so the
+  // state alone no longer distinguishes awaiting-purge from purged. Whether to
+  // add a PURGED state is open question Q-1029-7 (#1029 W15).
   optional int64 purge_after_ms = 5;
 }
 

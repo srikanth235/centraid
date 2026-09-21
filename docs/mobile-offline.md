@@ -154,7 +154,7 @@ A base version is a `row_version`, never a log position. The two are different n
 
 The shell registers background work with the platform — `BGTaskScheduler` on iOS, WorkManager on Android — and a woken pass runs the same round as the foreground under a bounded window. Platform timing is opportunistic; correctness always comes from the durable outbox and the cursor.
 
-One pass owns **the platform's own deadline** ([#1025](https://github.com/srikanth235/centraid/issues/1025) S5, [D-1025-S5-4](decisions.md#slice-s5--the-shells-half-1025)), checked between stages and also driven by the platform's own expiration listener. A fixed constant would stand in for a number only the OS knows. `BackgroundTasks.window(wake)` (`mobile/shared/src/commonMain/kotlin/dev/centraid/shared/platform/PlatformServices.kt`) states it per platform and per wake reason; **iOS publishes no API for a `BGAppRefreshTask`'s remaining time**, so what it states is Apple's documented window and it says so in those words rather than as a measurement. The expiration handler stays the second, independent trigger, because it is the half that is actually the OS speaking. A pass that runs out of budget stops at a stage boundary instead of being killed mid-stage, and reports what it managed. Vaults are isolated from each other: one whose pull or bootstrap fails never cancels the rest. The pass also asks the platform for the real connectivity answer rather than assuming a radio.
+One pass owns **a deadline the shell passes in**, checked between objects rather than at a fixed constant the app invented. `DrainPass.run(deadlineMs)` is that bound, and a pass that runs out stops cleanly at an object boundary with the spool and the acked txid intact, reporting `Stopped.DEADLINE` and what it managed. `BackgroundTasks.window(wake)` is **gone** ([#1029](https://github.com/srikanth235/centraid/issues/1029) §1, §6): it existed to bound one `seat.sync` call, its answer became the `SyncWindow` on that command, and both named a shape of work this device no longer does. **iOS publishes no API for a `BGAppRefreshTask`'s remaining time**, so whatever the shell derives is Apple's documented window and not a measurement, and the OS expiration handler stays the second, independent trigger because it is the half that is actually the OS speaking. Vaults are isolated from each other: one whose pass fails never cancels the rest. The pass asks the platform for the real connectivity answer rather than assuming a radio.
 
 **The Wi-Fi and charger rules are a SELECTOR, not a number the shell computes** ([#1025](https://github.com/srikanth235/centraid/issues/1025) S5, [D-1025-S5-4](decisions.md#slice-s5--the-shells-half-1025)). A foreground wake asks for a foreground window; a background wake on a charger and an unmetered link asks for the night shift; every other background wake asks for a short refresh. `crates/blobs` owns what each of those costs in bytes and items, and the window names the plan rather than restating the sizes — a Kotlin and a Swift copy of that arithmetic would drift from the Rust the moment either number changed. `metered` rides beside the selector because it is a separate fact (a night shift on a tethered phone is a night shift, metered) and it changes WHAT crosses rather than only how much: **no originals at all**, thumbnails and previews still. A ceiling could not have expressed that — the planner admits an item larger than the whole budget on purpose, because that is the only way a 900 MB video ever crosses, so a metered window bounded only by bytes would start the video and resume it every window until the bill arrived.
 
@@ -190,40 +190,65 @@ Locker is stricter in ONE direction: the secret half. The seat is the unlock bou
 
 The absolute targets for a phone are in [`tests/journeys.json`](../tests/journeys.json), stated on the two reference devices ([glossary.md](glossary.md#hosts-and-clients)). A bounded read costs what it returns, and every read states its window: there is no unpaged read, and a whole-set read walks its pages and fails at its stated bound rather than returning a short list that reads as complete (`read_pages` in `crates/apps/kit/src/reads.rs`).
 
-## The per-state promise — the camera-roll backup on iOS (PROVISIONAL)
+## The per-state promise — the backup on iOS
 
-What Centraid may tell a member about when their photos will be safe, per app state ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E, D-1020-E5; open question 3).
+What Centraid may tell a member about when their data will be safe, per app state. **The transport
+half is settled and the timing half is measured, not promised.**
 
-**The transport half of this question is settled; the timing half is not.** The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795), "Superseded — Background upload", rules that the phone drains its spool over iroh **in the foreground and inside the `BGProcessingTask` window iOS grants**, and under WorkManager on Android: there is no transfer while the app is suspended, force-quit stops it until next launch, and **this is the iCloud Backup posture** — which is what the copy says (`DrainCopy.POSTURE_SENTENCE` in `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/DrainPass.kt`). A background `URLSession` is therefore not an option that is open: it moves bytes over HTTP(S) to a URL, and the member's laptop is reached over QUIC by a client inside this process. The seam that wrapped it is retired with its destination ([#1029](https://github.com/srikanth235/centraid/issues/1029) W18-3).
+The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795),
+"Superseded — Background upload", rules that the phone drains its spool over iroh **in the foreground
+and inside the `BGProcessingTask` window iOS grants on the charger**, and under WorkManager on
+Android. There is no transfer while the app is suspended; force-quit stops it until next launch; and
+**this is the iCloud Backup posture**, which is what the copy says — `DrainCopy.POSTURE_SENTENCE` in
+[`DrainPass.kt`](../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/DrainPass.kt), not a
+sentence this document re-spells. A background `URLSession` is not an option that is open: it moves
+bytes over HTTP(S) to a URL, and the member's laptop is reached over QUIC by a client inside this
+process. The seam that wrapped it is retired with its destination
+([R-1029-2](decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21)).
 
-What remains provisional is **how much gets through per night**, which `BGProcessingTask`'s opportunistic scheduling decides and which depends on a measurement nobody has taken.
+**A pass is bounded by a deadline the caller passes in**, not by a platform window object:
+`DrainPass.run(deadlineMs)`. The shell derives that number from whatever the platform told it and
+the pass checks it **between objects**, so a window that runs out stops cleanly with the spool and
+the acked txid intact rather than being killed mid-object. `BackgroundTasks.window(wake)` is gone —
+it existed to bound one `seat.sync` call and named a shape of work this device no longer does.
+What `BackgroundTasks` still answers is `register()`, and **registration is observable rather than
+assumed**: "Background App Refresh is off" is a sentence a member reads, not a silent absence of
+passes.
 
-The experiment that takes it is written in full at [`mobile/maestro/ios-transfer-experiment.md`](../mobile/maestro/ios-transfer-experiment.md): five app states × two transports (iroh-blobs, and an HTTPS blob door behind the `blob-door` feature), four measurements per cell, a 2,000-asset corpus on a **named reference device** (R-1020-20 — never a simulator), and a decision table with one already-written sentence per outcome. The threshold is **500 assets per night, charging, on Wi-Fi**.
-
-**The pass that fills this table now exists** ([#1025](https://github.com/srikanth235/centraid/issues/1025) S6, [D-1025-S7-73](decisions.md#slice-s6--the-camera-roll-goes-up-1025)). Until that slice there was no code anywhere that turned a photograph on a phone into a row in a vault: `MediaLibrary` could describe a roll, `Staging` could hand bytes to the core, `BackupState` could be drawn — and nothing joined them, so every row below described a thing the product could not do. `CameraRoll` is the join. One pass enumerates from a **durable per-vault cursor**, streams each original into the core through the staging door so THE CORE names the bytes (BLAKE3; the phone computes no digest), and queues an ordinary `media.add_asset` intent declaring `needs`, which is what makes the gateway pull and verify the bytes over this seat's own connection **before** it commits the content row. Progress is the cursor plus the hash-keyed intent id, so a re-enumeration after a relaunch queues nothing and a restored phone — whose `PHAsset` identifiers are all new — does not re-upload a library. Wi-Fi and charger rules are the member's one `TransferRule`, read **before each item**.
-
-**HEIC is the standing gap** ([D-1025-S7-76](decisions.md#slice-s6--the-camera-roll-goes-up-1025)): an iPhone's originals upload untouched and the gateway derives no `thumb` or `preview` for them, so those cells fall back to the original until the deferral in [D-1025-S7-52](decisions.md#slice-s3--derivatives-at-the-gateway-1025) is closed.
-
-Until the transfer experiment runs, this is what the product may say, and the state machine in `mobile/shared` reports each row as a `BackupState.Phase` rather than as a claim:
+A pass stops for exactly three reasons, and each has one sentence
+(`DrainCopy.stoppedSentence`). **`DEADLINE` is not an error and does not say so** — a window that ran
+out with bytes left is the ordinary case for a first backup of a camera roll, and a phone that
+reported it as a failure would train members to distrust a product that is working.
 
 | App state | What Centraid does | What a member is told |
 | --- | --- | --- |
-| **Open, on screen** | enumerates and transfers continuously; Wi-Fi and charger rules are queried **before each item**, not once per pass | "Backing up: 38 done, 12 to go" |
-| **Open, phone locked** | continues while the app is foreground-but-obscured; the decrypted cache is cleared and the replica unmounted the moment it truly backgrounds | "Backing up" until the state changes, then the background row below |
-| **Backgrounded, recent** | one pass inside **the window the platform states** (`BackgroundTasks.window`), checked at stage boundaries, with the platform's expiration handler as a second independent trigger | "Backing up when your phone lets Centraid run" |
-| **Backgrounded, scheduled task** | `BGProcessingTask` with `requiresExternalPower`; **opportunistic timing, durable correctness** — progress is the durable per-vault cursor and the hash-keyed intent ids, not the task | _the sentence the experiment picks_ |
-| **Force-quit** | nothing until a task or a launch wakes it; **no progress is lost** — every pass resumes from the durable per-vault cursor | "Centraid picks up where it stopped" |
-| **Out of disk** | the feed is **parked**: the retry cadence stops, the cursor and the rows stay, and nothing is evicted to manufacture space | "This device is out of space, so Centraid has paused" + "Free up space and Centraid picks up where it stopped" |
-| **Photo access denied** | the backup is idle; **the grid is unaffected**, because it reads the vault and not the camera roll | "Photo access is off. Turn it on in Settings to back up your camera roll." |
-| **Background App Refresh off** | no scheduled passes at all; registration is **observable rather than assumed** | "Background App Refresh is off, so Centraid only catches up when you open it." |
+| **Open, on screen** | drains continuously; the member's `TransferRule` is read **before each item**, not once per pass | "Backing up" with the bytes still to go |
+| **Open, phone locked** | continues while the app is foreground-but-obscured; stops when it truly backgrounds | "Backing up" until the state changes, then the row below |
+| **Backgrounded, scheduled task** | one pass inside the `BGProcessingTask` window, `requiresExternalPower`, bounded by the deadline the shell passes in and checked between objects. **Opportunistic timing, durable correctness** — progress is the spool and the acked txid, never the task | "Still backing up — *N* to go. It will finish on its own." |
+| **Backgrounded, no window granted** | nothing this pass; **no progress is lost** | "Backing up when your phone lets Centraid run" |
+| **Force-quit** | nothing until a launch wakes it, **and iOS stops granting windows until then**; no progress is lost | `DrainCopy.FORCE_QUIT_SENTENCE` — swiping Centraid away stops backing up until you open it again |
+| **Laptop unreachable** | the pass ends and the next one resumes from the same place | "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off." |
+| **Everything acked** | idle | "Backed up. Everything is on your laptop." |
+| **Out of disk** | the spool is **parked**: the retry cadence stops, the cursor and the rows stay, and nothing is evicted to manufacture space | "This device is out of space, so Centraid has paused" + "Free up space and Centraid picks up where it stopped" |
+| **Photo access denied** | the camera-roll backup is idle; **the grid is unaffected**, because it reads the vault and not the camera roll | "Photo access is off. Turn it on in Settings to back up your camera roll." |
+| **Background App Refresh off** | no scheduled passes at all | "Background App Refresh is off, so Centraid only catches up when you open it." |
 
-### The sentence that changes, and what it changes to
+**What is not yet known is how much gets through per night**, which `BGProcessingTask`'s
+opportunistic scheduling decides and which depends on a measurement nobody has taken. The experiment
+is written in full at
+[`mobile/maestro/ios-transfer-experiment.md`](../mobile/maestro/ios-transfer-experiment.md): app
+states × a 2,000-asset corpus on a **named reference device** (R-1020-20 — never a simulator), with
+a threshold of **500 assets per night, charging, on Wi-Fi**. There is no second transport to compare
+against any more — the HTTPS blob door went with the hosted tier and the phone has one carrier — so
+what the experiment decides is the wording, not the design:
 
-One row above is blank on purpose. The experiment's decision table fills it, and these are the only four things it may say:
+1. **≥ 500 assets/night** — _"Backed up overnight: plug the phone in on Wi-Fi and Centraid finishes the night's photos before morning."_
+2. **100–499** — _"Backed up over a few nights: Centraid moves your photos while the phone is charging on Wi-Fi, oldest first, and tells you how many are left."_
+3. **< 100** — _"Backed up while Centraid is open: leave it on screen while the phone charges."_ The worst outcome, and it has to be sayable: the alternative is a promise the product cannot keep.
 
-1. **iroh-blobs clears ≥ 500 assets/night** — _"Backed up overnight: plug the phone in on Wi-Fi and Centraid finishes the night's photos before morning."_ The `blob-door` feature is then deleted and `no-listening-socket` loses its exception.
-2. **iroh-blobs clears 100–499** — _"Backed up over a few nights: Centraid moves your photos while the phone is charging on Wi-Fi, oldest first, and tells you how many are left."_
-3. **iroh-blobs clears < 100 and the HTTPS door clears ≥ 500** — _"Backed up overnight… On iPhone, Centraid uses a direct connection to your gateway for photo files."_ The door ships on iOS only, behind `blob-door`.
-4. **Neither clears 100** — _"Backed up while Centraid is open: leave it on screen while the phone charges."_ The worst outcome, and it has to be sayable: the alternative is a promise the product cannot keep.
+**Android is not in this table.** WorkManager's periodic work with a `NetworkType.UNMETERED` +
+charging constraint runs long enough for a night's camera roll; the open question is iOS's alone.
 
-**Android is not in this table.** WorkManager's periodic work with a `NetworkType.UNMETERED` + charging constraint runs long enough for a night's camera roll; the open question is iOS's alone.
+**HEIC is the standing gap** ([D-1025-S7-76](decisions.md#slice-s6--the-camera-roll-goes-up-1025)):
+an iPhone's originals upload untouched and no `thumb` or `preview` is derived for them, so those
+cells fall back to the original.
