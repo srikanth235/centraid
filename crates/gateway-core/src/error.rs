@@ -357,6 +357,178 @@ impl Refusal {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The refusal body, and it is ONE declaration (#1029 W17-5)
+// ---------------------------------------------------------------------------
+
+/// A REFUSAL AS IT TRAVELS, DECLARED ONCE FOR BOTH ENDS.
+///
+/// It lived twice: `gateway-server` had a `Serialize`-only copy and
+/// `gateway-client` a `Deserialize`-only one, written the same way by hand and
+/// asserted equal by a round-trip test that constructed the client's struct
+/// rather than reading the server's bytes. **They had already drifted.** The
+/// server wrote `server_protocol_min` / `server_protocol_max` /
+/// `client_protocol` and the client declared `min` / `max`, non-optional, so a
+/// `VersionWindow` refusal did not deserialise at all: a phone that was merely
+/// too new was told "the gateway's answer did not decode", which reads as a
+/// broken server and is not one.
+///
+/// Two structs cannot be held equal by discipline, so there is one, and it is
+/// **here** rather than in either end — the shape of a refusal is a fact about
+/// the protocol, exactly as [`Refusal::code`] and [`Companions`] are. The
+/// server renders it, the client reads it, and
+/// `gateway-server/tests/wire_iroh.rs` moves the bytes between two processes'
+/// worth of code to prove it.
+///
+/// `serde` is the one thing this adds to a crate that is otherwise a pure
+/// state machine. It reaches no clock, no socket and no filesystem, so
+/// `tests/pure_rules.rs` is unaffected — and the alternative was a hand-rolled
+/// JSON writer, which is a second serializer to disagree with the first.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ErrorBody {
+    /// The code from [`Refusal::code`], spelled `{code:?}`. **Never a
+    /// sentence**: the member-facing wording is derived from the code by the
+    /// shell, which is the rule `error.proto` already states for every other
+    /// refusal in this product.
+    pub code: String,
+    /// The server's clock, so a phone with a wrong one can re-sign **once**.
+    ///
+    /// Not a companion: every body carries it, after any refusal, because a
+    /// phone with a wrong clock has to be able to re-sign after all of them.
+    pub server_time_ms: i64,
+    /// `VAULT_MOVED`: which epoch superseded this device, and when.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moved: Option<MovedBody>,
+    /// `VERSION_WINDOW`: both ends of the comparison.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<ProtocolBody>,
+    /// `GATEWAY_CLOCK_SKEW`: the replay window, beside the clock above.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skew_window_ms: Option<i64>,
+    /// `GATEWAY_HEAD_CONFLICT`: the head as it stands now, hex. An **empty
+    /// string** is a real answer — "there is no head" — and is why the
+    /// conflict reports a present companion with an absent value rather than
+    /// no companion at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_head: Option<String>,
+    /// `GATEWAY_QUOTA_EXCEEDED`: the ceiling, what is spent, what was wanted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota: Option<QuotaBody>,
+    /// `GATEWAY_LEASE_STALE`: the two epochs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease: Option<LeaseBody>,
+    /// `GATEWAY_OBJECT_TOO_LARGE`: what was declared and the cap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<SizeBody>,
+    /// The object an unknown-object or already-committed refusal names, hex.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object: Option<String>,
+}
+
+/// See [`ErrorBody::moved`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MovedBody {
+    pub current_epoch: u64,
+    pub moved_at_ms: i64,
+}
+
+/// See [`ErrorBody::protocol`].
+///
+/// **The field names are the server's**, because the server's are what is
+/// already on the wire and what `Companions::pairs` spells; renaming them to
+/// the client's shorter ones would have moved the bytes to fix a reader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ProtocolBody {
+    /// Inclusive.
+    pub server_protocol_min: u32,
+    /// Inclusive.
+    pub server_protocol_max: u32,
+    /// What the refused request asked for.
+    pub client_protocol: u32,
+}
+
+/// See [`ErrorBody::quota`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct QuotaBody {
+    pub quota_bytes: u64,
+    pub used_bytes: u64,
+    pub wanted_bytes: u64,
+}
+
+/// See [`ErrorBody::lease`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct LeaseBody {
+    pub held_epoch: u64,
+    pub claimed_epoch: u64,
+}
+
+/// See [`ErrorBody::size`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SizeBody {
+    pub declared_bytes: u64,
+    pub cap_bytes: u64,
+}
+
+impl ErrorBody {
+    /// The body for one refusal, companions and all.
+    ///
+    /// **The only place this product builds an error body**, so there is one
+    /// answer rather than one per adapter.
+    #[must_use]
+    pub fn of(refusal: &Refusal, server_time_ms: i64) -> Self {
+        let companions = refusal.companions();
+        Self {
+            code: format!("{:?}", refusal.code()),
+            server_time_ms,
+            moved: companions.moved.map(|moved| MovedBody {
+                current_epoch: moved.current_epoch,
+                moved_at_ms: moved.moved_at_ms,
+            }),
+            protocol: companions.protocol.map(|protocol| ProtocolBody {
+                server_protocol_min: protocol.server_min,
+                server_protocol_max: protocol.server_max,
+                client_protocol: protocol.client,
+            }),
+            skew_window_ms: companions.skew_window_ms,
+            current_head: companions
+                .head
+                .map(|head| head.map(|name| name.hex()).unwrap_or_default()),
+            quota: companions.quota.map(|quota| QuotaBody {
+                quota_bytes: quota.quota_bytes,
+                used_bytes: quota.used_bytes,
+                wanted_bytes: quota.wanted_bytes,
+            }),
+            lease: companions.lease.map(|lease| LeaseBody {
+                held_epoch: lease.held,
+                claimed_epoch: lease.claimed,
+            }),
+            size: companions.size.map(|size| SizeBody {
+                declared_bytes: size.declared_bytes,
+                cap_bytes: size.cap_bytes,
+            }),
+            object: companions.object.map(|object| object.hex()),
+        }
+    }
+
+    /// A body that carries no companions, for an internal error — which is not
+    /// a refusal and has none.
+    #[must_use]
+    pub fn internal(server_time_ms: i64) -> Self {
+        Self {
+            code: format!("{:?}", ErrorCode::Internal),
+            server_time_ms,
+            moved: None,
+            protocol: None,
+            skew_window_ms: None,
+            current_head: None,
+            quota: None,
+            lease: None,
+            size: None,
+            object: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -31,6 +31,12 @@ blake3.workspace = true
 # rather than reaching for a DNS client's dependency tree to get one.
 ed25519-dalek.workspace = true
 hex.workspace = true
+# THE REFUSAL BODY IS A PROTOCOL FACT, so it is declared here and both ends
+# import it (#1029 W17-5). `serde` reaches no clock, no socket and no
+# filesystem, so `tests/pure_rules.rs` is unaffected; the alternative was a
+# hand-rolled JSON writer, which is a second serializer to disagree with the
+# first.
+serde = { workspace = true }
 # The store's attested checksum, and the ONE place this crate names it. See
 # `src/checksum.rs`, and the `crates/vault/tests/one_hash.rs` allowlist entry
 # that carries the reason.

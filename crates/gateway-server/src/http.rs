@@ -93,6 +93,30 @@ pub struct Server {
 /// under `StateStore` — not a rule that has learned to be reentrant.
 pub type Shared = Arc<Mutex<Server>>;
 
+/// THE BODY EVERY ROUTE BUT THE OBJECT `PUT` MAY CARRY.
+///
+/// A declaration, a commit or a delete is a small JSON document, and the
+/// biggest of them is a declaration naming one generation's objects. 1 MiB is
+/// far more than that and is a number rather than axum's silent default, so a
+/// request that is refused for being too big is refused against something
+/// written down.
+const REQUEST_BODY_CAP: usize = 1024 * 1024;
+
+/// THE BODY AN OBJECT `PUT` MAY CARRY, AND WHY IT IS DECLARED (audit 18).
+///
+/// It is `gateway_core`'s own object cap and not a second number: an object
+/// the phone can seal and the gateway refuses is a bug either way round (F6).
+///
+/// **Declaring it is the fix for two opposite faults at once.** The route
+/// carried NO limit of its own, which meant axum's default 2 MiB applied —
+/// one eighth of the size the rules admit — so a full-sized object could not
+/// be uploaded at all, on either carrier, and the failure was a stream closed
+/// mid-write rather than a refusal anybody could read. And an undeclared
+/// limit is not a bound either way: it is whatever the framework's default
+/// happens to be this version, which is exactly what audit finding 18 was
+/// about.
+const OBJECT_BODY_CAP: usize = centraid_gateway_core::upload::MAX_OBJECT_BYTES as usize;
+
 /// The routes.
 pub fn router(server: Shared) -> Router {
     Router::new()
@@ -102,167 +126,28 @@ pub fn router(server: Shared) -> Router {
         .route("/v1/vaults/{vault}/declare", post(declare))
         .route("/v1/vaults/{vault}/commit", post(commit))
         .route("/v1/vaults/{vault}/delete", post(delete))
-        .route("/v1/objects/{vault}/{name}", put(put_object))
+        .route(
+            "/v1/objects/{vault}/{name}",
+            put(put_object).layer(axum::extract::DefaultBodyLimit::max(OBJECT_BODY_CAP)),
+        )
         .route("/v1/objects/{vault}/{name}", get(get_object))
+        .layer(axum::extract::DefaultBodyLimit::max(REQUEST_BODY_CAP))
         .with_state(server)
 }
 
 // --------------------------------------------------------------- rendering --
 
-/// A refusal on the wire.
+/// THE REFUSAL BODY IS `centraid_gateway_core::error::ErrorBody`.
 ///
-/// # THE CODE IS NOT THE WHOLE ANSWER
-///
-/// Almost every refusal a phone *acts* on also carries a value: the epoch that
-/// superseded this device and **when**, the head as it stands now, the server's
-/// protocol range, the bytes left in a quota. This body used to carry the code
-/// and the clock and nothing else, so a phone learned THAT its vault moved and
-/// never WHEN — and a shell that defaults the missing time draws "0 changes
-/// since 1 January 1970" over a frozen vault, which is a fabricated fact rather
-/// than a missing one.
-///
-/// The companions are `centraid_gateway_core::error::Companions` and this
-/// renders them; it does not choose them. `gateway-core`'s conformance case
-/// `errors/a-refusal-carries-its-companions-on-the-wire` drives this very
-/// serializer and fails if a name or a value is lost, which is what stops the
-/// two deployments from drifting apart on it again.
-#[derive(Debug, Serialize)]
-pub struct ErrorBody {
-    /// The code from `Refusal::code()`. **Never a sentence**: the member-facing
-    /// wording is derived from the code by the shell, which is the rule
-    /// `error.proto` already states for every other refusal in this product.
-    pub code: String,
-    /// The server's clock, so a phone with a wrong one can re-sign **once**.
-    ///
-    /// Not a companion: every body carries it, after any refusal, because a
-    /// phone with a wrong clock has to be able to re-sign after all of them.
-    pub server_time_ms: i64,
-    /// `VAULT_MOVED`: which epoch superseded this device, and when.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub moved: Option<MovedBody>,
-    /// `VERSION_WINDOW`: both ends of the comparison.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<ProtocolBody>,
-    /// `GATEWAY_CLOCK_SKEW`: the replay window, beside the clock above.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub skew_window_ms: Option<i64>,
-    /// `GATEWAY_HEAD_CONFLICT`: the head as it stands now.
-    ///
-    /// **Present with an empty string when there is no head.** "There is no
-    /// head" is an answer — re-read from nothing — and a phone that could not
-    /// tell it from a dropped companion could not tell it from a broken server.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub current_head: Option<String>,
-    /// `GATEWAY_QUOTA_EXCEEDED`: the ceiling, the spend and the ask.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub quota: Option<QuotaBody>,
-    /// `GATEWAY_LEASE_STALE`: the epoch held and the epoch claimed.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lease: Option<LeaseBody>,
-    /// `GATEWAY_OBJECT_TOO_LARGE`: what was declared and the cap.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub size: Option<SizeBody>,
-    /// The object an unknown-object or already-committed refusal names, hex.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub object: Option<String>,
-}
-
-/// See [`ErrorBody::moved`].
-#[derive(Debug, Serialize)]
-pub struct MovedBody {
-    pub current_epoch: u64,
-    pub moved_at_ms: i64,
-}
-
-/// See [`ErrorBody::protocol`].
-#[derive(Debug, Serialize)]
-pub struct ProtocolBody {
-    pub server_protocol_min: u32,
-    pub server_protocol_max: u32,
-    pub client_protocol: u32,
-}
-
-/// See [`ErrorBody::quota`].
-#[derive(Debug, Serialize)]
-pub struct QuotaBody {
-    pub quota_bytes: u64,
-    pub used_bytes: u64,
-    pub wanted_bytes: u64,
-}
-
-/// See [`ErrorBody::lease`].
-#[derive(Debug, Serialize)]
-pub struct LeaseBody {
-    pub held_epoch: u64,
-    pub claimed_epoch: u64,
-}
-
-/// See [`ErrorBody::size`].
-#[derive(Debug, Serialize)]
-pub struct SizeBody {
-    pub declared_bytes: u64,
-    pub cap_bytes: u64,
-}
-
-impl ErrorBody {
-    /// The body for one refusal, companions and all.
-    ///
-    /// **The only place this crate builds an error body with companions**, so
-    /// there is one answer rather than one per handler.
-    #[must_use]
-    pub fn of(refusal: &Refusal, server_time_ms: i64) -> Self {
-        let companions = refusal.companions();
-        Self {
-            code: format!("{:?}", refusal.code()),
-            server_time_ms,
-            moved: companions.moved.map(|moved| MovedBody {
-                current_epoch: moved.current_epoch,
-                moved_at_ms: moved.moved_at_ms,
-            }),
-            protocol: companions.protocol.map(|protocol| ProtocolBody {
-                server_protocol_min: protocol.server_min,
-                server_protocol_max: protocol.server_max,
-                client_protocol: protocol.client,
-            }),
-            skew_window_ms: companions.skew_window_ms,
-            current_head: companions
-                .head
-                .map(|head| head.map(|name| name.hex()).unwrap_or_default()),
-            quota: companions.quota.map(|quota| QuotaBody {
-                quota_bytes: quota.quota_bytes,
-                used_bytes: quota.used_bytes,
-                wanted_bytes: quota.wanted_bytes,
-            }),
-            lease: companions.lease.map(|lease| LeaseBody {
-                held_epoch: lease.held,
-                claimed_epoch: lease.claimed,
-            }),
-            size: companions.size.map(|size| SizeBody {
-                declared_bytes: size.declared_bytes,
-                cap_bytes: size.cap_bytes,
-            }),
-            object: companions.object.map(|object| object.hex()),
-        }
-    }
-
-    /// A body that carries no companions, for an internal error — which is not
-    /// a refusal and has none.
-    #[must_use]
-    pub fn internal(server_time_ms: i64) -> Self {
-        Self {
-            code: format!("{:?}", ErrorCode::Internal),
-            server_time_ms,
-            moved: None,
-            protocol: None,
-            skew_window_ms: None,
-            current_head: None,
-            quota: None,
-            lease: None,
-            size: None,
-            object: None,
-        }
-    }
-}
+/// It used to be declared here, `Serialize`-only, with a hand-written twin in
+/// `gateway-client` that read it back — and the two had drifted on
+/// `VersionWindow`'s companion, so a phone that was merely too new could not
+/// parse the refusal at all. The shape of a refusal is a fact about the
+/// protocol, so it is declared where the rest of the protocol is and both ends
+/// import it (#1029 W17-5). This crate renders; it does not choose.
+pub use centraid_gateway_core::error::{
+    ErrorBody, LeaseBody, MovedBody, ProtocolBody, QuotaBody, SizeBody,
+};
 
 /// The HTTP status one error code is carried by.
 ///

@@ -24,49 +24,28 @@
 
 use centraid_api_proto::core_v1::ErrorCode;
 use centraid_gateway_core::error::Refusal;
-use serde::{Deserialize, Serialize};
 
 use crate::transport::TransportError;
 
-/// A refusal as the HTTP adapters render it.
+/// THE REFUSAL BODY IS `centraid_gateway_core::error::ErrorBody`.
 ///
-/// The field names are the wire's and are shared with `centraid-gateway-server`
-/// by being written the same on both sides — the server renders, the client
-/// reads, and the round trip is asserted in `tests/over_the_wire.rs` against a
-/// real socket rather than against this struct.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ErrorBody {
-    /// The code, as `Refusal::code()` produced it.
-    pub code: String,
-    /// The server's clock, so a phone with a wrong one can re-sign **once**.
-    pub server_time_ms: i64,
-    /// `VaultMoved`'s companion: which epoch holds the vault now, and when it
-    /// took it. Present exactly when `code` is the moved one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub moved: Option<MovedBody>,
-    /// `VersionWindow`'s companion: the range the server supports. Present
-    /// exactly when `code` is the version one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<ProtocolBody>,
-}
-
-/// `centraid.core.v1.VaultMoved`, on the HTTP wire.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MovedBody {
-    /// The lease epoch that holds the vault now.
-    pub current_epoch: u64,
-    /// When it took it, on the **server's** clock.
-    pub moved_at_ms: i64,
-}
-
-/// The server's supported protocol range.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProtocolBody {
-    /// Inclusive.
-    pub min: u32,
-    /// Inclusive.
-    pub max: u32,
-}
+/// It used to be declared here, `Deserialize`-only, as a hand-written twin of
+/// `gateway-server`'s `Serialize`-only one — "shared with
+/// `centraid-gateway-server` by being written the same on both sides", which
+/// is discipline and not a mechanism. **They had drifted**: the server wrote
+/// `server_protocol_min`/`server_protocol_max`/`client_protocol` and this
+/// declared `min`/`max`, non-optional, so a `VersionWindow` refusal did not
+/// deserialise at all and a phone that was merely too new got
+/// [`ClientError::Malformed`] — "the gateway's answer did not decode", which
+/// reads as a broken server and is not one.
+///
+/// One declaration, in the crate that owns the protocol (#1029 W17-5).
+/// `gateway-server/tests/wire_iroh.rs` moves the bytes between the two ends to
+/// prove it, and [`tests::every_refusal_this_product_has_survives_the_servers_own_serializer`]
+/// walks every variant through it.
+pub use centraid_gateway_core::error::{
+    ErrorBody, LeaseBody, MovedBody, ProtocolBody, QuotaBody, SizeBody,
+};
 
 /// Which side of a protocol mismatch needs an update.
 ///
@@ -165,7 +144,7 @@ impl ClientError {
                 },
                 |range| {
                     Self::Version(needs(
-                        (range.min, range.max),
+                        (range.server_protocol_min, range.server_protocol_max),
                         (crate::CLIENT_PROTOCOL_MIN, crate::CLIENT_PROTOCOL_MAX),
                     ))
                 },
@@ -319,9 +298,7 @@ mod tests {
                 current_epoch: 3,
                 moved_at: ServerTime::from_millis(9),
             }),
-            server_time_ms: 10,
-            moved: None,
-            protocol: None,
+            ..ErrorBody::internal(10)
         };
         assert!(matches!(
             ClientError::from_body(409, &body),
@@ -333,12 +310,11 @@ mod tests {
     fn a_moved_refusal_carries_the_epoch_and_the_moment_through() {
         let body = ErrorBody {
             code: format!("{:?}", ErrorCode::VaultMoved),
-            server_time_ms: 10,
             moved: Some(MovedBody {
                 current_epoch: 3,
                 moved_at_ms: 9,
             }),
-            protocol: None,
+            ..ErrorBody::internal(10)
         };
         assert_eq!(
             ClientError::from_body(409, &body),
@@ -368,9 +344,7 @@ mod tests {
     fn a_code_a_newer_server_invented_is_malformed() {
         let body = ErrorBody {
             code: "SomethingANewerServerInvented".to_owned(),
-            server_time_ms: 1,
-            moved: None,
-            protocol: None,
+            ..ErrorBody::internal(1)
         };
         assert!(matches!(
             ClientError::from_body(400, &body),
@@ -382,9 +356,7 @@ mod tests {
     fn the_unauthorized_and_moved_codes_stay_different_answers() {
         let unauthorized = ErrorBody {
             code: format!("{:?}", ErrorCode::Unauthorized),
-            server_time_ms: 1,
-            moved: None,
-            protocol: None,
+            ..ErrorBody::internal(1)
         };
         assert!(matches!(
             ClientError::from_body(401, &unauthorized),
@@ -393,6 +365,53 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// THE CROSS-SERIALIZER TEST (#1029 W17-5).
+    ///
+    /// Not "the client's struct round-trips through the client's struct" —
+    /// that is what the two hand-written twins passed while they disagreed
+    /// about `VersionWindow`. This builds each refusal's body the way the
+    /// **server** does (`ErrorBody::of`), serialises it to the bytes the
+    /// server writes, and parses those bytes back the way the client does, for
+    /// every refusal this product has. A companion that only one end knows the
+    /// name of fails here.
+    #[test]
+    fn every_refusal_this_product_has_survives_the_servers_own_serializer() {
+        for refusal in every_refusal() {
+            let rendered = ErrorBody::of(&refusal, 1_770_000_000_000);
+            let bytes = serde_json::to_vec(&rendered).expect("the server serialises it");
+            let parsed: ErrorBody = serde_json::from_slice(&bytes)
+                .unwrap_or_else(|error| panic!("{refusal:?} does not parse on the phone: {error}"));
+            assert_eq!(parsed, rendered, "{refusal:?} lost a field on the wire");
+            assert!(
+                !matches!(
+                    ClientError::from_body(400, &parsed),
+                    ClientError::Malformed { .. }
+                ),
+                "{refusal:?} reaches the phone as \"the gateway's answer did \
+                 not decode\", which reads as a broken server and is not one"
+            );
+        }
+    }
+
+    /// And the one that was broken, named on its own so a regression says what
+    /// it is: the range travels WITH the refusal.
+    #[test]
+    fn a_version_window_refusal_carries_its_range_through_the_servers_bytes() {
+        let bytes = serde_json::to_vec(&ErrorBody::of(
+            &Refusal::VersionWindow {
+                server: (1, 1),
+                client: 9,
+            },
+            1,
+        ))
+        .expect("serialises");
+        let parsed: ErrorBody = serde_json::from_slice(&bytes).expect("parses on the phone");
+        assert_eq!(
+            ClientError::from_body(400, &parsed),
+            ClientError::Version(ServerNeeds::PhoneUpdate { server: (1, 1) })
+        );
     }
 
     /// The companions are optional on the wire and absent when they do not

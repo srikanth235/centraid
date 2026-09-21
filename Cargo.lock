@@ -941,6 +941,7 @@ dependencies = [
  "centraid-api-proto",
  "ed25519-dalek",
  "hex",
+ "serde",
  "sha2",
  "thiserror 2.0.20",
 ]
