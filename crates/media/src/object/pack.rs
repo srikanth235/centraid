@@ -25,15 +25,21 @@
 //! there to be asked. No index file grows with the backup, and nothing loads an
 //! index of the whole backup into memory.
 //!
-//! ## REPACKING, AND THE SEAM THIS MODULE DOES NOT FILL
+//! ## REPACKING
 //!
 //! A pack whose dead share passes [`REPACK_UNUSED_THRESHOLD`] has its live items
-//! written into a new pack and the old one tombstoned. **A pack referenced by
-//! any live share is never repacked (F8)**: repacking would invalidate the
-//! share's registered byte ranges and every recipient's cached references.
-//! [`LiveShareIndex`] is where that question is asked. W8 owns shares and will
-//! answer it; [`NoLiveShares`] is the honest placeholder until then — it says
-//! "this deployment has no shares", not "do not check".
+//! written into a new pack and the old one tombstoned.
+//!
+//! [`repack`] carried one more rule until the scope amendment of 2026-09-21:
+//! **a pack referenced by a live share was never repacked (F8)**, because
+//! repacking invalidates the share's registered byte ranges and every
+//! recipient's cached references. Sharing is struck from v0 in full, so the
+//! `LiveShareIndex` seam, its `NoLiveShares` placeholder and
+//! `ObjectError::PackIsShared` are deleted with it. **Repack itself stays** —
+//! it is what keeps a pack from carrying dead thumbnails forever, and it never
+//! had anything to do with sharing. Whoever re-proposes sharing re-adds the
+//! predicate; this module must not keep an unasked question that reads as an
+//! enforced rule.
 
 use std::collections::BTreeSet;
 
@@ -89,29 +95,6 @@ pub struct Pack {
     pub name: ObjectName,
     /// The rows the vault records.
     pub entries: Vec<PackEntry>,
-}
-
-/// Whether a pack is referenced by a live share (F8).
-///
-/// **This is a seam, deliberately.** W8 owns shares; until it lands, the only
-/// implementation is [`NoLiveShares`], and `crates/media` must not grow its own
-/// idea of what a share is.
-pub trait LiveShareIndex {
-    /// Answer for one pack.
-    fn is_referenced_by_live_share(&self, pack: &ObjectName) -> bool;
-}
-
-/// "There are no shares in this deployment yet."
-///
-/// Not "skip the check": [`repack`] still asks, and the day W8 lands a real
-/// index the call site does not move.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoLiveShares;
-
-impl LiveShareIndex for NoLiveShares {
-    fn is_referenced_by_live_share(&self, _pack: &ObjectName) -> bool {
-        false
-    }
 }
 
 /// Fill packs to the cap, one after another, for a library that does not fit in
@@ -407,9 +390,6 @@ pub fn should_repack(entries: &[PackEntry], live: &BTreeSet<String>) -> bool {
 /// Write a pack's live items into a new pack, **without re-encrypting them**.
 ///
 /// # Errors
-/// [`ObjectError::PackIsShared`] when `shares` says a live share references this
-/// pack (F8) — checked **first**, before any byte is copied, so the refusal
-/// cannot be reached past a partially built replacement. Otherwise
 /// [`ObjectError::PackTable`] for a row that does not describe these bytes.
 pub fn repack(
     vault: VaultId<'_>,
@@ -417,14 +397,8 @@ pub fn repack(
     pack: &[u8],
     entries: &[PackEntry],
     live: &BTreeSet<String>,
-    shares: &dyn LiveShareIndex,
     dictionary: Option<&Dictionary>,
 ) -> ObjectResult<Pack> {
-    let name = ObjectName::of(pack);
-    if shares.is_referenced_by_live_share(&name) {
-        return Err(ObjectError::PackIsShared);
-    }
-
     let mut bytes = Vec::new();
     let mut kept = Vec::new();
     for entry in entries.iter().filter(|entry| live.contains(&entry.id)) {
@@ -667,16 +641,8 @@ mod tests {
         let live: BTreeSet<String> = ["thumb-a".to_owned(), "thumb-c".to_owned()].into();
         assert!(should_repack(&pack.entries, &live));
 
-        let repacked = repack(
-            vault(),
-            &ROOT,
-            &pack.bytes,
-            &pack.entries,
-            &live,
-            &NoLiveShares,
-            None,
-        )
-        .expect("repacks");
+        let repacked =
+            repack(vault(), &ROOT, &pack.bytes, &pack.entries, &live, None).expect("repacks");
         assert_eq!(repacked.entries.len(), 2);
         assert_eq!(repacked.entries[0].name, pack.entries[0].name);
         assert_eq!(repacked.entries[1].name, pack.entries[2].name);
@@ -690,33 +656,6 @@ mod tests {
             )
             .expect("opens"),
             b"the third thumbnail"
-        );
-    }
-
-    /// F8: a pack a live share references is never repacked — and the refusal
-    /// comes before a single byte is copied.
-    #[test]
-    fn a_pack_a_live_share_references_is_never_repacked() {
-        struct EverythingIsShared;
-        impl LiveShareIndex for EverythingIsShared {
-            fn is_referenced_by_live_share(&self, _pack: &ObjectName) -> bool {
-                true
-            }
-        }
-
-        let pack = a_pack();
-        let live: BTreeSet<String> = ["thumb-a".to_owned()].into();
-        assert_eq!(
-            repack(
-                vault(),
-                &ROOT,
-                &pack.bytes,
-                &pack.entries,
-                &live,
-                &EverythingIsShared,
-                None
-            ),
-            Err(ObjectError::PackIsShared)
         );
     }
 

@@ -62,10 +62,8 @@
 //!
 //! ## WHAT THIS MODULE DOES NOT DO
 //!
-//! It moves bytes. It does not decide when to capture, what a generation is,
-//! when to repack or what a share may reference — those are §2, §3 and W8. The
-//! one place it names a policy it does not own is [`pack::LiveShareIndex`],
-//! which is a seam, not an implementation.
+//! It moves bytes. It does not decide when to capture, what a generation is or
+//! when to repack — those are §2 and §3.
 
 pub mod dict;
 pub mod header;
@@ -175,9 +173,6 @@ pub enum ObjectError {
     /// before the bytes reach the backup (F11).
     #[error("this object read back from disk is not the object that was sealed")]
     ReadBackMismatch,
-    /// The pack is referenced by a live share (F8).
-    #[error("this pack is referenced by a live share and is never repacked")]
-    PackIsShared,
     /// The pack's trailer or item table does not describe these bytes.
     #[error("the pack's item table does not describe these bytes: {reason}")]
     PackTable {

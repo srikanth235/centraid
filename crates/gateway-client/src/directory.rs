@@ -2,35 +2,22 @@
 //!
 //! Three things a member does that are not a request about a vault's bytes:
 //!
-//! 1. **add a gateway and switch to it** — a self-hoster's box, or the hosted
-//!    offering, or both;
-//! 2. **redeem an invite** on a standalone server, which is the one endpoint
-//!    that is a deployment's own;
-//! 3. **register a hosted account**, where the payment platform's receipt has
-//!    to reach an account the server knows without the server learning who paid.
+//! 1. **add a gateway and switch to it** — the machine a member runs, and a
+//!    household may run more than one;
+//! 2. **redeem an invite** on it, which is how a vault becomes known to a
+//!    server at all.
 //!
 //! # THE GATEWAY IS A SETTING, AND SWITCHING IS NOT A MIGRATION
 //!
 //! [`Directory`] holds gateways and names one as current *per vault*, because a
 //! vault's objects live where they were uploaded — a household may keep one
-//! vault on a self-hosted box and another on the hosted offering, and a single
+//! vault on one machine and another on a second, and a single
 //! "current gateway" would be a setting that silently moved somebody's
 //! photographs. Switching a vault's gateway changes where the *next* commit
 //! goes and moves nothing; the old gateway still holds what it held, which is
 //! why [`Directory::switch`] returns the gateway that was displaced rather than
 //! dropping it.
 //!
-//! # `appAccountToken` IS A UUID AND NOTHING ELSE (F13, Q15)
-//!
-//! Apple's `appAccountToken` is the only field a receipt carries that the app
-//! chooses, and it is the join between "somebody paid" and "this account key
-//! has quota". It must be a **random UUID mapped server-side**, never the
-//! account key and never anything derived from it: the value reaches Apple, and
-//! an account key that reached Apple would tie a person's payment identity to
-//! the address every one of their vaults is published under.
-//!
-//! **No price and no licence text is encoded anywhere in this module.** Q15 and
-//! Q16 are open with the owner; what is built here is the mechanism.
 
 use std::collections::BTreeMap;
 
@@ -134,11 +121,10 @@ pub enum SwitchRefused {
     },
 }
 
-/// What a standalone server answered an invite with.
+/// What a server answered an invite with.
 ///
 /// It carries a quota and an append-only flag and **no price**: what a
-/// self-hoster charges, if anything, is not this protocol's business, and Q15
-/// is open for the hosted offering.
+/// self-hoster charges, if anything, is not this protocol's business.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub struct Admission {
     /// The bytes this vault may store.
@@ -147,7 +133,7 @@ pub struct Admission {
     pub append_only: bool,
 }
 
-/// Redeem an invite on a standalone gateway.
+/// Redeem an invite on a gateway.
 ///
 /// **Unsigned, and it must be**: this is how a vault becomes known to a server
 /// at all, and a signature would be verified against a registration that does
@@ -193,45 +179,6 @@ pub async fn redeem_invite<T: Transport>(
     })
 }
 
-/// The token a hosted purchase carries, and the mapping the phone keeps.
-///
-/// The token goes to the payment platform; the mapping stays here. A server
-/// that learns the pair can grant quota to an account key without learning who
-/// paid for it, and the payment platform learns a UUID and no key.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PurchaseToken {
-    /// The `appAccountToken`: 16 random bytes in UUID form. **Never derived
-    /// from the account key** — see the module header.
-    pub token: String,
-    /// The account it maps to, hex. Kept on the phone and sent to the gateway,
-    /// never to the payment platform.
-    pub account: String,
-}
-
-impl PurchaseToken {
-    /// Mint a token from 16 bytes of platform entropy.
-    ///
-    /// The bytes are an argument rather than drawn here for the reason
-    /// `gateway-core` gives about randomness: this code compiles into places
-    /// with no ambient generator, and a caller that has one is the caller that
-    /// should be trusted with it.
-    #[must_use]
-    pub fn mint(entropy: [u8; 16], account: &AccountId) -> Self {
-        let hex = hex::encode(entropy);
-        Self {
-            token: format!(
-                "{}-{}-{}-{}-{}",
-                &hex[0..8],
-                &hex[8..12],
-                &hex[12..16],
-                &hex[16..20],
-                &hex[20..32]
-            ),
-            account: account.hex(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use centraid_gateway_core::ids::Key32;
@@ -256,14 +203,14 @@ mod tests {
             label: "the shed".to_owned(),
         });
         directory.add(Gateway {
-            url: url("https://hosted.example"),
+            url: url("https://second.example"),
             label: "Centraid".to_owned(),
         });
         directory
             .switch(&vault(1), &url("https://shed.example"))
             .expect("added");
         directory
-            .switch(&vault(2), &url("https://hosted.example"))
+            .switch(&vault(2), &url("https://second.example"))
             .expect("added");
         assert_eq!(
             directory.current(&vault(1)).map(GatewayUrl::as_str),
@@ -271,7 +218,7 @@ mod tests {
         );
         assert_eq!(
             directory.current(&vault(2)).map(GatewayUrl::as_str),
-            Some("https://hosted.example/")
+            Some("https://second.example/")
         );
     }
 
@@ -325,30 +272,5 @@ mod tests {
         });
         assert_eq!(directory.gateways().len(), 1);
         assert_eq!(directory.gateways()[0].label, "the shed");
-    }
-
-    /// **THE ACCOUNT KEY NEVER REACHES THE PAYMENT PLATFORM.** The token is
-    /// entropy, and nothing about it is derived from the key it maps to.
-    #[test]
-    fn a_purchase_token_is_entropy_and_not_the_account_key() {
-        let account = Key32::from_bytes([7_u8; 32]);
-        let token = PurchaseToken::mint([3_u8; 16], &account);
-        assert_eq!(token.token, "03030303-0303-0303-0303-030303030303");
-        assert!(
-            !token.token.contains(&account.hex()[0..8]),
-            "no part of the account key is in the token"
-        );
-        assert_eq!(token.account, account.hex());
-    }
-
-    /// Two mints from different entropy are different tokens; the mapping is
-    /// the only thing that ties either to an account.
-    #[test]
-    fn two_tokens_for_one_account_are_not_equal() {
-        let account = Key32::from_bytes([7_u8; 32]);
-        assert_ne!(
-            PurchaseToken::mint([1_u8; 16], &account).token,
-            PurchaseToken::mint([2_u8; 16], &account).token
-        );
     }
 }

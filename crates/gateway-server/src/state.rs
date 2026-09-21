@@ -229,7 +229,6 @@ fn object_kind_of(word: &str) -> Result<ObjectKind, StoreFault> {
         ObjectKind::Manifest,
         ObjectKind::Blob,
         ObjectKind::Pack,
-        ObjectKind::ShareEntry,
     ] {
         if kind.as_str() == word {
             return Ok(kind);

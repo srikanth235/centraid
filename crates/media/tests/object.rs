@@ -325,19 +325,10 @@ fn a_pack_is_addressable_by_range_and_its_headers_do_not_transplant() {
         pack.entries
     );
 
-    // F8's seam is asked before any byte is copied.
     let live: BTreeSet<String> = bodies.iter().take(4).map(|(id, _)| id.clone()).collect();
     assert!(object::pack::should_repack(&pack.entries, &live));
-    let repacked = object::pack::repack(
-        vault(),
-        &ROOT,
-        &pack.bytes,
-        &pack.entries,
-        &live,
-        &object::pack::NoLiveShares,
-        None,
-    )
-    .expect("repacks");
+    let repacked = object::pack::repack(vault(), &ROOT, &pack.bytes, &pack.entries, &live, None)
+        .expect("repacks");
     assert_eq!(repacked.entries.len(), 4);
     assert!(repacked.bytes.len() < pack.bytes.len());
     assert_eq!(

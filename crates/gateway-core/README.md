@@ -52,7 +52,6 @@ The declaration carries both names of the same bytes, and that binding is what a
 | `commit` | the manifest head moves only by compare-and-set (F7) |
 | `retention` | the floor over bases, the grace period, the size guard, the delete rate limit |
 | `plan` | quota and lapse; a lapsed plan is read-only, never deleted inside its period |
-| `share` | capability scope over whole objects **and pack ranges**; F8's repack predicate |
 | `scrub` | blind re-hashing |
 | `store` | the two ports, and the one schema |
 | `engine` | the order the rules run in |

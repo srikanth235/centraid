@@ -62,7 +62,6 @@
 //! | [`commit`] | the manifest head moves only by compare-and-set |
 //! | [`retention`] | the floor over bases, the grace period, the size guard, the rate limit |
 //! | [`plan`] | the quota a vault's account is held to |
-//! | [`share`] | capability scope over whole objects and pack ranges |
 //! | [`scrub`] | blind re-hashing |
 //! | [`store`] | the two ports, and the one SQL schema both adapters apply |
 //! | [`engine`] | the orchestration that calls the rules in order |
@@ -81,7 +80,6 @@ pub mod memory;
 pub mod plan;
 pub mod retention;
 pub mod scrub;
-pub mod share;
 pub mod store;
 pub mod time;
 pub mod upload;

@@ -135,8 +135,6 @@ pub enum ObjectKind {
     Blob,
     /// ~16 MiB of small items with an encrypted item table at its end.
     Pack,
-    /// One sealed entry of a share feed.
-    ShareEntry,
 }
 
 impl ObjectKind {
@@ -149,13 +147,13 @@ impl ObjectKind {
             Self::Manifest => core_v1::ObjectKind::Manifest,
             Self::Blob => core_v1::ObjectKind::Blob,
             Self::Pack => core_v1::ObjectKind::Pack,
-            Self::ShareEntry => core_v1::ObjectKind::ShareEntry,
         }
     }
 
-    /// From the wire. `UNSPECIFIED`, and anything a newer phone invents, is
-    /// `None` — a gateway that guessed a kind would be a gateway guessing at
-    /// retention.
+    /// From the wire. `UNSPECIFIED`, anything a newer phone invents, and the
+    /// struck `SHARE_ENTRY` (6, reserved by the scope amendment of 2026-09-21)
+    /// are all `None` — a gateway that guessed a kind would be a gateway
+    /// guessing at retention.
     #[must_use]
     pub const fn from_proto(kind: core_v1::ObjectKind) -> Option<Self> {
         match kind {
@@ -165,7 +163,6 @@ impl ObjectKind {
             core_v1::ObjectKind::Manifest => Some(Self::Manifest),
             core_v1::ObjectKind::Blob => Some(Self::Blob),
             core_v1::ObjectKind::Pack => Some(Self::Pack),
-            core_v1::ObjectKind::ShareEntry => Some(Self::ShareEntry),
         }
     }
 
@@ -179,7 +176,6 @@ impl ObjectKind {
             Self::Manifest => "manifest",
             Self::Blob => "blob",
             Self::Pack => "pack",
-            Self::ShareEntry => "share-entry",
         }
     }
 }
@@ -220,7 +216,6 @@ mod tests {
             ObjectKind::Manifest,
             ObjectKind::Blob,
             ObjectKind::Pack,
-            ObjectKind::ShareEntry,
         ] {
             assert_eq!(ObjectKind::from_proto(kind.to_proto()), Some(kind));
         }

@@ -525,7 +525,6 @@ fn kind_of(word: &str) -> Option<ObjectKind> {
         ObjectKind::Manifest,
         ObjectKind::Blob,
         ObjectKind::Pack,
-        ObjectKind::ShareEntry,
     ]
     .into_iter()
     .find(|kind| kind.as_str() == word)
@@ -1002,7 +1001,6 @@ mod tests {
             ObjectKind::Manifest,
             ObjectKind::Blob,
             ObjectKind::Pack,
-            ObjectKind::ShareEntry,
         ] {
             assert_eq!(kind_of(kind.as_str()), Some(kind));
         }
