@@ -27,12 +27,16 @@ while IFS= read -r rule; do
 done < <(node scripts/lint-types-rules.mjs source)
 
 # Every workspace with src/ and a TypeScript program. Keep this explicit list
-# so adding a workspace forces a conscious coverage decision.
+# so adding a workspace forces a conscious coverage decision — which is why
+# `desktop/electron` and `extension` are REMOVED rather than skipped: #1029 §6
+# deleted both trees in W2 and neither has a tracked file, so each was a named
+# target that could only ever report "no tsconfig". A list that names a
+# workspace which does not exist is not an explicit list, it is a stale one,
+# and `assert_workspace_coverage` below still forces the decision the moment
+# either comes back.
 TARGETS=(
   packages/design
   packages/test-kit
-  desktop/electron
-  extension
 )
 
 contains() {

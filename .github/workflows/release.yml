@@ -230,14 +230,7 @@ jobs:
   # sidecar's socket; v0 has no paired client, and #1029 question 10 rules the
   # extension re-proposed on top of a desktop reader if and when §6 is built.
   release-check:
-    needs:
-      [
-        require-candidate,
-        plan,
-        gateway-image,
-        mobile,
-        prebuilt-core,
-      ]
+    needs: [require-candidate, plan, gateway-image, mobile, prebuilt-core]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

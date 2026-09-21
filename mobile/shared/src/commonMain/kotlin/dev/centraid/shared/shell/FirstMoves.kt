@@ -14,11 +14,13 @@ public object FirstMoves {
     /**
      * LEVERAGE ORDER, not springboard order.
      *
-     * `connectors` leads because one connection fills several apps at once,
-     * which no single-app move can do.
+     * `connectors` led, because one connection filled several apps at once.
+     * There is no connector plane in v0 (#1029 §8; the rows it wrote are on
+     * the deletion inventory), and the shell must not lead with a plane that
+     * does not exist — so the order now starts with an app a member can
+     * actually put something into.
      */
     public val FIRST_MOVE_ORDER: List<String> = listOf(
-        "connectors",
         "photos",
         "docs",
         "notes",
@@ -32,10 +34,8 @@ public object FirstMoves {
     /** Three, not one per empty app: a nudge as tall as its grid is no nudge. */
     public const val LIMIT: Int = 3
 
-    /** The one move that is not an app. */
-    public const val CONNECTORS: String = "connectors"
-
-    private const val CONNECTORS_ICON: String = "Plug"
+    /** The fallback mark for a move whose app the catalogue does not name. */
+    private const val FALLBACK_ICON: String = "Plug"
 
     /**
      * Verb first, and each must land somewhere that can take content.
@@ -46,8 +46,6 @@ public object FirstMoves {
      * rule applies to the two shells this module now feeds.
      */
     private val COPY: Map<String, Pair<String, String>> = mapOf(
-        CONNECTORS to ("Connect an account" to
-            "Mail, calendar and contacts arrive on their own."),
         "photos" to ("Bring in photos" to "The newest ones surface here."),
         "docs" to ("File a document" to "Versioned, restorable, yours."),
         "notes" to ("Write a note" to "The newest one shows up here."),
@@ -64,22 +62,14 @@ public object FirstMoves {
      * v0 read `meta.iconKey` off the app it was nudging toward, for the reason
      * that matters here: a move is an invitation to open a particular app, and
      * a nudge wearing a different glyph from the tile it leads to is two marks
-     * for one destination. `connectors` is the one move that is not an app, so
-     * it is the one entry with an icon of its own.
+     * for one destination. Every move is an app now that `connectors` is gone,
+     * so the fallback is only reached by an id the catalogue does not carry.
      */
     private fun iconFor(id: String): String =
-        if (id == CONNECTORS) {
-            CONNECTORS_ICON
-        } else {
-            CentraidCatalog.byId[id]?.iconKey ?: CONNECTORS_ICON
-        }
+        CentraidCatalog.byId[id]?.iconKey ?: FALLBACK_ICON
 
     /**
      * The moves offered for a set of idle apps, at most [LIMIT].
-     *
-     * `connectors` is offered while ANY app is idle, because one connection
-     * fills several at once — it is not itself an idle app and would otherwise
-     * never appear.
      */
     public fun forIdle(idleAppIds: Collection<String>): List<FirstMove> {
         if (idleAppIds.isEmpty()) return emptyList()
@@ -87,7 +77,7 @@ public object FirstMoves {
         val moves = mutableListOf<FirstMove>()
         for (id in FIRST_MOVE_ORDER) {
             if (moves.size >= LIMIT) break
-            if (id != CONNECTORS && id !in idle) continue
+            if (id !in idle) continue
             val copy = COPY[id] ?: continue
             moves += FirstMove(
                 id = id,

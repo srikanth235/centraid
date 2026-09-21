@@ -73,35 +73,6 @@ public object BandPolicy {
             pinnedByDefault = true,
         ),
         Place(
-            id = "autos",
-            name = "Rules",
-            short = "Rules",
-            iconKey = "Bolt",
-            what = "The standing rules that run on your vault's home machine",
-            law = false,
-            pinnedByDefault = false,
-        ),
-        Place(
-            id = "conn",
-            name = "Connectors",
-            short = "Connectors",
-            iconKey = "Plug",
-            what = "What is allowed to reach outside",
-            law = false,
-            pinnedByDefault = false,
-        ),
-        Place(
-            id = "devices",
-            name = "Copies",
-            short = "Copies",
-            // A desk machine AND a handset: one monitor standing for a set of
-            // screens is wrong.
-            iconKey = "Devices",
-            what = "The machines holding a copy",
-            law = false,
-            pinnedByDefault = false,
-        ),
-        Place(
             id = "gateway",
             name = "System",
             short = "System",

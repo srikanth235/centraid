@@ -374,8 +374,10 @@ class HomeMachineSpec : StringSpec({
         val moves = settleAllEmpty(opened()).data_!!.first_moves
         // A nudge as tall as its grid is no nudge.
         moves.size shouldBe FirstMoves.LIMIT
-        // Leverage order, not springboard order: one connection fills several.
-        moves.first().id shouldBe FirstMoves.CONNECTORS
+        // Leverage order, not springboard order. `connectors` led it until
+        // #1029 §8 deleted the connector plane; the head of the order is now
+        // the first app in it.
+        moves.first().id shouldBe FirstMoves.FIRST_MOVE_ORDER.first()
         moves.all { it.label.isNotEmpty() && it.hint.isNotEmpty() }.shouldBeTrue()
     }
 
