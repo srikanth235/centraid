@@ -3,43 +3,46 @@ package dev.centraid.shared
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
-import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.string.shouldContain
 import java.io.File
 
 /**
- * THE FOUR PLATFORM FACTS NO MACHINE HERE CAN COMPILE (#1029 W5B-2).
+ * THE PLATFORM FACTS NO MACHINE HERE CAN COMPILE (#1029 W18-3).
  *
- * Neither mobile shell is built in this container: there is no Android SDK, and
- * a Kotlin/Native link needs a macOS host. So the background-transfer halves
- * would ship with nothing checking them at all — and every one of their failure
- * modes is silent on a member's phone:
+ * `BackgroundTransferLawSpec`, which this file replaces. Two of its four rows
+ * were about the `URLSession` seam the amendment of 2026-09-21 struck, and they
+ * went with it; the two below survive because their subject does:
  *
  * | Fact | What happens when it is wrong |
  * |---|---|
- * | every `BGTaskScheduler` id is in `Info.plist` | the app **terminates** on launch, with no backup and no message |
  * | the Android worker is a CONCRETE class | WorkManager accepts the work, reports it enqueued, and every run fails inside the framework |
- * | iOS uploads are file-based | a background session refuses a data-bodied task, so uploads only run while the app is open |
- * | Block Store's asymmetry is stated | a member is told their key will come back, and on Android it will not |
+ * | the unique work name is kept and UPDATEd | a shipped build's unrunnable request is preserved for ever |
  *
- * A source scan is a poor substitute for a compiler and it is not pretending
- * otherwise. What it catches is the specific regression each row names, which is
- * the whole of what those files got wrong before — the abstract `Worker` shipped
- * exactly this way, accepted by every reviewer and by every gate.
+ * The row that pinned `BGTaskScheduler` identifiers against `Info.plist` is not
+ * lost either: `BackgroundIdentifierSpec` asks the stronger version of it, over
+ * all three files the identifier is written in, plus the launch handler the old
+ * row never checked for.
+ *
+ * The retired row about file-based `NSURLSession` uploads has no successor and
+ * needs none — its subject is deleted, and the last assertion here is what keeps
+ * it deleted.
+ *
+ * Neither mobile shell is built in this container: there is no Android SDK, and
+ * a Kotlin/Native link needs a macOS host. A source scan is a poor substitute
+ * for a compiler and does not pretend otherwise. What it catches is the specific
+ * regression each row names, which is the whole of what these files got wrong
+ * before — the abstract `Worker` shipped exactly this way, accepted by every
+ * reviewer and by every gate.
  */
-class BackgroundTransferLawSpec : StringSpec({
+class BackgroundPassLawSpec : StringSpec({
 
     val mobileRoot = File(
         System.getProperty("centraid.mobileRoot")
             ?: error("centraid.mobileRoot is unset; see mobile/shared/build.gradle.kts"),
     )
-    val iosServices = mobileRoot.resolve(
-        "shared/src/iosMain/kotlin/dev/centraid/shared/platform/PlatformServices.ios.kt",
-    ).readText()
     val androidServices = mobileRoot.resolve(
         "shared/src/androidMain/kotlin/dev/centraid/shared/platform/PlatformServices.android.kt",
     ).readText()
-    val plist = mobileRoot.resolve("iosApp/Resources/Info.plist").readText()
 
     /**
      * The CODE, with comments dropped.
@@ -56,25 +59,6 @@ class BackgroundTransferLawSpec : StringSpec({
         .joinToString("\n")
 
     val androidCode = code(androidServices)
-
-    "every BGTaskScheduler identifier the shell submits is declared in Info.plist" {
-        // AN UNDECLARED IDENTIFIER KILLS THE APP. `BGTaskScheduler` raises an
-        // NSInternalInconsistencyException on register and on submit, which is
-        // a crash on launch rather than a task that does not run — so a member
-        // whose phone does this has no backup and nothing to report.
-        val submitted = Regex("""const val \w*IDENTIFIER = "([^"]+)"""")
-            .findAll(iosServices)
-            .map { it.groupValues[1] }
-            .toList()
-        withClue("no identifiers were found in the iOS services; the scan is stale") {
-            submitted.shouldNotBeEmpty()
-        }
-        submitted.forEach { identifier ->
-            withClue("$identifier is submitted but not in BGTaskSchedulerPermittedIdentifiers") {
-                plist shouldContain "<string>$identifier</string>"
-            }
-        }
-    }
 
     "the Android periodic worker is a concrete class and never androidx.work.Worker" {
         // WHAT SHIPPED BEFORE. `PeriodicWorkRequestBuilder<androidx.work.Worker>`
@@ -104,12 +88,24 @@ class BackgroundTransferLawSpec : StringSpec({
         }
     }
 
-    "iOS background uploads are file-based over the sealed spool file" {
-        // A background `NSURLSession` refuses a data-bodied upload task. An
-        // uploader that passed bytes would work in the foreground, pass every
-        // manual test, and never run while the phone is in a pocket.
-        iosServices shouldContain "backgroundSessionConfigurationWithIdentifier"
-        iosServices shouldContain "uploadTaskWithRequest"
-        iosServices shouldContain "fromFile"
+    "the URLSession seam stays retired, on every platform" {
+        // ITS DESTINATION NO LONGER EXISTS. A background `NSURLSession` and a
+        // WorkManager upload worker both carried bytes to an HTTPS endpoint
+        // while the app was not running; the gateway is the member's own laptop
+        // reached over iroh by a client inside this process, so there is nothing
+        // for the OS to carry bytes to. The amendment of 2026-09-21 struck the
+        // seam, and this is what notices it coming back with no destination.
+        val sources = mobileRoot.walkTopDown()
+            .filter { it.isFile && (it.extension == "kt" || it.extension == "swift") }
+            .filterNot { it.path.contains("/build/") }
+            .filterNot { it.name == "BackgroundPassLawSpec.kt" }
+        sources.forEach { file ->
+            val text = code(file.readText())
+            withClue("${file.name} names the retired background-upload seam") {
+                text.contains("BackgroundTransfers").shouldBeFalse()
+                text.contains("NSURLSessionUploadTask").shouldBeFalse()
+                text.contains("backgroundSessionConfigurationWithIdentifier").shouldBeFalse()
+            }
+        }
     }
 })

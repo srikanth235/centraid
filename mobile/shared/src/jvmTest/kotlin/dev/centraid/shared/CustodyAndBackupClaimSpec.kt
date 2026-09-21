@@ -1,8 +1,6 @@
 package dev.centraid.shared
 
 import dev.centraid.shared.custody.PhraseMachine
-import dev.centraid.shared.platform.BackgroundTransfers
-import dev.centraid.shared.platform.FakeBackgroundTransfers
 import dev.centraid.shared.platform.FakeSyncedSecrets
 import dev.centraid.shared.platform.JvmSecureRandom
 import dev.centraid.shared.platform.SyncedSecrets
@@ -175,41 +173,5 @@ class CustodyAndBackupClaimSpec : StringSpec({
         secrets.seed() shouldBe "ab".repeat(64)
         secrets.forgetSeed()
         secrets.seed().shouldBeNull()
-    }
-
-    // ------------------------------------------------------ background uploads --
-
-    "the force-quit sentence names both halves, because only one of them stops uploads" {
-        // A member who force-quits nightly and finds a stalled backup has not
-        // hit a bug. Saying only the first half would be worse than saying
-        // nothing: it would read as "Centraid stops when you close it".
-        BackgroundTransfers.FORCE_QUIT_SENTENCE shouldContain "swipe Centraid away"
-        BackgroundTransfers.FORCE_QUIT_SENTENCE shouldContain "uploads in progress stop"
-        BackgroundTransfers.FORCE_QUIT_SENTENCE shouldContain "if iOS closes the app itself"
-    }
-
-    "an uncooperative platform answers a sentence rather than throwing" {
-        // The same shape `BackgroundTasks.register` already uses: a silent
-        // absence of passes is what this seam exists to make visible.
-        val transfers = FakeBackgroundTransfers(
-            answer = BackgroundTransfers.Enqueued(
-                accepted = 0,
-                sentence = "Centraid cannot upload in the background on this device.",
-                refusal = "Background App Refresh is off",
-            ),
-        )
-        val answer = transfers.enqueue(
-            listOf(
-                BackgroundTransfers.Upload(
-                    objectName = "aa".repeat(32),
-                    url = "https://gw.example/v1/objects/x/y",
-                    spoolPath = "/spool/aa",
-                    headers = listOf("centraid-signature" to "beef"),
-                    expiresAtMs = 1,
-                ),
-            ),
-        )
-        answer.accepted shouldBe 0
-        answer.refusal shouldContain "Background App Refresh"
     }
 })

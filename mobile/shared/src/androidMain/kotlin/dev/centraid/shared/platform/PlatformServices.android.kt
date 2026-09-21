@@ -14,20 +14,14 @@ import androidx.security.crypto.MasterKey
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.work.workDataOf
 import centraid.screen.v1.MediaPermission
 import com.google.android.gms.auth.blockstore.Blockstore
 import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
 import com.google.android.gms.auth.blockstore.StoreBytesData
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
@@ -72,7 +66,6 @@ public object AndroidPlatform {
 
 public class AndroidPlatformServices(context: Context) : PlatformServices {
     override val secureStore: SecureStore = AndroidSecureStore(context)
-    override val backgroundTransfers: BackgroundTransfers = AndroidBackgroundTransfers(context)
     override val syncedSecrets: SyncedSecrets = AndroidSyncedSecrets(context)
     override val backgroundTasks: BackgroundTasks = AndroidBackgroundTasks(context)
     override val networkStatus: NetworkStatus = AndroidNetworkStatus(context)
@@ -248,127 +241,6 @@ public class AndroidBackgroundTasks(private val context: Context) : BackgroundTa
          * change — see the `UPDATE` above, which is what migrates it.
          */
         const val WORK_NAME = "centraid-sync-pass"
-    }
-}
-
-/**
- * One object, uploaded by WorkManager from the spool file (#1029 W5B-2).
- *
- * Expedited is deliberately NOT asked for: an upload is not urgent, expedited
- * quota is small and shared, and a pass that spent it would be taking it from
- * something a member is waiting on.
- */
-public class CentraidUploadWorker(
-    context: Context,
-    parameters: WorkerParameters,
-) : CoroutineWorker(context, parameters) {
-
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val url = inputData.getString(KEY_URL) ?: return@withContext Result.failure()
-        val path = inputData.getString(KEY_PATH) ?: return@withContext Result.failure()
-        val names = inputData.getStringArray(KEY_HEADER_NAMES).orEmpty()
-        val values = inputData.getStringArray(KEY_HEADER_VALUES).orEmpty()
-        val file = File(path)
-        if (!file.exists()) {
-            // THE SPOOL FILE IS GONE. Not a retry: a vault that was reset, or a
-            // generation already committed, and re-running would fail forever.
-            return@withContext Result.success()
-        }
-        val connection = URL(url).openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "PUT"
-            connection.doOutput = true
-            // STREAMED, so a 16 MiB object never sits in this process's heap.
-            connection.setFixedLengthStreamingMode(file.length())
-            names.zip(values).forEach { (name, value) ->
-                connection.setRequestProperty(name, value)
-            }
-            file.inputStream().use { source ->
-                connection.outputStream.use { sink -> source.copyTo(sink) }
-            }
-            when (connection.responseCode) {
-                in 200..299 -> Result.success()
-                // A REFUSAL IS NOT A RETRY. The gateway said no — a spent quota,
-                // an expired target, a moved vault — and repeating the request
-                // would spend a member's battery to earn the same answer. The
-                // next foreground pass re-declares.
-                in 400..499 -> Result.failure()
-                else -> Result.retry()
-            }
-        } catch (error: java.io.IOException) {
-            Result.retry()
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    internal companion object {
-        const val KEY_URL = "url"
-        const val KEY_PATH = "path"
-        const val KEY_HEADER_NAMES = "header-names"
-        const val KEY_HEADER_VALUES = "header-values"
-    }
-}
-
-public class AndroidBackgroundTransfers(private val context: Context) : BackgroundTransfers {
-
-    override suspend fun enqueue(
-        uploads: List<BackgroundTransfers.Upload>,
-    ): BackgroundTransfers.Enqueued = try {
-        val manager = WorkManager.getInstance(context)
-        uploads.forEach { upload ->
-            manager.enqueueUniqueWork(
-                // UNIQUE BY OBJECT NAME, and `KEEP`: an object's name is the
-                // hash of its bytes, so two requests for one name are one
-                // upload. A pass that ran twice must not pay for it twice.
-                uploadWorkName(upload.objectName),
-                ExistingWorkPolicy.KEEP,
-                OneTimeWorkRequestBuilder<CentraidUploadWorker>()
-                    .setConstraints(
-                        Constraints.Builder()
-                            .setRequiredNetworkType(NetworkType.CONNECTED)
-                            .build(),
-                    )
-                    .setInputData(
-                        workDataOf(
-                            CentraidUploadWorker.KEY_URL to upload.url,
-                            CentraidUploadWorker.KEY_PATH to upload.spoolPath,
-                            CentraidUploadWorker.KEY_HEADER_NAMES to
-                                upload.headers.map { it.first }.toTypedArray(),
-                            CentraidUploadWorker.KEY_HEADER_VALUES to
-                                upload.headers.map { it.second }.toTypedArray(),
-                        ),
-                    )
-                    .build(),
-            )
-        }
-        BackgroundTransfers.Enqueued(
-            accepted = uploads.size,
-            sentence = BackgroundTransfers.ANDROID_UNMETERED_SENTENCE,
-        )
-    } catch (error: IllegalStateException) {
-        BackgroundTransfers.Enqueued(
-            accepted = 0,
-            sentence = "Centraid cannot upload in the background on this device.",
-            refusal = error.message ?: "WorkManager refused",
-        )
-    }
-
-    override suspend fun inFlight(): List<String> = WorkManager.getInstance(context)
-        .getWorkInfosByTag(CentraidUploadWorker::class.java.name)
-        .get()
-        .filter { !it.state.isFinished }
-        .flatMap { info -> info.tags.filter { it.startsWith(UPLOAD_PREFIX) } }
-        .map { it.removePrefix(UPLOAD_PREFIX) }
-
-    override suspend fun cancelAll() {
-        WorkManager.getInstance(context).cancelAllWorkByTag(CentraidUploadWorker::class.java.name)
-    }
-
-    private companion object {
-        const val UPLOAD_PREFIX = "centraid-upload-"
-
-        fun uploadWorkName(objectName: String): String = UPLOAD_PREFIX + objectName
     }
 }
 

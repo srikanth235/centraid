@@ -74,13 +74,8 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileSize
 import platform.Foundation.NSNumber
 import platform.Foundation.NSTemporaryDirectory
-import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
-import platform.Foundation.NSURLSession
-import platform.Foundation.NSURLSessionConfiguration
-import platform.Foundation.NSURLSessionUploadTask
 import platform.Foundation.NSUUID
-import platform.Foundation.backgroundSessionConfigurationWithIdentifier
 import platform.Foundation.setHTTPMethod
 import platform.Foundation.setValue
 import platform.Foundation.closeFile
@@ -143,7 +138,6 @@ public actual fun platformServices(): PlatformServices = IosPlatformServices()
 public class IosPlatformServices : PlatformServices {
     override val secureStore: SecureStore = IosSecureStore()
     override val backgroundTasks: BackgroundTasks = IosBackgroundTasks()
-    override val backgroundTransfers: BackgroundTransfers = IosBackgroundTransfers()
     override val syncedSecrets: SyncedSecrets = IosSyncedSecrets()
     override val networkStatus: NetworkStatus = IosNetworkStatus()
     override val mediaLibrary: MediaLibrary = IosMediaLibrary()
@@ -371,103 +365,6 @@ public class IosBackgroundTasks : BackgroundTasks {
             listOf(REFRESH_IDENTIFIER, PROCESSING_IDENTIFIER)
 
         const val EARLIEST_SECONDS = 15.0 * 60.0
-    }
-}
-
-/**
- * **THE BACKGROUND SESSION, AND WHY IT IS FILE-BASED** (#1029 W5B-2).
- *
- * `NSURLSessionConfiguration.backgroundSessionConfigurationWithIdentifier` is
- * the only way bytes keep moving after iOS suspends the app: the transfer is
- * handed to a system daemon, the app is relaunched into the background when it
- * finishes, and the session is looked up again by this identifier.
- *
- * Three rules, and all three are iOS's rather than ours:
- *
- * 1. **`uploadTaskWithRequest:fromFile:` ONLY.** A background session refuses a
- *    data-bodied upload task — `NSURLSession` documents it as unsupported and
- *    the task fails immediately. So the sealed spool file is what is handed
- *    over, which is also what keeps a 16 MiB object out of this process's heap.
- * 2. **One identifier, one session, for the life of the app.** Creating a
- *    second session with the same identifier throws; creating one with a new
- *    identifier orphans everything the first one had in flight.
- * 3. **`discretionary` is left FALSE.** iOS may then start the transfer
- *    promptly rather than waiting for what it considers ideal conditions; the
- *    member's own transfer rule is what decides whether an object may cross a
- *    metered link, and handing that decision to the system as well would be two
- *    policies over one member's bill. What `discretionary` would have bought is
- *    already bought by `TransferRule`.
- *
- * The presigned lifetime is not checked here — `Batch::usable_for` in
- * `centraid_gateway_client` already refused any target that could expire inside
- * the longest deferral iOS may impose, which is the comparison that is actually
- * correct.
- */
-public class IosBackgroundTransfers : BackgroundTransfers {
-
-    private val session: NSURLSession by lazy {
-        NSURLSession.sessionWithConfiguration(
-            NSURLSessionConfiguration.backgroundSessionConfigurationWithIdentifier(SESSION_ID),
-        )
-    }
-
-    override suspend fun enqueue(
-        uploads: List<BackgroundTransfers.Upload>,
-    ): BackgroundTransfers.Enqueued {
-        // ALREADY IN FLIGHT IS NOT ENQUEUED AGAIN. A background session
-        // OUTLIVES the process: after a relaunch iOS hands back every task it
-        // still holds, and a pass that did not ask would pay for each object
-        // twice.
-        val running = inFlight().toSet()
-        var accepted = 0
-        uploads.forEach { upload ->
-            if (upload.objectName in running) return@forEach
-            val request = NSMutableURLRequest(uRL = NSURL(string = upload.url))
-            request.setHTTPMethod("PUT")
-            upload.headers.forEach { (name, value) ->
-                request.setValue(value, forHTTPHeaderField = name)
-            }
-            val task: NSURLSessionUploadTask = session.uploadTaskWithRequest(
-                request = request,
-                fromFile = NSURL.fileURLWithPath(upload.spoolPath),
-            )
-            // THE OBJECT'S NAME RIDES ON THE TASK, so a completion handler that
-            // wakes in a relaunched process knows what finished without a
-            // side table that did not survive the relaunch.
-            task.setTaskDescription(upload.objectName)
-            task.resume()
-            accepted += 1
-        }
-        return BackgroundTransfers.Enqueued(
-            accepted = accepted,
-            sentence = BackgroundTransfers.FORCE_QUIT_SENTENCE,
-        )
-    }
-
-    override suspend fun inFlight(): List<String> = suspendCancellableCoroutine { continuation ->
-        session.getTasksWithCompletionHandler { data, uploads, downloads ->
-            val names = buildList {
-                (uploads ?: emptyList<Any?>()).forEach { task ->
-                    (task as? platform.Foundation.NSURLSessionTask)
-                        ?.taskDescription
-                        ?.let { add(it) }
-                }
-            }
-            continuation.resume(names)
-        }
-    }
-
-    override suspend fun cancelAll() {
-        session.invalidateAndCancel()
-    }
-
-    private companion object {
-        /**
-         * One identifier for the life of the app. See rule 2 in the class
-         * comment: a second session under this name throws, and a session under
-         * a new name orphans what the old one was carrying.
-         */
-        const val SESSION_ID = "dev.centraid.uploads"
     }
 }
 

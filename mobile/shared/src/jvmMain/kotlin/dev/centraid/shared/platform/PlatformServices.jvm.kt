@@ -21,7 +21,6 @@ public actual fun platformServices(): PlatformServices = FakePlatformServices()
 public class FakePlatformServices(
     override val secureStore: FakeSecureStore = FakeSecureStore(),
     override val backgroundTasks: FakeBackgroundTasks = FakeBackgroundTasks(),
-    override val backgroundTransfers: FakeBackgroundTransfers = FakeBackgroundTransfers(),
     override val syncedSecrets: FakeSyncedSecrets = FakeSyncedSecrets(),
     override val networkStatus: FakeNetworkStatus = FakeNetworkStatus(),
     override val mediaLibrary: FakeMediaLibrary = FakeMediaLibrary(),
@@ -69,41 +68,6 @@ public class FakeBackgroundTasks(
     override suspend fun register(): BackgroundTasks.Registration {
         registrations += 1
         return answer
-    }
-}
-
-/**
- * A platform that takes every batch and keeps it, so a pass can be asserted.
- *
- * It is cooperative by default and uncooperative on demand, which is this
- * file's standing shape: a test about "Background App Refresh is off" sets
- * [answer] rather than reaching for a second class.
- */
-public class FakeBackgroundTransfers(
-    public var answer: BackgroundTransfers.Enqueued? = null,
-) : BackgroundTransfers {
-    /** Every upload this platform was handed, in order. */
-    public val handed: MutableList<BackgroundTransfers.Upload> = mutableListOf()
-
-    public var cancellations: Int = 0
-        private set
-
-    override suspend fun enqueue(
-        uploads: List<BackgroundTransfers.Upload>,
-    ): BackgroundTransfers.Enqueued {
-        answer?.let { return it }
-        handed.addAll(uploads)
-        return BackgroundTransfers.Enqueued(
-            accepted = uploads.size,
-            sentence = BackgroundTransfers.IN_FLIGHT_TITLE,
-        )
-    }
-
-    override suspend fun inFlight(): List<String> = handed.map { it.objectName }
-
-    override suspend fun cancelAll() {
-        cancellations += 1
-        handed.clear()
     }
 }
 

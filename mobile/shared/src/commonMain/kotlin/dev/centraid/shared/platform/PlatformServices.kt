@@ -18,11 +18,20 @@ import centraid.screen.v1.MediaPermission
 public interface PlatformServices {
     public val secureStore: SecureStore
     public val backgroundTasks: BackgroundTasks
-    // THE TWO W5 SEAMS (#1029 §3, W5B-2/-3). Both are here for the same reason
-    // as every other member: `commonMain` cannot do them. The OS moves bytes
-    // while the app is not running, and the OS is the only thing that can
-    // synchronise a secret to a member's next phone.
-    public val backgroundTransfers: BackgroundTransfers
+    // ONE W5 SEAM IS LEFT, AND THE OTHER LEFT WITH ITS DESTINATION
+    // (#1029 W18-3, the amendment of 2026-09-21, "Struck").
+    //
+    // `backgroundTransfers` stood here: a seam onto `NSURLSession`'s background
+    // session and a WorkManager upload worker, because the OS was the only
+    // thing that could move bytes to an HTTPS endpoint while the app was not
+    // running. There is no such endpoint any more — the gateway is the member's
+    // own laptop, reached over iroh by a client inside this process — so the
+    // seam had nowhere to carry bytes to. `dev.centraid.shared.sync.DrainPass`
+    // is what replaced it, and it is `commonMain` because the flow no longer
+    // needs anything a platform alone can do.
+    //
+    // `syncedSecrets` stays for the reason it was always here: the OS is the
+    // only thing that can synchronise a secret to a member's next phone.
     public val syncedSecrets: SyncedSecrets
     public val networkStatus: NetworkStatus
     public val mediaLibrary: MediaLibrary
