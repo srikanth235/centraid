@@ -954,6 +954,7 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "centraid-api-proto",
+ "centraid-gateway-client",
  "centraid-gateway-core",
  "centraid-identity",
  "clap",

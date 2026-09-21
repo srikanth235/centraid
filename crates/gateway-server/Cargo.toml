@@ -60,5 +60,10 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+# `tests/wire_iroh.rs` drives the REAL phone client against this server over
+# the real carrier. A dev-dependency cycle (the client dev-depends on this
+# crate) and deliberately so: the one test that proves the two ends agree has
+# to link both of them, and neither is the other's production dependency.
+centraid-gateway-client = { path = "../gateway-client" }
 ed25519-dalek.workspace = true
 tempfile.workspace = true
