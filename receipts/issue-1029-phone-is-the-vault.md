@@ -3385,11 +3385,167 @@ The second claim, **"`BackupNow` is really gone"**, was checked by its own grep
 rather than by reading: `grep -rn 'NotYetAvailable' crates/core/src/handle.rs`
 returns two lines and both are prose about what used to be there.
 
+### The lane resumed, and finished — W15-2, W15-3, W15-4
+
+**The root ruled on both blockers and both rulings are executed.** Everything
+above this heading is the state at `795a21aa`; everything below is what
+followed. Four more commits.
+
+| Commit | What |
+| --- | --- |
+| `bc42a8d0` | W15-2 — the drain's wire test, **red**, and the seam it needs |
+| `8cbc45b0` | W15-2 — the drain, for real |
+| `84170476` | W15-3 — the phone-shaped drill, **red** |
+| `a110ce58` | W15-3 — restore from 24 words, over iroh |
+| `86e7c1ae` | W15-4 — the sweeps have a schedule, and purge had a defect |
+
+**W15-D3 — the device key is minted by the core and kept by the shell.** The
+root's ruling, executed with one choice left to this lane and made here: the
+secret is surfaced **on the response of the flow that minted it**, never as an
+event at open. `PairResponse.device_secret` and `RestoreResponse.device_secret`
+(both field 3, 32 raw bytes, present only on the call that minted). An event
+would have to cross a queue that is bounded and may not be drained yet when a
+core opens, and a device secret the shell MISSED is a phone that silently
+re-mints next launch — a fresh epoch per launch, which is F1's `VAULT_MOVED`
+fired at nobody. A response cannot be missed. It crosses back at open as
+`"device": {"secret": "<64 hex>"}`, a **sibling of `"vault"`**. The certificate
+is issued by the identity key at pair (epoch 1) or restore (`held + 1`) and
+kept in `backup/laptop.json` beside the endpoint, never in the vault: the
+public half of a certificate is a signed statement anybody may read, which is
+why it may live in a file while the secret it names may not.
+`centraid_identity` gained `DeviceKey::{from_bytes, to_secret_bytes}` —
+`generate` had no counterpart, which is why every `DeviceKey::` outside that
+crate was a `generate()` in a test.
+
+**W15-D4 — commit granularity is the manifest entry, and the answer came from
+the code.** The root's first branch holds. A manifest is a chain of small
+write-once objects linked by `prev_manifest` (`backup::manifest`'s header),
+`gateway-core`'s `commit` moves the head by
+`compare_and_set_head(prev_head, manifest_head)` with nothing tying a head to a
+generation boundary, and an object already committed is a no-op on a later
+commit (`already.push(*name)`, same function). So a pass commits **one entry
+per fully uploaded batch of segments**, chained, and `acked_txid` is the last
+txid of the last acked entry. **No proto change, no generation-per-pass, no
+watermark beside the head.** Entries carry the generation's segments
+**cumulatively**, because a restore opens ONE manifest and lays its base and
+its segments — an incremental entry would restore a file that was never a state
+of the database.
+
+**The deadline, in three lines.** (1) The budget starts with the pass and is
+checked **between entries, never inside one**: an entry is fully uploaded and
+committed or it is not attempted, and the spool never loses a sealed object
+either way. (2) **A pass always commits at least one entry when there is one**,
+however small the budget — a window too small for a single entry that made no
+progress would make a phone on 28-second windows never finish. (3) `acked_txid`
+moves only on a gateway ack and always to an entry boundary; `pending_bytes` is
+what the spool holds when the pass stopped.
+
+**The restore's steps, and the test that covers each.** All in
+`restore_drill.rs`'s `phone_shaped::lose_the_phone_type_the_words_and_the_core_brings_every_vault_back_over_iroh`,
+which drives `centraid_core::phone::restore` — the core door `centraid_call`'s
+`Restore` arm reaches — against a real `gateway-server` over a loopback iroh
+endpoint:
+
+| Step | What covers it |
+| --- | --- |
+| parse the phrase → seed | the drill's only input is `PHRASE`; three words are refused by `a_phrase_that_is_not_twenty_four_good_words_is_refused_before_anything_is_derived` |
+| derive vault keys by index, gap-limited, **never reusing one** | two vaults at indices 0 and 1 come back; `gap_scanned == GAP` asserts the scan ran to the limit |
+| find the laptop | the typed path (`endpoint` + `direct_addrs`); the DNS path is `identity::discovery`'s own tests |
+| ask which vaults it holds | **the probe is the lease claim** — no listing endpoint was added; see below |
+| take the lease at `epoch + 1` (F3) | the restore's second claim, and phone A's refusal below |
+| head → manifest → base ranges → segments | the two vaults' censuses match phone A's exactly |
+| `integrity_check` **and** the census (§2) | `restore_drill` plus `census_matches`, both inside `phone::restore` |
+| the old phone freezes (F1) | phone A's next drain is `CoreError::VaultMoved`, asserted **by name**, and its rows are still there |
+
+**The laptop endpoint that answers "which vaults do I hold" was NOT added, on
+purpose.** The brief and the root both allowed it. A vault's identity public key
+IS its id (§0), so the phone derives candidates and asks about each — and that
+is better on two counts, not merely cheaper. A listing is a claim the laptop
+makes that a phone would have to check against keys it derived anyway, so the
+derivation is the authority either way and the listing is a round trip that can
+only agree or lie; and a listing would make the laptop link one member's vaults
+to each other, which under the amendment nothing else does. The probe is the
+lease claim a restore must make regardless. `ClientError::LeaseStale { held,
+claimed }` is new: the server had always sent both epochs in `ErrorBody.lease`
+and the client threw them into `Refused`, which made "the vault exists and
+somebody held it" indistinguishable from "there is no such vault".
+
+**The purge schedule.** `centraid_gateway_server::sweeps`, spawned beside the
+listener: purge hourly, scrub quarterly (§5 line 337), both in `Config.sweeps`,
+`0` turns either off, both logged with counts only. The schedule compares
+against the last completed sweep, so a laptop shut for a month sweeps once when
+it comes back.
+
+### Finds from the resumed half
+
+5. **`purge` re-purged every tombstone, on every tick, forever** — and only a
+   schedule could find it. The unlink was a no-op on the filesystem; the
+   **count** said "purged 2" every hour for the life of the vault, and a count
+   is the only thing a blind gateway is allowed to report. Fixed by asking the
+   store whether the bytes are still there. **Owner question, with a
+   recommendation:** the row stays `Tombstoned` forever, so
+   `ObjectEntry.purge_after_ms` now means "tombstoned, and possibly already
+   purged" where its comment says "not yet purged". *Recommend adding an
+   `ObjectState::Purged`* so a list can tell a member "this is gone" rather
+   than "this is going"; it is a schema change to the state adapter and a
+   retention decision about whether a purged object is still listed at all,
+   which is why this lane did not make it unilaterally.
+6. **A drain reported `VAULT_MOVED` as `DRAIN_STOP_UNREACHABLE`.** "Unreachable"
+   promises the next pass will work; over a vault another phone now holds that
+   promise can never be kept, which is precisely the failure F1 exists to
+   prevent. It is a refusal now — `CoreError::VaultMoved` — and `to_wire`'s
+   `moved: None` is filled. The paragraph beside it, which said this core
+   "neither holds nor hears about" a lease, was true when W5 wrote it and the
+   drain changed it; it is superseded in place, and both numbers are copied out
+   of the gateway's refusal rather than invented.
+7. **A lease must be claimed once, not per drain.** The wire test found it: a
+   second pass re-claiming at the epoch it already holds is refused
+   `GatewayLeaseStale`, and the phone would read its own success as somebody
+   taking its vault. Pair and restore claim; drains write under it, and `commit`
+   runs `lease::authorize_write` on every entry, so a vault that really moved is
+   refused at the first commit.
+8. **`a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why`
+   is load-sensitive.** It failed once during a workspace run that shared the
+   machine with a second `cargo test`, capturing an empty log, and passed on
+   five later runs including two full workspace runs. Not this lane's test and
+   not this lane's change; recorded so the next lane does not chase it as new.
+
+### Falsification, the resumed half
+
+The riskiest claim here is **"a deadline moves `acked_txid` to a real
+boundary"**, because the cheap way to be wrong is a test that asserts a number
+the implementation happens to produce. The throwaway check was to run the
+deadline case against a spool of a single batch: it went green on `Empty`
+instead of `Deadline` and the assertion caught it, which is how the test learned
+that `MAX_BATCH_OBJECTS` is 64 and that **a first backup is a base covering
+every txid there is**, so there is no second boundary to stop on at all. The
+test now seeds the spool a real camera-roll pass has — after a base, which is
+where a phone with a small window actually lives — and the comment says why. A
+version of this test that had been written to pass would have asserted nothing
+and would have shipped a deadline that silently never fired.
+
+The second claim, **"the old phone really freezes"**, was checked by asserting
+the refusal **by name** rather than by `is_err()`: the first run returned
+`DRAIN_STOP_UNREACHABLE` as a successful answer, which an `is_err()` assertion
+would have failed on for the right reason and a `!= Empty` assertion would have
+passed on for the wrong one. That is find 6, and it was the test that found it.
+
 ### Verification
 
 | Command | Outcome |
 | --- | --- |
 | `cargo build --workspace --all-targets` | clean, 0 warnings |
+| `cargo test --workspace` | **1,644 passed / 0 failed / 5 ignored** (floor 1,624) |
+| `cargo test -p centraid --test drain_wire` | 3 passed; **red at `bc42a8d0`** (1 passed / 2 failed) |
+| `cargo test -p centraid --test restore_drill` | 5 passed; **red at `84170476`** (0 passed / 1 failed of the new case) |
+| `cargo test -p centraid-gateway-server --test sweeps` | 3 passed |
+| `cargo test -p centraid-core-ffi --test contract` | 17 passed (floor 14) |
+| `grep -rn 'attested_checksum' crates contracts` | the proto's `reserved 2` comment and the schema's, both prose |
+
+### The state at `795a21aa`, kept for the record
+
+| Command | Outcome |
+| --- | --- |
 | `cargo test --workspace` | **1,633 passed / 0 failed / 5 ignored** (floor 1,624) |
 | `cargo test -p centraid-core-ffi --test contract` | 16 passed (was 14) |
 | `grep -rn 'NotYetAvailable' crates/core/src/handle.rs` | 2 hits, both comments; **no arm** |
