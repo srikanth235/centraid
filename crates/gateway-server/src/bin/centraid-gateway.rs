@@ -24,10 +24,11 @@ use centraid_gateway_core::Gateway;
 use centraid_gateway_core::store::StoreFault;
 use centraid_gateway_server::bytes::configured::{Backend, ConfiguredBytes};
 use centraid_gateway_server::bytes::fs::FilesystemBytes;
-use centraid_gateway_server::config::{Config, StoreConfig, TlsConfig};
+use centraid_gateway_server::config::{Config, ListenerConfig, StoreConfig, TlsConfig};
 use centraid_gateway_server::http::Server;
 use centraid_gateway_server::service::{DEFAULT_LABEL, Platform, UnitSpec};
 use centraid_gateway_server::{clock, serve, service, state, tenancy};
+use centraid_identity::ticket;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -53,7 +54,11 @@ enum Command {
         ///
         /// Readable from the environment because the container image has no
         /// other way to be told: a `CMD` cannot know the household's hostname.
-        #[arg(long, env = "CENTRAID_GATEWAY_ORIGIN")]
+        ///
+        /// **Optional under the iroh carrier**, which is the default: there is
+        /// no origin, because there is no URL — a phone dials an endpoint id
+        /// (scope amendment 2026-09-21).
+        #[arg(long, env = "CENTRAID_GATEWAY_ORIGIN", default_value = "")]
         origin: String,
         #[arg(long)]
         bind: Option<String>,
@@ -151,6 +156,25 @@ async fn main() -> anyhow::Result<()> {
                 quota_gib,
                 invite.expires_at.millis()
             );
+            // And the same thing as something to scan. The endpoint id comes
+            // from the key file rather than from a bound endpoint: minting an
+            // invite must work while `serve` is running, and two processes
+            // cannot bind one UDP socket. No relay and no direct addresses ride
+            // this ticket — under the default n0 address lookup the endpoint id
+            // alone is dialable, and the hints are the running server's to give.
+            let secret = serve::node_secret(&data_dir)?;
+            let ticket = ticket::mint(
+                *secret.public().as_bytes(),
+                &invite.code,
+                u64::try_from(invite.expires_at.millis()).unwrap_or(0),
+                String::new(),
+                Vec::new(),
+            );
+            let encoded = ticket::encode(&ticket);
+            println!("pair      {encoded}");
+            if let Ok(rendered) = ticket::qr(&encoded) {
+                println!("{rendered}");
+            }
             Ok(())
         }
         Command::Invites { data_dir } => {
@@ -257,6 +281,44 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
+/// The pairing payload, as text and as a QR.
+///
+/// **A headless laptop has a terminal and nothing else**, so this IS the
+/// pairing surface: the QR is half-block Unicode so a phone camera can read it
+/// at a normal font size, and the same payload is printed as text for a member
+/// who is pasting it over a chat rather than pointing a camera at a screen.
+fn print_ticket(
+    endpoint: &iroh::Endpoint,
+    invite_code: &str,
+    expires_at_ms: i64,
+) -> anyhow::Result<()> {
+    let addr = endpoint.addr();
+    let relay = addr
+        .addrs
+        .iter()
+        .find_map(|transport| match transport {
+            iroh::TransportAddr::Relay(url) => Some(url.to_string()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let ticket = ticket::mint(
+        *endpoint.id().as_bytes(),
+        invite_code,
+        u64::try_from(expires_at_ms).unwrap_or(0),
+        relay,
+        addr.ip_addrs().map(ToString::to_string).collect(),
+    );
+    let encoded = ticket::encode(&ticket);
+    println!("pair      {encoded}");
+    match ticket::qr(&encoded) {
+        Ok(rendered) => println!("{rendered}"),
+        // A QR that will not render is not a reason to refuse to pair: the
+        // text above is the same payload and can be pasted.
+        Err(error) => println!("(no QR: {error}; paste the `pair` line instead)"),
+    }
+    Ok(())
+}
+
 fn store_error(fault: StoreFault) -> anyhow::Error {
     anyhow::anyhow!("{fault}")
 }
@@ -307,14 +369,62 @@ fn build(config: Config) -> anyhow::Result<Server> {
 
 async fn run(config: Config) -> anyhow::Result<()> {
     let server = build(config.clone())?;
-    let bound = serve::bind(&config.bind).await?;
-    tracing::info!(address = %bound.address, origin = %config.origin, "the gateway is up");
-    let shared = serve::shared(server);
-    match config.tls {
-        // The default. A reverse proxy, a Cloudflare Tunnel or a Tailscale
-        // Funnel holds the certificate, and none of them needs an inbound port
-        // on the home network.
-        TlsConfig::Terminated => serve::serve_plain(bound, shared).await,
-        TlsConfig::Acme { .. } => serve::serve_acme(bound, shared, &config).await,
+    match &config.listener {
+        // THE DEFAULT (scope amendment 2026-09-21). A laptop has no domain and
+        // no certificate, so the carrier is iroh and what a member needs on
+        // screen is an endpoint id and something to scan.
+        ListenerConfig::Iroh(iroh) => {
+            let endpoint = serve::bind_iroh(&config.data_dir, iroh).await?;
+            let store = state::SqliteState::open(&config.state_path()).map_err(store_error)?;
+            print_pairing(&endpoint, &store, &config)?;
+            tracing::info!(endpoint = %endpoint.id(), "the gateway is up");
+            serve::serve_iroh(endpoint, serve::shared(server)).await
+        }
+        // The self-hoster who has a domain. `acme.rs` is not deleted.
+        ListenerConfig::Tcp => {
+            let bound = serve::bind(&config.bind).await?;
+            tracing::info!(address = %bound.address, origin = %config.origin, "the gateway is up");
+            let shared = serve::shared(server);
+            match config.tls {
+                TlsConfig::Terminated => serve::serve_plain(bound, shared).await,
+                TlsConfig::Acme { .. } => serve::serve_acme(bound, shared, &config).await,
+            }
+        }
     }
+}
+
+/// WHAT A MEMBER SEES WHEN THE LAPTOP STARTS.
+///
+/// The endpoint id, then one pairing payload per invite that is still good,
+/// as text and as a QR. **A gateway with nothing on it mints the first
+/// invite itself**: an empty state directory means nobody has a vault here,
+/// and the one thing its owner needs next is the thing to scan. It is not
+/// minted again — a second start with a live invite prints that invite, and a
+/// gateway that has admitted a vault prints none.
+fn print_pairing(
+    endpoint: &iroh::Endpoint,
+    store: &state::SqliteState,
+    config: &Config,
+) -> anyhow::Result<()> {
+    println!("endpoint  {}", endpoint.id());
+    let now = clock::now();
+    let mut live: Vec<_> = tenancy::list(store)
+        .map_err(store_error)?
+        .into_iter()
+        .filter(|record| record.redeemed_at.is_none() && record.expires_at > now)
+        .collect();
+    if live.is_empty() && !tenancy::list(store).map_err(store_error)?.iter().any(|r| r.redeemed_at.is_some()) {
+        let invite = tenancy::mint(store, config.default_quota.bytes, now).map_err(store_error)?;
+        println!("invite    {}", invite.code);
+        print_ticket(endpoint, &invite.code, invite.expires_at.millis())?;
+        return Ok(());
+    }
+    live.sort_by_key(|record| record.expires_at.millis());
+    for record in live {
+        println!(
+            "invite    {}…  (the code itself was printed once, when it was minted)",
+            hex::encode(&record.code_hash[..8])
+        );
+    }
+    Ok(())
 }

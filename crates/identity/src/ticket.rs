@@ -1,4 +1,13 @@
-//! The pair ticket, its encoding and its QR (#1020, D-1020-C8).
+//! THE PAIR TICKET: what the laptop shows and the phone scans (#1029,
+//! [scope amendment 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795);
+//! #1020, D-1020-C8).
+//!
+//! §6 struck the pair ticket with the iroh transport; the amendment brings both
+//! back, and pairing the phone to the laptop IS this ticket: the laptop shows
+//! its endpoint id and an invite as a QR, and the phone scans it. It lives in
+//! `crates/identity` as #1029's Reference A intended — the parent of the
+//! standalone invite and the §7 link ticket — and `crates/net`, which held
+//! nothing else, is deleted with the move.
 //!
 //! `base64url(PairTicket)` — a protobuf message, not JSON. v0's ticket is
 //! `base64url(JSON.stringify(payload))`
@@ -51,6 +60,50 @@ pub fn fresh_secret() -> std::io::Result<Vec<u8>> {
         .try_fill_bytes(&mut secret)
         .map_err(std::io::Error::other)?;
     Ok(secret)
+}
+
+/// THE PAIRING PAYLOAD: `{EndpointId, invite}`, and where each half comes from.
+///
+/// The laptop shows this and the phone scans it. `secret` is the **invite code
+/// `tenancy.rs` already requires** — the one thing that admits a vault on this
+/// gateway — and not a second admission invented for pairing: the server holds
+/// its BLAKE3 and nothing else, and redemption is the conditional `UPDATE` that
+/// already exists. `ticket_id` names that row the way an operator's `invites`
+/// listing does, so a member reading a log and a phone holding a QR are talking
+/// about the same invite.
+///
+/// `addrs` are **hints**, not the address: with relays and address lookup on, an
+/// endpoint id alone is dialable and these only make the first LAN dial fast.
+/// With both off — a loopback test, a LAN-only household — they are the only
+/// way to reach the laptop at all, which is why they ride the ticket.
+#[must_use]
+pub fn mint(
+    gateway_endpoint: [u8; 32],
+    invite_code: &str,
+    expires_at_ms: u64,
+    relay_url: String,
+    addrs: Vec<String>,
+) -> PairTicket {
+    PairTicket {
+        v: TICKET_VERSION,
+        gateway_endpoint: gateway_endpoint.to_vec(),
+        relay_url,
+        // The row the gateway already keeps, named the way `invites` prints it.
+        ticket_id: hex::encode(&blake3::hash(invite_code.trim().as_bytes()).as_bytes()[..8]),
+        secret: invite_code.trim().as_bytes().to_vec(),
+        vault_name: String::new(),
+        expires_at_ms,
+        direct_addrs: addrs,
+    }
+}
+
+/// The invite code a minted ticket carries, back out of it.
+///
+/// `None` when the secret is not UTF-8: an invite is read aloud at a kitchen
+/// table, so it is text, and bytes that are not text are not an invite.
+#[must_use]
+pub fn invite_code(ticket: &PairTicket) -> Option<&str> {
+    core::str::from_utf8(&ticket.secret).ok()
 }
 
 /// Encode a ticket for a QR or for a copy-and-paste hand-off.
@@ -211,6 +264,35 @@ mod tests {
         let rendered = qr(&encoded).expect("rendered");
         assert!(rendered.lines().count() > 10);
         assert!(rendered.contains('█') || rendered.contains('▀') || rendered.contains('▄'));
+    }
+
+    /// THE PAIRING PAYLOAD IS `{EndpointId, invite}` AND THE INVITE IS THE
+    /// GATEWAY'S OWN. A ticket that carried a second admission secret would be
+    /// a second way into a household's server, with a second expiry and a
+    /// second refusal shape for nobody to keep in step.
+    #[test]
+    fn a_minted_ticket_carries_the_endpoint_and_the_invite_the_gateway_already_holds() {
+        let minted = mint(
+            [0x11; 32],
+            "  a1b2-c3d4-e5f6  ",
+            TICKET_TTL_MS,
+            String::new(),
+            vec!["192.168.1.20:41234".to_owned()],
+        );
+        assert_eq!(minted.gateway_endpoint, vec![0x11; 32]);
+        assert_eq!(
+            invite_code(&minted),
+            Some("a1b2-c3d4-e5f6"),
+            "the code is trimmed once, here, so the gateway hashes the bytes \
+             the member read out and not the whitespace around them"
+        );
+        // The row an operator's `invites` listing prints, so the two name the
+        // same invite.
+        assert_eq!(
+            minted.ticket_id,
+            hex::encode(&blake3::hash(b"a1b2-c3d4-e5f6").as_bytes()[..8])
+        );
+        assert_eq!(decode(&encode(&minted)).expect("round trips"), minted);
     }
 
     #[test]

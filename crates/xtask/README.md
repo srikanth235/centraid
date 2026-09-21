@@ -168,7 +168,7 @@ On this container (4 vCPU, 15 GB — the `ci-linux-x64-4c` hardware class in `te
 | `gate --profile pr`, warm | — | 575.8 s | 1500 s |
 | `cargo check --workspace`, clean | 17.4 s | 541.7 s | 1200 s |
 | `cargo check --workspace`, one line in an app crate | 0.1 s | 0.6 s | 10 s |
-| `cargo test -p centraid-net`, repeated | 10.4 s | 2.4 s | 60 s |
+| `cargo test -p centraid-gateway-server`, repeated | 10.4 s | 2.4 s | 60 s |
 | `cargo build --workspace --release`, clean | 28.9 s | 240.3-666.6 s | 1400 s |
 
-Two numbers that are not ceilings and are worth knowing. A cold `local` run spends 587.6-626.1 s in `clippy` and 806.5-935.6 s in `cargo test --workspace` — the same dependency graph compiled twice, once for check units and once for artifacts to link against. And alternating `cargo test -p centraid-net` with `cargo test --workspace` costs 185.8 s / 161.7 s each way against 2.4 s for either command repeated, because one package's feature resolution is not the workspace's union, so the two commands invalidate each other's artifacts.
+Two numbers that are not ceilings and are worth knowing. A cold `local` run spends 587.6-626.1 s in `clippy` and 806.5-935.6 s in `cargo test --workspace` — the same dependency graph compiled twice, once for check units and once for artifacts to link against. And alternating `cargo test -p centraid-gateway-server` with `cargo test --workspace` costs 185.8 s / 161.7 s each way against 2.4 s for either command repeated, because one package's feature resolution is not the workspace's union, so the two commands invalidate each other's artifacts.

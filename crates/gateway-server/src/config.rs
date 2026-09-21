@@ -73,6 +73,41 @@ const fn default_filesystem_mode() -> Mode {
     Mode::ReadAndHash
 }
 
+/// WHICH CARRIER THIS SERVER IS DIALLED OVER.
+///
+/// **iroh is the default** ([scope amendment 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)):
+/// v0's gateway is a laptop, and a laptop has no domain, no certificate and no
+/// forwarded port. The TCP arm stays for the self-hoster who has all three —
+/// it is the same router either way, and [`crate::serve`] is where that is
+/// kept true.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum ListenerConfig {
+    /// **The default.** HTTP/1.1 over one iroh bidirectional stream under
+    /// `centraid-gateway/1`.
+    Iroh(IrohConfig),
+    /// A TCP socket at [`Config::bind`], with [`Config::tls`] deciding whether
+    /// this process holds the certificate.
+    Tcp,
+}
+
+/// The two coordinates a self-hoster may point at their own infrastructure.
+///
+/// **Both default to n0's**, because a phone on a foreign network has to be
+/// able to reach a laptop behind NAT and that is what the relay mesh and the
+/// DNS address-lookup service are for. #1029 §0 already says a self-hoster may
+/// run their own `iroh-dns-server`; this says the same about the relay.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct IrohConfig {
+    /// A relay to use instead of n0's mesh. `None` is n0's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_url: Option<String>,
+    /// A pkarr/DNS origin to publish to and resolve from instead of n0's.
+    /// `None` is n0's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dns_origin: Option<String>,
+}
+
 /// How this server is reached, and whether it terminates TLS itself.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -130,6 +165,9 @@ pub struct Config {
     pub mirror: Option<StoreConfig>,
     #[serde(default = "default_tls")]
     pub tls: TlsConfig,
+    /// **Which carrier this server is dialled over. iroh by default.**
+    #[serde(default = "default_listener")]
+    pub listener: ListenerConfig,
     /// The quota a redeemed invite creates its account with.
     #[serde(default)]
     pub default_quota: Quota,
@@ -156,6 +194,13 @@ const fn default_tls() -> TlsConfig {
     TlsConfig::Terminated
 }
 
+/// IROH IS THE DEFAULT CARRIER (scope amendment 2026-09-21). A laptop has no
+/// domain and no certificate; a self-hoster who has both sets `listener` to
+/// `tcp` and keeps the `bind`/`tls` settings above.
+fn default_listener() -> ListenerConfig {
+    ListenerConfig::Iroh(IrohConfig::default())
+}
+
 impl Config {
     /// The config a bare `serve --data-dir <dir>` produces.
     #[must_use]
@@ -167,6 +212,7 @@ impl Config {
             store: default_store(),
             mirror: None,
             tls: default_tls(),
+            listener: default_listener(),
             default_quota: Quota::default(),
             append_only: false,
         }
@@ -180,6 +226,15 @@ impl Config {
     pub fn read(path: &Path) -> anyhow::Result<Self> {
         let text = std::fs::read_to_string(path)?;
         Ok(serde_json::from_str(&text)?)
+    }
+
+    /// The iroh settings, when iroh is the carrier.
+    #[must_use]
+    pub const fn iroh(&self) -> Option<&IrohConfig> {
+        match &self.listener {
+            ListenerConfig::Iroh(iroh) => Some(iroh),
+            ListenerConfig::Tcp => None,
+        }
     }
 
     /// The state file.
@@ -218,6 +273,11 @@ mod tests {
         );
         assert!(config.mirror.is_none());
         assert!(matches!(config.tls, TlsConfig::Terminated));
+        assert!(
+            config.iroh().is_some(),
+            "iroh is the default carrier: a laptop has no domain and no \
+             certificate (scope amendment 2026-09-21)"
+        );
         assert!(
             config.default_quota.bytes > 0,
             "a quota is a number, never absent (F13)"

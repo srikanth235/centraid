@@ -42,6 +42,11 @@ clap.workspace = true
 # The ACME state machine is a `Stream`; this is the crate whose trait it is.
 futures.workspace = true
 hex.workspace = true
+# THE DEFAULT CARRIER (#1029, scope amendment 2026-09-21). The gateway API is
+# carried as HTTP/1.1 over one iroh bi-stream under `centraid-gateway/1`, so a
+# laptop behind NAT needs no port forwarding and no certificate. Confined to
+# `serve.rs`, like every other listener in this workspace.
+iroh.workspace = true
 rand.workspace = true
 reqwest.workspace = true
 rusqlite.workspace = true

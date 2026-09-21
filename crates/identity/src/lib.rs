@@ -11,6 +11,7 @@
 //! | [`sealed_box`] | HPKE base mode to a box key — the primitive sealed mail and share invites are built from |
 //! | [`certificate`] | "identity key K certifies device D at epoch E", and the verifier that refuses a superseded one |
 //! | [`discovery`] | publish and resolve against a configurable `iroh-dns-server`, and the typed-URL fallback |
+//! | [`ticket`] | the pair ticket: what a laptop shows and a phone scans, and its QR |
 //! | [`record`] | the signed pkarr record that makes a key findable: `gateway=` and `cert=` under the vault's identity key |
 //!
 //! ## WHY THREE HASH FAMILIES LIVE IN THIS CRATE AND NOWHERE ELSE (W0.5-R1)
@@ -35,6 +36,7 @@ pub mod phrase;
 pub mod record;
 pub mod safety_number;
 pub mod sealed_box;
+pub mod ticket;
 
 pub use certificate::{
     CERTIFICATE_CONTEXT, CertificateError, DeviceCertificate, DeviceKey, DeviceTrust, Epoch,
