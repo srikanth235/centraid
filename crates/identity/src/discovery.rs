@@ -123,14 +123,25 @@ pub enum SourceUsed {
 
 /// A gateway that has been found, however it was found.
 ///
-/// The typed result is the same either way, which is the whole point of
-/// [`ResolutionSource`]: the caller that fetches the vault listing does not
-/// branch on how the URL was obtained, it reads [`Self::source`] only when it
-/// wants to say so.
+/// # WHAT A RESTORE READS OFF THIS (#1029 §5)
+///
+/// **This is the hand-off from 24 words to a dial.** Derive the vault identity
+/// key from the phrase, resolve it here, and one of the two coordinates below
+/// is how the phone reaches the gateway:
+///
+/// - [`Self::endpoint`] — the laptop's iroh `EndpointId`, from the record's
+///   `endpoint=`. Dial it under `centraid_gateway_core::ALPN`. This is the v0
+///   path, and it is the only one a laptop has.
+/// - [`Self::gateway`] — a base URL, for a self-hoster whose gateway has a
+///   domain. Absent for a laptop, and absent is not a failure.
+///
+/// A typed source gives the second and not the first: somebody typing a URL
+/// into a restore screen is naming a host, not an endpoint id.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Located {
     key: VerifyingKey,
-    gateway: GatewayUrl,
+    endpoint: Option<[u8; 32]>,
+    gateway: Option<GatewayUrl>,
     source: SourceUsed,
 }
 
@@ -140,9 +151,16 @@ impl Located {
         &self.key
     }
 
-    /// The gateway base URL.
-    pub const fn gateway(&self) -> &GatewayUrl {
-        &self.gateway
+    /// The laptop's iroh `EndpointId`, when the record named one.
+    ///
+    /// `None` only for a typed URL: a published record always carries it.
+    pub const fn endpoint(&self) -> Option<&[u8; 32]> {
+        self.endpoint.as_ref()
+    }
+
+    /// The gateway base URL, when there is one. `None` for a laptop.
+    pub const fn gateway(&self) -> Option<&GatewayUrl> {
+        self.gateway.as_ref()
     }
 
     /// Which source answered.
@@ -228,13 +246,16 @@ impl Discovery {
                 let record = self.resolve_identity(identity).await?;
                 Ok(Located {
                     key: *identity,
-                    gateway: record.gateway().clone(),
+                    endpoint: Some(*record.endpoint()),
+                    gateway: record.gateway().cloned(),
                     source: SourceUsed::Published,
                 })
             }
             ResolutionSource::Typed(gateway) => Ok(Located {
                 key: *identity,
-                gateway: gateway.clone(),
+                // A person typing a URL is naming a host, not an endpoint id.
+                endpoint: None,
+                gateway: Some(gateway.clone()),
                 source: SourceUsed::Typed,
             }),
         }
@@ -328,7 +349,12 @@ mod tests {
             .expect("the typed source always answers");
 
         assert_eq!(located.key(), &identity);
-        assert_eq!(located.gateway(), &typed);
+        assert_eq!(located.gateway(), Some(&typed));
+        assert_eq!(
+            located.endpoint(),
+            None,
+            "somebody typing a URL is naming a host, not an endpoint id"
+        );
         assert_eq!(located.source(), SourceUsed::Typed);
     }
 

@@ -7,23 +7,39 @@
 //! anyone holding the key can read it back.
 //!
 //! ```text
-//! _centraid.<z-base32 of the vault identity key>  TXT  "gateway=<gateway base URL>"
-//!                                                      "cert=<device certificate, base64url>"
+//! _centraid2.<z-base32 of the vault identity key>  TXT  "endpoint=<the laptop's iroh EndpointId, hex>"
+//!                                                       "gateway=<gateway base URL>"   (optional)
+//!                                                       "cert=<device certificate, base64url>"
 //! ```
 //!
-//! ## WHY THERE IS NO ADDRESS ENTRY
+//! ## THE ADDRESS HERE IS THE LAPTOP'S, NEVER THE PHONE'S
 //!
-//! `cert=` names the device key, and **nothing dials a phone in v0** (#1029
-//! §6). The certificate is here so a contact can tell a superseded phone from
-//! the current one, not so anyone can open a connection to it. A record that
-//! carried an IP or a relay URL for the phone would be the first half of an
-//! inbound endpoint, and there is no second half to build.
+//! `endpoint=` is the **laptop's** iroh `EndpointId`, and it is what makes a
+//! restore work: a phone with only the 24 words derives this vault's identity
+//! key, resolves this record under it, and dials that endpoint under
+//! `centraid-gateway/1`. That is the whole path from a phrase to a gateway
+//! (#1029 §0, §5, and the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)).
 //!
-//! The entry was spelled `mailbox=` while a mailbox was what a contact looked
-//! up here. The mailbox is struck from v0 (scope amendment 2026-09-21) and the
-//! entry is `gateway=`: where this vault's backup lives. There is no second
-//! record — the account, and the account record that named its gateway, are
-//! struck with it.
+//! `cert=` names the *device* key, and **nothing dials a phone** — the
+//! amendment restates the invariant: the phone dials, and accepts no inbound
+//! connection. The certificate is here so a contact can tell a superseded
+//! phone from the current one, not so anyone can open a connection to it.
+//!
+//! `gateway=` is now **optional**. A self-hoster with a domain still has a base
+//! URL and publishes one; a laptop has none, and an entry that had to be filled
+//! in would be filled in with a lie.
+//!
+//! ## THE OWNER NAME CARRIES THE FORMAT'S VERSION, AND IT MOVED ONCE
+//!
+//! `_centraid` became `_centraid2` for the two changes this umbrella made
+//! together: the `mailbox=` entry was retired for `gateway=` when the mailbox
+//! was struck from v0, and `endpoint=` was added beside it. Either alone makes
+//! a record this build publishes unreadable to a build that expects the old
+//! shape, and vice versa — and a reader that found a `_centraid` record with no
+//! `endpoint=` would resolve a vault it cannot dial. **One bump for both**,
+//! rather than one per entry: nothing has shipped, so there is no published
+//! record to orphan, and the version is the owner name because that is what a
+//! resolver asks for.
 //!
 //! ## THE RECORD IS SIGNED TWICE, BY TWO DIFFERENT THINGS
 //!
@@ -56,14 +72,21 @@ use pkarr::{Keypair, SignedPacket, Timestamp};
 use crate::certificate::{CertificateError, DeviceCertificate};
 use crate::derive::VaultIdentityKey;
 
-/// The owner name both records live at, relative to the key's own zone.
+/// The owner name the record lives at, relative to the key's own zone.
 ///
 /// Underscore-prefixed, the convention for a name that carries service data
 /// rather than a host — the same shape `_iroh` has on n0's side, so a zone can
-/// hold both without either shadowing the other.
-pub const RECORD_NAME: &str = "_centraid";
+/// hold both without either shadowing the other. The trailing `2` is the
+/// record format's version; see the module header for why it moved once for
+/// two changes.
+pub const RECORD_NAME: &str = "_centraid2";
 
-/// A vault's entry: where this vault's backup lives.
+/// A vault's entry: the **laptop's** iroh `EndpointId`, hex. What a restoring
+/// phone dials.
+pub const ENDPOINT_ENTRY: &str = "endpoint";
+
+/// A vault's entry: a gateway base URL, for a self-hoster who has a domain.
+/// **Optional** — a laptop has none.
 pub const GATEWAY_ENTRY: &str = "gateway";
 
 /// A vault's entry: which device key holds the vault now.
@@ -222,17 +245,43 @@ pub enum RecordError {
 /// so a record cannot be built that disagrees with itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentityRecord {
-    gateway: GatewayUrl,
+    endpoint: [u8; 32],
+    gateway: Option<GatewayUrl>,
     certificate: DeviceCertificate,
 }
 
 impl IdentityRecord {
     /// The record a phone publishes for one vault.
-    pub const fn new(gateway: GatewayUrl, certificate: DeviceCertificate) -> Self {
+    ///
+    /// `endpoint` is the **laptop's** iroh `EndpointId`, 32 raw bytes — the
+    /// thing a restoring phone dials. It is not optional: a record that named
+    /// no gateway at all would resolve a vault nobody can reach.
+    pub const fn new(endpoint: [u8; 32], certificate: DeviceCertificate) -> Self {
         Self {
-            gateway,
+            endpoint,
+            gateway: None,
             certificate,
         }
+    }
+
+    /// The same record, also naming a base URL.
+    ///
+    /// For a self-hoster whose gateway has a domain and a certificate. A
+    /// laptop has neither, which is why this is a builder and not a parameter.
+    #[must_use]
+    pub fn with_gateway(mut self, gateway: GatewayUrl) -> Self {
+        self.gateway = Some(gateway);
+        self
+    }
+
+    /// The laptop's `EndpointId`, 32 raw bytes.
+    ///
+    /// **This is what W15's restore dials.** From 24 words: derive the vault
+    /// identity key, resolve this record under it, take these bytes as an
+    /// `iroh::EndpointId`, and connect under
+    /// `centraid_gateway_core::ALPN`.
+    pub const fn endpoint(&self) -> &[u8; 32] {
+        &self.endpoint
     }
 
     /// The vault identity key this record belongs under — the vault id and the
@@ -241,9 +290,9 @@ impl IdentityRecord {
         self.certificate.identity()
     }
 
-    /// Where this vault's backup lives.
-    pub const fn gateway(&self) -> &GatewayUrl {
-        &self.gateway
+    /// The gateway's base URL, when it has one. `None` for a laptop.
+    pub const fn gateway(&self) -> Option<&GatewayUrl> {
+        self.gateway.as_ref()
     }
 
     /// Which device key holds the vault, according to this record. Read it
@@ -279,15 +328,21 @@ impl IdentityRecord {
             "{CERT_ENTRY}={}",
             CERT_BASE64.encode(self.certificate.to_bytes())
         );
-        let gateway = format!("{GATEWAY_ENTRY}={}", self.gateway);
-        sign_txt(
-            &keypair(identity.signing()),
-            &[
-                (GATEWAY_ENTRY, gateway.as_str()),
-                (CERT_ENTRY, cert.as_str()),
-            ],
-            timestamp,
-        )
+        let endpoint = format!("{ENDPOINT_ENTRY}={}", hex::encode(self.endpoint));
+        // The ORDER is part of the encoding the golden vectors pin, and the
+        // optional entry sits between the two that are always there rather than
+        // at the end, so a record with a gateway and one without differ by one
+        // string rather than by an order.
+        let mut entries: Vec<(&'static str, &str)> = vec![(ENDPOINT_ENTRY, endpoint.as_str())];
+        let gateway = self
+            .gateway
+            .as_ref()
+            .map(|url| format!("{GATEWAY_ENTRY}={url}"));
+        if let Some(gateway) = &gateway {
+            entries.push((GATEWAY_ENTRY, gateway.as_str()));
+        }
+        entries.push((CERT_ENTRY, cert.as_str()));
+        sign_txt(&keypair(identity.signing()), &entries, timestamp)
     }
 
     /// Read a record back.
@@ -299,7 +354,21 @@ impl IdentityRecord {
     pub fn read(packet: &SignedPacket) -> Result<Self, RecordError> {
         let key = packet.public_key().to_z32();
         let entries = entries(packet);
-        let gateway = GatewayUrl::parse(&one(&entries, &key, GATEWAY_ENTRY)?)?;
+        let endpoint_hex = one(&entries, &key, ENDPOINT_ENTRY)?;
+        let endpoint: [u8; 32] = hex::decode(&endpoint_hex)
+            .ok()
+            .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+            .ok_or_else(|| RecordError::UnreadableEntry {
+                key: key.clone(),
+                entry: ENDPOINT_ENTRY,
+                reason: "an endpoint id is 32 bytes of hex".to_owned(),
+            })?;
+        // OPTIONAL, but never REPEATED: `one` still refuses two of them, so a
+        // publisher cannot say two things and have a reader believe one.
+        let gateway = match optional(&entries, &key, GATEWAY_ENTRY)? {
+            Some(text) => Some(GatewayUrl::parse(&text)?),
+            None => None,
+        };
 
         let raw = one(&entries, &key, CERT_ENTRY)?;
         let bytes = CERT_BASE64
@@ -329,6 +398,7 @@ impl IdentityRecord {
             })?;
 
         Ok(Self {
+            endpoint,
             gateway,
             certificate,
         })
@@ -426,6 +496,28 @@ fn one(
     Ok(first.1.clone())
 }
 
+/// The same, for an entry that may legitimately be absent.
+///
+/// **A repeat is still a refusal.** "Optional" means a publisher need not say
+/// it; it does not mean a publisher may say it twice and have a reader pick.
+fn optional(
+    entries: &[(String, String)],
+    key: &str,
+    entry: &'static str,
+) -> Result<Option<String>, RecordError> {
+    let mut matching = entries.iter().filter(|(name, _)| name == entry);
+    let Some(first) = matching.next() else {
+        return Ok(None);
+    };
+    if matching.next().is_some() {
+        return Err(RecordError::RepeatedEntry {
+            key: key.to_owned(),
+            entry,
+        });
+    }
+    Ok(Some(first.1.clone()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -439,6 +531,9 @@ mod tests {
 
     const GATEWAY: &str = "https://gateway.example/";
 
+    /// The laptop's endpoint id, as a fixture. A test input, not a secret.
+    const ENDPOINT: [u8; 32] = [0x5E; 32];
+
     fn vault(index: u32) -> VaultKeys {
         let seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
         VaultMint::fresh().mint(&seed, index).expect("a vault")
@@ -448,10 +543,8 @@ mod tests {
         let device = DeviceKey::generate().expect("OS entropy");
         let certificate = DeviceCertificate::issue(&keys.identity, &device.public(), epoch);
         (
-            IdentityRecord::new(
-                GatewayUrl::parse(GATEWAY).expect("a gateway URL"),
-                certificate,
-            ),
+            IdentityRecord::new(ENDPOINT, certificate)
+                .with_gateway(GatewayUrl::parse(GATEWAY).expect("a gateway URL")),
             device,
         )
     }
@@ -465,9 +558,64 @@ mod tests {
         assert_eq!(packet.public_key().verifying_key(), &keys.identity.public());
         let read = IdentityRecord::read(&packet).expect("reads back");
         assert_eq!(read, built);
-        assert_eq!(read.gateway().as_str(), GATEWAY);
+        assert_eq!(read.endpoint(), &ENDPOINT);
+        assert_eq!(
+            read.gateway().map(GatewayUrl::as_str),
+            Some(GATEWAY),
+            "a self-hoster with a domain still publishes one"
+        );
         assert_eq!(read.certificate().device(), &device.public());
         assert_eq!(read.certificate().epoch(), Epoch::new(3));
+    }
+
+    /// A LAPTOP HAS NO BASE URL, and that is not a missing entry.
+    ///
+    /// `gateway=` became optional when v0's gateway became the member's own
+    /// laptop (scope amendment 2026-09-21): a record that had to name one
+    /// would name a lie. `endpoint=` is what a restoring phone dials, and it
+    /// is never optional.
+    #[test]
+    fn a_laptops_record_carries_an_endpoint_and_no_gateway_url() {
+        let keys = vault(0);
+        let device = DeviceKey::generate().expect("OS entropy");
+        let certificate = DeviceCertificate::issue(&keys.identity, &device.public(), Epoch::new(1));
+        let built = IdentityRecord::new(ENDPOINT, certificate);
+        let packet = built.sign(&keys.identity).expect("signs");
+        let read = IdentityRecord::read(&packet).expect("reads back");
+        assert_eq!(read, built);
+        assert_eq!(read.endpoint(), &ENDPOINT);
+        assert_eq!(read.gateway(), None);
+    }
+
+    /// An `endpoint=` that is not 32 bytes of hex is unreadable, never a
+    /// truncated endpoint id somebody would then dial.
+    #[test]
+    fn an_endpoint_that_is_not_thirty_two_bytes_of_hex_is_refused() {
+        let keys = vault(0);
+        let device = DeviceKey::generate().expect("OS entropy");
+        let certificate = DeviceCertificate::issue(&keys.identity, &device.public(), Epoch::FIRST);
+        let cert = format!(
+            "{CERT_ENTRY}={}",
+            CERT_BASE64.encode(certificate.to_bytes())
+        );
+        for bad in ["endpoint=5e5e5e", "endpoint=not hex at all"] {
+            let packet = sign_txt(
+                &keypair(keys.identity.signing()),
+                &[(ENDPOINT_ENTRY, bad), (CERT_ENTRY, cert.as_str())],
+                Timestamp::now(),
+            )
+            .expect("signs");
+            assert!(
+                matches!(
+                    IdentityRecord::read(&packet),
+                    Err(RecordError::UnreadableEntry {
+                        entry: ENDPOINT_ENTRY,
+                        ..
+                    })
+                ),
+                "{bad} was accepted"
+            );
+        }
     }
 
     /// The packet travels as bytes and comes back as bytes; the round trip has
@@ -513,6 +661,10 @@ mod tests {
         let packet = sign_txt(
             &keypair(mine.identity.signing()),
             &[
+                (
+                    ENDPOINT_ENTRY,
+                    &format!("{ENDPOINT_ENTRY}={}", hex::encode(ENDPOINT)),
+                ),
                 (GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}={GATEWAY}")),
                 (
                     CERT_ENTRY,
@@ -543,6 +695,10 @@ mod tests {
         let packet = sign_txt(
             &keypair(keys.identity.signing()),
             &[
+                (
+                    ENDPOINT_ENTRY,
+                    &format!("{ENDPOINT_ENTRY}={}", hex::encode(ENDPOINT)),
+                ),
                 (GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}={GATEWAY}")),
                 (
                     CERT_ENTRY,
@@ -588,6 +744,9 @@ mod tests {
         assert_eq!(trust.trusted_device(), Some(&new_device.public()));
     }
 
+    /// A record with no `endpoint=` — which is what every record published
+    /// before W17 looks like — names the entry it is missing rather than being
+    /// read as a vault with no gateway.
     #[test]
     fn a_record_missing_an_entry_names_the_key_and_the_entry() {
         let keys = vault(0);
@@ -598,6 +757,25 @@ mod tests {
         )
         .expect("signs");
 
+        assert_eq!(
+            IdentityRecord::read(&packet),
+            Err(RecordError::MissingEntry {
+                key: z32(&keys.identity.public()),
+                entry: ENDPOINT_ENTRY,
+            })
+        );
+
+        // And with the endpoint present, the certificate is the next thing
+        // required: neither is optional, and `gateway=` is the only one that is.
+        let packet = sign_txt(
+            &keypair(keys.identity.signing()),
+            &[(
+                ENDPOINT_ENTRY,
+                &format!("{ENDPOINT_ENTRY}={}", hex::encode(ENDPOINT)),
+            )],
+            Timestamp::now(),
+        )
+        .expect("signs");
         assert_eq!(
             IdentityRecord::read(&packet),
             Err(RecordError::MissingEntry {
@@ -616,6 +794,10 @@ mod tests {
         let packet = sign_txt(
             &keypair(keys.identity.signing()),
             &[
+                (
+                    ENDPOINT_ENTRY,
+                    &format!("{ENDPOINT_ENTRY}={}", hex::encode(ENDPOINT)),
+                ),
                 (GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}={GATEWAY}")),
                 (GATEWAY_ENTRY, &format!("{GATEWAY_ENTRY}=https://other/")),
                 (

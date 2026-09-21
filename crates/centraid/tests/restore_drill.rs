@@ -974,9 +974,17 @@ async fn the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_s
         .await
         .expect("a typed URL locates without a network");
     assert_eq!(
-        located.gateway().as_str().trim_end_matches('/'),
-        live.origin,
+        located
+            .gateway()
+            .map(|url| url.as_str().trim_end_matches('/')),
+        Some(live.origin.as_str()),
         "the URL the restore will use is the one the member typed"
+    );
+    assert_eq!(
+        located.endpoint(),
+        None,
+        "a typed URL names a host; the laptop's endpoint id comes off the \
+         published record, which is the path W15 builds"
     );
 
     // ---- the old phone backs up, over the wire ------------------------------

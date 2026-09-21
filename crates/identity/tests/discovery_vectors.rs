@@ -20,6 +20,11 @@
 //!   certificate layout are pinned separately from the packet that carries
 //!   them;
 //!
+//! The owner name moved from `_centraid` to `_centraid2` in #1029 W17, once
+//! for two changes: `mailbox=` became `gateway=` when the mailbox was struck
+//! from v0, and `endpoint=` was added beside it. These bytes are what noticed,
+//! and they are regenerated deliberately rather than by hand (below).
+//!
 //! ## THE TWO INPUTS THAT ARE NOT DERIVED, AND WHY THEY ARE CONSTANTS
 //!
 //! A device key is random per phone and a pkarr timestamp is the publishing
@@ -69,8 +74,14 @@ const DEVICE_SECRET: [u8; 32] = [
 const TIMESTAMP_MICROS: u64 = 1_700_000_000_000_000;
 
 /// The gateway the vectors name. `.example` is reserved by RFC 2606, so no
-/// fixture can be mistaken for a live host.
+/// fixture can be mistaken for a live host. It is the SELF-HOSTER's arm: a
+/// laptop publishes no `gateway=` at all, and the vector pins the record with
+/// every entry present so a change to any of them is visible.
 const GATEWAY: &str = "https://gateway.example/";
+
+/// The laptop's iroh `EndpointId`, fixed by hand. **A test input, not a
+/// secret**: a real one is the public half of a key on somebody's laptop.
+const ENDPOINT: [u8; 32] = [0x5E; 32];
 
 fn generated() -> Value {
     let seed = RecoveryPhrase::parse(PHRASE)
@@ -82,13 +93,14 @@ fn generated() -> Value {
 
     let keys = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
     let certificate = DeviceCertificate::issue(&keys.identity, &device, Epoch::new(2));
-    let record = IdentityRecord::new(gateway, certificate);
+    let record = IdentityRecord::new(ENDPOINT, certificate).with_gateway(gateway);
 
     json!({
         "schema": "centraid-discovery-vectors/1",
         "why": "The pkarr record's owner name, entry names, entry order, TTL and base64url alphabet are format decisions (#1029 §0). A round trip cannot see any of them move; a published record that no phone can read is what moving one costs.",
         "phrase": PHRASE,
         "gateway": GATEWAY,
+        "endpointHex": hex::encode(ENDPOINT),
         "timestampMicros": TIMESTAMP_MICROS,
         "recordName": centraid_identity::record::RECORD_NAME,
         "recordTtlSeconds": centraid_identity::record::RECORD_TTL_SECONDS,
@@ -171,7 +183,8 @@ fn the_pinned_packet_reads_back_as_the_record_it_pins() {
         .expect("a signed packet");
     let record = IdentityRecord::read(&packet).expect("reads back");
 
-    assert_eq!(record.gateway().as_str(), GATEWAY);
+    assert_eq!(record.endpoint(), &ENDPOINT);
+    assert_eq!(record.gateway().map(|url| url.as_str()), Some(GATEWAY));
     assert_eq!(record.certificate().epoch(), Epoch::new(2));
     assert_eq!(
         hex::encode(record.identity().to_bytes()),

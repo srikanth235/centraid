@@ -45,6 +45,9 @@ const PHRASE: &str = "abandon abandon abandon abandon abandon abandon abandon ab
 
 const GATEWAY: &str = "https://gateway.example/";
 
+/// The laptop's iroh `EndpointId`. A test input, not a secret.
+const LAPTOP_ENDPOINT: [u8; 32] = [0x5E; 32];
+
 /// The server, and the relay URL to point a [`Discovery`] at.
 struct LocalDnsServer {
     server: Server,
@@ -99,9 +102,10 @@ async fn a_record_published_to_a_local_iroh_dns_server_resolves_back() {
     let keys = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
     let device = DeviceKey::generate().expect("OS entropy");
     let published = IdentityRecord::new(
-        GatewayUrl::parse(GATEWAY).expect("a gateway URL"),
+        LAPTOP_ENDPOINT,
         DeviceCertificate::issue(&keys.identity, &device.public(), Epoch::new(2)),
-    );
+    )
+    .with_gateway(GatewayUrl::parse(GATEWAY).expect("a gateway URL"));
 
     discovery
         .publish_identity(&published, &keys.identity)
@@ -114,7 +118,10 @@ async fn a_record_published_to_a_local_iroh_dns_server_resolves_back() {
         .expect("the server gives it back");
 
     assert_eq!(resolved, published);
-    assert_eq!(resolved.gateway().as_str(), GATEWAY);
+    // WHAT A RESTORING PHONE READS OFF THIS: the laptop's endpoint id, which
+    // it dials under `centraid-gateway/1` (#1029 §5, W17).
+    assert_eq!(resolved.endpoint(), &LAPTOP_ENDPOINT);
+    assert_eq!(resolved.gateway().map(|url| url.as_str()), Some(GATEWAY));
 
     // What a contact does with it: the certificate that came off the wire is
     // the one that decides which phone holds the vault.
@@ -157,7 +164,12 @@ async fn the_typed_url_fallback_answers_where_resolution_could_not() {
         .expect("the typed source proceeds");
 
     assert_eq!(located.key(), &identity);
-    assert_eq!(located.gateway(), &typed);
+    assert_eq!(located.gateway(), Some(&typed));
+    assert_eq!(
+        located.endpoint(),
+        None,
+        "somebody typing a URL is naming a host, not an endpoint id"
+    );
     assert_eq!(located.source(), SourceUsed::Typed);
 
     dns.stop().await;
@@ -173,12 +185,10 @@ async fn republishing_after_a_restore_serves_the_higher_epoch() {
 
     let seed = RecoveryPhrase::parse(PHRASE).expect("parses").seed();
     let keys = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
-    let gateway = GatewayUrl::parse(GATEWAY).expect("a gateway URL");
-
     let old_phone = DeviceKey::generate().expect("OS entropy");
     let old = DeviceCertificate::issue(&keys.identity, &old_phone.public(), Epoch::new(7));
     discovery
-        .publish_identity(&IdentityRecord::new(gateway.clone(), old), &keys.identity)
+        .publish_identity(&IdentityRecord::new(LAPTOP_ENDPOINT, old), &keys.identity)
         .await
         .expect("the old phone published");
 
@@ -187,7 +197,7 @@ async fn republishing_after_a_restore_serves_the_higher_epoch() {
         DeviceCertificate::issue(&keys.identity, &new_phone.public(), old.epoch().next());
     discovery
         .publish_identity(
-            &IdentityRecord::new(gateway.clone(), reissued),
+            &IdentityRecord::new(LAPTOP_ENDPOINT, reissued),
             &keys.identity,
         )
         .await

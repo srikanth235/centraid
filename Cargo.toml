@@ -131,7 +131,10 @@ qrcode = { version = "0.14", default-features = false }
 # `hyper-util` is only `TokioIo`, the adapter between tokio's IO traits and
 # hyper's; `http-body-util` is `Full` and `collect`. No client stack, no
 # connection pool, no TLS: iroh already authenticated and encrypted the path.
-hyper = { version = "1", default-features = false, features = ["client", "http1"] }
+hyper = { version = "1", default-features = false, features = [
+  "client",
+  "http1",
+] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
 http-body-util = "0.1"
 rand = "0.9"
