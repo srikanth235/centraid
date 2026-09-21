@@ -56,9 +56,20 @@ const PHRASE: &str = "abandon abandon abandon abandon abandon abandon abandon ab
 /// The vault's derivation index. Never chosen by a shell, and never reused (F2).
 const INDEX: u32 = 0;
 
-/// Commits before the drain. Enough that the spool holds several segments and
-/// "a prefix" is a real claim with something left over.
-const WRITES: usize = 12;
+/// Segments the spool holds before the drain, and it is deliberately **more
+/// than one batch**.
+///
+/// `gateway_client::spool::MAX_BATCH_OBJECTS` is 64, so a spool of 64 or fewer
+/// objects is one declare, one commit and one manifest entry — and a deadline
+/// inside it could not move `acked_txid` however small the budget, because
+/// there is no second boundary to stop on. That is correct behaviour for a
+/// small vault and it is also a test that asserts nothing, so this drill seeds
+/// the spool a real camera-roll pass has: two batches, cut where the client's
+/// own policy cuts them.
+///
+/// A capture tick cuts one segment over the commits since the last one, so this
+/// is a write-then-capture loop rather than a run of commits.
+const SEGMENTS: usize = 70;
 
 /// A live gateway on a loopback iroh endpoint.
 struct Live {
@@ -122,10 +133,17 @@ fn keyring() -> (Keyring, [u8; 32]) {
     )
 }
 
-/// Write the record a pairing would have written, pointing at `live`.
-fn pair_with(vault_file: &Path, live: &Live, keyring: &Keyring, secret: &[u8; 32]) {
+/// Do what a pairing does: certify this device, keep the record, **and claim
+/// the lease**.
+///
+/// The claim is the half that is easy to leave out of a stand-in and is
+/// load-bearing: a lease is claimed once, by the flow that makes a device a
+/// device, and every drain afterwards writes under it. `phone::pair` claims it
+/// for real against a redeemed invite; this claims it the same way with the
+/// certificate it just issued.
+async fn pair_with(vault_file: &Path, live: &Live, keyring: &Keyring, secret: &[u8; 32]) {
     let device = phone::link::Device::certify(secret, &keyring.vault.identity, 1);
-    Laptop {
+    let record = Laptop {
         gateway_endpoint: hex::encode(live.address.id.as_bytes()),
         relay_url: Some(String::new()),
         direct_addrs: live
@@ -136,23 +154,60 @@ fn pair_with(vault_file: &Path, live: &Live, keyring: &Keyring, secret: &[u8; 32
         device_certificate: Some(device.certificate_hex()),
         epoch: Some(1),
         last_acked_at_ms: None,
-    }
-    .write(vault_file)
-    .expect("the laptop record is written");
+    };
+    record
+        .write(vault_file)
+        .expect("the laptop record is written");
+
+    let mut client = phone::link::dial(
+        &record,
+        &device,
+        Key32::from_bytes(keyring.vault.identity.public().to_bytes()),
+    )
+    .await
+    .expect("the phone dials the laptop");
+    client
+        .preflight(phone::link::now_ms())
+        .await
+        .expect("the laptop answers");
+    client
+        .claim_lease(phone::link::now_ms())
+        .await
+        .expect("this device takes the lease");
 }
 
-/// A founded vault with `WRITES` commits in it.
-fn founded(dir: &Path) -> (Vault, std::path::PathBuf) {
+/// A founded vault whose spool holds [`SEGMENTS`] sealed segments.
+fn founded(dir: &Path, keyring: &Keyring) -> (Vault, std::path::PathBuf) {
     std::fs::create_dir_all(dir).expect("the directory is made");
     let file = dir.join("vault.db");
     let vault = Vault::create(&file).expect("a vault file");
     vault
         .found("The Drain Household", "Ada")
         .expect("it founds");
-    for index in 0..WRITES {
+    for index in 0..8 {
         centraid_vault::backup::drill::write_one(&vault, index).expect("a commit");
     }
+    let _ = keyring;
     (vault, file)
+}
+
+/// Write and capture [`SEGMENTS`] times, so the spool holds that many segments
+/// **above** whatever base the last drain took.
+///
+/// It has to be after a drain and not before one, and that is the shape of the
+/// product rather than a trick: a first backup is a **base**, which covers
+/// every txid there is, so there is nothing above it to cut a second entry on.
+/// Segments are what a vault accumulates between bases, which is where a phone
+/// with a small background window actually lives.
+fn seed_segments(vault: &Vault, file: &Path, keyring: &Keyring) {
+    let home = phone::open_home(file).expect("a backup home");
+    let spool = home.spool().expect("a spool");
+    for index in 0..SEGMENTS {
+        centraid_vault::backup::drill::write_one(vault, 1_000 + index).expect("a commit");
+        // ONE CAPTURE TICK, ONE SEGMENT. The same call the drain makes; this
+        // loop stands in for the debounced tick a running phone has.
+        centraid_vault::backup::capture(vault, &spool, &keyring.objects).expect("a capture");
+    }
 }
 
 fn drain(
@@ -175,14 +230,14 @@ fn drain(
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_drain_moves_the_spool_to_the_laptop_and_acks_what_the_laptop_acked() {
     let dir = centraid_ontology::golden::scratch_dir();
-    let (vault, file) = founded(&dir);
     let (keys, secret) = keyring();
+    let (vault, file) = founded(&dir, &keys);
     let gateway = live(
         Key32::from_bytes(keys.vault.identity.public().to_bytes()),
         Key32::from_bytes(keys.vault.identity.public().to_bytes()),
     )
     .await;
-    pair_with(&file, &gateway, &keys, &secret);
+    pair_with(&file, &gateway, &keys, &secret).await;
 
     let runtime = tokio::runtime::Handle::current();
     let answer = tokio::task::block_in_place(|| drain(&vault, &file, &keys, 0, &runtime));
@@ -224,16 +279,22 @@ async fn a_drain_moves_the_spool_to_the_laptop_and_acks_what_the_laptop_acked() 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_deadline_stops_a_pass_on_an_entry_boundary_and_the_next_pass_continues() {
     let dir = centraid_ontology::golden::scratch_dir();
-    let (vault, file) = founded(&dir);
     let (keys, secret) = keyring();
+    let (vault, file) = founded(&dir, &keys);
     let gateway = live(
         Key32::from_bytes(keys.vault.identity.public().to_bytes()),
         Key32::from_bytes(keys.vault.identity.public().to_bytes()),
     )
     .await;
-    pair_with(&file, &gateway, &keys, &secret);
+    pair_with(&file, &gateway, &keys, &secret).await;
 
     let runtime = tokio::runtime::Handle::current();
+
+    // THE FIRST BACKUP IS A BASE, and a base covers every txid there is. The
+    // deadline this test is about lives in what comes AFTER one.
+    let founding = tokio::task::block_in_place(|| drain(&vault, &file, &keys, 0, &runtime));
+    assert_eq!(founding.stopped, wire::DrainStop::Empty as i32);
+    seed_segments(&vault, &file, &keys);
 
     // A BUDGET OF ONE MILLISECOND. Rule 2 of the deadline semantics: a pass
     // always commits at least one entry, however small the budget — a window
@@ -284,8 +345,8 @@ async fn a_deadline_stops_a_pass_on_an_entry_boundary_and_the_next_pass_continue
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_unpaired_phone_reports_unreachable_and_loses_nothing() {
     let dir = centraid_ontology::golden::scratch_dir();
-    let (vault, file) = founded(&dir);
     let (keys, _) = keyring();
+    let (vault, file) = founded(&dir, &keys);
     let runtime = tokio::runtime::Handle::current();
 
     let answer = tokio::task::block_in_place(|| drain(&vault, &file, &keys, 0, &runtime));

@@ -122,10 +122,18 @@ pub fn run(
     };
     let device = link::Device::resume(&secret, certificate_hex)?;
 
-    // W15-2 LANDS THE UPLOAD. Until it does, a paired phone is in exactly the
-    // state an unpaired one is: sealed, and nothing sent.
-    let _ = (runtime, &device, request.deadline_ms, started, &home);
-    answer(&spool, vault_file, None)
+    let pass = runtime.block_on(upload(
+        vault,
+        vault_file,
+        &home,
+        &spool,
+        keyring,
+        &laptop,
+        &device,
+        request.deadline_ms,
+        started,
+    ))?;
+    answer(&spool, vault_file, Some(pass))
 }
 
 /// Read the spool back and build the answer. One place, so the numbers a shell
@@ -192,14 +200,20 @@ async fn upload(
     if let Err(error) = client.preflight(now()).await {
         return unreachable_pass(spool, error);
     }
-    // THE EPOCH IS THE CERTIFICATE'S, not a parameter: `claim_lease` signs
-    // with this device's certificate and the server reads the epoch off it
-    // (`gateway-client`'s `client`). There is exactly one place an epoch is
-    // chosen — the pair or the restore that issued the certificate — which is
-    // what keeps F3 a property rather than a convention.
-    if let Err(error) = client.claim_lease(now()).await {
-        return unreachable_pass(spool, error);
-    }
+    // **THE LEASE IS NOT CLAIMED HERE, AND THAT IS THE POINT.**
+    //
+    // A lease is claimed once, by the flow that made this device a device —
+    // `phone::pair` or `phone::restore` — and every drain afterwards writes
+    // under it. A drain that re-claimed would be refused `GatewayLeaseStale`
+    // on its own second pass, because a claim at an epoch already held is
+    // exactly what the lease refuses (`gateway-core`'s `lease`), and the phone
+    // would read its own success as somebody else taking the vault.
+    //
+    // Nothing is lost by not asking: `commit` calls
+    // `lease::authorize_write(state.lease, caller.device, caller.epoch)` on
+    // every entry, so a vault that really has moved refuses this pass at its
+    // first commit and the phone freezes on the answer that means it (F1).
+    // Asking first would only move the same refusal one round trip earlier.
 
     // THE GENERATION THIS PASS CONTINUES, OR A NEW ONE.
     let previous = ManifestHead::read(&home.head_path()).map_err(|error| CoreError::Invariant {

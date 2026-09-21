@@ -455,6 +455,9 @@ mod tests {
             gateway_endpoint: hex::encode([0xAB_u8; 32]),
             relay_url: Some(String::new()),
             direct_addrs: vec!["10.0.0.2:41234".to_owned()],
+            device_certificate: None,
+            epoch: None,
+            last_acked_at_ms: None,
         }
         .write(&file)
         .expect("it writes");
@@ -482,7 +485,7 @@ mod tests {
 
     #[test]
     fn a_phrase_that_is_not_twenty_four_good_words_is_refused_before_anything_is_derived() {
-        let refusal = restore(&wire::RestoreRequest {
+        let refusal = restore::run(&wire::RestoreRequest {
             phrase: "abandon abandon abandon".to_owned(),
             endpoint: None,
         })
@@ -494,11 +497,18 @@ mod tests {
     fn a_payload_that_is_not_a_ticket_is_refused_and_pairs_nothing() {
         let dir = scratch();
         let file = dir.join("vault.db");
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .expect("a runtime");
         let refusal = pair(
             &file,
+            None,
             &wire::PairRequest {
                 payload: "not-a-ticket".to_owned(),
             },
+            runtime.handle(),
         )
         .expect_err("it refuses");
         assert!(matches!(refusal, CoreError::InvalidRequest { .. }));
