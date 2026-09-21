@@ -435,10 +435,28 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
             let ObjectState::Tombstoned { purge_after } = object.state else {
                 continue;
             };
-            if retention::purgeable(purge_after, now) {
-                self.bytes.purge(vault, &object.name).await?;
-                purged.push(object.name);
+            if !retention::purgeable(purge_after, now) {
+                continue;
             }
+            // **BYTES THAT ARE ALREADY GONE WERE NOT PURGED BY THIS PASS**
+            // (#1029 W15-4). Found by giving this function a SCHEDULE: as a
+            // CLI verb run by hand it re-unlinked a tombstone nobody noticed,
+            // and on an hourly timer it re-purged every tombstone this vault
+            // has ever had, every hour, for the life of the vault — reporting
+            // the same objects as newly purged in a member's log each time. The
+            // work was a no-op on the filesystem; the COUNT was a lie, and a
+            // count is the only thing a blind gateway is allowed to report.
+            //
+            // One store stat per tombstone per tick, which is cheap and is the
+            // only question that can be asked: the row stays `Tombstoned`
+            // because whether a purged object should still be listed at all is
+            // a retention decision and not this lane's (see the receipt's owner
+            // question).
+            if self.bytes.stored(vault, &object.name).await?.is_none() {
+                continue;
+            }
+            self.bytes.purge(vault, &object.name).await?;
+            purged.push(object.name);
         }
         Ok(purged)
     }

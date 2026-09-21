@@ -162,6 +162,11 @@ pub struct Config {
     /// not be given one.
     #[serde(default)]
     pub append_only: bool,
+    /// **HOW OFTEN THE SWEEPS RUN** (#1029 W15-4). Purge hourly, scrub
+    /// quarterly; either may be set to `0` to turn it off. See
+    /// [`crate::sweeps`].
+    #[serde(default)]
+    pub sweeps: crate::sweeps::Schedule,
 }
 
 fn default_bind() -> String {
@@ -199,6 +204,7 @@ impl Config {
             listener: default_listener(),
             default_quota: Quota::default(),
             append_only: false,
+            sweeps: crate::sweeps::Schedule::default(),
         }
     }
 

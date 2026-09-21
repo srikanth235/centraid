@@ -67,6 +67,10 @@ pub mod serve;
 pub mod service;
 pub mod sql;
 pub mod state;
+/// THE SWEEPS HAVE A SCHEDULE (#1029 W15-4). `purge` and `scrub` are
+/// `gateway-core`'s rules and had no caller but a CLI verb; this is the clock
+/// and the loop that run them.
+pub mod sweeps;
 pub mod tenancy;
 
 pub use config::Config;

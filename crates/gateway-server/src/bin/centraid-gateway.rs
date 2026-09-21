@@ -27,7 +27,7 @@ use centraid_gateway_server::bytes::fs::FilesystemBytes;
 use centraid_gateway_server::config::{Config, ListenerConfig, StoreConfig, TlsConfig};
 use centraid_gateway_server::http::Server;
 use centraid_gateway_server::service::{DEFAULT_LABEL, Platform, UnitSpec};
-use centraid_gateway_server::{clock, serve, service, state, tenancy};
+use centraid_gateway_server::{clock, serve, service, state, sweeps, tenancy};
 use centraid_identity::ticket;
 use clap::{Parser, Subcommand};
 
@@ -374,19 +374,38 @@ async fn run(config: Config) -> anyhow::Result<()> {
             let store = state::SqliteState::open(&config.state_path()).map_err(store_error)?;
             print_pairing(&endpoint, &store, &config)?;
             tracing::info!(endpoint = %endpoint.id(), "the gateway is up");
-            serve::serve_iroh(endpoint, serve::shared(server)).await
+            let shared = serve::shared(server);
+            sweep(&shared, config.sweeps);
+            serve::serve_iroh(endpoint, shared).await
         }
         // The self-hoster who has a domain. `acme.rs` is not deleted.
         ListenerConfig::Tcp => {
             let bound = serve::bind(&config.bind).await?;
             tracing::info!(address = %bound.address, origin = %config.origin, "the gateway is up");
             let shared = serve::shared(server);
+            sweep(&shared, config.sweeps);
             match config.tls {
                 TlsConfig::Terminated => serve::serve_plain(bound, shared).await,
                 TlsConfig::Acme { .. } => serve::serve_acme(bound, shared, &config).await,
             }
         }
     }
+}
+
+/// **THE SWEEPS, SPAWNED BESIDE THE LISTENER** (#1029 W15-4).
+///
+/// `purge` and `scrub` are `gateway-core`'s rules and had no caller but the
+/// `scrub` CLI verb, so a tombstone past its grace period stayed on the disk
+/// forever. They run on a timer now; `centraid_gateway_server::sweeps` has the
+/// two cadences and why they differ.
+///
+/// It is spawned rather than awaited because it never returns: serving is what
+/// this process is for, and the sweeps ride beside it. A sweep that faults logs
+/// and the loop carries on — a laptop whose disk is failing must still answer a
+/// phone that is trying to back up to it.
+fn sweep(shared: &centraid_gateway_server::http::Shared, schedule: sweeps::Schedule) {
+    let shared = shared.clone();
+    tokio::spawn(async move { sweeps::run(shared, schedule).await });
 }
 
 /// WHAT A MEMBER SEES WHEN THE LAPTOP STARTS.
