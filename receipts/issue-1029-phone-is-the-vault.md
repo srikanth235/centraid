@@ -2897,3 +2897,192 @@ the run that follows.
 | `bun run check:push:static` | 4/4 gates passed in 4.3s |
 | `node .governance/law/run.mjs --brief-digest 2612c611d7e6` | 10 rules, **no findings**. The law's own digest now reads `4cf9a5a8690a` against the brief's `2612c611d7e6`; `git diff --stat 1ee293d2..HEAD -- .governance/ CONSTITUTION.md tests/` is empty, so the drift is not this lane's |
 | the binary, empty state dir, twice | `endpoint  d42a882411fa67d9552acb05c92bd7880d97c86e9d7596891d4f738bd5f1e76f` on both starts; the first also printed `invite 0e47-8956-…-4632` and a `pair` payload, the second printed the invite's hash and minted nothing |
+
+## W18 — the drain pass
+
+Branch `claude/1029-w18-drain`, base `5d4ac8a5`. Five commits, no law commit. The mobile half
+of the [scope amendment of
+2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795),
+"Superseded — Background upload": the phone drains over iroh in the foreground and inside the
+`BGProcessingTask` window iOS grants, under WorkManager on Android; there is no transfer while
+the app is suspended; force-quit stops it until next launch; this is the iCloud Backup posture
+and the copy says so.
+
+**Floor: 236 jvm tests, 0 failed** (`./gradlew -p mobile mobileJvm`, summed from
+`mobile/*/build/test-results/*/*.xml`). **At HEAD: 258 passed, 0 failed** — +25 added, −3 retired
+with their subject, each named below.
+
+**iOS does not compile in this container.** Every Swift and `iosMain` claim below is an
+inventory row with the grep that supports it. No simulator ran.
+
+| Commit | What |
+| --- | --- |
+| `631c92d8` | W18-1 — the app stops dying: `upload-pass` in `project.yml`, both handlers registered, `BackgroundIdentifierSpec` |
+| `f9c1fff7` | W18-2 — `DrainPass`, `DrainDoor`, `DrainClaim`, `DrainCopy` and their spec |
+| `7034e07f` | W18-3 — the `URLSession` seam retired, its sentences already moved |
+| `6cb90d60` | W18-4 — `PairMachine`, `RestoreMachine`, `CustodyCopy` and their spec |
+| (this one) | W18-5 — the receipt, the CHANGELOG line, `docs/mobile-offline.md` |
+
+### The file table
+
+| Path | What changed |
+| --- | --- |
+| `mobile/iosApp/project.yml` | `dev.centraid.upload-pass` added to `BGTaskSchedulerPermittedIdentifiers` — **the source the plist is generated from** |
+| `mobile/iosApp/Sources/BackgroundPasses.swift` | **new** — both handlers, `setTaskCompleted` on every path, the next window resubmitted |
+| `mobile/iosApp/Sources/CentraidApp.swift` | `init()` registers before anything submits |
+| `mobile/shared/src/commonMain/…/sync/DrainPass.kt` | **new** — the pass, the door, the claim fold, the copy |
+| `mobile/shared/src/commonMain/…/custody/PairAndRestore.kt` | **new** — the two flows and their copy |
+| `mobile/shared/src/commonMain/…/platform/BackgroundTransfers.kt` | **deleted** |
+| `mobile/shared/src/commonMain/…/platform/PlatformServices.kt` | the `backgroundTransfers` member gone, with the paragraph saying where it went |
+| `mobile/shared/src/iosMain/…/PlatformServices.ios.kt` | `IosBackgroundTransfers` and five `NSURLSession*` imports gone |
+| `mobile/shared/src/androidMain/…/PlatformServices.android.kt` | `AndroidBackgroundTransfers`, `CentraidUploadWorker` and six imports gone |
+| `mobile/shared/src/jvmMain/…/PlatformServices.jvm.kt` | `FakeBackgroundTransfers` gone |
+| `mobile/shared/src/jvmTest/…/BackgroundIdentifierSpec.kt` | **new** — the identifier guard |
+| `mobile/shared/src/jvmTest/…/BackgroundPassLawSpec.kt` | **new**, replacing `BackgroundTransferLawSpec.kt` (**deleted**) |
+| `mobile/shared/src/jvmTest/…/{DrainPassSpec,PairAndRestoreSpec}.kt` | **new** |
+| `mobile/shared/src/jvmTest/…/CustodyAndBackupClaimSpec.kt` | its two background-upload cases retired |
+| `docs/mobile-offline.md` | the provisional iOS-transfer paragraph: the transport half is settled by the amendment, the timing half is not |
+| `CHANGELOG.md` | the entry |
+
+### The identifier guard, and the defect it was written for
+
+`grep -n 'BGTaskSchedulerPermittedIdentifiers' -A3 mobile/iosApp/project.yml` on the base named
+**one** identifier; `mobile/iosApp/Resources/Info.plist` named two. The plist is **xcodegen's
+output** of `project.yml` (the file says so in its own comment), so a generated bundle declared
+one identifier while `IosBackgroundTasks.register()` submitted two — and `BGTaskScheduler` raises
+`NSInternalInconsistencyException` for an undeclared identifier, which terminates the app rather
+than failing the task. Separately, `grep -rn 'forTaskWithIdentifier' mobile/iosApp/Sources` was
+**empty**: no launch handler for either identifier, which is the same exception and the same
+termination on the first submit, and means a granted window had nothing to run.
+
+`BackgroundIdentifierSpec` reads all three files and asserts, per identifier: present in
+`project.yml`, present in `Info.plist`, plist and source declare the **same set in both
+directions**, named in a Swift source, `forTaskWithIdentifier:` present, and `setTaskCompleted`
+reachable after `expirationHandler`. **Red-first**: with the base's `project.yml` restored, 2 of
+its 6 cases fail — `every identifier the shell submits is declared in project.yml, which is the
+source` and `the generated plist and its source declare the same set, in both directions`
+(`/tmp/…/redfirst.log`, `6 tests completed, 2 failed`).
+
+### The pass's deadline, per platform
+
+| Platform | Where the deadline comes from | Budget handed to the pass |
+| --- | --- | --- |
+| foreground | the caller's; a pass is not bounded by a window it does not have | caller's choice |
+| iOS `BGAppRefreshTask` | `BackgroundPasses.refreshBudgetSeconds`, with `task.expirationHandler` as the truth | 25 s |
+| iOS `BGProcessingTask` | `BackgroundPasses.processingBudgetSeconds`, same expiration handler | 8 min |
+| Android | WorkManager's stop signal, through `SyncPass.installed` | the worker's |
+
+The expiration handler cancels the work and calls `setTaskCompleted(success: false)`: a drain
+stopped mid-object resumes next window, because the spool never loses a sealed object. **The next
+window is requested on every path, including a refusal** — `BGTaskRequest` is one-shot, and a
+handler that resubmits only on success runs once in the life of an install.
+
+**On Android and the foreground-service question.** WorkManager's own limit is ten minutes per
+worker before `onStopped`, which is the same order as the iOS processing window, so a drain of a
+full generation may not finish inside one. It does not need to: the pass is resumable by
+construction and the periodic work is already every 15 minutes. A foreground service with a
+notification buys uninterrupted minutes at the cost of a permanent notification for a backup a
+member did not ask to watch, and it is the honest shape only if a resumable drain turns out to
+make no progress across windows — which is a measurement nobody has taken. **Recommendation to
+the owner: stay on `CoroutineWorker` and revisit if the measurement says otherwise.**
+
+### The iOS inventory — **7 rows, a grep each**
+
+| # | Claim | Grep | Result |
+| --- | --- | --- | --- |
+| 1 | both identifiers are declared in the plist's source | `grep -n -A3 BGTaskSchedulerPermittedIdentifiers mobile/iosApp/project.yml` | `:112 sync-pass`, `:113 upload-pass` |
+| 2 | both are in the committed plist | `grep -n '<string>dev.centraid' mobile/iosApp/Resources/Info.plist` | `:14`, `:15` |
+| 3 | a handler is registered for each | `grep -n 'forTaskWithIdentifier' mobile/iosApp/Sources/BackgroundPasses.swift` | `:79`, in a helper called once per identifier from `register()` (`:73-76`) |
+| 4 | registration happens at launch, before any submit | `grep -n 'BackgroundPasses.register' mobile/iosApp/Sources/CentraidApp.swift` | `:43`, inside `init()` |
+| 5 | the task is completed on every path | `grep -n 'setTaskCompleted' mobile/iosApp/Sources/BackgroundPasses.swift` | `:93` (no pass installed), `:98` (finished), `:106` (expired) |
+| 6 | the next window is resubmitted | `grep -n 'resubmit\|BGTaskScheduler.shared.submit' mobile/iosApp/Sources/BackgroundPasses.swift` | `:88` (called first, before the pass), `:116`, `:132` |
+| 7 | no `URLSession` upload is left in `iosMain` | `grep -n 'NSURLSession' mobile/shared/src/iosMain/kotlin/dev/centraid/shared/platform/PlatformServices.ios.kt` | empty |
+
+What these rows prove is that the declarations, the registrations and the completion paths are
+written and are consistent across the three files. What they do not prove is that iOS accepted
+them, which needs the physical-device run `TESTING.md` already parks.
+
+### What was retired, and where its sentences went
+
+`BackgroundTransfers` (127 lines), `IosBackgroundTransfers`, `AndroidBackgroundTransfers`,
+`CentraidUploadWorker`, `FakeBackgroundTransfers` and the `PlatformServices` member. **The
+sentences moved in the commit before the deletion, not with it**:
+
+| Sentence | Was | Is |
+| --- | --- | --- |
+| force-quit | `BackgroundTransfers.FORCE_QUIT_SENTENCE` | `DrainCopy.FORCE_QUIT_SENTENCE`, **corrected** |
+| Android unmetered | `BackgroundTransfers.ANDROID_UNMETERED_SENTENCE` | `DrainCopy.ANDROID_UNMETERED_SENTENCE`, verbatim |
+| in-flight title | `IN_FLIGHT_TITLE` = "Uploading" | `DrainCopy.IN_FLIGHT_TITLE` = "Backing up" |
+| the posture | did not exist | `DrainCopy.POSTURE_SENTENCE`, the amendment's own comparison |
+
+**The correction is the important one.** The old sentence ended "Uploads keep going if iOS closes
+the app itself", which was true of a system-owned `URLSession` background session and is **false**
+of a drain that runs inside this process. A sentence that outlives its mechanism is a promise the
+product stops keeping without anyone editing it, so `DrainPassSpec` has a case asserting that
+string is gone from every sentence in `DrainCopy`.
+
+Two specs changed rather than vanishing. `BackgroundTransferLawSpec`'s four rows: the two Android
+ones survive as `BackgroundPassLawSpec` (their subject survives), the plist row's successor is the
+stronger `BackgroundIdentifierSpec`, and the file-based-upload row's subject is deleted — with a
+new third row that walks every `.kt` and `.swift` under `mobile/` and fails if the seam comes
+back. `CustodyAndBackupClaimSpec` loses its two background-upload cases: the force-quit assertion
+is re-made in `DrainPassSpec` over the new home, and the "uncooperative platform" case was about a
+seam that no longer exists.
+
+### Exit list
+
+| # | Command | Outcome |
+| --- | --- | --- |
+| 1 | `cargo xtask gate --profile mobile-jvm` | **PASS**, 165.4 s of a 420 s budget; its own check `git diff --exit-code -- design copy mobile contracts/screens` clean |
+| 2 | the identifier guard | `BackgroundIdentifierSpec`, 6 cases, **2 red on the base `project.yml`** |
+| 3 | `grep -rn 'forTaskWithIdentifier' mobile/iosApp/Sources` | `BackgroundPasses.swift:79`, in the helper `register()` calls once per identifier |
+| 4 | `grep -rn 'BackgroundTransfers\|backgroundTransfers\|NSURLSessionUploadTask' mobile --include=*.kt --include=*.swift` | **no code hit.** Six prose hits remain — five KDoc lines naming where the seam went and one assertion in `BackgroundPassLawSpec` that it stays gone. They are supersession markers, which this repository treats as state |
+| 5 | `grep -rn 'FORCE_QUIT_SENTENCE\|ANDROID_UNMETERED_SENTENCE' mobile/shared/src` | `sync/DrainPass.kt:236,245` and five assertions in `DrainPassSpec` |
+| 6 | `grep -rn 'Drain\|BackupStatus' mobile/shared/src/commonMain` | `sync/DrainPass.kt` and `custody/PairAndRestore.kt` (its doc naming the door shape), nowhere else |
+| 7 | `./gradlew -p mobile mobileJvm --no-daemon` | **BUILD SUCCESSFUL**, 258 tests, 0 failed (floor 236). `contracts/screens` drift: none — no screen proto was touched |
+| 8 | `bun install --frozen-lockfile && bun run check:push:static` | **4/4 gates passed in 5.8 s** |
+| 9 | `node .governance/law/run.mjs --brief-digest 4cf9a5a8690a` | **10 rules, no findings**; no drift line — the law is at the brief's digest |
+| 10 | the iOS inventory | 7 rows above, a grep each |
+
+### Finds outside this lane's slice
+
+1. **The plist/`project.yml` split is a trap with no guard anywhere else.** `Info.plist` is a
+   generated file that is also committed — the same two-sources-of-truth shape `project.yml`'s own
+   header says the repository rejected for `.xcodeproj` — and the only thing that had ever compared
+   them was a spec that read the plist alone, which is the half that is *not* the source. Every
+   other generated-and-committed file in `mobile/iosApp/Resources/` is exposed the same way.
+   `BackgroundIdentifierSpec` closes it for this one key only.
+2. **`BackgroundTasks.register()` submits two task requests and reports one verdict**, and its
+   "both or neither" comment describes a `&&` that short-circuits: a refused refresh means the
+   processing request is never submitted at all, which is not "neither", it is "neither, and the
+   second was never asked". Left as found — it is `iosMain` and its behaviour is unchanged by this
+   lane — but the comment is wrong about its own code.
+3. **`docs/mobile-offline.md`'s per-state promise table still names `BackgroundTasks.window(wake)`**
+   (lines 157, 211), which `PlatformServices.kt` deleted with the seat plane; its own comment at
+   `:93-102` says so. The table describes a scheduler that is gone. Not this lane's to rewrite —
+   it is the whole section, and the drain replaces only part of it.
+
+### Falsification
+
+The riskiest claim here is **"the app stops dying"**, because it is a claim about a runtime this
+container cannot run, made by a test that reads text. The throwaway check was to ask whether the
+guard would have caught the defect *as it actually was*, rather than as I had described it: I
+restored the base `project.yml` and ran the spec, and it went red at two named cases, one of them
+the both-directions comparison that no previous test asked. The old
+`BackgroundTransferLawSpec` row was **green** on that same tree, because it compared the Kotlin
+companion against the plist and the plist was the file that was right. That is the whole finding:
+a guard pointed at the generated file passes while the source is wrong.
+
+What would falsify the second claim — **"a granted window now has something to run"** — is not a
+grep: it is a member's phone. The registration exists, names both identifiers, and completes the
+task on three paths; whether iOS ever grants the window, and whether the drain fits inside it, are
+the two things only the physical-device run can answer, and nothing here claims them.
+
+**The pass has no core behind it yet, and that is stated rather than implied.** `DrainDoor`,
+`PairDoor` and `RestoreDoor` are seams onto W15's request kinds, which had not landed in
+`envelope.proto` while this lane ran, so there is nothing to encode and no shell trigger is wired
+to the pass. Everything that does not depend on the wire — the pass's refusal of a concurrent run,
+its rescheduling, the claim fold, every sentence, both flows' state machines — is tested on the
+JVM. **Hand-off: when `Drain`, `Pair`, `Restore` and `BackupStatus` exist, the remaining work is
+three adapters over `CentraidCore.call`, `BackgroundPasses.pass = …` in `ShellModel`,
+`SyncPass.install { … }` on Android, and a foreground trigger on becoming active.**
