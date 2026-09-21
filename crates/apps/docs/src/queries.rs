@@ -906,10 +906,7 @@ pub fn load_drive(
 /// the filter that drops an untagged hit is not what excludes it — the index is
 /// (`search.ts:5`). A port that re-derived the exclusion from `deleted_at`
 /// would drop a document the index was right to return.
-pub fn load_search(
-    door: &dyn PageDoor,
-    hits: &[Row],
-) -> KitResult<(SearchData, Option<Denial>)> {
+pub fn load_search(door: &dyn PageDoor, hits: &[Row]) -> KitResult<(SearchData, Option<Denial>)> {
     if hits.is_empty() {
         return Ok((SearchData::default(), None));
     }
@@ -1239,7 +1236,6 @@ mod tests {
         assert_eq!(DriveInput { limit: Some(500) }.window(), 500);
         assert_eq!(DriveInput { limit: Some(9_000) }.window(), DRIVE_MAX);
     }
-
 
     /// A tag from another scheme is not a label. Printing one would put
     /// "Leases" and "Starred" in the chip rail.

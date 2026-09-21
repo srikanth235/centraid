@@ -33,13 +33,13 @@ use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::reads::{PageDoor, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 
+use crate::Denial;
 use crate::queries::{
     PARTY_PAIR_BOUND, ROSTER_FAN_OUT, ROSTER_MAX, ROSTER_MIN, Reminder, TRASH_ROWS, Taxonomy,
     UNKNOWN_NAME, Walked, fold_party_tags, fold_reminders, important_dates_statement,
-    names_by_party, parties_statement, party_tags_statement,
-    read_taxonomy, roster_profiles_statement, trash_profiles_statement, walk, walked,
+    names_by_party, parties_statement, party_tags_statement, read_taxonomy,
+    roster_profiles_statement, trash_profiles_statement, walk, walked,
 };
-use crate::Denial;
 
 /// What the roster was asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -65,7 +65,6 @@ impl PeopleInput {
             .clamp(ROSTER_MIN, ROSTER_MAX)
     }
 }
-
 
 /// One roster row.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -25,7 +25,6 @@
 
 use crate::error::{Result, VaultError};
 
-
 /// Compare two strings by UTF-16 CODE UNIT, as JavaScript's `<` does.
 #[must_use]
 pub fn compare_utf16(left: &str, right: &str) -> std::cmp::Ordering {

@@ -47,8 +47,6 @@ use centraid_apps_kit::row::Row;
 use centraid_apps_kit::testdoor::TestDoor;
 use serde_json::{Value, json};
 
-/// The instant the generator stamped the whole run at.
-
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -175,7 +173,7 @@ fn without_sharing(value: &mut Value) -> usize {
             // document here any more, so a row carrying one is a row the port
             // is right not to answer.
             let before = items.len();
-            items.retain(|item| !item.get("shared_from").is_some_and(|from| !from.is_null()));
+            items.retain(|item| item.get("shared_from").is_none_or(|from| from.is_null()));
             removed += before - items.len();
             for item in items {
                 removed += without_sharing(item);
@@ -485,8 +483,7 @@ fn the_activity_rail_the_gateways_door_refuses() {
 fn the_corpus_exercises_the_folds_it_is_here_to_compare() {
     let connection = fixture_vault();
     let door = TestDoor::new(&connection);
-    let (data, denial) =
-        load_drive(&door, DriveInput::default()).expect("the drive reads");
+    let (data, denial) = load_drive(&door, DriveInput::default()).expect("the drive reads");
     assert!(denial.is_none());
 
     // A NESTED FOLDER, which is what tells a working chain from a chain of
@@ -535,4 +532,3 @@ fn the_instant_lowering_matches_date_parse() {
     );
     assert_eq!(centraid_vault_clock_parse("not an instant"), None);
 }
-

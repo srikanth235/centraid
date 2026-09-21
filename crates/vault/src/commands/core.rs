@@ -3890,13 +3890,7 @@ pub fn fold_party(
     fold_people_profile(connection, survivor, merged, now)?;
     for reference in merge_party_sweep(connection)? {
         for key_values in rows_naming(connection, &reference, merged)? {
-            repoint_row(
-                connection,
-                &reference,
-                &key_values,
-                survivor,
-                &mut tally,
-            )?;
+            repoint_row(connection, &reference, &key_values, survivor, &mut tally)?;
         }
     }
     connection.execute("DELETE FROM core_party WHERE party_id = ?1", [merged])?;

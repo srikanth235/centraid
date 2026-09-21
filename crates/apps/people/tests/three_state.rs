@@ -35,7 +35,6 @@ use centraid_apps_people::person::load_person;
 use centraid_apps_people::roster::{PeopleInput, load_people};
 use centraid_apps_people::{Denial, ReadState};
 
-
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")

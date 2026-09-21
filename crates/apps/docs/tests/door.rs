@@ -419,9 +419,8 @@ fn a_pdf_rides_in_through_stage_and_out_through_a_url() {
     let content_id = added["content_id"].as_str().expect("an id").to_owned();
 
     // OUT: `blobUrl`, with the document's own reading of the bytes.
-    let (data, _) = drive.read(|read_door| {
-        load_drive(read_door, DriveInput::default()).expect("the drive reads")
-    });
+    let (data, _) = drive
+        .read(|read_door| load_drive(read_door, DriveInput::default()).expect("the drive reads"));
     let row = &data.documents[0];
     assert_eq!(row.media_type.as_deref(), Some("application/pdf"));
     let served = door

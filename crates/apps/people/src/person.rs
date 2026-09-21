@@ -71,9 +71,9 @@ use crate::queries::{
     Taxonomy, UNKNOWN_NAME, Walked, activities_statement, annotations_statement,
     duplicate_channels_statement, fold_party_tags, history_statement, important_dates_statement,
     incoming_links_statement, names_by_party, obligations_statement, outgoing_links_statement,
-    parties_statement, person_channels_statement, person_notes_statement,
-    person_profile_statement, person_tags_statement, read_taxonomy, reminder_on, tasks_statement,
-    vault_statement, walk, walked,
+    parties_statement, person_channels_statement, person_notes_statement, person_profile_statement,
+    person_tags_statement, read_taxonomy, reminder_on, tasks_statement, vault_statement, walk,
+    walked,
 };
 use crate::{Denial, ReadState};
 

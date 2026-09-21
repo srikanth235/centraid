@@ -3267,16 +3267,17 @@ pub fn notes_revision_cycle(
                    ORDER BY name",
             )
             .map_err(door)?;
-        let rows = statement
+        statement
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(door)?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(door)?;
-        rows
+            .map_err(door)?
     };
     for sql in &guards {
         let name = trigger_name(sql).ok_or_else(|| {
-            KitError::Door(format!("a trigger on core_entity_revision has no name: {sql}"))
+            KitError::Door(format!(
+                "a trigger on core_entity_revision has no name: {sql}"
+            ))
         })?;
         connection
             .execute_batch(&format!("DROP TRIGGER {name}"))
@@ -4203,7 +4204,6 @@ fn seed_year3_people(
         annotation_index += 1;
         counts.annotations += 1;
     }
-
 
     // --- the obligations. TALLY'S TABLE, and the only cross-app read in the
     // tree: an empty one would make the person sheet's debts rail unmeasurable.

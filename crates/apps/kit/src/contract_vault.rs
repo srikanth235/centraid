@@ -109,7 +109,10 @@ fn check_mapping(connection: &Connection, mapping: &FrozenRowMapping<'_>) -> Kit
         }
     }
     for (table, column) in mapping.columns_gone {
-        if columns_of(connection, table)?.iter().any(|have| have == column) {
+        if columns_of(connection, table)?
+            .iter()
+            .any(|have| have == column)
+        {
             return Err(KitError::Door(format!(
                 "the mapping says `{table}.{column}` is gone and the table still has it"
             )));

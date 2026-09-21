@@ -50,6 +50,7 @@ use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::reads::{PageDoor, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 
+use crate::Denial;
 use crate::dates::{CivilDate, days_since_contact, days_until_month_day, is_overdue};
 use crate::queries::{
     ACTIVITY_TARGET_TYPE, DASHBOARD_WINDOW, PARTY_PAIR_BOUND, PersonCard, RECENT_ACTIVITY_ROWS,
@@ -58,7 +59,6 @@ use crate::queries::{
     important_dates_statement, names_by_party, parties_statement, party_tags_statement,
     read_taxonomy, reminder_on, walked,
 };
-use crate::Denial;
 
 /// One row of the Upcoming rail: a person's card plus the date itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -382,4 +382,3 @@ pub fn load_dashboard(
 
 /// The label a touch shows when its kind concept resolves to none.
 pub const DEFAULT_TOUCH_LABEL: &str = "Touch";
-

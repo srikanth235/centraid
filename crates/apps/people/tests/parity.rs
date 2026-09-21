@@ -77,6 +77,7 @@ use std::path::{Path, PathBuf};
 
 use centraid_apps_kit::contract_vault::{FrozenRowMapping, open_contract_vault_without};
 use centraid_apps_kit::testdoor::TestDoor;
+use centraid_apps_people::Denial;
 use centraid_apps_people::dashboard::{DashboardData, load_dashboard};
 use centraid_apps_people::dates::CivilDate;
 use centraid_apps_people::journal::{JournalData, JournalEntry, load_journal};
@@ -86,7 +87,6 @@ use centraid_apps_people::roster::{
     PeopleData, PeopleInput, RosterRow, SearchData, SearchHit, TrashData, load_people, load_search,
     load_trash,
 };
-use centraid_apps_people::Denial;
 use serde_json::{Value, json};
 
 /// The instant the generator stamped the whole run at, and the civil date the
@@ -539,7 +539,13 @@ fn without_sharing(value: &mut Value) -> usize {
     let mut removed = 0;
     match value {
         Value::Object(map) => {
-            for key in ["linked", "vault_count", "links_available", "to_link", "vaults"] {
+            for key in [
+                "linked",
+                "vault_count",
+                "links_available",
+                "to_link",
+                "vaults",
+            ] {
                 if map.remove(key).is_some() {
                     removed += 1;
                 }

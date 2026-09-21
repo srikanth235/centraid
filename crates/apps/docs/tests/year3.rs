@@ -144,8 +144,7 @@ fn the_shrunken_axis_goes_through_the_same_statements() {
     assert_eq!(counts.revisions, shape.documents + shape.extra_versions);
 
     let door = TestDoor::new(&connection);
-    let (data, denial) =
-        load_drive(&door, DriveInput::default()).expect("it reads");
+    let (data, denial) = load_drive(&door, DriveInput::default()).expect("it reads");
     assert!(denial.is_none());
     // THE WINDOW IS THE DECLARED DEFAULT, and 120 documents fit inside it.
     assert_eq!(data.window, 200);
@@ -182,13 +181,11 @@ fn a_window_smaller_than_the_drive_reports_truncated_from_its_cursor() {
     year3_docs(&connection, shape, 679_003).expect("the axis seeds");
     let door = TestDoor::new(&connection);
 
-    let (whole, _) = load_drive(&door, DriveInput::default())
-        .expect("the drive reads");
+    let (whole, _) = load_drive(&door, DriveInput::default()).expect("the drive reads");
     assert_eq!(whole.documents.len(), 80);
     assert!(!whole.truncated, "80 documents fit in a 200-row window");
 
-    let (short, _) = load_drive(&door, DriveInput { limit: Some(20) })
-    .expect("the drive reads");
+    let (short, _) = load_drive(&door, DriveInput { limit: Some(20) }).expect("the drive reads");
     assert_eq!(short.window, 20);
     assert!(short.truncated, "there are sixty more");
     // AT MOST the window: the filing page is what bounds the row count, and two
@@ -223,8 +220,7 @@ fn the_generator_writes_the_same_rows_twice() {
             centraid_apps_docs::queries::DOC_PAIR_BOUND,
         )
         .expect("the taxonomy reads");
-        let (data, _) = load_drive(&door, DriveInput::default())
-            .expect("the drive reads");
+        let (data, _) = load_drive(&door, DriveInput::default()).expect("the drive reads");
         format!(
             "{}|{}|{:?}",
             rows.len(),
@@ -264,8 +260,8 @@ fn the_year3_docs_axis_measures_the_drives_own_ceilings() {
 
     let door = TestDoor::new(&connection);
     let at = std::time::Instant::now();
-    let (data, denial) = load_drive(&door, DriveInput { limit: Some(2_000) })
-    .expect("the drive reads");
+    let (data, denial) =
+        load_drive(&door, DriveInput { limit: Some(2_000) }).expect("the drive reads");
     let read = at.elapsed();
     assert!(denial.is_none());
     assert!(data.truncated, "8,000 documents is four windows deep");
