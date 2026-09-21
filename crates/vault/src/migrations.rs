@@ -78,6 +78,19 @@ pub const BACKUP_INDEX_SQL: &str =
 pub const BLOB_CUSTODY_SQL: &str =
     include_str!("../../../contracts/migrations/004_blob_custody.sql");
 
+/// Rung five: the cut — the planes v1 does not have leave the schema (#1029).
+///
+/// **WHY A NEW VAULT FOUNDS AND THEN DROPS.** Rung one is generated from
+/// `contracts/golden/issue-1020/vault.db.gz`, a frozen v0 vault with no
+/// generator; dropping a table there means hand-editing a frozen corpus, which
+/// is the "green by editing the fixture" this repository forbids. So the corpus
+/// keeps describing v0 and the deletions are a rung, like every other schema
+/// change (the owner's ruling of 2026-09-21). The cost is two `sqlite_master`
+/// rows per table in one `Vault::create`; squashing the ladder before the first
+/// release would remove even that and is an owner question, not a cleanup —
+/// a squash is a decision about the migration contract.
+pub const THE_CUT_SQL: &str = include_str!("../../../contracts/migrations/005_the_cut.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -103,6 +116,11 @@ pub const LADDER: &[Migration] = &[
         version: 4,
         name: "blob-custody",
         sql: BLOB_CUSTODY_SQL,
+    },
+    Migration {
+        version: 5,
+        name: "the-cut",
+        sql: THE_CUT_SQL,
     },
 ];
 

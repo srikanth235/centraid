@@ -175,35 +175,15 @@ CREATE INDEX idx_attachment_content ON core_attachment(content_id);
 -- index idx_attachment_target on core_attachment
 CREATE INDEX idx_attachment_target ON core_attachment(target_type, target_id);
 
--- index idx_attachments_hash on attachments
-CREATE INDEX idx_attachments_hash
-  ON attachments(hash);
-
--- index idx_attachments_item on attachments
-CREATE INDEX idx_attachments_item
-  ON attachments(item_id);
-
 -- index idx_attendee_party on schedule_attendee
 CREATE INDEX idx_attendee_party ON schedule_attendee(party_id);
-
--- index idx_automation_trigger_cursor_updated on automation_trigger_cursor
-CREATE INDEX idx_automation_trigger_cursor_updated
-  ON automation_trigger_cursor(updated_at);
 
 -- index idx_blob_access_lru on blob_access
 CREATE INDEX idx_blob_access_lru ON blob_access(last_access_at);
 
--- index idx_blob_device_content_key_device on blob_device_content_key
-CREATE INDEX idx_blob_device_content_key_device
-  ON blob_device_content_key(device_id);
-
 -- index idx_blob_ingress_expiry on blob_ingress_session
 CREATE INDEX idx_blob_ingress_expiry
   ON blob_ingress_session(state, expires_at);
-
--- index idx_blob_outbox_retry on blob_outbox
-CREATE INDEX idx_blob_outbox_retry
-  ON blob_outbox(state, next_retry_at, created_at);
 
 -- index idx_blob_staging_derivative_slot on blob_staging
 CREATE UNIQUE INDEX idx_blob_staging_derivative_slot
@@ -260,42 +240,6 @@ CREATE INDEX idx_content_item_origin_device ON core_content_item(origin_device_i
 -- index idx_content_representation_content on core_content_representation
 CREATE INDEX idx_content_representation_content
   ON core_content_representation(content_id);
-
--- index idx_conversation_archive_conv on conversation_archive
-CREATE INDEX idx_conversation_archive_conv
-  ON conversation_archive(conversation_id, seq_from);
-
--- index idx_conversation_archive_sha on conversation_archive
-CREATE INDEX idx_conversation_archive_sha
-  ON conversation_archive(segment_hash);
-
--- index idx_conversation_archive_unpruned on conversation_archive
-CREATE INDEX idx_conversation_archive_unpruned
-  ON conversation_archive(pruned_at) WHERE pruned_at IS NULL;
-
--- index idx_conversation_digest_automation on conversation_digest
-CREATE INDEX idx_conversation_digest_automation
-  ON conversation_digest(automation_ref);
-
--- index idx_conversation_harness_latest on conversation_harness_sessions
-CREATE INDEX idx_conversation_harness_latest
-  ON conversation_harness_sessions(conversation_id, harness_kind, status, last_used_at DESC);
-
--- index idx_conversation_provider_consent_active on conversation_provider_consent
-CREATE INDEX idx_conversation_provider_consent_active
-  ON conversation_provider_consent(conversation_id, harness_kind, subsystem, revoked_at);
-
--- index idx_conversations_app on conversations
-CREATE INDEX idx_conversations_app
-  ON conversations(app_id, updated_at DESC);
-
--- index idx_conversations_automation on conversations
-CREATE INDEX idx_conversations_automation
-  ON conversations(automation_id);
-
--- index idx_conversations_user_updated on conversations
-CREATE INDEX idx_conversations_user_updated
-  ON conversations(user_id, pinned DESC, updated_at DESC);
 
 -- index idx_device_owner_party on access_device
 CREATE INDEX idx_device_owner_party ON access_device(owner_party_id);
@@ -371,32 +315,11 @@ CREATE INDEX idx_face_region_confirmed_by_party ON media_face_region(confirmed_b
 -- index idx_face_region_party on media_face_region
 CREATE INDEX idx_face_region_party ON media_face_region(party_id);
 
--- index idx_harness_health_breaker on harness_health
-CREATE INDEX idx_harness_health_breaker
-  ON harness_health(workspace_context, harness_kind, breaker_until);
-
 -- index idx_important_date_party on people_important_date
 CREATE INDEX idx_important_date_party ON people_important_date(party_id);
 
 -- index idx_invocation_check_invocation on agent_invocation_check
 CREATE INDEX idx_invocation_check_invocation ON agent_invocation_check(invocation_id);
-
--- index idx_items_by_model on items
-CREATE INDEX idx_items_by_model
-  ON items(model, started_at DESC);
-
--- index idx_items_by_turn on items
-CREATE INDEX idx_items_by_turn
-  ON items(turn_id, ordinal);
-
--- index idx_items_run_rollup on items
-CREATE INDEX idx_items_run_rollup
-  ON items(turn_id, model, harness, effort, input_tokens, output_tokens)
-  WHERE kind IN ('step','delegate');
-
--- index idx_items_turn_call on items
-CREATE UNIQUE INDEX idx_items_turn_call
-  ON items(turn_id, call_id) WHERE call_id IS NOT NULL;
 
 -- index idx_link_from on core_link
 CREATE INDEX idx_link_from ON core_link(from_type, from_id);
@@ -466,26 +389,6 @@ CREATE INDEX idx_note_body_content ON knowledge_note(body_content_id);
 -- index idx_note_current_revision on knowledge_note
 CREATE INDEX idx_note_current_revision ON knowledge_note(current_revision_id);
 
--- index idx_outbox_item_authority on outbox_item
-CREATE INDEX idx_outbox_item_authority
-  ON outbox_item(authority_id);
-
--- index idx_outbox_item_connection on outbox_item
-CREATE INDEX idx_outbox_item_connection ON outbox_item(connection_id);
-
--- index idx_outbox_item_published_message on outbox_item
-CREATE INDEX idx_outbox_item_published_message ON outbox_item(published_message_id);
-
--- index idx_outbox_item_recipient_party on outbox_item
-CREATE INDEX idx_outbox_item_recipient_party ON outbox_item(recipient_party_id);
-
--- index idx_outbox_item_status on outbox_item
-CREATE INDEX idx_outbox_item_status ON outbox_item(status, staged_at);
-
--- index idx_outbox_item_target on outbox_item
-CREATE INDEX idx_outbox_item_target
-  ON outbox_item(target_type, target_id);
-
 -- index idx_party_avatar_content on core_party
 CREATE INDEX idx_party_avatar_content ON core_party(avatar_content_id);
 
@@ -514,46 +417,8 @@ CREATE INDEX idx_receipt_invocation ON access_receipt(invocation_id);
 -- index idx_receipt_seq on access_receipt
 CREATE UNIQUE INDEX idx_receipt_seq ON access_receipt(seq) WHERE seq IS NOT NULL;
 
--- index idx_replica_intent_device_status on replica_intent_outcome
-CREATE INDEX idx_replica_intent_device_status
-  ON replica_intent_outcome(device_id, status, updated_at);
-
--- index idx_replica_invocation_commit_intent on replica_invocation_commit
-CREATE INDEX idx_replica_invocation_commit_intent
-  ON replica_invocation_commit(intent_id)
-  WHERE intent_id IS NOT NULL;
-
--- index idx_replica_log_epoch_commit on replica_log
-CREATE INDEX idx_replica_log_epoch_commit
-  ON replica_log(epoch, commit_seq, seq);
-
--- index idx_replica_log_epoch_seq on replica_log
-CREATE INDEX idx_replica_log_epoch_seq
-  ON replica_log(epoch, seq);
-
--- index idx_replica_log_row on replica_log
-CREATE INDEX idx_replica_log_row
-  ON replica_log(epoch, "table", pk_json, seq DESC);
-
--- index idx_replica_parked_grant on replica_parked_payload
-CREATE INDEX idx_replica_parked_grant
-  ON replica_parked_payload(grant_id, parked_at);
-
 -- index idx_seed_row_app on access_seed_row
 CREATE INDEX idx_seed_row_app ON access_seed_row(app_id);
-
--- index idx_sync_connection_run_connection on sync_connection_run
-CREATE INDEX idx_sync_connection_run_connection ON sync_connection_run(connection_id);
-
--- index idx_sync_external_entity on sync_external_entity
-CREATE INDEX idx_sync_external_entity
-  ON sync_external_entity(target_type, target_id);
-
--- index idx_sync_import_batch_connection on sync_import_batch
-CREATE INDEX idx_sync_import_batch_connection ON sync_import_batch(connection_id);
-
--- index idx_sync_import_row_batch on sync_import_row
-CREATE INDEX idx_sync_import_row_batch ON sync_import_row(batch_id, seq);
 
 -- index idx_tag_concept on core_tag
 CREATE INDEX idx_tag_concept ON core_tag(concept_id);
@@ -588,30 +453,6 @@ CREATE INDEX idx_transaction_category_concept ON core_transaction(category_conce
 -- index idx_transaction_counterparty_party on core_transaction
 CREATE INDEX idx_transaction_counterparty_party ON core_transaction(counterparty_party_id);
 
--- index idx_trigger_ingress_expiry on trigger_ingress
-CREATE INDEX idx_trigger_ingress_expiry
-  ON trigger_ingress(expires_at);
-
--- index idx_trigger_ingress_source_position on trigger_ingress
-CREATE INDEX idx_trigger_ingress_source_position
-  ON trigger_ingress(source_key, id);
-
--- index idx_turns_conversation on turns
-CREATE INDEX idx_turns_conversation
-  ON turns(conversation_id, seq);
-
--- index idx_turns_idempotency on turns
-CREATE INDEX idx_turns_idempotency
-  ON turns(conversation_id, idempotency_key);
-
--- index idx_turns_parent on turns
-CREATE INDEX idx_turns_parent
-  ON turns(parent_turn_id);
-
--- index idx_turns_started on turns
-CREATE INDEX idx_turns_started
-  ON turns(started_at DESC);
-
 -- index idx_vault_self_party on core_vault
 CREATE INDEX idx_vault_self_party ON core_vault(self_party_id);
 
@@ -636,9 +477,6 @@ CREATE INDEX locker_item_alias_item_idx ON locker_item_alias(item_id);
 
 -- index locker_item_archived_idx on locker_item
 CREATE INDEX locker_item_archived_idx ON locker_item(archived_at);
-
--- index locker_item_connection_idx on locker_item
-CREATE INDEX locker_item_connection_idx ON locker_item(connection_id);
 
 -- index locker_item_field_item_idx on locker_item_field
 CREATE INDEX locker_item_field_item_idx
@@ -764,40 +602,6 @@ CREATE INDEX schedule_task_section_idx
 CREATE INDEX schedule_task_series_idx
   ON schedule_task(series_id, due_at) WHERE series_id IS NOT NULL;
 
--- index share_authority_granted_by on share_authority
-CREATE INDEX share_authority_granted_by
-  ON share_authority(granted_by);
-
--- index share_authority_live_answer on share_authority
-CREATE UNIQUE INDEX share_authority_live_answer
-  ON share_authority(principal_kind, principal_id, subject_type, subject_id,
-                     verb)
-  WHERE revoked_at IS NULL;
-
--- index share_authority_principal on share_authority
-CREATE INDEX share_authority_principal
-  ON share_authority(principal_kind, principal_id);
-
--- index share_authority_request_open on share_authority_request
-CREATE UNIQUE INDEX share_authority_request_open
-  ON share_authority_request(principal_id) WHERE decided_at IS NULL;
-
--- index share_authority_subject on share_authority
-CREATE INDEX share_authority_subject
-  ON share_authority(subject_type, subject_id) WHERE revoked_at IS NULL;
-
--- index share_party_vault_binding_live_party on share_party_vault_binding
-CREATE UNIQUE INDEX share_party_vault_binding_live_party
-  ON share_party_vault_binding(party_id) WHERE revoked_at IS NULL;
-
--- index share_subscription_lineage_target on share_subscription_lineage
-CREATE INDEX share_subscription_lineage_target
-  ON share_subscription_lineage(target_type, target_id);
-
--- index share_subscription_subscribed_page_idx on share_subscription
-CREATE INDEX share_subscription_subscribed_page_idx
-  ON share_subscription(subscribed_at, authority_id);
-
 -- index social_contact_channel_duplicate_idx on social_contact_channel
 CREATE INDEX social_contact_channel_duplicate_idx
   ON social_contact_channel(kind, normalized_value, party_id);
@@ -908,22 +712,6 @@ CREATE INDEX tally_settlement_to_party_idx ON tally_settlement(to_party);
 
 -- index tally_settlement_txn_idx on tally_settlement
 CREATE INDEX tally_settlement_txn_idx ON tally_settlement(txn_id);
-
--- table access_agent on access_agent
-CREATE TABLE access_agent (
-  agent_id       TEXT PRIMARY KEY,
-  party_id       TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  model_ref       TEXT NOT NULL,
-  version         TEXT NOT NULL,
-  enrolled_at     TEXT NOT NULL,
-  status          TEXT NOT NULL CHECK (status IN ('active','paused','revoked'))
-) STRICT;
-
--- table access_agent_secret on access_agent_secret
-CREATE TABLE access_agent_secret (
-  agent_id       TEXT PRIMARY KEY REFERENCES access_agent(agent_id) ON DELETE CASCADE,
-  enrollment_key TEXT NOT NULL UNIQUE
-) STRICT;
 
 -- table access_app on access_app
 CREATE TABLE access_app (
@@ -1116,21 +904,6 @@ CREATE TABLE agent_invocation_check (
   checked_at    TEXT NOT NULL
 ) STRICT;
 
--- table attachments on attachments
-CREATE TABLE attachments (
-  id         TEXT PRIMARY KEY,
-  item_id    TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-  hash       TEXT NOT NULL,
-  mime       TEXT NOT NULL,
-  size_bytes INTEGER NOT NULL,
-  source     TEXT,
-  filename   TEXT,
-  -- Harness-created files stay in their workspace. The hash verifies the
-  -- referenced bytes; no duplicate is copied into the blob CAS.
-  workspace_path TEXT,
-  created_at INTEGER NOT NULL
-) STRICT;
-
 -- table audit_archive_manifest on audit_archive_manifest
 CREATE TABLE audit_archive_manifest (
   manifest_id      TEXT PRIMARY KEY,
@@ -1155,30 +928,6 @@ CREATE TABLE audit_archive_manifest (
 -- table audit_archive_pass on audit_archive_pass
 CREATE TABLE audit_archive_pass (
   active INTEGER PRIMARY KEY CHECK (active = 1)
-) STRICT;
-
--- table automation_state on automation_state
-CREATE TABLE automation_state (
-  automation_id TEXT NOT NULL,
-  key           TEXT NOT NULL,
-  value_json    TEXT,
-  updated_at    INTEGER NOT NULL,
-  PRIMARY KEY (automation_id, key)
-) STRICT;
-
--- table automation_trigger_cursor on automation_trigger_cursor
-CREATE TABLE automation_trigger_cursor (
-  automation_id TEXT NOT NULL,
-  trigger_index INTEGER NOT NULL,
-  source_kind   TEXT NOT NULL,
-  position_json TEXT,
-  pending_json  TEXT,
-  window_from  INTEGER,
-  window_to    INTEGER,
-  skipped      INTEGER NOT NULL DEFAULT 0,
-  gap_reason   TEXT,
-  updated_at   INTEGER NOT NULL, dead_letter_json TEXT,
-  PRIMARY KEY (automation_id, trigger_index)
 ) STRICT;
 
 -- table backup_base_range on backup_base_range
@@ -1254,26 +1003,6 @@ CREATE TABLE blob_custody_state (
   checked_at    TEXT NOT NULL
 ) STRICT;
 
--- table blob_device_content_key on blob_device_content_key
-CREATE TABLE blob_device_content_key (
-  content_hash       TEXT NOT NULL REFERENCES blob_content_key(content_hash) ON DELETE CASCADE,
-  device_id    TEXT NOT NULL REFERENCES access_device(device_id) ON DELETE CASCADE,
-  wrapped_key  BLOB NOT NULL,
-  wrap_nonce   BLOB NOT NULL CHECK (length(wrap_nonce) = 12),
-  device_key_epoch INTEGER NOT NULL CHECK (device_key_epoch > 0),
-  granted_at   TEXT NOT NULL,
-  PRIMARY KEY (content_hash, device_id)
-) STRICT;
-
--- table blob_device_wrap_key on blob_device_wrap_key
-CREATE TABLE blob_device_wrap_key (
-  device_id    TEXT PRIMARY KEY REFERENCES access_device(device_id) ON DELETE CASCADE,
-  key_epoch    INTEGER NOT NULL DEFAULT 1 CHECK (key_epoch > 0),
-  salt         BLOB NOT NULL CHECK (length(salt) = 32),
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-) STRICT;
-
 -- table blob_ingress_probe on blob_ingress_probe
 CREATE TABLE blob_ingress_probe (
   session_id  TEXT PRIMARY KEY REFERENCES blob_ingress_session(session_id) ON DELETE CASCADE,
@@ -1314,33 +1043,6 @@ CREATE TABLE blob_orphan (
   first_orphaned_at INTEGER NOT NULL CHECK (first_orphaned_at >= 0)
 ) STRICT;
 
--- table blob_outbox on blob_outbox
-CREATE TABLE blob_outbox (
-  content_hash          TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
-  byte_size       INTEGER NOT NULL CHECK (byte_size >= 0),
-  state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','uploading')),
-  temp_id         TEXT,
-  upload_id       TEXT,
-  parts_json      TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(parts_json)),
-  attempt_count   INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-  next_retry_at   TEXT,
-  last_error      TEXT,
-  created_at      TEXT NOT NULL,
-  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- THE CONFLICT COMPARATOR (#996, R6). Bumped by this table's
-  -- touch trigger on every update, so an intent's expected version is
-  -- compared against a COLUMN rather than against a log position.
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-, quarantined_at TEXT) STRICT;
-
--- table blob_replica on blob_replica
-CREATE TABLE blob_replica (
-  content_hash        TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
-  replicated_at TEXT NOT NULL,
-  byte_size     INTEGER NOT NULL CHECK (byte_size >= 0),
-  store         TEXT NOT NULL DEFAULT 'cas' CHECK (store IN ('cas','derived'))
-) STRICT;
-
 -- table blob_staging on blob_staging
 CREATE TABLE blob_staging (
   staging_id    TEXT PRIMARY KEY,
@@ -1363,120 +1065,6 @@ CREATE TABLE blob_staging (
   CHECK (variant IS NULL OR
     (variant IN ('thumb','preview','poster') AND inline_content IS NULL) OR
     (variant IN ('text','transcript','embedding','phash','thumbhash') AND inline_content IS NOT NULL))
-) STRICT;
-
--- table conversation_archive on conversation_archive
-CREATE TABLE conversation_archive (
-  id                     TEXT PRIMARY KEY,
-  conversation_id        TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  seq_from               INTEGER NOT NULL,
-  seq_to                 INTEGER NOT NULL,
-  from_time              INTEGER NOT NULL,
-  to_time                INTEGER NOT NULL,
-  turn_count             INTEGER NOT NULL,
-  item_count             INTEGER NOT NULL,
-  segment_hash         TEXT NOT NULL CHECK (length(segment_hash) = 64),
-  segment_bytes          INTEGER NOT NULL CHECK (segment_bytes >= 0),
-  plaintext_bytes        INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
-  attachment_hashes_json TEXT NOT NULL DEFAULT '[]',
-  pruned_at              INTEGER,
-  created_at             INTEGER NOT NULL
-) STRICT;
-
--- table conversation_digest on conversation_digest
-CREATE TABLE conversation_digest (
-  conversation_id          TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
-  kind                     TEXT NOT NULL,
-  app_id                   TEXT,
-  automation_ref           TEXT,
-  automation_name          TEXT,
-  title                    TEXT NOT NULL DEFAULT '',
-  first_started_at         INTEGER,
-  last_ended_at            INTEGER,
-  run_count                INTEGER NOT NULL DEFAULT 0,
-  ok_count                 INTEGER NOT NULL DEFAULT 0,
-  err_count                INTEGER NOT NULL DEFAULT 0,
-  retry_count              INTEGER NOT NULL DEFAULT 0,
-  total_input_tokens       INTEGER NOT NULL DEFAULT 0,
-  total_output_tokens      INTEGER NOT NULL DEFAULT 0,
-  total_cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
-  total_cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-  total_hydration_tokens   INTEGER NOT NULL DEFAULT 0,
-  total_cost_usd           REAL NOT NULL DEFAULT 0,
-  step_count               INTEGER NOT NULL DEFAULT 0,
-  tool_count               INTEGER NOT NULL DEFAULT 0,
-  models_json              TEXT NOT NULL DEFAULT '[]',
-  efforts_json             TEXT NOT NULL DEFAULT '[]',
-  updated_at               INTEGER NOT NULL
-) STRICT;
-
--- table conversation_harness_sessions on conversation_harness_sessions
-CREATE TABLE conversation_harness_sessions (
-  id                    TEXT PRIMARY KEY,
-  conversation_id       TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  harness_kind           TEXT NOT NULL,
-  acp_session_id        TEXT NOT NULL,
-  usage_snapshot_json   TEXT,
-  hydrated_through_seq  INTEGER NOT NULL DEFAULT -1,
-  status                TEXT NOT NULL DEFAULT 'warm',
-  last_used_at          INTEGER NOT NULL,
-  created_at            INTEGER NOT NULL,
-  UNIQUE (conversation_id, harness_kind, acp_session_id),
-  CHECK (status IN ('active','warm','cold','stale'))
-) STRICT;
-
--- table conversation_provider_consent on conversation_provider_consent
-CREATE TABLE conversation_provider_consent (
-  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  harness_kind     TEXT NOT NULL,
-  source          TEXT NOT NULL,
-  subsystem       TEXT NOT NULL,
-  granted_at      INTEGER NOT NULL,
-  revoked_at      INTEGER,
-  PRIMARY KEY (conversation_id, harness_kind, source, subsystem),
-  CHECK (
-    (source = 'direct' AND subsystem = '')
-    OR
-    (source = 'ladder' AND subsystem IN ('assistant','ask','builder','automations'))
-  )
-) STRICT;
-
--- table conversation_turn_locks on conversation_turn_locks
-CREATE TABLE conversation_turn_locks (
-  conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
-  lock_token      TEXT NOT NULL,
-  acquired_at     INTEGER NOT NULL
-) STRICT;
-
--- table conversation_workspace_selection on conversation_workspace_selection
-CREATE TABLE conversation_workspace_selection (
-  conversation_id             TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
-  primary_kind                TEXT NOT NULL,
-  additional_directories_json TEXT NOT NULL DEFAULT '[]',
-  updated_at                  INTEGER NOT NULL,
-  CHECK (primary_kind IN ('vault-data','app','draft'))
-) STRICT;
-
--- table conversations on conversations
-CREATE TABLE conversations (
-  id                 TEXT PRIMARY KEY,
-  kind               TEXT NOT NULL,
-  user_id            TEXT NOT NULL,
-  app_id             TEXT,
-  automation_id      TEXT,
-  title              TEXT NOT NULL DEFAULT '',
-  harness_kind       TEXT,
-  harness_session_id TEXT,
-  harness_usage_json TEXT,
-  hydration_count    INTEGER NOT NULL DEFAULT 0,
-  last_hydrated_at   INTEGER,
-  turn_count         INTEGER NOT NULL DEFAULT 0,
-  item_count         INTEGER NOT NULL DEFAULT 0,
-  pinned             INTEGER NOT NULL DEFAULT 0,
-  archived           INTEGER NOT NULL DEFAULT 0,
-  created_at         INTEGER NOT NULL,
-  updated_at         INTEGER NOT NULL,
-  CHECK (kind IN ('chat','automation','build'))
 ) STRICT;
 
 -- table core_account on core_account
@@ -2165,29 +1753,6 @@ CREATE TABLE enrich_target_failure (
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 
--- table fts_conversation on fts_conversation
-CREATE VIRTUAL TABLE fts_conversation USING fts5(
-  conversation_id UNINDEXED,
-  title,
-  body,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_conversation_config on fts_conversation_config
-CREATE TABLE 'fts_conversation_config'(k PRIMARY KEY, v) WITHOUT ROWID;
-
--- table fts_conversation_content on fts_conversation_content
-CREATE TABLE 'fts_conversation_content'(id INTEGER PRIMARY KEY, c0, c1, c2);
-
--- table fts_conversation_data on fts_conversation_data
-CREATE TABLE 'fts_conversation_data'(id INTEGER PRIMARY KEY, block BLOB);
-
--- table fts_conversation_docsize on fts_conversation_docsize
-CREATE TABLE 'fts_conversation_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
-
--- table fts_conversation_idx on fts_conversation_idx
-CREATE TABLE 'fts_conversation_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
-
 -- table fts_core_collection on fts_core_collection
 CREATE VIRTUAL TABLE fts_core_collection USING fts5(
   collection_id UNINDEXED, name,
@@ -2545,59 +2110,6 @@ CREATE TABLE 'fts_tally_expense_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
 -- table fts_tally_expense_idx on fts_tally_expense_idx
 CREATE TABLE 'fts_tally_expense_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
 
--- table harness_health on harness_health
-CREATE TABLE harness_health (
-  workspace_context    TEXT NOT NULL,
-  harness_kind          TEXT NOT NULL,
-  failure_class        TEXT NOT NULL,
-  consecutive_failures INTEGER NOT NULL DEFAULT 0,
-  breaker_until        INTEGER,
-  half_open_claimed_at INTEGER,
-  last_error           TEXT,
-  last_failure_at      INTEGER,
-  last_ok_at           INTEGER,
-  PRIMARY KEY (workspace_context, harness_kind, failure_class),
-  CHECK (failure_class IN ('spawn','auth','init','timeout','quota','wedge','exit','unknown'))
-) STRICT;
-
--- table items on items
-CREATE TABLE items (
-  id                 TEXT PRIMARY KEY,
-  turn_id            TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
-  ordinal            INTEGER NOT NULL,
-  call_id            TEXT,
-  batch_id           INTEGER,
-  kind               TEXT NOT NULL,
-  role               TEXT,
-  text               TEXT,
-  name               TEXT,
-  args_json          TEXT,
-  output_json        TEXT,
-  raw_json           TEXT,
-  child_turn_id      TEXT,
-  model              TEXT,
-  harness            TEXT,
-  -- ACP semantic thought_level confirmed for this call. NULL means the
-  -- harness did not confirm a selectable effort; never infer a default.
-  effort             TEXT,
-  input_tokens       INTEGER,
-  output_tokens      INTEGER,
-  cache_read_tokens  INTEGER,
-  cache_write_tokens INTEGER,
-  cost_usd           REAL,
-  -- Provenance for cost_usd (issue #514): 'harness' = harness/ACP reported USD;
-  -- 'estimated' = catalog (model-pricing). NULL = legacy or unpriced.
-  cost_source        TEXT,
-  app_id             TEXT,
-  ok                 INTEGER NOT NULL DEFAULT 1,
-  error              TEXT,
-  started_at         INTEGER NOT NULL,
-  ended_at           INTEGER,
-  duration_ms        INTEGER,
-  CHECK (kind IN ('message_in','step','tool','delegate')),
-  CHECK (cost_source IS NULL OR cost_source IN ('harness','estimated'))
-) STRICT;
-
 -- table knowledge_annotation on knowledge_annotation
 CREATE TABLE knowledge_annotation (
   annotation_id   TEXT PRIMARY KEY,
@@ -2677,8 +2189,6 @@ CREATE TABLE locker_item (
   -- have connections for" becomes a join, and Watchtower can correlate a
   -- breach with the connection that uses the password. Nullable: most items
   -- guard services the vault never talks to.
-  connection_id TEXT REFERENCES sync_connection(connection_id),
-  -- watchtower: the one stored security fact (breach flag); weak/reused derive
   compromised  INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
   -- When the CURRENT password was set (#872, GAPS §3.3 #6d). Stamped by the
   -- write path, never derived from updated_at — an edit that only retags an
@@ -2934,41 +2444,6 @@ CREATE TABLE notifications_notice (
   UNIQUE(kind, source_ref)
 ) STRICT;
 
--- table outbox_item on outbox_item
-CREATE TABLE outbox_item (
-  item_id              TEXT PRIMARY KEY,
-  connection_id        TEXT NOT NULL REFERENCES sync_connection(connection_id),
-  actor_id             TEXT NOT NULL,
-  actor_kind           TEXT NOT NULL CHECK (actor_kind IN ('owner','app','ai_agent')),
-  verb                 TEXT NOT NULL,
-  target               TEXT NOT NULL,
-  target_type          TEXT,
-  target_id            TEXT,
-  recipient_party_id   TEXT REFERENCES core_party(party_id),
-  artifact_json        TEXT NOT NULL CHECK (json_valid(artifact_json)),
-  request_json         TEXT NOT NULL CHECK (json_valid(request_json)),
-  status               TEXT NOT NULL CHECK (status IN ('pending','approved','sent','discarded','failed')),
-  -- The standing answer that auto-approved this item, in the ONE id space
-  -- every receipt cites (#928). NULL = the member decided this item itself.
-  authority_id         TEXT REFERENCES share_authority(authority_id),
-  staged_at            TEXT NOT NULL,
-  decided_at           TEXT,
-  drained_at           TEXT,
-  result_json          TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
-  published_message_id TEXT REFERENCES social_message(message_id),
-  note                 TEXT,
-  CHECK ((target_type IS NULL) = (target_id IS NULL)),
-  -- A REAL reference (#916, E1). This was an audit value — "the row this was
-  -- about" — and that reading is wrong for a queue: an item still PENDING when
-  -- its subject is purged would drain afterwards and publish an artifact about
-  -- a row the member deleted. The pair is a composite key into the entity
-  -- supertype and cascades, so a purge empties the queue of anything about it.
-  -- A NULL pair (an outbound write with no canonical subject) satisfies a
-  -- composite foreign key by definition, which is the right reading.
-  FOREIGN KEY (target_type, target_id)
-    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
-) STRICT;
-
 -- table people_important_date on people_important_date
 CREATE TABLE people_important_date (
   date_id     TEXT PRIMARY KEY,
@@ -3028,141 +2503,6 @@ CREATE TABLE people_profile (
   deleted_at        TEXT,
   purge_at          TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   FOREIGN KEY (profile_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table replica_intent_outcome on replica_intent_outcome
-CREATE TABLE replica_intent_outcome (
-  intent_id     TEXT PRIMARY KEY,
-  device_id     TEXT NOT NULL,
-  app_id        TEXT NOT NULL,
-  action        TEXT NOT NULL,
-  payload_hash  TEXT NOT NULL,
-  status        TEXT NOT NULL CHECK (
-    status IN ('queued','sending','parked','executed','denied','failed','conflict')
-  ),
-  invocation_id TEXT,
-  reason        TEXT,
-  conflict_json TEXT CHECK (conflict_json IS NULL OR json_valid(conflict_json)),
-  -- WHO A PARKED WRITE IS WAITING ON (#929): 'owner' when the origin's member
-  -- must decide it, 'origin' when the write is queued for the vault that owns
-  -- the container, 'gateway' when the host cannot carry it yet. The seat draws
-  -- a person from it, so the label rides along — read off the LINK, never a
-  -- vault id a member has no name for.
-  waiting_on    TEXT CHECK (waiting_on IS NULL OR json_valid(waiting_on)),
-  -- The ORIGIN row versions this intent's answer stands for (#929, G1). A
-  -- member's pending row drops only when their replica holds them; without the
-  -- versions the seat would have to guess, and the guess is what makes a
-  -- pending badge clear before the row it wrote arrives.
-  answered_versions TEXT
-    CHECK (answered_versions IS NULL OR json_valid(answered_versions)),
-  -- THE CANONICAL COMMIT POSITION THIS ANSWER STANDS FOR (#996, R24). Every
-  -- executed outcome carries it, on the device path as well as the peer path,
-  -- and a seat keeps its pending projection until its applied cursor reaches
-  -- it. Without the number the seat has to guess, and the guess is what makes
-  -- a pending badge clear before the row it wrote arrives.
-  commit_seq    INTEGER CHECK (commit_seq IS NULL OR commit_seq > 0),
-  -- The (table, pk, row_version) set this intent's commit produced, read from
-  -- the captured rows rather than re-queried: a second read could see a LATER
-  -- commit's value and settle the intent against work it did not do.
-  produced_json TEXT CHECK (produced_json IS NULL OR json_valid(produced_json)),
-  -- THE INTENTS THIS ONE WAITS ON (#996, R23). A JSON array of intent ids: an
-  -- offline chain is causal, so a rename cannot execute before the create it
-  -- renames, and the gateway is where that is enforced rather than in each
-  -- app's retry loop.
-  depends_on    TEXT CHECK (depends_on IS NULL OR json_valid(depends_on)),
-  -- THE END OF THE IDEMPOTENCY WINDOW (#996, R24 / OQ-13). A retry after this
-  -- gets an explicit 'expired' answer naming what to do, never a silent
-  -- re-execution: the retained outcome is what makes a retry safe, so when it
-  -- is gone the honest answer is "I no longer know", not "here, do it again".
-  expires_at    TEXT,
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-) STRICT;
-
--- table replica_invocation_commit on replica_invocation_commit
-CREATE TABLE replica_invocation_commit (
-  invocation_id       TEXT PRIMARY KEY,
-  command_id          TEXT NOT NULL,
-  intent_id           TEXT,
-  -- Redacted/non-secret post-check + S5 reconstruction material. This row is
-  -- in the canonical transaction, so replay can finish the audit band without
-  -- re-entering the command handler after a crash.
-  audit_json          TEXT NOT NULL CHECK (json_valid(audit_json)),
-  committed_at        TEXT NOT NULL,
-  -- Set only after one atomic audit-band transaction has verified checks,
-  -- provenance, receipt, evidence, explanation, and executed status.
-  journal_finalized_at TEXT
-) STRICT;
-
--- table replica_log on replica_log
-CREATE TABLE replica_log (
-  seq             INTEGER PRIMARY KEY AUTOINCREMENT,
-  -- The canonical commit position every row of one transaction shares. An
-  -- intent's durable outcome names it (R24), and a seat applies one commit
-  -- per transaction with its cursor in the same transaction.
-  commit_seq      INTEGER NOT NULL CHECK (commit_seq > 0),
-  epoch           TEXT NOT NULL,
-  -- Two numbers, never one (R5): compatibility, then additive progress.
-  schema_epoch    INTEGER NOT NULL CHECK (schema_epoch >= 1),
-  ddl_version     INTEGER NOT NULL DEFAULT 0 CHECK (ddl_version >= 0),
-  -- PHYSICAL table name, not a logical entity: a seat holds the gateway's
-  -- schema and applies to the same table the gateway wrote.
-  "table"         TEXT NOT NULL,
-  op              TEXT NOT NULL CHECK (op IN ('insert','update','delete','ddl')),
-  -- The primary key as a JSON array, in declared key order — one element for
-  -- the ordinary case, several for a composite key. An array, not a scalar,
-  -- so a composite key needs no separator nobody can escape.
-  pk_json         TEXT NOT NULL CHECK (json_valid(pk_json)),
-  -- The full new row image for insert/update; the full OLD image for delete,
-  -- which is the only image a delete has and what a subscriber needs to judge
-  -- that the row left its closure. A `ddl` row carries its statement here.
-  row_json        TEXT CHECK (row_json IS NULL OR json_valid(row_json)),
-  -- 1 when the session flagged the change as trigger- or cascade-produced.
-  -- Carried, not filtered: a cascaded delete is a real row a seat must apply,
-  -- and the flag is what lets a reader tell it from a writer's own statement.
-  indirect        INTEGER NOT NULL DEFAULT 0 CHECK (indirect IN (0,1)),
-  -- What produced the commit — a command name, an import, the enricher. The
-  -- producer bound is denominated per producer, so this is how a bulk writer
-  -- is recognised without guessing from row counts.
-  producer        TEXT NOT NULL,
-  -- 1 when this commit's compressed size crossed the defer threshold, so a
-  -- metered seat may skip it and stay CONSISTENT BEHIND IT rather than
-  -- half-applied. Every row of one commit carries the same value: a commit is
-  -- the unit a seat applies, so it is the unit a seat defers.
-  deferred        INTEGER NOT NULL DEFAULT 0 CHECK (deferred IN (0,1)),
-  committed_at    TEXT NOT NULL
-, prior_json TEXT
-  CHECK (prior_json IS NULL OR json_valid(prior_json)), local INTEGER NOT NULL DEFAULT 0
-  CHECK (local IN (0,1))) STRICT;
-
--- table replica_meta on replica_meta
-CREATE TABLE replica_meta (
-  singleton        INTEGER PRIMARY KEY CHECK (singleton = 1),
-  epoch            TEXT NOT NULL,
-  floor_seq        INTEGER NOT NULL DEFAULT 0 CHECK (floor_seq >= 0),
-  schema_epoch     INTEGER NOT NULL CHECK (schema_epoch >= 1),
-  ddl_version      INTEGER NOT NULL DEFAULT 0 CHECK (ddl_version >= 0),
-  -- The last commit position handed out. Allocated inside the capturing
-  -- transaction, so a rolled-back commit leaves no gap a reader can see.
-  commit_seq       INTEGER NOT NULL DEFAULT 0 CHECK (commit_seq >= 0),
-  active_commit_id TEXT,
-  epoch_reason     TEXT NOT NULL DEFAULT 'created',
-  epoch_started_at TEXT NOT NULL,
-  updated_at       TEXT NOT NULL
-) STRICT;
-
--- table replica_parked_payload on replica_parked_payload
-CREATE TABLE replica_parked_payload (
-  invocation_id TEXT PRIMARY KEY,
-  intent_id     TEXT,
-  identity_json TEXT NOT NULL CHECK (json_valid(identity_json)),
-  request_sealed TEXT NOT NULL,
-  grant_id      TEXT,
-  command_id    TEXT NOT NULL,
-  command_name  TEXT NOT NULL,
-  reason        TEXT NOT NULL,
-  parked_at     TEXT NOT NULL
 ) STRICT;
 
 -- table schedule_attendee on schedule_attendee
@@ -3327,180 +2667,6 @@ CREATE TABLE schedule_task (
   FOREIGN KEY (task_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
--- table share_authority on share_authority
-CREATE TABLE share_authority (
-  authority_id   TEXT PRIMARY KEY,
-  -- 'automation' is ACCEPTED here with no writer yet: #928 wave 3 writes it,
-  -- when an automation's compiled manifest mints one row per (pack or entity
-  -- x read|act) and the owner's refusals become 'declined' rows. Accepting it
-  -- a wave early is what lets that wave land without a schema change. The
-  -- 'app' kind is deliberately NOT here — first-party apps are not principals
-  -- (#928 A1), and a third-party door would be a new answer, not a new value.
-  -- 'device' LEFT this vocabulary (#996, R17). Enrollment is full trust
-  -- (R11): a seat either holds this vault or it does not, and that is
-  -- `access_device`'s answer, not a standing one the member gave. Keeping it
-  -- here made "which surfaces may this seat reach" expressible in the same
-  -- table as "who may see this album", and row-level scoping exists in exactly
-  -- one place in the system -- the closure of a shared subject.
-  principal_kind TEXT NOT NULL CHECK (principal_kind IN
-    ('person','circle','harness','automation')),
-  principal_id   TEXT NOT NULL,
-  subject_type   TEXT NOT NULL,
-  -- '' where the subject is the whole of something the principal is already
-  -- scoped to: every scope, for a vault-wide egress
-  -- answer. Same empty-string argument as enrich_policy_rule.scope_ref — a NULL
-  -- would let one vault-wide answer be recorded twice under the live index.
-  subject_id     TEXT NOT NULL,
-  -- Per (principal_kind x subject_type) vocabulary, not one global union:
-  -- 'view'/'edit' for a share, the enrichment capability for an egress
-  -- answer. The registry that closes those
-  -- triples is ruling V-registry's, and lands with the share.* command pack.
-  verb           TEXT NOT NULL CHECK (length(verb) BETWEEN 1 AND 64),
-  duration       TEXT NOT NULL CHECK (duration IN ('standing','until-date')),
-  expires_at     TEXT,
-  -- A refusal is an ANSWER, not an absent grant (ruling V-table): forgetting a
-  -- 'declined' row would make "asked and told no" indistinguishable from "never
-  -- asked", and it is what ruling V-mask's per-party refusal mask is written as.
-  decision       TEXT NOT NULL CHECK (decision IN ('granted','declined')),
-  granted_at     TEXT NOT NULL,
-  -- The party who answered. NULL only where the member answered about their own
-  -- machinery and no actor party was ever recorded (the egress answers carry
-  -- none); the CHECK below keeps every person/circle row honest, which is what
-  -- makes grant/grant-store.ts's non-null narrowing sound.
-  granted_by     TEXT REFERENCES core_party(party_id),
-  revoked_at     TEXT,
-  -- Why the answer ended, when it ended for a reason the member did not state
-  -- in the moment (#916, E2): the purge of the subject revokes every live
-  -- answer about it through a trigger on `core_entity`, and 'subject-purged'
-  -- is what that trigger writes. NULL for an ordinary owner revoke, where the
-  -- receipt is the reason.
-  revoked_reason TEXT,
-  -- -> access.receipt, in the append-only audit band. A VALUE, not a key: an
-  -- audit outlives its subject (#916). NULL until the receipt is written,
-  -- never a second copy of it.
-  receipt_id     TEXT,
-  CHECK ((duration = 'until-date') = (expires_at IS NOT NULL)),
-  -- 'automation' is deliberately NOT exempted: the owner APPROVES an
-  -- automation's manifest, so there is always a party who answered, and a row
-  -- minted without one would be an automation that granted itself (#928 A3).
-  CHECK (granted_by IS NOT NULL OR principal_kind = 'harness'),
-  -- The one principal whose id is a closed vocabulary rather than a row id:
-  -- a harness principal is an ENGINE CLASS, and an egress class outside the
-  -- three enrich-gate.ts knows is unrepresentable here exactly as it was
-  -- unrepresentable in `enrich_consent.egress` (#807).
-  CHECK (principal_kind <> 'harness'
-         OR principal_id IN ('on-device','gateway','provider'))
-) STRICT;
-
--- table share_authority_request on share_authority_request
-CREATE TABLE share_authority_request (
-  request_id   TEXT PRIMARY KEY,
-  -- The automation's own id (its enrolment key), the same principal id
-  -- `share_authority.principal_id` carries for an 'automation' row.
-  principal_id TEXT NOT NULL,
-  scopes_json  TEXT NOT NULL CHECK (json_valid(scopes_json)),
-  requested_at TEXT NOT NULL,
-  decided_at   TEXT,
-  decision     TEXT CHECK (decision IN ('approved','denied'))
-) STRICT;
-
--- table share_authority_use on share_authority_use
-CREATE TABLE share_authority_use (
-  authority_id TEXT PRIMARY KEY,
-  last_used_at TEXT NOT NULL
-) STRICT;
-
--- table share_delivery_config on share_delivery_config
-CREATE TABLE share_delivery_config (
-  grant_id         TEXT PRIMARY KEY
-    REFERENCES share_authority(authority_id) ON DELETE CASCADE,
-  max_size_bytes   INTEGER CHECK (max_size_bytes IS NULL OR max_size_bytes >= 0),
-  departure_policy TEXT NOT NULL DEFAULT 'remove-member-only'
-    CHECK (departure_policy IN ('remove-member-only','retain-ledger-history'))
-) STRICT;
-
--- table share_fulfillment on share_fulfillment
-CREATE TABLE share_fulfillment (
-  grant_id      TEXT NOT NULL
-    REFERENCES share_authority(authority_id) ON DELETE CASCADE,
-  peer_vault_id TEXT NOT NULL,
-  -- awaiting_channel means the peer vault is known and the link to it has
-  -- ended (#903). It is deliberately NOT narrowed out of this CHECK: that
-  -- state is still reachable — link, share, then unlink — and only the
-  -- retired reading of it ("waiting on an invitation to be claimed") is gone.
-  state         TEXT NOT NULL CHECK (state IN
-    ('awaiting_channel','syncing','delivered','remove_sent','removed')),
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  -- Latest note: a refusal reason, a transport error, why a removal stalled.
-  detail        TEXT,
-  -- When the subject first reached this peer. NULL = never delivered.
-  delivered_at  TEXT,
-  PRIMARY KEY (grant_id, peer_vault_id)
-) STRICT;
-
--- table share_party_vault_binding on share_party_vault_binding
-CREATE TABLE share_party_vault_binding (
-  binding_id TEXT PRIMARY KEY,
-  party_id   TEXT NOT NULL REFERENCES core_party(party_id),
-  vault_id   TEXT NOT NULL,
-  vault_public_key TEXT,
-  linked_at  TEXT NOT NULL,
-  revoked_at TEXT,
-  UNIQUE (party_id, vault_id)
-) STRICT;
-
--- table share_subscription on share_subscription
-CREATE TABLE share_subscription (
-  -- NO FOREIGN KEY to `share_authority`, deliberately: the AUDIENCE holds this
-  -- row and never holds the origin's answer. Same reading as the member seat's
-  -- intent overlay — a key here would make holding the subscription depend on
-  -- holding the grant that authorizes it, which only the origin has.
-  authority_id      TEXT NOT NULL,
-  audience_vault_id TEXT NOT NULL,
-  origin_vault_id   TEXT NOT NULL,
-  -- Derivable from `share_authority` on the ORIGIN and only there: the
-  -- audience never holds the grant, so its own row has to carry the subject.
-  subject_type      TEXT NOT NULL,
-  -- The origin's replica epoch this cursor is measured in. A changed epoch is
-  -- a re-bootstrap, exactly as it is for a device (the phone's rule): the seat
-  -- does not extend a floor on a subscriber's behalf.
-  cursor_epoch      TEXT,
-  cursor_seq        INTEGER NOT NULL DEFAULT 0 CHECK (cursor_seq >= 0),
-  -- 'removed' is the audience's own acknowledgement that the grant's rows are
-  -- gone. The origin's `share_fulfillment` vocabulary is untouched.
-  state             TEXT NOT NULL CHECK (state IN ('subscribed','removed')),
-  subscribed_at     TEXT NOT NULL,
-  removed_at        TEXT,
-  detail            TEXT,
-  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (authority_id, audience_vault_id)
-) STRICT;
-
--- table share_subscription_lineage on share_subscription_lineage
-CREATE TABLE share_subscription_lineage (
-  authority_id       TEXT NOT NULL,
-  target_type        TEXT NOT NULL,
-  target_id          TEXT NOT NULL,
-  origin_item_id     TEXT NOT NULL,
-  origin_row_version INTEGER NOT NULL CHECK (origin_row_version >= 0),
-  audience_row_version INTEGER NOT NULL DEFAULT 0
-    CHECK (audience_row_version >= 0),
-  PRIMARY KEY (authority_id, target_type, target_id),
-  FOREIGN KEY (target_type, target_id)
-    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table share_subscription_member on share_subscription_member
-CREATE TABLE share_subscription_member (
-  authority_id TEXT NOT NULL,
-  table_name   TEXT NOT NULL,
-  pk           TEXT NOT NULL,
-  entered_seq  INTEGER NOT NULL CHECK (entered_seq >= 0),
-  PRIMARY KEY (authority_id, table_name, pk)
-) STRICT;
-
 -- table social_circle on social_circle
 CREATE TABLE social_circle (
   circle_id      TEXT PRIMARY KEY,
@@ -3600,127 +2766,6 @@ CREATE TABLE social_thread_participant (
 
 -- table sqlite_sequence on sqlite_sequence
 CREATE TABLE sqlite_sequence(name,seq);
-
--- table sync_connection on sync_connection
-CREATE TABLE sync_connection (
-  connection_id TEXT PRIMARY KEY,
-  kind          TEXT NOT NULL,
-  label         TEXT NOT NULL,
-  principal     TEXT,
-  status        TEXT NOT NULL CHECK (status IN ('active','needs-auth','failing','paused')),
-  trust         TEXT NOT NULL CHECK (trust IN ('staged','auto-publish')),
-  -- Per-class standing consent for enrichment (issue #310 C3): NULL means
-  -- auto-publish trust covers every derived-data class; a JSON array
-  -- (['caption','tag','face','collection','filing']) narrows it — classes
-  -- outside it stage as drafts for review instead of landing silently.
-  enrich_classes_json TEXT CHECK (enrich_classes_json IS NULL OR json_valid(enrich_classes_json)),
-  created_at    TEXT NOT NULL,
-  last_run_at   TEXT,
-  UNIQUE (kind, label)
-) STRICT;
-
--- table sync_connection_credential on sync_connection_credential
-CREATE TABLE sync_connection_credential (
-  connection_id    TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  cred_kind        TEXT NOT NULL CHECK (cred_kind IN ('oauth2','api_key')),
-  oauth_mode       TEXT NOT NULL DEFAULT 'byo' CHECK (oauth_mode IN ('byo','assist')),
-  provider         TEXT,
-  auth_url         TEXT,
-  token_url        TEXT,
-  scopes           TEXT,
-  client_id        TEXT,
-  client_secret    TEXT,
-  access_token     TEXT,
-  refresh_token    TEXT,
-  api_key          TEXT,
-  token_expires_at TEXT,
-  allowed_hosts    TEXT NOT NULL CHECK (json_valid(allowed_hosts)),
-  -- The exchange-minted HMAC capability an Assist refresh token is redeemable
-  -- at the OAuth Worker with (#865). Sealed, re-persisted on every rotation.
-  refresh_capability TEXT,
-  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-) STRICT;
-
--- table sync_connection_cursor on sync_connection_cursor
-CREATE TABLE sync_connection_cursor (
-  cursor_id     TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL
-    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  key           TEXT NOT NULL,
-  value_json    TEXT NOT NULL CHECK (json_valid(value_json)),
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  UNIQUE (connection_id, key)
-) STRICT;
-
--- table sync_connection_health on sync_connection_health
-CREATE TABLE sync_connection_health (
-  connection_id TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  auth_note     TEXT,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-) STRICT;
-
--- table sync_connection_run on sync_connection_run
-CREATE TABLE sync_connection_run (
-  run_id        TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL
-    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  started_at    TEXT NOT NULL,
-  finished_at   TEXT,
-  status        TEXT NOT NULL CHECK (status IN ('running','ok','failed','aborted')) ,
-  staged        INTEGER NOT NULL DEFAULT 0,
-  published     INTEGER NOT NULL DEFAULT 0,
-  skipped       INTEGER NOT NULL DEFAULT 0,
-  error         TEXT
-) STRICT;
-
--- table sync_external_entity on sync_external_entity
-CREATE TABLE sync_external_entity (
-  map_id        TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL
-    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  external_id   TEXT NOT NULL,
-  target_type   TEXT NOT NULL,
-  target_id     TEXT NOT NULL,
-  content_hash  TEXT NOT NULL,
-  first_seen_at TEXT NOT NULL,
-  last_seen_at  TEXT NOT NULL,
-  gone_upstream INTEGER NOT NULL CHECK (gone_upstream IN (0,1)) DEFAULT 0,
-  UNIQUE (connection_id, external_id),
-  FOREIGN KEY (target_type, target_id)
-    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table sync_import_batch on sync_import_batch
-CREATE TABLE sync_import_batch (
-  batch_id      TEXT PRIMARY KEY,
-  -- NO CASCADE, deliberately (#916, W2a): a batch is RECEIPTED HISTORY — what
-  -- was imported, when, and what it became — so removing the connection is
-  -- REFUSED while any exists rather than shredding the record of it.
-  -- `sync.remove_connection` says so in its denial.
-  connection_id TEXT NOT NULL REFERENCES sync_connection(connection_id),
-  status        TEXT NOT NULL CHECK (status IN ('draft','published','discarded')),
-  created_at    TEXT NOT NULL,
-  resolved_at   TEXT,
-  summary_json  TEXT NOT NULL CHECK (json_valid(summary_json))
-) STRICT;
-
--- table sync_import_row on sync_import_row
-CREATE TABLE sync_import_row (
-  row_id              TEXT PRIMARY KEY,
-  batch_id            TEXT NOT NULL
-    REFERENCES sync_import_batch(batch_id) ON DELETE CASCADE,
-  seq                 INTEGER NOT NULL,
-  entity_type         TEXT NOT NULL,
-  external_id         TEXT NOT NULL,
-  payload_json        TEXT NOT NULL CHECK (json_valid(payload_json)),
-  disposition         TEXT NOT NULL CHECK (disposition IN ('create','update','skip','merge-candidate')),
-  target_entity_id    TEXT,
-  published_entity_id TEXT,
-  note                TEXT
-) STRICT;
 
 -- table tally_expense on tally_expense
 CREATE TABLE tally_expense (
@@ -3964,54 +3009,6 @@ CREATE TABLE tally_settlement (
   FOREIGN KEY (settlement_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
--- table trigger_ingress on trigger_ingress
-CREATE TABLE trigger_ingress (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  source        TEXT NOT NULL,
-  source_key    TEXT NOT NULL,
-  delivery_id   TEXT NOT NULL,
-  received_at   INTEGER NOT NULL,
-  payload_json  TEXT,
-  payload_ref   TEXT,
-  expires_at    INTEGER NOT NULL,
-  UNIQUE (source, source_key, delivery_id),
-  CHECK (source IN ('webhook','poll')),
-  CHECK (payload_json IS NOT NULL OR payload_ref IS NOT NULL)
-) STRICT;
-
--- table turns on turns
-CREATE TABLE turns (
-  id                       TEXT PRIMARY KEY,
-  conversation_id          TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  seq                      INTEGER NOT NULL,
-  parent_turn_id           TEXT,
-  trigger                  TEXT NOT NULL,
-  trigger_origin           TEXT,
-  note                     TEXT,
-  summary                  TEXT,
-  output_json              TEXT,
-  retry_of                 TEXT,
-  idempotency_key          TEXT,
-  -- Explicit handoff-cost marker (D4): estimated canonical-ledger prompt
-  -- tokens injected on this turn, separate from ACP-reported usage.
-  hydration_tokens         INTEGER,
-  ok                       INTEGER NOT NULL DEFAULT 0,
-  error                    TEXT,
-  feedback                 TEXT,
-  pinned                   INTEGER NOT NULL DEFAULT 0,
-  started_at               INTEGER NOT NULL,
-  ended_at                 INTEGER,
-  total_input_tokens       INTEGER,
-  total_output_tokens      INTEGER,
-  total_cache_read_tokens  INTEGER,
-  total_cache_write_tokens INTEGER,
-  total_cost_usd           REAL,
-  step_count               INTEGER,
-  tool_count               INTEGER,
-  CHECK (trigger IN ('scheduled','manual','replay','on_failure','compile','interactive')),
-  CHECK (feedback IS NULL OR feedback IN ('up','down'))
-) STRICT;
-
 -- trigger access_app_ext_touch_updated_at on access_app_ext
 CREATE TRIGGER access_app_ext_touch_updated_at
 AFTER UPDATE ON access_app_ext
@@ -4136,19 +3133,6 @@ BEGIN
    WHERE content_hash = NEW.content_hash;
 END;
 
--- trigger blob_device_wrap_key_touch_updated_at on blob_device_wrap_key
-CREATE TRIGGER blob_device_wrap_key_touch_updated_at
-AFTER UPDATE ON blob_device_wrap_key
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE blob_device_wrap_key
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE device_id = NEW.device_id;
-END;
-
 -- trigger blob_ingress_session_touch_updated_at on blob_ingress_session
 CREATE TRIGGER blob_ingress_session_touch_updated_at
 AFTER UPDATE ON blob_ingress_session
@@ -4160,35 +3144,6 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE session_id = NEW.session_id;
-END;
-
--- trigger blob_outbox_touch_updated_at on blob_outbox
-CREATE TRIGGER blob_outbox_touch_updated_at
-AFTER UPDATE ON blob_outbox
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE blob_outbox
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE content_hash = NEW.content_hash;
-END;
-
--- trigger conversation_item_count_ad on items
-CREATE TRIGGER conversation_item_count_ad
-  AFTER DELETE ON items BEGIN
-  UPDATE conversations
-     SET item_count = MAX(item_count - 1, 0)
-   WHERE id = (SELECT conversation_id FROM turns WHERE id = old.turn_id);
-END;
-
--- trigger conversation_item_count_ai on items
-CREATE TRIGGER conversation_item_count_ai
-  AFTER INSERT ON items BEGIN
-  UPDATE conversations
-     SET item_count = item_count + 1
-   WHERE id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
 END;
 
 -- trigger core_account_entity_delete on core_account
@@ -4563,36 +3518,6 @@ BEGIN
    WHERE revision_id = NEW.revision_id;
 END;
 
--- trigger core_entity_revoke_on_purge on core_entity
-CREATE TRIGGER core_entity_revoke_on_purge
-BEFORE DELETE ON core_entity
-BEGIN
-  UPDATE share_authority
-     SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoked_reason = 'subject-purged'
-   WHERE subject_type = OLD.entity_type
-     AND subject_id = OLD.entity_id
-     AND revoked_at IS NULL;
-  -- The PRINCIPAL side of the same rule (#916, D1). `principal_id` is
-  -- polymorphic on `principal_kind` and carries no foreign key, so a purged
-  -- principal would leave live answers naming a row that is not there — a share
-  -- the member granted that can no longer be resolved to a peer vault, failing
-  -- silently. See schema/party-pointers.ts.
-  --
-  -- EVERY principal kind that is a ROW, not just 'person' (#916, audit F3):
-  -- the clause is generated from `PRINCIPAL_ENTITY_KINDS`, so a circle
-  -- deleted by `tally.delete_group` or by share/removal.ts ends the answers
-  -- its members hold through it, and a fifth kind cannot be added to the
-  -- table's CHECK without landing here too.
-  UPDATE share_authority
-     SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoked_reason = 'principal-purged'
-   WHERE principal_id = OLD.entity_id
-     AND revoked_at IS NULL
-     AND principal_kind = CASE OLD.entity_type
-           WHEN 'core.party' THEN 'person'
-           WHEN 'social.circle' THEN 'circle'
-         END;
-END;
-
 -- trigger core_event_entity_delete on core_event
 CREATE TRIGGER core_event_entity_delete
 AFTER DELETE ON core_event
@@ -4918,60 +3843,6 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE domain = NEW.domain;
-END;
-
--- trigger fts_conversation_conv_ad on conversations
-CREATE TRIGGER fts_conversation_conv_ad
-  AFTER DELETE ON conversations BEGIN
-  DELETE FROM fts_conversation WHERE conversation_id = old.id;
-END;
-
--- trigger fts_conversation_conv_ai on conversations
-CREATE TRIGGER fts_conversation_conv_ai
-  AFTER INSERT ON conversations WHEN new.kind IN ('chat','build') BEGIN
-  INSERT INTO fts_conversation(conversation_id, title, body)
-    VALUES (new.id, new.title, '');
-END;
-
--- trigger fts_conversation_conv_au on conversations
-CREATE TRIGGER fts_conversation_conv_au
-  AFTER UPDATE OF title ON conversations WHEN new.kind IN ('chat','build') BEGIN
-  DELETE FROM fts_conversation WHERE conversation_id = old.id;
-  INSERT INTO fts_conversation(conversation_id, title, body)
-    SELECT new.id, new.title,
-      (SELECT COALESCE(group_concat(i.text, ' '), '')
-         FROM items i JOIN turns t ON t.id = i.turn_id
-        WHERE t.conversation_id = new.id AND i.text IS NOT NULL AND i.text <> '');
-END;
-
--- trigger fts_conversation_item_ad on items
-CREATE TRIGGER fts_conversation_item_ad
-  AFTER DELETE ON items WHEN old.text IS NOT NULL AND old.text <> '' BEGIN
-  UPDATE fts_conversation
-     SET body = (SELECT COALESCE(group_concat(i.text, ' '), '')
-                   FROM items i JOIN turns t ON t.id = i.turn_id
-                  WHERE t.conversation_id = fts_conversation.conversation_id
-                    AND i.text IS NOT NULL AND i.text <> '')
-   WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = old.turn_id);
-END;
-
--- trigger fts_conversation_item_ai on items
-CREATE TRIGGER fts_conversation_item_ai
-  AFTER INSERT ON items WHEN new.text IS NOT NULL AND new.text <> '' BEGIN
-  UPDATE fts_conversation
-     SET body = CASE WHEN body = '' THEN new.text ELSE body || ' ' || new.text END
-   WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
-END;
-
--- trigger fts_conversation_turn_ad on turns
-CREATE TRIGGER fts_conversation_turn_ad
-  AFTER DELETE ON turns BEGIN
-  UPDATE fts_conversation
-     SET body = (SELECT COALESCE(group_concat(i.text, ' '), '')
-                   FROM items i JOIN turns t ON t.id = i.turn_id
-                  WHERE t.conversation_id = fts_conversation.conversation_id
-                    AND i.text IS NOT NULL AND i.text <> '')
-   WHERE conversation_id = old.conversation_id;
 END;
 
 -- trigger fts_core_collection_ad on core_collection
@@ -5707,19 +4578,6 @@ BEGIN
    WHERE profile_id = NEW.profile_id;
 END;
 
--- trigger replica_intent_outcome_touch_updated_at on replica_intent_outcome
-CREATE TRIGGER replica_intent_outcome_touch_updated_at
-AFTER UPDATE ON replica_intent_outcome
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE replica_intent_outcome
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE intent_id = NEW.intent_id;
-END;
-
 -- trigger schedule_attendee_entity_delete on schedule_attendee
 CREATE TRIGGER schedule_attendee_entity_delete
 AFTER DELETE ON schedule_attendee
@@ -6020,50 +4878,6 @@ BEGIN
    WHERE task_id = NEW.task_id;
 END;
 
--- trigger share_fulfillment_touch_updated_at on share_fulfillment
-CREATE TRIGGER share_fulfillment_touch_updated_at
-AFTER UPDATE ON share_fulfillment
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE share_fulfillment
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE grant_id = NEW.grant_id AND peer_vault_id = NEW.peer_vault_id;
-END;
-
--- trigger share_party_vault_binding_not_self_ai on share_party_vault_binding
-CREATE TRIGGER share_party_vault_binding_not_self_ai
-BEFORE INSERT ON share_party_vault_binding
-WHEN NEW.vault_id = (SELECT vault_id FROM core_vault LIMIT 1)
-  OR NEW.party_id = (SELECT self_party_id FROM core_vault LIMIT 1)
-BEGIN
-  SELECT RAISE(ABORT, 'share.party_vault_binding: a binding names another party''s vault, never this vault or its self party');
-END;
-
--- trigger share_party_vault_binding_not_self_au on share_party_vault_binding
-CREATE TRIGGER share_party_vault_binding_not_self_au
-BEFORE UPDATE OF party_id, vault_id ON share_party_vault_binding
-WHEN NEW.vault_id = (SELECT vault_id FROM core_vault LIMIT 1)
-  OR NEW.party_id = (SELECT self_party_id FROM core_vault LIMIT 1)
-BEGIN
-  SELECT RAISE(ABORT, 'share.party_vault_binding: a binding names another party''s vault, never this vault or its self party');
-END;
-
--- trigger share_subscription_touch_updated_at on share_subscription
-CREATE TRIGGER share_subscription_touch_updated_at
-AFTER UPDATE ON share_subscription
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE share_subscription
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE authority_id = NEW.authority_id AND audience_vault_id = NEW.audience_vault_id;
-END;
-
 -- trigger social_circle_entity_delete on social_circle
 CREATE TRIGGER social_circle_entity_delete
 AFTER DELETE ON social_circle
@@ -6254,45 +5068,6 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE thread_id = NEW.thread_id;
-END;
-
--- trigger sync_connection_credential_touch_updated_at on sync_connection_credential
-CREATE TRIGGER sync_connection_credential_touch_updated_at
-AFTER UPDATE ON sync_connection_credential
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE sync_connection_credential
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE connection_id = NEW.connection_id;
-END;
-
--- trigger sync_connection_cursor_touch_updated_at on sync_connection_cursor
-CREATE TRIGGER sync_connection_cursor_touch_updated_at
-AFTER UPDATE ON sync_connection_cursor
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE sync_connection_cursor
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE cursor_id = NEW.cursor_id;
-END;
-
--- trigger sync_connection_health_touch_updated_at on sync_connection_health
-CREATE TRIGGER sync_connection_health_touch_updated_at
-AFTER UPDATE ON sync_connection_health
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE sync_connection_health
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE connection_id = NEW.connection_id;
 END;
 
 -- trigger tally_expense_currency_matches_group_ai on tally_expense
@@ -7217,59 +5992,3 @@ BEGIN
             WHERE content_id = b."body_content_id") END) FROM social_message b
    WHERE b."message_id" = NEW.owner_id AND NEW.owner_type = 'social.message';
 END;
-
--- view run_summary on run_summary
-CREATE VIEW run_summary AS
-  SELECT
-t.id             AS run_id,
-c.kind           AS kind,
-CASE WHEN c.kind = 'automation' THEN c.automation_id END AS automation_ref,
-CASE
-  WHEN c.kind = 'automation' AND instr(c.automation_id, '/') > 1
-    THEN substr(c.automation_id, 1, instr(c.automation_id, '/') - 1)
-  ELSE c.app_id
-END              AS app_id,
--- The automation's display name (issue: orphaned runs showing the raw
--- ref) — conversations.title is refreshed when the stable automation
--- conversation is ensured and outlives the automation manifest being
--- deleted. NULLIF empties it out since the column defaults to ''.
-CASE WHEN c.kind = 'automation' THEN NULLIF(c.title, '') END AS automation_name,
-t.trigger        AS trigger,
-t.trigger_origin AS trigger_origin,
-t.ok             AS ok,
-t.pinned         AS pinned,
-t.summary        AS summary,
-t.note           AS note,
-t.error          AS error,
-t.retry_of       AS retry_of,
-(SELECT i.model FROM items i
-  WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','delegate')
-  GROUP BY i.model
-  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-  LIMIT 1)       AS model,
--- Dominant harness kind for the Insights harness breakdown (issue #514).
-(SELECT i.harness FROM items i
-  WHERE i.turn_id = t.id AND i.harness IS NOT NULL AND i.kind IN ('step','delegate')
-  GROUP BY i.harness
-  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-  LIMIT 1)       AS harness,
--- Effort is recorded only after ACP confirms thought_level. Picking
--- the dominant confirmed value mirrors the model/harness rollups.
-(SELECT i.effort FROM items i
-  WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','delegate')
-  GROUP BY i.effort
-  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-  LIMIT 1)       AS effort,
-t.started_at               AS started_at,
-t.ended_at                 AS ended_at,
-t.total_input_tokens       AS total_input_tokens,
-t.total_output_tokens      AS total_output_tokens,
-t.total_cache_read_tokens  AS total_cache_read_tokens,
-t.total_cache_write_tokens AS total_cache_write_tokens,
-t.hydration_tokens          AS hydration_tokens,
-t.total_cost_usd           AS total_cost_usd,
-t.step_count               AS step_count,
-t.tool_count               AS tool_count
-  FROM turns t
-  JOIN conversations c ON c.id = t.conversation_id
-  WHERE t.ended_at IS NOT NULL;
