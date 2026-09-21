@@ -3220,3 +3220,138 @@ Nothing in this lane's scope. The remaining unknowns are measurements, not code:
 grants the windows, whether a drain fits inside one, and whether a resumable Android drain makes
 progress across WorkManager windows (which is what the foreground-service recommendation turns
 on). None is answerable without a physical device.
+## W15 — restore, for real
+
+Branch `claude/1029-w15-restore`, base `5d4ac8a5`. **One commit, and the lane is
+NOT complete.** What landed is W15-1, the request contract the sibling lane is
+blocked on; W15-2 (the drain's upload half), W15-3 (restore from 24 words) and
+W15-4 (the purge schedule) did not, and the hand-off below says exactly where
+each stands so the next lane starts from evidence rather than from the brief.
+
+**Base test floor: 1,624 passed / 0 failed / 5 ignored** — `cargo test --workspace`
+at `5d4ac8a5`, on a **clean tree** and a fresh cold `CARGO_TARGET_DIR`, 143
+`test result` lines summed. It confirms the root's measured 1,624 exactly.
+**At HEAD: 1,633 / 0 / 5**, +9.
+
+| Commit | What |
+| --- | --- |
+| `b4f0e03e` | W15-1 — `phone.proto`, the four arms, `CONTRACT.md` §4b and §4c, `crates/core/src/phone.rs`, `BackupNow` retired |
+
+### The request contract
+
+| Kind (field) | Answer | Bounded? |
+| --- | --- | --- |
+| `drain = 15` `{ deadline_ms }` | `DrainResponse { acked_txid, pending_bytes, stopped, acked_at_ms? }` | **unbounded**, cancellable |
+| `pair_phone = 16` `{ payload }` | `PairResponse { gateway_endpoint, record_published }` | bounded |
+| `restore = 17` `{ phrase, endpoint? }` | `RestoreResponse { vaults[], gap_scanned }` | **unbounded**, cancellable |
+| `backup_status = 18` `{}` | `BackupStatusResponse { acked_txid?, acked_at_ms?, pending_bytes, laptop_paired }` | bounded |
+
+`DrainStop` is `UNSPECIFIED | EMPTY | DEADLINE | UNREACHABLE`. `BackupNow` is
+deleted and `Request.kind` field **10 is reserved, not reused**, with
+`ADMIN_COMMAND_BACKUP_NOW`'s value 3 beside it.
+
+Pairing and status are **bounded** although pairing talks to the network, and
+that is the classification's own question rather than a lapse: `Bounded` means
+"finishes on its own, bounded by its own limit" (`handle.rs`'s `request_kind`),
+and a pairing that cannot reach the laptop fails rather than running on. A drain
+has **two** stops and they are different facts — `Cancel` is the member leaving
+the screen, `deadline_ms` is the operating system taking the window back — which
+is why the deadline is not spelled as a cancellation the shell has to schedule.
+
+### The two decisions this slice had to make
+
+**W15-D1 — the laptop's `EndpointId` is NOT a rung, and the vault has no
+per-vault settings table.** W17 handed W19 an exact column, `gateway_endpoint
+BLOB` (32 bytes, nullable), "on whatever per-vault settings table W19 lands".
+W19 landed `005_the_cut.sql`, which lands none. The candidate is `core_vault`,
+and `core_vault` is not that table: it is an ontology entity with a
+`core_entity` foreign key, a `row_version`, and a place in **every census a
+manifest carries**. A laptop's endpoint id there would be sealed into a base,
+shipped to the laptop, counted in a census — and handed back to a RESTORED phone
+as if it were a fact about that phone. A restored phone learns its laptop from
+the identity record it resolved or the id its member typed, which is a coordinate
+it has just proved it can reach; inheriting a dead phone's would be inheriting a
+claim. It lives in `backup/laptop.json` beside the vault, which is derived state
+like everything else under the backup home (§1, F5). **No rung six.**
+
+**W15-D2 — the vault's seed crosses the C ABI, and this library writes no key
+down** (`CONTRACT.md` §4b). Sealing needs `ObjectKeys`, which are derived from
+the 24 words at this vault's index. The alternatives were a key file beside the
+vault — which is the scrypt-wrapped recovery kit `crates/vault/src/backup/mod.rs`
+deleted under §5 with one sentence, "a file that carries keys is a file that can
+be copied" — or a core that cannot seal at all. So the seed arrives the way
+§4a already says a secret arrives: out of the iOS Keychain or the Android
+Keystore, borrowed for the length of `centraid_open` like every other input.
+**Absent is a state, not a fault** (the core reads and writes and answers a drain
+`ERROR_CODE_PEER_UNREACHABLE` with a sentence naming the seed); **present and
+unreadable is `BAD_ARGUMENT`**, because carrying on would leave a shell believing
+it had unlocked a core that cannot seal a byte.
+
+### The path, said out loud
+
+The backup home is **`<the vault file's directory>/backup`**, computed by one
+expression with one reader, `centraid_core::phone::home_root`, and pinned by
+`the_backup_home_is_under_the_vaults_own_directory`. W13's F5 rows 6 and 7 are
+the mobile shell's OS-backup exclusion over exactly that directory, so a second
+call site that chose another one is a member's sealed vault in somebody's iCloud.
+`Handle` now keeps the path it was opened on; `Core::open` took it, used it and
+dropped it on a `let _ = &path;`.
+
+### What did NOT land, and where it stands
+
+| Slice | State |
+| --- | --- |
+| **W15-2 — the drain's upload half** | The seal half is real: `phone::drain` opens the backup home under the vault's directory, runs `backup::capture`, and reports the spool's true pending bytes and the cursor's acked txid. **Nothing uploads.** With no laptop paired it answers `DRAIN_STOP_UNREACHABLE`, which is honest and is what an unpaired phone's drain is — and it is also what a paired one answers today, which is not. `deadline_ms` is read and not yet honoured. |
+| **W15-3 — restore from 24 words** | `phone::restore` parses the phrase and refuses a bad checksum before anything is derived, and refuses a typed endpoint that is not 32 bytes; then it answers `PEER_UNREACHABLE`. There is no dial, no discovery, no gap-limited derivation and no fetch. `crates/centraid/tests/restore_drill.rs` is **untouched**: it still drives the gateway as a library and takes its index list as a parameter, which is the seam W16 handed on. |
+| **W15-4 — purge and scrub schedule** | Untouched. `gateway-core`'s `purge` (`engine.rs:413`) and `scrub` (`:438`) still have no caller but the CLI verb at `bin/centraid-gateway.rs:182`. |
+| **the laptop's "which vaults do I hold"** | Not added. `grep -n 'route(' crates/gateway-server/src/http.rs` is the six routes W17 left; there is no vault-listing endpoint, signed or otherwise. |
+
+### Finds outside this lane's slice
+
+1. **`crates/core/src/handle.rs` documents a module that does not exist.** Its
+   `holds_a_replica` doc-comment points a reader at
+   `crate::link::SeatNetwork::gateway`, and `crates/core/src/link.rs` was deleted
+   with the seat plane (the crate's own `lib.rs` header says so in the same
+   breath). `grep -rn 'crate::link' crates/core/src` finds it. Left as found
+   rather than fixed inside a contract commit; it is a doc bug and stale docs are
+   bugs.
+2. **`backup.proto`'s `ObjectDeclaration` still carries `attested_checksum`**
+   (field 2, with a nine-line comment about R2 and SigV4), which W17 retired
+   everywhere in Rust — `grep -rn 'AttestedChecksum|checksum::' crates` is empty.
+   The wire message is the last copy of a protocol somebody else's store needed
+   and v0 does not have. Not this lane's to strike, because a `buf breaking`
+   judgement belongs with whoever owns the schema rung.
+3. **The `ledgers` gate step still cannot run in a worktree**, for the merge-base
+   reason W17 named. Re-confirmed, not re-diagnosed.
+
+### Falsification
+
+The riskiest claim here is **"no sixth symbol, and the four flows really cross
+the C ABI"** — because the cheap way to be wrong is a test that calls
+`crates/core`'s Rust surface and proves the core works while saying nothing
+about the boundary. The throwaway check was to encode each of the four kinds
+into an `Envelope`, hand the bytes to `centraid_call` itself and decode what came
+back, and it earned its keep immediately: the drain came back as an **error body
+rather than a `DrainResponse`**, because the contract test's core is opened
+without a seed and §4b had just made that a refusal. That is the clause working,
+and it is a case a Rust-surface test with a hand-built `Handle` would have
+sailed past. It is now two tests — the four-flow round trip over an unlocked
+core, and `a_locked_core_refuses_to_drain_rather_than_inventing_a_key` — and the
+symbol count is still `5`.
+
+The second claim, **"`BackupNow` is really gone"**, was checked by its own grep
+rather than by reading: `grep -rn 'NotYetAvailable' crates/core/src/handle.rs`
+returns two lines and both are prose about what used to be there.
+
+### Verification
+
+| Command | Outcome |
+| --- | --- |
+| `cargo build --workspace --all-targets` | clean, 0 warnings |
+| `cargo test --workspace` | **1,633 passed / 0 failed / 5 ignored** (floor 1,624) |
+| `cargo test -p centraid-core-ffi --test contract` | 16 passed (was 14) |
+| `grep -rn 'NotYetAvailable' crates/core/src/handle.rs` | 2 hits, both comments; **no arm** |
+| `grep -rn 'BackupHome::open' crates --include=*.rs` | 8 hits, one of them `crates/core/src/phone.rs:143` — the core's own call site, not only the drill |
+| `grep -c 'pub unsafe extern "C" fn' crates/core-ffi/src/lib.rs` | **5** |
+| `cargo xtask gate --profile local --lane fmt` / `--lane clippy` / `--lane rules` | PASS / PASS / PASS |
+| `bun run check:push:static` | 4/4 gates passed in 4.4s |
