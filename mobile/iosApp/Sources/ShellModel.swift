@@ -137,7 +137,28 @@ final class ShellModel: ObservableObject {
         // the DIRECTORY vaults live in, and an empty one is the ordinary first
         // run — Home draws the empty shelf and the member's next move is the
         // vault sheet.
+        //
+        // **NOTHING UNDER THIS DIRECTORY GOES INTO iCLOUD BACKUP** (#1029 line
+        // 84, F5). Once before the core opens, so the directory itself carries
+        // the attribute, and once after, so the vault file, its `-wal` and
+        // `-shm`, its `.bytes` store and the backup home the core just made
+        // carry it too — iOS does not inherit `isExcludedFromBackup`, so each
+        // item needs it in its own right. `VaultFileProtection` says why this
+        // is the layer that can do it.
+        VaultFileProtection.secure(directory: Self.vaultDirectory)
         home.open(vaultDir: Self.vaultDirectory)
+        VaultFileProtection.secure(directory: Self.vaultDirectory)
+        // AND AGAIN ON THE WAY TO THE BACKGROUND, which is the moment before
+        // iOS would take a backup. Every file the core created while the app
+        // was in the foreground is swept then, which is what makes a per-item
+        // attribute hold for files nothing here created.
+        enteredBackground = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            VaultFileProtection.secure(directory: Self.vaultDirectory)
+        }
         // THE OS ASKING FOR MEMORY BACK IS THE ONLY THING THAT CLOSES A
         // BACKGROUND VAULT'S CORE (#1025 S7-13, ruling F).
         //
@@ -160,7 +181,14 @@ final class ShellModel: ObservableObject {
         if let memoryWarning {
             NotificationCenter.default.removeObserver(memoryWarning)
         }
+        if let enteredBackground {
+            NotificationCenter.default.removeObserver(enteredBackground)
+        }
     }
+
+    /// The background observer that re-sweeps the vault directory's backup
+    /// exclusion, held so it can be removed.
+    private var enteredBackground: NSObjectProtocol?
 
     /// The memory-warning observer, held so it can be removed.
     private var memoryWarning: NSObjectProtocol?
