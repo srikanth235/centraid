@@ -3323,6 +3323,48 @@ dropped it on a `let _ = &path;`.
    judgement belongs with whoever owns the schema rung.
 3. **The `ledgers` gate step still cannot run in a worktree**, for the merge-base
    reason W17 named. Re-confirmed, not re-diagnosed.
+4. **Nothing in this repository persists a PHONE's device key**, and W15-2 cannot
+   be built until something does. `grep -rn 'DeviceKey::' crates --include=*.rs`
+   outside `crates/identity` returns four hits and **every one of them is
+   `DeviceKey::generate()`** — two in `gateway-client`'s own tests, one in
+   `wire_iroh.rs`, one in `restore_drill.rs`. A drain signs with a
+   `DeviceSigner`, a signer needs a `DeviceCertificate`, and a certificate names
+   a device key at an epoch; a phone that minted a fresh one on every launch
+   would need a fresh epoch on every launch, and an epoch bump is what F1 spells
+   `VAULT_MOVED`. It cannot be derived from the seed either, because a restored
+   phone must be a **new** device at epoch + 1 (F3) and a seed-derived key would
+   be the same device. The laptop already has the shape of the answer
+   (`serve.rs`'s `NODE_KEY_FILE`, minted once, mode 0600, read back on every
+   start); whether a phone's copy belongs there or in the Keychain beside the
+   seed (W15-D2) is a third contract decision and is named here rather than
+   guessed at inside a lane that ran out of room to record it properly.
+
+### The contradiction W15-2 ran into, and why it was not coded around
+
+The brief's acceptance for the drain is "seal N objects, drain with a deadline
+that admits k, assert `acked_txid` matches exactly the acked prefix and the next
+drain continues from there". **The shipped commit contract cannot produce that
+number**, and the disagreement is not a bug in either half.
+
+A gateway commit is *generation-scoped*: `CommitRequest` carries a `generation`,
+the object names, a `manifest_head`, a `prev_head` for the compare-and-set and
+**one** `first_txid`/`last_txid` pair (`backup.proto`). A manifest is sealed by
+`take_generation` over a base plus the segments above it, and there is no such
+thing as committing half of one — the head is the manifest or there is no head.
+So within a generation a deadline can leave objects uploaded and uncommitted,
+and `acked_txid` does not move at all; it moves in whole generations.
+
+That makes the honest deadline semantics **"a pass commits whole generations; a
+deadline stops it between them, and an uploaded-but-uncommitted generation is
+re-declared next pass, where write-once makes every re-declare a no-op
+(`UploadTarget.already_committed`)"** — which is a different sentence from the
+one the brief asked to be asserted, and a materially weaker one for a phone with
+a long spool and a 28-second background window. The two ways out are a
+generation-per-drain-pass policy (more, smaller bases) or a commit that can
+advance a txid watermark without a new manifest head, and the second is a change
+to `backup.proto` and to the compare-and-set that F7 turns on. **Neither is a
+call to make inside an implementation commit**, so the contradiction is recorded
+and the code is not written around it.
 
 ### Falsification
 
