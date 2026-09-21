@@ -81,6 +81,24 @@ pub enum ClientError {
         moved_at_ms: i64,
     },
 
+    /// **A LEASE CLAIM AT AN EPOCH THE VAULT ALREADY HOLDS** (#1029 W15-3).
+    ///
+    /// Not a failure a phone shows: it is the answer a RESTORE is asking for.
+    /// A restoring phone does not know what epoch the lost phone held, so it
+    /// claims at one and reads `held` off the refusal, re-certifies at
+    /// `held + 1` and claims again (F3). The server has always sent the two
+    /// epochs — `ErrorBody.lease` — and this client was throwing them away into
+    /// [`Self::Refused`], which made "the vault exists and somebody held it"
+    /// indistinguishable from "there is no such vault".
+    #[error("gateway: the lease is held at epoch {held}")]
+    LeaseStale {
+        /// The epoch the vault's lease stands at now. A restore claims above
+        /// it.
+        held: u64,
+        /// What was claimed, for a log line.
+        claimed: u64,
+    },
+
     /// One side is outside the other's protocol range.
     #[error("gateway: protocol version")]
     Version(ServerNeeds),
@@ -136,6 +154,15 @@ impl ClientError {
                 |moved| Self::Moved {
                     current_epoch: moved.current_epoch,
                     moved_at_ms: moved.moved_at_ms,
+                },
+            ),
+            ErrorCode::GatewayLeaseStale => body.lease.map_or_else(
+                || Self::Malformed {
+                    reason: "a stale-lease refusal with no epochs".to_owned(),
+                },
+                |lease| Self::LeaseStale {
+                    held: lease.held_epoch,
+                    claimed: lease.claimed_epoch,
                 },
             ),
             ErrorCode::VersionWindow => body.protocol.map_or_else(

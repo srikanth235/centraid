@@ -366,6 +366,24 @@ async fn upload(
         )
         .await
         {
+            // **THE VAULT MOVED, AND THAT IS NOT A STOP REASON** (F1, §1).
+            //
+            // `DRAIN_STOP_UNREACHABLE` says "nothing was lost, the next pass
+            // starts where this one did", which is a promise, and here it
+            // would be a false one: the next pass will be refused too, and a
+            // phone that kept drawing "we will retry" over a vault another
+            // phone now holds is the exact failure F1 exists to prevent. It is
+            // a refusal, carrying the gateway's own epoch and moment, and the
+            // shell freezes on it.
+            Err(centraid_gateway_client::ClientError::Moved {
+                current_epoch,
+                moved_at_ms,
+            }) => {
+                return Err(CoreError::VaultMoved {
+                    current_epoch,
+                    moved_at_ms,
+                });
+            }
             Err(error) => {
                 // NOTHING WAS ACKED, SO NOTHING IS CLAIMED. The spool is
                 // untouched and the next pass starts exactly here.

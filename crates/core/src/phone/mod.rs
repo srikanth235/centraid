@@ -485,10 +485,19 @@ mod tests {
 
     #[test]
     fn a_phrase_that_is_not_twenty_four_good_words_is_refused_before_anything_is_derived() {
-        let refusal = restore::run(&wire::RestoreRequest {
-            phrase: "abandon abandon abandon".to_owned(),
-            endpoint: None,
-        })
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .expect("a runtime");
+        let refusal = restore::run(
+            Path::new("/tmp/centraid-w15-never-opened/vault.db"),
+            &wire::RestoreRequest {
+                phrase: "abandon abandon abandon".to_owned(),
+                endpoint: None,
+            },
+            runtime.handle(),
+        )
         .expect_err("three words are not a phrase");
         assert!(matches!(refusal, CoreError::InvalidRequest { .. }));
     }

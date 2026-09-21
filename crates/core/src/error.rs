@@ -73,6 +73,25 @@ pub enum CoreError {
     #[error("the gateway is unreachable: {reason}")]
     Unavailable { reason: String },
 
+    /// **THIS VAULT MOVED TO ANOTHER PHONE** (#1029 F1, §1, W15-2).
+    ///
+    /// A gateway's refusal, heard by this core because a drain holds the lease
+    /// and commits under it. The shell freezes the vault read-only, shows the
+    /// unacked spool as "N changes since `<date>`", and **keeps everything** —
+    /// nothing is wiped and nothing is taken back automatically.
+    ///
+    /// It is deliberately NOT a `DrainStop`: a stop reason says why a pass
+    /// ended and invites the next one, and "unreachable" in particular promises
+    /// the next pass will work. This is a refusal, and the only honest answer
+    /// to it is to stop drawing a backup at all.
+    #[error("this vault moved to another phone at epoch {current_epoch}")]
+    VaultMoved {
+        /// The lease epoch that holds it now.
+        current_epoch: u64,
+        /// When, on the GATEWAY's clock.
+        moved_at_ms: i64,
+    },
+
     /// The request itself is wrong: a zero limit, a cursor with a non-decimal
     /// seq, a page query with no order column. Not the state.
     #[error("invalid request: {detail}")]
@@ -143,6 +162,7 @@ impl CoreError {
             // which cannot fix it (#1020 wave 3).
             Self::StaleCore { .. } => ErrorCode::VersionWindow,
             Self::Unavailable { .. } => ErrorCode::PeerUnreachable,
+            Self::VaultMoved { .. } => ErrorCode::VaultMoved,
             Self::Unpaired => ErrorCode::RebootstrapRequired,
             Self::VaultAlreadyHeld { .. } => ErrorCode::VaultAlreadyHeld,
             Self::IdentityMismatch { .. } => ErrorCode::IdentityMismatch,
@@ -195,15 +215,25 @@ impl CoreError {
             detail: self.to_string(),
             diagnostic_id: self.diagnostic_id().unwrap_or_default().to_owned(),
             sentence: self.sentence(),
-            // NONE, AND NOT BECAUSE IT IS UNIMPLEMENTED (#1029 W5). `moved`
-            // carries `lease.proto`'s `VaultMoved` on an
-            // `ERROR_CODE_VAULT_MOVED`, and that code is a GATEWAY's refusal:
-            // it means "you held this vault and a higher epoch took it", which
-            // is a statement about a lease this core neither holds nor hears
-            // about. `CoreError` has no variant that maps to it, so there is no
-            // arm here that could fill it in — and a core that invented an
-            // epoch and a date would be the second mechanism F1 forbids.
-            moved: None,
+            // FILLED SINCE #1029 W15-2, AND THE PARAGRAPH THAT SAID IT COULD
+            // NOT BE IS SUPERSEDED. It read: "that code is a GATEWAY's
+            // refusal … a statement about a lease this core neither holds nor
+            // hears about". That was true when it was written, in W5, and the
+            // drain changed it — `phone::drain` claims nothing but commits
+            // under the lease, so `ClientError::Moved` arrives here with the
+            // gateway's OWN epoch and the gateway's OWN moment. Nothing is
+            // invented: both numbers are copied out of the refusal, which is
+            // exactly what the old paragraph was guarding against.
+            moved: match self {
+                Self::VaultMoved {
+                    current_epoch,
+                    moved_at_ms,
+                } => Some(centraid_api_proto::core_v1::VaultMoved {
+                    current_epoch: *current_epoch,
+                    moved_at_ms: *moved_at_ms,
+                }),
+                _ => None,
+            },
         }
     }
 }

@@ -826,9 +826,12 @@ impl Handle {
             // NOR DOES A RESTORE, and for the same reason with more force: the
             // vault it is about does not exist on this device yet. That is the
             // whole of what it is for (F2).
-            K::Restore(request) => Ok(response(wire::response::Kind::Restore(
-                crate::phone::restore::run(request)?,
-            ))),
+            K::Restore(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::Restore(
+                    crate::phone::restore::run(&self.path, request, &runtime)?,
+                )))
+            }
             K::BackupStatus(_) => Ok(response(wire::response::Kind::BackupStatus(
                 crate::phone::backup_status(&self.path)?,
             ))),

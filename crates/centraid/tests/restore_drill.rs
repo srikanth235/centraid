@@ -1225,3 +1225,285 @@ async fn a_wrong_clock_is_recovered_against_a_real_server_in_one_retry() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ---------------------------- #1029 W15-3: the phone-shaped drill, over iroh --
+
+/// **LOSE THE PHONE, TYPE 24 WORDS, GET EVERY VAULT BACK — THROUGH THE CORE.**
+///
+/// The acceptance criterion at issue line 572, minus the account listing the
+/// [scope amendment of
+/// 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+/// struck. What is new here, against every other case in this file:
+///
+/// 1. **The restore is `centraid_core::phone::restore` — the core's own door**,
+///    the one `centraid_call`'s `Restore` arm reaches, not a function this test
+///    wrote out of the same parts.
+/// 2. **Its whole input is the phrase and the laptop's id.** No vault id, no
+///    index, no key, no path on phone A. F2 held structurally: the signature
+///    has nothing to read phone A with.
+/// 3. **Which vaults exist is discovered, not told.** There is no account and
+///    no listing; the restore derives candidates by index and asks the laptop
+///    about each, gap-limited.
+/// 4. **It crosses a real iroh endpoint** to a real `gateway-server`, both ends
+///    on loopback with relay and address lookup off.
+/// 5. **Phone A's next drain is refused `VAULT_MOVED`** — not "unreachable",
+///    which would be the phone promising a retry that can never work (F1).
+mod phone_shaped {
+    use centraid_api_proto::core_v1 as wire;
+    use centraid_core::phone::{self, Keyring, Laptop};
+    use centraid_gateway_core::Gateway;
+    use centraid_gateway_core::ids::Key32;
+    use centraid_gateway_core::plan::Plan;
+    use centraid_gateway_core::retention::Policy;
+    use centraid_gateway_server::bytes::configured::{Backend, ConfiguredBytes};
+    use centraid_gateway_server::bytes::fs::FilesystemBytes;
+    use centraid_gateway_server::config::{Config, IrohConfig};
+    use centraid_gateway_server::http::Server;
+    use centraid_gateway_server::serve;
+    use centraid_gateway_server::state::{SqliteState, register};
+    use centraid_identity::RecoveryPhrase;
+    use centraid_vault::Vault;
+
+    /// The two vaults phone A makes. **Plural is the point**: "every vault
+    /// back" is a claim with a plural in it.
+    const INDICES: [u32; 2] = [0, 1];
+    const WRITES: usize = 10;
+
+    struct Live {
+        address: iroh::EndpointAddr,
+        _objects: tempfile::TempDir,
+        _served: tokio::task::JoinHandle<()>,
+    }
+
+    /// One gateway holding BOTH vaults, which is what a member's laptop is.
+    async fn live(vaults: &[Key32]) -> Live {
+        let objects = tempfile::tempdir().expect("a temporary object directory");
+        let mut state = SqliteState::in_memory().expect("a state file");
+        for vault in vaults {
+            register(&mut state, *vault, *vault, Plan::active(u64::MAX), false)
+                .await
+                .expect("a registered vault");
+        }
+        let bytes = ConfiguredBytes::new(Backend::Filesystem(
+            FilesystemBytes::open(objects.path(), "").expect("an object directory"),
+        ));
+        let server = Server {
+            gateway: Gateway::new(state, bytes, Policy::default()),
+            config: Config::defaults(objects.path(), ""),
+        };
+        let endpoint = serve::bind_iroh(
+            objects.path(),
+            &IrohConfig {
+                local_only: true,
+                bind_addr: Some("127.0.0.1:0".to_owned()),
+                ..IrohConfig::default()
+            },
+        )
+        .await
+        .expect("a bound endpoint");
+        let address = iroh::EndpointAddr::from_parts(
+            endpoint.id(),
+            endpoint
+                .bound_sockets()
+                .into_iter()
+                .map(iroh::TransportAddr::Ip),
+        );
+        let served = tokio::spawn(async move {
+            let _ = serve::serve_iroh(endpoint, serve::shared(server)).await;
+        });
+        Live {
+            address,
+            _objects: objects,
+            _served: served,
+        }
+    }
+
+    /// **LOSE THE PHONE, TYPE 24 WORDS, GET EVERY VAULT BACK.**
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn lose_the_phone_type_the_words_and_the_core_brings_every_vault_back_over_iroh() {
+        let root = centraid_ontology::golden::scratch_dir();
+        let seed = RecoveryPhrase::parse(super::PHRASE)
+            .expect("the vector parses")
+            .seed();
+        let ids: Vec<Key32> = INDICES
+            .iter()
+            .map(|index| {
+                let keys = centraid_identity::derive::restore_vault_keys(&seed, *index)
+                    .expect("vault keys");
+                Key32::from_bytes(keys.identity.public().to_bytes())
+            })
+            .collect();
+        let gateway = live(&ids).await;
+        let runtime = tokio::runtime::Handle::current();
+        let laptop_id = *gateway.address.id.as_bytes();
+
+        // ---- PHONE A: two vaults, written and drained to the laptop --------
+        let phone_a = root.join("phone-a");
+        let mut held = Vec::new();
+        let mut expected = Vec::new();
+        for index in INDICES {
+            let keys = Keyring::derive(&seed, index, Some([0xA1; 32])).expect("a fresh index");
+            let dir = phone_a.join(format!("vault-{index}"));
+            std::fs::create_dir_all(&dir).expect("a directory");
+            let file = dir.join("vault.db");
+            let vault = Vault::create(&file).expect("a vault file");
+            vault
+                .found(&format!("Household {index}"), "Ada")
+                .expect("it founds");
+            for write in 0..WRITES {
+                centraid_vault::backup::drill::write_one(&vault, write).expect("a commit");
+            }
+            pair_and_claim(&file, &gateway, &keys, &[0xA1; 32]).await;
+            let answer = tokio::task::block_in_place(|| {
+                phone::drain_now(
+                    &vault,
+                    &file,
+                    Some(&keys),
+                    &wire::DrainRequest { deadline_ms: 0 },
+                    &runtime,
+                )
+            })
+            .expect("a drain answers");
+            assert_eq!(
+                answer.stopped,
+                wire::DrainStop::Empty as i32,
+                "vault {index} did not reach the laptop"
+            );
+            expected.push(centraid_vault::backup::drill::census(&file).expect("a census"));
+            held.push((keys, vault, file));
+        }
+
+        // ---- PHONE B: the 24 words and the laptop's id, and nothing else ---
+        let phone_b = root.join("phone-b");
+        std::fs::create_dir_all(&phone_b).expect("a directory");
+        let restored = tokio::task::block_in_place(|| {
+            phone::restore::run(
+                &phone_b.join("vault.db"),
+                &wire::RestoreRequest {
+                    phrase: super::PHRASE.to_owned(),
+                    // THE TYPED PATH, because this test contacts no resolver:
+                    // §5's "or the one typed when DNS fails", which is the path
+                    // that must always work.
+                    endpoint: Some(laptop_id.to_vec()),
+                },
+                &runtime,
+            )
+        })
+        .expect("the restore runs");
+
+        assert_eq!(
+            restored.vaults.len(),
+            INDICES.len(),
+            "a restore that found {} of {} vaults is not 'every vault back'",
+            restored.vaults.len(),
+            INDICES.len()
+        );
+        assert_eq!(
+            restored.gap_scanned,
+            phone::restore::GAP,
+            "the scan stopped before the gap limit, so 'we looked' is not checkable"
+        );
+        assert_eq!(
+            restored.device_secret.len(),
+            32,
+            "a restore mints a device key and hands it over exactly once"
+        );
+
+        for (slot, index) in INDICES.iter().enumerate() {
+            let one = restored
+                .vaults
+                .iter()
+                .find(|one| one.index == *index)
+                .unwrap_or_else(|| panic!("vault at index {index} did not come back"));
+            // THE CENSUS, not only a clean page tree (§2).
+            let back = centraid_vault::backup::drill::census(std::path::Path::new(&one.path))
+                .expect("a census");
+            assert_eq!(
+                back, expected[slot],
+                "vault {index} came back with different rows"
+            );
+            assert!(one.rows > 0, "vault {index} came back empty");
+            assert!(
+                !one.safety_number.is_empty(),
+                "vault {index} came back with no safety number to compare"
+            );
+        }
+
+        // ---- PHONE A IS FROZEN, AND IT IS TOLD SO BY NAME (F1) -------------
+        let (keys, vault, file) = &held[0];
+        centraid_vault::backup::drill::write_one(vault, 900).expect("a commit phone A never sends");
+        let refusal = tokio::task::block_in_place(|| {
+            phone::drain_now(
+                vault,
+                file,
+                Some(keys),
+                &wire::DrainRequest { deadline_ms: 0 },
+                &runtime,
+            )
+        })
+        .expect_err("phone A's next put must be refused");
+        match refusal {
+            centraid_core::CoreError::VaultMoved { current_epoch, .. } => {
+                assert!(
+                    current_epoch > 1,
+                    "the refusal names the epoch that took the vault"
+                );
+            }
+            other => {
+                panic!("phone A was told {other}, which promises a retry that can never work (F1)")
+            }
+        }
+
+        // AND IT STILL HOLDS EVERY ROW IT HAD. Nothing is wiped.
+        let after = centraid_vault::backup::drill::census(file).expect("a census");
+        for (table, rows) in &expected[0] {
+            assert!(
+                after.get(table).copied().unwrap_or_default() >= *rows,
+                "phone A lost rows from {table} when it froze"
+            );
+        }
+
+        for (_, vault, _) in held {
+            drop(vault);
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Do what a pairing does: certify, keep the record, and claim the lease.
+    async fn pair_and_claim(
+        vault_file: &std::path::Path,
+        live: &Live,
+        keyring: &Keyring,
+        secret: &[u8; 32],
+    ) {
+        let device = phone::link::Device::certify(secret, &keyring.vault.identity, 1);
+        let record = Laptop {
+            gateway_endpoint: hex::encode(live.address.id.as_bytes()),
+            relay_url: Some(String::new()),
+            direct_addrs: live
+                .address
+                .ip_addrs()
+                .map(|addr: &std::net::SocketAddr| addr.to_string())
+                .collect(),
+            device_certificate: Some(device.certificate_hex()),
+            epoch: Some(1),
+            last_acked_at_ms: None,
+        };
+        record.write(vault_file).expect("the record is written");
+        let mut client = phone::link::dial(
+            &record,
+            &device,
+            Key32::from_bytes(keyring.vault.identity.public().to_bytes()),
+        )
+        .await
+        .expect("the phone dials");
+        client
+            .preflight(phone::link::now_ms())
+            .await
+            .expect("the laptop answers");
+        client
+            .claim_lease(phone::link::now_ms())
+            .await
+            .expect("this device takes the lease");
+    }
+}
