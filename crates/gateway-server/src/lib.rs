@@ -50,7 +50,7 @@
 //! | [`clock`] | the one reach for the wall clock, which rules take as an input |
 //! | [`sql`] | every statement, by `include_str!` from `contracts/gateway/` |
 //! | [`state`] | `StateStore` over SQLite; the compare-and-set under `BEGIN IMMEDIATE` |
-//! | [`bytes`] | `ByteStore` over a directory or a bucket, and the SigV4 that opens one |
+//! | [`bytes`] | `ByteStore` over a directory, and the mirror beside it |
 //! | [`tenancy`] | invites, quotas and the household owner's admin path |
 //! | [`http`] | axum over the rules, and the proxy a phone `PUT`s to |
 //! | [`serve`] | the listener, and the only one in this workspace |

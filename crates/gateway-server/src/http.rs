@@ -66,12 +66,11 @@ pub const TIMESTAMP_HEADER: &str = "centraid-timestamp";
 pub const PROTOCOL_HEADER: &str = "centraid-protocol";
 /// The checksum a client attests for the bytes it is uploading, hex.
 ///
-/// Which digest that is, is `centraid_gateway_core::checksum`'s and is named
-/// there and in `crates/gateway-server/src/bytes/sigv4.rs` — the two modules
-/// the one-hash boundary allows — and deliberately not here.
+/// Which digest that is, is `centraid_gateway_core::checksum`'s — the one
+/// module the one-hash boundary allows — and deliberately not here.
 ///
-/// **Optional, and its absence is a refusal one step later**: R2 records the
-/// attestation only when the client sent it, so a commit fails on *no
+/// **Optional, and its absence is a refusal one step later**: an object store
+/// records the attestation only when the client sent it, so a commit fails on *no
 /// checksum* and not only on *wrong checksum*. A client that omits it uploads
 /// successfully and is then refused `GatewayChecksumMissing` at commit — which
 /// is a 4xx and a CLIENT fault, not this server failing. See

@@ -43,13 +43,11 @@ use crate::transport::{HttpRequest, HttpResponse, Transport};
 /// The header a client attests a stored object's checksum in.
 ///
 /// Its VALUE is the checksum the declaration bound to this name; its PRESENCE
-/// is what the standalone adapter records, because `ChecksumEvidence::None` is
-/// a rejection at commit and not a shrug. An S3-compatible store carries the
-/// same fact in its own attestation header
-/// (`centraid_gateway_server::bytes::sigv4`), which is why the two adapters
-/// agree without either restating the rule — and why the digest inside is the
-/// one `AttestedChecksum` already computes rather than anything this crate
-/// chooses.
+/// is what the gateway records, because `ChecksumEvidence::None` is a rejection
+/// at commit and not a shrug. The digest inside is the one `AttestedChecksum`
+/// already computes rather than anything this crate chooses. (The amendment of
+/// 2026-09-21 rules that the attested checksum goes entirely and the gateway
+/// hashes what it stores; that is W17's, because it changes the wire.)
 pub const ATTESTED_CHECKSUM_HEADER: &str = "centraid-attested-checksum";
 
 /// What `/v1/health` said, and what this phone agreed to speak.

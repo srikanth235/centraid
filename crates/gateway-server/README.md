@@ -66,7 +66,7 @@ Point this at a store that does not attest while configured for `attest` and com
 | `src/clock.rs` | the one reach for the wall clock; rules take time as an input |
 | `src/sql.rs` | every statement, by `include_str!` from `contracts/gateway/` |
 | `src/state.rs` | `StateStore` over SQLite; the compare-and-set under `BEGIN IMMEDIATE` |
-| `src/bytes/` | `ByteStore` over a directory or a bucket, the mirror, and SigV4 |
+| `src/bytes/` | `ByteStore` over a directory, and the mirror |
 | `src/tenancy.rs` | invites and quotas — **admission**, the one thing the deployments differ on |
 | `src/http.rs` | axum over the rules, and the proxy a phone `PUT`s to |
 | `src/serve.rs` | the listener, and the only one in this workspace |
@@ -78,7 +78,7 @@ Point this at a store that does not attest while configured for `attest` and com
 
 No plaintext, no plaintext hash, no key — ever, anywhere, including logs. The state file's columns are `contracts/gateway/schema.sql`'s and the object store holds ciphertext filed under the BLAKE3 of itself. `tests/canary.rs` plants a plaintext, puts a derived ciphertext through the whole path, and then reads the SQLite file's **raw bytes**, its rendered rows and every stored object looking for either the plaintext or its hash.
 
-The one thing this crate does not hash with BLAKE3 is in `src/bytes/sigv4.rs`, and it is somebody else's protocol: AWS Signature Version 4 is an HMAC-SHA256 chain over a SHA-256 payload digest, and a signature restated in BLAKE3 would not open a bucket. That file is the only one under this crate that names it, and `crates/vault/tests/one_hash.rs` carries the allowlist entry that says why.
+This crate hashes with BLAKE3 and nothing else. It carried one exception — `src/bytes/sigv4.rs`, AWS Signature Version 4, an HMAC-SHA256 chain over a SHA-256 payload digest, which a signature restated in BLAKE3 would not be — and the scope amendment of 2026-09-21 struck the S3 byte store it opened. `tests/no_rules_here.rs` now asserts that NO module here names SHA-256, which is the tighter form of the same claim.
 
 ## Tests
 

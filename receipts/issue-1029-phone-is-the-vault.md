@@ -2243,3 +2243,231 @@ compiled or ran that Swift**. What the inventory proves is that every vault-deri
 that the exclusion call reaches the directory and every item under it, and that the sweep runs at
 three moments including the one before iOS takes a backup. What it does not prove is that iOS
 accepted the resource value — that needs the physical-device run TESTING.md already parks.
+## W16 — the cut
+
+Branch `claude/1029-w16-the-cut`, base `2ac95e6d`. Six commits, the law commit alone.
+A deletion lane, executing the [scope amendment of
+2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795).
+
+**Base test floor: 1,698 passed / 0 failed / 5 ignored** (`cargo test --workspace
+--no-fail-fast` at `2ac95e6d`). **At HEAD: 1,645 passed / 0 failed.** 54 tests deleted
+with their subjects and 3 renamed; every one is named in the commit that removed it.
+
+| Commit | What |
+| --- | --- |
+| `b6d5d10f` | W16-1 — the hosted adapter on Cloudflare, the worker release lane, the wasm target |
+| `f65008f2` | W16-1's law half — `gateway-engine-mode-agnostic` retired, **alone** |
+| `81e2add6` | W16-2 — the mailbox, the account (`AccountKey`, `VaultClaim`, `VaultListing`), plan lapse |
+| `6580ffd1` | W16-3 — sharing in the gateway, the wire and the pack (F8) |
+| `13bf54b3` | W16-5 — the S3 byte store and SigV4 |
+| (this one) | W16-4's shell surfaces and `lint-types.sh`, the residual prose, and this receipt |
+
+### Every deleted path
+
+**Whole trees:** `gateway/cloudflare/` (its own cargo workspace, 14 files),
+`.github/workflows/lane-release-gateway-worker.yml`, `contracts/gateway/hosted.sql`,
+`wrangler.toml` (the adapter's, inside `gateway/`),
+`.governance/packs/srikanth235/centraid/directives/gateway-engine-mode-agnostic/`.
+
+**Rust modules:** `crates/gateway-core/src/{mailbox,share}.rs`,
+`crates/identity/src/account.rs`, `crates/gateway-server/src/bytes/{s3,sigv4}.rs`,
+`crates/gateway-core/tests/wasm_clean.rs` (→ `tests/pure_rules.rs`, purity half kept),
+`crates/identity/tests/wasm_half.rs`.
+
+**Protocol:** `mailbox.proto` (and its `build.rs` row, 17 → 16).
+`ERROR_CODE_GATEWAY_PLAN_LAPSED = 91`, `ERROR_CODE_GATEWAY_MAILBOX_REFUSED = 94`,
+`OBJECT_KIND_SHARE_ENTRY = 6`, `VaultRegistration.vault_claim = 1` and
+`VaultsResponse.signed_listing = 1` all become `reserved`, never re-used: a phone on an
+older build already reads those numbers, and a second meaning for one is a refusal or a
+stored object kind that lies.
+
+**Schema:** `contracts/gateway/schema.sql` loses `mailbox_capability`, `mailbox_entry`,
+`share_capability`, `share_scope`, `share_feed`, and `account`'s `plan_state` /
+`lapse_at_ms` / `retain_until_ms`. Eight query files with no caller left:
+`account_vault_{insert}`, `account_vaults_select`, `purchase_{receipt_insert,
+receipts_select,token_insert,token_redeem,token_select}`, `table_clear`.
+
+**Elsewhere:** the `oauth-worker` release surface and the `continuous` cadence that had
+only it; the `CLOUDFLARE_*` secret group; two stale `egress-ledger.json` rows and the
+`workerd` `lifecycle-ledger.json` row (wrangler is no longer a dependency); three
+`.gitignore` lines; `crates/identity`'s `discovery`/`mint` feature split; the workspace
+`time` dependency; `Rules` / `Connectors` / `Copies` in `BandPolicy.kt`; `"connectors"`
+in `FirstMoves.kt`; `desktop/electron` and `extension` in `scripts/lint-types.sh`.
+
+### The greps that proved them dead
+
+| Claim | Command and answer |
+| --- | --- |
+| the hosted adapter is gone from code | `grep -rli 'cloudflare\|wrangler\|miniflare\|workerd\|durable object' --exclude-dir=receipts --exclude-dir=.git --exclude-dir=node_modules .` → 21 files, **none of them gateway code**: `CONSTITUTION.md` (Evolution Log, frozen and append-only), `tests/claims.json` (law estate), the docs-site host (`wrangler.json`, `scripts/docs-site/*`), the Assist-OAuth docs W2's deletion left (`docs/{enrollment,logs,oauth-assist,release,release/oauth-assist-google,recovery/oauth-assist}.md`, `SECURITY.md`, `privacy.html`, `terms.html`) and **Cloudflare Tunnel as a self-hosting shape** (`gateway-server/{README.md,src/{acme,config,serve,bin/centraid-gateway}.rs,tests/container.rs}`, `deploy/gateway-server/README.md`, `restore_drill.rs`) |
+| the mailbox, the account and the listing are gone | `grep -rn 'mailbox\|Mailbox\|deposit_capab\|ShareEntry\|share_feed\|share_id\|VaultListing\|VaultClaim' crates contracts mobile/shared/src --include=*.rs --include=*.proto --include=*.sql --include=*.kt --include=*.json` → **5 hits, every one a comment saying the thing is struck** (`identity/src/record.rs:22-23`, `error.proto:182`, `lease.proto`'s two `reserved` notes) |
+| SigV4 and the S3 store are gone | `grep -rn 'sigv4\|SigV4\|S3Store' crates` → **no code**, 13 comment hits: the "seven days is SigV4's cap" presign note (`store.rs`, `fs.rs`, `backup.proto`, `spool.rs` — W13's file), and the module docs that record the retirement |
+| nothing links the wasm target | `grep -rn 'wasm32' crates .github Cargo.toml` → **empty** |
+| the shell leads with no dead plane | `grep -rn '"Rules"\|"Connectors"\|"Copies"\|"connectors"' mobile/shared/src/commonMain` → **empty** |
+| `AccountKey` had no consumer outside the listing | `grep -rn 'AccountKey' --include=*.rs --include=*.kt --include=*.swift --include=*.proto crates mobile contracts` → `derive.rs`, `account.rs`, `record.rs` (the account record), `discovery.rs` (resolving it), `publish.rs` (publishing it), `restore_drill.rs` and two vector tests. Every one is the listing or the record that exists to find it. **Deleted**, and the `seed / account'` slot is RETIRED rather than freed — `ACCOUNT_INDEX` stays reserved with the reason on it, so no future vault index re-derives a key an old seed already produced there |
+| `time` had no other direct consumer | `cargo tree -i time` → only transitive (`asn1-rs`/`x509-parser`/`rcgen` under `tokio-rustls-acme`, `netwatch` under iroh) |
+| `hmac` and `sha2` still have consumers | `cargo tree -i hmac` → `centraid-identity`, `hkdf`→`hpke`, `pbkdf2`→`scrypt`→`centraid-vault`. `cargo tree -i sha2` → `centraid-gateway-core` (`checksum.rs`, W17's), `centraid-identity`, `ed25519-dalek`. Both workspace entries stay |
+
+### The re-judgments (decisions, not deferrals)
+
+**1. `wasm_clean.rs` — SPLIT, not deleted.** It held two invariants. The
+deployment-discriminator scan went with the second deployment; the purity scan — no
+thread, no file, no ambient clock, no ambient randomness — has a live consumer: it is what
+makes `ServerTime` an argument and the conformance suite runnable anywhere, and W17 needs
+it when the transport changes underneath these rules. It survives as `tests/pure_rules.rs`.
+
+**2. `plan.rs` — the lapse went, the quota stayed.** The amendment strikes "plan lapse
+F13", not quota; `tenancy.rs` sets `Plan::active(quota_bytes)` from the invite the owner
+mints, which is Q13's household. Deleting the module whole would have deleted a live rule
+the amendment did not strike.
+
+**3. `repack` — kept, F8's predicate deleted.** `LiveShareIndex` was a seam nobody could
+answer. Left in place it reads as an enforced rule; `repack` itself is what keeps a pack
+from carrying dead thumbnails forever and never had anything to do with sharing.
+
+**4. `restore_drill.rs` — rewritten, not deleted.** The drill IS the restore, which
+survives. It re-derives each vault's keys from the phrase by index instead of from a signed
+listing, and says in the file that **where the index list comes from is W15's**.
+
+**5. `the_stores_own_checksum_is_named_in_exactly_one_module` — tightened, not deleted.**
+Its expected list goes from `["bytes/sigv4.rs"]` to empty. That is a stronger assertion
+than the one it replaces, which is why it survives its subject.
+
+**6. Root `wrangler.json` — KEPT, against the brief.** It is the **docs-site** static-assets
+deploy for `centraid.dev`; the hosted adapter's own config was
+`gateway/cloudflare/wrangler.toml`, which is deleted. The brief's §1 state section listed
+them as one thing. Confirmed by the root as a brief error, recorded here as one.
+
+### Not landed, and why
+
+**THE VAULT SCHEMA BAND (W16-3's second half and all of W16-4's table work).** The
+`share_*` band (nine tables, `vault-ddl.sql:3273-3438`), `outbox_*`, `replica_*`,
+`blob_device_*`, `access_device*`, `automation_*` and the `intents`/`devices`/pair
+leftovers are **still in the DDL a new vault gets**, with their readers in
+`crates/apps/{docs,people}`, `crates/vault/src/{access.rs,commands/core.rs}` and
+`crates/apps/kit/src/fixtures.rs`.
+
+The reason is a fact the brief's state section did not carry: **all three schema fixtures
+are generated from one frozen binary corpus**, not from each other.
+
+```
+contracts/golden/issue-1020/vault.db.gz  (frozen v0 vault, 89 KB, no generator)
+  ├─ cargo run -p centraid-ontology --bin export-ddl              → contracts/schema/vault-ddl.sql
+  ├─ cargo run -p centraid-ontology --bin export-golden-manifest  → contracts/golden/issue-1020/manifest.json
+  └─ cargo run -p centraid-vault    --bin export-baseline         → contracts/migrations/001_baseline.sql
+```
+
+`TESTING.md:116` states it plainly — the corpora are **frozen vaults** and only the
+*derived* fixtures are regenerable. `crates/ontology/tests/fixtures.rs` diffs the derived
+files against the corpus and `crates/vault/tests/baseline_corpus.rs` re-freezes it from
+Rust and reproduces v0's manifest. `export-golden-manifest`'s own header says why it may
+not be more: _"a re-generation is not a re-freeze: the corpus was frozen when it was frozen,
+and this program only restates what is in it."_
+
+So dropping a table means mutating the frozen `.db.gz` by hand and re-gzipping it — there
+is no tool for it in `crates/xtask`, `crates/ontology/src/bin`, `crates/vault/src/bin`,
+`TESTING.md` or the W2 receipt section, and a hand-edited golden corpus is the "green by
+editing the fixture" this repository's doctrine forbids. **Stopped on the root's second
+stop condition.** Deferred rows, one per plane, each with the command that blocked it:
+
+| Plane | Tables still in the DDL a new vault gets | Blocked by |
+| --- | --- | --- |
+| sharing (§7) | `share_authority`, `share_authority_request`, `share_authority_use`, `share_delivery_config`, `share_fulfillment`, `share_party_vault_binding`, `share_subscription`, `share_subscription_lineage`, `share_subscription_member` | no tool mutates `contracts/golden/issue-1020/vault.db.gz`; `cargo run -p centraid-ontology --bin export-ddl` only re-reads it |
+| outbox | `outbox_item`, `blob_outbox` | as above |
+| replica | `replica_log`, `replica_meta`, `replica_intent_outcome`, `replica_invocation_commit`, `replica_parked_payload` | as above |
+| device / pairing | `blob_device_*` ×2, `access_device`, `access_device_secret` | as above |
+| automations | `automation_state`, `automation_trigger_cursor`, `trigger_ingress` | as above |
+| intents | `intents` (the earlier audit counted 6 live callers) | as above |
+| the W2 deferred band | `sync_connection*`, `sync_external_entity`, `sync_import_batch`/`_row`, `access_agent*`, `conversation_provider_consent`, the conversation/turn/item/attachment band, `harness_health`, plus `locker_item.connection_id` and `commands/locker.rs:611,958` | as above |
+
+**The question this raises for the owner, with a recommendation.** The corpus is a
+*historical* artefact — a v0 vault as it was — and `001_baseline.sql`, the migration a
+*new* vault runs, is derived from it. Those two jobs have diverged: v0's record should not
+be edited, and v0's table list should not be what v1 founds. **Recommendation: split them**
+— keep the corpus frozen as the migration-compatibility record, and give `001_baseline.sql`
+its own generator from the v1 ontology, so a plane deleted in code can be deleted in the
+schema without touching the frozen file. That is a slice, not a step, and it is the
+prerequisite for every row in the table above.
+
+### Found, and not this lane's slice
+
+1. **`scripts/release/surfaces.mjs` still lists `desktop` and `companion`**, whose
+   workflows W2 deleted. `node --test scripts/release/surfaces.test.mjs` is **RED on
+   `2ac95e6d`** for exactly that (`every surface names a workflow file that exists on
+   disk`); this lane removed the third dead surface (`oauth-worker`) and the failure list
+   went 3 → 2. `scripts/release/publish-guards.test.mjs` names surfaces `web` and `docs`
+   that do not exist. Neither is in `check:push:static`. **W9's or a release lane's.**
+2. **`scripts/docs-site/src/content/{privacy,terms}.html` describe the Assist OAuth
+   courier**, whose Worker W2 deleted — not the hosted gateway. Striking sentences from a
+   published privacy policy and terms of service is the owner's call, not a deletion lane's.
+   Same for `docs/{oauth-assist,enrollment,logs}.md`, `docs/release/oauth-assist-google.md`,
+   `docs/recovery/oauth-assist.md` and `SECURITY.md:140-174` (**W13's file**). **W9's.**
+3. **`crates/gateway-core::plan::Plan` should be `quota::Allowance`.** "Plan" is a purchase
+   word and there are no purchases. The rename collides with `error::Quota`, the refusal
+   companion, so it is a question rather than a guess. **W9's, or W17's if it touches the
+   wire.**
+4. **"Seven days is SigV4's cap"** is now a number with no protocol behind it
+   (`gateway-core/src/store.rs:114`, `gateway-server/src/bytes/fs.rs:28`,
+   `backup.proto:83`, `gateway-client/src/spool.rs:260` — **W13's file**). Whatever replaces
+   the presigned URL over iroh sets its own bound. **W17's.**
+5. **`.gitignore` still ignores `apps/web/public/centraid-worker-iroh.{js,wasm}`**, a tree
+   that does not exist. **W9's.**
+6. **`mobile/shared/build/` is committed-adjacent build output** that a repo-wide grep
+   walks (`kover/bin-reports/jvmTest.ic` matched the Cloudflare grep). Untracked, so it is
+   noise rather than a finding — but it makes every `grep -r` at the repo root noisier than
+   it should be. **W9's.**
+
+### Rulings spent
+
+- **Amendment 2026-09-21, "Struck from v0"** — five of the six items are deleted in this
+  lane. The sixth, `BackgroundTransfers` on the phone, is W18's.
+- **Amendment, "Superseded" — object names stay BLAKE3, the attested checksum goes.** NOT
+  started: it changes the wire and is W17's. `gateway-core/src/checksum.rs` and its `sha2`
+  dependency are untouched, and `client.rs` says so where it names the header.
+- **F8** ("never repack a shared pack") — deleted with sharing, and `repack` kept.
+- **F13** (free tier and lapse) — the lapse half is deleted; the quota half is Q13's
+  household bound and stays.
+- **D-1025-S4-5 / W0.5-R1** (the `sha2`/`hmac` carve-out is one module per crate) — survives
+  in a tighter form: `crates/gateway-server` now names SHA-256 in **no** module, asserted.
+- **`estate-separation`** — the directive retirement is `f65008f2`, alone.
+- **ACME stays** until W17 rules on HTTPS, per the brief. `src/acme.rs` is untouched.
+
+### Verification
+
+`export CARGO_TARGET_DIR=/home/user/.cargo-target-w16 CARGO_INCREMENTAL=0` throughout.
+
+| Exit item | Result |
+| --- | --- |
+| 1 `cargo build --workspace` / `--all-targets` | **clean**, both |
+| 2 `cargo test --workspace --no-fail-fast` | **1,645 passed, 0 failed** — the 1,698 floor minus 54 tests whose subjects were deleted, plus 1 renamed-and-tightened. Each named in its commit |
+| 3 the Cloudflare grep | 21 files, none of them gateway code — the table above says which and why |
+| 4 the mailbox/account/share grep | **5 hits, all comments recording the deletion** |
+| 5 `grep -rn 'sigv4\|SigV4\|S3Store' crates` | **no code**; `cargo tree -i hmac` / `-i sha2` each name their remaining consumers |
+| 6 `grep '^CREATE TABLE' vault-ddl.sql \| grep -i 'share_\|replica_\|outbox\|blob_device\|access_device\|automation_'` | **22 — NOT empty.** The frozen-corpus stop above |
+| 7 the shell-surface grep | **empty** |
+| 8 `bun install --frozen-lockfile && bun run lint:types` | **green** (it was RED on `2ac95e6d`: `desktop/electron` and `extension` had no tsconfig) |
+| 9 `cargo xtask gate --profile local --lane fmt\|clippy\|rules` | **PASS**, all three |
+| 10 `cargo xtask gate --profile local` | FAIL on `ledgers` (**"no merge base found"** — it cannot run in a worktree, same as W2). Budget line: _"the `local` profile took 269.2s against a 120s budget"_, `test` 264.4s of it, on a host a sibling lane was building on. Over before this lane and not a reason to touch a ledger |
+| 11 `cargo xtask gate --profile mobile-jvm` | **PASS**, 27.6s of a 420s budget |
+| 12 `bun run check:push:static` | **4/4 green** |
+| 13 `node .governance/law/run.mjs --brief-digest 2612c611d7e6` | **10 rules, no findings.** The law moved once, in `f65008f2`, alone |
+| 14 `git log --oneline 2ac95e6d..HEAD` | 6 commits, one per slice at least, the law commit alone |
+
+### Falsification
+
+The two riskiest claims in this section, and the throwaway check against each.
+
+**1. "`AccountKey` has no consumer outside the listing."** A grep over `crates` could miss a
+consumer that reaches it through a re-export, or one on the phone. The throwaway check was
+to delete the type first and read the compiler's answer: the whole break set was
+`record.rs` (`AccountRecord::sign`), `discovery.rs` (`publish_account`/`resolve_account`/
+`locate_account`), `publish.rs`, `restore_drill.rs` and the two vector tests — the same set
+the grep named and nothing else, and `mobile/` and `crates/core-ffi` did not move. The
+compiler is a better grep than the grep, and it agreed.
+
+**2. "The purity scan in `wasm_clean.rs` has a live consumer, so it survives its file."**
+The risk is the reverse of the usual one: keeping a test whose subject left, which is how a
+suite fills with assertions nobody can fail. The throwaway check was to break it on
+purpose — a `std::time::SystemTime::now()` in `gateway-core/src/lease.rs` — and
+`pure_rules.rs::no_rule_reaches_for_a_thread_a_file_an_ambient_clock_or_ambient_randomness`
+went red naming the file and line. It is still a scan with teeth over a crate that still
+has to be pure, which is the claim; the line was reverted before the build that follows.

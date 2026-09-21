@@ -55,22 +55,25 @@ message VaultMoved {
   int64 moved_at_ms = 2;
 }
 
-// Registering a vault under an account. The account key signs "vault V belongs
-// to account A" — `centraid_identity::VaultClaim`, 132 bytes.
+// Registering a vault under an account on the gateway.
+//
+// `vault_claim` carried an ACCOUNT KEY's signed "vault V belongs to account A"
+// (`centraid_identity::VaultClaim`, 132 bytes) until the scope amendment of
+// 2026-09-21 struck the account. The field is RESERVED rather than re-used:
+// field 1 of this message means that claim to anything already built.
 message VaultRegistration {
-  bytes vault_claim = 1;
+  reserved 1;
   // The first lease, so registration and admission are one round trip.
   LeaseClaim lease = 2;
 }
 
-// `GET /a/{account}/vaults`, signed by the account key. RESTORE NEEDS NO
-// OPERATOR (#1029 §3): the seed yields the account key, its pkarr record or a
-// typed URL names the gateway, and this is the enumeration that follows.
+// The vaults a gateway holds for a caller. RESTORE NEEDS NO OPERATOR
+// (#1029 §3), and how a restoring phone learns WHICH vaults exist is W15's:
+// the amendment of 2026-09-21 struck the account key and its signed listing,
+// so field 1 — `centraid_identity::VaultListing::to_bytes` — is RESERVED and
+// not re-used.
 message VaultsResponse {
-  // `centraid_identity::VaultListing::to_bytes` — the account's own signed
-  // listing, verified by the phone against its own key rather than trusted
-  // from the gateway.
-  bytes signed_listing = 1;
+  reserved 1;
   repeated VaultSummary vaults = 2;
 }
 

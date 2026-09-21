@@ -52,19 +52,15 @@ fn walk(dir: &Path, into: &mut Vec<PathBuf>) {
 const FORBIDDEN: &[(&str, &str)] = &[
     (
         "SystemTime::now",
-        "an ambient clock. It COMPILES for wasm32-unknown-unknown and PANICS \
-         when called, so this is the one that would survive every test and die \
-         in a Worker. Time is an input: take a `ServerTime`",
+        "an ambient clock. Time is an INPUT here — take a `ServerTime` — so a \
+         rule can be replayed, pinned by a test and driven by any adapter. This \
+         is also the reach that used to compile for wasm32 and panic at run \
+         time, which is how it got onto the list",
     ),
-    (
-        "Instant::now",
-        "an ambient clock, same reason — and a monotonic one is not available \
-         in a Worker at all",
-    ),
+    ("Instant::now", "an ambient clock, same reason"),
     (
         "std::thread",
-        "a Worker isolate is single-threaded and wasm32-unknown-unknown has no \
-         thread support. A rule that spawned would not link",
+        "a rule decides; it does not run work. Concurrency is the adapter's",
     ),
     (
         "std::fs",
@@ -80,8 +76,7 @@ const FORBIDDEN: &[(&str, &str)] = &[
     ),
     (
         "std::env",
-        "configuration is an argument, not an ambient variable a Worker does \
-         not have",
+        "configuration is an argument, not an ambient variable",
     ),
     (
         "rand::",
@@ -90,13 +85,13 @@ const FORBIDDEN: &[(&str, &str)] = &[
     ),
     (
         "OsRng",
-        "ambient randomness, same reason, and `getrandom` needs a backend a \
-         Worker supplies rather than one this crate assumes",
+        "ambient randomness, same reason: the adapter has the platform's \
+         generator and this crate does not assume one",
     ),
     (
         "tokio",
         "a runtime. The ports are `async fn` with no `Send` bound precisely so \
-         that a Worker's own scheduler can drive them",
+         that the adapter's own scheduler drives them",
     ),
     (
         "rusqlite",
