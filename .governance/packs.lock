@@ -6,7 +6,6 @@ packs:
   directives:
   - law
   - no-hardcoded-model-ids
-  - gateway-engine-mode-agnostic
   - format-check
   - coverage-scope-reachability
   - lint-check
