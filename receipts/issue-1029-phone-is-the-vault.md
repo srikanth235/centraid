@@ -2610,7 +2610,10 @@ pruning it turned four corpus commitments red
 | 7 `grep -c 'CREATE TABLE' contracts/schema/vault-ddl.sql` | **186.** The plane grep returns `access_device` and `access_device_secret` only — the deliberate keep above |
 | 8 `git diff --stat 1ee293d2..HEAD -- …/vault.db.gz …/manifest.json` | **empty: the corpus and its manifest are untouched** |
 | 9 `grep -rn 'mod intents\|intents::' crates --include=*.rs` | **empty** |
-| 10 `cargo xtask gate --profile local --lane {fmt,clippy,rules}` | **PASS / PASS / PASS** |
+| 10 `cargo xtask gate --profile local --lane {fmt,clippy,rules}` | **PASS / PASS / PASS** (`rules`: 4 rules applied, `sql-confinement` 214 files clean) |
+| 11 `cargo xtask gate --profile local` | **FAIL on `ledgers` only** — "no merge base found (tried origin/main, main, origin/master, master)", which is the worktree condition W2 and W16 both recorded and is not a reason to touch a ledger. Budget: **387.3s against 120s, 381.6s of it `test`** on a cold tree; `test` was already over warm before this lane (W2 measured 152.1s, 124.8s of it `test`). `restore-drill` **ok**, and it is the drill that founds a vault at the new ladder head |
+| 12 `bun install --frozen-lockfile && bun run check:push:static` | **4/4 gates passed** |
+| 13 `node .governance/law/run.mjs --brief-digest 2612c611d7e6` | **10 rules, no findings; no drift line — the law did not move** |
 
 ### Found, and not this lane's slice
 
