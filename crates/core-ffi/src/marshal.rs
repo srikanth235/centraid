@@ -12,7 +12,7 @@
 //! The encoding half is safe Rust and is tested the ordinary way.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_core::{CoreConfig, CoreError, Handle};
+use centraid_core::{CoreConfig, CoreError, Handle, Seed};
 use prost::Message as _;
 
 // ------------------------------------------------------------- encoding -----
@@ -139,6 +139,11 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
             .and_then(serde_json::Value::as_str)
             .filter(|digest| !digest.trim().is_empty())
             .map(str::to_owned),
+        // THE VAULT'S SEED AND ITS INDEX (#1029 W15, `CONTRACT.md` §4b). Out
+        // of the shell's secure store, for the length of this call; nothing
+        // here writes it anywhere. Absent is a core that cannot seal and says
+        // so — see `centraid_core::config::CoreConfig::seed`.
+        seed: vault_seed(&parsed)?,
     };
     // DEFAULTS TO CREATING, because a shell that named a path and said nothing
     // else is founding a vault there — which is what the phone does now
@@ -150,6 +155,38 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(true);
     Ok(config)
+}
+
+/// `{"vault": {"seed": "<128 lowercase hex>", "index": 0}}`.
+///
+/// **Present and unreadable IS an error**, for the same reason `CONTRACT.md`
+/// §4a gives about the endpoint secret: carrying on without it would leave a
+/// shell believing it had unlocked a core that cannot seal a single byte, and
+/// the member would find that out on the day their phone is gone.
+fn vault_seed(parsed: &serde_json::Value) -> Result<Option<(Seed, u32)>, CoreError> {
+    let Some(vault) = parsed.get("vault") else {
+        return Ok(None);
+    };
+    let refuse = |detail: String| CoreError::InvalidRequest { detail };
+    let hex_text = vault
+        .get("seed")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| refuse("`vault` carries no `seed`".to_owned()))?;
+    let raw = hex::decode(hex_text.trim())
+        .map_err(|error| refuse(format!("the vault seed is not hex: {error}")))?;
+    let raw: [u8; centraid_core::SEED_BYTES] = raw.try_into().map_err(|_| {
+        refuse(format!(
+            "a vault seed is {} bytes",
+            centraid_core::SEED_BYTES
+        ))
+    })?;
+    let index = vault
+        .get("index")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| refuse("`vault` carries no `index`".to_owned()))?;
+    let index = u32::try_from(index)
+        .map_err(|_| refuse("a vault index is a 32-bit unsigned integer".to_owned()))?;
+    Ok(Some((Seed::from_bytes(raw), index)))
 }
 
 // --------------------------------------------------------------- unsafe -----

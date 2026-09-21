@@ -31,6 +31,15 @@ centraid-apps-locker = { path = "../apps/locker" }
 # core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
 # door and this is the crate that has both halves in scope.
 centraid-blobs = { path = "../blobs" }
+# THE 24 WORDS AND THE PAIRING CODE (#1029 W15). A restore parses the phrase
+# here and refuses a bad checksum before anything is derived from it, and a
+# pairing payload is decoded by `centraid_identity::ticket` and NOT by a second
+# parser in a shell — a ticket is the one message with no handshake in front of
+# it, so two parsers is two chances to half-accept one.
+centraid-identity = { path = "../identity" }
+# The laptop's endpoint id is stored as hex beside the vault; `hex` is what
+# writes and reads it.
+hex.workspace = true
 # THE RUNTIME THE BYTE STORE NEEDS, OWNED BY THE CORE (#1029 W6, hand-off 2).
 # `ByteStore::open` is asynchronous and `ContentBytes` holds a runtime handle,
 # so SOMEBODY has to own a runtime for the life of the core. On a phone there is

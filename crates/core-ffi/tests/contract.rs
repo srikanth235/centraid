@@ -29,10 +29,28 @@ struct Opened {
 impl Opened {
     /// A gateway core over a fresh file, through `centraid_open`.
     fn gateway() -> Self {
+        Self::over_a_fresh_file(false)
+    }
+
+    /// The same, with the vault seed `CONTRACT.md` §4b describes — a core that
+    /// can seal, which is what a drain needs.
+    fn unlocked() -> Self {
+        Self::over_a_fresh_file(true)
+    }
+
+    fn over_a_fresh_file(with_seed: bool) -> Self {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
+        let vault = if with_seed {
+            format!(
+                r#","vault":{{"seed":"{}","index":0}}"#,
+                "ab".repeat(centraid_core::SEED_BYTES)
+            )
+        } else {
+            String::new()
+        };
         let config = format!(
-            r#"{{"path":{:?},"role":"gateway","create":true}}"#,
+            r#"{{"path":{:?},"role":"gateway","create":true{vault}}}"#,
             dir.join("vault.db").display().to_string()
         );
         let mut handle: *mut centraid_core::Handle = std::ptr::null_mut();
@@ -806,4 +824,191 @@ fn an_open_that_refuses_an_ordinary_file_never_answers_ok() {
         "a failed open wrote a handle the caller would then close"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ------------------------------------------- #1029 W15: the phone's flows ----
+
+/// Decode an answer envelope, or fail loudly with what came back instead.
+fn answer(bytes: &[u8]) -> wire::Envelope {
+    wire::Envelope::decode(bytes).expect("the answer is an envelope")
+}
+
+/// CLAUSE 4b. The seed crosses the boundary, and a malformed one is refused
+/// rather than replaced.
+///
+/// The three cases are the three a shell can actually produce: no `vault` key
+/// at all (every first launch, and a locked phone), a good one, and a `seed`
+/// that is the wrong length — which is what a shell handed a truncated
+/// Keychain item produces, and is the one that must NOT be read as "absent".
+#[test]
+fn the_vault_seed_crosses_the_abi_and_a_malformed_one_is_refused() {
+    use centraid_core_ffi::marshal::config_from_json;
+
+    let absent = config_from_json(br#"{"path":"/tmp/v.db"}"#).expect("no vault key is fine");
+    assert!(
+        absent.seed.is_none(),
+        "a shell that said nothing has no seed, and that is a state"
+    );
+
+    let seed_hex = "ab".repeat(centraid_core::SEED_BYTES);
+    let good = config_from_json(
+        format!(r#"{{"path":"/tmp/v.db","vault":{{"seed":"{seed_hex}","index":3}}}}"#).as_bytes(),
+    )
+    .expect("a good seed parses");
+    let (seed, index) = good.seed.expect("the seed crossed");
+    assert_eq!(
+        index, 3,
+        "the index is the vault's own and is never chosen here"
+    );
+    assert_eq!(
+        seed.as_bytes()[..],
+        [0xAB_u8; centraid_core::SEED_BYTES][..],
+        "the bytes that crossed are the bytes the shell sent"
+    );
+
+    for bad in [
+        // Too short: a truncated secure-store item.
+        r#"{"path":"/tmp/v.db","vault":{"seed":"abcd","index":0}}"#,
+        // Not hex at all.
+        r#"{"path":"/tmp/v.db","vault":{"seed":"not hex","index":0}}"#,
+        // A seed with no index is half a derivation, and F2 is about indices.
+        r#"{"path":"/tmp/v.db","vault":{"seed":"ab"}}"#,
+    ] {
+        // `CoreConfig` is not `Debug` (it holds `dyn Clock`), so the refusal
+        // is matched rather than unwrapped.
+        match config_from_json(bad.as_bytes()) {
+            Err(centraid_core::CoreError::InvalidRequest { .. }) => {}
+            Err(other) => panic!("a malformed seed is BAD_ARGUMENT, not {other}"),
+            Ok(_) => panic!("present and unreadable is an error, never a fresh key: {bad}"),
+        }
+    }
+}
+
+/// CLAUSE 4c. All four phone flows round-trip through `centraid_call`.
+///
+/// **What is asserted is the round trip, not the outcome.** Each kind is
+/// encoded into an `Envelope`, handed to the C symbol, and the answer decoded —
+/// so a kind the core does not dispatch, or one whose answer is filed under the
+/// wrong `Response` arm, fails here rather than in a shell. Two of the four
+/// answer with a typed response over a core with no laptop, and two refuse for
+/// a reason the shell draws; both are answers and neither is a hang.
+#[test]
+fn the_phones_four_flows_round_trip_through_call() {
+    // UNLOCKED, because a drain seals and sealing needs the keys clause 4b
+    // carries. A LOCKED core's drain is the clause's other half and is pinned
+    // by `a_locked_core_refuses_to_drain_rather_than_inventing_a_key` below.
+    let opened = Opened::unlocked();
+
+    // `backup_status` — a typed answer over a phone that has never paired.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            11,
+            wire::request::Kind::BackupStatus(wire::BackupStatusRequest {}),
+        ),
+    );
+    assert_eq!(code, CENTRAID_OK, "a status read answers");
+    let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+        panic!("a status read is answered by a Response");
+    };
+    let Some(wire::response::Kind::BackupStatus(status)) = response.kind else {
+        panic!("a BackupStatusRequest is answered by a BackupStatusResponse");
+    };
+    assert!(!status.laptop_paired, "this core has never scanned a QR");
+    assert_eq!(
+        status.acked_at_ms, None,
+        "a moment that is not the gateway's is no moment at all"
+    );
+
+    // `drain` — the door `BackupNow` stood in for, and it is NOT
+    // `NotYetAvailable`: an unpaired phone has nowhere to send bytes, which is
+    // `DRAIN_STOP_UNREACHABLE` and not a failure.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            12,
+            wire::request::Kind::Drain(wire::DrainRequest { deadline_ms: 0 }),
+        ),
+    );
+    assert_eq!(code, CENTRAID_OK, "a drain answers");
+    let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+        panic!("a drain is answered by a Response, never by a NotYetAvailable error");
+    };
+    let Some(wire::response::Kind::Drain(drain)) = response.kind else {
+        panic!("a DrainRequest is answered by a DrainResponse");
+    };
+    assert_eq!(
+        drain.stopped,
+        wire::DrainStop::Unreachable as i32,
+        "an unpaired phone has no laptop to reach"
+    );
+    assert_eq!(
+        drain.acked_at_ms, None,
+        "nothing was acked, so nothing is claimed"
+    );
+
+    // `pair` — a payload that is not a ticket is refused by the core's own
+    // decoder, so no shell ever writes a second one.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            13,
+            wire::request::Kind::PairPhone(wire::PairRequest {
+                payload: "not-a-pairing-code".to_owned(),
+            }),
+        ),
+    );
+    assert_eq!(code, CENTRAID_BAD_ARGUMENT, "a bad pairing code is refused");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+
+    // `restore` — three words are not 24, and the refusal is the phrase's own
+    // checksum rather than a failure somewhere downstream.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            14,
+            wire::request::Kind::Restore(wire::RestoreRequest {
+                phrase: "abandon abandon abandon".to_owned(),
+                endpoint: None,
+            }),
+        ),
+    );
+    assert_eq!(code, CENTRAID_BAD_ARGUMENT, "three words are not a phrase");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+}
+
+/// CLAUSE 4b, the other half. A core opened with no seed reads and writes its
+/// vault and **refuses to drain**, with a sentence naming the seed — it never
+/// invents a key file beside the vault it protects.
+#[test]
+fn a_locked_core_refuses_to_drain_rather_than_inventing_a_key() {
+    let opened = Opened::gateway();
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            21,
+            wire::request::Kind::Drain(wire::DrainRequest { deadline_ms: 0 }),
+        ),
+    );
+    // `CENTRAID_OK` AND A REFUSING BODY is this ABI's shape for everything
+    // that is not a decode, a bad argument, a close or a panic (`code_for`):
+    // the status says the call ran and the closed `ErrorCode` says what the
+    // answer is. What matters here is that the answer is not a `DrainResponse`.
+    assert_eq!(code, CENTRAID_OK, "the call itself ran");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    // `CoreError::Unavailable` is `ERROR_CODE_PEER_UNREACHABLE` on the wire
+    // (`crates/core/src/error.rs`), which is the sentence a member reads.
+    assert_eq!(error.code, wire::ErrorCode::PeerUnreachable as i32);
+    assert!(
+        !centraid_core::phone::Laptop::path_for(&opened.dir.join("vault.db")).exists(),
+        "a refused drain wrote something beside the vault"
+    );
 }

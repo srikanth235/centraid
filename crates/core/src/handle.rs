@@ -120,6 +120,22 @@ pub struct Handle {
     /// Open staging sessions: bytes a shell is streaming in so this core can
     /// name them (#1025 S4). See [`crate::stage`].
     staging: crate::stage::Staging,
+    /// THE FILE THIS CORE WAS OPENED ON, KEPT (#1029 W15).
+    ///
+    /// `Core::open` took the path, used it and dropped it — there was a
+    /// `let _ = &path;` where this field should have been. The backup home is
+    /// **under the vault's own directory** (`crate::phone::home_root`), and a
+    /// drain that had to be told where its own vault lives would be a second
+    /// place the path is decided; W13's F5 rows 6-7 are about exactly that
+    /// directory, so there is one expression that computes it and this is what
+    /// it reads.
+    path: std::path::PathBuf,
+    /// THE VAULT'S OBJECT KEYS, WHEN THE SHELL SUPPLIED A SEED.
+    ///
+    /// `None` is a core that reads and writes its vault and cannot seal, which
+    /// is an honest state (see [`crate::phone`]'s header for why this library
+    /// writes no key down).
+    keys: Option<centraid_vault::backup::ObjectKeys>,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -153,6 +169,7 @@ impl Core {
             clock,
             ids,
             expected_digest,
+            seed,
         } = config;
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
@@ -207,8 +224,29 @@ impl Core {
                 None,
             )?)
         };
-        let _ = &path;
+        // THE VAULT KEYS, IF THE SHELL HAD THEM (#1029 W15). Derived here and
+        // never written down: see `crate::phone`'s header.
+        let keys = seed.map(|(seed, index)| {
+            let derived = centraid_identity::derive::restore_vault_keys(&seed, index);
+            derived.map(|keys| {
+                centraid_vault::backup::ObjectKeys::new(
+                    keys.identity.public().to_bytes(),
+                    *keys.root.as_bytes(),
+                )
+            })
+        });
+        let keys = match keys {
+            None => None,
+            Some(Ok(keys)) => Some(keys),
+            Some(Err(error)) => {
+                return Err(CoreError::InvalidRequest {
+                    detail: format!("the vault seed will not derive: {error}"),
+                });
+            }
+        };
         Ok(Handle {
+            path,
+            keys,
             vault: Mutex::new(vault),
             registry: Registry::with_system_commands()?,
             ui_thread_name,
@@ -731,10 +769,27 @@ impl Handle {
                     },
                 )?)))
             }
-            K::BackupNow(_) => Err(CoreError::NotYetAvailable {
-                what: "backup",
-                lands_in: "wave 2 lane R",
-            }),
+            // THE PHONE'S TWO FLOWS, AND THE TWO SCREENS BESIDE THEM (#1029
+            // W15). `BackupNow` stood here and answered `NotYetAvailable` for
+            // the whole of its life; `Drain` is the door it stood in for.
+            K::Drain(request) => Ok(response(wire::response::Kind::Drain(self.with_vault(
+                |vault| crate::phone::drain(vault, &self.path, self.keys.as_ref(), request),
+            )?))),
+            // PAIRING NEEDS NO VAULT TO BE OPEN. A phone pairs the laptop it
+            // will restore ONTO, which by definition has no vault yet, so this
+            // arm deliberately does not go through `with_vault`.
+            K::PairPhone(request) => Ok(response(wire::response::Kind::PairPhone(
+                crate::phone::pair(&self.path, request)?,
+            ))),
+            // NOR DOES A RESTORE, and for the same reason with more force: the
+            // vault it is about does not exist on this device yet. That is the
+            // whole of what it is for (F2).
+            K::Restore(request) => Ok(response(wire::response::Kind::Restore(
+                crate::phone::restore(request)?,
+            ))),
+            K::BackupStatus(_) => Ok(response(wire::response::Kind::BackupStatus(
+                crate::phone::backup_status(&self.path)?,
+            ))),
         }
         .map_err(|error| {
             tracing::debug!(request_id, %error, "the core refused a request");
@@ -877,11 +932,24 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // policy rows. A cancel arriving mid-found could not stop it
             // anyway — the commit guard is what decides, and it is
             // all-or-nothing.
-            | K::Found(_),
+            | K::Found(_)
+            // PAIRING IS BOUNDED: one ticket, one redemption, one record
+            // published. It talks to the network, which is not the same
+            // question — `Bounded` is "finishes on its own bounded by its own
+            // limit", and a pairing that cannot reach the laptop fails rather
+            // than running on.
+            | K::PairPhone(_)
+            // A STATUS READ IS BOUNDED AND DIALS NOTHING. It is the cheapest
+            // call this ABI takes: a spool measurement and one small file.
+            | K::BackupStatus(_),
         )
         | None => RequestKind::Bounded,
-        // A snapshot fetch and a backup are as long as the artifact is.
-        Some(K::BackupNow(_)) => RequestKind::Unbounded,
+        // A DRAIN IS AS LONG AS THE SPOOL IS and a RESTORE as long as the
+        // vault is. Both are cancellable, and a drain has a deadline of its
+        // own besides — the two are different stops and a shell may use
+        // either: `Cancel` is the member leaving the screen, the deadline is
+        // the operating system taking the window back.
+        Some(K::Drain(_) | K::Restore(_)) => RequestKind::Unbounded,
     }
 }
 
@@ -1145,15 +1213,39 @@ mod tests {
     fn an_unbounded_request_is_cancellable_and_a_bounded_one_is_not() {
         // The classification, directly: it lives in one function so a call site
         // cannot choose wrongly.
-        // `backup_now` is the unbounded one now: `snapshot_head` was the other
-        // and is deleted (#1025 S7, item 5).
+        // THE TWO UNBOUNDED ONES ARE THE PHONE'S TWO FLOWS (#1029 W15).
+        // `backup_now` was the only one and it is retired; `snapshot_head` was
+        // the other and went in #1025 S7, item 5.
         assert_eq!(
             request_kind(&wire::Request {
-                kind: Some(wire::request::Kind::BackupNow(wire::BackupNow {
-                    force: false
+                kind: Some(wire::request::Kind::Drain(wire::DrainRequest {
+                    deadline_ms: 0
                 })),
             }),
             RequestKind::Unbounded
+        );
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::Restore(wire::RestoreRequest::default())),
+            }),
+            RequestKind::Unbounded
+        );
+        // AND THE TWO BESIDE THEM ARE BOUNDED. A status read is a spool
+        // measurement; a pairing is one ticket and one redemption. Talking to
+        // the network is not the same question as being unbounded.
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::BackupStatus(
+                    wire::BackupStatusRequest {}
+                )),
+            }),
+            RequestKind::Bounded
+        );
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::PairPhone(wire::PairRequest::default())),
+            }),
+            RequestKind::Bounded
         );
         assert_eq!(request_kind(&hello()), RequestKind::Bounded);
         assert_eq!(

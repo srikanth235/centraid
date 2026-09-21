@@ -97,6 +97,41 @@ _Why the shell holds it and this library does not:_ a secret key belongs in the 
 
 Tests: `the_endpoint_secret_crosses_the_abi_inside_the_enrolment_record`, `the_enrolment_record_carries_the_address_the_relay_and_the_enrolled_key`, `a_malformed_endpoint_secret_key_is_refused_rather_than_replaced`, and `crates/centraid/tests/seat_identity.rs`
 
+## 4b. The vault's seed crosses the ABI, and this library writes no key down
+
+`centraid_open`'s JSON may carry one more object:
+
+```json
+{ "vault": { "seed": "<128 lowercase hex characters>", "index": 0 } }
+```
+
+`seed` is the **64-byte BIP-39 seed** the 24 words derive (`centraid_identity::phrase::Seed`), and `index` is the derivation index this vault was minted at. Together they are what [`centraid_vault::backup::ObjectKeys`] is built from, and sealing a generation is impossible without them.
+
+_Why the shell holds it and this library does not:_ the same answer clause 4a gives about the endpoint secret, with more force. `crates/vault/src/backup/mod.rs` deleted the scrypt-wrapped recovery kit under [#1029](https://github.com/srikanth235/centraid/issues/1029) §5 with one sentence — "a file that carries keys is a file that can be copied" — and a core that invented a key file beside the vault it protects would put the one unrecoverable secret in a place no shell asked for and no backup excludes. It belongs in the iOS Keychain or the Android Keystore, and it is borrowed for the length of `centraid_open` like every other input (clause 2).
+
+**Absent is not an error.** A core opened without it reads and writes its vault perfectly well and refuses to drain, with `ERROR_CODE_PEER_UNREACHABLE` and a sentence naming the seed. That is a state a shell draws ("unlock to back up"), because a member who has not unlocked their phone has not lost anything.
+
+**Present and unreadable IS an error** (`BAD_ARGUMENT`): a seed that is not 128 hex characters, or a `vault` object with no `index`. Carrying on would leave a shell believing it had unlocked a core that cannot seal a single byte, and the member would find that out on the day their phone is gone.
+
+Tests: `the_vault_seed_crosses_the_abi_and_a_malformed_one_is_refused`
+
+## 4c. The phone's four flows are request kinds, not symbols
+
+`centraid.core.v1.Request` gained four arms under [#1029](https://github.com/srikanth235/centraid/issues/1029) W15, and `BackupNow` — which answered `NotYetAvailable` for the whole of its life — left with them. Field number 10 is **reserved, not reused**.
+
+| Kind | Answer | Bounded? |
+| --- | --- | --- |
+| `drain` (15) | `DrainResponse { acked_txid, pending_bytes, stopped, acked_at_ms? }` | **unbounded**, cancellable; also carries its own `deadline_ms` |
+| `pair_phone` (16) | `PairResponse { gateway_endpoint, record_published }` | bounded |
+| `restore` (17) | `RestoreResponse { vaults[], gap_scanned }` | **unbounded**, cancellable |
+| `backup_status` (18) | `BackupStatusResponse { acked_txid?, acked_at_ms?, pending_bytes, laptop_paired }` | bounded |
+
+_Why this is a clause and not a schema note:_ clause 10 says five symbols and means it, and "backing up" is exactly the kind of flow that grows a symbol — it has a background half, a foreground half and a status. All three are arms on `call`. A shell adds a flow by encoding a different message, never by resolving a new name, and `buf breaking` governs the churn.
+
+**A drain and a restore are cancellable; the other two are not**, and that follows from clause 4 rather than from a preference: `Cancel` names an unbounded operation, and a status read is a spool measurement. A drain has _two_ stops — `Cancel` is the member leaving the screen and `deadline_ms` is the operating system taking the window back — and they are different facts, which is why the deadline is not spelled as a cancellation the shell has to schedule.
+
+Test: `the_phones_four_flows_round_trip_through_call`
+
 ## 5. `next_event` surfaces bounded-queue backpressure as a health event
 
 The event queue is bounded at 1024 and **drops nothing**. When it fills, sync stalls and a `HealthEvent { stalled: true, queue_depth, capacity, behind }` reaches the shell — later, on the first slot a drain frees, if the queue is full of change events, because a change event may not be dropped to make room for the report.

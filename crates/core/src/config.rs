@@ -59,6 +59,22 @@ pub struct CoreConfig {
     /// treated as "not checked", and `crate::identity::require_digest` is what
     /// says so out loud when a `dev` build is on either side.
     pub expected_digest: Option<String>,
+    /// THE VAULT'S OWN SEED, AND THE INDEX IT WAS MINTED AT (#1029 W15,
+    /// `CONTRACT.md` §4b).
+    ///
+    /// Sealing a generation needs this vault's object keys, which are derived
+    /// from the 24 words at this vault's index. **This library writes no key
+    /// down** — `crates/vault/src/backup/mod.rs` deleted the recovery kit for
+    /// exactly that reason — so the secret arrives the way `CONTRACT.md` §4a
+    /// already says a secret arrives: out of the platform's secure store, for
+    /// the length of the call that opens the core.
+    ///
+    /// `None` is a core that reads and writes its vault perfectly well and
+    /// cannot drain. That is an honest state a shell draws ("unlock to back
+    /// up"), not a failure: the alternative is a core that invents a key file
+    /// beside the vault it protects, in a place no shell asked for and no
+    /// backup excludes.
+    pub seed: Option<(centraid_identity::Seed, u32)>,
 }
 
 impl CoreConfig {
@@ -71,6 +87,7 @@ impl CoreConfig {
             clock: None,
             ids: None,
             expected_digest: None,
+            seed: None,
         }
     }
 
@@ -82,6 +99,16 @@ impl CoreConfig {
     }
 
     /// Refuse to open unless this core's digest is `digest`.
+    /// Derive this vault's object keys from `seed` at `index`.
+    ///
+    /// The index is the vault's own derivation index and is **never chosen by
+    /// this library** (F2): it is what a found or a restore recorded.
+    #[must_use]
+    pub fn with_seed(mut self, seed: centraid_identity::Seed, index: u32) -> Self {
+        self.seed = Some((seed, index));
+        self
+    }
+
     #[must_use]
     pub fn expecting_digest(mut self, digest: impl Into<String>) -> Self {
         self.expected_digest = Some(digest.into());

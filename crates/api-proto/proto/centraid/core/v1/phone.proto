@@ -1,0 +1,199 @@
+// THE PHONE'S TWO FLOWS, OVER THE ABI (#1029 §2, §5, W15).
+//
+// The shell has exactly two things to ask this core that it could not ask
+// before: **drain what is waiting to my laptop**, and **bring my vaults back
+// from 24 words**. Two more ride with them because a shell cannot draw either
+// screen without them: **pair with the laptop** (the QR it scanned) and **what
+// is the state of my backup**.
+//
+// ## Why four REQUEST KINDS and not four registered commands
+//
+// Same answer `vault.proto` gives for founding, one layer further out. A
+// `Command` runs through `centraid_vault::commands::Registry`, whose gate order
+// evaluates a `Principal` against `core_vault.self_party_id` and ends in a
+// receipt row. **A restore has no vault to be a principal in** — that is the
+// whole of what it is for — and a drain is not a write to the vault at all: it
+// moves sealed ciphertext the vault already produced out to a laptop. Neither
+// is a command, and a command exempted from the gate order would be a second
+// command plane wearing the first one's name.
+//
+// ## The five symbols are not touched
+//
+// A new flow is a new arm on `Request.kind` through `centraid_call`
+// (`crates/core-ffi/CONTRACT.md` §10). There is no sixth symbol here and there
+// never will be: `nm -D --defined-only libcentraid_core_ffi.so | grep ' T
+// centraid_'` is 5 and `abi-five-symbols` counts the declarations on every
+// gate run.
+//
+// ## The gateway is blind, and so is this file
+//
+// Nothing here carries a key. `RestoreRequest` carries the 24 words INWARD —
+// from the member's own fingers into their own device's core — and carries
+// nothing back out but vault ids and paths. A restoring phone **derives**; it
+// never downloads a key (#1029 §0, §5).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ------------------------------------------------------------------ drain --
+
+// RUN ONE DRAIN PASS. Replaces `BackupNow` (`admin.proto`), which answered
+// `NotYetAvailable` and classed itself unbounded over a door that did not
+// exist.
+//
+// Seal what the spool holds, upload over this vault's transport until the spool
+// is empty or the deadline is near, and answer with what the GATEWAY acked.
+//
+// **Idempotent, and a second call while one runs is REFUSED, not queued.** A
+// queue behind this door would make a background window's call sit waiting for
+// a foreground pass it cannot see, and expire holding nothing. The shell is
+// told `ERROR_CODE_INVALID_REQUEST` with "a drain is already running" and
+// decides for itself whether to wait.
+message DrainRequest {
+  // How long this pass may take, in milliseconds from when it starts. `0` is
+  // "no deadline" — the foreground case, where the member is watching a
+  // progress bar and the pass runs until the spool is empty.
+  //
+  // It is a DURATION and not a wall-clock instant on purpose: a background
+  // window hands out a budget ("you have 28 seconds"), not a moment, and a
+  // shell converting one to the other against a phone clock the gateway has
+  // already corrected would be converting against the wrong clock.
+  uint64 deadline_ms = 1;
+}
+
+// Why the pass stopped. Every arm is a fact about the spool or the laptop, and
+// none of them is a failure the shell should draw as one: two of the three are
+// ordinary.
+enum DrainStop {
+  DRAIN_STOP_UNSPECIFIED = 0;
+  // The spool is empty. Everything this vault had is on the laptop and acked.
+  DRAIN_STOP_EMPTY = 1;
+  // The deadline came up first. `pending_bytes` is what is left; the next pass
+  // continues from `acked_txid` and re-sends nothing.
+  DRAIN_STOP_DEADLINE = 2;
+  // The laptop did not answer. Nothing was lost — the spool is intact and the
+  // next pass starts where this one did.
+  DRAIN_STOP_UNREACHABLE = 3;
+}
+
+message DrainResponse {
+  // THE TXID THE GATEWAY ACKED, and only that. Not what was sealed, not what
+  // was sent, not what is believed to have arrived: the last txid covered by a
+  // commit the gateway answered (#1029 §2; `gateway_client::CommitAck`).
+  //
+  // Zero means this pass acked nothing new, which is the honest answer when
+  // the laptop was unreachable or the deadline came up before the first
+  // commit.
+  uint64 acked_txid = 1;
+  // Sealed bytes still in the spool when the pass stopped. The number a shell
+  // draws as "3.2 MB left to back up".
+  uint64 pending_bytes = 2;
+  DrainStop stopped = 3;
+  // When the gateway acked, on the GATEWAY's clock — the only moment a member
+  // may be shown as "last backed up". Absent when this pass acked nothing.
+  optional int64 acked_at_ms = 4;
+}
+
+// ------------------------------------------------------------------- pair --
+
+// REDEEM THE PAIRING PAYLOAD THE MEMBER SCANNED (#1029 W17).
+//
+// The laptop prints `base64url(PairTicket)` as text and as a QR
+// (`centraid_identity::ticket`); the phone's camera reads it and hands it
+// here whole. The core parses it, redeems the invite against the laptop over
+// iroh, keeps the laptop's `EndpointId`, and publishes this vault's identity
+// record so a restore from another device can find the same laptop by DNS.
+message PairRequest {
+  // The scanned string, exactly as it was read. **Not a decoded struct**: the
+  // ticket is the one message with no handshake in front of it, and a shell
+  // that parsed it would be a second parser to disagree with
+  // `centraid_identity::ticket`.
+  string payload = 1;
+}
+
+message PairResponse {
+  // The laptop's iroh `EndpointId`, 32 raw bytes — what this phone will dial
+  // from now on without re-resolving DNS.
+  bytes gateway_endpoint = 1;
+  // Whether the identity record reached the pkarr resolver. **False is not a
+  // failure of the pairing**: the phone is paired and can back up over the
+  // endpoint it just learned. What an unpublished record costs is a RESTORE
+  // from a device that never scanned this QR, which is why the shell is told
+  // rather than reassured.
+  bool record_published = 2;
+}
+
+// ---------------------------------------------------------------- restore --
+
+// BRING EVERY VAULT BACK FROM 24 WORDS (#1029 §5).
+//
+// The whole input, and F2 held structurally: there is no vault id here, no
+// index, no key and no path on the lost phone. What this core does with it is
+// derive, resolve, dial, ask the laptop which vaults it holds for this
+// identity, and fetch.
+message RestoreRequest {
+  // The 24 words, as the member typed them. Parsed by
+  // `centraid_identity::phrase::RecoveryPhrase::parse`, which refuses a bad
+  // checksum rather than deriving from nonsense.
+  string phrase = 1;
+  // THE LAPTOP'S ENDPOINT ID, TYPED, WHEN DNS COULD NOT ANSWER (§5).
+  //
+  // 32 raw bytes. Absent is the ordinary path: the identity record is
+  // published under the vault's own key and `centraid_identity::discovery`
+  // resolves it. Present is the member reading the id off their laptop's own
+  // screen because the resolver is down or the network is walled — which is
+  // the case a restore must not be unable to survive, since the resolver is
+  // the one piece of this that is somebody else's uptime.
+  optional bytes endpoint = 2;
+}
+
+// One vault a restore brought back.
+message RestoredVault {
+  // The vault's identity public key, hex — which IS its id (#1029 §0).
+  string vault_id = 1;
+  // The derivation index this vault was found at. Reported so the shell can
+  // show "2 vaults" honestly and so a support log names which index a failure
+  // was at; **never reused** (F2) and never chosen by the shell.
+  uint32 index = 2;
+  // Where the restored file landed, under the directory the core was opened
+  // on.
+  string path = 3;
+  // The txid the restored file stands at.
+  uint64 txid = 4;
+  // Rows the generation's census promised at that txid, summed. The number
+  // that makes "your vault is back" a claim rather than a hope: a perfect page
+  // tree over no rows passes `integrity_check` and is a total loss (§2).
+  int64 rows = 5;
+}
+
+message RestoreResponse {
+  // Every vault the laptop holds for this identity, restored. Empty is a real
+  // answer and not a failure: an identity the laptop has never seen has no
+  // vaults, and a shell that drew an error would tell a member their words
+  // were wrong when they were right.
+  repeated RestoredVault vaults = 1;
+  // How many derivation indices were tried past the last one that answered.
+  // The gap limit, reported, so "we looked" is checkable.
+  uint32 gap_scanned = 2;
+}
+
+// ----------------------------------------------------------------- status --
+
+// WHAT THE SHELL DRAWS ON THE BACKUP SCREEN. Reads local state and the last
+// thing the gateway said; it dials nothing of its own.
+message BackupStatusRequest {}
+
+message BackupStatusResponse {
+  // The last txid a gateway acked, and when — on the GATEWAY's clock. Both
+  // absent is a vault that has never been backed up, which is a state and not
+  // a fault.
+  optional uint64 acked_txid = 1;
+  optional int64 acked_at_ms = 2;
+  // Sealed bytes waiting in the spool right now.
+  uint64 pending_bytes = 3;
+  // Whether this core has a laptop to reach at all — a pairing, with an
+  // endpoint. **It is not a ping**: a status read that dialled would make
+  // drawing a screen depend on somebody else's network.
+  bool laptop_paired = 4;
+}

@@ -21,15 +21,19 @@ enum AdminCommand {
   ADMIN_COMMAND_DEVICES_LIST = 1;
   // `devices.revoke`
   ADMIN_COMMAND_DEVICES_REVOKE = 2;
-  // `backup.now`
-  ADMIN_COMMAND_BACKUP_NOW = 3;
+  // `backup.now` STOOD HERE AND IS RETIRED (#1029 W15). Backing up is not an
+  // admin command: it is the phone's own `DrainRequest` (`phone.proto`), with
+  // a deadline the caller sets and an acked txid the GATEWAY answers. The
+  // number is reserved and not reused — a stored enum value that comes back
+  // meaning something else is exactly what this file's header forbids.
+  reserved 3;
 }
 
 // DevicesList, DeviceRow, DevicesListResult AND DevicesRevoke LEFT WITH THE
 // SEATS THEY LISTED (#1029 §1, §6). Their two consumers were the gateway's
 // allowlist — now server-side — and a paired client's "Devices" screen.
 //
-message BackupNow {
-  // Take the snapshot even if the interval has not elapsed.
-  bool force = 1;
-}
+// `BackupNow` LEFT WITH ITS STUB (#1029 W15). It carried one field, `force`,
+// against an interval no code kept, and `crates/core` answered every one of
+// them `NotYetAvailable`. Its replacement carries a deadline instead, because
+// what a background window gives a phone is a budget and not permission.

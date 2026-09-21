@@ -35,6 +35,10 @@ centraid-core = { path = "../core" }
 # implementation depends on it — so the process builder closes the loop. This is
 # the process builder for every phone.
 centraid-vault = { path = "../vault" }
+# The vault seed crosses this boundary as hex (`CONTRACT.md` §4b), and this is
+# what decodes it. One type's worth of dependency, not `centraid-identity`:
+# `centraid_core::Seed` is re-exported for exactly this reason.
+hex.workspace = true
 prost.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

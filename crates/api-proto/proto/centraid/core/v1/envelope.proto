@@ -18,12 +18,12 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-import "centraid/core/v1/admin.proto";
 import "centraid/core/v1/change.proto";
 import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
+import "centraid/core/v1/phone.proto";
 import "centraid/core/v1/query.proto";
 import "centraid/core/v1/vault.proto";
 
@@ -52,11 +52,17 @@ message Request {
   //   8  `devices_list`   — the seats this vault has enrolled
   //   9  `devices_revoke` — un-enrolling one
   //   12 `blob`           — handing the stream over to iroh-blobs
+  //
+  // AND ONE MORE, RETIRED BY ITS REPLACEMENT (#1029 W15):
+  //   10 `backup_now`     — answered `NotYetAvailable` for the whole of its
+  //                         life. `drain` (15) is the door it stood in for,
+  //                         and it is a different message with a deadline and
+  //                         an acked txid, so the number does not come back.
+  reserved 10;
   oneof kind {
     Hello hello = 1;
     Command command = 5;
     PageRequest page = 6;
-    BackupNow backup_now = 10;
     ContentUrlRequest content_urls = 11;
     // A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM (#1025 S4). See
     // `content.proto`'s `StageRequest`.
@@ -65,6 +71,12 @@ message Request {
     // `create` left missing: the migrations were laid and nothing over this ABI
     // could write `core_vault`. See `vault.proto`.
     FoundRequest found = 14;
+    // THE PHONE'S TWO FLOWS, AND THE TWO SCREENS BESIDE THEM (#1029 W15). See
+    // `phone.proto` for why none of the four is a registered command.
+    DrainRequest drain = 15;
+    PairRequest pair_phone = 16;
+    RestoreRequest restore = 17;
+    BackupStatusRequest backup_status = 18;
   }
 }
 
@@ -81,6 +93,12 @@ message Response {
     ContentUrls content_urls = 12;
     StageResponse stage = 13;
     FoundResponse found = 14;
+    // The four answers to `phone.proto`'s four requests, at the same numbers
+    // as their requests so a reader of one file can read the other.
+    DrainResponse drain = 15;
+    PairResponse pair_phone = 16;
+    RestoreResponse restore = 17;
+    BackupStatusResponse backup_status = 18;
   }
 }
 
