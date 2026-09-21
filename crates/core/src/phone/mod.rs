@@ -495,6 +495,7 @@ mod tests {
             &wire::RestoreRequest {
                 phrase: "abandon abandon abandon".to_owned(),
                 endpoint: None,
+                direct_addrs: Vec::new(),
             },
             runtime.handle(),
         )

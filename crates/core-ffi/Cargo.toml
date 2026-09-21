@@ -48,6 +48,9 @@ cbindgen = "0.29"
 
 [dev-dependencies]
 centraid-ontology = { path = "../ontology" }
+# The safety number's own renderer, for the clause-4c companion case: the test
+# asserts the SHIPPED function rather than a second rendering of its own.
+centraid-identity = { path = "../identity" }
 libloading = "0.8"
 cbindgen = "0.29"
 centraid-protocol = { path = "../protocol" }

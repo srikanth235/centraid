@@ -1125,15 +1125,21 @@ async fn the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_s
         .claim_lease(old_phone_clock)
         .await
         .expect_err("a stale epoch cannot re-take the lease");
+    // **AND IT NAMES THE EPOCH** (#1029 W15-3). It arrived as a bare
+    // `Refused { GatewayLeaseStale }` until this lane: the server had always
+    // sent both epochs in `ErrorBody.lease` and the client threw them away,
+    // which made "the vault exists and somebody held it" indistinguishable
+    // from "there is no such vault" — and a restore has to tell those apart to
+    // certify at `held + 1` at all.
     assert!(
         matches!(
             stale_claim,
-            ClientError::Refused {
-                code: centraid_api_proto::core_v1::ErrorCode::GatewayLeaseStale,
-                ..
+            ClientError::LeaseStale {
+                held: 2,
+                claimed: 1
             }
         ),
-        "a stale claim is not a move: {stale_claim:?}"
+        "a stale claim is not a move, and it says which epoch holds it: {stale_claim:?}"
     );
 
     let retried = phone
@@ -1385,6 +1391,15 @@ mod phone_shaped {
                     // §5's "or the one typed when DNS fails", which is the path
                     // that must always work.
                     endpoint: Some(laptop_id.to_vec()),
+                    // THE HINTS, because this laptop is on loopback with no
+                    // relay and no DNS: an endpoint id alone has nothing to be
+                    // dialled through (D-1020-C15). A member scanning the
+                    // laptop's own pairing code gets the same values.
+                    direct_addrs: gateway
+                        .address
+                        .ip_addrs()
+                        .map(|addr: &std::net::SocketAddr| addr.to_string())
+                        .collect(),
                 },
                 &runtime,
             )

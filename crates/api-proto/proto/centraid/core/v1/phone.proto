@@ -173,6 +173,18 @@ message RestoreRequest {
   // the case a restore must not be unable to survive, since the resolver is
   // the one piece of this that is somebody else's uptime.
   optional bytes endpoint = 2;
+  // DIALLING HINTS FOR THE TYPED PATH, and never authority.
+  //
+  // `<ip>:<port>`, the same values `PairTicket.direct_addrs` carries and for
+  // the same reason (D-1020-C15): with no relay and no address-lookup service
+  // there is nothing an endpoint id ALONE can be dialled through, so a
+  // LAN-only laptop needs them. iroh's TLS proves the endpoint id, so a
+  // tampered address reaches the right laptop or nothing — which is what makes
+  // it safe for a value read off a screen to carry them.
+  //
+  // Empty is the ordinary case: a relayed or DNS-resolvable laptop is reached
+  // by its id.
+  repeated string direct_addrs = 3;
 }
 
 // One vault a restore brought back.

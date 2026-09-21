@@ -899,6 +899,7 @@ dependencies = [
  "cbindgen",
  "centraid-api-proto",
  "centraid-core",
+ "centraid-identity",
  "centraid-ontology",
  "centraid-protocol",
  "centraid-vault",

@@ -87,14 +87,6 @@ pub fn run(
         })?;
     let seed = phrase.seed();
 
-    // W15-3 LANDS THE DIAL. Until it does, a restore validates its one input
-    // and says there is nothing to dial with.
-    if true {
-        return Err(CoreError::Unavailable {
-            reason: "a restore dials the laptop over iroh, and this core has no transport yet"
-                .to_owned(),
-        });
-    }
     let endpoint = match request.endpoint.as_deref() {
         Some(typed) => <[u8; 32]>::try_from(typed).map_err(|_| CoreError::InvalidRequest {
             detail: "a typed laptop id is 32 bytes".to_owned(),
@@ -132,7 +124,14 @@ pub fn run(
                     detail: format!("index {index} will not derive: {error}"),
                 }
             })?;
-        match runtime.block_on(one_vault(&keys, &endpoint, &device_secret, &root, index))? {
+        match runtime.block_on(one_vault(
+            &keys,
+            &endpoint,
+            &request.direct_addrs,
+            &device_secret,
+            &root,
+            index,
+        ))? {
             Some(restored) => {
                 vaults.push(restored);
                 misses = 0;
@@ -193,6 +192,7 @@ fn resolve(seed: &centraid_identity::Seed, runtime: &tokio::runtime::Handle) -> 
 async fn one_vault(
     keys: &VaultKeys,
     endpoint: &[u8; 32],
+    direct_addrs: &[String],
     device_secret: &[u8; 32],
     root: &Path,
     index: u32,
@@ -200,7 +200,7 @@ async fn one_vault(
     let record = Laptop {
         gateway_endpoint: hex::encode(endpoint),
         relay_url: None,
-        direct_addrs: Vec::new(),
+        direct_addrs: direct_addrs.to_vec(),
         device_certificate: None,
         epoch: None,
         last_acked_at_ms: None,

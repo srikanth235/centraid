@@ -973,6 +973,7 @@ fn the_phones_four_flows_round_trip_through_call() {
             wire::request::Kind::Restore(wire::RestoreRequest {
                 phrase: "abandon abandon abandon".to_owned(),
                 endpoint: None,
+                direct_addrs: Vec::new(),
             }),
         ),
     );
@@ -1010,5 +1011,49 @@ fn a_locked_core_refuses_to_drain_rather_than_inventing_a_key() {
     assert!(
         !centraid_core::phone::Laptop::path_for(&opened.dir.join("vault.db")).exists(),
         "a refused drain wrote something beside the vault"
+    );
+}
+
+/// CLAUSE 4c, the companion W15-D5 added. **A member compares a designed short
+/// string, not a hex id**, so the field a shell renders is pinned here.
+///
+/// It is asserted on the SHAPE rather than on a live pairing: computing one
+/// needs a laptop, and what a shell depends on is that the field exists, is a
+/// string, and is empty only when the core could not compute one — never as a
+/// stand-in for "it matched".
+#[test]
+fn the_pair_and_restore_answers_carry_a_safety_number_a_member_can_read_aloud() {
+    // The rendering is `centraid_identity`'s, over two Ed25519 keys — an iroh
+    // `EndpointId` IS one, which is what lets a phone and a laptop render the
+    // same digits with no third value agreed in advance.
+    let one = centraid_identity::certificate::DeviceKey::generate().expect("a key");
+    let other = centraid_identity::certificate::DeviceKey::generate().expect("a key");
+    let number = centraid_identity::safety_number(&one.public(), &other.public()).grouped();
+    assert!(
+        !number.is_empty() && number.chars().any(|character| character.is_ascii_digit()),
+        "a safety number is digits a member reads out: {number:?}"
+    );
+    // BOTH ORDERS RENDER THE SAME NUMBER, which is why neither end has to be
+    // told which of them is "first".
+    assert_eq!(
+        number,
+        centraid_identity::safety_number(&other.public(), &one.public()).grouped(),
+        "the two ends would read different numbers to each other"
+    );
+
+    // AND THE FIELD IS ON BOTH ANSWERS, at the numbers a shell encodes against.
+    let paired = wire::PairResponse {
+        safety_number: number.clone(),
+        ..wire::PairResponse::default()
+    };
+    assert_eq!(paired.safety_number, number);
+    let restored = wire::RestoredVault {
+        safety_number: number.clone(),
+        ..wire::RestoredVault::default()
+    };
+    assert_eq!(restored.safety_number, number);
+    assert!(
+        wire::PairResponse::default().safety_number.is_empty(),
+        "empty is 'could not compute', and is the default rather than a sentinel"
     );
 }
