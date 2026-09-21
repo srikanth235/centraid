@@ -2102,3 +2102,144 @@ fetched on demand (F14).
    not a code one.** `git merge-base HEAD origin/main` exits 1 — the umbrella's history has no
    common ancestor with `origin/main` in this checkout — and it fails identically at the base
    commit `3fe7cc84`. `node scripts/check-ledgers.mjs --base 3fe7cc84` is clean.
+
+## W13 — durability and crypto
+
+Branch `claude/1029-w13-durability`, base `2ac95e6d`. `cargo test --workspace`: base **1,694**
+passed across 142 binaries, 0 failed; at the end of the lane **1,705** passed across 143, 0 failed.
+Five audit findings — 3 (Critical), 6 (High), 15 (Med), 22 (Med) and three of 24's five (Low).
+
+### The file table
+
+| File | What landed |
+| --- | --- |
+| `crates/media/src/object/header.rs` | `Kind::Manifest` no longer compresses, and why; the kind test says so |
+| `crates/media/src/object/dict.rs` | the sentence at line 15 was a promise nothing kept, and where it is kept now |
+| `crates/media/src/object/mod.rs` | two tests that used `Manifest` as a stand-in compressing kind use `Segment` |
+| `crates/media/tests/primitives.rs` | the two fixture paths it named do not exist; the two that do |
+| `crates/media/README.md` | the conformance-boundary paragraph, repointed at the fixtures and tests that are there |
+| `contracts/crypto/object-vectors.json` | regenerated: the manifest vector is `compressed: false`, 278 → 262 bytes |
+| `crates/vault/src/backup/objects.rs` | the dictionary is a field on `ObjectKeys`; `with_dictionary`, `adopting`, `dictionary()`; `page_dictionary` → `shipped_dictionary`, which refuses rather than substituting |
+| `crates/vault/src/backup/manifest.rs` | the manifest's plaintext frame `u32be len ‖ dictionary ‖ json`; `open_with_dictionary`; the design and why it is not a separate object |
+| `crates/vault/src/backup/drill.rs` | the restore adopts the dictionary the manifest carried before it opens a base range |
+| `crates/vault/tests/dictionary_durability.rs` | **new** — the two red-first tests and the golden vector |
+| `crates/vault/src/log/census.rs` | **new** — `RunningCensus`: `apply`, `forget`, `read`, the seed scan and the three exclusions |
+| `crates/vault/src/log/guard.rs` | the hook carries a signed per-table delta; applied after COMMIT only; `census()` reads the counters; **no `count(*)` left in this file** |
+| `crates/vault/src/log/mod.rs`, `crates/vault/src/file.rs` | the module, and the counter the vault holds |
+| `crates/vault/tests/running_census.rs` | **new** — the red-first shadow-table test, and the randomised workload with rollbacks |
+| `crates/vault/src/backup/spool.rs` | `unique_temp_name` refuses instead of answering one fixed name |
+| `crates/vault/src/backup/store.rs` | its test follows the new signature |
+| `crates/xtask/src/rules.rs` | the dead `blob-door` escape hatch removed from `listener_hits`; the rule is stricter |
+| `mobile/iosApp/Sources/VaultFileProtection.swift` | **new** — `isExcludedFromBackup` and `completeUntilFirstUserAuthentication` over the vault directory and every item in it |
+| `mobile/iosApp/Sources/ShellModel.swift` | the sweep before the open, after it, and on `didEnterBackground` |
+| `SECURITY.md` | the size-class leak, Padmé's bound, and that it bounds rather than removes |
+| `CHANGELOG.md` | the entry |
+
+### The dictionary design, and why (finding 3)
+
+**Option (a): the bytes ride inside the generation manifest**, `u32be len ‖ dictionary ‖ json`,
+uncompressed and sealed — so `Kind::Manifest` stops compressing, because an object sealed against
+the dictionary it carries cannot be opened by anybody who does not already have it.
+
+Option (b) — a `blob` object of its own whose name a manifest or the head carries — costs 16 KiB
+once per *generation* rather than once per manifest, and would have been cheaper. It was declined
+because **it reintroduces the failure at one remove**: a dictionary in its own object is a thing
+that can be absent, garbage-collected, or not uploaded yet, and a generation whose dictionary
+object is gone is exactly as unopenable as one whose dictionary was never written. Carrying the
+bytes inside the manifest makes the two inseparable, and the manifest is already the one object a
+restore must open first. Option (c) was ruled out by the brief: `ObjectKind` is W16's.
+
+The bytes are not trusted on sight — `Dictionary::from_bytes` re-derives the id as their BLAKE3,
+and every base and segment header names the id it was sealed against, so a substituted dictionary
+is a `DictionaryMismatch` and never a wrong plaintext. The gateway is as blind to them as to
+everything else: they are inside the seal.
+
+### The F5 inventory (finding 6) — **8 rows, a grep each**
+
+Every path the app derives under the vault directory, the line that creates it, and the line that
+excludes it. iOS does not compile in this container (TESTING.md), so this table is the exit.
+`VaultFileProtection.secure(directory:)` walks the directory and every item under it, because iOS
+**does not inherit** `isExcludedFromBackup` — a file created inside an excluded directory is not
+itself excluded.
+
+| # | Path | Created at (grep) | Excluded at (grep) |
+| --- | --- | --- | --- |
+| 1 | the vault directory (`Documents`) | `grep -n "static var vaultDirectory" mobile/iosApp/Sources/ShellModel.swift` → `:207` | `grep -n "VaultFileProtection.secure" mobile/iosApp/Sources/ShellModel.swift` → `:148, :150, :160` (the root itself) |
+| 2 | `<stem>.sqlite3`, the vault file | `grep -n "PREFIX + hex(services.secureRandom" …/shell/Shelf.kt` → `:720` | `grep -n "isExcludedFromBackup = true" mobile/iosApp/Sources/VaultFileProtection.swift` → `:85` (the sweep, per item) |
+| 3 | `<stem>.sqlite3-wal` | `grep -n 'SIDECARS = listOf' …/shell/Shelf.kt` → `:818` (SQLite creates it) | as row 2 |
+| 4 | `<stem>.sqlite3-shm` | `grep -n 'SIDECARS = listOf' …/shell/Shelf.kt` → `:818` | as row 2 |
+| 5 | `<stem>.bytes/`, the byte store (originals **and thumbnails** — there is no separate thumbnail cache; `grep -rn 'cachesDirectory' mobile` is empty) | `grep -n 'with_extension("bytes")' crates/core-ffi/src/lib.rs` → `:173` | as row 2 |
+| 6 | the backup home's `objects/`, `spool/`, `scratch/` | `grep -n 'for child in \["objects", "spool", "scratch"\]' crates/vault/src/backup/mod.rs` → `:125` | as row 2, **conditional — see the find below** |
+| 7 | `head.json` | `grep -n 'join("head.json")' crates/vault/src/backup/mod.rs` → `:169` | as row 2, same condition |
+| 8 | `*.tmp` durable-write temporaries | `grep -n "unique_temp_name(path)" crates/vault/src/backup/spool.rs` → `:77` | as row 2 |
+
+Data Protection: `grep -n "protectionKey" mobile/iosApp/Sources/VaultFileProtection.swift` → `:93`,
+applying `completeUntilFirstUserAuthentication` (`:53`) to the directory and to every item.
+Not `.complete`, which is #1029 line 84's own choice and the product's: capture and upload run
+while the phone is locked, and under `.complete` every background write becomes a failure.
+
+**The Android claim is confirmed**, three mechanisms at once —
+`grep -n 'android:allowBackup\|dataExtractionRules\|fullBackupContent' mobile/androidApp/src/main/AndroidManifest.xml`
+→ `:28 android:allowBackup="false"`, `:29 android:dataExtractionRules="@xml/data_extraction_rules"`,
+`:30 android:fullBackupContent="@xml/full_backup_content"`.
+
+### The census test's shape (finding 15)
+
+`running_census.rs` holds two tests. The red-first one asserts the census names no `fts_` table;
+on the base it named ninety shadow tables and eighteen virtual ones. The other runs a
+deterministic randomised workload — insert one to three, update, delete the oldest, or **write
+three rows and then refuse** — and after *every* round compares `vault.census()` against a
+`count(*)` scan of the same table list. The rollback round is the one that matters: the hook fires
+for every row a refused body wrote, and the guard applies the tally only on the success path, so no
+`rollback_hook` is needed and none is installed.
+
+The counters live in `crates/vault/src/log/census.rs`, not in the guard, so the guard has no scan
+in it at all. **One scan remains and it is the seed**: a table whose count nothing in this process
+holds is counted once and remembered. That is a vault-sized cost once per process instead of once
+per capture tick, and it is stated rather than hidden. The table LIST is re-read from
+`sqlite_master` every call — a schema-sized query, which is what makes a table a migration created
+since the last call appear, with its count seeded on the spot.
+
+### Exit list
+
+1. `cargo build --workspace --all-targets` — clean.
+2. `cargo test --workspace` — **1,705 passed, 0 failed** (floor 1,694). New: `a_manifest_opens_with_the_root_key_and_no_dictionary_at_all`, `a_generation_opens_against_the_dictionary_its_manifest_carries`, `the_shipped_dictionarys_id_is_the_one_this_build_is_pinned_to`, `the_census_names_no_fts5_shadow_table`, `the_running_census_equals_a_scan_after_every_commit_and_every_rollback`, `a_delta_for_an_unseeded_table_is_not_invented`, `the_counters_move_by_their_deltas_once_seeded`, `every_listener_is_a_hit_including_one_wearing_the_retired_attribute`.
+3. Red-first, by name and by commit: `a_manifest_opens_with_the_root_key_and_no_dictionary_at_all` fails at `84885fd6` with `Err(DictionaryRequired)`; `the_census_names_no_fts5_shadow_table` fails at `38913400` naming 90 shadow tables. The fixes are `ab520c7f` and `887202b1`.
+4. `cargo test -p centraid-media` and `-p centraid-vault` — green. The golden vector pins the shipped dictionary's id at **`84f64d4aa6ab33c496ffaec1ced1f7a6be84d62904de9a5fd9ef7a20f8b43bd9`**.
+5. `grep -rn 'or_else' crates/vault/src/backup/objects.rs` — **empty**.
+6. `grep -rn 'count(\*)' crates/vault/src/log/guard.rs` — **empty**. The seed scan is `crates/vault/src/log/census.rs:155`, in a function whose whole documentation is why it is there.
+7. The F5 inventory above — 8 rows, a grep per row.
+8. `cargo xtask gate --profile local --lane fmt` / `--lane clippy` / `--lane rules` — all **PASS** (rules: 4 applied, 0 pending, 0 findings).
+
+### Finds outside this lane's slices
+
+1. **`BackupHome` is not wired into the phone's core yet.** `grep -rn "BackupHome::open" --include=*.rs crates` names only `crates/vault/src/backup/drill.rs:107`, so rows 6 and 7 of the F5 inventory are excluded **only if** the backup home is opened under the vault directory. It must be. Whoever wires it: put it under the directory the shell hands in, or the sweep will not see it.
+2. **The spool's temp-name collision is in `crates/vault/src/backup/spool.rs`, not `crates/gateway-client/src/spool.rs`** as the brief has it. `crates/gateway-client/src/spool.rs` has no temp-name logic at all — it batches uploads. The fixed one is the vault's.
+3. **Five more references to fixture files that do not exist**, outside `crates/media`: `crates/identity/tests/identity_vectors.rs:16`, `crates/protocol/src/lib.rs:24`, `crates/vault/src/custody/member_key.rs:59`, `crates/vault/src/backup/store.rs:97`, `crates/blobs/src/store.rs:20`, plus `docs/protocol.md:87` and `docs/vault-ontology.md:32`. All name `contracts/golden/format-golden.json` or `contracts/protocol/framing-golden.json`; `contracts/golden/` holds only `issue-1020/` and `issue-929/`, and `contracts/protocol/` does not exist.
+4. **`SECURITY.md`'s `### Backups` section is stale beyond finding 22.** It says WAL segments are "sealed with deterministic nonces" (B9 replaced them with random ones), says "the base copy is not sealed" (it is, as a `base` object), and describes `crates/vault/src/backup/kit.rs`, which `#1029` §0 retired for the 24-word phrase. Not touched: correcting it is a rewrite of a section, and this lane's ruling was to add.
+5. **The census change moves what a manifest records.** `base_census` and every `SegmentRef::census` now carry ~108 fewer entries. Nothing compares a manifest's census against a differently-built list — `RestoredGeneration::census_matches` iterates the census's own tables — but a generation sealed before this change and restored after it carries the old list, which is harmless and worth knowing.
+6. **`bun run format` cannot run in this container**: `oxfmt: command not found`. `bun run check:push:static` was not run for the same reason. The staged-file `format-check` and `lint-check` directives ran at every commit hook and passed.
+7. `cargo xtask gate --profile local` (the whole profile) was not run to completion in this lane; the three lanes it contains that judge this change — `fmt`, `clippy`, `rules` — were, each inside its 120 s budget (clippy 95.2 s cold, 46.1 s warm). W6's receipt records that the profile's `ledgers` step fails in this container for an environment reason (`git merge-base HEAD origin/main` exits 1), and that is unchanged.
+
+### Falsification
+
+The claim this lane rests on is that **a build whose zstd trainer has moved can still open a
+backup the previous build sealed**. The way to falsify it is not to read the manifest code: it is
+`a_generation_opens_against_the_dictionary_its_manifest_carries`, which seals a generation against
+a dictionary trained on a corpus this build cannot produce, asserts that this build's own keys
+**fail** to open the segment, and then opens it with the dictionary recovered from the manifest.
+Delete the `adopting` call in `drill.rs` and the restore drill still passes, because the drill
+seals and restores in one process with one trainer — which is exactly why the trainer-drift test
+exists and why reading the drill would not have found finding 3.
+
+What would falsify the census claim is a writer that reaches the vault outside `Vault::commit`.
+The hook is installed per commit, so such a writer moves rows the counters never see, and the
+counters would drift until the next `forget()` or process restart. Nothing in the tree does this
+today — `crate::log::guard` is the only door — but it is the assumption the design rests on, and
+the workload test would not catch a violation added later in a path it does not exercise.
+
+The F5 claim is the weakest of the three and it is stated as such: **nothing in this container
+compiled or ran that Swift**. What the inventory proves is that every vault-derived path is named,
+that the exclusion call reaches the directory and every item under it, and that the sweep runs at
+three moments including the one before iOS takes a backup. What it does not prove is that iOS
+accepted the resource value — that needs the physical-device run TESTING.md already parks.
