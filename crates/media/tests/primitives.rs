@@ -9,8 +9,8 @@
 //! derivation passes; so does a `blake3` version bump that changed a context
 //! string's handling. So the vectors live in `contracts/crypto/blake3-vectors.json`,
 //! where they are bytes rather than behaviour, and this regenerates and diffs
-//! them the way `contracts/golden/format-golden.json` and
-//! `contracts/protocol/framing-golden.json` are regenerated and diffed:
+//! them the way `contracts/crypto/object-vectors.json` and
+//! `contracts/crypto/identity-vectors.json` are regenerated and diffed:
 //! `CENTRAID_UPDATE_FIXTURES=1` writes the file and the comparison still runs
 //! afterwards, so the variable is a generator and never a way to go green.
 //!

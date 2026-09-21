@@ -74,7 +74,7 @@ pub(crate) fn write_durably(path: &Path, bytes: &[u8]) -> Result<()> {
     use std::io::Write as _;
 
     let dir = path.parent().unwrap_or(Path::new("."));
-    let temp = dir.join(unique_temp_name(path));
+    let temp = dir.join(unique_temp_name(path)?);
     {
         let mut handle = std::fs::File::create(&temp).map_err(io_at(&temp))?;
         handle.write_all(bytes).map_err(io_at(&temp))?;
@@ -96,7 +96,19 @@ pub(crate) fn write_durably(path: &Path, bytes: &[u8]) -> Result<()> {
 /// process share: both create it, both write, one renames a file the other is
 /// still writing into. The process id stays because it makes an abandoned temp
 /// attributable; what makes it unique is the 16 random bytes.
-pub(crate) fn unique_temp_name(path: &Path) -> String {
+///
+/// # Errors
+/// [`SpoolError::Io`] when the operating system will not give entropy.
+///
+/// **This used to answer `{stem}.{pid}.__entropy_failed__.tmp` instead** (#1029
+/// W13, finding 24) — a FIXED name, which is precisely the collision the
+/// function exists to prevent, handed out at the one moment two writers are
+/// most likely to be in it at once. Its comment said "let the write fail loudly
+/// at `create`", and `File::create` does not fail on an existing path: it
+/// truncates it, so two writers would have shared one file and one would have
+/// renamed a half-written copy over the other\'s. A name that cannot be made
+/// unique is a refusal.
+pub(crate) fn unique_temp_name(path: &Path) -> Result<String> {
     use rand::TryRngCore as _;
 
     let stem = path
@@ -104,14 +116,19 @@ pub(crate) fn unique_temp_name(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("object");
     let mut suffix = [0_u8; 16];
-    // A failure here is not a reason to fall back to a colliding name: the
-    // clock and the thread id are both guessable, and the whole point is that
-    // two writers cannot meet. `OsRng` failing means the process cannot make a
-    // nonce either, so let the write fail loudly at `create` instead.
-    if rand::rngs::OsRng.try_fill_bytes(&mut suffix).is_err() {
-        return format!("{stem}.{}.__entropy_failed__.tmp", std::process::id());
-    }
-    format!("{stem}.{}.{}.tmp", std::process::id(), hex::encode(suffix))
+    rand::rngs::OsRng
+        .try_fill_bytes(&mut suffix)
+        .map_err(|error| SpoolError::Io {
+            path: path.to_path_buf(),
+            source: std::io::Error::other(format!(
+                "the operating system would not give entropy for a temp name: {error}"
+            )),
+        })?;
+    Ok(format!(
+        "{stem}.{}.{}.tmp",
+        std::process::id(),
+        hex::encode(suffix)
+    ))
 }
 
 /// What capture knows, written down before any checkpoint can make it stale.
@@ -481,8 +498,9 @@ mod tests {
     #[test]
     fn a_temp_name_cannot_collide_between_two_writers() {
         let path = Path::new("/spool/a.seg");
-        let names: std::collections::BTreeSet<String> =
-            (0..256).map(|_| unique_temp_name(path)).collect();
+        let names: std::collections::BTreeSet<String> = (0..256)
+            .map(|_| unique_temp_name(path).expect("entropy"))
+            .collect();
         assert_eq!(names.len(), 256, "256 draws, 256 names");
         assert!(names.iter().all(|name| name.ends_with(".tmp")));
         assert!(names.iter().all(|name| name.starts_with("a.seg.")));

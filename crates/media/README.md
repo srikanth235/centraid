@@ -23,7 +23,12 @@ Content-addressed sealed frames, the format-normative crypto every backup and sn
 
 ## The conformance boundary
 
-`contracts/golden/format-golden.json` (`schema: "centraid-cross-language-golden/1"`) is the one fixture designed as the cross-language boundary, and `tests/golden.rs` reads it: CBSF store/zstd/deflate vectors, a sealed WAL segment against a fixed master key and full address, and a `centraid-snapshot/2` envelope with its `manifestHash`. Sealing is asserted **byte-for-byte**, not just round-tripped. The same test regenerates the file and diffs; `CENTRAID_UPDATE_FIXTURES=1` writes it, with the comparison still running afterwards.
+Two fixtures under `contracts/crypto/`, and each has the test that reads it beside it ([#1029](https://github.com/srikanth235/centraid/issues/1029) W13 — this paragraph named `contracts/golden/format-golden.json` and a `tests/golden.rs`, neither of which exists: the v0 cross-language fixture went with the TypeScript half of the product and nothing repointed the sentence):
+
+- `contracts/crypto/object-vectors.json`, read by [`tests/object_vectors.rs`](tests/object_vectors.rs) — `centraid-object/1`'s header fields, Padmé's buckets, the trained dictionary and its BLAKE3 id, each object kind's sealed length, a pack's item offsets, and how an oversized input splits. Half of it is **compared** and half is **opened**: sealing is deliberately not reproducible (random salt, random content key, random nonces), so the committed `sealedBase64` bytes are decrypted and checked against their plaintext rather than resealed.
+- `contracts/crypto/blake3-vectors.json`, read by [`tests/primitives.rs`](tests/primitives.rs) — every `keyed_hash` and `derive_key` site, as bytes.
+
+Both regenerate with `CENTRAID_UPDATE_FIXTURES=1`, and the comparison still runs afterwards, so the variable is a generator and never a way to go green.
 
 ## Arithmetic, not format
 

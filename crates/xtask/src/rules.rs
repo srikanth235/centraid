@@ -375,7 +375,7 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
         };
         for (line, pattern) in listener_hits(&source) {
             findings.push(format!(
-                "{rel}:{line}: `{pattern}` outside a `#[cfg(feature = \"blob-door\")]` block. iroh QUIC is the transport, and the only listeners this product has are the blob door (off by default) and the standalone gateway's, which is confined to {} (#1020, #1029 §3)",
+                "{rel}:{line}: `{pattern}`. iroh QUIC is the transport, and the only listener this product has is the standalone gateway's, which is confined to {} (#1020, #1029 §3)",
                 LISTENER_ALLOWED
                     .iter()
                     .map(|(path, _)| *path)
@@ -389,51 +389,39 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
     ))
 }
 
-/// Listener constructions that are NOT inside a `blob-door`-gated item.
+/// Every listener construction in a source file.
 ///
-/// The guard is tracked by brace depth: the attribute arms the next `{`, and
-/// every hit until that brace closes is allowed.
+/// ## THE `blob-door` ESCAPE HATCH IS GONE, AND IT WAS ALREADY DEAD (#1029 W13)
+///
+/// This used to skip any hit inside a `#[cfg(feature = "blob-door")]` item,
+/// tracked by brace depth, and both the rule's own message and the constitution
+/// described the blob door as "the only listener the product may ever have".
+/// **No crate in this workspace declares a `blob-door` feature** — `grep -rn
+/// blob-door --include=Cargo.toml` is empty — so nothing could be gated by it
+/// and the branch exempted nothing. What it did do is stand there as a way to
+/// exempt a listener by typing one attribute above it, with no allowlist row,
+/// no reason and nobody reading it.
+///
+/// The rule is stricter without it: the ONE way to land a listener is a row in
+/// [`LISTENER_ALLOWED`], which carries a reason and which
+/// [`tests::the_listener_allowlist_has_no_dead_entries`] fails on when it stops
+/// binding. An exemption somebody has to write down is an exemption somebody
+/// can read.
 pub fn listener_hits(source: &str) -> Vec<(usize, &'static str)> {
     const PATTERNS: [&str; 2] = ["TcpListener::bind", "tokio::net::TcpListener"];
-    const GUARD: &str = "#[cfg(feature = \"blob-door\")]";
-    let mut hits = Vec::new();
-    let mut depth: i32 = 0;
-    let mut guards: Vec<i32> = Vec::new();
-    let mut armed = false;
-    for (index, line) in source.lines().enumerate() {
-        let code = line.split("//").next().unwrap_or(line);
-        if line.contains(GUARD) {
-            armed = true;
-        } else {
-            let guarded = armed || !guards.is_empty();
-            if !guarded {
-                // One hit per line: `tokio::net::TcpListener::bind(…)` matches
-                // both patterns, and one line of code is one finding.
-                if let Some(pattern) = PATTERNS.iter().find(|pattern| code.contains(**pattern)) {
-                    hits.push((index + 1, *pattern));
-                }
-            }
-        }
-        for byte in code.bytes() {
-            match byte {
-                b'{' => {
-                    depth += 1;
-                    if armed {
-                        guards.push(depth - 1);
-                        armed = false;
-                    }
-                }
-                b'}' => {
-                    depth -= 1;
-                    while guards.last().is_some_and(|guard| depth <= *guard) {
-                        guards.pop();
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    hits
+    source
+        .lines()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let code = line.split("//").next().unwrap_or(line);
+            // One hit per line: `tokio::net::TcpListener::bind(…)` matches both
+            // patterns, and one line of code is one finding.
+            PATTERNS
+                .iter()
+                .find(|pattern| code.contains(**pattern))
+                .map(|pattern| (index + 1, *pattern))
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -773,8 +761,13 @@ pub extern \"C\" fn centraid_open() {}
         assert!(report.findings.is_empty());
     }
 
+    /// **EVERY listener is a hit**, including one wearing the retired
+    /// `blob-door` attribute — no crate declares that feature, so the branch
+    /// that used to exempt it was an escape hatch nothing could reach and
+    /// anybody could type (#1029 W13, finding 24). The allowlist is the one way
+    /// through, and it has reasons in it.
     #[test]
-    fn an_unguarded_listener_is_caught_and_a_guarded_one_is_not() {
+    fn every_listener_is_a_hit_including_one_wearing_the_retired_attribute() {
         let source = "\
 fn open() {
     let _ = TcpListener::bind(\"0.0.0.0:0\");
@@ -785,8 +778,9 @@ fn door() {
 }
 ";
         let hits = listener_hits(source);
-        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits.len(), 2, "{hits:?}");
         assert_eq!(hits[0].0, 2);
+        assert_eq!(hits[1].0, 6);
     }
 
     #[test]

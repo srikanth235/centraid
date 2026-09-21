@@ -330,7 +330,7 @@ mod tests {
         // every writer in a process. This one is not.
         let path = dir.path().join(&id);
         let names: BTreeSet<String> = (0..128)
-            .map(|_| crate::backup::spool::unique_temp_name(&path))
+            .map(|_| crate::backup::spool::unique_temp_name(&path).expect("entropy"))
             .collect();
         assert_eq!(names.len(), 128, "128 draws, 128 names");
     }
