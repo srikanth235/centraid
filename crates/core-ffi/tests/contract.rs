@@ -19,6 +19,116 @@ use centraid_core_ffi::{
 };
 use prost::Message as _;
 
+// -------------------------------------------------------- log capture -----
+
+/// Capturing one test's `tracing` output inside a binary whose OTHER tests reach
+/// the same callsites, on other threads, at the same moment.
+///
+/// `tracing::subscriber::with_default` alone is not enough here, and what it
+/// does instead of working is nothing at all — an empty log and no error.
+/// `tracing` caches one `Interest` per callsite for the whole PROCESS, and while
+/// only a single dispatcher has ever been registered, `tracing_core` takes its
+/// `Rebuilder::JustOne` path (`callsite.rs`), which resolves that dispatcher
+/// with `dispatcher::get_default()` — *the registering thread's* default. A
+/// thread-local default belongs to one thread, so when another test is the first
+/// to reach `centraid_open`'s `warn!`, the interest computed there is `never`,
+/// and `never` is then cached for that callsite for every thread and the rest of
+/// the run. The capturing test's own event is dropped before any writer sees it.
+/// `an_open_that_refuses_an_ordinary_file_never_answers_ok` and
+/// `a_panic_in_open_hands_back_no_handle` both reach that callsite, and the loss
+/// reproduced once in 30 runs of the full binary (#1029 W20).
+///
+/// So the subscriber is installed ONCE as the process-wide default: every thread
+/// then resolves the same dispatcher, and the interest cached for a callsite is
+/// the same answer whichever thread happens to register it. The interest cache is
+/// rebuilt at install, because a callsite reached before it is already cached at
+/// `never`. Routing is per thread — a thread that asked to capture gets its own
+/// lines, every other thread's go to `io::sink`, exactly as they did before.
+mod capture {
+    use std::cell::RefCell;
+    use std::io::{self, Write};
+    use std::sync::{Arc, Mutex, Once};
+
+    #[derive(Clone, Default)]
+    struct Kept(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Kept {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            self.0
+                .lock()
+                .expect("the log lock")
+                .extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    enum Writer {
+        Kept(Kept),
+        Dropped(io::Sink),
+    }
+
+    impl Write for Writer {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            match self {
+                Self::Kept(kept) => kept.write(buffer),
+                Self::Dropped(sink) => sink.write(buffer),
+            }
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            match self {
+                Self::Kept(kept) => kept.flush(),
+                Self::Dropped(sink) => sink.flush(),
+            }
+        }
+    }
+
+    thread_local! {
+        static THIS_THREAD: RefCell<Option<Kept>> = const { RefCell::new(None) };
+    }
+
+    struct ByThread;
+
+    impl tracing_subscriber::fmt::MakeWriter<'_> for ByThread {
+        type Writer = Writer;
+
+        fn make_writer(&self) -> Self::Writer {
+            THIS_THREAD.with(|slot| match slot.borrow().clone() {
+                Some(kept) => Writer::Kept(kept),
+                None => Writer::Dropped(io::sink()),
+            })
+        }
+    }
+
+    /// Run `body` with this thread's `tracing` output captured, and answer what
+    /// it wrote.
+    pub fn from_this_thread(body: impl FnOnce()) -> String {
+        static INSTALLED: Once = Once::new();
+        INSTALLED.call_once(|| {
+            let subscriber = tracing_subscriber::fmt()
+                .with_writer(ByThread)
+                .with_max_level(tracing::Level::TRACE)
+                .finish();
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("this binary installs no other global subscriber");
+            // A callsite reached before the line above is cached at `never`.
+            tracing::callsite::rebuild_interest_cache();
+        });
+
+        let kept = Kept::default();
+        THIS_THREAD.with(|slot| *slot.borrow_mut() = Some(kept.clone()));
+        body();
+        THIS_THREAD.with(|slot| *slot.borrow_mut() = None);
+
+        let bytes = kept.0.lock().expect("the log lock").clone();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+}
+
 // -------------------------------------------------------------- harness -----
 
 struct Opened {
@@ -687,25 +797,6 @@ fn a_panic_in_open_hands_back_no_handle() {
 /// the ABI: a negative code, no handle written, and a line that names the reason.
 #[test]
 fn a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why() {
-    use std::sync::{Arc, Mutex};
-
-    #[derive(Clone, Default)]
-    struct Captured(Arc<Mutex<Vec<u8>>>);
-
-    impl std::io::Write for Captured {
-        fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
-            self.0
-                .lock()
-                .expect("the log lock")
-                .extend_from_slice(buffer);
-            Ok(buffer.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
     let dir = centraid_ontology::golden::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let path = dir.join("from-the-future.db");
@@ -743,15 +834,10 @@ fn a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why() {
     );
     let sentinel = 0x1234_usize as *mut centraid_core::Handle;
     let mut handle = sentinel;
-    let captured = Captured::default();
-    let sink = captured.clone();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(move || sink.clone())
-        .with_max_level(tracing::Level::TRACE)
-        .finish();
-    let code = tracing::subscriber::with_default(subscriber, || {
+    let mut code = CENTRAID_OK;
+    let log = capture::from_this_thread(|| {
         // SAFETY: live config bytes and a live out-pointer.
-        unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) }
+        code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
     });
 
     assert_eq!(
@@ -763,8 +849,6 @@ fn a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why() {
         "a failed open wrote a handle the caller would then close"
     );
 
-    let log = captured.0.lock().expect("the log lock").clone();
-    let log = String::from_utf8_lossy(&log);
     assert!(
         log.contains("centraid_open refused"),
         "the refusal emitted no line, so `-1` is again the whole story: {log}"

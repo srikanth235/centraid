@@ -3553,3 +3553,50 @@ passed on for the wrong one. That is find 6, and it was the test that found it.
 | `grep -c 'pub unsafe extern "C" fn' crates/core-ffi/src/lib.rs` | **5** |
 | `cargo xtask gate --profile local --lane fmt` / `--lane clippy` / `--lane rules` | PASS / PASS / PASS |
 | `bun run check:push:static` | 4/4 gates passed in 4.4s |
+
+## W20 — the open-refusal test's race
+
+`crates/core-ffi/tests/contract.rs::a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why`
+failed 1 in 30 full-binary runs with an **empty** captured log (`the refusal
+emitted no line, so `-1` is again the whole story: ` and nothing after the
+colon) while the code and handle assertions passed — so the event was dropped
+before any writer, not written somewhere else.
+
+**Cause.** The test captured through `tracing::subscriber::with_default`, a
+*thread-local* default, while other tests in the same binary reach the same
+`warn!` callsite on other threads:
+
+```
+$ grep -rn "centraid_open refused" crates --include=*.rs
+crates/core-ffi/src/lib.rs:208:            tracing::warn!("centraid_open refused with {code}: {error}");
+crates/core-ffi/tests/contract.rs:769:        log.contains("centraid_open refused"),
+$ grep -rn 'subscriber\|tracing_subscriber' crates/core-ffi/tests/contract.rs crates/core-ffi/src crates/core/src
+crates/core-ffi/tests/contract.rs:748:    let subscriber = tracing_subscriber::fmt()
+crates/core-ffi/tests/contract.rs:752:    let code = tracing::subscriber::with_default(subscriber, || {
+```
+
+`tracing` caches one `Interest` per callsite for the whole process, and while
+only a single dispatcher has ever been registered, `tracing_core`'s
+`callsite.rs` takes its `Rebuilder::JustOne` path, which resolves that
+dispatcher with `dispatcher::get_default()` — *the registering thread's*
+default. So when `an_open_that_refuses_an_ordinary_file_never_answers_ok`
+registers that callsite in the window between this test creating its
+thread-local `Dispatch` and reaching the `warn!`, the interest computed is
+`never`, and `never` is cached for that callsite on every thread for the rest of
+the run. Outside that window the dispatch's own `rebuild_interest_cache` repairs
+it, which is why the test passes 5/5 alone and fails rarely in the binary.
+
+**Fix.** A `capture` module in the test file installs the capturing subscriber
+**once as the process-wide default** (so every thread resolves the same
+dispatcher and a callsite gets the same answer whichever thread registers it)
+and rebuilds the interest cache at install (a callsite reached before it is
+already cached at `never`). Writers are routed per thread: the capturing thread
+gets its own buffer, every other thread's lines go to `io::sink` as before. No
+assertion loosened, no `#[ignore]`, no retry, no serialization; no other test
+touched.
+
+| Command | Before | After |
+| --- | --- | --- |
+| `for i in $(seq 1 30); do cargo test -p centraid-core-ffi --test contract; done` | **1 FAILED / 30** | **0 failed / 30** |
+| `cargo test -p centraid-core-ffi` | — | 39 passed / 0 failed |
+| `cargo xtask gate --profile local --lane fmt` / `--lane clippy` / `--lane rules` | — | PASS / PASS / PASS |
