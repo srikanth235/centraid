@@ -39,7 +39,7 @@ class PairAndRestoreSpec : StringSpec({
             // W17 OWNS THE PAYLOAD'S SHAPE. A shell that validated it would be a
             // second parser for a format it does not own.
             val seen = mutableListOf<String>()
-            val machine = PairMachine(pairDoor(PairAnswer("11 22 33", "silver"), seen))
+            val machine = PairMachine(pairDoor(PairAnswer("ab".repeat(32), laptopName = "silver"), seen))
             machine.offer("  eyJ2IjoxfQ  ")
             seen shouldBe listOf("eyJ2IjoxfQ")
         }
@@ -52,21 +52,36 @@ class PairAndRestoreSpec : StringSpec({
         }
     }
 
-    "a pairing with no safety number is refused rather than shown" {
+    "a pairing with nothing to compare is refused rather than shown" {
         runTest {
             // THE COMPARISON IS THE WHOLE SECURITY PROPERTY. A screen asking a
             // member to compare a blank is worse than one that refused.
-            val machine = PairMachine(pairDoor(PairAnswer(safetyNumber = " ")))
+            val machine = PairMachine(pairDoor(PairAnswer(gatewayEndpoint = " ")))
             machine.offer("payload") shouldBe
-                PairMachine.State.Refused(CustodyCopy.PAIR_NO_SAFETY_NUMBER)
+                PairMachine.State.Refused(CustodyCopy.PAIR_NOTHING_TO_COMPARE)
         }
     }
 
-    "the paired line names the number and says what to do with it" {
-        val line = CustodyCopy.pairedLine(PairAnswer("55 19 04 88", "the kitchen laptop"))
-        line shouldContain "55 19 04 88"
+    "the paired line carries every character of the id and says what to do with it" {
+        // NOT A SHORTENING. A fingerprint that dropped characters would be a
+        // comparison that passes on a collision somebody arranged.
+        val id = "0123456789abcdef".repeat(4)
+        val line = CustodyCopy.pairedLine(PairAnswer(id, laptopName = "the kitchen laptop"))
+        val shown = CustodyCopy.fingerprint(id)
+        shown shouldBe "01234567 89abcdef 01234567 89abcdef 01234567 89abcdef 01234567 89abcdef"
+        shown.filterNot { it == ' ' }.length shouldBe id.length
+        line shouldContain shown
         line shouldContain "the kitchen laptop"
-        line shouldContain "matches the one"
+        line shouldContain "do not carry on"
+    }
+
+    "an unpublished record is a warning about RESTORE, not a failed pairing" {
+        // `phone.proto`: false is not a failure of the pairing. The sentence
+        // says what it actually costs instead of alarming a member about a
+        // backup that works.
+        val line = CustodyCopy.pairedLine(PairAnswer("ab".repeat(32), recordPublished = false))
+        line shouldContain "Paired with"
+        line shouldContain "restoring on a new phone"
     }
 
     "restore refuses a phrase that is not 24 words, and says how many there are" {
@@ -120,9 +135,10 @@ class PairAndRestoreSpec : StringSpec({
         }
     }
 
-    "the restoring line reports what BackupStatus says and claims nothing more" {
-        CustodyCopy.restoringLine(RestoreAnswer(vaults = 2, pendingBytes = 4096)) shouldContain
-            "Restoring 2 vaults"
+    "the restored line names the rows, because 'two vaults' reads the same over two empty ones" {
+        CustodyCopy.restoringLine(RestoreAnswer(vaults = 2, rows = 9_000)) shouldContain
+            "9,000 rows"
+        CustodyCopy.restoringLine(RestoreAnswer(vaults = 2, rows = 9_000)) shouldContain "2 vaults"
         CustodyCopy.restoringLine(RestoreAnswer(vaults = 1)) shouldBe "Restored 1 vault."
     }
 })

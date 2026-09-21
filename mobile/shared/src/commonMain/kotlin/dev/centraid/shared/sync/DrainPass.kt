@@ -258,10 +258,25 @@ public object DrainCopy {
      * a product that is working.
      */
     public fun stoppedSentence(answer: DrainAnswer): String = when (answer.stopped) {
-        DrainAnswer.Stopped.EMPTY -> "Everything on this phone is on your laptop."
+        DrainAnswer.Stopped.EMPTY -> "Backed up. Everything is on your laptop."
         DrainAnswer.Stopped.DEADLINE ->
-            "Still backing up. Centraid carries on in the background and when you open it."
+            "Still backing up — ${bytes(answer.pendingBytes)} to go. It will finish on its own."
         DrainAnswer.Stopped.UNREACHABLE ->
-            "Your laptop did not answer. Centraid will try again when it can reach it."
+            "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
+    }
+
+    /**
+     * `pending_bytes` in a member's units.
+     *
+     * Decimal and not binary, because a phone's own storage screen is decimal
+     * and a member comparing the two should not be told two numbers for one
+     * amount. Whole units above a kilobyte: a backup screen reading
+     * "3.27183 MB to go" is a number nobody can use.
+     */
+    public fun bytes(count: Long): String = when {
+        count < 1_000L -> "$count bytes"
+        count < 1_000_000L -> "${count / 1_000} KB"
+        count < 1_000_000_000L -> "${count / 1_000_000} MB"
+        else -> "${count / 1_000_000_000} GB"
     }
 }

@@ -71,12 +71,62 @@ public data class CoreConfiguration(
      * use. [ArtifactIdentity.DEV] means "not checked, and say so".
      */
     public val expectedDigest: String = ArtifactIdentity.DEV,
+    /**
+     * THE VAULT'S SEED, AND IT CROSSES ONLY AT OPEN (`CONTRACT.md` §4b, #1029 W15).
+     *
+     * The 64-byte BIP-39 seed the member's 24 words derive, as **128 lowercase
+     * hex characters**, out of this device's Keychain or Keystore. Sealing a
+     * generation is built from it, so a core opened without it cannot back up.
+     *
+     * **Absent is not an error.** Such a core reads and writes its vault
+     * perfectly well and refuses `Drain` with `ERROR_CODE_PEER_UNREACHABLE` and
+     * a sentence naming the seed — a state a shell draws as "unlock to back up",
+     * because a member who has not unlocked their phone has not lost anything.
+     * **Present and malformed IS an error** (`BAD_ARGUMENT`), deliberately: a
+     * shell that believed it had unlocked a core which cannot seal a byte would
+     * find out on the day the phone is gone.
+     *
+     * It is a value on a configuration and not a field this class holds: the
+     * core takes it at open and this binding keeps no reference to it.
+     */
+    public val vaultSeedHex: String? = null,
+    /** The derivation index this vault was minted at. Ignored with no seed. */
+    public val vaultIndex: Int = 0,
+    /**
+     * THIS DEVICE'S SECRET, WHICH IS NOT THE SEED AND DOES NOT TRAVEL WITH IT.
+     *
+     * 32 bytes as 64 lowercase hex characters, out of the ordinary secure
+     * store, which both platforms pin to this device. The seed above is
+     * SYNCHRONISED on purpose — it is the 24 words — and this one must not be:
+     * a device secret that reached a second phone would enrol both as the same
+     * device, which is exactly the distinction F1's `VAULT_MOVED` freeze is
+     * keyed on. `dev.centraid.shared.custody.VaultSecrets` is the one place the
+     * two are stored, with that rule on each accessor.
+     *
+     * **Absent is not an error**: the core mints one and hands it back to be
+     * stored, which is every first launch.
+     *
+     * **The JSON spelling below is W15's and is still landing.** `CONTRACT.md`
+     * §4b carries the seed half today; the `device` object is the extension
+     * W15 is adding, and its key is `"device": {"secret": "<hex>"}` as the
+     * contract's author stated it. If the landed contract spells it otherwise,
+     * this one line moves and nothing else does — which is why the spelling is
+     * built here and nowhere else.
+     */
+    public val deviceSecretHex: String? = null,
 ) {
     internal fun toJson(uiThreadName: String): String = buildString {
         append('{')
         append("\"path\":").append(quote(databasePath))
         append(",\"create\":").append(create)
         append(",\"uiThreadName\":").append(quote(uiThreadName))
+        vaultSeedHex?.let {
+            append(",\"vault\":{\"seed\":").append(quote(it))
+                .append(",\"index\":").append(vaultIndex).append('}')
+        }
+        deviceSecretHex?.let {
+            append(",\"device\":{\"secret\":").append(quote(it)).append('}')
+        }
         append('}')
     }
 

@@ -6,10 +6,10 @@ package dev.centraid.shared.custody
  * The two flows a phone has that are not about a vault it already holds:
  *
  * * **Pair** — scan the laptop's QR (or paste the same text), hand it to W15's
- *   `Pair` request, and show the laptop's **safety number** so the member can
- *   compare it with the one the laptop's terminal is printing. That comparison
- *   is the whole security property of the flow and it is the member's to make:
- *   nothing here decides that a pairing is genuine.
+ *   `Pair` request, and show the laptop's endpoint id so the member can compare
+ *   it with the one the laptop's terminal is printing. That comparison is the
+ *   whole security property of the flow and it is the member's to make: nothing
+ *   here decides that a pairing is genuine.
  * * **Restore** — 24 words typed, or the seed the platform synchronised, with
  *   an endpoint typed by hand when DNS cannot find the laptop; then `Restore`,
  *   then progress read from `BackupStatus`.
@@ -22,8 +22,9 @@ package dev.centraid.shared.custody
  *
  * **The doors are W15's request kinds**, the same seam shape
  * `dev.centraid.shared.sync.DrainDoor` uses and for the same reason: the
- * request contract is Rust's and the core-backed implementations land with it,
- * while everything that does not depend on the wire is testable on the JVM.
+ * request contract is Rust's, the core-backed implementations are in
+ * `dev.centraid.shared.sync.CoreDoors`, and everything that does not depend on
+ * the wire is testable on the JVM without an FFI.
  *
  * The **`VAULT_MOVED` freeze on the old phone is NOT here**, and that is not an
  * omission: it already exists, drawn from the roster's own state
@@ -56,11 +57,11 @@ public class PairMachine(private val door: PairDoor) {
         state = State.Pairing
         state = when (val answer = door.pair(ticket)) {
             null -> State.Refused(CustodyCopy.PAIR_UNREACHABLE)
-            else -> if (answer.safetyNumber.isBlank()) {
-                // A PAIRING WITH NO SAFETY NUMBER IS NOT A PAIRING A MEMBER CAN
-                // CHECK. Refused rather than shown, because the alternative is a
-                // screen that asks somebody to compare a blank.
-                State.Refused(CustodyCopy.PAIR_NO_SAFETY_NUMBER)
+            else -> if (answer.gatewayEndpoint.isBlank()) {
+                // A PAIRING WITH NOTHING TO COMPARE IS NOT A PAIRING A MEMBER
+                // CAN CHECK. Refused rather than shown, because the alternative
+                // is a screen that asks somebody to compare a blank.
+                State.Refused(CustodyCopy.PAIR_NOTHING_TO_COMPARE)
             } else {
                 State.Paired(answer)
             }
@@ -75,7 +76,7 @@ public class PairMachine(private val door: PairDoor) {
         /** The payload is with the core. */
         public data object Pairing : State
 
-        /** Paired. [answer] carries the number the member must compare. */
+        /** Paired. [answer] carries what the member must compare. */
         public data class Paired(public val answer: PairAnswer) : State
 
         /** [sentence] is what the member reads. */
@@ -169,23 +170,47 @@ public interface RestoreDoor {
 }
 
 /**
- * What a `Pair` answered.
+ * What a `Pair` answered (`phone.proto`'s `PairResponse`).
  *
- * [safetyNumber] is `identity::safety_number` over the two identities, and it
- * is the only thing on the paired screen a member has to act on.
+ * **There is no safety number on the wire and this does not invent one.** W15's
+ * response carries the laptop's `EndpointId` and whether the identity record
+ * was published; `centraid_identity::safety_number` exists in Rust and is not
+ * part of this answer. The endpoint id is what the laptop's own terminal
+ * prints, so it is comparable by eye and it is what the paired screen shows —
+ * and the gap is recorded as a hand-off rather than papered over with a number
+ * this shell computed itself, which would be a second answer to "who did I
+ * pair with".
  */
 public data class PairAnswer(
-    public val safetyNumber: String,
+    /** The laptop's iroh `EndpointId`, hex — what this phone will dial. */
+    public val gatewayEndpoint: String,
+    /**
+     * Whether the identity record reached the resolver.
+     *
+     * **False is not a failure of the pairing** (`phone.proto`): the phone is
+     * paired and can back up over the endpoint it just learned. What it costs
+     * is a restore from a device that never scanned this QR, so the member is
+     * told rather than reassured.
+     */
+    public val recordPublished: Boolean = true,
     /** What the laptop calls itself, for the sentence. May be empty. */
     public val laptopName: String = "",
 )
 
-/** What a `Restore` answered: how much came back, and from where. */
+/** What a `Restore` answered (`phone.proto`'s `RestoreResponse`). */
 public data class RestoreAnswer(
     /** How many vaults the laptop held for this identity. */
     public val vaults: Int,
-    /** Bytes still to fetch, as `BackupStatus` reports them. */
-    public val pendingBytes: Long = 0,
+    /**
+     * Rows the restored generations' censuses promised, summed.
+     *
+     * The number that makes "your vault is back" a claim rather than a hope: a
+     * perfect page tree over no rows passes `integrity_check` and is a total
+     * loss (#1029 §2).
+     */
+    public val rows: Long = 0,
+    /** How many derivation indices were tried past the last that answered. */
+    public val gapScanned: Int = 0,
 )
 
 /**
@@ -209,7 +234,7 @@ public object CustodyCopy {
     public const val PAIR_UNREACHABLE: String =
         "Your laptop did not answer. Check it is awake and on the same network, then try again."
 
-    public const val PAIR_NO_SAFETY_NUMBER: String =
+    public const val PAIR_NOTHING_TO_COMPARE: String =
         "Centraid could not check who answered, so it did not pair. Try again."
 
     /**
@@ -222,10 +247,29 @@ public object CustodyCopy {
      */
     public fun pairedLine(answer: PairAnswer): String {
         val who = answer.laptopName.ifBlank { "your laptop" }
-        return "Paired with $who. Check this number matches the one $who is showing: " +
-            "${answer.safetyNumber}. If it does not match, unpair and try again on a network " +
-            "you trust."
+        val warning = if (answer.recordPublished) {
+            ""
+        } else {
+            // FALSE IS NOT A FAILURE OF THE PAIRING, and the sentence says what
+            // it actually costs rather than alarming a member about a backup
+            // that works.
+            " Centraid could not publish your address, so restoring on a new phone may need " +
+                "you to type it."
+        }
+        return "Paired with $who. Check this matches what $who is showing: " +
+            "${fingerprint(answer.gatewayEndpoint)}. If it does not match, do not carry on — " +
+            "pair again on a network you trust.$warning"
     }
+
+    /**
+     * A 32-byte id, in groups a member can read across two screens.
+     *
+     * Not a shortening: every character is there, because a fingerprint that
+     * dropped some of them would be a comparison that passes on a collision
+     * somebody arranged.
+     */
+    public fun fingerprint(endpointHex: String): String =
+        endpointHex.chunked(8).joinToString(" ")
 
     /** The restore screen's heading and its ask. */
     public const val RESTORE_TITLE: String = "Restore from your 24 words"
@@ -258,11 +302,25 @@ public object CustodyCopy {
         else -> "Centraid needs 24 words. There are $typed here."
     }
 
-    /** The line while bytes are coming back, from `BackupStatus`. */
-    public fun restoringLine(answer: RestoreAnswer): String = when {
-        answer.pendingBytes > 0 ->
-            "Restoring ${answer.vaults} vaults. Centraid keeps going in the background."
-        answer.vaults == 1 -> "Restored 1 vault."
-        else -> "Restored ${answer.vaults} vaults."
+    /**
+     * What came back, in the terms the answer is in.
+     *
+     * **It names the rows.** `RestoredVault.rows` is the census the generation
+     * promised, and a restore that reports only "2 vaults" would read the same
+     * over two empty files — a perfect page tree over no rows passes
+     * `integrity_check` and is a total loss (#1029 §2). What makes it a claim
+     * rather than a hope is the count.
+     */
+    public fun restoringLine(answer: RestoreAnswer): String {
+        val vaults = if (answer.vaults == 1) "1 vault" else "${answer.vaults} vaults"
+        return if (answer.rows > 0) "Restored $vaults, ${grouped(answer.rows)} rows." else
+            "Restored $vaults."
     }
+
+    /** Thousands separated, so a six-figure row count is readable at a glance. */
+    private fun grouped(value: Long): String = value.toString()
+        .reversed()
+        .chunked(3)
+        .joinToString(",")
+        .reversed()
 }

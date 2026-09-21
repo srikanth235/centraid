@@ -113,16 +113,23 @@ class DrainPassSpec : StringSpec({
             "3 changes not backed up"
     }
 
-    "each stopped reason has its own sentence and a deadline is not an error" {
+    "each stopped reason has its own sentence, and neither of the two ordinary ones is an error" {
         // A FIRST CAMERA-ROLL BACKUP ENDS ON A DEADLINE EVERY TIME. A phone that
         // called that a failure would train a member to distrust a product that
-        // is working.
-        val deadline = DrainCopy.stoppedSentence(DrainAnswer(1, 99, DrainAnswer.Stopped.DEADLINE))
-        deadline shouldContain "Still backing up"
-        DrainCopy.stoppedSentence(DrainAnswer(1, 0, DrainAnswer.Stopped.EMPTY)) shouldContain
-            "on your laptop"
-        DrainCopy.stoppedSentence(DrainAnswer(0, 99, DrainAnswer.Stopped.UNREACHABLE)) shouldContain
-            "did not answer"
+        // is working — and an unreachable laptop lost nothing, so neither
+        // sentence may read as "backup failed". These are W15's own words.
+        val deadline = DrainCopy.stoppedSentence(
+            DrainAnswer(1, 3_200_000, DrainAnswer.Stopped.DEADLINE),
+        )
+        deadline shouldBe "Still backing up — 3 MB to go. It will finish on its own."
+        DrainCopy.stoppedSentence(DrainAnswer(1, 0, DrainAnswer.Stopped.EMPTY)) shouldBe
+            "Backed up. Everything is on your laptop."
+        DrainCopy.stoppedSentence(DrainAnswer(0, 99, DrainAnswer.Stopped.UNREACHABLE)) shouldBe
+            "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
+        listOf(
+            DrainCopy.stoppedSentence(DrainAnswer(1, 99, DrainAnswer.Stopped.DEADLINE)),
+            DrainCopy.stoppedSentence(DrainAnswer(0, 99, DrainAnswer.Stopped.UNREACHABLE)),
+        ).forEach { it.contains("failed") shouldBe false }
     }
 
     "the two platform truths and the amendment's posture live with the pass" {
