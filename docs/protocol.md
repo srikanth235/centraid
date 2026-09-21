@@ -94,7 +94,15 @@ ok iff peer.schema_version >= local.min_supported
 
 **The desktop's local channel is not on this wire.** The seat socket's frame carries a channel tag: `0x00` is a `centraid.core.v1` envelope byte-identical to what crosses iroh, `0x01` is one UTF-8 JSON local message naming things that cannot exist remotely — a peer uid, a byte offset into a file this process can see, a capability token for a child on this machine. Adding those to `centraid.core.v1` would put them under its FILE promise to seats that update on their own schedule ([D-1020-F9](decisions.md#wave-3-lane-rulings-1020)). A new local message is **additive** and does not bump `LOCAL_PROTOCOL_VERSION`, whose own rule is that it is bumped when a message changes shape.
 
-## One ALPN, one connection per vault, one stream per request ([#1025](https://github.com/srikanth235/centraid/issues/1025) S2, S3)
+## The gateway API's ALPN: `centraid-gateway/1` ([#1029](https://github.com/srikanth235/centraid/issues/1029), [scope amendment 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795))
+
+v0 is a phone backing up to the member's own laptop. The gateway API — the same HTTP requests, headers, signatures, JSON bodies and refusal shapes `gateway-client` signs and `gateway-server` routes — is carried as **HTTP/1.1 over one iroh bidirectional stream** under the ALPN **`centraid-gateway/1`**. One iroh dial gives the LAN-direct, hole-punched and relayed paths, so a laptop behind NAT needs no port forwarding and no certificate. The carrier's version (`/1`) is not the protocol version: `PROTOCOL_MIN`/`PROTOCOL_MAX` are negotiated *inside* the requests this carries.
+
+The ALPN is declared once, in the rules — `centraid_gateway_core::ALPN` — and imported by both ends, so the listener and the dialler cannot disagree about a string whose mismatch is a hang rather than a compile error. The laptop's endpoint offers it and calls `accept`; **the phone's endpoint offers no ALPN and never calls `accept`** — it dials, and accepts no inbound connection. `cargo xtask rules`' `no-listening-socket` enforces both halves.
+
+## One ALPN, one connection per vault, one stream per request ([#1025](https://github.com/srikanth235/centraid/issues/1025) S2, S3) — superseded
+
+> The `centraid/v1` device plane below was deleted with the seat crates ([#1029](https://github.com/srikanth235/centraid/issues/1029) §8). It is left here until #1029's documentation pass rewrites this file; the section above is current.
 
 The v1 plane is **one ALPN**, and it is the only one a v1 endpoint advertises: `centraid/v1`. Everything a device does with its gateway rides it — redeeming a pairing code, a page of the log, a write, a bootstrap offer, a blob's bytes. `centraid/v1/byte`, `centraid/v1/peer` and `centraid/v1/pair` are all gone ([D-1025-S2-1](decisions.md#slice-s2--one-protocol-1025), [D-1025-S3-4](decisions.md#slice-s3--bytes-both-ways-one-store-1025)).
 

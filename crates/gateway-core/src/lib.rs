@@ -92,6 +92,27 @@ pub use ids::{AccountId, DeviceId, Generation, ObjectKind, ObjectName, VaultId};
 pub use store::{ByteStore, StateStore, StoredObject, VaultState};
 pub use time::{Duration, ServerTime};
 
+/// THE ONE ALPN THE GATEWAY API IS CARRIED UNDER.
+///
+/// The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)
+/// supersedes §3's "transport is HTTPS, not iroh" and answers open question 12
+/// yes: v0 is a phone backing up to the member's own laptop, and a laptop
+/// behind NAT has no port to forward and no certificate to hold. So the same
+/// requests, headers, signatures, JSON bodies and refusal shapes travel as
+/// **HTTP/1.1 over one iroh bidirectional stream** under this ALPN. Nothing on
+/// the wire changes; only what carries it.
+///
+/// It is declared **here**, in the rules, rather than in either end, because
+/// the two ends must not be able to disagree about it: `gateway-server`'s
+/// listener offers it and `gateway-client`'s transport dials it, and a
+/// mismatch is a dial that hangs rather than a compile error.
+///
+/// The `/1` is the **carrier's** version and is not [`PROTOCOL_MIN`] /
+/// [`PROTOCOL_MAX`]: those are negotiated inside the requests this carries, so
+/// a phone and a laptop that disagree about them get a `VersionWindow` refusal
+/// they can read instead of a connection that never forms.
+pub const ALPN: &[u8] = b"centraid-gateway/1";
+
 /// The protocol versions this build of the rules speaks, inclusive.
 ///
 /// Until the first release "v0, no legacy" holds and the protocol changes
