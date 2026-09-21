@@ -10,16 +10,18 @@ import {
 
 test("default ship is tag surfaces only (not mobile)", () => {
   const ids = defaultShipSurfaceIds();
-  assert.ok(ids.includes("desktop"));
   assert.ok(ids.includes("gateway-image"));
   assert.ok(ids.includes("prebuilt-core"));
   assert.ok(!ids.includes("mobile"));
 });
 
 test("resolveShipSurfaces rejects unknown ids", () => {
-  const bad = resolveShipSurfaces(["desktop", "nope"]);
+  const bad = resolveShipSurfaces(["gateway-image", "nope"]);
   assert.equal(bad.ok, false);
-  const good = resolveShipSurfaces(["desktop", "mobile"]);
+  // `desktop` was a surface until the #1029 scope amendment of 2026-09-21 and
+  // is now exactly as unknown as "nope" — which is the property this asserts.
+  assert.equal(resolveShipSurfaces(["desktop"]).ok, false);
+  const good = resolveShipSurfaces(["gateway-image", "mobile"]);
   assert.equal(good.ok, true);
   if (good.ok) assert.equal(good.surfaces.length, 2);
 });
@@ -29,7 +31,10 @@ test("buildSurfaceMatrix marks ship set", () => {
   assert.deepEqual(m.shipThisCycle, ["mobile"]);
   const mobile = m.surfaces.find((s) => s.id === "mobile");
   assert.equal(mobile?.inThisShip, true);
-  assert.equal(m.surfaces.find((s) => s.id === "desktop")?.inThisShip, false);
+  assert.equal(
+    m.surfaces.find((s) => s.id === "gateway-image")?.inThisShip,
+    false
+  );
 });
 
 test("catalog ids unique", () => {
