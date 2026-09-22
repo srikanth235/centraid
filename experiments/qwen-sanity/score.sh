@@ -8,7 +8,8 @@
 # canonical and a reason for anything it cannot build, and `run-model` scores
 # the empty canonical as the failure it is.
 set -eu
-PREFIX="$1"
+# absolute, because the `run-model` step runs from the repository root
+PREFIX=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 
