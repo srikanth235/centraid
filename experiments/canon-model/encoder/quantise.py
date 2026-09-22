@@ -30,8 +30,13 @@ def main():
     tok, model, vocabs = load(args.model)
 
     fp32 = size_mb(model, "/tmp/enc-fp32.pt")
+    from torch.ao.quantization import float_qparams_weight_only_qconfig, \
+        default_dynamic_qconfig
     q = torch.ao.quantization.quantize_dynamic(
-        model, {nn.Linear, nn.Embedding}, dtype=torch.qint8)
+        model,
+        {nn.Linear: default_dynamic_qconfig,
+         nn.Embedding: float_qparams_weight_only_qconfig},
+        dtype=torch.qint8)
     int8 = size_mb(q, "/tmp/enc-int8.pt")
     print("fp32 %.1f MB   int8 %.1f MB" % (fp32, int8))
     print("params %.2fM" % (sum(p.numel() for p in model.parameters()) / 1e6))

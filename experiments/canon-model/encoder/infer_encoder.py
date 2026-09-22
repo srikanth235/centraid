@@ -20,7 +20,7 @@ import torch
 
 from features import decode_tags, encode
 from model import CanonEncoder, Vocabs, load_tokenizer
-from task import assemble_from, gold_rows
+from task import HOLE_RX, assemble_from, gold_rows
 
 
 def load(path):
@@ -38,9 +38,16 @@ def predict(tok, model, vocabs, text, prev):
     feats, offsets = encode(tok, [text], None, vocabs, with_labels=False)
     tlog, slog, glog = model(feats["input_ids"], feats["attention_mask"])
     template = vocabs.templates[int(tlog.argmax(-1))]
+    needed = {m.group(1) + m.group(2) for m in HOLE_RX.finditer(template)}
     closed = {}
     for name, head in slog.items():
-        value = vocabs.slots[name][int(head.argmax(-1))]
+        logits = head[0]
+        if name in needed:
+            # the template HAS this hole, so <none> is not an option: take the
+            # argmax over the real vocabulary.  Still one argmax, still closed.
+            value = vocabs.slots[name][int(logits[1:].argmax(-1)) + 1]
+        else:
+            value = vocabs.slots[name][int(logits.argmax(-1))]
         if value != "<none>":
             closed[name] = value
     lits = decode_tags(feats["input_ids"][0].tolist(), offsets[0].tolist(),

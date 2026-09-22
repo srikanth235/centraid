@@ -160,7 +160,14 @@ def scan(canonical):
     return out
 
 
-def _classify_ident(raw, nxt):
+def _classify_ident(raw, nxt, first=False):
+    # `refuse` / `clarify` open a DECLINE turn and are followed by ":", which
+    # would otherwise make them an argument NAME.  They are structure, and the
+    # refuse/clarify distinction belongs in the template, not in the ARG
+    # vocabulary.  Only these two need the guard: every other STRUCT word that
+    # can precede ":" (`to:`, `by:`, `from:`) really is an argument name.
+    if first and raw in ("refuse", "clarify"):
+        return "KEEP"
     if raw in ("asc", "desc"):
         return "DIR"
     if raw in VERBS:
@@ -185,7 +192,7 @@ def decompose(canonical):
     for i, (ty, raw, start, end) in enumerate(toks):
         if ty == "IDENT":
             nxt = toks[i + 1][1] if i + 1 < len(toks) else ""
-            ty = _classify_ident(raw, nxt)
+            ty = _classify_ident(raw, nxt, first=(i == 0))
             if ty == "UNKNOWN":
                 unknown.append(raw)
                 continue

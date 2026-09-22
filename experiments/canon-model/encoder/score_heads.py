@@ -14,8 +14,8 @@ import json
 import os
 import sys
 
-import check
 from canon_decomp import GRAMMAR
+import check
 from task import label_of
 
 
@@ -28,7 +28,14 @@ def main():
     tree = collections.Counter()
     n = collections.Counter()
     lit_ok = lit_tot = 0
+    ab_ok = ab_tot = ab_false = 0
     wrong = []
+
+    def is_abstain(t):
+        # Both spellings: the fixed one (`refuse: <REASON#0>`) and the one the
+        # round-2 checkpoint was trained with (`<ARG#0>: <REASON#0>`).
+        return (t == "nothing" or t.startswith(("refuse:", "clarify:"))
+                or t == "<ARG#0>: <REASON#0>")
     for line in open(path, encoding="utf-8"):
         line = line.strip()
         if not line:
@@ -52,8 +59,16 @@ def main():
         heads = row.get("heads")
         if not heads:
             continue
+        got_t = heads["template"]
+        if got_t == "<ARG#0>: <REASON#0>":
+            got_t = "%s: <REASON#0>" % heads["closed"].get("ARG0", "?")
+        if is_abstain(gl.template):
+            ab_tot += 1
+            ab_ok += int(got_t == gl.template)
+        elif is_abstain(got_t):
+            ab_false += 1
         per["template"][1] += 1
-        per["template"][0] += int(heads["template"] == gl.template)
+        per["template"][0] += int(got_t == gl.template)
         for slot, value in gl.closed.items():
             per[slot[:-1]][1] += 1
             per[slot[:-1]][0] += int(heads["closed"].get(slot) == value)
@@ -75,6 +90,9 @@ def main():
         print("  %-10s %5d/%-5d %5.1f%%" % (head, ok, tot, 100.0 * ok / max(1, tot)))
     print("  %-10s %5d/%-5d %5.1f%%  (LIT span exact, case-insensitive)"
           % ("LIT-span", lit_ok, lit_tot, 100.0 * lit_ok / max(1, lit_tot)))
+    print("  %-10s %5d/%-5d %5.1f%%  (abstention: refuse/clarify/nothing; "
+          "%d false abstentions)"
+          % ("abstain", ab_ok, ab_tot, 100.0 * ab_ok / max(1, ab_tot), ab_false))
     print("\nsample wrong outputs")
     for key, req, out, g in wrong[:8]:
         print("  %s %r\n    got  %s\n    gold %s" % (key, req, out, g))

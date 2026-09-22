@@ -63,6 +63,19 @@ def encode(tok, texts, labels, vocabs, with_labels=True):
     return out, offsets
 
 
+WORDCH = __import__("re").compile(r"[A-Za-z0-9_'-]")
+
+
+def snap(text, s, e):
+    """Grow a tagged span to whole words of the INPUT text.  This is the code
+    decoder reading the member's own characters; no model output is edited."""
+    while s > 0 and WORDCH.match(text[s - 1]):
+        s -= 1
+    while e < len(text) and WORDCH.match(text[e]):
+        e += 1
+    return s, e
+
+
 def decode_tags(tok_ids, offsets, tag_ids, text, vocabs):
     """BIO -> {"LIT0": "Tahoe Trip", ...} using the INPUT's own characters."""
     spans = {}
@@ -74,16 +87,16 @@ def decode_tags(tok_ids, offsets, tag_ids, text, vocabs):
             continue
         if lab == "O":
             if cur_key and cur_key not in spans:
-                spans[cur_key] = text[cur_s:cur_e]
+                spans[cur_key] = text[slice(*snap(text, cur_s, cur_e))]
             cur_key = None
             continue
         pos, key = lab.split("-", 1)
         if pos == "B" or key != cur_key:
             if cur_key and cur_key not in spans:
-                spans[cur_key] = text[cur_s:cur_e]
+                spans[cur_key] = text[slice(*snap(text, cur_s, cur_e))]
             cur_key, cur_s, cur_e = key, a, b
         else:
             cur_e = b
     if cur_key and cur_key not in spans:
-        spans[cur_key] = text[cur_s:cur_e]
+        spans[cur_key] = text[slice(*snap(text, cur_s, cur_e))]
     return spans

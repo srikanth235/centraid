@@ -1,0 +1,13 @@
+# The Python side of this spike has NO third-party dependencies.
+#
+# `frame.py`, `gen_vocab.py`, `render_frames.py` and `summarise.py` import
+# only the standard library plus two files already in this repository:
+# `crates/evalsuite/grammar/check.py` (the parser, stdlib only) and
+# `experiments/canon-model/encoder/render.py` (the unparser, stdlib only).
+#
+# A virtualenv is therefore optional. It is still the documented step in
+# HANDOFF.md, because a `python3` that is Xcode's or Homebrew's or the
+# system's should not matter to a result, and `python3 -m venv .venv` is the
+# cheapest way to make sure it does not.
+#
+# Python 3.11 or newer.

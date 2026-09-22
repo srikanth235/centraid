@@ -52,10 +52,15 @@ def main():
     tr = read_jsonl(os.path.join(DATA, "train.jsonl"))
     if args.extra:
         tr = tr + read_jsonl(args.extra)
-    va = read_jsonl(os.path.join(DATA, "val.jsonl"))
+    vals = [("val", read_jsonl(os.path.join(DATA, "val.jsonl")))]
+    dv = os.path.join(DATA, "distill_val.jsonl")
+    if os.path.exists(dv):
+        vals.append(("distill_val", read_jsonl(dv)))
     tr_t, tr_l = build(tr)
-    va_t, va_l = build(va)
-    print("train %d  val %d" % (len(tr_t), len(va_t)), flush=True)
+    vals = [(n, build(rows)) for n, rows in vals]
+    print("train %d  %s" % (len(tr_t),
+          "  ".join("%s %d" % (n, len(t)) for n, (t, _) in vals)), flush=True)
+    va_t, va_l = vals[0][1]
 
     vocabs = Vocabs.build(tr_l)
     print("templates %d  slots %d  bio %d"
@@ -77,7 +82,12 @@ def main():
     sched = torch.optim.lr_scheduler.OneCycleLR(
         opt, max_lr=[args.lr, args.head_lr], total_steps=steps, pct_start=0.1)
     ce = nn.CrossEntropyLoss()
-    ce_tag = nn.CrossEntropyLoss(ignore_index=-100)
+    # The BIO tagger is the head that grounds a world handle, and O outnumbers
+    # every span label ~30:1 -- unweighted, round 1 learned to say O and
+    # emitted a literal on 27 of 434 corpus turns.
+    tag_w = torch.ones(len(vocabs.bio))
+    tag_w[1:] = 10.0
+    ce_tag = nn.CrossEntropyLoss(ignore_index=-100, weight=tag_w)
 
     best = -1.0
     started = time.time()
@@ -106,11 +116,16 @@ def main():
                 print("e%d s%d loss %.4f  %.0fs"
                       % (epoch, step, run / (step + 1), time.time() - started),
                       flush=True)
-        acc = evaluate(model, tok, va_t, va_l, vocabs, args.batch)
-        print("EPOCH %d  val template %.4f  slots %.4f  tags %.4f  %.0fs"
-              % (epoch, acc["template"], acc["slots"], acc["tags"],
-                 time.time() - started), flush=True)
-        score = acc["template"] + acc["slots"] + acc["tags"]
+        score = None
+        for name, (vt, vl) in vals:
+            acc = evaluate(model, tok, vt, vl, vocabs, args.batch)
+            print("EPOCH %d  %-12s template %.4f  slots %.4f  tags %.4f  "
+                  "abstain %.4f (n=%d)  %.0fs"
+                  % (epoch, name, acc["template"], acc["slots"], acc["tags"],
+                     acc["abstain"], acc["abstain_n"], time.time() - started),
+                  flush=True)
+            if score is None:
+                score = acc["template"] + acc["slots"] + acc["tags"]
         if score > best:
             best = score
             torch.save(model.state_dict(), os.path.join(args.out, "model.pt"))
@@ -124,6 +139,10 @@ def evaluate(model, tok, texts, labels, vocabs, batch):
     ok = tot = 0
     sok = stot = 0
     gok = gtot = 0
+    aok = atot = 0
+    abstain = {i for i, t in enumerate(vocabs.templates)
+               if t == "nothing" or t.startswith("refuse:")
+               or t.startswith("clarify:")}
     for at in range(0, len(texts), batch):
         sl = slice(at, at + batch)
         feats, _ = encode(tok, texts[sl], labels[sl], vocabs)
@@ -134,11 +153,17 @@ def evaluate(model, tok, texts, labels, vocabs, batch):
         for name in vocabs.slots:
             sok += int((slog[name].argmax(-1) == feats["slot_" + name]).sum())
             stot += len(texts[sl])
+        pred = tlog.argmax(-1)
+        for j in range(len(texts[sl])):
+            if int(feats["template"][j]) in abstain and feats["template_ok"][j]:
+                atot += 1
+                aok += int(int(pred[j]) == int(feats["template"][j]))
         m = feats["tags"] != -100
         gok += int(((glog.argmax(-1) == feats["tags"]) & m).sum())
         gtot += int(m.sum())
     return {"template": ok / max(1, tot), "slots": sok / max(1, stot),
-            "tags": gok / max(1, gtot)}
+            "tags": gok / max(1, gtot), "abstain": aok / max(1, atot),
+            "abstain_n": atot}
 
 
 if __name__ == "__main__":
