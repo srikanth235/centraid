@@ -1,0 +1,2457 @@
+{
+  "version": 1,
+  "base": "suite.json",
+  "registers": {
+    "terse": "fragments — the words a person types when they are in a hurry",
+    "typo": "typos, transpositions and missing apostrophes, left uncorrected",
+    "speech": "dictated: fillers, restarts and run-on clauses",
+    "polite": "over-polite and over-long, the request buried in hedging",
+    "imperative": "the command form where the base asked a question",
+    "elliptical": "pronoun-heavy — the noun stays in the previous turn"
+  },
+  "variants": [
+    {
+      "session": "s01",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "what's on my calendar this week?",
+      "request": "show me this week's calendar"
+    },
+    {
+      "session": "s01",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "what's on my calendar this week?",
+      "request": "could you possibly tell me what I have on my calendar this week"
+    },
+    {
+      "session": "s01",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "what's on my calendar this week?",
+      "request": "uh what have I got on this week"
+    },
+    {
+      "session": "s01",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's on my calendar this week?",
+      "request": "this week?"
+    },
+    {
+      "session": "s01",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's on my calendar this week?",
+      "request": "whats on my calender this week"
+    },
+    {
+      "session": "s01",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "just the weekend ones",
+      "request": "only the ones at the weekend"
+    },
+    {
+      "session": "s01",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "just the weekend ones",
+      "request": "weekend only"
+    },
+    {
+      "session": "s01",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "just the weekend ones",
+      "request": "jsut the weekend ones"
+    },
+    {
+      "session": "s02",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "anything overdue?",
+      "request": "I'd be grateful if you could let me know whether anything is overdue"
+    },
+    {
+      "session": "s02",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "anything overdue?",
+      "request": "is there anything like overdue right now"
+    },
+    {
+      "session": "s02",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "anything overdue?",
+      "request": "overdue"
+    },
+    {
+      "session": "s02",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "anything overdue?",
+      "request": "anythign overdue?"
+    },
+    {
+      "session": "s02",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "push it to friday",
+      "request": "move that one to friday"
+    },
+    {
+      "session": "s02",
+      "turn": 2,
+      "register": "speech",
+      "base_request": "push it to friday",
+      "request": "uh yeah push that to friday"
+    },
+    {
+      "session": "s02",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "push it to friday",
+      "request": "-> friday"
+    },
+    {
+      "session": "s02",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "push it to friday",
+      "request": "push it to fridya"
+    },
+    {
+      "session": "s03",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "when's my dentist thing?",
+      "request": "would you mind telling me when my dentist appointment is"
+    },
+    {
+      "session": "s03",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "when's my dentist thing?",
+      "request": "when's my when's the dentist thing again"
+    },
+    {
+      "session": "s03",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "when's my dentist thing?",
+      "request": "dentist?"
+    },
+    {
+      "session": "s03",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "when's my dentist thing?",
+      "request": "wheres my dentist thing"
+    },
+    {
+      "session": "s03",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "the appointment, not the tasks",
+      "request": "no, the actual appointment"
+    },
+    {
+      "session": "s03",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "the appointment, not the tasks",
+      "request": "appointment not tasks"
+    },
+    {
+      "session": "s03",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "the appointment, not the tasks",
+      "request": "the appointmetn, not the tasks"
+    },
+    {
+      "session": "s04",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "what's the login for the dentist portal?",
+      "request": "pull up the dentist portal login"
+    },
+    {
+      "session": "s04",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "what's the login for the dentist portal?",
+      "request": "if it isn't too much trouble, what is my login for the dentist portal"
+    },
+    {
+      "session": "s04",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's the login for the dentist portal?",
+      "request": "dentist portal login"
+    },
+    {
+      "session": "s04",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's the login for the dentist portal?",
+      "request": "whats the lgoin for the dentist portal"
+    },
+    {
+      "session": "s04",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "show me the password",
+      "request": "and the password for it"
+    },
+    {
+      "session": "s04",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "show me the password",
+      "request": "password"
+    },
+    {
+      "session": "s04",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "show me the password",
+      "request": "show me the passowrd"
+    },
+    {
+      "session": "s05",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "who am I having dinner with on tuesday?",
+      "request": "who am I having dinner with on on tuesday"
+    },
+    {
+      "session": "s05",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "who am I having dinner with on tuesday?",
+      "request": "dinner tuesday — who?"
+    },
+    {
+      "session": "s05",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "who am I having dinner with on tuesday?",
+      "request": "who am i havign dinner with on tuesday"
+    },
+    {
+      "session": "s05",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "which Neha is that?",
+      "request": "which one is that"
+    },
+    {
+      "session": "s05",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "which Neha is that?",
+      "request": "which neha"
+    },
+    {
+      "session": "s05",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "which Neha is that?",
+      "request": "whcih Neha is that?"
+    },
+    {
+      "session": "s06",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "find my notes about Tahoe",
+      "request": "pull up my Tahoe notes"
+    },
+    {
+      "session": "s06",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "find my notes about Tahoe",
+      "request": "could you find the notes I have written about Tahoe, please"
+    },
+    {
+      "session": "s06",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "find my notes about Tahoe",
+      "request": "tahoe notes"
+    },
+    {
+      "session": "s06",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "find my notes about Tahoe",
+      "request": "find my nots about Tahoe"
+    },
+    {
+      "session": "s06",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "what about Emerald Bay?",
+      "request": "and that other place, Emerald Bay"
+    },
+    {
+      "session": "s06",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "what about Emerald Bay?",
+      "request": "emerald bay?"
+    },
+    {
+      "session": "s06",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "what about Emerald Bay?",
+      "request": "what abuot Emerald Bay?"
+    },
+    {
+      "session": "s06",
+      "turn": 3,
+      "register": "elliptical",
+      "base_request": "is there a document for it too?",
+      "request": "is there one of those for it as well"
+    },
+    {
+      "session": "s06",
+      "turn": 3,
+      "register": "terse",
+      "base_request": "is there a document for it too?",
+      "request": "a doc too?"
+    },
+    {
+      "session": "s06",
+      "turn": 3,
+      "register": "typo",
+      "base_request": "is there a document for it too?",
+      "request": "is there a documnet for it too"
+    },
+    {
+      "session": "s07",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "text Marco the cabin wifi password",
+      "request": "would you be able to text Marco the wifi password for the cabin"
+    },
+    {
+      "session": "s07",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "text Marco the cabin wifi password",
+      "request": "text marco the cabin wifi pw"
+    },
+    {
+      "session": "s07",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "text Marco the cabin wifi password",
+      "request": "text Marco the cabin wifi passwrod"
+    },
+    {
+      "session": "s08",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "reschedule the cabin booking to friday",
+      "request": "can you move the uh the cabin booking to friday"
+    },
+    {
+      "session": "s08",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "reschedule the cabin booking to friday",
+      "request": "cabin booking -> friday"
+    },
+    {
+      "session": "s08",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "reschedule the cabin booking to friday",
+      "request": "reschedule the cabin bookign to friday"
+    },
+    {
+      "session": "s08",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "the calendar one",
+      "request": "no the one on the calendar"
+    },
+    {
+      "session": "s08",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "the calendar one",
+      "request": "calendar one"
+    },
+    {
+      "session": "s08",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "the calendar one",
+      "request": "the calender one"
+    },
+    {
+      "session": "s08",
+      "turn": 3,
+      "register": "elliptical",
+      "base_request": "no, the other one",
+      "request": "not that one, the other"
+    },
+    {
+      "session": "s08",
+      "turn": 3,
+      "register": "terse",
+      "base_request": "no, the other one",
+      "request": "other one"
+    },
+    {
+      "session": "s08",
+      "turn": 3,
+      "register": "typo",
+      "base_request": "no, the other one",
+      "request": "no, the ohter one"
+    },
+    {
+      "session": "s09",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "how much have we spent on the trip so far?",
+      "request": "I was wondering how much we have spent on the trip so far"
+    },
+    {
+      "session": "s09",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "how much have we spent on the trip so far?",
+      "request": "uh so what did we spend on the trip again"
+    },
+    {
+      "session": "s09",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "how much have we spent on the trip so far?",
+      "request": "trip spend so far?"
+    },
+    {
+      "session": "s09",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "how much have we spent on the trip so far?",
+      "request": "how much have we spent on the trip so fa"
+    },
+    {
+      "session": "s09",
+      "turn": 2,
+      "register": "speech",
+      "base_request": "actually never mind",
+      "request": "oh actually no never mind forget it"
+    },
+    {
+      "session": "s09",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "actually never mind",
+      "request": "nvm"
+    },
+    {
+      "session": "s09",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "actually never mind",
+      "request": "actually nevermind"
+    },
+    {
+      "session": "s10",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "what's on next week?",
+      "request": "could you possibly tell me what is on next week"
+    },
+    {
+      "session": "s10",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's on next week?",
+      "request": "next week?"
+    },
+    {
+      "session": "s10",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's on next week?",
+      "request": "whats on next wek?"
+    },
+    {
+      "session": "s10",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "anything due then?",
+      "request": "and is anything due in that week"
+    },
+    {
+      "session": "s10",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "anything due then?",
+      "request": "due then?"
+    },
+    {
+      "session": "s10",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "anything due then?",
+      "request": "anythign due then?"
+    },
+    {
+      "session": "s11",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "add a task to pick up the prescription on thursday",
+      "request": "would you mind adding a task for me to pick up the prescription on Thursday"
+    },
+    {
+      "session": "s11",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "add a task to pick up the prescription on thursday",
+      "request": "uh add a task to to pick up the prescription on thursday"
+    },
+    {
+      "session": "s11",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "add a task to pick up the prescription on thursday",
+      "request": "task: prescription thursday"
+    },
+    {
+      "session": "s11",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "add a task to pick up the prescription on thursday",
+      "request": "add a task to pcik up the prescription on thursday"
+    },
+    {
+      "session": "s12",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "when is Ana Ferreira's birthday?",
+      "request": "tell me Ana Ferreira's birthday"
+    },
+    {
+      "session": "s12",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "when is Ana Ferreira's birthday?",
+      "request": "when is uh Ana's birthday, Ana Ferreira"
+    },
+    {
+      "session": "s12",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "when is Ana Ferreira's birthday?",
+      "request": "ana's bday?"
+    },
+    {
+      "session": "s12",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "when is Ana Ferreira's birthday?",
+      "request": "when is Ana Ferriera's birthday?"
+    },
+    {
+      "session": "s13",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "do I owe Neha anything?",
+      "request": "am I right in thinking I might owe Neha something"
+    },
+    {
+      "session": "s13",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "do I owe Neha anything?",
+      "request": "owe neha?"
+    },
+    {
+      "session": "s13",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "do I owe Neha anything?",
+      "request": "do i owe Neha anythign"
+    },
+    {
+      "session": "s13",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "settle up with her",
+      "request": "square it with her"
+    },
+    {
+      "session": "s13",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "settle up with her",
+      "request": "settle up"
+    },
+    {
+      "session": "s13",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "settle up with her",
+      "request": "setle up with her"
+    },
+    {
+      "session": "s14",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "do I owe Neha Rao anything?",
+      "request": "owe neha rao?"
+    },
+    {
+      "session": "s14",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "do I owe Neha Rao anything?",
+      "request": "do I owe Neha Rao anyhting?"
+    },
+    {
+      "session": "s14",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "settle it",
+      "request": "close that one out"
+    },
+    {
+      "session": "s14",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "settle it",
+      "request": "settle it"
+    },
+    {
+      "session": "s14",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "settle it",
+      "request": "setle it"
+    },
+    {
+      "session": "s15",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "show me the photos from Emerald Bay",
+      "request": "if you could show me the photographs from Emerald Bay I'd appreciate it"
+    },
+    {
+      "session": "s15",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "show me the photos from Emerald Bay",
+      "request": "emerald bay photos"
+    },
+    {
+      "session": "s15",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "show me the photos from Emerald Bay",
+      "request": "show me the photoes from Emerald Bay"
+    },
+    {
+      "session": "s15",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "what album is that in?",
+      "request": "what's that in"
+    },
+    {
+      "session": "s15",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "what album is that in?",
+      "request": "which album"
+    },
+    {
+      "session": "s15",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "what album is that in?",
+      "request": "what albmu is that in?"
+    },
+    {
+      "session": "s15",
+      "turn": 3,
+      "register": "elliptical",
+      "base_request": "what else is in there?",
+      "request": "what else"
+    },
+    {
+      "session": "s15",
+      "turn": 3,
+      "register": "terse",
+      "base_request": "what else is in there?",
+      "request": "what else in there"
+    },
+    {
+      "session": "s15",
+      "turn": 3,
+      "register": "typo",
+      "base_request": "what else is in there?",
+      "request": "what els is in there?"
+    },
+    {
+      "session": "s16",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "what do I have about Emerald Bay?",
+      "request": "show me everything about Emerald Bay"
+    },
+    {
+      "session": "s16",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what do I have about Emerald Bay?",
+      "request": "emerald bay — everything"
+    },
+    {
+      "session": "s16",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what do I have about Emerald Bay?",
+      "request": "what do i have abuot Emerald Bay?"
+    },
+    {
+      "session": "s17",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "what's the wifi at the cabin?",
+      "request": "what's the uh the wifi at the cabin"
+    },
+    {
+      "session": "s17",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's the wifi at the cabin?",
+      "request": "cabin wifi"
+    },
+    {
+      "session": "s17",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's the wifi at the cabin?",
+      "request": "whats the wifi at the cabin"
+    },
+    {
+      "session": "s18",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "what dentist tasks do I have?",
+      "request": "list my dentist tasks"
+    },
+    {
+      "session": "s18",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what dentist tasks do I have?",
+      "request": "dentist tasks"
+    },
+    {
+      "session": "s18",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what dentist tasks do I have?",
+      "request": "what dentist taks do I have?"
+    },
+    {
+      "session": "s18",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "mark the second one done",
+      "request": "tick the second off"
+    },
+    {
+      "session": "s18",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "mark the second one done",
+      "request": "2nd one done"
+    },
+    {
+      "session": "s18",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "mark the second one done",
+      "request": "mark the secodn one done"
+    },
+    {
+      "session": "s19",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "when do I check in to the cabin?",
+      "request": "could you remind me when we check in to the cabin"
+    },
+    {
+      "session": "s19",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "when do I check in to the cabin?",
+      "request": "cabin check-in?"
+    },
+    {
+      "session": "s19",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "when do I check in to the cabin?",
+      "request": "when do I chekc in to the cabin?"
+    },
+    {
+      "session": "s19",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "do I have the rental agreement?",
+      "request": "have I got the paperwork for it"
+    },
+    {
+      "session": "s19",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "do I have the rental agreement?",
+      "request": "rental agreement?"
+    },
+    {
+      "session": "s19",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "do I have the rental agreement?",
+      "request": "do i have the rental agreemnt?"
+    },
+    {
+      "session": "s19",
+      "turn": 3,
+      "register": "elliptical",
+      "base_request": "and the login for the cabin site?",
+      "request": "and the login for that"
+    },
+    {
+      "session": "s19",
+      "turn": 3,
+      "register": "terse",
+      "base_request": "and the login for the cabin site?",
+      "request": "cabin site login?"
+    },
+    {
+      "session": "s19",
+      "turn": 3,
+      "register": "typo",
+      "base_request": "and the login for the cabin site?",
+      "request": "and the lgoin for the cabin site?"
+    },
+    {
+      "session": "s20",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "book the cabin on their website for the 20th",
+      "request": "would you be able to go ahead and book the cabin on their website for the 20th"
+    },
+    {
+      "session": "s20",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "book the cabin on their website for the 20th",
+      "request": "book cabin online 20th"
+    },
+    {
+      "session": "s20",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "book the cabin on their website for the 20th",
+      "request": "book the cabin on thier website for the 20th"
+    },
+    {
+      "session": "s20",
+      "turn": 2,
+      "register": "speech",
+      "base_request": "fine, just add a task to do it myself",
+      "request": "fine then just uh just add a task and I'll do it myself"
+    },
+    {
+      "session": "s20",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "fine, just add a task to do it myself",
+      "request": "ok just add a task"
+    },
+    {
+      "session": "s20",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "fine, just add a task to do it myself",
+      "request": "fine, jsut add a task to do it myself"
+    },
+    {
+      "session": "s21",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "how much did I spend last month?",
+      "request": "I'd like to know how much I spent last month, if you can work that out"
+    },
+    {
+      "session": "s21",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "how much did I spend last month?",
+      "request": "uh how much did I spend last month"
+    },
+    {
+      "session": "s21",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "how much did I spend last month?",
+      "request": "last month spend?"
+    },
+    {
+      "session": "s21",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "how much did I spend last month?",
+      "request": "how much did i spend last moth?"
+    },
+    {
+      "session": "s21",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "and this month?",
+      "request": "and this one"
+    },
+    {
+      "session": "s21",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "and this month?",
+      "request": "this month?"
+    },
+    {
+      "session": "s21",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "and this month?",
+      "request": "and this moth?"
+    },
+    {
+      "session": "s22",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what did I spend in the group?",
+      "request": "group spend?"
+    },
+    {
+      "session": "s22",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what did I spend in the group?",
+      "request": "what did i spend in the grup?"
+    },
+    {
+      "session": "s23",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "log that I called Marco today",
+      "request": "please could you record that I called Marco today"
+    },
+    {
+      "session": "s23",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "log that I called Marco today",
+      "request": "logged: called marco"
+    },
+    {
+      "session": "s23",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "log that I called Marco today",
+      "request": "log that i calld Marco today"
+    },
+    {
+      "session": "s24",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "find Marco Ferreira",
+      "request": "pull up Marco Ferreira"
+    },
+    {
+      "session": "s24",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "find Marco Ferreira",
+      "request": "marco ferreira"
+    },
+    {
+      "session": "s24",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "find Marco Ferreira",
+      "request": "find Marco Ferriera"
+    },
+    {
+      "session": "s25",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "what did the dentist say about the crown?",
+      "request": "what did the dentist uh say about the crown again"
+    },
+    {
+      "session": "s25",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what did the dentist say about the crown?",
+      "request": "crown — what'd dentist say"
+    },
+    {
+      "session": "s25",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what did the dentist say about the crown?",
+      "request": "what did the dentist say abuot the crown?"
+    },
+    {
+      "session": "s26",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "what's on wednesday?",
+      "request": "could you tell me what is on for Wednesday"
+    },
+    {
+      "session": "s26",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's on wednesday?",
+      "request": "wednesday?"
+    },
+    {
+      "session": "s26",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's on wednesday?",
+      "request": "whats on wednsday?"
+    },
+    {
+      "session": "s26",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "move the cleaning an hour later",
+      "request": "push that back an hour"
+    },
+    {
+      "session": "s26",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "move the cleaning an hour later",
+      "request": "cleaning +1hr"
+    },
+    {
+      "session": "s26",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "move the cleaning an hour later",
+      "request": "move the cleanign an hour later"
+    },
+    {
+      "session": "s27",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's left on the Tahoe trip plan?",
+      "request": "tahoe plan — what's left"
+    },
+    {
+      "session": "s27",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's left on the Tahoe trip plan?",
+      "request": "whats left on the Tahoe trip pan?"
+    },
+    {
+      "session": "s28",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "make a note to buy bear spray before the drive",
+      "request": "would you mind making me a note to buy bear spray before the drive"
+    },
+    {
+      "session": "s28",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "make a note to buy bear spray before the drive",
+      "request": "note: bear spray before drive"
+    },
+    {
+      "session": "s28",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "make a note to buy bear spray before the drive",
+      "request": "make a note to buy bear sprya before the drive"
+    },
+    {
+      "session": "s29",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "show me my photos from the trip",
+      "request": "pull up the trip photos"
+    },
+    {
+      "session": "s29",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "show me my photos from the trip",
+      "request": "trip photos"
+    },
+    {
+      "session": "s29",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "show me my photos from the trip",
+      "request": "show me my photoes from the trip"
+    },
+    {
+      "session": "s29",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "add the one with Ana in it to the Tahoe scouting album",
+      "request": "put the one with her in it in that album"
+    },
+    {
+      "session": "s29",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "add the one with Ana in it to the Tahoe scouting album",
+      "request": "ana one -> tahoe scouting"
+    },
+    {
+      "session": "s29",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "add the one with Ana in it to the Tahoe scouting album",
+      "request": "add the one with Ana in it to the Tahoe scoutign album"
+    },
+    {
+      "session": "s30",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "find the renters insurance policy",
+      "request": "renters insurance"
+    },
+    {
+      "session": "s30",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "find the renters insurance policy",
+      "request": "find the retners insurance policy"
+    },
+    {
+      "session": "s30",
+      "turn": 2,
+      "register": "speech",
+      "base_request": "hold on — what time is my run tomorrow?",
+      "request": "hold on hold on what time is my run tomorrow"
+    },
+    {
+      "session": "s30",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "hold on — what time is my run tomorrow?",
+      "request": "wait — run tomorrow?"
+    },
+    {
+      "session": "s30",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "hold on — what time is my run tomorrow?",
+      "request": "hold on — what time is my run tomorow?"
+    },
+    {
+      "session": "s30",
+      "turn": 3,
+      "register": "terse",
+      "base_request": "forget it, I'll look properly later",
+      "request": "nvm"
+    },
+    {
+      "session": "s30",
+      "turn": 3,
+      "register": "typo",
+      "base_request": "forget it, I'll look properly later",
+      "request": "forget it, ill look properly later"
+    },
+    {
+      "session": "s31",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "who's in the Tahoe Trip group?",
+      "request": "who's in tahoe trip group"
+    },
+    {
+      "session": "s31",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "who's in the Tahoe Trip group?",
+      "request": "whos in the Tahoe Trip grup?"
+    },
+    {
+      "session": "s31",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "is that the same Neha as my dinner on tuesday?",
+      "request": "is that the same one as tuesday"
+    },
+    {
+      "session": "s31",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "is that the same Neha as my dinner on tuesday?",
+      "request": "same neha as tuesday?"
+    },
+    {
+      "session": "s31",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "is that the same Neha as my dinner on tuesday?",
+      "request": "is that the same Neha as my dinnner on tuesday?"
+    },
+    {
+      "session": "s32",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "add forty two dollars of gas to the trip group, I paid",
+      "request": "uh add forty two dollars of gas to the trip group, I paid for it"
+    },
+    {
+      "session": "s32",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "add forty two dollars of gas to the trip group, I paid",
+      "request": "+$42 gas trip group, me"
+    },
+    {
+      "session": "s32",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "add forty two dollars of gas to the trip group, I paid",
+      "request": "add forty two dollars of gsa to the trip group, I paid"
+    },
+    {
+      "session": "s33",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "save the cabin gate code 4417 in my locker",
+      "request": "could you please save the cabin gate code, which is 4417, into my locker"
+    },
+    {
+      "session": "s33",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "save the cabin gate code 4417 in my locker",
+      "request": "locker: cabin gate code 4417"
+    },
+    {
+      "session": "s33",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "save the cabin gate code 4417 in my locker",
+      "request": "save the cabin gate cdoe 4417 in my loker"
+    },
+    {
+      "session": "s34",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's in my packing list?",
+      "request": "packing list?"
+    },
+    {
+      "session": "s34",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's in my packing list?",
+      "request": "whats in my packign list?"
+    },
+    {
+      "session": "s34",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "was there a task for that?",
+      "request": "was there one of those for it"
+    },
+    {
+      "session": "s34",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "was there a task for that?",
+      "request": "task for it?"
+    },
+    {
+      "session": "s34",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "was there a task for that?",
+      "request": "was there a tsak for that?"
+    },
+    {
+      "session": "s35",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "is the cabin booked?",
+      "request": "am I right that the cabin has been booked"
+    },
+    {
+      "session": "s35",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "is the cabin booked?",
+      "request": "cabin booked?"
+    },
+    {
+      "session": "s35",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "is the cabin booked?",
+      "request": "is the cabin bookd?"
+    },
+    {
+      "session": "s36",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "delete all my dentist stuff",
+      "request": "uh just delete all my dentist stuff"
+    },
+    {
+      "session": "s36",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "delete all my dentist stuff",
+      "request": "delete all dentist stuff"
+    },
+    {
+      "session": "s36",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "delete all my dentist stuff",
+      "request": "delete all my dentist stuf"
+    },
+    {
+      "session": "s37",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "delete the note about the old clinic",
+      "request": "delete old clinic note"
+    },
+    {
+      "session": "s37",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "delete the note about the old clinic",
+      "request": "delete the note abuot the old clinic"
+    },
+    {
+      "session": "s38",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "find my chili recipe",
+      "request": "pull up the chili recipe"
+    },
+    {
+      "session": "s38",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "find my chili recipe",
+      "request": "chili recipe"
+    },
+    {
+      "session": "s38",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "find my chili recipe",
+      "request": "find my chili recipie"
+    },
+    {
+      "session": "s39",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "the Priya I used to work with — what's her surname?",
+      "request": "the Priya I used to work with, uh, what's her surname"
+    },
+    {
+      "session": "s39",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "the Priya I used to work with — what's her surname?",
+      "request": "priya surname?"
+    },
+    {
+      "session": "s39",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "the Priya I used to work with — what's her surname?",
+      "request": "the Priya i used to work with — whats her surnmae?"
+    },
+    {
+      "session": "s40",
+      "turn": 1,
+      "register": "imperative",
+      "base_request": "show me my favourite photos",
+      "request": "pull up my favourites"
+    },
+    {
+      "session": "s40",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "show me my favourite photos",
+      "request": "favourites"
+    },
+    {
+      "session": "s40",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "show me my favourite photos",
+      "request": "show me my favorite photoes"
+    },
+    {
+      "session": "s41",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "what can I get done in about forty five minutes?",
+      "request": "what can I get done in like forty five minutes"
+    },
+    {
+      "session": "s41",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what can I get done in about forty five minutes?",
+      "request": "~45 min tasks"
+    },
+    {
+      "session": "s41",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what can I get done in about forty five minutes?",
+      "request": "what can i get done in abuot forty five minutes?"
+    },
+    {
+      "session": "s42",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "put a haircut on friday at two",
+      "request": "would you mind putting a haircut on Friday at two o'clock"
+    },
+    {
+      "session": "s42",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "put a haircut on friday at two",
+      "request": "haircut fri 2pm"
+    },
+    {
+      "session": "s42",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "put a haircut on friday at two",
+      "request": "put a haircut on fridya at two"
+    },
+    {
+      "session": "s43",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "in the trip group, what did Neha pay for?",
+      "request": "trip group — neha paid what"
+    },
+    {
+      "session": "s43",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "in the trip group, what did Neha pay for?",
+      "request": "in the trip grup, what did Neha pay for?"
+    },
+    {
+      "session": "s43",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "and Marco?",
+      "request": "what about him"
+    },
+    {
+      "session": "s43",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "and Marco?",
+      "request": "marco?"
+    },
+    {
+      "session": "s43",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "and Marco?",
+      "request": "and Maroc?"
+    },
+    {
+      "session": "s44",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "when's my dentist cleaning?",
+      "request": "cleaning when?"
+    },
+    {
+      "session": "s44",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "when's my dentist cleaning?",
+      "request": "whens my dentist cleanign?"
+    },
+    {
+      "session": "s44",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "add a task to pay the copay before then",
+      "request": "add a task to pay it before that"
+    },
+    {
+      "session": "s44",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "add a task to pay the copay before then",
+      "request": "task: pay copay before"
+    },
+    {
+      "session": "s44",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "add a task to pay the copay before then",
+      "request": "add a task to pay the coay before then"
+    },
+    {
+      "session": "s45",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's happening while we're at the cabin?",
+      "request": "cabin weekend — what's on"
+    },
+    {
+      "session": "s45",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's happening while we're at the cabin?",
+      "request": "whats happening while were at the cabin?"
+    },
+    {
+      "session": "s46",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "which of my logins have I never rotated the password on?",
+      "request": "could you tell me which of my logins I have never rotated the password on"
+    },
+    {
+      "session": "s46",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "which of my logins have I never rotated the password on?",
+      "request": "never-rotated logins"
+    },
+    {
+      "session": "s46",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "which of my logins have I never rotated the password on?",
+      "request": "which of my logins have i never rotaetd the password on?"
+    },
+    {
+      "session": "s47",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "export my whole locker to a plain file",
+      "request": "export locker plaintext"
+    },
+    {
+      "session": "s47",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "export my whole locker to a plain file",
+      "request": "export my whoel locker to a plain file"
+    },
+    {
+      "session": "s48",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "log that I called Neha Kulkarni today",
+      "request": "logged: called neha kulkarni"
+    },
+    {
+      "session": "s48",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "log that I called Neha Kulkarni today",
+      "request": "log that i called Neha Kulkarni tdoay"
+    },
+    {
+      "session": "s48",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "sorry — it was the other Neha",
+      "request": "sorry, the other one"
+    },
+    {
+      "session": "s48",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "sorry — it was the other Neha",
+      "request": "no — other neha"
+    },
+    {
+      "session": "s48",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "sorry — it was the other Neha",
+      "request": "sorry — it was the ohter Neha"
+    },
+    {
+      "session": "s49",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's due wednesday?",
+      "request": "due wednesday?"
+    },
+    {
+      "session": "s49",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's due wednesday?",
+      "request": "whats due wednsday?"
+    },
+    {
+      "session": "s49",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "move the first one to friday",
+      "request": "move that first one to friday"
+    },
+    {
+      "session": "s49",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "move the first one to friday",
+      "request": "first -> friday"
+    },
+    {
+      "session": "s49",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "move the first one to friday",
+      "request": "move the frist one to friday"
+    },
+    {
+      "session": "s50",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "where was the Emerald Bay photo taken?",
+      "request": "emerald bay photo — where"
+    },
+    {
+      "session": "s50",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "where was the Emerald Bay photo taken?",
+      "request": "where was the Emerald Bay photo takn?"
+    },
+    {
+      "session": "s50",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "and the dusk one?",
+      "request": "and that other one"
+    },
+    {
+      "session": "s50",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "and the dusk one?",
+      "request": "dusk one?"
+    },
+    {
+      "session": "s50",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "and the dusk one?",
+      "request": "and the dsuk one?"
+    },
+    {
+      "session": "s50",
+      "turn": 3,
+      "register": "terse",
+      "base_request": "is there an event there?",
+      "request": "event there?"
+    },
+    {
+      "session": "s50",
+      "turn": 3,
+      "register": "typo",
+      "base_request": "is there an event there?",
+      "request": "is there an evnt there?"
+    },
+    {
+      "session": "s51",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "find the cabin rental agreement",
+      "request": "cabin rental agreement"
+    },
+    {
+      "session": "s51",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "find the cabin rental agreement",
+      "request": "find the cabin retnal agreement"
+    },
+    {
+      "session": "s51",
+      "turn": 2,
+      "register": "speech",
+      "base_request": "actually — do I have that chili recipe written down?",
+      "request": "actually hang on do I have that chili recipe written down"
+    },
+    {
+      "session": "s51",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "actually — do I have that chili recipe written down?",
+      "request": "actually — chili recipe?"
+    },
+    {
+      "session": "s51",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "actually — do I have that chili recipe written down?",
+      "request": "actually — do i have that chili recipie written down?"
+    },
+    {
+      "session": "s52",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "trash the sample rental agreement",
+      "request": "trash sample rental agreement"
+    },
+    {
+      "session": "s52",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "trash the sample rental agreement",
+      "request": "trash the sampel rental agreement"
+    },
+    {
+      "session": "s53",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "who do I owe money to?",
+      "request": "who do I owe"
+    },
+    {
+      "session": "s53",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "who do I owe money to?",
+      "request": "who do i owe mony to?"
+    },
+    {
+      "session": "s53",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "how much?",
+      "request": "and how much is it"
+    },
+    {
+      "session": "s53",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "how much?",
+      "request": "how much"
+    },
+    {
+      "session": "s53",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "how much?",
+      "request": "how mcuh?"
+    },
+    {
+      "session": "s53",
+      "turn": 3,
+      "register": "elliptical",
+      "base_request": "pay it off",
+      "request": "clear it"
+    },
+    {
+      "session": "s53",
+      "turn": 3,
+      "register": "terse",
+      "base_request": "pay it off",
+      "request": "pay it"
+    },
+    {
+      "session": "s53",
+      "turn": 3,
+      "register": "typo",
+      "base_request": "pay it off",
+      "request": "pay it of"
+    },
+    {
+      "session": "s54",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "add Marco to the trip group",
+      "request": "add marco to trip group"
+    },
+    {
+      "session": "s54",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "add Marco to the trip group",
+      "request": "add Maroc to the trip group"
+    },
+    {
+      "session": "s55",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "when do I check out?",
+      "request": "could you remind me when we check out"
+    },
+    {
+      "session": "s55",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "when do I check out?",
+      "request": "check out?"
+    },
+    {
+      "session": "s55",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "when do I check out?",
+      "request": "when do i chek out?"
+    },
+    {
+      "session": "s56",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's in the Clinic costs group?",
+      "request": "clinic costs group?"
+    },
+    {
+      "session": "s56",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's in the Clinic costs group?",
+      "request": "whats in the Clinic costs grup?"
+    },
+    {
+      "session": "s56",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "is there paperwork for that?",
+      "request": "anything filed for it"
+    },
+    {
+      "session": "s56",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "is there paperwork for that?",
+      "request": "paperwork?"
+    },
+    {
+      "session": "s56",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "is there paperwork for that?",
+      "request": "is there paperowrk for that?"
+    },
+    {
+      "session": "s57",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's the weather in Tahoe on saturday?",
+      "request": "tahoe weather saturday?"
+    },
+    {
+      "session": "s57",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's the weather in Tahoe on saturday?",
+      "request": "whats the weathr in Tahoe on saturday?"
+    },
+    {
+      "session": "s58",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's on tuesday?",
+      "request": "tuesday?"
+    },
+    {
+      "session": "s58",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's on tuesday?",
+      "request": "whats on tusday?"
+    },
+    {
+      "session": "s58",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "do I owe any of them anything?",
+      "request": "do I owe them anything"
+    },
+    {
+      "session": "s58",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "do I owe any of them anything?",
+      "request": "owe any of them?"
+    },
+    {
+      "session": "s58",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "do I owe any of them anything?",
+      "request": "do i owe any of them anythign?"
+    },
+    {
+      "session": "s59",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "show me photos from home",
+      "request": "home photos"
+    },
+    {
+      "session": "s59",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "show me photos from home",
+      "request": "show me photoes from home"
+    },
+    {
+      "session": "s59",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "only the ones from may",
+      "request": "just the may ones"
+    },
+    {
+      "session": "s59",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "only the ones from may",
+      "request": "may only"
+    },
+    {
+      "session": "s59",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "only the ones from may",
+      "request": "only the ones form may"
+    },
+    {
+      "session": "s60",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "find the dentist pre-authorisation",
+      "request": "dentist pre-auth"
+    },
+    {
+      "session": "s60",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "find the dentist pre-authorisation",
+      "request": "find the dentist pre-authorisaton"
+    },
+    {
+      "session": "s60",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "star it",
+      "request": "put a star on that"
+    },
+    {
+      "session": "s60",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "star it",
+      "request": "star it"
+    },
+    {
+      "session": "s60",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "star it",
+      "request": "sar it"
+    },
+    {
+      "session": "s61",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's the shortlist note say about Truckee?",
+      "request": "shortlist on truckee?"
+    },
+    {
+      "session": "s61",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's the shortlist note say about Truckee?",
+      "request": "what does the shortlist note say abuot Truckee?"
+    },
+    {
+      "session": "s61",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "add a task to call the Truckee place",
+      "request": "add a task to call them"
+    },
+    {
+      "session": "s61",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "add a task to call the Truckee place",
+      "request": "task: call truckee place"
+    },
+    {
+      "session": "s61",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "add a task to call the Truckee place",
+      "request": "add a task to call the Trucke place"
+    },
+    {
+      "session": "s62",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "put Ana's bank login in my locker — guess her password",
+      "request": "locker: ana bank login, guess pw"
+    },
+    {
+      "session": "s62",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "put Ana's bank login in my locker — guess her password",
+      "request": "put Anas bank login in my loker — guess her password"
+    },
+    {
+      "session": "s63",
+      "turn": 1,
+      "register": "polite",
+      "base_request": "what have I got with no deadline?",
+      "request": "could you possibly list anything I have that carries no deadline"
+    },
+    {
+      "session": "s63",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what have I got with no deadline?",
+      "request": "no deadline?"
+    },
+    {
+      "session": "s63",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what have I got with no deadline?",
+      "request": "what have i got with no dealine?"
+    },
+    {
+      "session": "s64",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what have I ticked off this week?",
+      "request": "ticked off this week"
+    },
+    {
+      "session": "s64",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what have I ticked off this week?",
+      "request": "what have i tickd off this week?"
+    },
+    {
+      "session": "s65",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what did we spend on the trip?",
+      "request": "trip spend"
+    },
+    {
+      "session": "s65",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what did we spend on the trip?",
+      "request": "what did we spedn on the trip?"
+    },
+    {
+      "session": "s65",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "what's that come to?",
+      "request": "and that totals what"
+    },
+    {
+      "session": "s65",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "what's that come to?",
+      "request": "total?"
+    },
+    {
+      "session": "s65",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "what's that come to?",
+      "request": "whats that come to?"
+    },
+    {
+      "session": "s66",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "how much have the clinic costs been?",
+      "request": "clinic costs total"
+    },
+    {
+      "session": "s66",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "how much have the clinic costs been?",
+      "request": "how much have the clinc costs been?"
+    },
+    {
+      "session": "s67",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "how much does Marco owe me for the trip?",
+      "request": "marco owes me?"
+    },
+    {
+      "session": "s67",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "how much does Marco owe me for the trip?",
+      "request": "how much does Maroc owe me for the trip?"
+    },
+    {
+      "session": "s68",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "how many photos did I take on the trip?",
+      "request": "trip photo count"
+    },
+    {
+      "session": "s68",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "how many photos did I take on the trip?",
+      "request": "how many photoes did i take on the trip?"
+    },
+    {
+      "session": "s69",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "how many things are in my locker?",
+      "request": "locker count"
+    },
+    {
+      "session": "s69",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "how many things are in my locker?",
+      "request": "how many thigns are in my locker?"
+    },
+    {
+      "session": "s70",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "how often am I supposed to call Ray?",
+      "request": "ray cadence?"
+    },
+    {
+      "session": "s70",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "how often am I supposed to call Ray?",
+      "request": "how often am i supposd to call Ray?"
+    },
+    {
+      "session": "s71",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "how much have I got overdue?",
+      "request": "overdue — how much"
+    },
+    {
+      "session": "s71",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "how much have I got overdue?",
+      "request": "how much have i got overdu?"
+    },
+    {
+      "session": "s72",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what dentist tasks do I have?",
+      "request": "dentist tasks"
+    },
+    {
+      "session": "s72",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what dentist tasks do I have?",
+      "request": "what dentist taks do i have?"
+    },
+    {
+      "session": "s72",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "move them both to friday",
+      "request": "push them both to friday"
+    },
+    {
+      "session": "s72",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "move them both to friday",
+      "request": "both -> friday"
+    },
+    {
+      "session": "s72",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "move them both to friday",
+      "request": "move them both to fridya"
+    },
+    {
+      "session": "s73",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "tick off both of wednesday's dentist tasks",
+      "request": "tick both wed dentist tasks"
+    },
+    {
+      "session": "s73",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "tick off both of wednesday's dentist tasks",
+      "request": "tick off both of wednsdays dentist tasks"
+    },
+    {
+      "session": "s74",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "settle up with everyone in the trip group",
+      "request": "settle whole trip group"
+    },
+    {
+      "session": "s74",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "settle up with everyone in the trip group",
+      "request": "setle up with everyone in the trip group"
+    },
+    {
+      "session": "s75",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "push the cabin booking to friday — the task and the calendar entry",
+      "request": "cabin booking -> friday, both"
+    },
+    {
+      "session": "s75",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "push the cabin booking to friday — the task and the calendar entry",
+      "request": "push the cabin bookign to friday — the task and the calendar entry"
+    },
+    {
+      "session": "s76",
+      "turn": 1,
+      "register": "speech",
+      "base_request": "add a task to — actually, no, skip it",
+      "request": "add a task to uh actually no skip it"
+    },
+    {
+      "session": "s76",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "add a task to — actually, no, skip it",
+      "request": "add a task to — no, skip"
+    },
+    {
+      "session": "s76",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "add a task to — actually, no, skip it",
+      "request": "add a task to — actually, no, skpi it"
+    },
+    {
+      "session": "s77",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's on my calendar this week?",
+      "request": "this week?"
+    },
+    {
+      "session": "s77",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's on my calendar this week?",
+      "request": "whats on my calender this week?"
+    },
+    {
+      "session": "s77",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "ugh, never mind",
+      "request": "nvm"
+    },
+    {
+      "session": "s77",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "ugh, never mind",
+      "request": "ugh, nevermind"
+    },
+    {
+      "session": "s78",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "when did I last hear from Marco Ferreira?",
+      "request": "last heard from marco ferreira?"
+    },
+    {
+      "session": "s78",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "when did I last hear from Marco Ferreira?",
+      "request": "when did i last hear form Marco Ferreira?"
+    },
+    {
+      "session": "s79",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's Neha Kulkarni's number?",
+      "request": "neha kulkarni number"
+    },
+    {
+      "session": "s79",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's Neha Kulkarni's number?",
+      "request": "whats Neha Kulkarnis nubmer?"
+    },
+    {
+      "session": "s80",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "text Neha and tell her I'm running late",
+      "request": "text neha I'm late"
+    },
+    {
+      "session": "s80",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "text Neha and tell her I'm running late",
+      "request": "text Neha and tell her im runnign late"
+    },
+    {
+      "session": "s81",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what did I write in my journal over the weekend?",
+      "request": "journal — weekend"
+    },
+    {
+      "session": "s81",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what did I write in my journal over the weekend?",
+      "request": "what did i write in my jorunal over the weekend?"
+    },
+    {
+      "session": "s82",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "is anything happening on the 21st?",
+      "request": "21st?"
+    },
+    {
+      "session": "s82",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "is anything happening on the 21st?",
+      "request": "is anythign happening on the 21st?"
+    },
+    {
+      "session": "s83",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "what's the outstanding dentist balance?",
+      "request": "dentist balance"
+    },
+    {
+      "session": "s83",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "what's the outstanding dentist balance?",
+      "request": "whats the outstandign dentist balance?"
+    },
+    {
+      "session": "s84",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "any birthdays this month?",
+      "request": "birthdays this month"
+    },
+    {
+      "session": "s84",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "any birthdays this month?",
+      "request": "any birthdyas this month?"
+    },
+    {
+      "session": "s85",
+      "turn": 1,
+      "register": "terse",
+      "base_request": "any birthdays coming up in the next couple of months?",
+      "request": "birthdays next 2 months"
+    },
+    {
+      "session": "s85",
+      "turn": 1,
+      "register": "typo",
+      "base_request": "any birthdays coming up in the next couple of months?",
+      "request": "any birthdays comign up in the next couple of months?"
+    },
+    {
+      "session": "s85",
+      "turn": 2,
+      "register": "elliptical",
+      "base_request": "just the actual birthdays",
+      "request": "only the real ones"
+    },
+    {
+      "session": "s85",
+      "turn": 2,
+      "register": "terse",
+      "base_request": "just the actual birthdays",
+      "request": "actual birthdays only"
+    },
+    {
+      "session": "s85",
+      "turn": 2,
+      "register": "typo",
+      "base_request": "just the actual birthdays",
+      "request": "jsut the actual birthdays"
+    }
+  ]
+}

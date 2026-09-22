@@ -1,0 +1,128 @@
+{
+  "$note": "THE NAMING LAYER — the only part of the grammar's terminals a human owns. Everything structural (which columns a Kind has, which commands exist, which effects group into a class) is derived from the ontology by `derive_grammar.py`; this file supplies the words a member would use for what the derivation found, plus the conversational terminals the vault has nothing to say about. `emit.py` validates every entry here against `derived.json` and generates `grammar/lexicon.py` and `crates/candidates/src/canon_terminals.rs` from the pair, so the two parsers cannot drift from each other or from the ontology.",
+
+  "$kindsNote": "Kind name -> [logical entity, door]. `emit.py` refuses a pair the doors do not serve. `composite` names further entities whose columns the door hands back on the same row — GRAMMAR.md §2.1 already says the `photos` Kind is `core_content_item`+`media_asset`; writing it here makes the second half checkable instead of implied.",
+  "kinds": {
+    "events": { "entity": "core.event", "door": "agenda" },
+    "tasks": { "entity": "schedule.task", "door": "tasks" },
+    "notes": { "entity": "knowledge.note", "door": "notes" },
+    "journal notes": { "entity": "knowledge.note", "door": "people" },
+    "documents": { "entity": "core.document", "door": "docs" },
+    "parties": { "entity": "core.party", "door": "people" },
+    "members": { "entity": "core.party", "door": "tally" },
+    "profiles": { "entity": "people.profile", "door": "people" },
+    "important dates": { "entity": "people.important_date", "door": "people" },
+    "contact channels": {
+      "entity": "social.contact_channel",
+      "door": "people"
+    },
+    "activities": { "entity": "core.activity", "door": "people" },
+    "obligations": { "entity": "tally.obligation", "door": "people" },
+    "photos": {
+      "entity": "core.content_item",
+      "door": "photos",
+      "composite": ["media.asset"]
+    },
+    "albums": {
+      "entity": "media.album",
+      "door": "photos",
+      "ontologyEntity": "core.collection"
+    },
+    "notebooks": {
+      "entity": "knowledge.notebook",
+      "door": "notes",
+      "ontologyEntity": "core.collection"
+    },
+    "places": { "entity": "core.place", "door": "photos" },
+    "expenses": { "entity": "tally.expense", "door": "tally" },
+    "groups": { "entity": "tally.group", "door": "tally" },
+    "circles": { "entity": "social.circle", "door": "tally" },
+    "settlements": { "entity": "tally.settlement", "door": "tally" },
+    "accounts": { "entity": "core.account", "door": "tally" },
+    "transactions": { "entity": "core.transaction", "door": "tally" },
+    "projects": { "entity": "schedule.project", "door": "tasks" },
+    "locker items": { "entity": "locker.item", "door": "locker" },
+    "things": { "entity": "*", "door": "*" }
+  },
+
+  "$readerFieldsNote": "Facts an app's reader computes and hands back beside the row — GRAMMAR.md §2.2 admits these and named no source, so the source is named here and `emit.py` checks it. A path is checked by finding the field named in a file under `crates/apps/*/src` or an app manifest. `manifest` means the owning app DECLARES it under `derivedFields`, with what computes it and which tables it reads; `emit.py` refuses one no manifest declares. The four that were `harness` are now declared with `computedBy: null` — the product ships no reader for them (DIFF.md B4-B7), and a declared gap is a statement, where `harness` was a shrug.",
+  "readerFields": {
+    "album": "crates/apps/photos/src/queries.rs",
+    "album_titles": "crates/apps/photos/src/queries.rs",
+    "attendee_party_ids": "crates/apps/agenda/src/expansion.rs",
+    "favorite": "crates/apps/photos/manifest.json",
+    "folder": "crates/apps/docs/src/shares.rs",
+    "notebooks": "crates/apps/notes/manifest.json",
+    "place": "crates/apps/photos/src/places.rs",
+    "starred": "crates/apps/docs/src/queries.rs",
+    "member_party_ids": "manifest",
+    "next_occurrence": "manifest",
+    "owed_to_me": "manifest",
+    "owed_to_them": "manifest"
+  },
+
+  "$verbClassesNote": "The CLASS NAME a member says, mapped onto the effect `derive_grammar.py` found in each command's handler SQL. `emit.py` refuses a member that is not a registered command. The entity spellings are the grammar's; where they differ from the one the derivation files the command under, DIFF.md section C says so (`media.delete_asset` takes an `asset_id`).",
+  "verbClasses": {
+    "reschedule": {
+      "schedule.task": "schedule.edit_task",
+      "core.event": "schedule.reschedule_event"
+    },
+    "delete": {
+      "schedule.task": "schedule.delete_task",
+      "core.event": "schedule.delete_event",
+      "knowledge.note": "knowledge.delete_note",
+      "core.document": "core.trash_document",
+      "tally.expense": "tally.delete_expense",
+      "locker.item": "locker.trash_item",
+      "core.content_item": "media.delete_asset",
+      "core.party": "people.trash_person"
+    },
+    "restore": {
+      "schedule.task": "schedule.restore_task",
+      "core.event": "schedule.restore_event",
+      "knowledge.note": "knowledge.restore_note",
+      "core.document": "core.restore_document",
+      "tally.expense": "tally.restore_expense",
+      "locker.item": "locker.restore_item",
+      "core.content_item": "media.restore_asset",
+      "core.party": "people.restore_person"
+    },
+    "complete": {
+      "schedule.task": "people.complete_task"
+    },
+    "cancel": {
+      "core.event": "schedule.cancel_event"
+    }
+  },
+
+  "$sessionNote": "Terminals of the CONVERSATION, not of the vault. The ontology has nothing to say about them, so they are declared, not derived — but they are declared ONCE, which is the point.",
+  "refs": [
+    "it",
+    "them",
+    "that one",
+    "the other one",
+    "the earlier one",
+    "the last thing I added"
+  ],
+  "windowPhrases": [
+    "today",
+    "tomorrow",
+    "yesterday",
+    "this week",
+    "last week",
+    "next week",
+    "this weekend",
+    "last weekend",
+    "this month",
+    "last month",
+    "next month",
+    "before now",
+    "recently"
+  ],
+  "declineReasons": [
+    "out_of_ontology",
+    "sealed_egress",
+    "fabricated_secret",
+    "unbounded_destruction"
+  ]
+}

@@ -9,22 +9,102 @@
   "vault": {
     "why": "Keeps your important documents filed, editable, downloadable and restorable — with a version history.",
     "scopes": [
-      { "schema": "core", "table": "document", "verbs": "read" },
-      { "schema": "core", "table": "content_item", "verbs": "read" },
-      { "schema": "core", "table": "content_representation", "verbs": "read" },
-      { "schema": "core", "table": "entity_revision", "verbs": "read" },
-      { "schema": "social", "table": "circle", "verbs": "read" },
-      { "schema": "social", "table": "circle_member", "verbs": "read" },
-      { "schema": "share", "table": "authority", "verbs": "read" },
-      { "schema": "share", "table": "fulfillment", "verbs": "read" },
-      { "schema": "core", "table": "party", "verbs": "read" },
-      { "schema": "share", "table": "subscription", "verbs": "read" },
-      { "schema": "share", "table": "subscription_lineage", "verbs": "read" },
-      { "schema": "share", "table": "party_vault_binding", "verbs": "read" },
-      { "schema": "core", "table": "link", "verbs": "read" },
-      { "schema": "core", "table": "tag", "verbs": "read" },
-      { "schema": "core", "table": "concept", "verbs": "read" },
-      { "schema": "core", "table": "concept_scheme", "verbs": "read" },
+      {
+        "schema": "core",
+        "table": "document",
+        "verbs": "read",
+        "surface": "kind"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "core",
+        "table": "content_representation",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "core",
+        "table": "entity_revision",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "social",
+        "table": "circle",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "social",
+        "table": "circle_member",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "share",
+        "table": "authority",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "share",
+        "table": "fulfillment",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "share",
+        "table": "subscription",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "share",
+        "table": "subscription_lineage",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "share",
+        "table": "party_vault_binding",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "core",
+        "table": "link",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "core",
+        "table": "tag",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "core",
+        "table": "concept_scheme",
+        "verbs": "read",
+        "surface": "internal"
+      },
       { "schema": "core", "table": "add_document", "verbs": "act" },
       { "schema": "core", "table": "rename_document", "verbs": "act" },
       { "schema": "core", "table": "move_document", "verbs": "act" },
@@ -45,8 +125,18 @@
       { "schema": "core", "table": "delete_folder", "verbs": "act" },
       { "schema": "core", "table": "tag_item", "verbs": "act" },
       { "schema": "core", "table": "untag_item", "verbs": "act" },
-      { "schema": "access", "table": "provenance", "verbs": "read" },
-      { "schema": "blob", "table": "custody_state", "verbs": "read" }
+      {
+        "schema": "access",
+        "table": "provenance",
+        "verbs": "read",
+        "surface": "internal"
+      },
+      {
+        "schema": "blob",
+        "table": "custody_state",
+        "verbs": "read",
+        "surface": "internal"
+      }
     ]
   },
   "actionSideEffect": "vault-write",

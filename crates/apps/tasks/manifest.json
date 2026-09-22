@@ -12,42 +12,50 @@
       {
         "schema": "schedule",
         "table": "task",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "schedule",
         "table": "project",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "schedule",
         "table": "section",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "facet"
       },
       {
         "schema": "core",
         "table": "content_item",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "content_representation",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "attachment",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "link",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "link_anchor",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "schedule",
@@ -97,17 +105,20 @@
       {
         "schema": "core",
         "table": "tag",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "concept",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "concept_scheme",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",

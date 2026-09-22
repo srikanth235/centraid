@@ -1,0 +1,12 @@
+[package]
+name = "centraid-candidates"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+centraid-evalsuite = { path = "../evalsuite" }
+centraid-evalworld = { path = "../evalworld" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

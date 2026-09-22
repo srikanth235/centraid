@@ -12,7 +12,8 @@
       {
         "schema": "locker",
         "table": "item",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "locker",
@@ -22,17 +23,20 @@
       {
         "schema": "core",
         "table": "tag",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "concept",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "concept_scheme",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "locker",
@@ -82,12 +86,14 @@
       {
         "schema": "locker",
         "table": "item_alias",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "locker",
         "table": "item_field",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "facet"
       },
       {
         "schema": "locker",
@@ -97,12 +103,14 @@
       {
         "schema": "locker",
         "table": "item_address",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "locker",
         "table": "item_passkey",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "locker",
@@ -113,6 +121,7 @@
         "schema": "core",
         "table": "entity_revision",
         "verbs": "read",
+        "surface": "internal",
         "rowFilter": [
           {
             "column": "entity_type",
@@ -134,22 +143,26 @@
       {
         "schema": "core",
         "table": "attachment",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "content_item",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "content_representation",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "access",
         "table": "receipt",
         "verbs": "read",
+        "surface": "internal",
         "rowFilter": [
           {
             "column": "object_type",

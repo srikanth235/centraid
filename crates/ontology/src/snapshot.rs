@@ -177,6 +177,135 @@ pub fn snapshot_vault(db: &Connection) -> Result<VaultSnapshot> {
     Ok(snapshot)
 }
 
+/// ONE TABLE'S SHAPE: its column names at freeze time, and its single-column
+/// primary key if it has one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TableShape {
+    /// Sorted, exactly as [`TableSnapshot::columns`] carries them.
+    pub columns: Vec<String>,
+    pub primary_key: Option<String>,
+}
+
+/// **THE SHAPE OF A VAULT, REMEMBERED BETWEEN SNAPSHOTS.**
+///
+/// A snapshot of this schema is ~140 tables, and for each one
+/// [`snapshot_table`] runs `PRAGMA table_info` before it reads a single row.
+/// The shape is a function of the SCHEMA, so a caller that snapshots the same
+/// vault repeatedly — an evaluation harness diffing the vault either side of
+/// every turn — pays that pragma sweep once per turn for an answer that
+/// cannot have changed.
+///
+/// This cache holds the table list and each table's shape. It is keyed by
+/// nothing: it belongs to the caller, and a caller that points it at a vault
+/// on a different schema version must drop it. [`SnapshotCache::invalidate`]
+/// is how, and a migration is the only thing that needs it.
+///
+/// **It changes no answer.** The digests are computed from the same columns
+/// in the same order; only the pragma round-trips are skipped.
+#[derive(Debug, Clone, Default)]
+pub struct SnapshotCache {
+    tables: Option<Vec<String>>,
+    shapes: BTreeMap<String, TableShape>,
+}
+
+impl SnapshotCache {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Forget every remembered shape. Call after a migration.
+    pub fn invalidate(&mut self) {
+        self.tables = None;
+        self.shapes.clear();
+    }
+
+    /// How many tables this cache is remembering — so a caller can assert the
+    /// cache is doing something rather than hoping.
+    #[must_use]
+    pub fn remembered(&self) -> usize {
+        self.shapes.len()
+    }
+
+    /// The corpus tables, read once.
+    fn tables(&mut self, db: &Connection) -> Result<Vec<String>> {
+        if let Some(tables) = &self.tables {
+            return Ok(tables.clone());
+        }
+        let tables = snapshot_tables(db)?;
+        self.tables = Some(tables.clone());
+        Ok(tables)
+    }
+
+    /// One table's shape, read once.
+    fn shape(&mut self, db: &Connection, table: &str) -> Result<TableShape> {
+        if let Some(shape) = self.shapes.get(table) {
+            return Ok(shape.clone());
+        }
+        let mut columns: Vec<String> = columns_of(db, table)?
+            .into_iter()
+            .map(|column| column.name)
+            .collect();
+        columns.sort();
+        let shape = TableShape {
+            columns,
+            primary_key: primary_key_of(db, table)?,
+        };
+        self.shapes.insert(table.to_owned(), shape.clone());
+        Ok(shape)
+    }
+}
+
+/// Freeze one table against a shape already known.
+///
+/// # Errors
+///
+/// The table cannot be read.
+pub fn snapshot_table_with(
+    db: &Connection,
+    table: &str,
+    shape: &TableShape,
+) -> Result<TableSnapshot> {
+    let Some(primary_key) = shape.primary_key.clone() else {
+        let rows: i64 = db.query_row(
+            &format!("SELECT COUNT(*) FROM {}", quote_identifier(table)),
+            [],
+            |row| row.get(0),
+        )?;
+        return Ok(TableSnapshot {
+            columns: shape.columns.clone(),
+            primary_key: None,
+            rows,
+            digests: BTreeMap::new(),
+        });
+    };
+    let (digests, rows) = digests_of(db, table, &shape.columns, &primary_key, true)?;
+    Ok(TableSnapshot {
+        columns: shape.columns.clone(),
+        primary_key: Some(primary_key),
+        rows: i64::try_from(rows).unwrap_or(i64::MAX),
+        digests,
+    })
+}
+
+/// [`snapshot_vault`], reusing a caller-held [`SnapshotCache`] for the schema
+/// round-trips. Byte-for-byte the same answer.
+///
+/// # Errors
+///
+/// A table cannot be read.
+pub fn snapshot_vault_cached(db: &Connection, cache: &mut SnapshotCache) -> Result<VaultSnapshot> {
+    let mut snapshot = VaultSnapshot::new();
+    for table in cache.tables(db)? {
+        let shape = cache.shape(db, &table)?;
+        let table_snapshot = snapshot_table_with(db, &table, &shape)?;
+        if table_snapshot.rows > 0 {
+            snapshot.insert(table, table_snapshot);
+        }
+    }
+    Ok(snapshot)
+}
+
 /// Compare a frozen snapshot against the same vault after today's code opened
 /// it. The findings ARE the failure message, one clause per problem.
 pub fn compare_snapshot(frozen: &VaultSnapshot, db: &Connection) -> Result<SnapshotComparison> {

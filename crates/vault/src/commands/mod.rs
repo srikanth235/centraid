@@ -102,6 +102,344 @@ impl Risk {
     }
 }
 
+/// WHAT A COMMAND DOES TO THE VAULT.
+///
+/// For most commands the handler's own SQL says it — every command that stamps
+/// `deleted_at` is a `Delete` whatever it is called — and
+/// `crates/evalsuite/grammar/derive/derive_grammar.py` reads it off the SQL
+/// rather than off a list. Twenty-six handlers state it somewhere the SQL
+/// cannot be seen: the statement lives in a helper (`set_starred`,
+/// `write_new_expense`, `task_for_person`), or the command writes nothing at
+/// all. Those are DECLARED in [`DECLARED_EFFECTS`] below, each with the reason,
+/// so the effect of a command is a fact of the registry and not of whether a
+/// parser could find the INSERT.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Effect {
+    /// Mints a row a member can then name.
+    Create,
+    /// Changes a row that already exists.
+    Edit,
+    /// Stamps `deleted_at`.
+    Delete,
+    /// Clears `deleted_at`.
+    Restore,
+    /// Stamps `completed_at`.
+    Complete,
+    /// Stamps `settled_at`.
+    Settle,
+    /// Sets a row's status to cancelled.
+    Cancel,
+    /// Moves a row in time.
+    Reschedule,
+    /// Folds one row into another and leaves one behind: neither an `Edit` of
+    /// the survivor nor a `Delete` of the loser, because the references move.
+    Merge,
+    /// Reads and writes nothing but its own receipt. A command rather than a
+    /// query because a query handler is read-only by directive and so cannot
+    /// write the receipt a reveal owes.
+    Read,
+}
+
+impl Effect {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Edit => "edit",
+            Self::Delete => "delete",
+            Self::Restore => "restore",
+            Self::Complete => "complete",
+            Self::Settle => "settle",
+            Self::Cancel => "cancel",
+            Self::Reschedule => "reschedule",
+            Self::Merge => "merge",
+            Self::Read => "read",
+        }
+    }
+}
+
+/// WHETHER A COMMAND'S EFFECT LEAVES THE VAULT.
+///
+/// Until now nothing in the registry said so. `sealed_input` declares which
+/// arguments are secrets, `online_only` declares what a seat refuses to queue,
+/// `risk` and `confirm` declare how loudly to ask — and all eight app manifests
+/// declare the same `actionSideEffect: "vault-write"`, so the manifests
+/// separated nothing either. The one consumer that needed the fact,
+/// `crates/candidates/src/exec.rs`, carried a hand-written list of ONE name and
+/// missed `locker.export`, which is R-R2's own example.
+///
+/// So egress is declared here, for every command the structural signals raise
+/// as a candidate, and `derive_grammar.py` fails when a candidate carries no
+/// declaration. `None` is a real answer and must still be written down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Egress {
+    /// Nothing leaves. The vault's own rows change and stop there.
+    None,
+    /// Hands material to a transport that carries it to somebody else.
+    Transport,
+    /// Hands material to the member, out of the vault's custody, in bulk.
+    Export,
+}
+
+impl Egress {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Transport => "transport",
+            Self::Export => "export",
+        }
+    }
+}
+
+/// One command's declared effect, and why the SQL cannot state it.
+pub struct DeclaredEffect {
+    pub command: &'static str,
+    pub effect: Effect,
+    /// One line. The handler this was read out of, and what it does there.
+    pub why: &'static str,
+}
+
+/// THE TWENTY-SIX whose effect the handler's SQL does not state.
+///
+/// Read out of `crates/vault/src/commands/*.rs` one handler at a time. Every
+/// other command's effect is derived from its own SQL and is NOT repeated here:
+/// a second list of facts the code already carries is the thing that drifts.
+/// `derive_grammar.py` refuses a name here that the SQL classifies differently,
+/// and refuses a registered command that neither the SQL nor this list places.
+pub const DECLARED_EFFECTS: &[DeclaredEffect] = &[
+    DeclaredEffect {
+        command: "core.edit_document",
+        effect: Effect::Edit,
+        why: "its UPDATE runs inside `update_document`, and `set_representation` \
+              re-points the body at freshly minted bytes.",
+    },
+    DeclaredEffect {
+        command: "core.replace_document_content",
+        effect: Effect::Edit,
+        why: "`update_document` plus `set_representation`: one document, a new body.",
+    },
+    DeclaredEffect {
+        command: "core.set_extracted_text",
+        effect: Effect::Edit,
+        why: "`upsert_text_derivative` fills in an existing document's text; no \
+              row a member names appears.",
+    },
+    DeclaredEffect {
+        command: "core.merge_party",
+        effect: Effect::Merge,
+        why: "`fold_party` moves every reference onto the survivor and trashes \
+              the loser — not the `Delete` its SQL would look like.",
+    },
+    DeclaredEffect {
+        command: "locker.star_item",
+        effect: Effect::Edit,
+        why: "`set_starred` carries the UPDATE.",
+    },
+    DeclaredEffect {
+        command: "locker.unstar_item",
+        effect: Effect::Edit,
+        why: "`set_starred` carries the UPDATE.",
+    },
+    DeclaredEffect {
+        command: "locker.counts",
+        effect: Effect::Read,
+        why: "counts the locker's rows and writes nothing.",
+    },
+    DeclaredEffect {
+        command: "locker.totp_code",
+        effect: Effect::Read,
+        why: "derives a code from a stored seed and writes only its subject receipt.",
+    },
+    DeclaredEffect {
+        command: "locker.watchtower",
+        effect: Effect::Read,
+        why: "reports weak and reused secrets; writes only its subject receipt.",
+    },
+    DeclaredEffect {
+        command: "locker.export",
+        effect: Effect::Read,
+        why: "reads every item and writes only the one receipt the mass reveal \
+              owes; what makes it grave is its egress, not its effect.",
+    },
+    DeclaredEffect {
+        command: "locker.reveal_receipt",
+        effect: Effect::Read,
+        why: "records that a seat-side reveal happened; `access_receipt` is \
+              append-only and is not a row a member names.",
+    },
+    DeclaredEffect {
+        command: "media.add_asset",
+        effect: Effect::Create,
+        why: "mints an asset and its content item; identical bytes dedupe onto one.",
+    },
+    DeclaredEffect {
+        command: "media.derive_missing",
+        effect: Effect::Edit,
+        why: "fills in derivatives for assets that already exist; no new asset appears.",
+    },
+    DeclaredEffect {
+        command: "media.set_favorite",
+        effect: Effect::Edit,
+        why: "`set_starred` carries the UPDATE.",
+    },
+    DeclaredEffect {
+        command: "people.star_person",
+        effect: Effect::Edit,
+        why: "`set_starred` carries the UPDATE.",
+    },
+    DeclaredEffect {
+        command: "people.unstar_person",
+        effect: Effect::Edit,
+        why: "`set_starred` carries the UPDATE.",
+    },
+    DeclaredEffect {
+        command: "people.move_person",
+        effect: Effect::Edit,
+        why: "`file_into_list` re-files an existing party.",
+    },
+    DeclaredEffect {
+        command: "people.add_note",
+        effect: Effect::Create,
+        why: "`annotate` mints the journal note the member then names.",
+    },
+    DeclaredEffect {
+        command: "people.add_task",
+        effect: Effect::Create,
+        why: "`task_for_person` mints a task and links it to the party.",
+    },
+    DeclaredEffect {
+        command: "people.add_gift",
+        effect: Effect::Create,
+        why: "`task_for_person` mints a task and links it to the party.",
+    },
+    DeclaredEffect {
+        command: "schedule.set_task_status",
+        effect: Effect::Edit,
+        why: "one command that completes, cancels or reopens depending on \
+              `status`: the registry fixes no single effect, only the argument does.",
+    },
+    DeclaredEffect {
+        command: "tally.add_group_member",
+        effect: Effect::Create,
+        why: "`add_circle_member` mints the circle membership the group reads back.",
+    },
+    DeclaredEffect {
+        command: "tally.add_expense",
+        effect: Effect::Create,
+        why: "`write_new_expense` mints the expense, its payers and its splits.",
+    },
+    DeclaredEffect {
+        command: "tally.add_receipt_expense",
+        effect: Effect::Create,
+        why: "the same mint as `tally.add_expense`, from a receipt's line items.",
+    },
+    DeclaredEffect {
+        command: "tally.reallocate_receipt",
+        effect: Effect::Edit,
+        why: "`write_line_items` and `write_splits` re-cut an expense that already exists.",
+    },
+    DeclaredEffect {
+        command: "tally.materialize_recurring_expense",
+        effect: Effect::Create,
+        why: "mints this occurrence of a recurring expense as a real one.",
+    },
+];
+
+/// One command's declared egress, and why.
+pub struct DeclaredEgress {
+    pub command: &'static str,
+    pub egress: Egress,
+    pub why: &'static str,
+}
+
+/// EVERY COMMAND THE STRUCTURAL SIGNALS RAISE, ruled one way or the other.
+///
+/// The signals are the ones `derive_grammar.py` can see without a judgement:
+/// a name that states a transfer, a handler that stamps a row as sent, an
+/// `online_only` command, a sealed input. A command that trips one and appears
+/// nowhere here is a red derivation, so the list cannot go quietly stale — and
+/// `Egress::None` beside a reason is how a candidate is cleared.
+pub const DECLARED_EGRESS: &[DeclaredEgress] = &[
+    DeclaredEgress {
+        command: "locker.export",
+        egress: Egress::Export,
+        why: "every secret the locker holds, in the clear, in a file the seat writes.",
+    },
+    DeclaredEgress {
+        command: "social.send_message",
+        egress: Egress::Transport,
+        why: "the member's request is for the message to ARRIVE; the row it \
+              records is the vault's half of a transfer.",
+    },
+    DeclaredEgress {
+        command: "social.draft_message",
+        egress: Egress::None,
+        why: "a draft is a row and stays one; sending it is `social.send_message`.",
+    },
+    DeclaredEgress {
+        command: "locker.reveal_receipt",
+        egress: Egress::None,
+        why: "records that a seat revealed something. The reveal left custody; \
+              writing down that it did, did not.",
+    },
+    DeclaredEgress {
+        command: "tally.nudge",
+        egress: Egress::None,
+        why: "writes one row saying a reminder was PREPARED, with `sent` stated \
+              and always false, because no delivery path exists.",
+    },
+    DeclaredEgress {
+        command: "locker.add_item",
+        egress: Egress::None,
+        why: "`online_only` and sealed-input: the seat seals the secret before \
+              the gateway sees it. Nothing leaves.",
+    },
+    DeclaredEgress {
+        command: "locker.edit_item",
+        egress: Egress::None,
+        why: "as `locker.add_item` — the seat seals, the vault stores.",
+    },
+    DeclaredEgress {
+        command: "locker.set_field",
+        egress: Egress::None,
+        why: "as `locker.add_item` — the seat seals, the vault stores.",
+    },
+    DeclaredEgress {
+        command: "locker.duplicate_item",
+        egress: Egress::None,
+        why: "copies one item's sealed cells to a second row inside the same \
+              vault; the ciphertext never leaves.",
+    },
+    DeclaredEgress {
+        command: "locker.set_passkey",
+        egress: Egress::None,
+        why: "as `locker.add_item` — the seat seals the private key, the vault stores it.",
+    },
+    DeclaredEgress {
+        command: "locker.rotate_key",
+        egress: Egress::None,
+        why: "`online_only` because the seat holds the key it rotates; the new \
+              key never leaves that seat.",
+    },
+    DeclaredEgress {
+        command: "locker.totp_code",
+        egress: Egress::None,
+        why: "derives a code at the member's own seat; it is shown, not sent.",
+    },
+    DeclaredEgress {
+        command: "locker.watchtower",
+        egress: Egress::None,
+        why: "reads the locker's own rows and answers at the seat.",
+    },
+    DeclaredEgress {
+        command: "tally.materialize_recurring_expense",
+        egress: Egress::None,
+        why: "`online_only` so the recurrence plane is reachable, not because \
+              anything is handed out.",
+    },
+];
+
 /// What a handler is handed.
 pub struct CommandCtx<'tx, 'conn> {
     tx: &'tx CommitTx<'conn>,
@@ -763,4 +1101,63 @@ pub fn not_implemented(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Err(VaultError::NotImplemented {
         name: ctx.command.to_owned(),
     })
+}
+
+#[cfg(test)]
+mod declaration_tests {
+    use std::collections::BTreeSet;
+
+    use super::{DECLARED_EFFECTS, DECLARED_EGRESS, Registry};
+
+    /// A declaration that names nothing is a lie that never goes red, so the
+    /// registry is what both lists are held to.
+    #[test]
+    fn every_declaration_names_a_registered_command() {
+        let registry = Registry::with_system_commands().expect("the registry builds");
+        let names: BTreeSet<&str> = registry.names().into_iter().collect();
+        for declared in DECLARED_EFFECTS {
+            assert!(
+                names.contains(declared.command),
+                "DECLARED_EFFECTS names `{}`, which is not registered",
+                declared.command
+            );
+            assert!(
+                !declared.why.is_empty(),
+                "`{}` declares an effect with no reason",
+                declared.command
+            );
+        }
+        for declared in DECLARED_EGRESS {
+            assert!(
+                names.contains(declared.command),
+                "DECLARED_EGRESS names `{}`, which is not registered",
+                declared.command
+            );
+            assert!(
+                !declared.why.is_empty(),
+                "`{}` declares an egress with no reason",
+                declared.command
+            );
+        }
+    }
+
+    #[test]
+    fn neither_list_names_a_command_twice() {
+        let mut seen = BTreeSet::new();
+        for declared in DECLARED_EFFECTS {
+            assert!(
+                seen.insert(declared.command),
+                "DECLARED_EFFECTS names `{}` twice",
+                declared.command
+            );
+        }
+        let mut seen = BTreeSet::new();
+        for declared in DECLARED_EGRESS {
+            assert!(
+                seen.insert(declared.command),
+                "DECLARED_EGRESS names `{}` twice",
+                declared.command
+            );
+        }
+    }
 }

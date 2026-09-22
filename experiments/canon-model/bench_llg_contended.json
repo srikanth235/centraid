@@ -1,0 +1,32 @@
+{
+  "model": "google/flan-t5-small",
+  "n": 50,
+  "int8": true,
+  "threads": 4,
+  "load_at_start": 8.4,
+  "contended": true,
+  "contention": "box never idle: load 7.92, 2 competing process(es): /root/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/cargo tes; ./.venv/bin/python -u train.py --model t5-small --data data/merged.jso",
+  "unconstrained": {
+    "p50": 6134.5,
+    "p95": 18256.4,
+    "mean": 7667.8
+  },
+  "compiled_mask": {
+    "p50": 588.7,
+    "p95": 24854.3,
+    "mean": 5322.7,
+    "mask_calls": 1496
+  },
+  "sample": [
+    "address of activities",
+    "is_asset of obligations of obligations of obligations",
+    "item_id of it ordered by opened_at asc ordered by to_party asc"
+  ],
+  "old_mask": {
+    "p50": 9307.5,
+    "p95": 43283.0,
+    "mean": 16488.8
+  },
+  "load_at_end": 6.56,
+  "still_idle": false
+}

@@ -1,0 +1,9 @@
+.venv/
+.venv-*/
+hf/
+runs/
+__pycache__/
+*.safetensors
+*.bin
+logs/
+distill/

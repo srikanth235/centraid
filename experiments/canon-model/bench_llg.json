@@ -1,0 +1,4 @@
+{
+  "latency": "NOT MEASURED",
+  "reason": "box never idle: load 7.78, 4 competing process(es): /bin/bash -c source /root/.claude/shell-snapshots/snapshot-bash-179004; /bin/bash -c source /root/.claude/shell-snapshots/snapshot-bash-179004; /root/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/cargo tes"
+}

@@ -850,6 +850,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-candidates"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-evalsuite",
+ "centraid-evalworld",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "centraid-core"
 version = "1.0.0-alpha.0"
 dependencies = [
@@ -893,6 +903,45 @@ name = "centraid-design"
 version = "1.0.0-alpha.0"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "centraid-evalsuite"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-apps-agenda",
+ "centraid-apps-docs",
+ "centraid-apps-kit",
+ "centraid-apps-locker",
+ "centraid-apps-notes",
+ "centraid-apps-people",
+ "centraid-apps-photos",
+ "centraid-apps-tally",
+ "centraid-apps-tasks",
+ "centraid-evalworld",
+ "centraid-ontology",
+ "centraid-search",
+ "centraid-vault",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "centraid-evalworld"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-apps-docs",
+ "centraid-apps-kit",
+ "centraid-apps-tasks",
+ "centraid-blobs",
+ "centraid-search",
+ "centraid-vault",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

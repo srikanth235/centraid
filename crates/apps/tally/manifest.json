@@ -12,97 +12,118 @@
       {
         "schema": "core",
         "table": "vault",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "party",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "core",
         "table": "content_item",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "content_representation",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "attachment",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "tally",
         "table": "friend",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal",
+        "surfaceReason": "A friend row is the edge that admits a party to Tally; the board a member names is `members`."
       },
       {
         "schema": "tally",
         "table": "group",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "social",
         "table": "circle",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "social",
         "table": "circle_member",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "tally",
         "table": "expense",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "tally",
         "table": "expense_split",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "tally",
         "table": "expense_payer",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "tally",
         "table": "expense_line_item",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "facet"
       },
       {
         "schema": "tally",
         "table": "expense_line_allocation",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "tally",
         "table": "settlement",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "tally",
         "table": "obligation",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "tally",
         "table": "nudge",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal",
+        "surfaceReason": "A nudge is a prepared reminder, read back through the obligation it belongs to, never asked for as a board."
       },
       {
         "schema": "tally",
         "table": "recurring_expense",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "facet"
       },
       {
         "schema": "schedule",
         "table": "recurrence_exception",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "tally",
@@ -213,6 +234,7 @@
         "schema": "core",
         "table": "entity_revision",
         "verbs": "read",
+        "surface": "internal",
         "rowFilter": [
           {
             "column": "entity_type",
@@ -234,17 +256,21 @@
       {
         "schema": "core",
         "table": "transaction",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "core",
         "table": "account",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind",
+        "surfaceReason": "Tally imports statement lines, so a member names their accounts to file them (#916 wave ruling)."
       },
       {
         "schema": "core",
         "table": "link",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
@@ -253,6 +279,28 @@
       }
     ]
   },
+  "$derivedFieldsNote": "Facts this app's READER computes and hands back beside the row — GRAMMAR.md §2.2 admits them as Fields and they appear in no column list. `computedBy` names the reader or statement that produces one; `inputs` names the tables it reads, and manifest validation refuses an input this app's read scopes do not grant. `computedBy: null` says the grammar states a Field and nothing this product ships computes it.",
+  "derivedFields": [
+    {
+      "field": "balance",
+      "entity": "core.party",
+      "computedBy": "crates/apps/tally/src/balance.rs",
+      "inputs": [
+        "tally.expense",
+        "tally.expense_payer",
+        "tally.expense_split",
+        "tally.settlement",
+        "tally.group"
+      ]
+    },
+    {
+      "field": "member_party_ids",
+      "entity": "tally.group",
+      "computedBy": null,
+      "gap": "A group's members are reached through `social.circle_member`, and no shipped query hands the id list back beside the group row; the grammar's Field is served only by the eval harness (DIFF.md B4). It is also the two-hop walk DIFF.md B12 records.",
+      "inputs": ["tally.group", "social.circle", "social.circle_member"]
+    }
+  ],
   "actionSideEffect": "vault-write",
   "actions": [
     {

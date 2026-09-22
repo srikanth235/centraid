@@ -11,7 +11,20 @@
     "scopes": [
       {
         "schema": "schedule",
-        "verbs": "read+act"
+        "verbs": "read+act",
+        "surface": {
+          "attendee": "internal",
+          "calendar": "facet",
+          "event_ext": "internal",
+          "project": "internal",
+          "recurrence_exception": "internal",
+          "section": "facet",
+          "task": "internal"
+        },
+        "surfaceReason": {
+          "project": "Projects are Tasks' board; Agenda joins through the project only to colour an event.",
+          "task": "Tasks' own door serves the board; Agenda reads tasks to place them on the day."
+        }
       },
       {
         "schema": "schedule",
@@ -21,47 +34,56 @@
       {
         "schema": "core",
         "table": "vault",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "event",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "core",
         "table": "party",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "content_item",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "content_representation",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "attachment",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "tag",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "concept",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "concept_scheme",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",

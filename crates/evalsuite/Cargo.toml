@@ -1,0 +1,44 @@
+[package]
+name = "centraid-evalsuite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+centraid-evalworld = { path = "../evalworld" }
+# THE DOORS. Reads go through each app's own reader and the FTS plane; writes
+# go through the typed command plane. The harness holds no SQL of its own —
+# `sql-confinement` refuses it here, and that refusal is what makes a score
+# worth having: a candidate is scored against the vault a member's tap reaches.
+centraid-vault = { path = "../vault" }
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-search = { path = "../search" }
+# THE ROW-LEVEL DIGEST. `centraid_ontology::snapshot` already holds the one
+# thing this crate is forbidden to write for itself — a scan of every table,
+# keyed by primary key — and it holds it inside the SQL-allowed layer. The
+# changed-row set a write turn is judged on is a diff of two of its snapshots.
+centraid-ontology = { path = "../ontology" }
+centraid-apps-agenda = { path = "../apps/agenda" }
+centraid-apps-docs = { path = "../apps/docs" }
+centraid-apps-locker = { path = "../apps/locker" }
+centraid-apps-notes = { path = "../apps/notes" }
+centraid-apps-people = { path = "../apps/people" }
+centraid-apps-photos = { path = "../apps/photos" }
+centraid-apps-tally = { path = "../apps/tally" }
+centraid-apps-tasks = { path = "../apps/tasks" }
+# A fresh world per session is a temp directory per session.
+tempfile.workspace = true
+# The liveness probe reads a row's own `deleted_at` through the kit's door;
+# the error type it is carried in is `rusqlite`'s.
+rusqlite.workspace = true
+
+# THE BINARIES ARE ASSERTED FROM A TEST THAT SPAWNS THEM (`tests/bins.rs`), and
+# an integration test links only the crate and these — never the crate's own
+# `[dependencies]`. Both are already built for the library; naming them here
+# costs no extra compilation.
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile.workspace = true

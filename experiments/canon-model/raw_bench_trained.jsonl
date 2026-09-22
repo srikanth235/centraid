@@ -1,0 +1,50 @@
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "no"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "I'm looking for the Emerald Bay permit", "raw": "I need the Emerald Bay permit"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "ok"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "incurred_on of gas"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "Yusuf Bergmann's telephone, please", "raw": "telephone"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "Yusuf Castellanos's electronic mail address?", "raw": "e-mail_id"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "actually never mind", "raw": "it"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "actually never mind, forget it", "raw": "forget it"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "actually \u2014 do I have that chili recipe written down?", "raw": "no"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "incurred expenses of (trips called \"Firewood\")"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add Marco to the trip group", "raw": "add_person_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_member_group_group_member_group_"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "tasks called \"Buy tire chains\" that (count of items = 4)"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add a task to call the Truckee place", "raw": "task: \"Track\""}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add a task to pay the copay before then", "raw": "tasks of the copay"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add a task to pick up the prescription on thursday", "raw": "tasks that (prescription contains cyanide) during this week"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add a task to print that parking note before we go", "raw": "task: \"parking notes\""}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add a task to \u2014 actually, no, skip it", "raw": "rename it"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "add forty 2 dollars of gas to the trip group"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "add it that (a_s_at during it) during Tahoe / album"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "add the trailhead one to Rolls to sort", "raw": "add trailhead of (parties)"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and Marco?", "raw": "and Marco?"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and Ray?", "raw": "and ray"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and have I got insurance paperwork for it?", "raw": "no"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and in my photos?", "raw": "and in photos"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and its guest list?", "raw": "and its guest list"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and of those, the dentist ones", "raw": "and of them"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and on my task list?", "raw": "tasks"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the cottage?", "raw": "and the cottage"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the dusk one?", "raw": "and the dusk one"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the figure?", "raw": "figure of the tally of the tally of the corresponding parties"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the login for the cabin site?", "raw": "login"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the login?", "raw": "and the login"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the rest of that album?", "raw": "rest of it"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the rest of that spot's frames?", "raw": "rest of that spot"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the running total?", "raw": "max running_at of the last thing I added that (count of activities = 4)"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and the two tasks that go with it?", "raw": "and the two tasks that (completed_at is not null)"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and their advice at the fitting?", "raw": "and their advice during the fitting"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and this month?", "raw": "and this month"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and what do I have to do that day?", "raw": "schedule"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and what else is on that shelf for the trip?", "raw": "a shelf that (sequence is not null)"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and what's the last thing I wrote in my journal?", "raw": "last thing I wrote that (journal_id is null)"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and when am I seeing her?", "raw": "show her"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "and where was that fog one of them taken?", "raw": "dtstart of them"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "any balance outstanding with them?", "raw": "balance of (expenses)"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "any birthdays coming up in the next couple of months?", "raw": "annis of (parties) during next 2 months"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "any birthdays this month?", "raw": "birthday of lord johnson"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "any frame of Tomoko up on the headland?", "raw": "frame of Tomoko"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "any outstanding balance with the optometrist?", "raw": "balance of (optional)"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "any photographs from last week?", "raw": "photos of last week"}
+{"model": "runs/flan-t5-small/final", "precision": "fp32", "decode": "greedy", "input": "anything behind schedule?", "raw": "schedule"}

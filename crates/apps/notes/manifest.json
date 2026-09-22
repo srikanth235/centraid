@@ -11,37 +11,47 @@
     "scopes": [
       {
         "schema": "knowledge",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": {
+          "annotation": "internal",
+          "note": "kind"
+        }
       },
       {
         "schema": "core",
         "table": "content_item",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "content_representation",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "entity_revision",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "attachment",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "link",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "link_anchor",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
@@ -51,22 +61,27 @@
       {
         "schema": "core",
         "table": "party",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "event",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "document",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "schedule",
         "table": "task",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal",
+        "surfaceReason": "Notes reads tasks only to follow a checklist line it sent to Tasks."
       },
       {
         "schema": "schedule",
@@ -76,22 +91,26 @@
       {
         "schema": "tally",
         "table": "expense",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "media",
         "table": "asset",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "collection",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "kind"
       },
       {
         "schema": "core",
         "table": "collection_entry",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "knowledge",
@@ -151,17 +170,20 @@
       {
         "schema": "core",
         "table": "tag",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "concept",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",
         "table": "concept_scheme",
-        "verbs": "read"
+        "verbs": "read",
+        "surface": "internal"
       },
       {
         "schema": "core",

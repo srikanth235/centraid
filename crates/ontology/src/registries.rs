@@ -140,6 +140,15 @@ pub struct Entity {
     pub label: String,
     /// `append-only`, `mutable`, `trash` or `machinery`.
     pub lifecycle: String,
+    /// WHAT KIND OF THING THIS ROW IS, declared rather than inferred from the
+    /// table's shape: `thing`, `edge`, `revision`, `vocabulary` or `facet`.
+    ///
+    /// A reader that wants to know whether `core_tag` is a board a member
+    /// names or an edge a door joins through used to test the table for a
+    /// `(X_type, X_id)` pair and hope. The registry now says so, and
+    /// `crates/evalsuite/grammar/derive/derive_grammar.py` holds the shape test
+    /// to the declaration instead of the other way round.
+    pub role: String,
     #[serde(rename = "projectionOf")]
     pub projection_of: Option<String>,
     #[serde(rename = "deletionRoles")]
@@ -327,6 +336,22 @@ mod tests {
                     )
                 })
             })
+            .collect();
+        assert_eq!(findings.join("\n"), "");
+    }
+
+    #[test]
+    fn every_entity_declares_one_of_the_five_roles() {
+        let findings: Vec<String> = v0_registries()
+            .entities
+            .iter()
+            .filter(|entity| {
+                !matches!(
+                    entity.role.as_str(),
+                    "thing" | "edge" | "revision" | "vocabulary" | "facet"
+                )
+            })
+            .map(|entity| format!("{}: `{}`", entity.logical, entity.role))
             .collect();
         assert_eq!(findings.join("\n"), "");
     }

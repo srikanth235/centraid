@@ -1,0 +1,400 @@
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "no"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "I'm looking for the Emerald Bay permit", "raw": "I'm looking for a permit for Emerald Bay."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "I've paid the dentist balance off \u2014 close it out"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "Marco just sent me twenty dollars towards the gas \u2014 record it"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "Yusuf Bergmann's telephone, please", "raw": "Yusuf Bergmann's telephone, please"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "Yusuf Castellanos's electronic mail address?", "raw": "e-mail address"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "actually never mind", "raw": "it is not a matter of time"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "actually never mind, forget it", "raw": "it is not a good idea to be a snobby, but a good idea to be a snobby."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "actually \u2014 do I have that chili recipe written down?", "raw": "no"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "I'm not sure if I'll be able to afford it."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add Marco to the trip group", "raw": "add Marco to the trip group"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "How to buy a tire chain?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to call the Truckee place", "raw": "a tasmanian tasmanian tasmanian tasmanian tasmanian tasmanian tasmanian tas"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to pay the copay before then", "raw": "i need to pay the copay before i go to the store"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to pick up the prescription on thursday", "raw": "i need to take a prescription"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to print that parking note before we go", "raw": "i need to print the parking note"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to \u2014 actually, no, skip it", "raw": "i need to make a new sock"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "$45 for the trip."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "add the one with Ana in it to the Tahoe scouting album"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "add the trailhead one to Rolls to sort", "raw": "add the trailhead one to Rolls to sort"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and Marco?", "raw": "and Marco?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and Ray?", "raw": "and Ray?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and have I got insurance paperwork for it?", "raw": "no"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and in my photos?", "raw": "i love you"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and its guest list?", "raw": "adolescent"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and of those, the dentist ones", "raw": "and of those, the dentist ones"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and on my task list?", "raw": "I'm a big fan of the sandwhich."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the cottage?", "raw": "a secluded cottage"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the dusk one?", "raw": "and the dusk one?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the figure?", "raw": "and the figure?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the login for the cabin site?", "raw": "and the login for the cabin site?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the login?", "raw": "and the login?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the rest of that album?", "raw": "a slew of symphonic symphonic symphonic symphonic symphonic symphonic symphonic symphonic "}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the rest of that spot's frames?", "raw": "a sleeve"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the running total?", "raw": "0"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and the two tasks that go with it?", "raw": "i need to make a list of all the tasks that go with it"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and their advice at the fitting?", "raw": "and their advice at the fitting?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and this month?", "raw": "ida"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and what do I have to do that day?", "raw": "i have to go to the doctor"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and what else is on that shelf for the trip?", "raw": "a sandbox"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and what's the last thing I wrote in my journal?", "raw": "a book"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and when am I seeing her?", "raw": "a few days"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "and where was that fog one of them taken?", "raw": "st. john s s s s s s s s s s s s s s s s s s s s s"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "any balance outstanding with them?", "raw": "a resale"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "any birthdays coming up in the next couple of months?", "raw": "april"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "any birthdays this month?", "raw": "july"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "any frame of Tomoko up on the headland?", "raw": "a sand castle"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "any outstanding balance with the optometrist?", "raw": "no"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "any photographs from last week?", "raw": "i haven't seen any of them"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "greedy", "input": "anything behind schedule?", "raw": "a slammed slammed slammed slammed slammed slammed slammed slammed slammed "}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "no"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "I'm looking for the Emerald Bay permit", "raw": "I'm looking for the Emerald Bay permit"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "I've paid the dentist balance off \u2014 close it out"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "Marco just sent me twenty dollars towards the gas \u2014 record it"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "Yusuf Bergmann's telephone, please", "raw": "Yusuf Bergmann's telephone, please"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "Yusuf Castellanos's electronic mail address?", "raw": "Yusuf Castellanos's electronic mail address"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "actually never mind", "raw": "actually never mind"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "actually never mind, forget it", "raw": "it's not a good idea to forget it."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "actually \u2014 do I have that chili recipe written down?", "raw": "no"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "I'm a huge fan of the 'Firewood' \u2014 I'm a huge fan of the 'Firewood' \u2014 I'm a huge fan of the 'Firewood"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add Marco to the trip group", "raw": "add Marco to the trip group"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "how do you get rid of a tire chain?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to call the Truckee place", "raw": "How to call the truckee place?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to pay the copay before then", "raw": "To pay the copay, you can"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to pick up the prescription on thursday", "raw": "how do you get a prescription on thursday?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to print that parking note before we go", "raw": "how do you print the parking note before we go?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to \u2014 actually, no, skip it", "raw": "add a task to the list."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "I paid for the trip."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "add the one with Ana in it to the Tahoe scouting album"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "add the trailhead one to Rolls to sort", "raw": "add the trailhead one to Rolls to sort"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and Marco?", "raw": "and Marco?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and Ray?", "raw": "and Ray?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and have I got insurance paperwork for it?", "raw": "no"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and in my photos?", "raw": "and in my photos? and in my photos? and in my photos? and in my photos? and in my photos? and in my photos? and in my photos? and in my photos? and in my photos? and in my"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and its guest list?", "raw": "adolescent adolescent adolescent adolescent adolescent adolescent adolescent adolescent"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and of those, the dentist ones", "raw": "and of those, the dentist ones"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and on my task list?", "raw": "I'm not sure what to do with it, but I'm sure it's a good idea."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the cottage?", "raw": "and the cottage? and the cottage? and the cottage? and the cottage? and the cottage? and the cottage? and the cottage? and the cottage? and the cottage? and the cottage? and the cottage? and the cottage?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the dusk one?", "raw": "and the dusk one?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the figure?", "raw": "and the figure?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the login for the cabin site?", "raw": "and the login for the cabin site?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the login?", "raw": "and the login?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the rest of that album?", "raw": "the rest of the album"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the rest of that spot's frames?", "raw": "and the rest of that spot's frames?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the running total?", "raw": "0"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the two tasks that go with it?", "raw": "make sure you have a good time."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and their advice at the fitting?", "raw": "and their advice at the fitting?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and this month?", "raw": "and this month? and this month? and this month? and this month? and this month? and this month? and this month? and this month? and this month? and this month? and this month? and this month?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and what do I have to do that day?", "raw": "I have to do that day that day"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and what else is on that shelf for the trip?", "raw": "a teddy bear"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and what's the last thing I wrote in my journal?", "raw": "i wrote a letter to a friend and i wrote a letter to a friend and i wrote a letter to a friend and i wrote a letter to a friend and i wrote "}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and when am I seeing her?", "raw": "I'm seeing her at the end of the week."}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "and where was that fog one of them taken?", "raw": "st. louis st. louis st. louis st. louis st. louis st. louis st. louis st. louis"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "any balance outstanding with them?", "raw": "if i have a balance of i have a balance of i have a balance of i have a balance of i have a balance of i have a balance of i have "}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "any birthdays coming up in the next couple of months?", "raw": "idk idk idk idk idk idk idk idk idk idk idk idk"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "any birthdays this month?", "raw": "april 22nd"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "any frame of Tomoko up on the headland?", "raw": "a teddy bear"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "any outstanding balance with the optometrist?", "raw": "any outstanding balance with the optometrist?"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "any photographs from last week?", "raw": "oh oh oh oh oh oh oh oh oh oh oh oh oh oh oh oh"}
+{"model": "google/flan-t5-small", "precision": "fp32", "decode": "beam=4", "input": "anything behind schedule?", "raw": "if you haven't been able to get a job, you'll probably be able to get a job in a few weeks."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "'Book the Tahoe cabin' \u2014 have I got that written down twice"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "I'm looking for the Emerald Bay permit", "raw": "I'm looking for the Emerald Bay permit"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "i'm a dentist i love"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "Marco just sent me twenty dollars towards the gas \u2014 record it"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "Yusuf Bergmann's telephone, please", "raw": "please send me the telephone number."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "Yusuf Castellanos's electronic mail address?", "raw": "e-mail address"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "actually never mind", "raw": "actually never mind"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "actually never mind, forget it", "raw": "i think that i should be a little more careful."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "actually \u2014 do I have that chili recipe written down?", "raw": ""}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "i figured out how to make a sleigh ride - i figured out how to make a sleigh ride - i figured out how to make a sleigh ride -"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add Marco to the trip group", "raw": "a tiger"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "i can't find a new car"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to call the Truckee place", "raw": "a telecommunications company"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to pay the copay before then", "raw": "add a task to the spreadsheet."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to pick up the prescription on thursday", "raw": "ipad"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to print that parking note before we go", "raw": "i stymie the shit"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to \u2014 actually, no, skip it", "raw": "........................................................................"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "I paid for the trip."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "i like it"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "add the trailhead one to Rolls to sort", "raw": "if necessary"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and Marco?", "raw": "Marco"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and Ray?", "raw": "he was a slob"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and have I got insurance paperwork for it?", "raw": "I have been a customer for over 30 years and have been a customer for over 30 years."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and in my photos?", "raw": "and in my photos"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and its guest list?", "raw": "a stag"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and of those, the dentist ones", "raw": "dentists are the best dentists in the world."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and on my task list?", "raw": "On my task list, I am a snooping dog."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the cottage?", "raw": "a secluded cottage"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the dusk one?", "raw": "i like it"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the figure?", "raw": "and the figure"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the login for the cabin site?", "raw": "id"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the login?", "raw": "and the login"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the rest of that album?", "raw": "'The Last of This Album'"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the rest of that spot's frames?", "raw": "a sleazy sexy sexy"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the running total?", "raw": "0"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and the two tasks that go with it?", "raw": "and the two tasks that go with it"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and their advice at the fitting?", "raw": "i have a few questions and i have a few questions."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and this month?", "raw": "a month of adolescence"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and what do I have to do that day?", "raw": "i have to do that day"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and what else is on that shelf for the trip?", "raw": "a spool"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and what's the last thing I wrote in my journal?", "raw": "a cigarette"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and when am I seeing her?", "raw": "I'm seeing her"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "and where was that fog one of them taken?", "raw": "where the sandstones were deposited"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "any balance outstanding with them?", "raw": "a levy"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "any birthdays coming up in the next couple of months?", "raw": "a few more"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "any birthdays this month?", "raw": "oh my, i'm not gonna go to the movies this month"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "any frame of Tomoko up on the headland?", "raw": "a stag"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "any outstanding balance with the optometrist?", "raw": ""}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "any photographs from last week?", "raw": "i'm sorry"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "greedy", "input": "anything behind schedule?", "raw": "a scouting session"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "'Book the Tahoe cabin' \u2014 have I got that written down twice"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "I'm looking for the Emerald Bay permit", "raw": "I'm looking for the Emerald Bay permit"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "I've paid the dentist balance off \u2014 close it out \u2014"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "Marco just sent me twenty dollars towards the gas \u00e2 record it \u00e2"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "Yusuf Bergmann's telephone, please", "raw": "Yusuf Bergmann's telephone, please"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "Yusuf Castellanos's electronic mail address?", "raw": "Yusuf Castellanos's electronic mail address"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "actually never mind", "raw": "actually never mind"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "actually never mind, forget it", "raw": "really never mind, forget it"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "actually \u2014 do I have that chili recipe written down?", "raw": "        "}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "I paid it"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add Marco to the trip group", "raw": "add Marco to the trip group"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "Add a new car to your list if necessary."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to call the Truckee place", "raw": "Add a task To Call The Truckee"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to pay the copay before then", "raw": "Add a task to pay the copay before then."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to pick up the prescription on thursday", "raw": "i need to take a nap on thursday"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to print that parking note before we go", "raw": "i can'n't do it myself. i can'n't do it myself. i can'n't do it myself. i can'n't do it myself."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to \u2014 actually, no, skip it", "raw": "Make sure you aren't going to miss a hole in the wall. Make sure you aren't going to miss a hole in the wall. Make sure you aren't going to miss a hole in"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "I paid a lot of money for the trip."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "add the one with Ana in it to the Tahoe scouting album"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "add the trailhead one to Rolls to sort", "raw": "add the trailhead one to Rolls to sort"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and Marco?", "raw": "and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco? and Marco?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and Ray?", "raw": "i'm not sure i'd be able to do anything if i didn  i'm not sure i'm not sure i'm not sure i "}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and have I got insurance paperwork for it?", "raw": "I got my insurance paperwork for it"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and in my photos?", "raw": "and in my photos? and in my photos?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and its guest list?", "raw": "and its guest list?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and of those, the dentist ones", "raw": "and of those, the dentist ones. and of those, the dentist ones. and of those, the dentist ones. and of those, the dentist ones. and of those, the dentist ones. and of those, the dentist ones."}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and on my task list?", "raw": "On my task list: and on my task list"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the cottage?", "raw": "and the cottage?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the dusk one?", "raw": "and the dusk one? and the dusk one? and the dusk one?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the figure?", "raw": "and the figure"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the login for the cabin site?", "raw": "and the login for the cabin site"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the login?", "raw": "and the login?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the rest of that album?", "raw": "&ndash &amp; the rest of this album"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the rest of that spot's frames?", "raw": "and the rest of that spot's frames"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the running total?", "raw": "and the running total?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and the two tasks that go with it?", "raw": "and the two tasks that go with it. and the two tasks that go with it. and the two tasks that go with it. and the two tasks that go with it. and the two tasks that go with it. and the two"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and their advice at the fitting?", "raw": "and their advice at the fitting"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and this month?", "raw": "and this month"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and what do I have to do that day?", "raw": "i have to do this day. and what do i have to do that day? and what do i have to do that day? and what do i have to do that day? and what do i have to"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and what else is on that shelf for the trip?", "raw": "and other other items on that shelf for the trip"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and what's the last thing I wrote in my journal?", "raw": "What's the last thing I wrote in my journal?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and when am I seeing her?", "raw": "and when am I seeing her? and when am I seeing her? and when am I seeing her? and when am I seeing her? and when am I seeing her? and when am I seeing her? and when am I seeing her"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "and where was that fog one of them taken?", "raw": "Vancouver, British Columbia"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "any balance outstanding with them?", "raw": "opportunidad de lderes e opportunidad de lderes opportunidades e opportunidades"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "any birthdays coming up in the next couple of months?", "raw": "i'm not sure if i'll be able to get a babysitter"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "any birthdays this month?", "raw": "olympic games"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "any frame of Tomoko up on the headland?", "raw": "any frame of Tomoko up on the headland?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "any outstanding balance with the optometrist?", "raw": "any outstanding balance with the optometrist?"}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "any photographs from last week?", "raw": "                       "}
+{"model": "google/flan-t5-small", "precision": "int8", "decode": "beam=4", "input": "anything behind schedule?", "raw": "if you don't eat fried beef, you'll have to eat fried beef. if you don't eat fried beef, you'll have to eat fried beef."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "\u2014 hast du a book written twice?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "I'm looking for the Emerald Bay permit", "raw": "Ich m'aurai a safte ich es m'afte, es safte ich es m'aft"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "Ich habe den Zahnsaldo bezahlt \u2014 schlie\u00dfen Sie ihn aus."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "Marco just sent me twenty dollars for the gas \u2014 record it"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "Yusuf Bergmann's telephone, please", "raw": "Yusuf Bergmann's telephone, please, please, please, please, please, please, please, please, please, please, please, please, please, please, please, please, please, please, please,"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "Yusuf Castellanos's electronic mail address?", "raw": "Is Yusuf Castellanos's electronic mail address?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "actually never mind", "raw": "."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "actually never mind, forget it", "raw": ""}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "actually \u2014 do I have that chili recipe written down?", "raw": "\u2014 habe ich diese chili recipe geschrieben?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "'Firewood' trip to Tahoe for 'Firewood' \u2014 I paid it for it \u2014 $42,50 to the Tahoe trip for 'Firewood' \u2014 I paid it for it \u2014"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add Marco to the trip group", "raw": "ajoutez Marco to the trip group."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "Add a task called 'Buy tire chains' \u2014 no date on it \u2014 a task called 'Buy tire chains' \u2014 no date on it \u2014 no date on it."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to call the Truckee place", "raw": "Add a task to call the Truckee place"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to pay the copay before then", "raw": "a task to pay the copay before then."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to pick up the prescription on thursday", "raw": "a task to pick up the prescription on thursday."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to print that parking note before we go", "raw": "a task to print that parking note before we go."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add a task to \u2014 actually, no, skip it", "raw": "a task \u2014 ne pas, skip it."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "ajoutez 40 2 dollars de gaz a add forty two dollars d gas to the trip group, I paid"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "to the Tahoe scouting album."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "add the trailhead one to Rolls to sort", "raw": "Add the trailhead one to Rolls to Rolls to sort the trailhead one to Rolls to sort the trailhead one."}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and Marco?", "raw": "Marco Marco?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and Ray?", "raw": "Ray Ray?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and have I got insurance paperwork for it?", "raw": "- et ai-je et a-je e e?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and in my photos?", "raw": "Und in meine Fotos?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and its guest list?", "raw": "G\u00e4stebewertungen"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and of those, the dentist ones", "raw": "und von ihnen, die Zahn\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and on my task list?", "raw": "und auf meine Task list?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the cottage?", "raw": "und das Cottage?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the dusk one?", "raw": ""}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the figure?", "raw": "e e e e e e e e e e e e e e e e e e e e e e e e"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the login for the cabin site?", "raw": "und die Login f\u00fcr die cabin site?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the login?", "raw": "und die login?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the rest of that album?", "raw": "                       "}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the rest of that spot's frames?", "raw": "the rest of the frames?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the running total?", "raw": "und die Gesamt Gesamt?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and the two tasks that go with it?", "raw": "Und die beiden Aufgaben, die damit verbunden sind?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and their advice at the fitting?", "raw": "und ihre Beratung bei der passende?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and this month?", "raw": "und diesen Monat?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and what do I have to do that day?", "raw": "Was muss ich tun, wenn ich es es es es es es es es es es es es e "}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and what else is on that shelf for the trip?", "raw": "Und was ist auf diesem shelf f\u00fcr den Trip?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and what's the last thing I wrote in my journal?", "raw": "I'm writing in my journal?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and when am I seeing her?", "raw": ""}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "and where was that fog one of them taken?", "raw": "Und wo war dieser fog eins?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "any balance outstanding with them?", "raw": "Sollten sie noch nicht irgendes noch ausstehendes balance balance erringen?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "any birthdays coming up in the next couple of months?", "raw": "Y'a-t-il des anniversaires qui viennent d'\u00eatre c\u00e9l\u00e9br\u00e9s dans les prochains mois?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "any birthdays this month?", "raw": ""}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "any frame of Tomoko up on the headland?", "raw": "irgendet irgendet Tomoko auf Tomoko auf dem Kopf?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "any outstanding balance with the optometrist?", "raw": "Etwas anderes, wenn es um die Optimmetrist geht?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "any photographs from last week?", "raw": "Fotos von vergangen week, Fotos von Fotos von vergangene Woche?"}
+{"model": "t5-small", "precision": "fp32", "decode": "greedy", "input": "anything behind schedule?", "raw": "Was ist im Zeitplan?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "'Book the Tahoe cabin' \u2014 have I got that written down twice?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "I'm looking for the Emerald Bay permit", "raw": "I'm looking for the Emerald Bay permit."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "I've paid the dentist balance off \u2014 close it out \u2014 the dentist balance off \u2014 and close it out."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "Marco just sent me twenty dollars for the gas \u2014 record it"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "Yusuf Bergmann's telephone, please", "raw": "Yusuf Bergmann's telephone, please contact Yusuf Bergmann's telephone."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "Yusuf Castellanos's electronic mail address?", "raw": "Is Yusuf Castellanos's electronic mail address?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "actually never mind", "raw": "en r\u00e9alit\u00e9, il n\u2019en"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "actually never mind, forget it", "raw": "                       "}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "actually \u2014 do I have that chili recipe written down?", "raw": "\u2014 habe ich das chili chili recipe geschrieben?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "Add $42,50 to the Tahoe trip for 'Firewood' \u2014 I paid it it for 'Firewood' \u2014 I paid it for it."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add Marco to the trip group", "raw": "add Marco to the trip group."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "Add a task called 'Buy tire chains' \u2014 no date on it \u2014 a task called 'Buy tire chains' \u2014 no date on it."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to call the Truckee place", "raw": "Add a task to call the Truckee place"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to pay the copay before then", "raw": "a task to pay the copay before then."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to pick up the prescription on thursday", "raw": "a task to pick up the prescription on thursday."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to print that parking note before we go", "raw": "Add a task to print that parking note before we go."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add a task to \u2014 actually, no, skip it", "raw": "a task to \u2014 actually, no, skip it."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "add forty two dollars of gas to the trip group, I paid"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "the one with Ana in it to the Tahoe scouting album."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "add the trailhead one to Rolls to sort", "raw": "Add the trailhead one to Rolls to Rolls to sort."}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and Marco?", "raw": "Marco und Marco?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and Ray?", "raw": "Ray Ray?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and have I got insurance paperwork for it?", "raw": "Habe ich eine Versicherungsversicherung, und habe ich eine Versicherungsversicherung?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and in my photos?", "raw": "und in meinen Fotos?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and its guest list?", "raw": "guest guest list?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and of those, the dentist ones", "raw": "und von ihnen, die Zahn\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and on my task list?", "raw": "und auf meiner Task list?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the cottage?", "raw": "and the cottage?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the dusk one?", "raw": "Und die d\u00fcstere?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the figure?", "raw": "and the figure?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the login for the cabin site?", "raw": "and the login for the cabin site?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the login?", "raw": "and the login?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the rest of that album?", "raw": "                       "}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the rest of that spot's frames?", "raw": "and the rest of that spot's frames?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the running total?", "raw": "and the running total?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and the two tasks that go with it?", "raw": "Und die beiden Aufgaben, die damit verbunden sind?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and their advice at the fitting?", "raw": "and their advice at the fitting?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and this month?", "raw": "und diesen Monat?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and what do I have to do that day?", "raw": "Und was muss ich tun dieser Tage?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and what else is on that shelf for the trip?", "raw": "Und was ist auf diesem shelf f\u00fcr die Reise?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and what's the last thing I wrote in my journal?", "raw": "what's the last thing I wrote in my journal?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and when am I seeing her?", "raw": "und wann schaue ich sie?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "and where was that fog one of them taken?", "raw": "Und wo war dieser fog eines von ihnen genommen?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "any balance outstanding with them?", "raw": "Y a-t-il un solde outstanding \u00e0 ihnen?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "any birthdays coming up in the next couple of months?", "raw": "                       "}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "any birthdays this month?", "raw": "                       "}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "any frame of Tomoko up on the headland?", "raw": "Etwas Tomoko auf Tomoko auf der Kopfland?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "any outstanding balance with the optometrist?", "raw": "Is there a balance between the optometrist and the optometrist?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "any photographs from last week?", "raw": "Fotos from last week?"}
+{"model": "t5-small", "precision": "fp32", "decode": "beam=4", "input": "anything behind schedule?", "raw": "Etwas hinter dem Zeitplan?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "\u2014 hast i got that written down twice?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "I'm looking for the Emerald Bay permit", "raw": ". - (EN) Ich w\u00fcnsche a Lizenz, ich w\u00fcnsche a Lizenz, a Lizenz, a Lizenz, a Lizenz, a Lizenz, a Lizenz"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "I've paid off the dentist balance \u2014 close it out \u2014 \u2014 the dentist balance off \u2014 close it out \u2014 close it out."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "Marco just sent me twenty dollars for the gas \u2014 record it"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "Yusuf Bergmann's telephone, please", "raw": "Yusuf Bergmann's telephone, please, please contact Yusuf Bergmann's telephone, please contact Yusuf Bergmann's telephone, please contact Yusuf Bergmann's telephone,"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "Yusuf Castellanos's electronic mail address?", "raw": "Yusuf Castellanos's electronic mail address?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "actually never mind", "raw": "-"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "actually never mind, forget it", "raw": "..."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "actually \u2014 do I have that chili recipe written down?", "raw": "\u2014 habe ich diese chili recipe geschrieben?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "'Firewood' trip to Tahoe for 'Firewood' \u2014 i paid it \u2014 a $42.50 add to the Tahoe trip for 'Firewood' \u2014 I paid it \u2014"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add Marco to the trip group", "raw": "Marco add Marco to the trip group."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "Add a task called 'Buy tire chains' \u2014 no date on it on it \u2014 a task called 'Buy tire chains' \u2014 no date on it on it."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to call the Truckee place", "raw": "Add a task to call the Truckee place"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to pay the copay before then", "raw": "Add a task to pay the copay before then then add a task to pay the copay."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to pick up the prescription on thursday", "raw": "a task to pick up the prescription on thursday."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to print that parking note before we go", "raw": "Add a task to print that parking note before we go to the park."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add a task to \u2014 actually, no, skip it", "raw": "Add a task to \u2014 if you add a task to \u2014 skip it."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "add 40 two dollars of gas to the trip group, I paid"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "Ana in it to the Tahoe scouting album."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "add the trailhead one to Rolls to sort", "raw": "Add the trailhead one to Rolls to Rolls to sort sort."}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and Marco?", "raw": "Marco Marco?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and Ray?", "raw": "Ray Ray?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and have I got insurance paperwork for it?", "raw": ", et ai-je et a ich e e e e?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and in my photos?", "raw": ""}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and its guest list?", "raw": "Guest list?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and of those, the dentist ones", "raw": "Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn Zahn"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and on my task list?", "raw": "- - - - - - - - - - - - - - - - - - - - - - - -"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the cottage?", "raw": "e?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the dusk one?", "raw": ""}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the figure?", "raw": "e e e e e e e e e e e e e e e e e e e e e e e e"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the login for the cabin site?", "raw": "und die Log login f\u00fcr den cabin site?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the login?", "raw": ", e, e,,,,,,,,,,,,,,,,,,,,"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the rest of that album?", "raw": "?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the rest of that spot's frames?", "raw": "and the rest of that spot's frames?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the running total?", "raw": "?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and the two tasks that go with it?", "raw": ""}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and their advice at the fitting?", "raw": "und ihre Beratung in der passende?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and this month?", "raw": "und diesen Monat?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and what do I have to do that day?", "raw": "Warum ich es w\u00e4hrend meiner letzten Tage?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and what else is on that shelf for the trip?", "raw": "Warum ist es auf dem Regal f\u00fcr den Reise?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and what's the last thing I wrote in my journal?", "raw": ":)"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and when am I seeing her?", "raw": ""}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "and where was that fog one of them taken?", "raw": "Warum hat man diese fog erweckt?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "any balance outstanding with them?", "raw": ""}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "any birthdays coming up in the next couple of months?", "raw": "YES-t-il des anniversaires \u00e0 venir?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "any birthdays this month?", "raw": "Y a-t-il d\u2019anniversaires \u00e0 venir cette month?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "any frame of Tomoko up on the headland?", "raw": "Tomoko irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend irgend"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "any outstanding balance with the optometrist?", "raw": "YEAYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "any photographs from last week?", "raw": "Fotos from last week?"}
+{"model": "t5-small", "precision": "int8", "decode": "greedy", "input": "anything behind schedule?", "raw": "Etwas hinter dem Programm?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "'Book the Tahoe cabin' \u2014 have I got that written down twice?", "raw": "'Book the Tahoe cabin' \u2014 has i got that written down twice?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "I'm looking for the Emerald Bay permit", "raw": "I'm looking for the Emerald Bay permit for the Emerald Bay permit."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "I've paid the dentist balance off \u2014 close it out", "raw": "I've paid the dentist balance off \u2014 close it out."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "Marco just sent me twenty dollars towards the gas \u2014 record it", "raw": "Marco just sent me twenty dollars for the gas \u2014 record it"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "Yusuf Bergmann's telephone, please", "raw": "Yusuf Bergmann's telephone, please contact Yusuf Bergmann's telephone, please call Yusuf Bergmann's telephone, please call Yusuf Bergmann's telephone, please contact"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "Yusuf Castellanos's electronic mail address?", "raw": "Yusuf Castellanos's electronic mail address?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "actually never mind", "raw": "ne s"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "actually never mind, forget it", "raw": "                       "}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "actually \u2014 do I have that chili recipe written down?", "raw": "\u2014 habe ich die chili chili recipe geschrieben?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it", "raw": "Add $42.50 to the Tahoe trip for 'Firewood' \u2014 I paid it it."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add Marco to the trip group", "raw": "Marco add Marco to the trip group."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task called 'Buy tire chains' \u2014 no date on it", "raw": "Add a task called 'Buy tire chains' \u2014 no date on it \u2014 a task called 'Buy tire chains' \u2014 no date on it."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to call the Truckee place", "raw": "Add a task to call the Truckee place"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to pay the copay before then", "raw": "Add a task to pay the copay before then then add a task to pay the copay."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to pick up the prescription on thursday", "raw": "a task to pick up the prescription on thursday."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to print that parking note before we go", "raw": "Add a task to print that parking note before we go."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add a task to \u2014 actually, no, skip it", "raw": "Adding a task to \u2014 actually, non, skip it."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add forty two dollars of gas to the trip group, I paid", "raw": "add forty two dollars of gas to the trip group, I paid"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add the one with Ana in it to the Tahoe scouting album", "raw": "Ajouter Ana in it to the Tahoe scouting album Tahoe scouting album."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "add the trailhead one to Rolls to sort", "raw": "Add the trailhead one to Rolls to Rolls to sort."}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and Marco?", "raw": "Marco Marco?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and Ray?", "raw": "Ray Ray?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and have I got insurance paperwork for it?", "raw": "Habe ich eine Versicherungsversicherung, und habe ich die Versicherung?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and in my photos?", "raw": "Und in my photos?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and its guest list?", "raw": "Guest list and its guest list?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and of those, the dentist ones", "raw": "Zahn Zahn\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4\u00e4"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and on my task list?", "raw": "und auf meiner Task list?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the cottage?", "raw": "and the cottage?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the dusk one?", "raw": "Und die d\u00fcse?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the figure?", "raw": "and the figure?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the login for the cabin site?", "raw": "und die Log login for the cabin site?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the login?", "raw": "and login?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the rest of that album?", "raw": "und das \u00fcbrige Album?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the rest of that spot's frames?", "raw": "and the rest of that spot's frames?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the running total?", "raw": "and the running total?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and the two tasks that go with it?", "raw": "                       "}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and their advice at the fitting?", "raw": "and their advice at the fitting?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and this month?", "raw": "und diesen Monat?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and what do I have to do that day?", "raw": "Und was habe ich zu tun dieser Stunde?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and what else is on that shelf for the trip?", "raw": "Und was ist auf diesem Regal f\u00fcr den Trip?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and what's the last thing I wrote in my journal?", "raw": "was the last thing I wrote in my journal?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and when am I seeing her?", "raw": "Und wann schaue ich sie?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "and where was that fog one of them taken?", "raw": "Und wo war dieser fog, welcher fog?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "any balance outstanding with them?", "raw": "Any balance outstanding with them?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "any birthdays coming up in the next couple of months?", "raw": "                       "}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "any birthdays this month?", "raw": "Y a-t-il des anniversaires de l\u2019anniversaire de l\u2019anniversaire de l\u2019anniversaire de l\u2019anniversaire de l\u2019anniversaire de l\u2019anniversaire de l\u2019anniversaire de"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "any frame of Tomoko up on the headland?", "raw": "Tomoko in irgendeinem Rahmen auf Tomoko auf der Kopfland?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "any outstanding balance with the optometrist?", "raw": "                       "}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "any photographs from last week?", "raw": "Fotos from last week?"}
+{"model": "t5-small", "precision": "int8", "decode": "beam=4", "input": "anything behind schedule?", "raw": "Etwas hinter schedule?"}

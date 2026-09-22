@@ -1,0 +1,45 @@
+[package]
+name = "centraid-evalworld"
+description = "The seeded world an assistant evaluation is scored against: one deterministic vault, written through the real typed commands, with its entity inventory emitted as an artifact."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_evalworld"
+path = "src/lib.rs"
+
+[dependencies]
+# THE COMMAND PLANE AND THE CLOCK. This crate holds no SQL — `sql-confinement`
+# allows it only under `crates/{ontology,vault,search}` and `crates/apps/kit`,
+# and the refusal is the reason this world is worth scoring against: every row
+# here was written by the same handler a member's tap runs.
+centraid-vault = { path = "../vault" }
+# THE ONE CONTENT STORE (D-1025-S3-1). A photograph needs a byte door, and a
+# fixture that attached a second kind of store would be seeding an arrangement
+# no device has.
+centraid-blobs = { path = "../blobs" }
+# THE READ DOOR, so this crate can hold no statement of its own. Two rows the
+# scenario has to discover rather than mint — the calendar `Vault::found`
+# writes, and the place a photograph's coordinate collapsed into — are read
+# through `PageQuery` + `TestDoor`, which is statements-as-DATA and exactly what
+# an app crate is allowed. A `SELECT` here would be refused by
+# `sql-confinement`, and rightly: it would be this crate reaching past its layer.
+centraid-apps-kit = { path = "../apps/kit" }
+serde.workspace = true
+serde_json.workspace = true
+# The byte store's own runtime. Owned by the builder, not by a caller.
+tokio.workspace = true
+
+[dev-dependencies]
+# THE READ-BACK PROOF. A world nothing can read is not a world: the suite opens
+# the seeded vault through the app plane's own door and the FTS door, so a later
+# lane authoring utterances knows the rows it names are reachable.
+centraid-apps-tasks = { path = "../apps/tasks" }
+# The drive door, so the grace-window guard reads `purge_at` the way Docs does.
+centraid-apps-docs = { path = "../apps/docs" }
+centraid-search = { path = "../search" }
+tempfile.workspace = true

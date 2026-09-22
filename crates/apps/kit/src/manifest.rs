@@ -28,7 +28,7 @@
 //! outside the type is a gate that can be forgotten; here the type is the gate,
 //! and `[]` is still valid and still means "no database writes".
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
@@ -95,6 +95,47 @@ pub enum ScopeVerbs {
     Reveal,
 }
 
+/// What a MEMBER can do with the rows a read scope hands back.
+///
+/// The doors serve 119 (entity, door) pairs and a member never sees most of
+/// them: a door reads `core_link` to render a backlink, not so anyone can ask
+/// for their links. Which pairs a member can NAME is a product decision, so
+/// every read scope declares one of these rather than leaving a parser to
+/// guess. `crates/evalsuite/grammar/derive/derive_grammar.py` computes the
+/// DEFAULT from the ontology and `emit.py` holds the `Kind` declarations and
+/// the grammar's Kind table to each other, both ways.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Surface {
+    /// A member names it as a thing and asks for the board.
+    Kind,
+    /// A row that only exists inside a parent kind — reachable as
+    /// `X of (Kind …)`, never as a bare board.
+    Facet,
+    /// Plumbing: an edge, a revision, a representation, a row a door joins
+    /// through.
+    Internal,
+}
+
+impl Surface {
+    fn parse(word: &str) -> Option<Self> {
+        Some(match word {
+            "kind" => Self::Kind,
+            "facet" => Self::Facet,
+            "internal" => Self::Internal,
+            _ => return None,
+        })
+    }
+
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Kind => "kind",
+            Self::Facet => "facet",
+            Self::Internal => "internal",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct VaultScope {
     pub schema: String,
@@ -102,6 +143,37 @@ pub struct VaultScope {
     pub verbs: ScopeVerbs,
     pub row_filter: Vec<RowFilter>,
     pub field_mask: Option<Vec<String>>,
+    /// The declared surface of every entity this scope grants, by TABLE name.
+    /// A named scope holds exactly one entry; a whole-schema scope holds one
+    /// per entity it serves, because one grant covers several and they do not
+    /// share a surface. Empty for a scope with no `read` verb.
+    pub surface: BTreeMap<String, Surface>,
+    /// Why a declared surface departs from the derivation's default, by table.
+    /// Required there and refused nowhere — the derivation is what checks that
+    /// an override carries one.
+    pub surface_reason: BTreeMap<String, String>,
+}
+
+/// A fact an app's READER computes and hands back beside a row.
+///
+/// GRAMMAR.md §2.2 admits these as Fields and they appear in no column list,
+/// so until now the only statement that one existed was the grammar naming it
+/// — and four of them turned out to be computed by nothing this product ships.
+/// The app declares them instead: what computes the field, and which tables
+/// that reader reads. `computed_by: None` is a declared GAP, not an omission,
+/// and it must carry the `gap` note that says so.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DerivedField {
+    pub field: String,
+    /// The entity whose rows carry it.
+    pub entity: Option<String>,
+    /// The reader or statement that produces it, or `None` where nothing does.
+    pub computed_by: Option<String>,
+    /// Required exactly when `computed_by` is `None`.
+    pub gap: Option<String>,
+    /// The logical tables the reader reads. Every one must lie inside this
+    /// app's own read scopes.
+    pub inputs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -140,6 +212,8 @@ pub struct Manifest {
     /// app uses `ext`**; the block is read so a manifest that grows one is not
     /// silently dropped.
     pub ext_tables: Vec<String>,
+    /// Reader-computed Fields this app declares. See [`DerivedField`].
+    pub derived_fields: Vec<DerivedField>,
 }
 
 impl Manifest {
@@ -251,6 +325,7 @@ pub fn parse_manifest(text: &str) -> KitResult<Manifest> {
     let queries = parse_queries(&raw)?;
     let states = parse_states(&raw)?;
     let vault = parse_vault(&raw)?;
+    let derived_fields = parse_derived_fields(&raw, vault.as_ref())?;
     let ext_tables = match field(&raw, "ext").and_then(|ext| field(ext, "tables")) {
         Some(Value::Array(tables)) => tables
             .iter()
@@ -270,7 +345,97 @@ pub fn parse_manifest(text: &str) -> KitResult<Manifest> {
         vault,
         states,
         ext_tables,
+        derived_fields,
     })
+}
+
+/// `derivedFields`, held to this app's own read scopes.
+///
+/// The check that earns the block: a derived field naming a table the app may
+/// not read is a claim the app could not honour, and it would have gone
+/// unnoticed exactly as `owed_to_me` did — stated by the grammar, scored by the
+/// corpus, computed by nothing.
+fn parse_derived_fields(raw: &Value, vault: Option<&VaultBlock>) -> KitResult<Vec<DerivedField>> {
+    let entries = match field(raw, "derivedFields") {
+        None => return Ok(Vec::new()),
+        Some(Value::Array(entries)) => entries.clone(),
+        Some(_) => {
+            return Err(KitError::manifest(
+                "invalid_field",
+                "\"derivedFields\" must be an array",
+                Some("derivedFields"),
+            ));
+        }
+    };
+    // What the app may READ, as `schema.table` plus the whole-schema grants.
+    let mut named: BTreeSet<String> = BTreeSet::new();
+    let mut wide: BTreeSet<String> = BTreeSet::new();
+    for scope in vault.map(|block| block.scopes.as_slice()).unwrap_or(&[]) {
+        if !matches!(scope.verbs, ScopeVerbs::Read | ScopeVerbs::ReadAct) {
+            continue;
+        }
+        match &scope.table {
+            Some(table) => {
+                named.insert(format!("{}.{table}", scope.schema));
+            }
+            None => {
+                wide.insert(scope.schema.clone());
+            }
+        }
+    }
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut out = Vec::with_capacity(entries.len());
+    for entry in &entries {
+        let name = required_string(entry, "field", "derivedFields[].field")?;
+        let path = format!("derivedFields[field={name}]");
+        if !seen.insert(name.clone()) {
+            return Err(KitError::manifest(
+                "duplicate_handler",
+                format!("manifest declares the derived field \"{name}\" twice"),
+                Some(&path),
+            ));
+        }
+        let computed_by = optional_string(entry, "computedBy");
+        let gap = optional_string(entry, "gap");
+        if computed_by.is_none() && gap.is_none() {
+            return Err(KitError::manifest(
+                "invalid_field",
+                format!(
+                    "derived field \"{name}\" names no \"computedBy\"; name the reader, or say in \"gap\" that nothing computes it"
+                ),
+                Some(&path),
+            ));
+        }
+        let inputs = string_list(entry, "inputs", &path)?;
+        if inputs.is_empty() {
+            return Err(KitError::manifest(
+                "invalid_field",
+                format!("derived field \"{name}\" names no \"inputs\""),
+                Some(&path),
+            ));
+        }
+        for input in &inputs {
+            let schema = input.split('.').next().unwrap_or_default();
+            if named.contains(input) || wide.contains(schema) {
+                continue;
+            }
+            return Err(KitError::manifest(
+                "invalid_field",
+                format!(
+                    "derived field \"{name}\" reads \"{input}\", which this app's vault read scopes do not grant"
+                ),
+                Some(&path),
+            ));
+        }
+        out.push(DerivedField {
+            field: name,
+            entity: optional_string(entry, "entity"),
+            computed_by,
+            gap,
+            inputs,
+        });
+    }
+    Ok(out)
 }
 
 fn parse_actions(raw: &Value) -> KitResult<Vec<ActionEntry>> {
@@ -465,6 +630,125 @@ fn parse_states(raw: &Value) -> KitResult<Option<StatesBlock>> {
     Ok(Some(StatesBlock { designed, excluded }))
 }
 
+/// `surface` (and its optional `surfaceReason`) on one vault scope.
+///
+/// A NAMED read scope declares a string; a WHOLE-SCHEMA read scope declares an
+/// object keyed by table, because one grant covers several entities and they
+/// do not share a surface — Agenda's single `schedule` grant carries tasks,
+/// projects, sections and the recurrence machinery at once. An undeclared or
+/// misspelt value fails here, so a scope cannot quietly opt out of saying what
+/// a member may name.
+fn parse_surface(
+    entry: &Value,
+    schema: &str,
+    table: Option<&str>,
+    verbs: ScopeVerbs,
+) -> KitResult<(BTreeMap<String, Surface>, BTreeMap<String, String>)> {
+    let named = table.map_or_else(
+        || format!("{schema}.*"),
+        |table| format!("{schema}.{table}"),
+    );
+    let reading = matches!(verbs, ScopeVerbs::Read | ScopeVerbs::ReadAct);
+    let Some(declared) = field(entry, "surface") else {
+        if reading {
+            return Err(KitError::manifest(
+                "missing_field",
+                format!(
+                    "vault read scope on \"{named}\" declares no \"surface\"; one of kind, facet, internal"
+                ),
+                Some("vault.scopes[].surface"),
+            ));
+        }
+        return Ok((BTreeMap::new(), BTreeMap::new()));
+    };
+    if !reading {
+        return Err(KitError::manifest(
+            "invalid_field",
+            format!("vault scope on \"{named}\" declares a \"surface\" and no read verb"),
+            Some("vault.scopes[].surface"),
+        ));
+    }
+    let bad = |word: &str| {
+        KitError::manifest(
+            "invalid_field",
+            format!(
+                "vault scope on \"{named}\" declares surface \"{word}\"; one of kind, facet, internal"
+            ),
+            Some("vault.scopes[].surface"),
+        )
+    };
+    let mut surface = BTreeMap::new();
+    match (declared, table) {
+        (Value::String(word), Some(table)) => {
+            surface.insert(
+                table.to_owned(),
+                Surface::parse(word).ok_or_else(|| bad(word))?,
+            );
+        }
+        (Value::Object(entries), None) => {
+            for (key, value) in entries {
+                let word = value.as_str().ok_or_else(|| bad("<not a string>"))?;
+                surface.insert(key.clone(), Surface::parse(word).ok_or_else(|| bad(word))?);
+            }
+            if surface.is_empty() {
+                return Err(KitError::manifest(
+                    "invalid_field",
+                    format!("whole-schema read scope on \"{named}\" declares an empty surface map"),
+                    Some("vault.scopes[].surface"),
+                ));
+            }
+        }
+        (_, Some(_)) => return Err(bad("<not a string>")),
+        (_, None) => {
+            return Err(KitError::manifest(
+                "invalid_field",
+                format!(
+                    "whole-schema read scope on \"{named}\" must declare \"surface\" as an object keyed by table"
+                ),
+                Some("vault.scopes[].surface"),
+            ));
+        }
+    }
+    let mut reason = BTreeMap::new();
+    match field(entry, "surfaceReason") {
+        None => {}
+        Some(Value::String(why)) if table.is_some() => {
+            reason.insert(table.unwrap_or_default().to_owned(), why.clone());
+        }
+        Some(Value::Object(entries)) if table.is_none() => {
+            for (key, value) in entries {
+                let why = value.as_str().ok_or_else(|| {
+                    KitError::manifest(
+                        "invalid_field",
+                        format!("\"surfaceReason\" on \"{named}\" must hold strings"),
+                        Some("vault.scopes[].surfaceReason"),
+                    )
+                })?;
+                if !surface.contains_key(key) {
+                    return Err(KitError::manifest(
+                        "invalid_field",
+                        format!(
+                            "\"surfaceReason\" on \"{named}\" explains \"{key}\", which the scope's surface map does not name"
+                        ),
+                        Some("vault.scopes[].surfaceReason"),
+                    ));
+                }
+                reason.insert(key.clone(), why.to_owned());
+            }
+        }
+        Some(_) => {
+            return Err(KitError::manifest(
+                "invalid_field",
+                format!(
+                    "\"surfaceReason\" on \"{named}\" must match \"surface\": a string beside a string, an object beside an object"
+                ),
+                Some("vault.scopes[].surfaceReason"),
+            ));
+        }
+    }
+    Ok((surface, reason))
+}
+
 fn parse_vault(raw: &Value) -> KitResult<Option<VaultBlock>> {
     let Some(block) = field(raw, "vault").filter(|block| block.is_object()) else {
         return Ok(None);
@@ -522,12 +806,16 @@ fn parse_vault(raw: &Value) -> KitResult<Option<VaultBlock>> {
             None => None,
             Some(_) => Some(string_list(entry, "fieldMask", "vault.scopes[].fieldMask")?),
         };
+        let table = optional_string(entry, "table");
+        let (surface, surface_reason) = parse_surface(entry, &schema, table.as_deref(), verbs)?;
         scopes.push(VaultScope {
             schema,
-            table: optional_string(entry, "table"),
+            table,
             verbs,
             row_filter,
             field_mask,
+            surface,
+            surface_reason,
         });
     }
     Ok(Some(VaultBlock {
@@ -544,6 +832,129 @@ mod tests {
         format!(
             r#"{{"manifestVersion": 1, "id": "tally", "name": "Tally", "version": "0.3.0"{extra}}}"#
         )
+    }
+
+    fn scope(scope: &str) -> String {
+        minimal(&format!(r#", "vault": {{"scopes": [{scope}]}}"#))
+    }
+
+    #[test]
+    fn a_read_scope_must_declare_a_surface() {
+        let error = parse_manifest(&scope(
+            r#"{"schema": "core", "table": "event", "verbs": "read"}"#,
+        ))
+        .unwrap_err();
+        assert!(
+            format!("{error:?}").contains("surface"),
+            "a read scope with no surface must name the field: {error:?}"
+        );
+    }
+
+    #[test]
+    fn a_misspelt_surface_is_refused() {
+        let error = parse_manifest(&scope(
+            r#"{"schema": "core", "table": "event", "verbs": "read", "surface": "Kind"}"#,
+        ))
+        .unwrap_err();
+        assert!(
+            format!("{error:?}").contains("kind, facet, internal"),
+            "the refusal must name the three values: {error:?}"
+        );
+    }
+
+    #[test]
+    fn a_whole_schema_read_scope_declares_a_surface_per_table() {
+        // One grant, several entities, and they do not share a surface: a
+        // string here would silently give every table in the schema the same
+        // answer.
+        parse_manifest(&scope(
+            r#"{"schema": "schedule", "verbs": "read", "surface": "kind"}"#,
+        ))
+        .unwrap_err();
+        let manifest = parse_manifest(&scope(
+            r#"{"schema": "schedule", "verbs": "read",
+                "surface": {"task": "kind", "section": "facet"}}"#,
+        ))
+        .expect("a per-table surface map is the shape a whole-schema scope takes");
+        let scopes = &manifest.vault.expect("vault block").scopes;
+        assert_eq!(scopes[0].surface.get("task"), Some(&Surface::Kind));
+        assert_eq!(scopes[0].surface.get("section"), Some(&Surface::Facet));
+    }
+
+    #[test]
+    fn a_surface_reason_must_explain_a_table_the_scope_names() {
+        parse_manifest(&scope(
+            r#"{"schema": "schedule", "verbs": "read", "surface": {"task": "kind"},
+                "surfaceReason": {"project": "…"}}"#,
+        ))
+        .unwrap_err();
+    }
+
+    #[test]
+    fn an_act_only_scope_declares_no_surface() {
+        // `surface` says what a member may NAME among the rows a scope hands
+        // back, and an act scope hands none back.
+        let manifest = parse_manifest(&scope(
+            r#"{"schema": "knowledge", "table": "create_note", "verbs": "act"}"#,
+        ))
+        .expect("an act scope is complete without a surface");
+        assert!(
+            manifest.vault.expect("vault block").scopes[0]
+                .surface
+                .is_empty()
+        );
+        parse_manifest(&scope(
+            r#"{"schema": "knowledge", "table": "create_note", "verbs": "act", "surface": "kind"}"#,
+        ))
+        .unwrap_err();
+    }
+
+    #[test]
+    fn a_derived_field_may_only_read_what_the_app_may_read() {
+        // The check that earns the block. `owed_to_me` was stated by the
+        // grammar, scored by the corpus and computed by nothing; a field that
+        // names a table the app cannot read is the same failure one step
+        // earlier.
+        let granted = minimal(
+            r#", "vault": {"scopes": [{"schema": "tally", "table": "obligation", "verbs": "read", "surface": "kind"}]},
+                "derivedFields": [{"field": "owed_to_me", "computedBy": null,
+                                   "gap": "no shipped reader",
+                                   "inputs": ["tally.obligation"]}]"#,
+        );
+        let manifest = parse_manifest(&granted).expect("a granted input is fine");
+        assert_eq!(manifest.derived_fields[0].field, "owed_to_me");
+        assert!(manifest.derived_fields[0].computed_by.is_none());
+
+        let ungranted = minimal(
+            r#", "vault": {"scopes": [{"schema": "tally", "table": "obligation", "verbs": "read", "surface": "kind"}]},
+                "derivedFields": [{"field": "owed_to_me", "computedBy": "x.rs",
+                                   "inputs": ["locker.item"]}]"#,
+        );
+        let error = parse_manifest(&ungranted).unwrap_err();
+        assert!(
+            format!("{error:?}").contains("read scopes do not grant"),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn a_derived_field_with_no_reader_must_say_so() {
+        // `computedBy: null` is a STATEMENT — the product ships nothing that
+        // computes this — and it only counts as one beside the note.
+        let silent = minimal(
+            r#", "derivedFields": [{"field": "next_occurrence", "computedBy": null,
+                                    "inputs": ["people.important_date"]}]"#,
+        );
+        let error = parse_manifest(&silent).unwrap_err();
+        assert!(format!("{error:?}").contains("gap"), "{error:?}");
+    }
+
+    #[test]
+    fn a_derived_field_needs_inputs() {
+        let empty = minimal(
+            r#", "derivedFields": [{"field": "balance", "computedBy": "balance.rs", "inputs": []}]"#,
+        );
+        assert!(parse_manifest(&empty).is_err());
     }
 
     #[test]

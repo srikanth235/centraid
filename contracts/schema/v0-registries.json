@@ -379,6 +379,7 @@
       "table": "access_agent",
       "label": "Agent registrations",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -393,6 +394,7 @@
       "table": "access_app",
       "label": "Installed apps",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -401,6 +403,7 @@
       "table": "access_app_ext",
       "label": "App tables",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -409,6 +412,7 @@
       "table": "access_device",
       "label": "Devices",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -423,6 +427,7 @@
       "table": "access_seed_row",
       "label": "Seeded rows",
       "lifecycle": "machinery",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -431,6 +436,7 @@
       "table": "agent_capability",
       "label": "Agent capabilities",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -439,6 +445,7 @@
       "table": "agent_command",
       "label": "Agent commands",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -447,6 +454,7 @@
       "table": "blob_custody_rollup",
       "label": "Custody totals",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -455,6 +463,7 @@
       "table": "blob_custody_state",
       "label": "Custody",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -469,6 +478,7 @@
       "table": "core_account",
       "label": "Accounts",
       "lifecycle": "append-only",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -488,6 +498,7 @@
       "table": "core_activity",
       "label": "Activity",
       "lifecycle": "append-only",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -502,6 +513,7 @@
       "table": "core_attachment",
       "label": "Attachments",
       "lifecycle": "append-only",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -516,6 +528,7 @@
       "table": "core_collection",
       "label": "Collections",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -535,6 +548,7 @@
       "table": "core_collection_entry",
       "label": "Collection items",
       "lifecycle": "append-only",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -543,6 +557,7 @@
       "table": "core_concept",
       "label": "Concepts",
       "lifecycle": "mutable",
+      "role": "vocabulary",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -551,6 +566,7 @@
       "table": "core_concept_scheme",
       "label": "Vocabularies",
       "lifecycle": "append-only",
+      "role": "vocabulary",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -559,6 +575,7 @@
       "table": "core_content_derivative",
       "label": "Derivatives",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -573,6 +590,7 @@
       "table": "core_content_item",
       "label": "Content",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -587,6 +605,7 @@
       "table": "core_content_representation",
       "label": "Representations",
       "lifecycle": "mutable",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -601,6 +620,7 @@
       "table": "core_content_text",
       "label": "Body text",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "core.content_item",
       "deletionRoles": [
         {
@@ -615,6 +635,7 @@
       "table": "core_document",
       "label": "Documents",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -629,6 +650,7 @@
       "table": "core_entity_revision",
       "label": "Entity history",
       "lifecycle": "mutable",
+      "role": "revision",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -648,6 +670,7 @@
       "table": "core_event",
       "label": "Events",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -662,6 +685,7 @@
       "table": "core_link",
       "label": "Links",
       "lifecycle": "mutable",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -670,6 +694,7 @@
       "table": "core_link_anchor",
       "label": "Anchors",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -678,6 +703,7 @@
       "table": "core_party",
       "label": "People",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -692,6 +718,7 @@
       "table": "core_party_identifier",
       "label": "Identifiers",
       "lifecycle": "mutable",
+      "role": "facet",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -706,6 +733,7 @@
       "table": "core_place",
       "label": "Places",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -714,6 +742,7 @@
       "table": "core_tag",
       "label": "Tags",
       "lifecycle": "mutable",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -728,6 +757,7 @@
       "table": "core_transaction",
       "label": "Transactions",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -742,6 +772,7 @@
       "table": "core_vault",
       "label": "Vault",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -756,6 +787,7 @@
       "table": "enrich_derivation",
       "label": "Enrichment provenance",
       "lifecycle": "machinery",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -764,6 +796,7 @@
       "table": "enrich_embedding",
       "label": "Embeddings",
       "lifecycle": "machinery",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -772,6 +805,7 @@
       "table": "enrich_policy",
       "label": "Enrichment policy",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -780,6 +814,7 @@
       "table": "enrich_policy_rule",
       "label": "Enrichment rules",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -788,6 +823,7 @@
       "table": "enrich_request",
       "label": "Enrichment requests",
       "lifecycle": "machinery",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -796,6 +832,7 @@
       "table": "knowledge_annotation",
       "label": "Annotations",
       "lifecycle": "mutable",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -810,6 +847,7 @@
       "table": "knowledge_note",
       "label": "Notes",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -829,6 +867,7 @@
       "table": "locker_item",
       "label": "Secrets",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -837,6 +876,7 @@
       "table": "locker_item_address",
       "label": "Addresses",
       "lifecycle": "append-only",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -845,6 +885,7 @@
       "table": "locker_item_alias",
       "label": "Aliases",
       "lifecycle": "append-only",
+      "role": "thing",
       "projectionOf": "locker.item",
       "deletionRoles": []
     },
@@ -853,6 +894,7 @@
       "table": "locker_item_field",
       "label": "Custom fields",
       "lifecycle": "mutable",
+      "role": "facet",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -861,6 +903,7 @@
       "table": "locker_item_passkey",
       "label": "Passkeys",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "locker.item",
       "deletionRoles": []
     },
@@ -869,6 +912,7 @@
       "table": "media_asset",
       "label": "Media",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -883,6 +927,7 @@
       "table": "media_asset_phash",
       "label": "Fingerprints",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "media.asset",
       "deletionRoles": []
     },
@@ -891,6 +936,7 @@
       "table": "media_face_cluster",
       "label": "Face groups",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "media.face_region",
       "deletionRoles": []
     },
@@ -899,6 +945,7 @@
       "table": "media_face_region",
       "label": "Faces",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -918,6 +965,7 @@
       "table": "media_memory",
       "label": "Memories",
       "lifecycle": "append-only",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -926,6 +974,7 @@
       "table": "media_memory_member",
       "label": "Memory photos",
       "lifecycle": "append-only",
+      "role": "thing",
       "projectionOf": "media.memory",
       "deletionRoles": []
     },
@@ -934,6 +983,7 @@
       "table": "notifications_notice",
       "label": "Notices",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -942,6 +992,7 @@
       "table": "outbox_item",
       "label": "Outbox items",
       "lifecycle": "machinery",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -956,6 +1007,7 @@
       "table": "people_important_date",
       "label": "Important dates",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -970,6 +1022,7 @@
       "table": "people_profile",
       "label": "Profiles",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -984,6 +1037,7 @@
       "table": "schedule_attendee",
       "label": "Guests",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -998,6 +1052,7 @@
       "table": "schedule_calendar",
       "label": "Calendars",
       "lifecycle": "append-only",
+      "role": "facet",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1012,6 +1067,7 @@
       "table": "schedule_event_ext",
       "label": "Event details",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1020,6 +1076,7 @@
       "table": "schedule_project",
       "label": "Task projects",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1034,6 +1091,7 @@
       "table": "schedule_recurrence_exception",
       "label": "Recurrence changes",
       "lifecycle": "mutable",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1042,6 +1100,7 @@
       "table": "schedule_recurrence_exception_attendee",
       "label": "Recurrence guests",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "schedule.recurrence_exception",
       "deletionRoles": [
         {
@@ -1056,6 +1115,7 @@
       "table": "schedule_section",
       "label": "Task sections",
       "lifecycle": "mutable",
+      "role": "facet",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1064,6 +1124,7 @@
       "table": "schedule_task",
       "label": "Tasks",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1078,6 +1139,7 @@
       "table": "share_authority",
       "label": "Access answers",
       "lifecycle": "machinery",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1092,6 +1154,7 @@
       "table": "share_authority_request",
       "label": "Pending asks",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1100,6 +1163,7 @@
       "table": "share_authority_use",
       "label": "Answer last used",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1108,6 +1172,7 @@
       "table": "share_delivery_config",
       "label": "Delivery limits",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1116,6 +1181,7 @@
       "table": "share_fulfillment",
       "label": "Delivery state",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1124,6 +1190,7 @@
       "table": "share_party_vault_binding",
       "label": "Vault bindings",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1138,6 +1205,7 @@
       "table": "share_subscription",
       "label": "Subscriptions",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1146,6 +1214,7 @@
       "table": "share_subscription_lineage",
       "label": "Subscription lineage",
       "lifecycle": "machinery",
+      "role": "edge",
       "projectionOf": "core.entity",
       "deletionRoles": []
     },
@@ -1154,6 +1223,7 @@
       "table": "share_subscription_member",
       "label": "Subscription membership",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1162,6 +1232,7 @@
       "table": "social_circle",
       "label": "Circles",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1176,6 +1247,7 @@
       "table": "social_circle_member",
       "label": "Circle members",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1190,6 +1262,7 @@
       "table": "social_contact_channel",
       "label": "Contact channels",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1204,6 +1277,7 @@
       "table": "social_message",
       "label": "Messages",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1223,6 +1297,7 @@
       "table": "social_thread",
       "label": "Threads",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1231,6 +1306,7 @@
       "table": "social_thread_participant",
       "label": "Participants",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1245,6 +1321,7 @@
       "table": "sync_connection",
       "label": "Connections",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1253,6 +1330,7 @@
       "table": "sync_connection_credential",
       "label": "Connection credentials",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1261,6 +1339,7 @@
       "table": "sync_connection_cursor",
       "label": "Sync cursors",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1269,6 +1348,7 @@
       "table": "sync_connection_health",
       "label": "Connection health",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1277,6 +1357,7 @@
       "table": "sync_connection_run",
       "label": "Sync runs",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1285,6 +1366,7 @@
       "table": "sync_external_entity",
       "label": "External ids",
       "lifecycle": "machinery",
+      "role": "edge",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1293,6 +1375,7 @@
       "table": "sync_import_batch",
       "label": "Import batches",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1301,6 +1384,7 @@
       "table": "sync_import_row",
       "label": "Imported rows",
       "lifecycle": "machinery",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1309,6 +1393,7 @@
       "table": "tally_expense",
       "label": "Expenses",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1323,6 +1408,7 @@
       "table": "tally_expense_line_allocation",
       "label": "Line shares",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "tally.expense_line_item",
       "deletionRoles": [
         {
@@ -1337,6 +1423,7 @@
       "table": "tally_expense_line_item",
       "label": "Receipt lines",
       "lifecycle": "mutable",
+      "role": "facet",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1345,6 +1432,7 @@
       "table": "tally_expense_payer",
       "label": "Expense payers",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "tally.expense",
       "deletionRoles": [
         {
@@ -1359,6 +1447,7 @@
       "table": "tally_expense_split",
       "label": "Expense splits",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "tally.expense",
       "deletionRoles": [
         {
@@ -1373,6 +1462,7 @@
       "table": "tally_friend",
       "label": "Friends",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1387,6 +1477,7 @@
       "table": "tally_group",
       "label": "Groups",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": []
     },
@@ -1395,6 +1486,7 @@
       "table": "tally_nudge",
       "label": "Prepared reminders",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1409,6 +1501,7 @@
       "table": "tally_obligation",
       "label": "Obligations",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1428,6 +1521,7 @@
       "table": "tally_recurring_expense",
       "label": "Recurring expenses",
       "lifecycle": "mutable",
+      "role": "facet",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -1442,6 +1536,7 @@
       "table": "tally_recurring_expense_split",
       "label": "Recurring splits",
       "lifecycle": "mutable",
+      "role": "thing",
       "projectionOf": "tally.recurring_expense",
       "deletionRoles": [
         {
@@ -1456,6 +1551,7 @@
       "table": "tally_settlement",
       "label": "Settlements",
       "lifecycle": "trash",
+      "role": "thing",
       "projectionOf": null,
       "deletionRoles": [
         {

@@ -58,6 +58,66 @@ Domains the design carried and the implementation dropped, each for having **no 
 
 **Lifecycle, as declared:** 13 trash, 10 append-only, 40 mutable, 33 machinery. **Projections** (a part of an entity, keyed by its parent, no supertype row): 12.
 
+## What each entity is: the `role` declaration
+
+Every one of the 96 registry entities declares a `role` in `contracts/schema/v0-registries.json`, read by `crates/ontology/src/registries.rs` and by the grammar derivation:
+
+| role | entities | what it means |
+| --- | --- | --- |
+| `thing` | 72 | a row with standing of its own — a board, or a row inside one |
+| `edge` | 15 | it exists to RELATE two rows: `core_tag`, `core_link`, `core_attachment`, `core_collection_entry`, `core_content_representation`, `knowledge_annotation`, `schedule_recurrence_exception`, `access_seed_row`, `share_authority`, `share_subscription_lineage`, `sync_external_entity`, `outbox_item` and the three `enrich` targets |
+| `revision` | 1 | `core.entity_revision` — a row's prior state, which must be readable after the row is in the bin |
+| `vocabulary` | 2 | `core.concept` and `core.concept_scheme`: the shared spine a member names THROUGH the rows that carry it (`tagged X`), never as a board |
+| `facet` | 6 | reachable only inside a parent: `core.party_identifier`, `locker.item_field`, `schedule.calendar`, `schedule.section`, `tally.expense_line_item`, `tally.recurring_expense` |
+
+**What the declaration replaced.** All five were previously INFERRED from the shape of a table — a polymorphic `(X_type, X_id)` pair meant edge, an owned child with a label meant facet — and a classifier that reads column names cannot tell `social.contact_channel`, which People serves as its own board, from `locker.item_field`, which is only ever reached through its item. That guess needed two manifest overrides to correct (`social.contact_channel@people`, `schedule.calendar@agenda`) and two more for the vocabulary spine (`core.concept` at Docs and at People). Declaring the role removed all four.
+
+**The shape is now the CHECK.** `derive_grammar.py` fails when a declared `edge` or `revision` carries no polymorphic pair, and when a `thing`, `vocabulary` or `facet` anchors one to `core_entity` with a composite foreign key. What it reports rather than fails on is the other half: **six polymorphic pairs the DDL leaves UNANCHORED** — `access_provenance`, `access_receipt`, `access_seed_row`, `agent_evidence`, `core_entity_revision`, `share_authority` (a seventh, `core_entity`'s own, is the anchor). Fifteen pairs are anchored; these six are not, and nothing constrains their id to a row that exists or ever existed. Some are plainly deliberate — a receipt that vanished with its object is not a receipt — and at least two are owner questions: a revision nothing prunes on PURGE, and a `share_authority` grant that can outlive its subject and be served against an id the vault has since reissued. `crates/evalsuite/grammar/DIFF.md` §R1 carries the reading of each; they are **open**, and the DDL has not been changed for them.
+
+## What a member can name: the `surface` declaration
+
+The eight app manifests grant **119 (entity, door) read pairs**, and a member never sees most of them: Notes reads `core_link` so it can render a backlink, not so anyone can ask for their links. Which pairs a member NAMES is a product decision, so it is declared rather than inferred — every read scope in `crates/apps/*/manifest.json` carries a `surface`, validated by `crates/apps/kit/src/manifest.rs` (an undeclared or misspelt value fails the manifest):
+
+| value | meaning | pairs |
+| --- | --- | --- |
+| `kind` | a member names it as a thing and asks for the board | 24 |
+| `facet` | a row that only exists inside a parent kind, reached as `X of (Kind …)` and never as a bare board | 7 |
+| `internal` | edges, revisions, representations — everything a door joins through | 88 |
+
+A whole-schema scope declares `surface` as an object keyed by table, because one grant covers several entities and they do not share a surface.
+
+The DEFAULT is derived, not typed, and the ROLE is read first: `crates/evalsuite/grammar/derive/derive_grammar.py` gives an `edge`, a `revision` or a `vocabulary` entity `internal` and a `facet` entity `facet`, both on the declaration alone. Only a `thing` is classified — `kind` when its lifecycle is `trash`, or it is a search domain (`crates/search/src/domains.rs`), or some command's `writes` names it; `internal` otherwise. A `kind` is a `kind` only at its HOME doors — the ones whose manifest can act a command that creates it, or whose search domain it is; at every other door it is a join. A manifest may override the default and must then carry a one-line `surfaceReason`; **seven scopes do today**, down from eleven, and `crates/evalsuite/grammar/DIFF.md` §S1 lists each with its reason. A redundant override is a lie about the rule, so the four the role declaration made unnecessary were removed with it.
+
+The declaration is in LOCKSTEP with the canonical grammar both ways: `derive/emit.py` refuses a Kind in `GRAMMAR.md` §2.1 whose scope is not declared `kind`, and refuses a scope declared `kind` for which the grammar names no word. The `facet` set — `locker.item_field`, `tally.expense_line_item`, `schedule.section` (both doors), `core.party_identifier`, `schedule.calendar`, `tally.recurring_expense` — is now `role: facet` in the registry, and the register of rows reachable only through their parent is the registry itself.
+
+## What an app computes: the `derivedFields` declaration
+
+GRAMMAR.md §2.2 admits Fields an app's READER computes and hands back beside the row — `favorite`, `album_titles`, `balance`, `owed_to_them`. They appear in no column list, so the only statement that one existed was the grammar naming it, and four turned out to be computed by nothing this product ships: their only implementation was the eval harness, which is the thing being evaluated.
+
+Each owning app now declares them under `derivedFields` in its manifest: the field, the entity whose rows carry it, `computedBy` (the reader or statement that produces it), and `inputs` (the tables that reader reads). `crates/apps/kit/src/manifest.rs` refuses an input the app's own read scopes do not grant, and refuses a `computedBy: null` that carries no `gap` note.
+
+| field              | app    | computedBy                         |
+| ------------------ | ------ | ---------------------------------- |
+| `balance`          | Tally  | `crates/apps/tally/src/balance.rs` |
+| `member_party_ids` | Tally  | **none — declared gap**            |
+| `next_occurrence`  | People | **none — declared gap**            |
+| `owed_to_me`       | People | **none — declared gap**            |
+| `owed_to_them`     | People | **none — declared gap**            |
+
+`computedBy: null` is not an omission. It says the grammar states the Field, the corpus scores it, and nothing shipped produces it — DIFF.md B4–B7, unchanged as findings and now visible where a reader of the manifest would look.
+
+## What leaves the vault: the `egress` declaration
+
+`CommandDefinition` declares which arguments are secrets (`sealed_input`), what a seat refuses to queue offline (`online_only`), and how loudly to ask (`risk`, `confirm`). It declared nothing that said an effect **leaves the vault** — and all eight app manifests declare the same `actionSideEffect: "vault-write"`, so the manifests separated nothing either. The one consumer that needed the fact, `crates/candidates/src/exec.rs`, carried a hand-written list of one name and missed `locker.export`, which is R-R2's own worked example.
+
+`DECLARED_EGRESS` in `crates/vault/src/commands/mod.rs` now states it, one line of reason per command, with `Egress::{None, Transport, Export}`. Two commands carry a non-`none` egress today: `locker.export` (Export — every secret the locker holds, in the clear, in a file the seat writes) and `social.send_message` (Transport). Eleven more are declared `None` with their reason, because they trip a structural signal — a sealed input, `online_only`, a name that states a transfer — and **`derive_grammar.py` fails on a candidate nobody has ruled on**. `derive/emit.py` generates the set into both parsers, and `exec.rs` reads `canon::egress_verbs()` rather than a list of its own.
+
+## What a command does: the `effect` declaration
+
+A command's effect is read off the SQL its handler runs — every command that stamps `deleted_at` is a `delete` whatever it is called — which is what makes the grammar's verb CLASSES derivable rather than grouped by hand. Twenty-six of the 148 commands write through a helper (`set_starred`, `write_new_expense`, `task_for_person`) or write nothing at all, so the SQL said nothing and the derivation classified **82%** of the registry while quietly missing the rest.
+
+Those twenty-six now declare their effect in `DECLARED_EFFECTS` (`crates/vault/src/commands/mod.rs`), each with a one-line reason naming the handler it was read out of. No other command repeats what its own SQL already says — a second list of facts the code carries is the thing that drifts — and where both speak, `derive_grammar.py` holds them to each other and fails on a disagreement. **Verb-class derivability is 100%.** Two effects were added for cases the existing vocabulary did not hold: `merge` (`core.merge_party` folds one party into another and moves every reference: neither an edit of the survivor nor a delete of the loser) and `read` (the five Locker commands that answer a question and write only the receipt a reveal owes, which a query handler cannot do because it is read-only by directive).
+
 ## Derived data is not automatically local data
 
 A tempting rule after [#1014](https://github.com/srikanth235/centraid/issues/1014) (B10) was "derived data does not replicate": enrichment writes 512-float vectors and a provenance stamp per derivation, and on a 50k library that is what a seat's change log fills up with.

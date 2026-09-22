@@ -1757,10 +1757,19 @@ fn add_task() -> CommandDefinition {
             let task_id = minted_id(ctx, "task_id"); // The seat's, or ours (#922 G2).
             let title = ctx.required_str("title")?.to_owned();
             ctx.connection().execute(
+                // `created_at`/`updated_at` FROM THE INJECTED CLOCK, like every
+                // other insert in this file. Omitting them fell through to the
+                // column DEFAULT, which is `strftime('now')` — the WALL clock.
+                // A vault opened with a `FixedClock` then stamped every task
+                // with whenever the process happened to run, so a task's
+                // `completed_at` and `deleted_at` (both `ctx.now`) sorted
+                // BEFORE its own creation, and a seeded world stopped being
+                // deterministic in the one column the Tasks board pages by.
                 "INSERT INTO schedule_task
                    (task_id, owner_party_id, title, description, status, priority, due_at,
-                    completed_at, effort_min, parent_task_id, rrule, remind_before_min)
-                 VALUES (?1, ?2, ?3, ?4, 'needs-action', ?5, ?6, NULL, ?7, ?8, ?9, ?10)",
+                    completed_at, effort_min, parent_task_id, rrule, remind_before_min,
+                    created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, 'needs-action', ?5, ?6, NULL, ?7, ?8, ?9, ?10, ?11, ?11)",
                 rusqlite::params![
                     task_id,
                     owner,
@@ -1772,6 +1781,7 @@ fn add_task() -> CommandDefinition {
                     ctx.optional_str("parent_task_id"),
                     ctx.optional_str("rrule"),
                     optional_i64(ctx, "remind_before_min"),
+                    ctx.now,
                 ],
             )?;
             Ok(serde_json::json!({ "task_id": task_id }))
