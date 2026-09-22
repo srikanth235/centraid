@@ -510,8 +510,13 @@ SLOT_KEY = {"called": "called", "called2": "called2", "during": "window",
             "walk1": "walk1", "walk2": "walk2"}
 FLAT_HEADS = ("show", "count", "sum", "min", "max", "project", "balance",
               "same", "write", "nothing", "refuse")
+# Every `valueKind` the wire carries.  `_rhs_to_flat` asserts against this and
+# `_rhs_from_flat` reads it, so the tuple cannot drift from the code again --
+# it was wrong (and unreferenced) until 2026-09-22, missing `value`, the kind
+# `due_at: dtstart of (it)` needs.
 VALUE_KINDS = ("literal", "number", "date", "datetime", "month", "daterange",
-               "duration", "keyword", "bool", "null", "me", "field", "set")
+               "duration", "keyword", "bool", "null", "me", "field", "set",
+               "value")
 _LIT_FOR_VALUE_KIND = {"literal": "string", "number": "number", "date": "date",
                        "datetime": "datetime", "month": "month",
                        "daterange": "daterange", "duration": "duration",
@@ -523,6 +528,20 @@ class Unflat(Exception):
 
 
 def _rhs_to_flat(rhs):
+    """Encode one right-hand side, and CHECK it against `VALUE_KINDS`.
+
+    The tuple used to be unreferenced, and was wrong because of it.  Nothing
+    reaches the wire without passing through here, so a kind the tuple does
+    not list is a bug in one of the two and never a silent disagreement.
+    """
+    out = _rhs_to_flat_inner(rhs)
+    if out.get("valueKind") not in VALUE_KINDS:
+        raise Unframeable("valueKind %r is not in VALUE_KINDS"
+                          % out.get("valueKind"))
+    return out
+
+
+def _rhs_to_flat_inner(rhs):
     kind = rhs["kind"]
     if kind == "string":
         return {"valueKind": "literal", "value": rhs["value"]}

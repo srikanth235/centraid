@@ -1,8 +1,10 @@
 # The frame's coverage of the canonical grammar
 
-**Headline: 434/434 (100.0%) of the gold turns, and 7 287/7 287 (100.0%) of the distinct canonicals in `experiments/canon-model/data/train.jsonl`, survive `gold -> frame -> wire -> canonical` tree-equal. The frame imposes no ceiling.**
+**Headline: 434/434 (100.0%) of the gold turns, and 7 287/7 287 (100.0%) of the distinct canonicals in `experiments/canon-model/data/train.jsonl`, survive `gold -> frame -> wire -> canonical` tree-equal. `frame.py`'s wire frame imposes no ceiling.**
 
-That sentence is the whole reason this file exists. The encoder lane ([ENCODER.md](../canon-model/ENCODER.md) §1) reached a legal, fast parser that could never have scored above **65.7%** on this corpus, because its template head was a flat classifier over the 1 200 whole SHAPES the generator happened to produce: a corpus turn whose shape was not in the inventory was unreachable no matter how well the model read the sentence. A spike whose ceiling is below the floor it is being measured against cannot produce a result, only a number. So the first thing built here was the ceiling, in Python, before a line of Swift.
+**That headline is about `frame.py`, and `frame.py` is not what the Apple model fills.** The schema the on-device model is given is [`Sources/afm-spike/Frame.swift`](Sources/afm-spike/Frame.swift), and it is narrower: it can carry **329/434 (75.8%)** of the same gold wire frames. An Apple run is therefore bounded above by 329/434 before the model reads a single sentence — and that is itself an upper bound, because it assumes Stage A always names the right head and the right kind. [§ What Frame.swift cannot carry](#what-frameswift-cannot-carry) has the number by cause and how to reproduce it. Nothing in this file has been changed to close the gap; the gap is a decision, not a bug to fix in passing.
+
+The 434/434 sentence is still the reason this file exists. The encoder lane ([ENCODER.md](../canon-model/ENCODER.md) §1) reached a legal, fast parser that could never have scored above **65.7%** on this corpus, because its template head was a flat classifier over the 1 200 whole SHAPES the generator happened to produce: a corpus turn whose shape was not in the inventory was unreachable no matter how well the model read the sentence. A spike whose ceiling is below the floor it is being measured against cannot produce a result, only a number. So the first thing built here was the ceiling, in Python, before a line of Swift.
 
 Reproduce:
 
@@ -70,14 +72,49 @@ The ladder's ORDER is the corpus's own postfix order, read off every gold Set sh
 
 The second row is the difference. Both designs make an illegal command name or an invented field impossible by construction; only one of them can say a sentence it has not seen the shape of before.
 
+## What Frame.swift cannot carry
+
+`frame.py` is the frame. `Frame.swift` is the SCHEMA THE MODEL IS GIVEN, and the two are not the same object. Reproduce the gap:
+
+```
+python3 ../qwen-sanity/swift_ceiling.py
+```
+
+```
+Frame.swift can express   329/434   75.8%   (frame.py wire frame: 434/434)
+```
+
+The script reads `Frame.swift`'s `ObjectSpec`s as predicates over each gold `to_flat` object and attributes every loss. A turn can hit several causes:
+
+| cause | turns lost |
+| --- | --- |
+| a field that is not in the kind's narrowed field list | 37 |
+| an `Arg.name` that is not in the registry's arg list for that kind (`to`, `by`, `since`) | 32 |
+| a window whose value is an exact date: `Frame.swift` offers a `literal` slot, `frame._window_decode` reads `value` | 16 |
+| `Arg.valueKind` lacks `set`/`field`/`daterange`/`value` | 12 |
+| `Arg` has no `set` slot | 12 |
+| `Atom` has no `set` slot | 7 |
+| `Atom.valueKind` lacks `duration`/`daterange`/`field`/`set`/`value` | 7 |
+| `Window` has no `anchored` how | 5 |
+| `Atom` has no `member` type | 2 |
+| `Atom` has no `lits` slot | 1 |
+
+Three of those rows say more than their count does.
+
+**The largest is the per-kind FIELD narrowing, and it is unsound rather than merely tight.** `Frame.swift` narrows `fields` to the kind Stage A named and then hands the same list to `filtersB`, whose own guidance says "Conditions on the rows AFTER walk1" — after a link walk has changed the board underneath it. The narrowing is correct for `filtersA` and wrong for everything past the first walk. (The same trap catches a single-stage schema harder still: one recursive `#/$defs/set` rule is reused at every depth, so `experiments/qwen-sanity/mkschema.py` carries the full 172-field enum and proves 434/434 against gold. That is a real design difference between the two lanes, not a stylistic one.)
+
+**The window `literal` slot is a wiring mistake, not a narrowing.** `Frame.swift`'s `Window` offers `value` as `anyOf(Vocab.windowPhrases)` and puts an exact date, date-time, month or range in a separate `literal` slot. `frame._window_decode` requires `value` for `how` ∈ `date`/`datetime`/`month`/`daterange` and never reads `literal`. Every dated window the model produces comes back `unrenderable`, and `render_frames.py` books it as a model failure when it is a harness failure. 16 gold turns sit behind it.
+
+**`called2`, `window2` and `filtersC` cost nothing here.** `Frame.swift`'s header comment lists all three in its `set` ladder and its `ObjectSpec(name: "Set")` has none of them, which reads like a hole — but no gold turn needs them. They exist for `train.jsonl`'s wider postfix orders (§ The frame), so the omission narrows the schema against the generator's corpus and not against this one.
+
 ## What the coverage number does NOT say
 
-It says the frame can EXPRESS every gold turn. It says nothing about whether the model will FILL it correctly — that is what `run-model` measures, against the Tier D floor of 53/120 · 34/60 · 31/78 strict sessions, and it is the only number that counts as a result.
+It says `frame.py` can EXPRESS every gold turn. It says nothing about whether the model will FILL it correctly — that is what `run-model` measures, against the Tier D floor of 53/120 · 34/60 · 31/78 strict sessions, and it is the only number that counts as a result.
 
-Two narrowings sit between the frame and the model, and both are honest reductions rather than coverage losses:
+Two narrowings sit between the frame and the model. Both were written as honest reductions; only the second is one, and the section above is why:
 
-- **Stage A picks the kind, and Stage B only carries that kind's fields.** A wrong kind in Stage A costs the turn even though the frame could have expressed it. That is a model error, and `summarise.py` counts it by kind.
-- **`gen_vocab.py` narrows the per-kind verb list** to the commands whose registry subject is that kind's entity, plus the five verb classes, plus every command the registry gives no subject at all (a creator such as `schedule.add_task` names the row it is about to mint, so the derivation cannot attribute it and the harness must not hide it). Twenty-three of the twenty-five kinds end up with 37–60 verbs instead of 153.
+- **Stage A picks the kind, and Stage B only carries that kind's fields.** A wrong kind in Stage A costs the turn even though the frame could have expressed it. That is a model error, and `summarise.py` counts it by kind. But the field list is also wrong past a link walk, independently of anything Stage A does, and that is a schema error the model is charged for — 37 gold turns.
+- **`gen_vocab.py` narrows the per-kind verb list** to the commands whose registry subject is that kind's entity, plus the five verb classes, plus every command the registry gives no subject at all (a creator such as `schedule.add_task` names the row it is about to mint, so the derivation cannot attribute it and the harness must not hide it). Twenty-three of the twenty-five kinds end up with 37–60 verbs instead of 153. This one is clean: no gold turn loses a verb to it.
 
 ## The verbatim-literal rule, and the measurement behind it
 
