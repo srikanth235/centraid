@@ -89,7 +89,7 @@
   ordered read taken after a write went **37.9 ms to 1.03 ms**, and a one-row
   write batch went 0.36 ms to 0.55 ms for the extra b-tree. The rule the fix
   now depends on is that the index expression and the probe expression are
-  spelled identically — docs/traps/expression-index-spelling.md,
+  spelled identically — [docs/traps/expression-index-spelling.md](docs/traps/expression-index-spelling.md),
   asserted on the query plan by
   `packages/client/src/replica/order-census.test.ts`.
 
