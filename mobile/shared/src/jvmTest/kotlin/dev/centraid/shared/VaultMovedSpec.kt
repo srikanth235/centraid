@@ -143,9 +143,13 @@ class VaultMovedSpec : StringSpec({
                     > {
                     override val appId: String = NotesReads.appId
 
-                    override fun settled(status: CommandStatus, sentence: String): NotesEditorEvent {
+                    override fun settled(
+                        status: CommandStatus,
+                        sentence: String,
+                        invokeKey: String,
+                    ): NotesEditorEvent {
                         seen += status to sentence
-                        return NotesReads.settled(status, sentence)
+                        return NotesReads.settled(status, sentence, invokeKey)
                     }
                 },
                 readOnly = { Shelf.MOVED_SENTENCE },

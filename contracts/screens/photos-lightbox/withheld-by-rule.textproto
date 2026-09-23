@@ -1,0 +1,43 @@
+# THE ONE STATE THAT CARRIES THE DOWNLOAD ARROW.
+#
+# `HELD_WITHHELD_BY_RULE` is a DECISION and not a failure: the member's own
+# transfer rule is why the original is not on this device, so the screen offers
+# to fetch it rather than apologising. The arrow needs two things and this
+# fixture carries both — the held state that earns it, and `original_hash`,
+# which is what `seat.bytes.fetch` takes. A hash is on the detail rather than a
+# path or a URI because a shell that had to compose `blob:blake3-<hex>` would be
+# a shell spelling a scheme that is the core's.
+#
+# `original_path` is ABSENT and `thumbnail_path` is present: absent here is what
+# makes the thumbnail the fallback rather than an error, and the lightbox is the
+# one surface that would otherwise draw full-size bytes.
+#
+# Contrast `HELD_ABSENT`, which is the same missing original for a reason nobody
+# decided — no arrow, because there is nothing a tap can honour.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_METERED
+}
+asset_id: "ast-0301"
+detail {
+  asset_id: "ast-0301"
+  thumbnail_path: "thumbs/ast-0301.jpg"
+  title: "Cliff path"
+  captured_at: "2026-03-22T07:45:00Z"
+  captured_utc_offset_minutes: 0
+  kind: KIND_PHOTO
+  held: HELD_WITHHELD_BY_RULE
+  original_hash: "c0ffee11223344556677889900aabbccddeeff00112233445566778899aabbcc"
+  favorite: true
+  width: 4032
+  height: 3024
+  byte_size: 8412672
+  place_name: "Dún Laoghaire"
+  place_id: "plc-0004"
+  camera: "iPhone 17 Pro"
+}
+chrome_visible: true
+sheet: SHEET_NONE
+neighbour_asset_ids: "ast-0300"
+neighbour_asset_ids: "ast-0302"

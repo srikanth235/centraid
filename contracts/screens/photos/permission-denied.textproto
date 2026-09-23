@@ -23,6 +23,6 @@ data {
 }
 backup {
   phase: PHASE_IDLE
-  paused_reason: "Photo access is off. Turn it on in Settings to back up your camera roll."
+  paused_reason: "Photo access is off. Turn it on in Settings to import your camera roll."
 }
 sheet: SHEET_NONE

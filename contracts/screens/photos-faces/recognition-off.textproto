@@ -1,0 +1,28 @@
+# A QUEUE CANNOT FILL WHILE THE PLANE THAT FILLS IT IS OFF.
+#
+# `recognition_enabled: false` with `data` present and no candidates. The screen
+# says the plane is off; it does NOT show an empty queue and let a member
+# conclude their photographs have no faces in them. The flag is on the state
+# rather than inferred from an empty list precisely because the two are
+# different screens with the same list.
+#
+# It is also not a `failure`: the read succeeded, and what it returned is the
+# truth. A setting a member chose is not an error, and dressing it as one would
+# offer a retry for something no retry changes.
+#
+# `cursor: 0` over an empty list is not "past the end" — compare
+# `photos-faces/worked-through`, where the cursor is past a queue that HAS two
+# answers behind it. Both show no question; only one of them is a finish.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  known_people {
+    party_id: "pty-0031"
+    display_name: "Ada Lovelace"
+  }
+}
+cursor: 0
+recognition_enabled: false

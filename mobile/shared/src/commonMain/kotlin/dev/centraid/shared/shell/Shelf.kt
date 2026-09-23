@@ -765,7 +765,18 @@ public class Shelf(
         /** What [freshVaultFile] writes. A label on a file, never an identity. */
         internal const val PREFIX: String = "centraid-vault-"
 
-        internal const val SUFFIX: String = ".sqlite3"
+        /**
+         * WHAT MAKES A FILE IN THE VAULT DIRECTORY A VAULT.
+         *
+         * `public` because a shell that PLACES a file there has to spell it the
+         * same way — Android's asset copy filtered on `.db`, the suffix
+         * `mobile/scripts/demo-vault.sh` used to write, so a fixture was copied
+         * into the vault directory and then ignored by the roster that was
+         * meant to adopt it. Nothing failed; the switcher simply said the
+         * device held one vault. A second spelling of this constant is how that
+         * happened, so there is one and it is reachable.
+         */
+        public const val SUFFIX: String = ".sqlite3"
 
         /** 128 bits of file name. Enough that a collision is not a case. */
         private const val NAME_BYTES: Int = 16

@@ -42,7 +42,7 @@ public object BackupClaim {
      * The line for a vault whose newest change the gateway has, drawn over a
      * [lastAckedAtMs] that came from an acknowledgement.
      */
-    public fun upToDate(relative: String): String = "Backed up $relative."
+    public fun upToDate(relative: String): String = "Records backed up $relative."
 
     /**
      * The line for a vault with an acknowledgement AND changes behind it.
@@ -52,8 +52,8 @@ public object BackupClaim {
      * unsent changes is the claim this whole object exists to prevent.
      */
     public fun behind(unacked: Int, relative: String): String = when (unacked) {
-        1 -> "1 change not backed up. Last backed up $relative."
-        else -> "$unacked changes not backed up. Last backed up $relative."
+        1 -> "1 change not backed up. Records last backed up $relative."
+        else -> "$unacked changes not backed up. Records last backed up $relative."
     }
 
     /**

@@ -84,9 +84,19 @@ public class ScreenHost<S, E>(public val machine: ScreenMachine<S, E>) {
 
     public companion object {
         /**
-         * A screen's effects are a handful per event. The buffer exists so
-         * `send` does not suspend on a shell that has not attached its runner
-         * yet during a screen's first frame.
+         * A screen's effects are a handful per event. The buffer is what keeps
+         * [send] from suspending while a runner that IS collecting is busy
+         * serving the last one.
+         *
+         * **It is not a mailbox for a runner that has not subscribed yet, and
+         * it never was.** `replay = 0` means an effect emitted with no
+         * collector is dropped, buffer or no buffer — this doc used to claim
+         * the opposite ("so `send` does not suspend on a shell that has not
+         * attached its runner yet"), and on that reading two runners started
+         * their collectors with a plain `launch` and raced the screen's first
+         * `ReadPage`. Home's tiles sat `LOADING` for ever on the launches the
+         * race lost. Both start `UNDISPATCHED` now; `HomeRuntime.start` carries
+         * the argument.
          */
         public const val EFFECT_BUFFER: Int = 32
     }

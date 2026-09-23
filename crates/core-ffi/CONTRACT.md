@@ -132,6 +132,14 @@ _Why this is a clause and not a schema note:_ clause 10 says five symbols and me
 
 Test: `the_phones_four_flows_round_trip_through_call`
 
+## 4d. The originals on this phone are a request kind too
+
+`originals` (19) answers `OriginalsResponse { kept_album_ids[], census? }` and is **bounded**. Its three ops are `kept` (read the keep list), `keep { album_id, keep }` (put one album on it or take it off) and `census` (the originals whole on this phone, and the share in kept albums). The keep list is `<stem>.keep-originals.json` beside the vault file, not a vault row: "keep these originals on this phone" is a fact about one device's disk, and a row would be sealed into the backup and restored onto the next phone as a promise about a disk it never had. An absent `census` is "not counted" — a core with no content store — and never zero.
+
+_Why there is no release op:_ the backup carries the vault's pages and never an original's bytes, so no original can be proved held by the gateway, and a verb that released one would release the only copy. It arrives with the plane that uploads originals ([`docs/decisions.md`](../../docs/decisions.md) R-1029-PH-1).
+
+Test: `the_originals_on_this_phone_round_trip_through_call` (and, below the ABI, `crates/core/src/originals.rs` and `crates/vault/tests/originals.rs`)
+
 ## 5. `next_event` surfaces bounded-queue backpressure as a health event
 
 The event queue is bounded at 1024 and **drops nothing**. When it fills, sync stalls and a `HealthEvent { stalled: true, queue_depth, capacity, behind }` reaches the shell — later, on the first slot a drain frees, if the queue is full of change events, because a change event may not be dropped to make room for the report.

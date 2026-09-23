@@ -39,11 +39,46 @@ targets:
   Centraid:
     type: application
     platform: iOS
+    settings:
+      base:
+        # THE MODULE IS `CentraidApp` IN BOTH BUILD SYSTEMS, AND IT WAS NOT.
+        #
+        # `Package.swift` names its library target `CentraidApp`, so every file in
+        # `Tests/` says `@testable import CentraidApp`. XcodeGen's target is called
+        # `Centraid`, and a Swift module is named after its target unless told
+        # otherwise — so under Xcode those same three test files imported a module
+        # that did not exist. Two build systems over ONE `Tests/` directory, each
+        # with its own idea of what the app is called, is the two-sources problem
+        # this file's header argues against, one level down.
+        #
+        # ON THIS TARGET AND NOT IN `settings.base`: the base block reaches
+        # EVERY target, so stating it there renamed the test bundle's module
+        # to `CentraidApp` as well and two targets raced to write one
+        # `CentraidApp.swiftmodule` — "Multiple commands produce", four
+        # times over.
+        PRODUCT_MODULE_NAME: CentraidApp
     sources:
       - path: Sources
       - path: Design
-    resources:
-      - path: Resources
+      # THE FACES, AS A BUILD PHASE — AND `resources:` IS NOT AN XCODEGEN KEY.
+      #
+      # This target carried `resources: - path: Resources` for its whole life
+      # and it did NOTHING: xcodegen has no `resources` key on a target, so the
+      # block was parsed as nothing and silently dropped. It looked correct, and
+      # it read correct, and no file under `Resources` was ever copied into the
+      # bundle — which went unnoticed only because the two files in there,
+      # `Info.plist` and `Centraid.entitlements`, reach the build through the
+      # `info:` and `entitlements:` keys below instead. The first thing that
+      # needed a real resource was the font, and it arrived in a bundle with no
+      # resource phase at all: `UIFont(name:)` returned nil and
+      # `CentraidTypeModifier` died on the first label.
+      #
+      # A source entry with `buildPhase: resources` is how xcodegen actually
+      # spells it. `Resources/Fonts` and not `Resources`, so the plist and the
+      # entitlements are not ALSO copied in as loose resources beside their
+      # generated selves.
+      - path: Resources/Fonts
+        buildPhase: resources
     dependencies:
       - package: SwiftProtobuf
       # THE SHARED FRAMEWORK. Dynamic in debug and static in release, which the
@@ -96,6 +131,25 @@ targets:
         # whole declaration: the launch screen is the app's own background, and
         # nothing else belongs on it.
         UILaunchScreen: {}
+        # THE FACE, DECLARED. Copying a .ttf into the bundle registers NOTHING:
+        # iOS only loads an app-supplied font whose filename is listed here, and
+        # `UIFont(name:size:)` for an unlisted face returns nil — silently. That
+        # silence is the whole reason "sans" meant SF Pro for this project's
+        # entire life, so `CentraidTypeModifier` now fails loudly instead, and
+        # `FontRegistrationTests` asserts both names resolve.
+        #
+        # The files are copied into `Resources/Fonts` by
+        # `contracts/tools/export-native-theme.ts` from `packages/design/fonts`,
+        # the one source, and the emitted `centraidFontFiles` in
+        # `Design/Theme.swift` is this list's other half — they must agree.
+        #
+        # `InstrumentSans_470Book.ttf` IS THE 400 REGISTER'S FACE HERE, and is
+        # not a third weight: the ramp still says 400, the file is a derived
+        # instance at `usWeightClass` 470, and `docs/decisions.md` says why a
+        # touch surface needs it where a desktop pane does not.
+        UIAppFonts:
+          - InstrumentSans_470Book.ttf
+          - InstrumentSans-SemiBold.ttf
         # BGTaskScheduler does NOT refuse an undeclared identifier politely: it
         # raises an NSInternalInconsistencyException on `register` and on
         # `submit`, and the app TERMINATES. This file is the SOURCE — the
@@ -125,6 +179,24 @@ targets:
   CentraidTests:
     type: bundle.unit-test
     platform: iOS
+    # A TEST BUNDLE NEEDS AN `Info.plist` TOO, AND NOTHING HERE SUPPLIED ONE.
+    #
+    # The app target gets its plist from the `info:` key above; this target had
+    # neither that nor `GENERATE_INFOPLIST_FILE`, so `xcodebuild
+    # build-for-testing` refused the bundle outright — "does not contain an
+    # Info.plist, and GENERATE_INFOPLIST_FILE is not enabled". Every test under
+    # `Tests/` has therefore never been COMPILED, let alone run:
+    # `ScreenFixtureTests` was written in wave A and `FontRegistrationTests`
+    # with the faces, and both were green in the only sense that nothing ever
+    # asked them a question.
+    #
+    # `GENERATE_INFOPLIST_FILE` and not an `info:` block, because a test bundle's
+    # plist carries nothing this repo chooses — no launch screen, no background
+    # identifiers, no usage strings. Xcode's generated one is the whole truth,
+    # and a committed copy would be a second source for a file with no content.
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     sources:
       - path: Tests
     dependencies:

@@ -5,10 +5,14 @@ import UIKit
 
 // THE FRAMEWORK IS OPTIONAL AT COMPILE TIME, AND `Package.swift` SAYS WHY.
 //
-// Its `binaryTarget` is commented out on purpose: `swift test` has to run on a
-// bare macOS with no Kotlin toolchain, and that is what makes
+// Its `binaryTarget` is commented out on purpose: `swift test` had to run on a
+// bare macOS with no Kotlin toolchain, and that was what made
 // `Tests/ScreenFixtureTests.swift` a one-command hand-off rather than an Xcode
-// scheme. An unconditional `import CentraidShared` here breaks that promise for
+// scheme. THE `import UIKit` FOUR LINES UP IS WHAT ENDED THAT — it arrived with
+// this file in `a4dd49d0d` and macOS has no UIKit, so the host build has failed
+// at dependency scanning ever since and the guard below now protects a build
+// nobody can run. `Package.swift`'s header carries the whole account and the
+// open question. An unconditional `import CentraidShared` here breaks that promise for
 // the WHOLE `Sources` target — wave A did exactly that and turned the hand-off
 // command red — so the import and everything that touches Kotlin types is
 // guarded. Xcode builds always have the framework; only the SPM host build does
@@ -34,6 +38,35 @@ final class ShellModel: ObservableObject {
         case tally
         case photos
         case note(String)
+
+        // THE PHOTOS MINIAPP'S OTHER NINE SCREENS (#1029, photos port).
+        //
+        // **The shelf carries its parameter as `Data`, not as a message.** The
+        // route holds an ENCODED `PhotoShelf`, because `Centraid_Screen_V1_*`
+        // is SwiftProtobuf's struct and the bridge wants Wire's Kotlin class —
+        // generated from the same `.proto` and not the same type, so bytes are
+        // the only thing both halves agree on. It is also what makes `Route`
+        // `Hashable` without SwiftProtobuf conforming to it.
+        //
+        // `more` is deliberately absent, as it is from `Destination`: it is a
+        // `PhotosGridState.Sheet` and there is no route it could be. So are
+        // Collections and Search, which are band DESTINATIONS on
+        // `photos.grid` — a parameter, never a push, so back does not walk
+        // through the bands a member happened to tap.
+        case photoShelf(Data)
+        // THE ALBUM IT WAS OPENED FROM rides along, empty from anywhere else,
+        // so "Make key photo" knows which cover it sets.
+        case photoLightbox(String, [String], album: String = "")
+        case photoPicker(String, String)
+        case places
+        case photosPeople
+        case photoFaceReview
+        case photosMemories
+        case photoDuplicates
+        case photoDuplicateReview(String)
+        /// The editor over one photograph, with the lightbox's neighbours so a
+        /// save can come back to the same shelf's order (#1029).
+        case photoEditor(String, [String])
     }
 
     @Published var path: [Route] = []
@@ -104,6 +137,28 @@ final class ShellModel: ObservableObject {
     @Published var tallyState = Data()
     @Published var photosState = Data()
     @Published var notesState = Data()
+    @Published var photoShelfState = Data()
+    @Published var photoLightboxState = Data()
+    @Published var photoPickerState = Data()
+    @Published var photosCollectionsState = Data()
+    @Published var photosSearchState = Data()
+    @Published var placesState = Data()
+    @Published var photosPeopleState = Data()
+    @Published var faceReviewState = Data()
+    @Published var duplicatesState = Data()
+    @Published var duplicateReviewState = Data()
+    @Published var photosMemoriesState = Data()
+    @Published var photoEditorState = Data()
+
+    /// The shelf's own sentences, read off the bridge when it opens.
+    ///
+    /// Not derived here and not a second table in Swift: `PhotoShelfMachine`
+    /// owns every empty sentence and title, and `PhotoShelfBridge.sentences()`
+    /// hands the ANSWERS across because the machine's functions take Wire's
+    /// `PhotoShelf` and this side holds SwiftProtobuf's. A Swift copy of that
+    /// table is exactly the drift that gave v0 a `PlaceDetail` with an empty
+    /// sentence and three state views without one.
+    @Published var photoShelfCopy = PhotoShelfCopy.unknown
 
     #if canImport(CentraidShared)
     /// Home's bridge into `CentraidShared`. Created once, observed once.
@@ -127,6 +182,23 @@ final class ShellModel: ObservableObject {
     private let photos = PhotosBridge()
     private let notes = NotesBridge()
 
+    /// THE PHOTOS MINIAPP'S OTHER NINE, held for the same reason as the three
+    /// above: a `ScreenHost` routed onto the change stream cannot be
+    /// un-routed, so a bridge rebuilt per push would leave a routed host
+    /// drawing into a view that is gone.
+    private let photoShelf = PhotoShelfBridge()
+    private let photoLightbox = PhotoLightboxBridge()
+    private let photoPicker = PhotoPickerBridge()
+    private let photosCollections = PhotosCollectionsBridge()
+    private let photosSearch = PhotosSearchBridge()
+    private let places = PlacesBridge()
+    private let photosPeople = PhotosPeopleBridge()
+    private let faceReview = FaceReviewBridge()
+    private let duplicates = DuplicatesBridge()
+    private let duplicateReview = DuplicateReviewBridge()
+    private let photosMemories = PhotosMemoriesBridge()
+    private let photoEditor = PhotoEditorBridge()
+
     init() {
         home.observe { [weak self] bytes in
             self?.homeState = bytes.data
@@ -134,6 +206,36 @@ final class ShellModel: ObservableObject {
         tally.observe { [weak self] bytes in self?.tallyState = bytes.data }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
         notes.observe { [weak self] bytes in self?.notesState = bytes.data }
+        photoShelf.observe { [weak self] bytes in
+            guard let self else { return }
+            self.photoShelfState = bytes.data
+            // THE COPY FOLLOWS THE STATE, NOT THE OPEN.
+            //
+            // It was read once, straight after `openedEncoded` — and
+            // `opened` LAUNCHES a coroutine, so `sentences()` ran before the
+            // reduce that set the shelf. Every shelf drew
+            // `PhotoShelfCopy.unknown`: the favourites shelf was titled
+            // "Photographs" and the trash offered no retention sentence.
+            // Reading it here instead means it is re-derived after each
+            // reduce, from the shelf the host actually holds.
+            self.photoShelfCopy = self.shelfWords()
+        }
+        photoLightbox.observe { [weak self] bytes in self?.photoLightboxState = bytes.data }
+        photoPicker.observe { [weak self] bytes in self?.photoPickerState = bytes.data }
+        photosCollections.observe { [weak self] bytes in self?.photosCollectionsState = bytes.data }
+        photosSearch.observe { [weak self] bytes in self?.photosSearchState = bytes.data }
+        places.observe { [weak self] bytes in self?.placesState = bytes.data }
+        photosPeople.observe { [weak self] bytes in self?.photosPeopleState = bytes.data }
+        faceReview.observe { [weak self] bytes in self?.faceReviewState = bytes.data }
+        duplicates.observe { [weak self] bytes in self?.duplicatesState = bytes.data }
+        duplicateReview.observe { [weak self] bytes in self?.duplicateReviewState = bytes.data }
+        photosMemories.observe { [weak self] bytes in self?.photosMemoriesState = bytes.data }
+        photoEditor.observe { [weak self] bytes in self?.photoEditorState = bytes.data }
+        // THE EDITOR'S SAVE RENDERS ON THIS SHELL'S OWN DECODER and ingests
+        // through the bridge — the camera roll's path (#1029).
+        photoEditor.onRender = { [weak self] key, path, plan in
+            self?.renderEdit(key: key, path: path, plan: plan.data)
+        }
         // THE SESSION OWNS THE ONE CORE (R-1020-24), so the app screens are
         // attached TO it rather than opening one. It is opened asynchronously,
         // so this is a callback and not a getter: there is exactly one moment
@@ -144,6 +246,18 @@ final class ShellModel: ObservableObject {
             self.tally.attach(session: session)
             self.photos.attach(session: session)
             self.notes.attach(session: session)
+            self.photoShelf.attach(session: session)
+            self.photoLightbox.attach(session: session)
+            self.photoPicker.attach(session: session)
+            self.photosCollections.attach(session: session)
+            self.photosSearch.attach(session: session)
+            self.places.attach(session: session)
+            self.photosPeople.attach(session: session)
+            self.faceReview.attach(session: session)
+            self.duplicates.attach(session: session)
+            self.duplicateReview.attach(session: session)
+            self.photosMemories.attach(session: session)
+            self.photoEditor.attach(session: session)
             // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
             //
             // `BackgroundPasses` registered both handlers at launch — it has to,
@@ -315,6 +429,139 @@ final class ShellModel: ObservableObject {
         gatewayStatus = ""
     }
 
+    /// THE EDITOR SAVED, AND THE MEMBER GOES TO WHAT THEY MADE (#1029).
+    ///
+    /// The editor comes off the stack and the lightbox under it is REPLACED by
+    /// one on the new photograph — the shelf's order kept behind it, so a swipe
+    /// still walks where it walked. An empty id (an output that named nothing)
+    /// returns to the photograph the member came from rather than to a guess.
+    func photoEditSaved(_ saved: String, neighbours: [String]) {
+        guard !path.isEmpty else { return }
+        path.removeLast()
+        guard !saved.isEmpty, case .photoLightbox? = path.last else { return }
+        path[path.count - 1] = .photoLightbox(saved, [saved] + neighbours.filter { $0 != saved })
+    }
+
+    /// DRAW AN EDIT, OFF THE MAIN THREAD, and hand the JPEG to the bridge —
+    /// which gives it the original's date, place and caption (#1029).
+    private func renderEdit(key: String, path: String, plan: Data) {
+        #if canImport(CentraidShared)
+        let decoded = (try? Centraid_Screen_V1_PhotoEditPlan(serializedBytes: plan)) ?? .init()
+        // THE BRIDGE, NOT `self`, crosses into the detached task: it is the one
+        // thing the answer goes to, and a captured model is a main-actor type
+        // read from a background thread.
+        let bridge = photoEditor
+        Task.detached(priority: .userInitiated) {
+            let made = PhotoEditRenderer.render(sourcePath: path, plan: decoded)
+            await MainActor.run {
+                switch made {
+                case let .made(file, width, height):
+                    bridge.rendered(key: key, path: file, width: Int32(width), height: Int32(height))
+                case let .refused(sentence):
+                    bridge.renderRefused(key: key, sentence: sentence)
+                }
+            }
+        }
+        #endif
+    }
+
+    /// A BAND BODY CAME ON SCREEN (#1029, photos port).
+    ///
+    /// Collections and Search are DESTINATIONS on `photos.grid`, not routes —
+    /// law 2 — so neither gets a `Route` and neither passes through
+    /// [opened]. They still have to be told they are showing, for the reason
+    /// that method's doc gives: a screen reads because it was OPENED, and one
+    /// that is merely composed sits on its seeded `LOADING` for ever.
+    ///
+    /// Idempotence is the machines': a second `Opened` re-reads, which is what
+    /// a member returning to a band should get.
+    func openedPhotosBand(_ destination: Centraid_Screen_V1_PhotosGridState.Destination) {
+        #if canImport(CentraidShared)
+        switch destination {
+        case .collections: photosCollections.opened()
+        case .search: photosSearch.opened()
+        case .library, .unspecified, .UNRECOGNIZED: break
+        }
+        #endif
+    }
+
+    /// THE MACHINE'S ANSWERS, CROSSING THE ABI AS SIX PLAIN VALUES.
+    ///
+    /// `PhotoShelfMachine` owns every shelf title and empty sentence; its
+    /// functions take Wire's `PhotoShelf` and the views hold SwiftProtobuf's,
+    /// so the DERIVATION stays put and only the answers cross. A Swift table
+    /// of shelf sentences beside the Kotlin one is the drift that left v0 with
+    /// a `PlaceDetail` carrying an empty sentence and three state views
+    /// carrying none.
+    private func shelfWords() -> PhotoShelfCopy {
+        #if canImport(CentraidShared)
+        let words = photoShelf.sentences()
+        return PhotoShelfCopy(
+            title: words.title,
+            empty: words.empty,
+            emptyRemedy: words.emptyRemedy,
+            purgeWindow: words.purgeWindow,
+            isTrash: words.isTrash,
+            isArchive: words.isArchive
+        )
+        #else
+        return .unknown
+        #endif
+    }
+
+    /// THE THREE SHELVES THAT ARE REACHED FROM ANOTHER SCREEN, ENCODED.
+    ///
+    /// A place card, a person and a memory each open the SAME screen —
+    /// `photos.shelf`, the library under a predicate — so each of these builds
+    /// the parameter that says which. They are here rather than in the views
+    /// because a route's payload is the shell's business, and because
+    /// `PhotoShelfRoute` carries bytes: SwiftProtobuf's `PhotoShelf` and
+    /// Wire's are different types generated from one `.proto`.
+    ///
+    /// **Names ride along** (`navigation.ts:63-69`), so the shelf's app bar
+    /// says "Lisbon" before its page read has landed and never paints under
+    /// the previous shelf's title.
+    func placeShelf(identifier: String, name: String) -> Data {
+        var shelf = Centraid_Screen_V1_PhotoShelf()
+        shelf.place = .with {
+            $0.placeID = identifier
+            $0.placeName = name
+        }
+        return (try? shelf.serializedData()) ?? Data()
+    }
+
+    func personShelf(identifier: String, name: String) -> Data {
+        var shelf = Centraid_Screen_V1_PhotoShelf()
+        // A PERSON IS A `PhotoStateView`, NOT AN ARM OF ITS OWN — law 3, and
+        // the shape `navigation.ts:43-46` chose: the state view is a
+        // discriminated union and "one person's photographs" is one of its
+        // cases, beside favourites, archive, trash and videos.
+        shelf.stateView = .with {
+            $0.person = .with {
+                $0.partyID = identifier
+                $0.personName = name
+            }
+        }
+        return (try? shelf.serializedData()) ?? Data()
+    }
+
+    func memoryShelf(identifier: String, title: String) -> Data {
+        var shelf = Centraid_Screen_V1_PhotoShelf()
+        shelf.memory = .with {
+            $0.memoryID = identifier
+            $0.title = title
+        }
+        return (try? shelf.serializedData()) ?? Data()
+    }
+
+    /// The four standing shelves, for Collections and for anything else that
+    /// names one. A `Mode` and never a string.
+    func modeShelf(_ kind: Centraid_Screen_V1_PhotoStateView.Mode.Kind) -> Data {
+        var shelf = Centraid_Screen_V1_PhotoShelf()
+        shelf.stateView = .with { $0.mode = .with { $0.kind = kind } }
+        return (try? shelf.serializedData()) ?? Data()
+    }
+
     /// Forward an event. The shared module reduces; nothing here decides.
     ///
     /// The `screen` string is the machine's own `SCREEN_ID` — the same constant
@@ -335,8 +582,36 @@ final class ShellModel: ObservableObject {
         case "tally.list": tally.send(event: event.kotlin)
         case "photos.grid": photos.send(event: event.kotlin)
         case "notes.editor": notes.send(event: event.kotlin)
+        case "photos.shelf": photoShelf.send(event: event.kotlin)
+        case "photos.lightbox": photoLightbox.send(event: event.kotlin)
+        case "photos.picker": photoPicker.send(event: event.kotlin)
+        case "photos.collections": photosCollections.send(event: event.kotlin)
+        case "photos.search": photosSearch.send(event: event.kotlin)
+        case "photos.places": places.send(event: event.kotlin)
+        case "photos.people": photosPeople.send(event: event.kotlin)
+        case "photos.faces": faceReview.send(event: event.kotlin)
+        case "photos.duplicates": duplicates.send(event: event.kotlin)
+        case "photos.duplicate": duplicateReview.send(event: event.kotlin)
+        case "photos.memories": photosMemories.send(event: event.kotlin)
+        case "photos.editor": photoEditor.send(event: event.kotlin)
         default: break
         }
+        #endif
+    }
+
+    /// "Send a copy" and "Download original" over a shelf's pick. The work is
+    /// `ShelfCopyExport.swift`'s; this only lends it the shelf's bridge.
+    func exportShelf(_ assetIdentifiers: [String], as kind: ShelfCopyExport.Kind) {
+        #if canImport(CentraidShared)
+        ShelfCopyExport.run(kind, assetIdentifiers, bridge: photoShelf)
+        #endif
+    }
+
+    /// "Send a copy" over the library's selection — the shelf's batch hand-off,
+    /// lent the grid's `LibraryCopies` so the outcome lands on the library.
+    func exportLibrary(_ assetIdentifiers: [String], keepLocation: Bool) {
+        #if canImport(CentraidShared)
+        ShelfCopyExport.run(.send(keepLocation: keepLocation), assetIdentifiers, bridge: photos.copies)
         #endif
     }
 
@@ -416,6 +691,44 @@ final class ShellModel: ObservableObject {
             var event = Centraid_Screen_V1_NotesEditorEvent()
             event.opened = .with { $0.noteID = identifier }
             send(screen: "notes.editor", event: (try? event.serializedData()) ?? Data())
+
+        // THE SHELF OPENS ON ITS PARAMETER, AND READS THE MACHINE'S WORDS.
+        //
+        // `openedEncoded` and not `opened`: the bridge wants Wire's
+        // `PhotoShelf` and this route holds SwiftProtobuf's bytes. The copy is
+        // read straight after, because `sentences()` is a function of the
+        // shelf the host has just been told about — which is why it is read at
+        // the moment of the call rather than published.
+        case let .photoShelf(shelf):
+            photoShelf.openedEncoded(shelf: shelf.kotlin)
+
+        case let .photoLightbox(identifier, neighbours, album):
+            photoLightbox.opened(assetId: identifier, neighbours: neighbours, albumId: album)
+
+        case let .photoPicker(identifier, name):
+            // ALREADY IN THE ALBUM IS EMPTY FROM HERE, and the picker knows
+            // it: the set is what the album's own entries say, and this route
+            // carries the album's id and name, not its contents. The reducer
+            // treats an empty list as "nothing is known to be taken" rather
+            // than "nothing is", which is the conservative reading — a member
+            // can add a photograph twice and the second add is a no-op at the
+            // vault, where a wrongly-greyed cell would be a photograph they
+            // could not add at all.
+            photoPicker.opened(
+                collectionId: identifier,
+                collectionName: name,
+                alreadyInAlbumAssetIds: []
+            )
+
+        case .places: places.opened()
+        case .photosPeople: photosPeople.opened()
+        case .photoFaceReview: faceReview.opened()
+        case .photosMemories: photosMemories.opened()
+        case .photoDuplicates: duplicates.opened()
+        case let .photoEditor(identifier, _):
+            photoEditor.opened(assetId: identifier)
+        case let .photoDuplicateReview(clusterIdentifier):
+            duplicateReview.opened(clusterId: clusterIdentifier)
         }
         #endif
     }

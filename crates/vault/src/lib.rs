@@ -55,6 +55,7 @@ pub mod file;
 pub mod log;
 pub mod migrations;
 pub mod operations;
+pub mod originals;
 pub mod page;
 pub mod snapshot;
 pub mod testdoor;

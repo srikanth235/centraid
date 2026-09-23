@@ -13,6 +13,7 @@ import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.sync.fromCore
 import dev.centraid.shared.sync.sentenceFor
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -57,11 +58,25 @@ public class HomeRuntime(
     /**
      * Collect this host's effects and serve them for as long as [scope] lives.
      *
-     * Started before the first event is sent, because `ScreenHost` buffers only
-     * `EFFECT_BUFFER` effects and a runner attached after the open would miss
-     * the read the open asked for.
+     * Started before the first event is sent, because a runner attached after
+     * the open would miss the read the open asked for.
+     *
+     * **[CoroutineStart.UNDISPATCHED], because "started before" has to mean
+     * SUBSCRIBED before.** `ScreenHost.effects` is a `SharedFlow` with
+     * `replay = 0`: an effect emitted while nothing is collecting is DROPPED,
+     * and `EFFECT_BUFFER` does not change that — a shared flow's buffer holds
+     * values for subscribers that exist, never for one that has not arrived.
+     * `HomeSession.open` starts this runtime and then sends `Opened` on the
+     * next line, so with a plain `scope.launch` the two raced on the
+     * dispatcher: when the send won, Home's `ReadPage` went nowhere, no tile
+     * read was ever issued, and every tile sat on its seeded `LOADING` state
+     * for ever — the exact defect this class was written to close, reappearing
+     * as an intermittent one. It reproduced on roughly half the launches of the
+     * iOS shell on a simulator. Undispatched, `collect` registers its slot
+     * synchronously on the calling thread, so `start()` returning means the
+     * effects have somewhere to land.
      */
-    public fun start(): Job = scope.launch {
+    public fun start(): Job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
         host.effects.collect { effect ->
             when (effect) {
                 is ScreenEffect.ReadPage ->

@@ -52,6 +52,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
     // `debugImplementation`, NOT `androidRuntimeClasspath` (#1020, wave A).
     //
     // `androidRuntimeClasspath` is the accessor the AGP 9 KMP LIBRARY plugin

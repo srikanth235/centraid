@@ -112,6 +112,7 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
         held_thumbnail: query.with_held_thumbnail,
         note_body: query.with_note_body,
+        document_size: query.with_document_size,
     })?;
 
     Ok(wire::Page {
@@ -154,6 +155,18 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                         query
                             .with_note_body
                             .then(|| centraid_vault::page::NOTE_BODY_COLUMN.to_owned()),
+                    )
+                    // AND THE DOCUMENT'S SIZE LAST, when it is asked for at
+                    // all (#1029, Home's Docs tile). Same positional contract
+                    // as the two above: appended, in a fixed place, so a shell
+                    // counts past its own `select` list to reach it. It is
+                    // TEXT — the phrase the vault composed — and a caller who
+                    // wanted the byte count behind it is a caller the field's
+                    // own comment refuses.
+                    .chain(
+                        query
+                            .with_document_size
+                            .then(|| centraid_vault::page::DOCUMENT_SIZE_COLUMN.to_owned()),
                     )
                     .map(|column| {
                         image.get(&column).map_or_else(
@@ -358,6 +371,7 @@ mod tests {
             }),
             with_held_thumbnail: false,
             with_note_body: false,
+            with_document_size: false,
         }
     }
 

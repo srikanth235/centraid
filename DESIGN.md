@@ -430,6 +430,8 @@ The role registry marks values as `literal`, `scalar`, `solved`, or `wash`; only
 
 There is **one** bundled face, shipped from the repo with no network fetch: `Instrument Sans` at 400 and 600. Source Serif 4 is withdrawn with v8, so display, reading, UI, and numerics all draw from the same stack with mandatory CJK fallbacks. `--font-code` names the platform code stack (`ui-monospace, SFMono-Regular, Menlo, …`) and ships no bytes; it is reached only by fenced code, inline literals, file paths, keyboard chips, and secrets — never by a timestamp, count, duration, or file size.
 
+The weights are **two**, here and everywhere, and the table below is the whole ramp. One thing is true of the phone that is not true of a desktop pane, and it is a lowering rather than a rung: the 400 register is DRAWN by a derived 470 instance of the same family on native, because the native delta's +2px step scales the glyph without scaling the stroke and CoreText's grayscale antialiasing takes the rest. Nothing in this ramp names a 470 and nothing may; only the file behind the 400 register changes, and only on a touch surface. See [decisions.md](docs/decisions.md) and [packages/design/fonts](packages/design/fonts/README.md).
+
 | Role | Brief role | Face | Size / line-height | Weight | Native delta |
 | --- | --- | --- | --- | --- | --- |
 | `--t-display` | Display | Instrument Sans | 32 / 36, −0.02em | 600 | −5 / −5 |

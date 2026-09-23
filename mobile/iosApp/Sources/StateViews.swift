@@ -40,6 +40,12 @@ struct TallyRowView: Hashable {
 struct BandView: Hashable {
     let label: String
     let event: Data
+    /// The catalog mark a drawn band shows above the label. Empty for a band
+    /// still drawn as a row of words (Tally's), which has none.
+    var iconKey: String = ""
+    /// Whether this is the destination on screen — read off the state, never
+    /// written down by the view that draws it.
+    var selected: Bool = false
 }
 
 struct TallyListStateView {
@@ -53,15 +59,26 @@ struct TallyListStateView {
     ///
     /// **A BAND DESTINATION IS A PARAMETER, NOT A SECOND SCREEN** — so each of these carries a
     /// `DestinationChanged` for the SAME machine, and never a route.
+    /// v0's order and marks (`packages/blueprints/apps/tally/shelves.ts`):
+    /// Balances, Activity, Groups. v0's fourth, Waiting, has no destination in
+    /// this state, and its More has no sheet here, so neither is drawn.
     var bands: [BandView] {
-        [
-            (Centraid_Screen_V1_TallyListState.Destination.activity, "Activity"),
-            (.balances, "Balances"),
-            (.groups, "Groups"),
-        ].map { destination, label in
+        let current = state.destination
+        return [
+            (Centraid_Screen_V1_TallyListState.Destination.balances, "Balances", "Coin"),
+            (.activity, "Activity", "Activity"),
+            (.groups, "Groups", "Users"),
+        ].map { destination, label, iconKey in
             var event = Centraid_Screen_V1_TallyListEvent()
             event.destination = .with { $0.destination = destination }
-            return BandView(label: label, event: event.encoded)
+            return BandView(
+                label: label,
+                event: event.encoded,
+                iconKey: iconKey,
+                // `unspecified` is Activity: the machine opens there.
+                selected: destination == current
+                    || (destination == .activity && current == .unspecified)
+            )
         }
     }
 
@@ -103,28 +120,12 @@ struct TallyListStateView {
     }
 }
 
-struct PhotoCellView: Hashable {
-    let identifier: String
-    let thumbnailPath: String?
-    /// WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH (#1025 S5, D-1025-S7-62).
-    ///
-    /// The read derives it; this view carries it. A closed enum and not three
-    /// booleans, so a cell cannot be two states at once and draw two
-    /// affordances.
-    let held: Centraid_Screen_V1_PhotoCell.Held
-    /// The ORIGINAL's hash — what the download arrow asks for. Empty when this
-    /// replica has no live content row naming one, in which case no arrow is
-    /// drawn, because an affordance nothing can serve is worse than none.
-    let originalHash: String
-
-    /// The member's own rule is why the original is not here, and there is
-    /// something to ask for. The one state that carries the arrow.
-    var offersDownload: Bool {
-        held == .withheldByRule && !originalHash.isEmpty
-    }
-
-    var isFetching: Bool { held == .fetching }
-}
+// `PhotoCellView` IS GONE, AND WITH IT THE SECOND DERIVATION (#1029, photos
+// port). It restated `held`, `originalHash` and the `offersDownload` rule that
+// `PhotoCells.swift` now owns for every surface that draws photographs — and a
+// second spelling of "which cell gets the download arrow" is a second answer
+// waiting to disagree with the first. The views take the WIRE TYPE, which is
+// already decoded by the time a screen has a data case.
 
 struct PhotosGridStateView {
     let data: Data
@@ -133,41 +134,56 @@ struct PhotosGridStateView {
         (try? Centraid_Screen_V1_PhotosGridState(serializedBytes: data)) ?? .init()
     }
 
+    /// v0's three places, in v0's order and with v0's marks
+    /// (`photos-band.ts`): Library first, because the band is judged by how
+    /// few taps the timeline costs. More is not among them — it opens a sheet,
+    /// so the band draws it as its own bordered square.
+    ///
+    /// **"Collections", not "Albums".** The label once said Albums over a page
+    /// titled Collections that has an Albums section of its own, so one word
+    /// named two different things on one screen.
+    /// The event that moves the grid to `destination` — the band's own, and
+    /// the one the search bar's close sends to put the band back.
+    static func destinationEvent(_ destination: Centraid_Screen_V1_PhotosGridState.Destination) -> Data {
+        var event = Centraid_Screen_V1_PhotosGridEvent()
+        event.destination = .with { $0.destination = destination }
+        return event.encoded
+    }
+
     var bands: [BandView] {
-        [
-            (Centraid_Screen_V1_PhotosGridState.Destination.library, "Library"),
-            (.collections, "Albums"),
-            (.search, "Search"),
-        ].map { destination, label in
+        let current = destination
+        return [
+            (Centraid_Screen_V1_PhotosGridState.Destination.library, "Library", "Image"),
+            (.collections, "Collections", "Layers"),
+            (.search, "Search", "Search"),
+        ].map { destination, label, iconKey in
             var event = Centraid_Screen_V1_PhotosGridEvent()
             event.destination = .with { $0.destination = destination }
-            return BandView(label: label, event: event.encoded)
+            return BandView(
+                label: label,
+                event: event.encoded,
+                iconKey: iconKey,
+                // `unspecified` IS the library: the machine opens there, and a
+                // band with nothing lit would be a band saying "nowhere".
+                selected: destination == current
+                    || (destination == .library && current == .unspecified)
+            )
         }
     }
 
-    var content: ScreenContent<([PhotoCellView], Bool)> {
+    /// The cells, AS THE WIRE HOLDS THEM, and whether this device has a
+    /// thumbnail pack at all.
+    ///
+    /// No per-cell struct in between: `PhotoCellsGrid` renders
+    /// `Centraid_Screen_V1_PhotoCell` directly, so a mapping step here would
+    /// decode a message that is already decoded and give the held derivation a
+    /// second home.
+    var content: ScreenContent<([Centraid_Screen_V1_PhotoCell], Bool)> {
         switch state.content {
         case let .failure(failure):
             return .failure(failure.sentence, failure.remedy)
         case let .data(data):
-            return .data(
-                (
-                    data.cells.map { cell in
-                        // ABSENT IS A REAL ANSWER and the empty string is not
-                        // one: `thumbnail_path` is `optional` in the schema, so
-                        // `hasThumbnailPath` is the question, and a cell with no
-                        // path draws one of the two empty-cell sentences rather
-                        // than an image at "".
-                        PhotoCellView(
-                            identifier: cell.assetID,
-                            thumbnailPath: cell.hasThumbnailPath ? cell.thumbnailPath : nil,
-                            held: cell.held,
-                            originalHash: cell.originalHash
-                        )
-                    },
-                    data.thumbnailPackAbsent
-                )
-            )
+            return .data((data.cells, data.thumbnailPackAbsent))
         case let .loading(loading):
             return .loading(loading.firstLoad)
         case .none:
@@ -180,11 +196,11 @@ struct PhotosGridStateView {
     /// Both ids, because they answer two different questions: the hash
     /// addresses the bytes and the asset id is what the grid keys the cell by,
     /// so the reducer can start that one spinner without a round trip.
-    func fetchEvent(for cell: PhotoCellView) -> Data {
+    func fetchEvent(assetIdentifier: String, contentHash: String) -> Data {
         var event = Centraid_Screen_V1_PhotosGridEvent()
         event.fetchOriginal = .with {
-            $0.assetID = cell.identifier
-            $0.contentHash = cell.originalHash
+            $0.assetID = assetIdentifier
+            $0.contentHash = contentHash
         }
         return event.encoded
     }
@@ -205,21 +221,21 @@ struct PhotosGridStateView {
             // member watching a roll upload saw a number shrink with nothing to
             // say how much had been done, and a backup near the end and a backup
             // that had barely started both read as a small number.
-            return "Backing up: \(done) done, \(left) to go"
+            return "Importing: \(done) done, \(left) to go"
         case .enumerating:
             return "Looking through your camera roll."
         case .waitingForPower:
-            return waiting(done: done, left: left, "Centraid backs these up when this phone is charging.")
+            return waiting(done: done, left: left, "Centraid imports these when this phone is charging.")
         case .waitingForUnmetered:
-            return waiting(done: done, left: left, "Centraid backs these up on Wi-Fi.")
+            return waiting(done: done, left: left, "Centraid imports these on Wi-Fi.")
         case .parkedLowDisk:
-            return "Centraid has paused the backup."
+            return "Centraid has paused the import."
         case .done:
             return done > 0
-                ? "Your camera roll is backed up \u{2014} \(done) this time."
-                : "Your camera roll is backed up."
+                ? "Your camera roll is in your vault \u{2014} \(done) this time."
+                : "Your camera roll is in your vault."
         case .idle, .unspecified, .UNRECOGNIZED:
-            return "Camera roll backup is off."
+            return "Camera roll import is off."
         }
     }
 
@@ -270,6 +286,44 @@ struct PhotosGridStateView {
     var permissionRequestEvent: Data {
         var event = Centraid_Screen_V1_PhotosGridEvent()
         event.permissionRequested = .init()
+        return event.encoded
+    }
+
+    /// WHICH TRANSPORT CARRIED THEM, as a member-readable word.
+    ///
+    /// Reported, never claimed: the iOS background-transfer experiment
+    /// (`mobile/maestro/ios-transfer-experiment.md`) decides which of these the
+    /// product ships, and until it has run this is what a diagnostics surface
+    /// says rather than a sentence in a document. `unspecified` is an honest
+    /// "nothing has moved yet" and not a default.
+    var backupTransport: String {
+        switch state.backup.transport {
+        case .irohBlobs: return "Direct"
+        case .httpsBlobDoor: return "HTTPS"
+        case .unspecified, .UNRECOGNIZED: return "Nothing carried yet"
+        }
+    }
+
+    /// WHICH SHEET IS OPEN, if one is.
+    ///
+    /// It was set and never read: `moreSheetEvent` moved the state and nothing
+    /// on either shell drew anything, so the `···` on the band was a control
+    /// that reduced correctly and did nothing a member could see.
+    var sheet: Centraid_Screen_V1_PhotosGridState.Sheet { state.sheet }
+
+    /// WHICH BAND IS SHOWING. A PARAMETER, NOT A SECOND SCREEN (law 2).
+    ///
+    /// The three destinations are one screen with one state; moving between
+    /// them is not a push, so back does not walk through the bands a member
+    /// happened to tap. `PhotosGridView` reads this to decide which BODY to
+    /// draw — the library grid, Collections or Search — which is why there is
+    /// no `Destination.PhotosCollections` in `nav/Navigation.kt` and never
+    /// will be.
+    var destination: Centraid_Screen_V1_PhotosGridState.Destination { state.destination }
+
+    func sheetEvent(_ sheet: Centraid_Screen_V1_PhotosGridState.Sheet) -> Data {
+        var event = Centraid_Screen_V1_PhotosGridEvent()
+        event.sheet = .with { $0.sheet = sheet }
         return event.encoded
     }
 }
@@ -379,7 +433,14 @@ extension ScreenContent {
     }
 }
 
-private extension SwiftProtobuf.Message {
+// ONE `encoded`, FOR EVERY SCREEN IN THIS TARGET.
+//
+// Three views each grew a `private extension SwiftProtobuf.Message` with this
+// same body, and a fourth used `.encoded` without declaring one — which does
+// not compile, because a fileprivate helper is not visible from the file that
+// needed it. Same shape as the four cell renderers: written once is written
+// once.
+extension SwiftProtobuf.Message {
     /// The bytes that cross back into `CentraidShared`.
     ///
     /// A serialisation that throws yields EMPTY bytes rather than a crash, and

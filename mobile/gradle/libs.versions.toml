@@ -28,6 +28,10 @@ androidx-core = "1.17.0"
 androidx-lifecycle = "2.9.4"
 androidx-security-crypto = "1.1.0"
 androidx-work = "2.10.5"
+# THE LIGHTBOX'S VIDEO PLAYER (#1029 photos port): ExoPlayer for decode and
+# the `PlayerView` surface only — the transport is the app's own controls, so
+# `media3-ui`'s controller is never shown.
+androidx-media3 = "1.11.1"
 # BLOCK STORE, AND THE ADAPTER THAT MAKES ITS `Task` AWAITABLE (#1029 §5, W5B-3).
 #
 # The seed is the ONE secret allowed to follow a member to their next phone, and
@@ -72,6 +76,8 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 # Tink 1.5 and the alphas in between were never a thing to ship a credential on.
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "androidx-security-crypto" }
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
+androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "androidx-media3" }
+androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "androidx-media3" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
 roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }

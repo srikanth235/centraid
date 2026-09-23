@@ -1,0 +1,20 @@
+# NO PLACES, AND NINETEEN HUNDRED PHOTOGRAPHS.
+#
+# An empty `places` list is DATA — the read landed and this vault has named no
+# place yet — and it is the case where a screen is most tempted to say "no
+# photographs have a location", which would be a claim about the library rather
+# than about the place table. `unplaced_count` is what makes the honest sentence
+# possible: nothing to show here, and here is how much there is.
+#
+# It also pins that `unplaced_count` is not derived from `places`. A screen that
+# computed "everything not on this page" would say 0 on this fixture, because
+# the page is empty, and be wrong by 1904.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_OFFLINE
+}
+presentation: PRESENTATION_CARDS
+data {
+  unplaced_count: 1904
+}

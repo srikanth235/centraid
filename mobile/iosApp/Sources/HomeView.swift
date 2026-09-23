@@ -72,15 +72,26 @@ struct HomeView: View {
         .sheet(isPresented: $shell.transferRulesOpen) {
             TransferRulesSheet(shell: shell)
         }
-        .sheet(isPresented: .constant(home.allAppsSheetOpen)) {
+        // A REAL BINDING, and the setter is the only way this sheet closes. It
+        // was `.constant` once: the swipe had nothing to write "closed" into,
+        // so the sheet would not move, and with no row a member could tap and
+        // no close control it was a screen the app could only be killed out of.
+        .sheet(
+            isPresented: Binding(
+                get: { home.allAppsSheetOpen },
+                set: { open in
+                    if !open { shell.send(screen: "home", event: HomeEvents.allApps(open: false)) }
+                }
+            )
+        ) {
             AllAppsSheet(tiles: home.data.tiles, shell: shell)
         }
-        // A REAL BINDING, unlike the one above: this sheet is dismissible by
-        // swipe, and a constant binding would leave the state saying it is open
-        // over a sheet that is gone — the next press of the lockup would then
-        // set a flag that is already set and nothing would appear. Dismissing
-        // sends a pick with no id, which the machine reads as exactly what it
-        // is: shut the sheet, change no vault.
+        // A REAL BINDING here too, for the same reason: a constant binding
+        // would leave the state saying it is open over a sheet that is gone —
+        // the next press of the lockup would then set a flag that is already
+        // set and nothing would appear. Dismissing sends a pick with no id,
+        // which the machine reads as exactly what it is: shut the sheet,
+        // change no vault.
         .sheet(
             isPresented: Binding(
                 get: { home.vaultSheetOpen },
@@ -120,10 +131,35 @@ private let controlRadius: CGFloat = 7
 /// One row, fixed count — only the cell CONTENTS change, never the count.
 private let mosaicSlots = 4
 
-/// STATED, never derived: a percentage-width cell can resolve to zero height.
+/// A FLOOR AND NOT A HEIGHT. `mosaicCss` is `flex:1;min-height:0` over
+/// `grid-auto-rows:1fr`, so the strip STRETCHES into whatever the card has
+/// left and this is only the rung below which it will not go. It is STATED
+/// rather than derived for the reason it always was: a percentage-width cell
+/// has no intrinsic height of its own and can resolve to zero.
 private let mosaicCellHeight: CGFloat = 88
 
 private let hairline = CentraidGeometry.hairline
+
+/// THE HUE KEY'S SPELLING IN THE EMITTED TABLE, and nothing more.
+///
+/// `PartyHueWheel` decides WHICH of the eight a face gets and `HomeReads` puts
+/// the answer on the wire; this is the eight-row spelling that turns that key
+/// into a `Theme` role, and `HomeScreen.kt` carries the same eight. It is a
+/// dictionary and not `"c" + key.capitalized` because the string form would
+/// hand any key at all to `Theme.color`, which trips a `preconditionFailure`
+/// correctly for a role that does not exist — the wrong failure for a launcher
+/// tile drawing whatever a producer sent. `PartyHueWheelSpec` asserts every key
+/// has a role in the emitted table and that both view trees name all eight.
+private let partyHueRoles: [String: String] = [
+    "rose": "cRose",
+    "amber": "cAmber",
+    "ochre": "cOchre",
+    "forest": "cForest",
+    "teal": "cTeal",
+    "slate": "cSlate",
+    "indigo": "cIndigo",
+    "violet": "cViolet",
+]
 
 /// The vault at a glance, and how it stands on this device.
 ///
@@ -297,6 +333,26 @@ private struct TileCard: View {
         tile.hasCount ? "\(count) \(tile.countLabel)" : tile.countLabel
     }
 
+    /// PHOTOS TAKES THE CARD'S SLACK ITSELF, so it is the one body that gets no
+    /// trailing `Spacer` under it.
+    ///
+    /// Every other body is a few lines of type with the rest of the card left
+    /// over, and the `Spacer` below is where that leftover is sent — v0's
+    /// `margin-top:auto` on the last line of an event, a face row or a figure.
+    /// The mosaic is the opposite shape: `mosaicCss` is `flex:1`, so the strip
+    /// is what stretches and it finishes ON the card's floor.
+    ///
+    /// The two cannot both be in the `VStack`. A `Spacer` and a
+    /// `maxHeight: .infinity` child are equally flexible, so SwiftUI splits the
+    /// slack between them — and the trailing `Spacer` also brings the stack's
+    /// own 16 with it, which is why a card whose ideal height exactly matched
+    /// its proposal still drew 28 of dead ground under the photographs. One
+    /// flexible child per card, and for Photos it is the mosaic.
+    private var bodyTakesTheSlack: Bool {
+        if case .photos = tile.body.kind { return true }
+        return false
+    }
+
     var body: some View {
         Button {
             // TWO THINGS, AND THEY ARE DIFFERENT THINGS (#1025 S5).
@@ -329,7 +385,7 @@ private struct TileCard: View {
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }
                 TileBodyView(tile: tile)
-                Spacer(minLength: 0)
+                if !bodyTakesTheSlack { Spacer(minLength: 0) }
             }
             // PADDING FIRST, THEN THE FLOOR. The floor is the CARD's height and
             // v0 states it on the box that carries the padding, so measuring it
@@ -451,9 +507,13 @@ private struct ContentBody: View {
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(1)
                 if !note.excerpt.isEmpty {
+                    // SOFT INK, NOT FULL: `readBodyCss` is `color: t.ink2`,
+                    // which the handoff's own role map spells `--text-soft`.
+                    // Drawn at full `text` the excerpt weighed the same as the
+                    // title above it and the tile read as two headings.
                     Text(note.excerpt)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .foregroundStyle(Theme.color("textSoft", scheme))
                         .lineLimit(3)
                 }
             }
@@ -510,11 +570,24 @@ private struct ContentBody: View {
                 // mirrors under RTL rather than stacking the wrong way.
                 HStack(spacing: -7) {
                     ForEach(people.faces, id: \.partyID) { face in
+                        // THE PARTY'S OWN HUE, not a grey disc. `face.color` is
+                        // the key `HomeReads` already resolved with the one
+                        // port of the identity wheel; all this does is spell
+                        // the emitted role. An unrecognised key draws the
+                        // neutral disc rather than reaching `Theme.color`,
+                        // which trips a `preconditionFailure` by design — a
+                        // tile is not the place to take the shell down over a
+                        // hue.
+                        let hue = face.hasColor ? partyHueRoles[face.color] : nil
                         Text(face.initials)
                             .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("text", scheme))
+                            // `textInv` is the SOLVED foreground for a filled
+                            // identity disc (`DESIGN.md`'s rule 7 — `onAccent`
+                            // in the hand-off's role map). Ink on a saturated
+                            // fill is the contrast failure this tile had.
+                            .foregroundStyle(Theme.color(hue != nil ? "textInv" : "text", scheme))
                             .frame(width: 30, height: 30)
-                            .background(Theme.color("bgSunken", scheme))
+                            .background(Theme.color(hue ?? "bgSunken", scheme))
                             .clipShape(Circle())
                             .overlay(
                                 Circle()
@@ -600,7 +673,11 @@ private struct PhotoMosaic: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        // 8 AND NOT 4 BETWEEN THE STRIP AND ITS SENTENCE: `mosaicNoteCss` is
+        // `padding-top: R.gap.s`, and the note is the mosaic's SIBLING in the
+        // template rather than a second line inside a body wrapper, so it does
+        // not take that wrapper's `gap: R.gap.xs`.
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 2) {
                 ForEach(0 ..< mosaicSlots, id: \.self) { index in
                     let cell = index < photos.cells.count ? photos.cells[index] : nil
@@ -611,7 +688,9 @@ private struct PhotoMosaic: View {
                         // does not reflow as thumbnails land.
                         .fill(Theme.color(cell == nil ? "skel" : "bgSunken", scheme))
                         .frame(maxWidth: .infinity)
-                        .frame(height: mosaicCellHeight)
+                        // A FLOOR, so the strip can take the slack the card's
+                        // own floor leaves and finish flush with its edge.
+                        .frame(minHeight: mosaicCellHeight, maxHeight: .infinity)
                         .overlay {
                             if let path = cell?.thumbnailPath, !path.isEmpty {
                                 ContentImage(path: path)
@@ -624,7 +703,34 @@ private struct PhotoMosaic: View {
                 }
             }
             .padding(.horizontal, -tilePad)
-            .padding(.top, 8)
+            // NO TOP OF ITS OWN, BECAUSE THE 8 IN `mosaicCss` IS NOT AN EXTRA
+            // 8 — IT IS THE HALF THIS TILE DOES NOT OTHERWISE GET.
+            //
+            // The reference's template is the whole argument, and it took three
+            // readings on 2026-09-22 to get right. Every other tile's body is
+            // wrapped in `bodyWrapCss`, which carries `padding-top: R.gap.s`;
+            // the mosaic is a DIRECT CHILD of the tile wrap and is not wrapped
+            // in it at all. So a list reads `headCss` padding-bottom 8 + the
+            // wrapper's 8 = 16, and the mosaic reads `headCss` 8 + its own
+            // `margin-top: R.gap.s` = 16. THE SAME 16. Photos is not special.
+            //
+            // Our `VStack(spacing: 16)` already stands in for both halves at
+            // once, so an 8 here was a third helping and put the strip 24 down
+            // — the dead band under the header that was reported, correctly, as
+            // too much gap. Removed, then restored on a misreading of
+            // `mosaicCss` in isolation, then removed again once the TEMPLATE
+            // was read: `<sc-if isMosaic>` sits outside every `bodyWrapCss`.
+            // AND IT BLEEDS TO THE FLOOR, which is the THIRD margin in the same
+            // rule and the one this file had been missing: `margin: R.gap.s
+            // -R.gap.m -R.gap.m` cancels the card's bottom padding exactly as
+            // it cancels its sides, so the photographs finish ON the card's
+            // edge rather than on a band of card ground above it.
+            //
+            // The reference drops it in the waiting state and so does this
+            // (`margin: … ' + (grey ? '0' : '-' + R.gap.m)`): the sentence under
+            // the strip needs the 12 back, and a line of type bled past the
+            // card's edge is clipped rather than merely tight.
+            .padding(.bottom, waiting ? 0 : -tilePad)
             // Grey squares with no explanation read as a failed render.
             if waiting {
                 // IT DOES NOT NAME THE GATEWAY any more, and did before: with
@@ -637,7 +743,11 @@ private struct PhotoMosaic: View {
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        // THE MOSAIC IS THE CARD'S SLACK-TAKER, and `maxHeight: .infinity` is
+        // how it says so — `mosaicCss` is `flex:1;min-height:0`. It only holds
+        // while nothing else in the card competes for the same slack; see
+        // `TileCard.bodyTakesTheSlack`.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -819,12 +929,29 @@ private struct AllAppsSheet: View {
 
     var body: some View {
         List(tiles, id: \.appID) { tile in
-            HStack(spacing: 8) {
-                AppMark(appID: tile.appID, size: 22)
-                Text(CentraidCatalog.byID[tile.appID]?.name ?? tile.appID.capitalized)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
+            // A ROW DOES WHAT ITS TILE DOES — the same pick, the same route —
+            // so the listing and the springboard cannot disagree about where an
+            // app goes. The sheet closes only when there is somewhere to go: an
+            // app with no screen yet leaves the member where they are, as its
+            // tile does, rather than dropping them back on Home with nothing
+            // opened.
+            Button {
+                shell.send(screen: "home", event: HomeEvents.movePicked(tile.appID))
+                guard let route = TileCard.route(for: tile) else { return }
+                shell.send(screen: "home", event: HomeEvents.allApps(open: false))
+                shell.path.append(route)
+            } label: {
+                HStack(spacing: 8) {
+                    AppMark(appID: tile.appID, size: 22)
+                    Text(CentraidCatalog.byID[tile.appID]?.name ?? tile.appID.capitalized)
+                        .centraidType("smallStrong")
+                        .foregroundStyle(Theme.color("text", scheme))
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home-all-apps-row-\(tile.appID)")
         }
         .accessibilityIdentifier("home-all-apps-sheet")
     }

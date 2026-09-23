@@ -12,7 +12,7 @@
     "PHOTOS_ERROR_IN_CLOUD": "Original is still in iCloud.",
     "PHOTOS_ERROR_WRITE_NOT_SAVED": "Photo change not saved.",
     "PHOTOS_SAVE_AS_NEW": "Save as a new photograph",
-    "PHOTOS_SAVE_AS_NEW_EXPLANATION": "Saving writes a new photograph dated today; the original is not touched.",
+    "PHOTOS_SAVE_AS_NEW_EXPLANATION": "Saving writes a new photograph with the original's date and place; the original is not touched.",
     "PHOTOS_SAVED_AS_NEW": "Saved as a new photograph",
     "PHOTOS_SEARCH_PLACEHOLDER": "Search photographs, people, places, albums",
     "PHOTOS_UNARCHIVE": "Unarchive",

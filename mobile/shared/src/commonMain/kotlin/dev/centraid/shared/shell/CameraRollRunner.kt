@@ -86,7 +86,7 @@ public class CameraRollRunner(
             // ordinary pass and never a second way to learn what is new: the
             // cursor is the durable answer, and a `PHChange` read here would be
             // a second opinion about it that a backgrounded app never gets.
-            scope.launch { pass() }
+            scope.launch { once() }
         }
         return scope.launch {
             syncPermission()
@@ -95,7 +95,7 @@ public class CameraRollRunner(
                     effect is ScreenEffect.RequestMediaPermission -> scope.launch { ask() }
                     effect is ScreenEffect.Backup &&
                         effect.action != ScreenEffect.Backup.Action.PAUSE ->
-                        scope.launch { pass() }
+                        scope.launch { once() }
                     // PAUSE STOPS THE NEXT PASS AND NEVER THE ONE RUNNING. A
                     // stage that is interrupted half way leaves the core a
                     // staging session nothing will ever end; the pass checks the
@@ -126,7 +126,37 @@ public class CameraRollRunner(
             // sit there is the failure.
             answer == MediaPermission.MEDIA_PERMISSION_LIMITED
         ) {
-            pass()
+            once()
+        }
+    }
+
+    /**
+     * "IMPORT NOW": passes until the roll is walked, not one page.
+     *
+     * One [CameraRoll.pass] is bounded so that a background window can finish
+     * one; a member who pressed the button meant their camera roll, so passes
+     * follow each other while the last one ended mid-roll
+     * ([BackupState.Phase.PHASE_TRANSFERRING]) and stop at the first that did
+     * not — done, waiting on the transfer rule, parked, or refused. The durable
+     * cursor is what makes each one start where the last stopped, and
+     * [MAX_PASSES] is the ceiling a cursor that failed to advance could never
+     * run past. The automatic triggers — a grant, a library change, a
+     * `Backup` effect — stay one bounded pass each ([once]).
+     */
+    public suspend fun pass() {
+        val vault = vaultId() ?: return
+        if (!passing.tryLock()) return
+        try {
+            repeat(MAX_PASSES) {
+                val report = roll.pass(vault) { state -> scope.launch { publish(state) } }
+                if (report.enumerated == 0 ||
+                    report.state.phase != BackupState.Phase.PHASE_TRANSFERRING
+                ) {
+                    return
+                }
+            }
+        } finally {
+            passing.unlock()
         }
     }
 
@@ -140,7 +170,7 @@ public class CameraRollRunner(
      * writer of a screen's state and would lose whatever the reducer did
      * between two of its own frames.
      */
-    public suspend fun pass() {
+    private suspend fun once() {
         val vault = vaultId() ?: return
         if (!passing.tryLock()) return
         try {
@@ -148,6 +178,11 @@ public class CameraRollRunner(
         } finally {
             passing.unlock()
         }
+    }
+
+    private companion object {
+        /** A hundred thousand items at `CameraRoll.PAGE`, and never a loop. */
+        const val MAX_PASSES: Int = 4_000
     }
 
     private suspend fun publish(state: BackupState) {

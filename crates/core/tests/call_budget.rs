@@ -69,6 +69,7 @@ fn page_request() -> wire::Request {
                 }),
                 with_held_thumbnail: false,
                 with_note_body: false,
+                with_document_size: false,
             }),
             limit: PAGE_ROWS,
             after: None,

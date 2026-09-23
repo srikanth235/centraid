@@ -620,6 +620,43 @@ impl Handle {
         self.events.close();
     }
 
+    /// CLOSE THE FILE ITSELF, so what is on disk is the whole vault.
+    ///
+    /// [`Self::close`] releases the waiters and leaves the connection to the
+    /// process's teardown, which is right for a shell: the file is reopened on
+    /// the next launch and SQLite's `-wal` is part of the vault, not a
+    /// leftover. It is WRONG for a process whose artifact is the file — a
+    /// fixture writer, a seeder — because a `-wal` that is never checkpointed
+    /// holds every row the run wrote, and a copy of the `.db` alone is an
+    /// EMPTY vault that opens without an error and draws nothing.
+    ///
+    /// That is not hypothetical: `seed-demo-vault` left a 4 KB file beside a
+    /// 19 MB `-wal`, `mobile/scripts/demo-vault.sh` copied the `.db` and
+    /// dropped the sidecars by design, and the phone opened a vault with no
+    /// rows in it. Nothing failed anywhere along that path.
+    ///
+    /// So this is the door that ENDS a vault: the connection is taken out and
+    /// [`Vault::finish`]ed — the log is checkpointed into the file and the
+    /// connection closed — and a refusal is returned rather than swallowed, a
+    /// file that would not close being a fixture that lies. `Vault::finish`
+    /// carries the rest of the argument, including why a plain close cannot do
+    /// this and why a vault a spool is tracking must not come through here.
+    ///
+    /// Idempotent, and everything after it is [`CoreError::Unpaired`]:
+    /// [`Self::with_vault`] answers that for a core holding no file, which is
+    /// the state this leaves behind.
+    pub fn close_file(&self) -> Result<()> {
+        let taken = self
+            .vault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        match taken {
+            Some(vault) => Ok(vault.finish()?),
+            None => Ok(()),
+        }
+    }
+
     /// Whether this handle is closed.
     #[must_use]
     pub fn is_closed(&self) -> bool {
@@ -835,6 +872,12 @@ impl Handle {
             K::BackupStatus(_) => Ok(response(wire::response::Kind::BackupStatus(
                 crate::phone::backup_status(&self.path)?,
             ))),
+            // THE KEEP LIST AND THE CENSUS (#1029, the photos port). Through
+            // `with_vault` for every arm, because the vault lock is what
+            // serialises two toggles of one list — see `originals::answer`.
+            K::Originals(request) => Ok(response(wire::response::Kind::Originals(
+                self.with_vault(|vault| crate::originals::answer(vault, &self.path, request))?,
+            ))),
         }
         .map_err(|error| {
             tracing::debug!(request_id, %error, "the core refused a request");
@@ -986,7 +1029,11 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::PairPhone(_)
             // A STATUS READ IS BOUNDED AND DIALS NOTHING. It is the cheapest
             // call this ABI takes: a spool measurement and one small file.
-            | K::BackupStatus(_),
+            | K::BackupStatus(_)
+            // THE ORIGINALS ASK IS BOUNDED: one small file, and for a census
+            // one listing of the store and one read of the library's rows. It
+            // moves no byte and dials nothing.
+            | K::Originals(_),
         )
         | None => RequestKind::Bounded,
         // A DRAIN IS AS LONG AS THE SPOOL IS and a RESTORE as long as the
@@ -1390,6 +1437,7 @@ mod tests {
                     }),
                     with_held_thumbnail: false,
                     with_note_body: false,
+                    with_document_size: false,
                 }),
                 limit: 10,
                 after: None,

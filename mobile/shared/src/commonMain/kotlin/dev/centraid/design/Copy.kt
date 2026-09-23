@@ -443,7 +443,7 @@ public object CentraidCopy {
         public const val PHOTOS_ERROR_IN_CLOUD: String = "Original is still in iCloud."
         public const val PHOTOS_ERROR_WRITE_NOT_SAVED: String = "Photo change not saved."
         public const val PHOTOS_SAVE_AS_NEW: String = "Save as a new photograph"
-        public const val PHOTOS_SAVE_AS_NEW_EXPLANATION: String = "Saving writes a new photograph dated today; the original is not touched."
+        public const val PHOTOS_SAVE_AS_NEW_EXPLANATION: String = "Saving writes a new photograph with the original's date and place; the original is not touched."
         public const val PHOTOS_SAVED_AS_NEW: String = "Saved as a new photograph"
         public const val PHOTOS_SEARCH_PLACEHOLDER: String = "Search photographs, people, places, albums"
         public const val PHOTOS_UNARCHIVE: String = "Unarchive"

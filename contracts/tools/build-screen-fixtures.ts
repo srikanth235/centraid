@@ -40,6 +40,26 @@ const TYPES: Record<string, string> = {
   home: "centraid.screen.v1.HomeState",
   notes: "centraid.screen.v1.NotesEditorState",
   photos: "centraid.screen.v1.PhotosGridState",
+  // The rest of the photos miniapp: eleven state messages for v0's fourteen
+  // routes. The seven that collapsed did so under *a band destination is a
+  // parameter, not a screen*, which is why there is a `photos-shelf` and no
+  // album, place or album-detail directory beside it — those are `PhotoShelf`
+  // arms, and the fixtures in `photos-shelf` are what hold them to one message.
+  //
+  // `photos-memories` is the LIST of computed memories; a single memory's
+  // members are a `PhotoShelf.Memory`, which is why both exist and neither is
+  // the other's page.
+  "photos-collections": "centraid.screen.v1.PhotosCollectionsState",
+  "photos-duplicate-review": "centraid.screen.v1.DuplicateReviewState",
+  "photos-duplicates": "centraid.screen.v1.DuplicatesState",
+  "photos-faces": "centraid.screen.v1.FaceReviewState",
+  "photos-lightbox": "centraid.screen.v1.PhotoLightboxState",
+  "photos-memories": "centraid.screen.v1.PhotosMemoriesState",
+  "photos-people": "centraid.screen.v1.PhotosPeopleState",
+  "photos-picker": "centraid.screen.v1.PhotoPickerState",
+  "photos-places": "centraid.screen.v1.PlacesState",
+  "photos-search": "centraid.screen.v1.PhotosSearchState",
+  "photos-shelf": "centraid.screen.v1.PhotoShelfState",
   seat: "centraid.screen.v1.SeatState",
   tally: "centraid.screen.v1.TallyListState",
 };

@@ -182,6 +182,74 @@ public class HomeSession private constructor(
     }
 
     /**
+     * A SECOND READ FOR A SCREEN THAT IS ALREADY ATTACHED (#1029, photos port).
+     *
+     * **The read door has no join clause**, and two screens need one. A place
+     * card is `core_place`'s name, pin and zone beside `media_asset`'s count
+     * and cover; a person row is `core_party`'s display name beside
+     * `media_face_region`'s count. Neither is answerable in one statement, so
+     * those screens run two passes and merge the answers into one state.
+     *
+     * **This exists because [attachScreen] is not idempotent.** It does two
+     * things — serve the screen's `ReadPage` effects, and `changes.route(host)`
+     * so sync moves the screen without a tap — and the second is *registration
+     * with no removal*, by design ("a screen the member has scrolled away from
+     * must be right when they come back"). Calling it twice for a second read
+     * therefore routes the same host twice, and every change event delivers
+     * two re-reads for ever. That is not a leak anyone would notice in a test
+     * and is a doubling of read load on a real vault, growing by one multiple
+     * per extra pass.
+     *
+     * So: one [attachScreen] for the screen, and one of these per further
+     * read. The route is deliberately absent here — the host is already on the
+     * stream, and the screen's own `rowsChanged` is what decides whether a
+     * table it reads in EITHER pass is one of its own.
+     *
+     * The merge is the machine's business and not this method's: an `arrived`
+     * that had to know which pass it came from would be a reducer with a mode,
+     * so both screens make theirs commutative instead.
+     *
+     * ## WHICH OF THE TWO SHAPES A MULTI-READ SCREEN TAKES
+     *
+     * Four screens hit this independently and three invented different
+     * mechanisms, so the rule is written here once. **The question is whether a
+     * partial answer is a state the screen can render.**
+     *
+     * - **It is** when the second read ENRICHES rows the first already
+     *   produced — a place's asset count, a cluster's bytes, a lightbox's
+     *   people. Then this method is the answer: each leg lands its own event,
+     *   the reducer merges commutatively, and the screen draws the rows it has
+     *   with the columns it has. Every one of those events is an AMENDMENT and
+     *   says so on the wire (`DataArrived.amendment`,
+     *   `PlacementArrived`, `ThumbnailsArrived`), because a reducer that cannot
+     *   tell a merge from a replace paints one subject's data onto another.
+     * - **It is not** when the data case cannot be CONSTRUCTED until both reads
+     *   land — a person row is a `core_party` name and a `media_face_region`
+     *   count, and neither half is a row. Then the fan-out belongs in the
+     *   bridge, which folds both answers and sends ONE event, exactly as
+     *   `HomeRuntime` fans out seven reads per app. There is no third option:
+     *   a screen's `content` is a protobuf `oneof`, so Wire REFUSES a state
+     *   with `loading` and `data` both set, and there is nowhere to park the
+     *   first answer while the second is in flight.
+     *
+     * Neither shape is a workaround for the other. A screen that folds in the
+     * bridge when it could amend gives up showing anything until the slowest
+     * read returns; a screen that amends when it cannot construct has to invent
+     * a half-built row.
+     */
+    public fun <S, E> attachReads(
+        host: ScreenHost<S, E>,
+        reads: ScreenReads<S, E>,
+    ): Job = ScreenRuntime(
+        core = { core },
+        host = host,
+        reads = reads,
+        scope = scope,
+        writes = null,
+        readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+    ).start()
+
+    /**
      * MAKE A VAULT ON THIS PHONE (#1029 §1).
      *
      * What replaces `pair`, which redeemed a ticket against a gateway and took

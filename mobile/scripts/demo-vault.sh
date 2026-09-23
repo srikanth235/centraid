@@ -46,8 +46,12 @@ staging="${CENTRAID_DEMO_DIR:-/tmp/centraid-demo}"
 echo "==> seeding $staging"
 (cd "$root" && cargo run -q -p centraid --bin seed-demo-vault -- "$staging")
 (cd "$root" && cargo run -q -p centraid --bin seed-demo-vault -- "$staging" \
-  --file work-vault.db --name "Work" --only docs,tasks,agenda)
-vaults=("$staging/demo-vault.db" "$staging/work-vault.db")
+  --file work-vault.sqlite3 --name "Work" --only docs,tasks,agenda)
+# `.sqlite3` AND NOT `.db`. `Shelf.SUFFIX` takes every `*.sqlite3` in the vault
+# directory as a vault and ignores everything else, so the `.db` files this
+# script used to place were invisible to both shells: the switcher said "this
+# device holds one vault", and a re-seed changed nothing a member could see.
+vaults=("$staging/demo-vault.sqlite3" "$staging/work-vault.sqlite3")
 
 place_android() {
   local adb="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb"

@@ -4,6 +4,18 @@
 // copy of this table is a fourth lowering with no drift gate, which is what
 // `git diff --exit-code design copy mobile` in the mobile-jvm gate step
 // exists to prevent.
+//
+// THE FACE TABLE BELOW IS EMITTED TOO, and so are the .ttf files it names:
+// `packages/design/fonts` is the one source and this emitter copies them into
+// both app trees. A face added or renamed there moves through here.
+//
+// THE TYPE SIZES HERE ARE THE TOUCH STEP AND WILL NOT MATCH THE SOURCE.
+// `packages/design/src/typography.ts` holds the web value and a
+// `nativeDelta` per role; this table is the sum. For sans that is +2 size
+// and +3 line-height, so `small` reads 13/19 there and 15/22 here — the
+// same role, not a second scale. `NATIVE_DELTA_OVERRIDES` is the whole
+// list of roles that refuse the step (`band`, `bodyStrong`, `control`,
+// `display`, `eyebrow`, `reading`, `title`). Change a value THERE.
 
 package dev.centraid.design
 
@@ -89,6 +101,27 @@ public val NATIVE_EFFECT_ROLES: List<String> = listOf(
     "shadowLg",
     "shadowMd",
     "shadowSm",
+)
+
+/**
+ * THE FACES BEHIND THE FAMILY NAMES, AS ANDROID RESOURCE NAMES.
+ *
+ * `NativeTypeStyle.family` is a word — `sans` — and Compose needs a
+ * `FontFamily` built from `R.font.*`. Kotlin cannot turn a string into an
+ * `R` id without reflection, so this table does NOT replace the `R.font`
+ * references in the shell: it is what a test compares them against, so a
+ * face renamed in `packages/design/fonts` reds here instead of falling back
+ * to Roboto on a device. `code` is absent because it is the platform's own
+ * monospace and ships no file.
+ *
+ * THE 400 KEY RESOLVES TO A 470 FACE ON PURPOSE. It is a LOWERING and not a
+ * third weight: the key is the ramp's 400, the file is `instrument_sans_book`
+ * (`usWeightClass` 470), and the touch step this table already carries is why
+ * — see `docs/decisions.md` and the emitter's own note. Web and desktop draw
+ * a true 400 and are untouched.
+ */
+public val NATIVE_TYPE_FACES: Map<String, Map<Int, String>> = mapOf(
+    "sans" to mapOf(400 to "instrument_sans_book", 600 to "instrument_sans_semibold"),
 )
 
 public object CentraidTokens {

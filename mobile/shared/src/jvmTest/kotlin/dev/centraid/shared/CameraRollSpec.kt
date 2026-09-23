@@ -62,11 +62,11 @@ class CameraRollSpec : StringSpec({
         val roll = rollOf(FakePlatformServices())
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_GRANTED) shouldBe ""
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_LIMITED) shouldBe
-            "Centraid backs up the photos you selected."
+            "Centraid imports the photos you selected."
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_NOT_ASKED) shouldBe
             "Centraid needs access to your photos to back them up."
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_DENIED) shouldBe
-            "Photo access is off. Turn it on in Settings to back up your camera roll."
+            "Photo access is off. Turn it on in Settings to import your camera roll."
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_RESTRICTED) shouldBe
             "This device does not allow photo access."
     }

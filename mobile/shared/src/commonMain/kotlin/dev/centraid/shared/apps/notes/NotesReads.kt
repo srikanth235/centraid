@@ -179,7 +179,7 @@ public object NotesReads :
      * which keeps the member's words on the screen with a sentence OVER them
      * rather than instead of them.
      */
-    override fun settled(status: CommandStatus, sentence: String): NotesEditorEvent =
+    override fun settled(status: CommandStatus, sentence: String, invokeKey: String): NotesEditorEvent =
         NotesEditorEvent(
             save_settled = NotesEditorEvent.SaveSettled(
                 outcome = when (status) {

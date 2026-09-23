@@ -24,10 +24,27 @@ export interface NativeDelta {
 }
 
 export interface TypeStyle {
+  /**
+   * THE WEB VALUE. A phone renders `size + nativeDelta.size`, so the numbers
+   * in this file are NOT the numbers a device draws and never were: `small`
+   * is 13/19 here and 15/22 in `design/native-theme.json`, in
+   * `mobile/iosApp/Design/Theme.swift` and in
+   * `mobile/shared/.../design/Tokens.kt`, which are emitted from this table by
+   * `contracts/tools/export-native-theme.ts`. One role, two surfaces, one
+   * declared step — see [nativeDelta] and `docs/design-machinery.md`'s
+   * invariant 5.
+   *
+   * The reading that costs an afternoon is treating the emitted table as a
+   * second scale and "correcting" it towards this one. It is generated; the
+   * gate reverts the edit and the change belongs here.
+   */
   size: number;
+  /** The web value; see [size] for what a phone draws. */
   lineHeight: number;
   family: FontFamily;
   weight: "400" | "600";
+  /** What touch adds to [size] and [lineHeight]. A zero is a role that REFUSES
+   *  to step, declared in [NATIVE_DELTA_OVERRIDES] rather than worked around. */
   nativeDelta: NativeDelta;
   letterSpacing?: string;
   textTransform?: "uppercase";
@@ -115,6 +132,15 @@ export const type = {
     size: 13,
     weight: "400",
   }),
+  // `section` IN THE DESIGN SYSTEM, AND 13/18 ON PURPOSE (v17 handoff,
+  // `centraid-system.js` type ladder: `section:'600 13px/18px'` against
+  // `body:'400 13px/19px'`). A section head is a heading rung and takes the
+  // tighter leading; it is the one 13pt sans role that does, which is exactly
+  // why it looks like a typo next to `small`, `labelOn` and `bodyStrong`.
+  // Changed to 19 on 2026-09-22 reading the lone 18 as an unrecorded slip from
+  // #760, and reverted the same day when the handoff's ladder showed it ruled.
+  // The touch step lands it at 15/21 against `body`'s 15/22 — a heading and the
+  // line under it, not two leadings in one stack.
   smallStrong: style("smallStrong", {
     family: "sans",
     lineHeight: 18,

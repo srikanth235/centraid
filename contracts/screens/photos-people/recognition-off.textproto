@@ -1,0 +1,21 @@
+# AN EMPTY PEOPLE SCREEN HAS THREE CAUSES AND v0 DREW ONE SENTENCE FOR ALL OF
+# THEM (`PeopleEmptyState.tsx`).
+#
+# This is the first: recognition is OFF — the member turned it off, or never
+# turned it on. The screen's honest answer names a setting and says where it is.
+# It must not say "Centraid hasn't found anyone yet", because nothing has been
+# looked at and saying so blames the library for a switch.
+#
+# `proposed_face_count: 0` follows from the cause rather than standing beside
+# it: a queue cannot fill while the plane that fills it is off, so there is no
+# door to review here. `photos-people/none-named` is the case where that number
+# is the answer, and the two fixtures differ in both fields at once — which is
+# what a reader comparing them has to see.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  empty_reason: EMPTY_REASON_RECOGNITION_OFF
+}

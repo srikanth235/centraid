@@ -45,23 +45,23 @@ class WriteRunnerSpec : StringSpec({
         // into CLEAN would be the shell claiming a commit that has not
         // happened, which is exactly the badge a member reads to know a write
         // is still owed.
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_QUEUED, "")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_QUEUED, "", "test.command:row-0001")
             .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_IN_FLIGHT, "")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_IN_FLIGHT, "", "test.command:row-0001")
             .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_PARKED, "")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_PARKED, "", "test.command:row-0001")
             .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
     }
 
     "only an executed command is clean, and every refusal is refused" {
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "test.command:row-0001")
             .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_CLEAN
         listOf(
             CommandStatus.COMMAND_STATUS_DENIED,
             CommandStatus.COMMAND_STATUS_FAILED,
             CommandStatus.COMMAND_STATUS_UNSPECIFIED,
         ).forEach { status ->
-            NotesReads.settled(status, "")
+            NotesReads.settled(status, "", "test.command:row-0001")
                 .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
         }
     }
@@ -70,10 +70,10 @@ class WriteRunnerSpec : StringSpec({
         // `CommandOutcome.reason` is the author's words for a denial or a failed
         // precondition — never the raw predicate, which reaches the audit trail
         // only. A shell that composed one would be the hole in that rule.
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "That note was removed.")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "That note was removed.", "test.command:row-0001")
             .save_settled?.failure.shouldNotBeNull()
             .sentence shouldBe "That note was removed."
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "")
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "", "test.command:row-0001")
             .save_settled?.failure shouldBe null
     }
 

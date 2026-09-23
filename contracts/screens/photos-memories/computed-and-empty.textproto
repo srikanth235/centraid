@@ -1,0 +1,19 @@
+# THE PAIR: THE SAME EMPTY LIST, AND THIS ONE MAY SAY "NONE".
+#
+# The pass ran and found nothing to make a memory out of — too few photographs,
+# none on this day in other years, no run of days away from home. "No memories
+# yet" is now a sentence the vault has earned.
+#
+# Byte-for-byte this differs from `photos-memories/not-yet-computed` in one
+# boolean. A screen that only checked `memories.isEmpty()` draws both the same
+# and is wrong about one of them, and asserting the two separately would pass
+# just as happily against a shell that collapsed them — so the spec asserts
+# them against each other.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  computed: true
+}

@@ -46,7 +46,7 @@ class CustodyAndBackupClaimSpec : StringSpec({
 
     "an acknowledgement with changes behind it leads with what is NOT backed up" {
         val line = BackupClaim.line(lastAckedAtMs = 1_770_000_000_000, unacked = 3, "2 minutes ago")
-        line shouldBe "3 changes not backed up. Last backed up 2 minutes ago."
+        line shouldBe "3 changes not backed up. Records last backed up 2 minutes ago."
         // The member would be wrong about the unsent half, so the unsent half
         // is what the sentence opens with.
         line.startsWith("3 changes not backed up").shouldBeTrue()
@@ -55,12 +55,12 @@ class CustodyAndBackupClaimSpec : StringSpec({
 
     "one change reads as one, because a member counts" {
         BackupClaim.line(1, 1, "an hour ago") shouldBe
-            "1 change not backed up. Last backed up an hour ago."
+            "1 change not backed up. Records last backed up an hour ago."
     }
 
     "an acknowledgement with an empty spool is the only thing that says backed up" {
         BackupClaim.line(1_770_000_000_000, 0, "2 minutes ago") shouldBe
-            "Backed up 2 minutes ago."
+            "Records backed up 2 minutes ago."
         BackupClaim.isBackedUp(1_770_000_000_000, 0).shouldBeTrue()
     }
 
