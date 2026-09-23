@@ -357,7 +357,7 @@ public fun TransferRulesSheet(
                     .testTag("transfer-rule-" + choice.stored)
                     .semantics(mergeDescendants = true) {
                         contentDescription = choice.sentence
-                        if (choice.stored == selected) selected()
+                        if (choice.stored == selected) this.selected = true
                     },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),

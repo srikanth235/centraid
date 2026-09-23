@@ -115,6 +115,265 @@
       "binary": "contracts/screens/photos/thumbnail-pack-absent.bin"
     },
     {
+      "case": "counts-are-floors",
+      "screen": "photos-collections",
+      "type": "centraid.screen.v1.PhotosCollectionsState",
+      "textproto": "contracts/screens/photos-collections/counts-are-floors.textproto",
+      "binary": "contracts/screens/photos-collections/counts-are-floors.bin"
+    },
+    {
+      "case": "new-album-sheet",
+      "screen": "photos-collections",
+      "type": "centraid.screen.v1.PhotosCollectionsState",
+      "textproto": "contracts/screens/photos-collections/new-album-sheet.textproto",
+      "binary": "contracts/screens/photos-collections/new-album-sheet.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "photos-collections",
+      "type": "centraid.screen.v1.PhotosCollectionsState",
+      "textproto": "contracts/screens/photos-collections/read-refused.textproto",
+      "binary": "contracts/screens/photos-collections/read-refused.bin"
+    },
+    {
+      "case": "standing-and-owned",
+      "screen": "photos-collections",
+      "type": "centraid.screen.v1.PhotosCollectionsState",
+      "textproto": "contracts/screens/photos-collections/standing-and-owned.textproto",
+      "binary": "contracts/screens/photos-collections/standing-and-owned.bin"
+    },
+    {
+      "case": "member-overrode-the-suggestion",
+      "screen": "photos-duplicate-review",
+      "type": "centraid.screen.v1.DuplicateReviewState",
+      "textproto": "contracts/screens/photos-duplicate-review/member-overrode-the-suggestion.textproto",
+      "binary": "contracts/screens/photos-duplicate-review/member-overrode-the-suggestion.bin"
+    },
+    {
+      "case": "no-suggestion-at-all",
+      "screen": "photos-duplicate-review",
+      "type": "centraid.screen.v1.DuplicateReviewState",
+      "textproto": "contracts/screens/photos-duplicate-review/no-suggestion-at-all.textproto",
+      "binary": "contracts/screens/photos-duplicate-review/no-suggestion-at-all.bin"
+    },
+    {
+      "case": "suggestion-not-accepted",
+      "screen": "photos-duplicate-review",
+      "type": "centraid.screen.v1.DuplicateReviewState",
+      "textproto": "contracts/screens/photos-duplicate-review/suggestion-not-accepted.textproto",
+      "binary": "contracts/screens/photos-duplicate-review/suggestion-not-accepted.bin"
+    },
+    {
+      "case": "clusters-by-reclaimable",
+      "screen": "photos-duplicates",
+      "type": "centraid.screen.v1.DuplicatesState",
+      "textproto": "contracts/screens/photos-duplicates/clusters-by-reclaimable.textproto",
+      "binary": "contracts/screens/photos-duplicates/clusters-by-reclaimable.bin"
+    },
+    {
+      "case": "clusters-partial-page",
+      "screen": "photos-duplicates",
+      "type": "centraid.screen.v1.DuplicatesState",
+      "textproto": "contracts/screens/photos-duplicates/clusters-partial-page.textproto",
+      "binary": "contracts/screens/photos-duplicates/clusters-partial-page.bin"
+    },
+    {
+      "case": "scan-incomplete",
+      "screen": "photos-duplicates",
+      "type": "centraid.screen.v1.DuplicatesState",
+      "textproto": "contracts/screens/photos-duplicates/scan-incomplete.textproto",
+      "binary": "contracts/screens/photos-duplicates/scan-incomplete.bin"
+    },
+    {
+      "case": "scanned-and-clean",
+      "screen": "photos-duplicates",
+      "type": "centraid.screen.v1.DuplicatesState",
+      "textproto": "contracts/screens/photos-duplicates/scanned-and-clean.textproto",
+      "binary": "contracts/screens/photos-duplicates/scanned-and-clean.bin"
+    },
+    {
+      "case": "recognition-off",
+      "screen": "photos-faces",
+      "type": "centraid.screen.v1.FaceReviewState",
+      "textproto": "contracts/screens/photos-faces/recognition-off.textproto",
+      "binary": "contracts/screens/photos-faces/recognition-off.bin"
+    },
+    {
+      "case": "unnamed-guess",
+      "screen": "photos-faces",
+      "type": "centraid.screen.v1.FaceReviewState",
+      "textproto": "contracts/screens/photos-faces/unnamed-guess.textproto",
+      "binary": "contracts/screens/photos-faces/unnamed-guess.bin"
+    },
+    {
+      "case": "worked-through",
+      "screen": "photos-faces",
+      "type": "centraid.screen.v1.FaceReviewState",
+      "textproto": "contracts/screens/photos-faces/worked-through.textproto",
+      "binary": "contracts/screens/photos-faces/worked-through.bin"
+    },
+    {
+      "case": "chrome-hidden",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/chrome-hidden.textproto",
+      "binary": "contracts/screens/photos-lightbox/chrome-hidden.bin"
+    },
+    {
+      "case": "fetching-with-percent",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/fetching-with-percent.textproto",
+      "binary": "contracts/screens/photos-lightbox/fetching-with-percent.bin"
+    },
+    {
+      "case": "info-sheet-proposals",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/info-sheet-proposals.textproto",
+      "binary": "contracts/screens/photos-lightbox/info-sheet-proposals.bin"
+    },
+    {
+      "case": "loading-keyed-by-asset",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/loading-keyed-by-asset.textproto",
+      "binary": "contracts/screens/photos-lightbox/loading-keyed-by-asset.bin"
+    },
+    {
+      "case": "withheld-by-rule",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/withheld-by-rule.textproto",
+      "binary": "contracts/screens/photos-lightbox/withheld-by-rule.bin"
+    },
+    {
+      "case": "computed-and-empty",
+      "screen": "photos-memories",
+      "type": "centraid.screen.v1.PhotosMemoriesState",
+      "textproto": "contracts/screens/photos-memories/computed-and-empty.textproto",
+      "binary": "contracts/screens/photos-memories/computed-and-empty.bin"
+    },
+    {
+      "case": "not-yet-computed",
+      "screen": "photos-memories",
+      "type": "centraid.screen.v1.PhotosMemoriesState",
+      "textproto": "contracts/screens/photos-memories/not-yet-computed.textproto",
+      "binary": "contracts/screens/photos-memories/not-yet-computed.bin"
+    },
+    {
+      "case": "title-hint-absent",
+      "screen": "photos-memories",
+      "type": "centraid.screen.v1.PhotosMemoriesState",
+      "textproto": "contracts/screens/photos-memories/title-hint-absent.textproto",
+      "binary": "contracts/screens/photos-memories/title-hint-absent.bin"
+    },
+    {
+      "case": "named-with-proposals-waiting",
+      "screen": "photos-people",
+      "type": "centraid.screen.v1.PhotosPeopleState",
+      "textproto": "contracts/screens/photos-people/named-with-proposals-waiting.textproto",
+      "binary": "contracts/screens/photos-people/named-with-proposals-waiting.bin"
+    },
+    {
+      "case": "none-named",
+      "screen": "photos-people",
+      "type": "centraid.screen.v1.PhotosPeopleState",
+      "textproto": "contracts/screens/photos-people/none-named.textproto",
+      "binary": "contracts/screens/photos-people/none-named.bin"
+    },
+    {
+      "case": "recognition-off",
+      "screen": "photos-people",
+      "type": "centraid.screen.v1.PhotosPeopleState",
+      "textproto": "contracts/screens/photos-people/recognition-off.textproto",
+      "binary": "contracts/screens/photos-people/recognition-off.bin"
+    },
+    {
+      "case": "already-in-album",
+      "screen": "photos-picker",
+      "type": "centraid.screen.v1.PhotoPickerState",
+      "textproto": "contracts/screens/photos-picker/already-in-album.textproto",
+      "binary": "contracts/screens/photos-picker/already-in-album.bin"
+    },
+    {
+      "case": "named-before-the-read",
+      "screen": "photos-picker",
+      "type": "centraid.screen.v1.PhotoPickerState",
+      "textproto": "contracts/screens/photos-picker/named-before-the-read.textproto",
+      "binary": "contracts/screens/photos-picker/named-before-the-read.bin"
+    },
+    {
+      "case": "map-presentation",
+      "screen": "photos-places",
+      "type": "centraid.screen.v1.PlacesState",
+      "textproto": "contracts/screens/photos-places/map-presentation.textproto",
+      "binary": "contracts/screens/photos-places/map-presentation.bin"
+    },
+    {
+      "case": "no-coordinate",
+      "screen": "photos-places",
+      "type": "centraid.screen.v1.PlacesState",
+      "textproto": "contracts/screens/photos-places/no-coordinate.textproto",
+      "binary": "contracts/screens/photos-places/no-coordinate.bin"
+    },
+    {
+      "case": "no-places-but-unplaced",
+      "screen": "photos-places",
+      "type": "centraid.screen.v1.PlacesState",
+      "textproto": "contracts/screens/photos-places/no-places-but-unplaced.textproto",
+      "binary": "contracts/screens/photos-places/no-places-but-unplaced.bin"
+    },
+    {
+      "case": "hits-say-why",
+      "screen": "photos-search",
+      "type": "centraid.screen.v1.PhotosSearchState",
+      "textproto": "contracts/screens/photos-search/hits-say-why.textproto",
+      "binary": "contracts/screens/photos-search/hits-say-why.bin"
+    },
+    {
+      "case": "no-hits",
+      "screen": "photos-search",
+      "type": "centraid.screen.v1.PhotosSearchState",
+      "textproto": "contracts/screens/photos-search/no-hits.textproto",
+      "binary": "contracts/screens/photos-search/no-hits.bin"
+    },
+    {
+      "case": "resting",
+      "screen": "photos-search",
+      "type": "centraid.screen.v1.PhotosSearchState",
+      "textproto": "contracts/screens/photos-search/resting.textproto",
+      "binary": "contracts/screens/photos-search/resting.bin"
+    },
+    {
+      "case": "album-selecting",
+      "screen": "photos-shelf",
+      "type": "centraid.screen.v1.PhotoShelfState",
+      "textproto": "contracts/screens/photos-shelf/album-selecting.textproto",
+      "binary": "contracts/screens/photos-shelf/album-selecting.bin"
+    },
+    {
+      "case": "memory-empty-but-titled",
+      "screen": "photos-shelf",
+      "type": "centraid.screen.v1.PhotoShelfState",
+      "textproto": "contracts/screens/photos-shelf/memory-empty-but-titled.textproto",
+      "binary": "contracts/screens/photos-shelf/memory-empty-but-titled.bin"
+    },
+    {
+      "case": "person",
+      "screen": "photos-shelf",
+      "type": "centraid.screen.v1.PhotoShelfState",
+      "textproto": "contracts/screens/photos-shelf/person.textproto",
+      "binary": "contracts/screens/photos-shelf/person.bin"
+    },
+    {
+      "case": "trash-states-its-window",
+      "screen": "photos-shelf",
+      "type": "centraid.screen.v1.PhotoShelfState",
+      "textproto": "contracts/screens/photos-shelf/trash-states-its-window.textproto",
+      "binary": "contracts/screens/photos-shelf/trash-states-its-window.bin"
+    },
+    {
       "case": "locked",
       "screen": "seat",
       "type": "centraid.screen.v1.SeatState",

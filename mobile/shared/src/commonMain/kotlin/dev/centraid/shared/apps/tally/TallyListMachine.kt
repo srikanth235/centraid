@@ -95,7 +95,19 @@ public object TallyListMachine : ScreenMachine<TallyListState, TallyListEvent> {
             // have changed, and a patched row in the wrong position is a list
             // that disagrees with its own sort.
             event.rows_changed != null ->
-                if (event.rows_changed.expense_ids.none { it in shownIds(state) }) {
+                // AN EMPTY ID LIST MEANS "RE-READ THIS TABLE", NOT "NOTHING
+                // OF MINE" (#1029, photos port). `none {}` over an empty list
+                // is vacuously TRUE, and `ChangeFeed::tables_changed` emits
+                // `pk_set: Vec::new()` for EVERY locally committed command —
+                // it says so itself: "an empty `pk_set` reads as re-read this
+                // table, which is what a screen does"
+                // (`crates/core/src/events.rs:293`). So this ledger never
+                // redrew from the member's OWN writes; only a sync from
+                // another device, which arrives WITH keys, ever moved it.
+                if (
+                    event.rows_changed.expense_ids.isNotEmpty() &&
+                    event.rows_changed.expense_ids.none { it in shownIds(state) }
+                ) {
                     Step(state)
                 } else {
                     Step(state, listOf(ScreenEffect.ReadPage(SCREEN_ID, afterCursor = null)))

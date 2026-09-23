@@ -19,7 +19,7 @@ Under [#1029](https://github.com/srikanth235/centraid/issues/1029) the vault mov
 ## How agents get it wrong
 
 1. **`cp vault.db vault.db.bak` while the core is open** — WAL frames are not in the main file; the copy is incomplete.
-2. **Copying only `vault.db` without its `-wal` and `-shm` sidecars** when the process was not cleanly closed.
+2. **Copying only `vault.db` without its `-wal` and `-shm` sidecars** when the process was not cleanly closed. This is the trap read from the other end too, and it was live: `seed-demo-vault` left a 4 KB file beside a 19 MB `-wal`, `mobile/scripts/demo-vault.sh` copied the database and dropped the sidecars — as it must, they belong to the copy — and the simulator opened a vault with no rows in it. A writer that hands its file to someone else owes the checkpoint; see the safe pattern below.
 3. **Opening a second connection "just to read".** If it is the last one to close, it checkpoints the WAL out from under the capture's offsets; if it uses the default `wal_autocheckpoint`, it restarts the WAL while the capture is mid-cursor.
 4. **Editing a migration rung to fix a comment.** The ladder's bytes train the backup dictionary — see [migration-header-is-a-format.md](migration-header-is-a-format.md).
 5. **Treating a filesystem snapshot of the phone's vault directory as a backup product.** The product is the drain: sealed objects committed to the laptop under a manifest head.
@@ -33,6 +33,7 @@ Under [#1029](https://github.com/srikanth235/centraid/issues/1029) the vault mov
 | Health check on a gateway | `centraid doctor --data-dir <dir> [--json]` — read-only and lock-free, which is why the container health check runs it. |
 | Bit-rot check on stored objects | `centraid-gateway scrub --data-dir <dir> [--repair]`, or the quarterly sweep the server runs itself. No key is involved. |
 | Tests | Temp directories per test — never a live vault. |
+| A fixture whose artifact IS the file (`seed-demo-vault`) | End it with `Vault::finish` (`Handle::close_file` over the ABI side), which checkpoints `TRUNCATE` and then closes, so the `.db` alone carries the rows. A plain close cannot: `NO_CKPT_ON_CLOSE` is set, by design, so every row a short-lived writer wrote stays in the `-wal`. **Only for a vault no spool is tracking** — under a live capture the door is `backup::capture::checkpoint`, which seals first. |
 
 ## Related
 

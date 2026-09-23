@@ -142,7 +142,7 @@ public object SpringboardPolicy {
         "locker" to "Unlock to see your items",
         "notes" to "Write your first note",
         "people" to "Add someone you know",
-        "photos" to "Back up your first photo",
+        "photos" to "Import your first photo",
         "tally" to "Log your first expense",
         "tasks" to "Capture the next thing to do",
     )

@@ -15,9 +15,34 @@
 //      project, and `.xcode-version` is already the one toolchain nix cannot
 //      pin. A second unpinnable toolchain is a second way for two developers to
 //      build different things.
-//   3. `swift test` works against this package directly, which is what makes
-//      `Tests/ScreenFixtureTests.swift` an owner hand-off that is a single
-//      command rather than an Xcode scheme.
+//   3. `swift test` worked against this package directly, which was what made
+//      `Tests/ScreenFixtureTests.swift` an owner hand-off that was a single
+//      command rather than an Xcode scheme. **THAT REASON HAS LAPSED** — see
+//      the note below. Reasons 1 and 2 stand on their own and are why this
+//      file is still SPM.
+//
+// THE HOST BUILD IS DEAD, AND EVERYTHING BELOW ABOUT IT IS VESTIGIAL.
+//
+// `swift test` builds `Sources/` for macOS, and `Sources/` imports **UIKit**.
+// That is not a framework macOS has, and unlike `CentraidShared` it cannot be
+// guarded into existence by `#if canImport` without a macOS-shaped stub behind
+// every use. `ShellModel.swift` took the first unguarded `import UIKit` in
+// `a4dd49d0d` and `ContentImage.swift` the second in `b3832bb6e` — both #1020
+// waves — and the host build has failed at clang dependency scanning ever
+// since. The three files under `Tests/` were therefore not merely unrun but
+// uncompiled, by either build system, until `project.yml` was given
+// `GENERATE_INFOPLIST_FILE` and a matching `PRODUCT_MODULE_NAME`.
+//
+// The tests now run as a SIMULATOR bundle (`mobile/README.md` step 4), which is
+// the better home for them anyway: `FontRegistrationTests` asserts `UIAppFonts`
+// and `UIFont(name:)`, and neither exists without a real app bundle.
+//
+// **An owner ruling is wanted on what to do with the wreckage.** Either restore
+// the host build — guard every UIKit use and keep a second, cheaper route that
+// needs no simulator — or delete the `macOS` platform line, the
+// `CentraidAppTests` target and the commented-out `binaryTarget` below, and let
+// this manifest be only what reasons 1 and 2 need. Leaving it exactly as-is is
+// the one option that keeps arguing for a command that cannot run.
 //
 // THE DEPLOYMENT FLOOR IS READ FROM ONE FILE. `mobile/ios-deployment-target`
 // holds `17.5`, the shipped floor. SPM's manifest cannot read a file at manifest time, so the
@@ -31,7 +56,8 @@ let package = Package(
     platforms: [
         // KEEP IN STEP WITH `mobile/ios-deployment-target` (17.5).
         .iOS(.v17),
-        // THE HOST FLOOR IS WHAT MAKES `swift test` THE HAND-OFF COMMAND.
+        // THE HOST FLOOR WAS WHAT MADE `swift test` THE HAND-OFF COMMAND —
+        // and it is no longer sufficient; see the header's note on UIKit.
         //
         // `swift test` builds for the HOST, and a package that names only iOS
         // gets SPM's default macOS floor (10.13) — under which every SwiftUI

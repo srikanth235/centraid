@@ -441,6 +441,42 @@ impl Vault {
             .close()
             .map_err(|(_, error)| VaultError::Sqlite(error))
     }
+
+    /// CHECKPOINT AND CLOSE, so the `.db` **alone** is the whole vault.
+    ///
+    /// [`Self::close`] is not enough and cannot be: [`Self::apply_pragmas`]
+    /// sets `wal_autocheckpoint = 0` and `SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE`
+    /// precisely so a close never checkpoints away frames a spool has not
+    /// sealed, and `docs/traps/wal-checkpoint.md` records the defect that rule
+    /// exists to stop. The consequence is that a closed vault keeps its
+    /// `-wal`, and **every row a short-lived process wrote lives there**.
+    ///
+    /// That is the whole of trap #2 in that file — "copying only `vault.db`
+    /// without its `-wal` and `-shm`" — reached from the other end:
+    /// `seed-demo-vault` left a 4 KB file beside a 19 MB `-wal`,
+    /// `mobile/scripts/demo-vault.sh` copied the `.db` and dropped the
+    /// sidecars, and the simulator opened a vault with no rows in it. Nothing
+    /// refused anything.
+    ///
+    /// So a process whose ARTIFACT IS THE FILE ends its vault here instead: the
+    /// log is checkpointed `TRUNCATE`, which folds every frame into the
+    /// database and restarts the WAL, and then the connection is closed.
+    ///
+    /// **Only for a vault no spool is tracking**, which is the same rule the
+    /// trap states and the reason this is a second door rather than a change to
+    /// [`Self::close`]. A checkpoint under a live capture restarts the WAL
+    /// beneath its cursor; the door that checkpoints a vault the backup plane
+    /// owns is [`crate::backup::capture::checkpoint`], which seals first and
+    /// records the restart. Its one caller today is `seed-demo-vault`, whose
+    /// vault is a throwaway fixture with no backup home behind it.
+    pub fn finish(self) -> Result<()> {
+        self.connection
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map_err(|error| VaultError::from_sqlite("checkpointing the log to finish", error))?;
+        self.close()
+    }
 }
 
 #[cfg(test)]

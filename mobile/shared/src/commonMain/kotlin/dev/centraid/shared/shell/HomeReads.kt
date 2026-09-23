@@ -7,6 +7,7 @@ import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.TileBody
 import centraid.screen.v1.TileCount
 import centraid.screen.v1.TileStatus
+import dev.centraid.shared.design.PartyHueWheel
 
 /**
  * WHAT EACH HOME TILE READS, AND WHAT IT MAKES OF THE ROWS (#1020, wave A).
@@ -70,6 +71,14 @@ public object HomeReads {
     private const val PHOTO_THUMBNAIL: Int = 3
 
     /**
+     * Where the door puts `document_size` on the docs read: after the three
+     * columns it named, exactly as [PHOTO_THUMBNAIL] sits after its own. A
+     * constant for the same reason — it moves with that `select` list, and a
+     * literal `3` in the row builder would be a second place to forget.
+     */
+    private const val DOC_SIZE: Int = 3
+
+    /**
      * One app's read: the statement, and the label its count is spoken with.
      *
      * `countLabel` is the noun a screen reader says after the number ("812
@@ -122,6 +131,12 @@ public object HomeReads {
                 select = listOf("document_id", "title", "updated_at"),
                 from = "core_document",
                 order = order("updated_at", "document_id"),
+                // THE SIZE IS A COMPUTED COLUMN THE VAULT APPENDS, and asking
+                // for it is the whole of what this tile had to do. `core_document`
+                // carries `current_content_id`, which is what the correlated
+                // subquery correlates on — set this flag on a table that does not
+                // and the page is REFUSED at prepare, never answered with nulls.
+                with_document_size = true,
             ),
             countLabel = "documents",
         ),
@@ -287,12 +302,20 @@ public object HomeReads {
                         TileBody.Docs.Row(
                             document_id = row.text(0),
                             name = row.text(1),
-                            // The SIZE IS NOT READ HERE and so it is not shown.
-                            // It lives on the content item, not the document,
-                            // and a byte count this tile invented would be a
-                            // number a member could quote back. The renderer
-                            // draws nothing for an empty size, never a zero.
-                            size = "",
+                            // A PHRASE THE VAULT SAID, NEVER A NUMBER THIS TILE
+                            // TURNED INTO ONE. This used to read `size = ""`
+                            // with a comment explaining that the size "is not
+                            // read here" — true, and the reason the Docs tile
+                            // drew a bare list against a handoff that rules a
+                            // trailing meta column. The door now offers
+                            // `with_document_size` and the vault projects the
+                            // formatted phrase, so the contract's rule ("already
+                            // formatted by the core, which knows the vault's
+                            // locale; never formatted in a view from a byte
+                            // count") is a shape rather than advice: the integer
+                            // is removed from the row before it is served and
+                            // there is no byte count here to format.
+                            size = row.text(DOC_SIZE),
                         )
                     },
                 ),
@@ -340,6 +363,26 @@ public object HomeReads {
                         TileBody.People.Face(
                             party_id = row.text(0),
                             initials = initials(row.text(1)),
+                            // THE HUE IS RESOLVED HERE, ONCE, FOR BOTH SHELLS
+                            // (#883, ruling O-identity). A face drawn without
+                            // one is a grey disc, which is what Home drew until
+                            // this line: the identity wheel was emitted, ported
+                            // to Rust and never reached from a screen. Compose
+                            // and SwiftUI could each have run it — and would
+                            // have agreed by luck — so the answer travels in
+                            // the message and a view's whole job is a lookup.
+                            //
+                            // `null` for the stored colour, and NOT a column
+                            // this read forgot: `core_party` has no
+                            // `avatar_color`. It carries `avatar_content_id` —
+                            // a PHOTOGRAPH — and the only `avatar_color` this
+                            // repository ever had was v0's `tally_friend`. So
+                            // every face today is derived from `party_id`,
+                            // which is the branch that matters anyway: a hue
+                            // keyed off the display name would repaint a
+                            // person the member recognises the moment they
+                            // corrected a spelling.
+                            color = PartyHueWheel.partyHueKey(row.text(0), null),
                         )
                     },
                     // From the HEADER TOTAL, never a fabricated 0: an exhausted

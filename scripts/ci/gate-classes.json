@@ -6,12 +6,6 @@
     "door": "hook",
     "why": "The affected packages' tests — the gate that actually catches breakage, and the wall clock every other rung-1 gate hides behind."
   },
-  "design:gallery": {
-    "class": "product",
-    "rung": 1,
-    "door": "hook",
-    "why": "Pixel baselines for the design gallery. No CI job owns it (it needs a downloaded browser), so rung 1 is its only enforcement."
-  },
   "knip": {
     "class": "contract",
     "rung": 1,

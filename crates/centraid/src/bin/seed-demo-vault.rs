@@ -3,7 +3,7 @@
 //! ```text
 //! cargo run -p centraid --bin seed-demo-vault -- <dir> [options]
 //!
-//!   --file <name>   the file to write inside <dir>  (default demo-vault.db)
+//!   --file <name>   the file to write inside <dir>  (default demo-vault.sqlite3)
 //!   --name <text>   the vault's display name        (default "Demo vault")
 //!   --only <a,b,c>  seed only these apps            (default: all seven)
 //!   --force         overwrite a file that is ALREADY a vault
@@ -55,12 +55,19 @@
 //! guard and not against it: a dev binary that can silently destroy a gateway's
 //! vault is the one class worth guarding, and the cost is one read.
 //!
-//! **What did NOT come across, and why.** v0's photos seed generates real JPEG
-//! bytes for eighteen frames and stages face proposals over them; the frames'
-//! titles and capture times are here and the BYTES are not, because nothing on
-//! either shell reads a thumbnail yet (Home's mosaic draws cells, not images).
-//! When the blob door lands, the byte half of that seed is the next thing to
-//! port and `v0 photos/seed.js` is where it is.
+//! **THE BYTES ARE HERE NOW.** This paragraph used to say the frames' titles
+//! and capture times had come across from v0 and the bytes had not, "because
+//! nothing on either shell reads a thumbnail yet". Both halves are gone:
+//! `media.add_asset` stages real image bytes through the content plane, the
+//! derivative tiers are written beside them, and both shells draw the mosaic
+//! and the grid from the files this seed leaves in `<stem>.bytes`.
+//!
+//! **What is still missing is the VIDEO's poster.** The one video seeds its own
+//! bytes and no `poster` derivative — nothing in the workspace writes that
+//! variant for any asset — so its cell draws empty while every photograph draws
+//! its thumbnail. That is the honest state rather than a `.mp4` handed to an
+//! image view, which is what it was until `Vault::resolve_held_bytes` learned
+//! to say so.
 
 use std::path::PathBuf;
 
@@ -209,7 +216,14 @@ struct Options {
 fn options() -> Options {
     let mut args = std::env::args().skip(1);
     let mut dir = None;
-    let mut file = "demo-vault.db".to_owned();
+    // `.sqlite3` AND NOT `.db`, BECAUSE THAT IS WHAT A SHELL ADOPTS.
+    // `Shelf.SUFFIX` (mobile/shared, `Shelf.kt`) takes every `*.sqlite3` in the
+    // vault directory as a vault and ignores everything else, so a fixture
+    // written as `demo-vault.db` and placed on a phone was a file the roster
+    // never looked at: the switcher said "this device holds one vault" and the
+    // re-seed changed nothing anyone could see. The suffix is the shell's, so
+    // the generator spells it the shell's way.
+    let mut file = "demo-vault.sqlite3".to_owned();
     let mut name = "Demo vault".to_owned();
     let mut wanted = Wanted(None);
     let mut force = false;
@@ -436,6 +450,19 @@ fn main() {
         }
     };
     handle.close();
+    // AND THE FILE IS FINISHED BEFORE THIS PROCESS GOES, for the same reason
+    // the store is flushed below (#1020 wave A, and the run that found it).
+    //
+    // `close` releases the waiters and leaves the connection to teardown, which
+    // is right for a phone and wrong here: this run left a 4 KB vault file
+    // beside a 19 MB `-wal`, `mobile/scripts/demo-vault.sh` copied the `.db`
+    // and dropped the sidecars — as it must, they belong to the copy — and the
+    // simulator opened a vault with NO ROWS IN IT. Nothing failed at any layer.
+    // `close_file` checkpoints the WAL and removes both sidecars, so the file
+    // this binary names in `CENTRAID_VAULT` is the whole vault.
+    handle
+        .close_file()
+        .expect("the vault file closes, so the artifact is the whole vault");
     // THE STORE IS FLUSHED BEFORE THIS PROCESS GOES. See the clone above: the
     // artifact this binary leaves is a store another process has to serve from,
     // and an unflushed index is a fixture that lies.
@@ -486,6 +513,7 @@ fn first_row(handle: &centraid_core::Handle, table: &str, column: &str) -> Optio
                 }),
                 with_held_thumbnail: false,
                 with_note_body: false,
+                with_document_size: false,
             }),
             limit: 1,
             after: None,
@@ -1252,8 +1280,10 @@ fn seed_photos(seeder: &mut Seeder, now: i64) -> u32 {
         }
     }
 
-    // THE ONE VIDEO, which is what makes the mosaic's poster variant reachable
-    // and the video badge something a screenshot can show.
+    // THE ONE VIDEO, which is what makes the video badge something a screenshot
+    // can show — and the one cell in the demo library that draws no image.
+    // Nothing in this workspace writes a `poster` derivative, so the mosaic has
+    // no still to fall back to and says so by drawing an empty cell.
     if seeder
         .run(
             "media.add_asset",

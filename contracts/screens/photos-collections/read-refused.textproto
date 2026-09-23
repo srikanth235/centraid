@@ -1,0 +1,23 @@
+# A REFUSED COLLECTIONS SCREEN INVENTS NO SHELVES.
+#
+# The standing four are a constant — Favorites, Archive, Trash, Videos exist in
+# every vault — which makes this the screen most likely to grow a fourth read
+# state: a list that "cannot fail" because the shell can always draw four rows.
+# It can. Their COUNTS and their covers come from a read, and four rows with
+# nothing behind them is a screen that says a member's library is empty when
+# what happened is that nothing was read.
+#
+# So: `failure` present, `data` absent, and no shelves at all. The remedy is set
+# because there is something a member can do; a refusal with nothing to offer
+# leaves it empty rather than inventing advice.
+seat {
+  availability: AVAILABILITY_WAITING_FOR_MOUNT
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+failure {
+  kind: READ_FAILURE_KIND_NO_COPY_YET
+  sentence: "This device has not copied your albums yet."
+  remedy: "Stay on Wi-Fi while Centraid catches up."
+}
+sheet: SHEET_NONE

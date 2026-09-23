@@ -56,6 +56,144 @@ struct CentraidApp: App {
                                 PhotosGridView(shell: shell)
                             case let .note(identifier):
                                 NotesEditorView(shell: shell, noteIdentifier: identifier)
+
+                            // THE PHOTOS MINIAPP'S OTHER NINE SCREENS.
+                            //
+                            // Every one takes BYTES and closures, never this
+                            // model: a view that held the shell would be a
+                            // view that could reach past its own screen, and
+                            // the whole execution model is that a view renders
+                            // a finished state and forwards events.
+                            case let .photoShelf(shelf):
+                                PhotoShelfView(
+                                    data: shell.photoShelfState,
+                                    shelf: (try? Centraid_Screen_V1_PhotoShelf(
+                                        serializedBytes: shelf
+                                    )) ?? .init(),
+                                    copy: shell.photoShelfCopy,
+                                    send: { shell.send(screen: "photos.shelf", event: $0) },
+                                    onOpenAsset: { identifier, neighbours in
+                                        // AN ALBUM'S LIGHTBOX KNOWS ITS ALBUM,
+                                        // for "Make key photo".
+                                        let album = (try? Centraid_Screen_V1_PhotoShelf(
+                                            serializedBytes: shelf
+                                        ))?.album.collectionID ?? ""
+                                        shell.path.append(
+                                            .photoLightbox(identifier, neighbours, album: album)
+                                        )
+                                    },
+                                    onAddPhotographs: { identifier, name in
+                                        shell.path.append(.photoPicker(identifier, name))
+                                    },
+                                    onExport: { identifiers, kind in
+                                        shell.exportShelf(identifiers, as: kind)
+                                    }
+                                )
+
+                            case let .photoLightbox(identifier, _, _):
+                                PhotoLightboxView(
+                                    data: shell.photoLightboxState,
+                                    send: { shell.send(screen: "photos.lightbox", event: $0) }
+                                )
+                                // THE NEIGHBOURS RIDE THE ROUTE and reach the
+                                // machine through `shell.opened(route)` below,
+                                // so a swipe needs no read. `.id` is what makes
+                                // SwiftUI rebuild when a member swipes from one
+                                // photograph to the next.
+                                .id(identifier)
+                                // EDIT PUSHES THE EDITOR, with the neighbours,
+                                // so a save can come back to the same shelf.
+                                .environment(\.openPhotoEditor) { assetIdentifier, neighbours in
+                                    shell.path.append(.photoEditor(assetIdentifier, neighbours))
+                                }
+
+                            case let .photoPicker(identifier, name):
+                                PhotoPickerView(
+                                    data: shell.photoPickerState,
+                                    collectionIdentifier: identifier,
+                                    collectionName: name,
+                                    // EMPTY, AND NOT A GAP: the picker reads
+                                    // the album's whole membership itself on
+                                    // open (`PhotoPickerMachine.MEMBERS_READ_ID`)
+                                    // — no caller holds more than one page of it.
+                                    alreadyInAlbum: [],
+                                    send: { shell.send(screen: "photos.picker", event: $0) },
+                                    onFinished: { shell.path.removeLast() }
+                                )
+
+                            case .places:
+                                PlacesView(
+                                    data: shell.placesState,
+                                    send: { shell.send(screen: "photos.places", event: $0) },
+                                    onOpenPlace: { identifier, name in
+                                        shell.path.append(.photoShelf(shell.placeShelf(
+                                            identifier: identifier,
+                                            name: name
+                                        )))
+                                    },
+                                    onOpenShelf: { shell.path.append(.photoShelf($0)) }
+                                )
+
+                            case .photosPeople:
+                                PhotosPeopleView(
+                                    data: shell.photosPeopleState,
+                                    onEvent: { shell.send(screen: "photos.people", event: $0) },
+                                    onOpenPerson: { identifier, name in
+                                        shell.path.append(.photoShelf(shell.personShelf(
+                                            identifier: identifier,
+                                            name: name
+                                        )))
+                                    },
+                                    onOpenFaceReview: { shell.path.append(.photoFaceReview) }
+                                )
+
+                            case .photoFaceReview:
+                                FaceReviewView(
+                                    data: shell.faceReviewState,
+                                    onEvent: { shell.send(screen: "photos.faces", event: $0) }
+                                )
+
+                            case .photosMemories:
+                                PhotosMemoriesView(
+                                    data: shell.photosMemoriesState,
+                                    send: { shell.send(screen: "photos.memories", event: $0) },
+                                    onOpenMemory: { identifier, title in
+                                        shell.path.append(.photoShelf(shell.memoryShelf(
+                                            identifier: identifier,
+                                            title: title
+                                        )))
+                                    }
+                                )
+
+                            case .photoDuplicates:
+                                DuplicatesView(
+                                    data: shell.duplicatesState,
+                                    send: { shell.send(screen: "photos.duplicates", event: $0) },
+                                    onOpenCluster: { identifier in
+                                        shell.path.append(.photoDuplicateReview(identifier))
+                                    }
+                                )
+
+                            case let .photoDuplicateReview(identifier):
+                                DuplicateReviewView(
+                                    data: shell.duplicateReviewState,
+                                    send: { shell.send(screen: "photos.duplicate", event: $0) }
+                                )
+                                .id(identifier)
+
+                            // THE EDITOR (#1029). Cancel pops back onto the
+                            // lightbox it came from; a save replaces that
+                            // lightbox with one on the NEW photograph.
+                            case let .photoEditor(identifier, neighbours):
+                                PhotoEditorView(
+                                    data: shell.photoEditorState,
+                                    send: { shell.send(screen: "photos.editor", event: $0) },
+                                    onClose: { shell.path.removeLast() },
+                                    onSaved: { saved in
+                                        shell.photoEditSaved(saved, neighbours: neighbours)
+                                    }
+                                )
+                                .id(identifier)
                             }
                         }
                         // A SCREEN READS BECAUSE IT WAS OPENED. The machine

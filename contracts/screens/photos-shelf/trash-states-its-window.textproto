@@ -1,0 +1,51 @@
+# TRASH SAYS HOW LONG IT KEEPS THINGS, AND ONLY TRASH CAN.
+#
+# `purge_window_days` is the WINDOW — "purged 30 days after deletion" — and it
+# is 0 on every other shelf. The three other `photos-shelf` fixtures beside this
+# one leave it unset for exactly that reason: the field is not "a retention
+# sentence a shelf may have", it is the one sentence the trash predicate earns.
+# A shelf that could carry it under any predicate is a shelf that eventually
+# tells a member their album expires — which is how v0's four separate shelf
+# screens drifted in the first place, one of them growing an affordance the
+# others could not show.
+#
+# IT WAS `purge_in_days`, A COUNTDOWN, AND NOTHING COULD PRODUCE IT. `PhotoCell`
+# carries no `purge_at`, so a row's own deadline never reaches the state, and
+# `commonMain` has no clock BY DESIGN (`sync/Instants.kt`) — so a reducer could
+# not subtract one from today even if it did. The window needs neither, and it
+# is what v0's trash meta line actually said.
+#
+# 30 is `PURGE_AFTER_DAYS` in `crates/vault/src/commands/media.rs`, NOT
+# `retentionWindows` in `contracts/schema/v0-registries.json` — that object
+# holds only `audit` and `ledger`.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+shelf {
+  state_view {
+    mode { kind: KIND_TRASH }
+  }
+}
+data {
+  cells {
+    asset_id: "ast-0101"
+    thumbnail_path: "thumbs/ast-0101.jpg"
+    captured_at: "2026-06-14T11:02:00Z"
+    captured_utc_offset_minutes: 120
+    kind: KIND_PHOTO
+    held: HELD_ORIGINAL
+    original_hash: "9f2c1a77b3d40e5188aa6c0f4b7e2d9130cc5a6e8f11b2c3d4e5f60718293a4b"
+  }
+  cells {
+    asset_id: "ast-0102"
+    thumbnail_path: "thumbs/ast-0102.jpg"
+    captured_at: "2026-06-13T08:41:00Z"
+    captured_utc_offset_minutes: 120
+    kind: KIND_VIDEO
+    held: HELD_THUMBNAIL_ONLY
+    original_hash: "1b4d5e6f708192a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f8091203"
+  }
+}
+purge_window_days: 30

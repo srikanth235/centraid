@@ -1038,7 +1038,7 @@ public class IosMediaLibrary : MediaLibrary {
          * `close()` is called from the `finally` of `CameraRoll.offer`, so
          * anything it raises escapes the pass, escapes the coroutine and takes
          * the process down — which is what happened the first time a member
-         * pressed "Back up now" on a real device.
+         * pressed "Import now" on a real device.
          *
          * **The file is removed on every path.** A pass over a roll that left
          * its temporaries behind would fill a member's disk with a second copy

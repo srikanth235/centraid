@@ -1,0 +1,48 @@
+# THE ONE SURFACE A MEMBER ACTUALLY WATCHES A DOWNLOAD ON.
+#
+# `HELD_FETCHING` with `fetch_percent: 43`. The field was absent from
+# `PhotoDetail` for one draft, which put a percentage on the 120-cell grid and
+# nothing on the lightbox — and the lightbox is where it is felt: a member who
+# taps an arrow in the grid glances, a member here is waiting for THIS
+# photograph.
+#
+# The zero is an honest "nobody can say" and never "nothing has crossed", which
+# is why a value of 43 has to be distinguishable from an unset field by being a
+# real number rather than by presence. `photos-lightbox/withheld-by-rule` is
+# the state before this one — a decision, with the arrow — and
+# `photos/thumbnail-pack-absent`'s cells are the grid's side of the same enum.
+#
+# `original_path` is still ABSENT: the bytes are moving and have not landed, so
+# the thumbnail is still what draws. A view that took `HELD_FETCHING` as
+# permission to reach for the original would show a member a blank frame for
+# however long the transfer takes.
+#
+# `chrome_visible` is true and the sheet is none: a member watching a download
+# is not a member who has hidden the bars.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+asset_id: "ast-0301"
+detail {
+  asset_id: "ast-0301"
+  thumbnail_path: "thumbs/ast-0301.jpg"
+  title: "Cliff path"
+  captured_at: "2026-03-22T07:45:00Z"
+  kind: KIND_PHOTO
+  held: HELD_FETCHING
+  original_hash: "c0ffee11223344556677889900aabbccddeeff00112233445566778899aabbcc"
+  favorite: true
+  width: 4032
+  height: 3024
+  byte_size: 8412672
+  place_name: "Dún Laoghaire"
+  place_id: "plc-0004"
+  camera: "iPhone 17 Pro"
+  fetch_percent: 43
+}
+chrome_visible: true
+sheet: SHEET_NONE
+neighbour_asset_ids: "ast-0300"
+neighbour_asset_ids: "ast-0302"

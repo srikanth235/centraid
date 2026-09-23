@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,19 +20,88 @@ function json<T>(file: string): T {
   return JSON.parse(readFileSync(path.join(ROOT, file), "utf8")) as T;
 }
 
-describe("single icon registry", () => {
-  test("blueprint adapters contain no local SVG dictionaries", () => {
-    const appRoot = path.join(ROOT, "packages/blueprints/apps");
-    for (const app of readdirSync(appRoot)) {
-      const dir = path.join(appRoot, app);
-      for (const file of ["icons.ts", "icons.tsx"]) {
-        const full = path.join(dir, file);
-        if (!existsSync(full)) continue;
-        const source = readFileSync(full, "utf8");
-        expect(source, full).toContain("@centraid/design");
-        expect(source, full).not.toMatch(/<svg|<path|<circle|<rect/gu);
-      }
+// ── WHO CONSUMES THE REGISTRY, AND HOW THAT MOVED ─────────────────────────
+//
+// Until #1029 the two tests below scanned `packages/blueprints` — the app
+// adapters and their `app.json` catalogues were the surfaces that could fork
+// the icon set or name a key it did not hold. That tree was deleted with the
+// rest of v0, and both tests then died on `ENOENT` inside `readdirSync` before
+// asserting anything. An icon contract that scans nothing is worse than no
+// icon contract: it reports two green cases per run for a guarantee nobody is
+// making any more.
+//
+// The consumers now are the two native shells, and they reach the registry
+// through ONE emitted artifact each: `contracts/tools/export-native-catalog.ts`
+// lowers `icons` into `design/native-catalog.json`, `Catalog.kt` and
+// `Catalog.swift`. So the same two questions re-point, and both still have
+// teeth here:
+//
+//   1. does anything OUTSIDE that emitted pair carry silhouette path data?
+//   2. does every icon key a shipped artifact or a shell names RESOLVE?
+//
+// Question 2 is the one with a real failure mode behind it. `Icon.swift` reads
+// `CentraidCatalog.icons[iconKey] ?? []` and `Icon.kt` reads
+// `.icons[iconKey].orEmpty()`, so a misspelled key draws NOTHING and nothing
+// throws — the silent blank mark `CatalogSpec` was written after. That spec and
+// `IconSilhouetteTests` cover the keys the Kotlin POLICIES name; this file
+// covers the string literals typed into the view layer and the emitted table
+// itself, neither of which needs a JVM or an Xcode toolchain to read.
+
+/** The hand-written shell sources, plus the two emitted catalogue files that
+ *  live among them. `iosApp/Sources/Generated` holds protobuf output and is
+ *  walked like anything else — it is generated, but it is not the icon
+ *  lowering, so it may not carry path data either. */
+const SHELL_ROOTS = [
+  "mobile/iosApp/Sources",
+  "mobile/iosApp/Design",
+  "mobile/androidApp/src",
+  "mobile/shared/src/commonMain",
+];
+
+/** The ONLY two files permitted to carry silhouette path data, and both are
+ *  generated. Hand-editing either is caught elsewhere — the gate's `emitters`
+ *  step and the `mobile-jvm` profile both regenerate and fail on a diff. */
+const EMITTED_CATALOGUES = new Set([
+  "mobile/iosApp/Design/Catalog.swift",
+  "mobile/shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt",
+]);
+
+const SHELL_EXTENSIONS = [".swift", ".kt"];
+
+function walkShellSources(): string[] {
+  const out: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory)) {
+      const full = path.join(directory, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (SHELL_EXTENSIONS.some((suffix) => entry.endsWith(suffix)))
+        out.push(path.relative(ROOT, full));
     }
+  };
+  for (const root of SHELL_ROOTS) walk(path.join(ROOT, root));
+  return out;
+}
+
+describe("single icon registry", () => {
+  test("no shell source outside the emitted catalogue carries path data", () => {
+    // A `"M…"` string literal in a 24-box is what a silhouette IS, so a view
+    // that holds one is holding artwork the registry cannot revise — the
+    // native form of the local SVG dictionary this case has always forbidden.
+    const pathData = /"M-?[\d.]+[\s,]/u;
+    const sources = walkShellSources();
+    expect(
+      sources.length,
+      "the shell trees produced no sources"
+    ).toBeGreaterThan(0);
+    const offenders = sources.filter(
+      (file) =>
+        !EMITTED_CATALOGUES.has(file) &&
+        pathData.test(readFileSync(path.join(ROOT, file), "utf8"))
+    );
+    expect(
+      offenders,
+      "SVG path data outside Catalog.kt/Catalog.swift"
+    ).toStrictEqual([]);
   });
 
   test("the element layer hand-rolls no icon markup", () => {
@@ -44,20 +113,44 @@ describe("single icon registry", () => {
     }
   });
 
-  test("all shipped catalogs resolve through the shared registry", () => {
-    const files = [
-      "packages/blueprints/index.json",
-      "packages/blueprints/manifest.json",
-      ...walkJsonFiles(path.join(ROOT, "packages/blueprints")),
-    ];
-    const keys: string[] = [];
-    for (const file of files) collectIconKeys(json<unknown>(file), keys);
-    expect(
-      keys.length,
-      "catalogs should contain iconKey entries"
-    ).toBeGreaterThan(0);
-    for (const iconKey of keys) {
-      expect(isIconName(iconKey), iconKey).toBe(true);
+  test("the emitted native catalogue is this registry, not a second one", () => {
+    // `design/native-catalog.json` is COMMITTED, so it can go stale against the
+    // registry it was lowered from. The drift gate that catches that lives in
+    // `cargo xtask gate` (`emitters`, and the `mobile-jvm` profile), which is
+    // neither cheap nor run on a TypeScript-only change — and the emitted table
+    // is what both shells actually draw.
+    const catalogue = json<{
+      apps: { id: string; iconKey: string }[];
+      icons: Record<string, unknown[]>;
+    }>("design/native-catalog.json");
+    expect(Object.keys(catalogue.icons).sort()).toStrictEqual(
+      Object.keys(icons).sort()
+    );
+    expect(catalogue.apps.map((app) => app.id)).toStrictEqual(
+      apps.map((app) => app.id)
+    );
+    for (const app of catalogue.apps) {
+      expect(isIconName(app.iconKey), `${app.id} → ${app.iconKey}`).toBe(true);
+    }
+  });
+
+  test("every icon key a shell names by literal resolves", () => {
+    // `Icon.swift` and `Icon.kt` both fall back to an EMPTY path list, so a key
+    // the table does not hold renders a blank chip and nothing fails. These are
+    // the keys typed into the views rather than declared in a Kotlin policy —
+    // the half `CatalogSpec` cannot enumerate.
+    const literal = /iconKey\s*[:=]\s*"(?<key>[^"]+)"/gu;
+    const named = new Map<string, string>();
+    for (const file of walkShellSources()) {
+      const source = readFileSync(path.join(ROOT, file), "utf8");
+      for (const match of source.matchAll(literal)) {
+        const key = match.groups?.key ?? "";
+        if (!named.has(key)) named.set(key, file);
+      }
+    }
+    expect(named.size, "no shell source names an icon key").toBeGreaterThan(0);
+    for (const [key, file] of named) {
+      expect(isIconName(key), `${file} names icon '${key}'`).toBe(true);
     }
   });
 
@@ -249,23 +342,3 @@ describe("Photos v4 handoff icon keys", () => {
     expect(new Set(signatures).size).toBe(signatures.length);
   });
 });
-
-function walkJsonFiles(directory: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(directory)) {
-    const full = path.join(directory, entry);
-    if (statSync(full).isDirectory()) walkJsonFiles(full, out);
-    else if (entry === "app.json") out.push(path.relative(ROOT, full));
-  }
-  return out;
-}
-
-function collectIconKeys(value: unknown, out: string[]): void {
-  if (Array.isArray(value)) {
-    for (const child of value) collectIconKeys(child, out);
-    return;
-  }
-  if (!value || typeof value !== "object") return;
-  const record = value as Record<string, unknown>;
-  if (typeof record.iconKey === "string") out.push(record.iconKey);
-  for (const child of Object.values(record)) collectIconKeys(child, out);
-}

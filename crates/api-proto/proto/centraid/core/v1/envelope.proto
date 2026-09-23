@@ -23,6 +23,7 @@ import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
+import "centraid/core/v1/originals.proto";
 import "centraid/core/v1/phone.proto";
 import "centraid/core/v1/query.proto";
 import "centraid/core/v1/vault.proto";
@@ -77,6 +78,10 @@ message Request {
     PairRequest pair_phone = 16;
     RestoreRequest restore = 17;
     BackupStatusRequest backup_status = 18;
+    // THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
+    // the photos port). See `originals.proto`, including why it carries no
+    // release verb.
+    OriginalsRequest originals = 19;
   }
 }
 
@@ -99,6 +104,7 @@ message Response {
     PairResponse pair_phone = 16;
     RestoreResponse restore = 17;
     BackupStatusResponse backup_status = 18;
+    OriginalsResponse originals = 19;
   }
 }
 

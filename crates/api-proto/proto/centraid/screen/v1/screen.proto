@@ -337,6 +337,59 @@ message PhotosGridState {
   // so it cannot be a `Destination` value.
   Sheet sheet = 8;
 
+  // THE LIBRARY'S OWN VIEW OF ITSELF (#1029, photos port — v0's
+  // `PhotosHome.tsx`). The zoom, the filter and the tile size are the MEMBER'S
+  // choices about how to look at one library, so they live on the state and
+  // survive every recomposition; only `rung` outlives the process, because it
+  // is the only one v0 persisted (`photos-rung-store.ts`).
+  Grain grain = 9;
+  Filter filter = 10;
+  // 0-3, XS to L (`photos-rungs.ts`). The machine seeds M.
+  uint32 rung = 11;
+  // WHERE THE MEMBER IS, as a capture-local `YYYY-MM-DD`, so a grain switch
+  // lands on the same stretch of time rather than at the top. Empty is "the
+  // top", which is also the honest answer for the undated tail.
+  string place_day = 12;
+
+  // THE SELECTION. A mode and a set, not a set alone: a member who pressed
+  // Select and has picked nothing yet is selecting, and the band has already
+  // given way to the selection bar.
+  bool selecting = 13;
+  repeated string selected = 14;
+
+  // "Add to album" — the shared sheet's contract (`AlbumChoice.kt`).
+  bool album_choice_open = 15;
+  repeated AlbumChoiceEntry album_choices = 16;
+
+  // A WRITE THE VAULT REFUSED, in its own slot and never the `content` oneof's
+  // `failure`: a refused favourite must not replace the library with an error.
+  ReadFailure write_failure = 17;
+  // WHAT "SEND A COPY" OVER THE SELECTION CAME TO — the shelf's
+  // `export_notice`, for the same batch hand-off (`ShelfCopies.kt`). One
+  // clause reported back by the shell (`ExportSettled`) and cleared by the
+  // next verb. Not `write_failure`: nothing was written to the vault.
+  string export_notice = 23;
+
+  // THE ONE READ IN FLIGHT, AND THE ONE WAITING BEHIND IT. `DataArrived` does
+  // not say which request it answers, so the machine keeps at most one page
+  // read outstanding and knows the answer by elimination — a refresh that
+  // raced a next page would otherwise splice page three onto a fresh page one.
+  ReadMode reading = 18;
+  // The read in flight is the UNDATED walk's (see `PhotosGridData.undated_walk`).
+  bool reading_undated = 19;
+  ReadMode queued = 20;
+  // A REFRESH READS BESIDE THE LIBRARY, NOT INSTEAD OF IT. A write re-reads
+  // every page the member had scrolled through into this buffer and swaps it
+  // in whole, so a favourite neither blanks the grid nor throws the scroll.
+  PhotosGridData restage = 21;
+  uint32 restage_target = 22;
+
+  // THE MORE SHEET'S "FREE UP SPACE" ROW (#1029, the photos port — v0's
+  // "Free up vault"). Unset until the sheet first opens and the core counts;
+  // the row then says it is counting, never a zero. Numbered clear of the
+  // library's own run of fields so the two never collide mid-edit.
+  FreeUpSpace free_up = 40;
+
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
     DESTINATION_LIBRARY = 1;
@@ -349,6 +402,36 @@ message PhotosGridState {
     SHEET_NONE = 1;
     SHEET_MORE = 2;
     SHEET_BACKUP_DETAIL = 3;
+    // "Move these to the trash?" over the selection. A confirm is a sheet (D4).
+    SHEET_CONFIRM_TRASH = 4;
+  }
+
+  // v0's three zooms, widest first (`timeline-grains.ts`). A VIEW, NOT A
+  // FILTER: Years and Months summarise the same cells All draws.
+  enum Grain {
+    GRAIN_UNSPECIFIED = 0;
+    GRAIN_YEARS = 1;
+    GRAIN_MONTHS = 2;
+    GRAIN_ALL = 3;
+  }
+
+  // v0's two honest per-asset predicates (`photos-library-menu.ts`). Videos
+  // has its own door on Collections and is deliberately not here.
+  enum Filter {
+    FILTER_UNSPECIFIED = 0;
+    FILTER_ALL = 1;
+    FILTER_FAVORITES = 2;
+  }
+
+  enum ReadMode {
+    // Nothing in flight.
+    READ_MODE_NONE = 0;
+    // The library from its first page, drawn over skeletons.
+    READ_MODE_FIRST = 1;
+    // The next page, appended.
+    READ_MODE_MORE = 2;
+    // The pages already read, re-read into `restage`.
+    READ_MODE_REFRESH = 3;
   }
 }
 
@@ -360,6 +443,13 @@ message PhotosGridData {
   // A single "no image" would make a member who has no pack and a member whose
   // pack has evicted these look at the same screen.
   bool thumbnail_pack_absent = 3;
+  // THE DATED WALK HAS ENDED (#1029, photos port). An undated photograph has
+  // no place in a capture-time keyset — `(NULL, id) < (?, ?)` is never true —
+  // so the library is TWO walks: every dated row newest first, then the
+  // undated tail by id. Set, `next_cursor` is the undated walk's.
+  bool undated_walk = 4;
+  // Both walks have ended: every photograph in the library is in `cells`.
+  bool complete = 5;
 }
 
 message PhotoCell {
@@ -382,8 +472,8 @@ message PhotoCell {
   // A CLOSED ENUM and not three booleans. The five states are mutually
   // exclusive by construction and a cell that could be two of them at once is
   // a cell drawing two affordances; the derivation is one function
-  // (`PhotosReads.heldOf`) over `seat_blob_held` and the member's rule, and it
-  // is the only thing allowed to produce this value.
+  // (`PhotosReads.heldOf`) over the page read's held columns and the member's
+  // rule, and it is the only thing allowed to produce this value.
   Held held = 8;
   // HOW FAR A `HELD_FETCHING` CELL HAS GOT, 0-100, and 0 when nobody can say.
   //
@@ -400,6 +490,23 @@ message PhotoCell {
   // hash, and a shell that had to compose `blob:blake3-<hex>` would be a shell
   // spelling a scheme that is the core's.
   string original_hash = 10;
+  // THE PHOTOGRAPH'S OWN PIXEL BOX, from `media_asset.width`/`height`, 0 when
+  // the vault does not know it (#1029, photos port). A justified row packs from
+  // the REAL aspect ratio before a byte arrives (v0's `justify.ts`), so a
+  // tile's shape never reflows when its thumbnail lands; unknown is square.
+  uint32 width = 11;
+  uint32 height = 12;
+  // A video's length in whole seconds, 0 when unknown or not a video — the
+  // tile's kind line (`tile-overlays.ts`).
+  uint32 duration_seconds = 13;
+  // THE CAPTURE-LOCAL DAY, `YYYY-MM-DD`, empty when the photograph carries no
+  // capture time. Derived once from `captured_at` and its offset
+  // (`PhotosReads`) so both shells group a day identically and neither parses
+  // an instant: re-parsing files a 20:00-local photograph under the wrong day.
+  string day = 14;
+  // A LIVE PHOTO: its paired movie shares this still's capture group and is
+  // folded into this one cell rather than drawn beside it.
+  bool live = 15;
 
   // The five states a cell can be in, and no sixth.
   enum Held {
@@ -511,10 +618,96 @@ message PhotosGridEvent {
     RowsChanged rows_changed = 12;
     OriginalRequested fetch_original = 14;
     FetchSettled fetch_settled = 15;
+    // THE LIBRARY'S OWN CONTROLS (#1029, photos port).
+    GrainChanged grain = 16;
+    PeriodOpened period = 17;
+    RungChanged rung = 18;
+    FilterChanged filter = 19;
+    SelectionModeChanged selection_mode = 20;
+    SelectionToggled selection_toggled = 21;
+    SelectionSet selection_set = 22;
+    FavoriteSelected favorite_selected = 23;
+    TrashConfirmed trash_confirmed = 24;
+    AlbumChoiceOpened album_choice_opened = 25;
+    AlbumChoiceDismissed album_choice_dismissed = 26;
+    AlbumChosen album_chosen = 27;
+    AlbumChoicesArrived album_choices = 28;
+    AlbumChoiceCreated album_created = 29;
+    WriteSettled write_settled = 30;
+    ExportSettled export_settled = 31;
+    // The originals census answered for the More sheet (`KeepOriginals`).
+    FreeUpCounted free_up_counted = 40;
+  }
+
+  message FreeUpCounted {
+    FreeUpSpace free_up = 1;
+  }
+
+  // What the shell's "Send a copy" came to, in the one clause
+  // `export_notice` shows.
+  message ExportSettled {
+    string sentence = 1;
+  }
+
+  // THE ZOOM MOVED. `at_day` is where the member was standing when they moved
+  // it, so the new grain lands on the same stretch of time (v0's
+  // `anchorForGrain`); empty is "at the top".
+  message GrainChanged {
+    PhotosGridState.Grain grain = 1;
+    string at_day = 2;
+  }
+
+  // A YEAR OR A MONTH CARD WAS TAPPED: one grain narrower, at that period's
+  // first day. A period is not a photograph, so a card never selects.
+  message PeriodOpened {
+    string anchor_day = 1;
+  }
+
+  // The tile size, 0-3 — the menu, a pinch, or the stored rung at launch.
+  message RungChanged {
+    uint32 rung = 1;
+  }
+
+  message FilterChanged {
+    PhotosGridState.Filter filter = 1;
+  }
+
+  // Select pressed (true) or Cancel (false). Leaving the mode empties the set.
+  message SelectionModeChanged {
+    bool selecting = 1;
+  }
+
+  // One tile tapped while selecting.
+  message SelectionToggled {
+    string asset_id = 1;
+  }
+
+  // A SET AT ONCE: a drag across tiles, or a day's "Select" — `selected` says
+  // whether they join the selection or leave it.
+  message SelectionSet {
+    repeated string asset_ids = 1;
+    bool selected = 2;
+  }
+
+  // One value for the whole selection, never a per-item toggle
+  // (`photos-selection-writes.ts`' `batchFavorite`).
+  message FavoriteSelected {
+    bool favorite = 1;
+  }
+
+  // The member answered the trash confirm with yes.
+  message TrashConfirmed {}
+
+  // One write's outcome. `asset_id` is recovered from the key this screen
+  // minted, so a refusal names the photograph it was about.
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+    string asset_id = 3;
   }
 
   // 13 WAS `BytesArrived`, DELETED BY D-1025-S7-20. A landed byte is a row:
-  // the seat keeps `seat_blob_held`, the page read joins it, and the core names
+  // the page read resolves what this device holds, and the core names
   // the ASSET rows a window's files belong to — so a blob arriving is an
   // ordinary `RowsChanged` over `media_asset` and this grid has one fewer event
   // to reduce. The event only ever existed because the ids the core had were
@@ -557,6 +750,11 @@ message PhotosGridEvent {
   // patching a cell whose position in the sort may have moved.
   message RowsChanged {
     repeated string asset_ids = 1;
+    // WHICH TABLE MOVED (#1029, photos port). The library reads a star
+    // (`core_tag`) under its Favorites filter and the album list
+    // (`core_collection*`) while its sheet is open, and neither is a fact about
+    // `media_asset` — so the reducer, which knows the filter, decides.
+    string table = 2;
   }
 
   message DestinationChanged {
@@ -815,9 +1013,15 @@ message TileBody {
       // so that a rename does not repaint a face the member recognises.
       string party_id = 1;
       string initials = 2;
-      // The stored colour, when the vault holds one. Absent falls through to
-      // derivation from `party_id`; a seeded vault leaves it empty and an empty
-      // string is not a choice.
+      // THE RESOLVED HUE KEY, and not a colour: one of `packages/design`'s
+      // eight party hues — `rose`, `amber`, `ochre`, `forest`, `teal`, `slate`,
+      // `indigo`, `violet` — never a hex and never a CSS `var()`. The producer
+      // runs the ONE port of `identity.ts` over `party_id` and whatever the
+      // vault stored, so a renderer looks up an emitted colour role and never
+      // turns the wheel itself; two renderers that each derived a hue would
+      // agree by luck. ABSENT means the wheel could NOT name one — a stored
+      // literal it does not recognise — and a renderer draws its neutral disc
+      // rather than substituting a hue nobody chose.
       optional string color = 3;
     }
   }
@@ -1237,5 +1441,2220 @@ message HomeEvent {
 
   message MovePicked {
     string move_id = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Photos: the rest of the miniapp
+// ---------------------------------------------------------------------------
+//
+// v0 shipped FOURTEEN photos routes (`navigation.ts`, `PhotosStackParamList`).
+// This package declares TEN screens for them, and the seven that collapsed did
+// so under law 2 — *a band destination is a parameter, not a screen* — read one
+// step further than wave 3 read it.
+//
+// `PhotoStateView`, `AlbumDetail`, `PlaceDetail` and a memory's members are
+// **the library under a predicate**. Each one is a page of `media_asset` in
+// `captured_at DESC` order with a different `WHERE`, drawing the same
+// `PhotoCell` with the same held states and the same download arrow. v0 wrote
+// four screens for them and they drifted: `AlbumDetail.tsx` grew a selection
+// mode the state views never got, `PlaceDetail.tsx` its own empty sentence, and
+// `PhotoStateView`'s trash a countdown none of the others could show. One
+// message with a `Shelf` oneof is the same doctrine `TallyListState` already
+// keeps for its three destinations, and it is why there is no `AlbumState`.
+//
+// What did NOT collapse, and why each is its own message:
+//
+// - **`PhotoLightboxState`** — one asset, not a page. Its content is a detail
+//   and not a cell, it owns chrome visibility, and its events are verbs.
+// - **`PhotosCollectionsState`** — a list of SHELVES, not of assets.
+// - **`PhotosSearchState`** — a query and its hits; the resting state is a
+//   third thing that is neither.
+// - **`PlacesState`** — places and their counts. Cards and the map are one
+//   screen with a `Presentation` parameter, because v0's `PlacesView` and
+//   `PlacesMap` read the same rows and differed only in how they drew them.
+// - **`PhotosPeopleState`** — confirmed identities.
+// - **`FaceReviewState`** — a QUEUE worked one item at a time, whose state is
+//   a cursor and a verdict rather than a page.
+// - **`DuplicatesState`** / **`DuplicateReviewState`** — a shelf of clusters,
+//   and one cluster with a keep decision. Two, for the reason v0 gave: listing
+//   clusters and choosing within one are different jobs with different writes.
+// - **`PhotosMemoriesState`** — computed memories; their MEMBERS are a shelf.
+// - **`PhotoPickerState`** — a grid with a picked set and a destination album.
+//   Not a shelf: the picked set is the screen's own state (§10) and a shelf
+//   that could be picked from would carry it on every other surface too.
+
+// WHICH LIBRARY THIS IS. The predicate, as a parameter (law 2).
+//
+// A oneof and not `{mode, album_id?, place_id?, party_id?}` (law 3): the four
+// are mutually exclusive by construction, and a bag of optionals is a shape a
+// reducer has to defend rather than match on.
+message PhotoShelf {
+  oneof of {
+    // Favorites, archive, trash, videos, or one person's photographs.
+    PhotoStateView state_view = 1;
+    Album album = 2;
+    Place place = 3;
+    Memory memory = 4;
+  }
+
+  // NAMES RIDE ALONG (law 2's sibling, `navigation.ts:63-69`): every one of
+  // these carries the title its app bar shows, so a head never waits for the
+  // page read and never paints under the previous shelf.
+  message Album {
+    string collection_id = 1;
+    string name = 2;
+  }
+
+  message Place {
+    string place_id = 1;
+    string place_name = 2;
+    // THE PHOTOGRAPHS WITH NO PLACE AT ALL (v0's "No location yet" card), and
+    // then `place_id` is empty. A flag and not an empty id standing for it:
+    // an empty id is also what a place row with a missing key would send, and
+    // the two must not open the same shelf.
+    bool unplaced = 3;
+  }
+
+  message Memory {
+    string memory_id = 1;
+    string title = 2;
+  }
+}
+
+message PhotoShelfState {
+  SeatState seat = 1;
+  PhotoShelf shelf = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    PhotosGridData data = 5;
+  }
+  // WHAT THE MEMBER HAS PICKED, when this shelf is in selection mode.
+  //
+  // On the state and not on the cells, for `TallyListState.pending_expense_ids`'
+  // reason: a selection over a cell the page has not loaded yet still has to
+  // survive until it arrives.
+  repeated string selected_asset_ids = 6;
+  bool selecting = 7;
+  // TRASH SAYS HOW LONG IT KEEPS THINGS, AND ONLY TRASH CAN.
+  //
+  // **THE WINDOW, NOT A COUNTDOWN**, and the difference is a clock. This was
+  // `purge_in_days` — days until the oldest row is purged — and nothing can
+  // produce that number here: `PhotoCell` carries no `purge_at`, so the row's
+  // own deadline never reaches the state, and `commonMain` has no clock BY
+  // DESIGN (`sync/Instants.kt`), so a reducer could not subtract one from
+  // today even if it did. A per-row countdown needs both, and would be a new
+  // field on `DataArrived` plus a clock on the read path.
+  //
+  // The window needs neither and is what v0's trash meta line actually said:
+  // "purged 30 days after deletion". The constant is `PURGE_AFTER_DAYS` in
+  // `crates/vault/src/commands/media.rs` — NOT `retentionWindows` in
+  // `contracts/schema/v0-registries.json`, which holds only `audit` and
+  // `ledger`.
+  //
+  // 0 on every other shelf.
+  uint32 purge_window_days = 8;
+  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
+  //
+  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
+  // READ's — it is one of the three states a read can be in — and putting a
+  // denied write there would replace the rows on screen with an error, so a
+  // member whose rename was refused would lose the list they were renaming
+  // from. `NoteDraft.save_failure` is the same field for the same reason.
+  //
+  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
+  // event carrying a sentence and, for one draft, nowhere to put it.
+  optional ReadFailure write_failure = 9;
+  // "ADD TO ALBUM" — the shared sheet's list and whether it is up. See
+  // `AlbumChoiceEntry`.
+  repeated AlbumChoiceEntry album_choices = 10;
+  bool album_choice_open = 11;
+  // THE ALBUM THIS SHELF WAS SHOWING IS GONE — its delete committed. The view
+  // leaves; a shelf left standing over an album that no longer exists would
+  // offer Add and Rename against a row the vault refuses on `album_exists`.
+  bool album_gone = 12;
+  // WHAT A COPY THE SHELL MADE CAME TO — "Sent", "Saved to this device's
+  // photos", "2 originals are not on this device". One clause, reported back by
+  // the shell after a platform hand-off (`ExportSettled`), and cleared by the
+  // next verb. Not `write_failure`: nothing was written to the vault.
+  string export_notice = 13;
+  // "KEEP ORIGINALS ON THIS PHONE" — an album shelf's own row (#1029, the
+  // photos port; v0's `album-keep-originals.ts`). `offered` is false on every
+  // shelf but an album, where the row is not drawn at all.
+  KeepOriginalsRow keep_originals = 14;
+}
+
+// WHAT FREEING SPACE ON THIS PHONE CAN DO, AS THE MORE SHEET SAYS IT
+// (`originals.proto`). Sentences and not numbers, derived once in
+// `KeepOriginals` so the two shells cannot word one fact two ways.
+message FreeUpSpace {
+  // False until a census answered. `meta` then says the phone is counting.
+  bool counted = 1;
+  // The row's line: how many originals this phone holds, and their size.
+  string meta = 2;
+  // Why nothing can be freed, and how much of it the member keeps here.
+  // Empty when there is nothing on this phone to speak of.
+  //
+  // THE ROW IS A STATEMENT AND NEVER A BUTTON, and there is no "releasable"
+  // flag to make it one: no build can prove the gateway holds an original
+  // until originals are backed up (R-1029-PH-1), and a flag that is always
+  // false is a control nobody can test the true half of.
+  string reason = 3;
+}
+
+// ONE ALBUM'S PLACE ON THIS PHONE'S KEEP LIST (`originals.proto`).
+message KeepOriginalsRow {
+  bool offered = 1;
+  // False until the keep list has answered for THIS album. The switch is
+  // disabled and `meta` says it is checking: a claim about what freeing space
+  // would take is not one to guess at (v0's `pinsReady`).
+  bool ready = 2;
+  bool keep = 3;
+  // A change is on its way to the core. The switch shows the member's answer
+  // and holds still until the list confirms it.
+  bool saving = 4;
+  // The line under the switch, derived once in `KeepOriginals`.
+  string meta = 5;
+}
+
+message PhotoShelfEvent {
+  oneof kind {
+    Opened opened = 1;
+    NextPageRequested next_page = 2;
+    DataArrived data = 3;
+    ReadRefused refused = 4;
+    RowsChanged rows_changed = 5;
+    SeatChanged seat_changed = 6;
+    SelectionToggled selection = 7;
+    SelectionModeChanged selection_mode = 8;
+    // The verbs a shelf has over its selection. Each is a WRITE and each is
+    // named, rather than one `ActionInvoked {string verb}`: a string verb is a
+    // command name a view composes, and a view that can compose one can
+    // compose one the vault does not register.
+    RestoreRequested restore = 9;
+    DeleteRequested delete = 10;
+    ArchiveToggled archive = 11;
+    WriteSettled write_settled = 12;
+    AlbumChoiceOpened album_choice_opened = 13;
+    AlbumChoiceDismissed album_choice_dismissed = 14;
+    AlbumChosen album_chosen = 15;
+    AlbumChoicesArrived album_choices = 16;
+    AlbumChoiceCreated album_choice_created = 17;
+    FavoriteToggled favorite = 18;
+    // The album's own verbs — only on an album shelf.
+    AlbumRenamed album_renamed = 19;
+    AlbumDeleteRequested album_delete = 20;
+    CoverChosen cover = 21;
+    RemoveFromAlbumRequested remove_from_album = 22;
+    // The trash's own verb, and the list it needs.
+    EmptyTrashRequested empty_trash = 23;
+    TrashListed trash_listed = 24;
+    ExportSettled export_settled = 25;
+    // The member flipped "Keep originals on this phone".
+    KeepOriginalsToggled keep_originals_toggled = 26;
+    // What the keep list says about this album now — after a read or a change.
+    KeepOriginalsSettled keep_originals_settled = 27;
+  }
+
+  message KeepOriginalsToggled {
+    bool keep = 1;
+  }
+
+  // `refusal` non-empty is a list the core would not read or write; the row
+  // then says so and the switch stays disabled rather than guessing.
+  // `album_id` names the album the answer is about, so an answer that lands
+  // after the member moved to another album settles nothing there.
+  message KeepOriginalsSettled {
+    bool keep = 1;
+    string refusal = 2;
+    string album_id = 3;
+  }
+
+  // Star, or unstar, every picked photograph. `media.set_favorite` per asset.
+  message FavoriteToggled {
+    bool favorite = 1;
+  }
+
+  // An empty name is not a write: `media.rename_album`'s `title` is
+  // `minLength: 1`, and the reducer drops it rather than spend a round trip on
+  // a refusal it can predict.
+  message AlbumRenamed {
+    string title = 1;
+  }
+
+  // Asked AFTER the screen's own confirm. `media.delete_album` removes the
+  // grouping and never a photograph.
+  message AlbumDeleteRequested {}
+
+  // "Make key photo": this photograph becomes the album's cover. The asset is
+  // named rather than read off the selection, so the one surface that asked
+  // says which.
+  message CoverChosen {
+    string asset_id = 1;
+  }
+
+  // Take the picked photographs out of this album. The photographs stay in
+  // the library; only the reference goes.
+  message RemoveFromAlbumRequested {}
+
+  // Asked AFTER the screen's own confirm. Purges EVERY trashed photograph, not
+  // the page on screen — so the reducer asks for the list first.
+  message EmptyTrashRequested {}
+
+  // Every trashed asset id, walked to the end. One `media.purge_asset` each.
+  message TrashListed {
+    repeated string asset_ids = 1;
+  }
+
+  // What the shell's copy — "Send a copy", "Download original" — came to, in
+  // the one clause `export_notice` shows.
+  message ExportSettled {
+    string sentence = 1;
+  }
+
+  message Opened {
+    PhotoShelf shelf = 1;
+  }
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    PhotosGridData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message RowsChanged {
+    repeated string asset_ids = 1;
+    // ONLY THE ALBUM LIST MOVED (`core_collection`) — nothing on this shelf's
+    // page did. It re-reads the "Add to album" list while that sheet is up and
+    // moves nothing else.
+    bool albums_only = 2;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message SelectionToggled {
+    string asset_id = 1;
+  }
+
+  message SelectionModeChanged {
+    bool selecting = 1;
+  }
+
+  // Out of trash, or out of the archive. One event: both are the same write
+  // with a different column, and the SHELF already says which.
+  message RestoreRequested {}
+
+  // Into the trash from a live shelf; OUT OF THE VAULT from the trash itself.
+  // `permanent` is not inferred from the shelf here even though it could be:
+  // the screen that asked has to have said so, because the two are one tap
+  // apart and only one of them is reversible.
+  message DeleteRequested {
+    bool permanent = 1;
+  }
+
+  message ArchiveToggled {
+    bool archived = 1;
+  }
+
+  // WHICH ROW SETTLED, AND WHETHER IT COMMITTED.
+  //
+  // **`asset_id` is not optional decoration: without it a partial refusal
+  // reads as a whole success.** A selection of twelve submits twelve writes,
+  // and a screen told only "something committed" has to guess — so it marks
+  // all twelve done, and the two the vault refused a precondition on quietly
+  // stay where they were. Empty means the settle is about the batch and not
+  // about one row.
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+    string asset_id = 3;
+    // WHICH COMMAND SETTLED, as the vault registers it. The album's own verbs
+    // are about no row: a committed rename retitles the shelf and a committed
+    // delete closes it, and neither can be told from an add by `asset_id`.
+    string command = 4;
+    // The name a committed `media.rename_album` gave the album.
+    string album_title = 5;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The album choice sheet — "Add to album", wherever it is offered
+// ---------------------------------------------------------------------------
+
+// ONE ALBUM A PICK CAN GO INTO.
+//
+// DEFINED ONCE AND CARRIED BY EVERY SCREEN THAT OFFERS "ADD TO ALBUM" — the
+// lightbox, the library grid, a shelf — as `repeated AlbumChoiceEntry
+// album_choices` beside a `bool album_choice_open` on that screen's state. v0
+// asked "which album?" from four surfaces through four hand-rolled alerts and
+// one of them sliced its list to six (`PhotosChoiceSheet.tsx`); one message is
+// one list, and `AlbumChoice.kt` is the one read that fills it.
+message AlbumChoiceEntry {
+  string album_id = 1;
+  string title = 2;
+  // Photographs in it, counted from one page of entries — see `count_capped`.
+  int64 count = 3;
+  // THE COVER AS AN ASSET, empty when the album has none or this device cannot
+  // resolve it. `core_collection.cover_content_id` names a CONTENT item, and
+  // the asset behind it is a second read.
+  string cover_asset_id = 4;
+  // The cover's thumbnail, absent when this device holds no image for it. Never
+  // a placeholder path — the sheet draws the empty cover itself.
+  optional string cover_thumbnail_path = 5;
+  // THE COUNT IS A FLOOR, NOT A TOTAL, when the entry page filled —
+  // `ShelfRow.item_count_capped`'s rule and reason.
+  bool count_capped = 6;
+}
+
+// The member asked to put the pick into an album: the sheet opens and the
+// album list is read.
+message AlbumChoiceOpened {}
+
+// The sheet went away without a choice.
+message AlbumChoiceDismissed {}
+
+// The album the pick goes into. One `media.add_to_album` per picked asset.
+message AlbumChosen {
+  string album_id = 1;
+}
+
+// THE LIST, READ. Its own arm rather than a field on the screen's page: the
+// albums are a second read the sheet asks for when it opens, and a screen's
+// `DataArrived` is its own page and nothing else.
+message AlbumChoicesArrived {
+  repeated AlbumChoiceEntry choices = 1;
+}
+
+// "NEW ALBUM…" FROM THE SHEET. The vault mints the id and a screen's settle
+// never carries the command's output, so the pick cannot follow the create in
+// one step: the create commits, the list re-reads, the new album is in it, and
+// the member's next tap puts the pick there (`AlbumChoice.kt`).
+message AlbumChoiceCreated {
+  string title = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The lightbox
+// ---------------------------------------------------------------------------
+
+// ONE PHOTOGRAPH, AS MUCH AS THIS DEVICE KNOWS OF IT.
+//
+// Not a `PhotoCell` with extra fields: a cell is what a grid draws 120 of and
+// every field on it costs a page read; this is what one tap is worth. The two
+// share `held` and `original_hash` deliberately — the download arrow is the
+// same affordance in both places and a second derivation of it would be a
+// second answer.
+message PhotoDetail {
+  string asset_id = 1;
+  optional string thumbnail_path = 2;
+  // The ORIGINAL's local path, when this device holds it. The lightbox is the
+  // one surface that draws full-size bytes, and absent here is what makes the
+  // thumbnail the fallback rather than an error.
+  optional string original_path = 3;
+  string title = 4;
+  string captured_at = 5;
+  int32 captured_utc_offset_minutes = 6;
+  PhotoCell.Kind kind = 7;
+  PhotoCell.Held held = 8;
+  string original_hash = 9;
+  bool favorite = 10;
+  bool archived = 11;
+  bool trashed = 12;
+  // Pixels, and 0 when the row does not say. Never computed from a decoded
+  // image: the vault's columns are the answer and a decode is a different
+  // number on a device that only has a thumbnail.
+  uint32 width = 13;
+  uint32 height = 14;
+  // Seconds, 0 for a still.
+  uint32 duration_seconds = 15;
+  uint64 byte_size = 16;
+  // WHERE, as the vault names it — never a coordinate formatted into a
+  // sentence. Empty when the asset has no place.
+  string place_name = 17;
+  string place_id = 18;
+  // WHO IS IN IT: confirmed face regions only. A proposal belongs to face
+  // review and naming it here would make a guess look like a fact.
+  repeated PhotoPerson people = 19;
+  // What the enrichment plane has said about this photograph, as labels. The
+  // member's own tags and a model's proposals are the SAME table with
+  // different confidence, so the row says which.
+  repeated PhotoLabel labels = 20;
+  string camera = 21;
+  // HOW FAR A `HELD_FETCHING` ORIGINAL HAS GOT, 0-100, and 0 when nobody can
+  // say — the same field `PhotoCell` carries, and for a stronger reason.
+  //
+  // It was absent here for one draft, which put a percentage on the 120-cell
+  // grid and nothing on the ONE surface a member actually watches a download
+  // on. A member who taps an arrow in the grid glances; a member in the
+  // lightbox is waiting for that photograph, and it is the place where the
+  // absence of a number is felt.
+  uint32 fetch_percent = 22;
+  // WHICH PARTS OF THIS PHOTOGRAPH COULD NOT BE READ.
+  //
+  // A lightbox is SEVEN reads — the asset, then place, faces, people, tags,
+  // concepts and content — and only the first can honestly fail the screen. A
+  // refused tag read must not replace the photograph with a sentence. But the
+  // opposite is just as wrong and was the state for one draft: a satellite
+  // that refused simply produced nothing, so **"nobody is in this photograph"
+  // and "the face read was refused" drew the same empty panel.** That is the
+  // two-empty-cell-sentences defect one level up, and the fix is the same one
+  // — say which absence this is.
+  //
+  // Empty is the ordinary case: everything that was asked, answered.
+  repeated Part unread_parts = 23;
+  // THE ORIGINAL'S CONTENT ITEM, off the content leg — the id the byte door
+  // (`ContentUrlRequest`) is asked by. The page door answers for hashes and
+  // never for paths, so this is what `original_path` is located from.
+  string content_id = 24;
+  // WHETHER THE STAGE MAY DRAW `original_path`, as the byte door answered it
+  // (`ContentUrl.embeddable`). A security answer and not a hint: a path the
+  // member may still SEND is not always one this screen may render.
+  bool original_embeddable = 25;
+  // What the original's owner reads its bytes as (`ContentUrl.media_type`).
+  // A blob in the store has no extension, so a player that has to be told
+  // what a file is, and a copy that has to be named, both read it here.
+  string original_media_type = 26;
+  // THE PLACE'S COORDINATE, for "Copy exact location" and nothing else. Never
+  // printed: a coordinate leaves the screen only because the member asked for
+  // it, onto their own clipboard (`docs/photos/places.md`, layer 2).
+  double place_latitude = 27;
+  double place_longitude = 28;
+  // Both or neither — a row with half a pin has no coordinate to copy.
+  bool place_has_coordinate = 29;
+  // A LIVE PHOTO'S MOVIE: the video asset that shares this still's capture
+  // group. Empty on everything that is not one half of a Live Photo pair.
+  string live_asset_id = 30;
+  string live_content_id = 31;
+  // The movie's local path, once the byte door has located it.
+  optional string live_path = 32;
+
+  // The satellite reads, named, so an absence can say which kind it is.
+  enum Part {
+    PART_UNSPECIFIED = 0;
+    PART_PLACE = 1;
+    PART_PEOPLE = 2;
+    PART_LABELS = 3;
+    // The content row: byte size, and the original's hash.
+    PART_CONTENT = 4;
+  }
+}
+
+message PhotoPerson {
+  string party_id = 1;
+  string display_name = 2;
+}
+
+message PhotoLabel {
+  string concept_id = 1;
+  string label = 2;
+  // True when a member put it there; false when a derivation proposed it.
+  bool confirmed = 3;
+  // THE EDGE, so removing a label removes THIS one: `core.untag_item` takes a
+  // tag id and never a word, because two schemes can spell one word.
+  string tag_id = 4;
+}
+
+// A PLACE THE MEMBER CAN MOVE A PHOTOGRAPH TO ("Adjust location"). The name
+// is the readable one or empty — never a coordinate dressed as a name.
+message PhotoPlaceChoice {
+  string place_id = 1;
+  string name = 2;
+}
+
+message PhotoLightboxState {
+  SeatState seat = 1;
+  // The asset this lightbox opened on. Present before the read lands, so the
+  // chrome has something to key by.
+  string asset_id = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    PhotoDetail detail = 5;
+  }
+  // CHROME IS A STATE, NOT AN ANIMATION. A tap hides the bars; a member who
+  // has hidden them and rotates the phone must not get them back.
+  bool chrome_visible = 6;
+  Sheet sheet = 7;
+  // The filmstrip's neighbours, so a swipe has somewhere to go without a read
+  // per swipe. Ordered as the shelf that opened this lightbox ordered them.
+  repeated string neighbour_asset_ids = 8;
+  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
+  //
+  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
+  // READ's — it is one of the three states a read can be in — and putting a
+  // denied write there would replace the rows on screen with an error, so a
+  // member whose rename was refused would lose the list they were renaming
+  // from. `NoteDraft.save_failure` is the same field for the same reason.
+  //
+  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
+  // event carrying a sentence and, for one draft, nowhere to put it.
+  optional ReadFailure write_failure = 9;
+  // THE ALBUM THIS LIGHTBOX WAS OPENED FROM, empty everywhere else. "Make key
+  // photo" is offered only here: a cover is chosen from an album's members,
+  // and the album a member walked in from is the one they mean.
+  string album_id = 10;
+  // A SLIDESHOW IS A MODE OF THIS SCREEN, not a screen of its own (v0's
+  // `SLIDESHOW`): no filmstrip, no info, and one way out — Leave.
+  bool slideshow = 11;
+  // WHAT THE LAST HAND-OFF DID, on the stage's one status line: "Sent with no
+  // location.", "Saved to Photos." Stated every time, because silence reads
+  // as safety. A hand-off that did NOT happen lands on `write_failure`.
+  string notice = 12;
+  // "Add to album" — the shared sheet's contract (`AlbumChoice.kt`).
+  repeated AlbumChoiceEntry album_choices = 13;
+  bool album_choice_open = 14;
+  // "Adjust location": the places this vault knows, read when the picker opens.
+  repeated PhotoPlaceChoice place_choices = 15;
+  // THE FILMSTRIP'S FRAMES, read in a window around the photograph on screen.
+  // Cells and not ids, because a strip of ids is a strip of blanks; ordered by
+  // `neighbour_asset_ids`, never by this read.
+  repeated PhotoCell film = 16;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    // Everything the vault knows: the facts panel.
+    SHEET_INFO = 2;
+    // WHAT LEAVES THE VAULT, AND IN WHAT FORM. A share is a decision about
+    // bytes, so it is a sheet with a choice and never a direct hand-off.
+    SHEET_SHARE = 3;
+    SHEET_MORE = 4;
+    // "Adjust location": the place picker.
+    SHEET_PLACE = 5;
+  }
+}
+
+message PhotoLightboxEvent {
+  oneof kind {
+    Opened opened = 1;
+    DataArrived data = 2;
+    ReadRefused refused = 3;
+    RowsChanged rows_changed = 4;
+    SeatChanged seat_changed = 5;
+    ChromeToggled chrome = 6;
+    SheetChanged sheet = 7;
+    Moved moved = 8;
+    FavoriteToggled favorite = 9;
+    ArchiveToggled archive = 10;
+    DeleteRequested delete = 11;
+    OriginalRequested fetch_original = 12;
+    FetchSettled fetch_settled = 13;
+    WriteSettled write_settled = 14;
+    OriginalLocated located = 15;
+    SlideshowChanged slideshow = 16;
+    SlideshowAdvanced slideshow_advanced = 17;
+    CaptionChanged caption = 18;
+    TagAdded tag_added = 19;
+    TagRemoved tag_removed = 20;
+    PlaceChosen place_chosen = 21;
+    PlaceChoicesArrived place_choices = 22;
+    KeyPhotoRequested key_photo = 23;
+    HandOffSettled hand_off_settled = 24;
+    FilmArrived film = 25;
+    LiveArrived live = 26;
+    AlbumChoiceOpened album_choice_opened = 27;
+    AlbumChoiceDismissed album_choice_dismissed = 28;
+    AlbumChosen album_chosen = 29;
+    AlbumChoicesArrived album_choices = 30;
+    AlbumChoiceCreated album_choice_created = 31;
+  }
+
+  message Opened {
+    string asset_id = 1;
+    repeated string neighbour_asset_ids = 2;
+    // The album the member walked in from, empty from anywhere else. See
+    // `PhotoLightboxState.album_id`.
+    string album_id = 3;
+  }
+
+  // ONE LEG OF THE LIGHTBOX'S READ LANDED.
+  //
+  // **`amendment` is explicit and is not inferred from an empty `asset_id`.**
+  // It was, for one draft: "a detail with no id is a satellite". That works
+  // only while no satellite can carry an id, and it fails silently the moment
+  // one does — which is exactly what a placement or face leg would want to
+  // carry. A reducer that cannot tell a merge from a replace paints one
+  // photograph's people onto another, and both shapes typecheck.
+  //
+  // False replaces the detail; true merges the fields this leg set into the
+  // detail already on screen, and is dropped when there is none.
+  message DataArrived {
+    PhotoDetail detail = 1;
+    bool amendment = 2;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message RowsChanged {
+    repeated string asset_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message ChromeToggled {
+    bool visible = 1;
+  }
+
+  message SheetChanged {
+    PhotoLightboxState.Sheet sheet = 1;
+  }
+
+  // A swipe landed on a neighbour. The id and not a delta: the shell knows
+  // which cell it swiped to, and an index into a list the reducer also holds
+  // is two places one fact can be wrong.
+  message Moved {
+    string asset_id = 1;
+  }
+
+  message FavoriteToggled {
+    bool favorite = 1;
+  }
+
+  message ArchiveToggled {
+    bool archived = 1;
+  }
+
+  message DeleteRequested {
+    bool permanent = 1;
+  }
+
+  message OriginalRequested {
+    string asset_id = 1;
+    string content_hash = 2;
+  }
+
+  message FetchSettled {
+    string asset_id = 1;
+    bool fetched = 2;
+    string sentence = 3;
+  }
+
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+  }
+
+  // THE BYTE DOOR ANSWERED FOR THIS PHOTOGRAPH'S FILES (`ContentUrlRequest`).
+  //
+  // The page door hands out hashes and never paths, so `PhotoDetail.
+  // original_path` is located by a second door the bridge asks, keyed by the
+  // asset it asked about — an answer for a photograph the member has swiped
+  // past lands on nothing. An absent path is a real answer: this device does
+  // not hold those bytes.
+  message OriginalLocated {
+    string asset_id = 1;
+    optional string original_path = 2;
+    bool embeddable = 3;
+    string media_type = 4;
+    optional string live_path = 5;
+  }
+
+  // Start or leave the slideshow.
+  message SlideshowChanged {
+    bool playing = 1;
+  }
+
+  // THE SLIDESHOW'S CLOCK TICKED. The shell owns the clock — a reducer has
+  // none — and the reducer owns WHERE the next photograph is, wrapping at the
+  // end of the shelf as v0's did.
+  message SlideshowAdvanced {}
+
+  // The caption the member typed, committed. Empty clears it.
+  message CaptionChanged {
+    string caption = 1;
+  }
+
+  // A free-form label, added (`core.tag_item`).
+  message TagAdded {
+    string label = 1;
+  }
+
+  // One label, removed by its edge (`core.untag_item`).
+  message TagRemoved {
+    string tag_id = 1;
+  }
+
+  // "Adjust location": a place picked, or EMPTY to clear the photograph's
+  // place back to unknown (`media.set_asset_place` with no `place_id`).
+  message PlaceChosen {
+    string place_id = 1;
+  }
+
+  // The picker's list, read.
+  message PlaceChoicesArrived {
+    repeated PhotoPlaceChoice places = 1;
+  }
+
+  // "Make key photo": this photograph becomes the cover of the album the
+  // lightbox was opened from.
+  message KeyPhotoRequested {}
+
+  // A HAND-OFF TO THE OS — a copy sent, an original saved — and what it did.
+  // `done` puts the sentence on the status line; a refusal lands on
+  // `write_failure`, because a copy that did not leave is a thing the member
+  // asked for that did not happen.
+  message HandOffSettled {
+    bool done = 1;
+    string sentence = 2;
+  }
+
+  // THE FILMSTRIP'S FRAMES for a window of neighbours, read.
+  message FilmArrived {
+    repeated PhotoCell frames = 1;
+  }
+
+  // THIS STILL'S LIVE PHOTO MOVIE, or the empty answer that it has none.
+  message LiveArrived {
+    string asset_id = 1;
+    string live_asset_id = 2;
+    string live_content_id = 3;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Collections — the band's second destination
+// ---------------------------------------------------------------------------
+
+// A SHELF, AS A ROW IN A LIST OF THEM.
+//
+// The standing shelves (Favorites, Archive, Trash, Videos) and a member's own
+// albums are ONE row type with one `PhotoShelf` in it, because the Collections
+// screen draws them in one list and a tap on either lands on `photos.shelf`.
+// v0 drew two component families here and had to keep their covers, counts and
+// empty states in step by hand.
+//
+// The DOORS that are not shelves — People, Places, Memories, Duplicates — are
+// [CollectionsDoor] below, because their tap lands somewhere else.
+message ShelfRow {
+  PhotoShelf shelf = 1;
+  string title = 2;
+  // How many assets are on it. A read that counts, and 0 is a real count: a
+  // shelf with no photographs says "Empty" and is still a door.
+  uint32 item_count = 3;
+  // THE COUNT IS A FLOOR, NOT A TOTAL. The read door has no `COUNT(*)`, so
+  // every count in this section is counted from the rows one page returned —
+  // and a page that filled has more behind it. `HomeState.ThingCount` carries
+  // this as `capped` for the same reason and with the same consequence: the
+  // honest phrasing is "at least", and a screen that printed a bare number
+  // over a full page would be stating a total nobody counted.
+  bool item_count_capped = 6;
+  // The cover's thumbnail path, absent when this device has no image for it.
+  // Never a placeholder path — the view draws the empty cover itself.
+  optional string cover_thumbnail_path = 4;
+  // A standing shelf cannot be renamed or deleted; an album can. The row says
+  // so rather than the view deriving it from the oneof, so a fifth standing
+  // shelf does not need every menu edited.
+  bool member_owned = 5;
+}
+
+// A door on Collections that is NOT a shelf of assets.
+message CollectionsDoor {
+  Kind kind = 1;
+  // The count its own screen would show, 0 when nothing is known yet. On the
+  // door because a member deciding whether to open it is deciding on the
+  // number, and a door that says nothing is a door nobody opens.
+  uint32 count = 2;
+  // Set when the door has something waiting: proposed faces to name, duplicate
+  // clusters to resolve. It is what draws the badge.
+  uint32 needs_attention = 3;
+  // THE COUNT IS A FLOOR, NOT A TOTAL. The read door has no `COUNT(*)`, so
+  // every count in this section is counted from the rows one page returned —
+  // and a page that filled has more behind it. `HomeState.ThingCount` carries
+  // this as `capped` for the same reason and with the same consequence: the
+  // honest phrasing is "at least", and a screen that printed a bare number
+  // over a full page would be stating a total nobody counted.
+  bool count_capped = 4;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_PEOPLE = 1;
+    KIND_PLACES = 2;
+    KIND_MEMORIES = 3;
+    KIND_DUPLICATES = 4;
+  }
+}
+
+message PhotosCollectionsState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    PhotosCollectionsData data = 4;
+  }
+  Sheet sheet = 5;
+  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
+  //
+  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
+  // READ's — it is one of the three states a read can be in — and putting a
+  // denied write there would replace the rows on screen with an error, so a
+  // member whose rename was refused would lose the list they were renaming
+  // from. `NoteDraft.save_failure` is the same field for the same reason.
+  //
+  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
+  // event carrying a sentence and, for one draft, nowhere to put it.
+  optional ReadFailure write_failure = 6;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    // Naming a new album. A sheet and not a route: it is one field and a
+    // verb, and a push for it would put a keyboard behind a back chevron.
+    SHEET_NEW_ALBUM = 2;
+  }
+}
+
+message PhotosCollectionsData {
+  repeated ShelfRow shelves = 1;
+  repeated CollectionsDoor doors = 2;
+  optional string next_cursor = 3;
+}
+
+message PhotosCollectionsEvent {
+  oneof kind {
+    Opened opened = 1;
+    NextPageRequested next_page = 2;
+    DataArrived data = 3;
+    ReadRefused refused = 4;
+    RowsChanged rows_changed = 5;
+    SeatChanged seat_changed = 6;
+    SheetChanged sheet = 7;
+    AlbumCreated album_created = 8;
+    AlbumDeleted album_deleted = 9;
+    WriteSettled write_settled = 10;
+  }
+
+  message Opened {}
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    PhotosCollectionsData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message RowsChanged {
+    repeated string collection_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message SheetChanged {
+    PhotosCollectionsState.Sheet sheet = 1;
+  }
+
+  message AlbumCreated {
+    string name = 1;
+  }
+
+  message AlbumDeleted {
+    string collection_id = 1;
+  }
+
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Search — the band's third destination
+// ---------------------------------------------------------------------------
+
+// THREE SCREENS BEHIND ONE DESTINATION, and the oneof is which one is showing.
+//
+// v0 had `PhotosSearchRestingState`, `PhotosSearchEmptyState` and the hits in
+// three components with three empty sentences between them. They are three
+// states of one search and not three places, and the difference that matters is
+// the one a bag of optionals erases: a member who has typed nothing and a
+// member whose query matched nothing must not read the same words.
+message PhotosSearchState {
+  SeatState seat = 1;
+  // What the member has typed. The screen's own, never the vault's.
+  string query = 2;
+  oneof content {
+    // Nothing typed yet: what there is to search FOR.
+    SearchResting resting = 3;
+    Loading loading = 4;
+    ReadFailure failure = 5;
+    SearchHits hits = 6;
+  }
+}
+
+// The vocabulary a member can search by, when they have not searched yet.
+message SearchResting {
+  // Concepts the enrichment plane has actually attached to this vault's
+  // photographs — never a fixed list of words the product hopes are there.
+  repeated PhotoLabel suggested_labels = 1;
+  // People a member has CONFIRMED on a face. A proposal is not a person yet.
+  repeated PhotoPerson people = 2;
+  // Places with photographs behind them, as the shelf each one opens — so a
+  // tap on "Lisbon" lands on Lisbon's photographs and costs no second lookup.
+  // Only places whose name is a name: a coordinate-shaped label reads as an
+  // answer and is left out rather than printed.
+  repeated PhotoShelf.Place places = 4;
+
+  // 3 WAS `repeated string places`: a word with no id behind it, which a view
+  // could print and could not open.
+  reserved 3;
+}
+
+message SearchHits {
+  repeated PhotoCell cells = 1;
+  optional string next_cursor = 2;
+  bool thumbnail_pack_absent = 3;
+  // WHY THESE MATCHED — the same query can hit a label, a person or a place,
+  // and a member looking at a grid with no explanation cannot tell which.
+  repeated SearchMatch matches = 5;
+  // THE PEOPLE, PLACES AND ALBUMS THE QUERY NAMED, above the photographs
+  // (v0's `search-hits.ts`): each one tap from the shelf that owns it. At most
+  // three of each kind, narrowest kind first — person, place, album.
+  repeated SearchTopHit top_hits = 6;
+  // WHICH QUERY THESE HITS ANSWER. A member types faster than a vault reads,
+  // so a page can land after the field has moved on; a reducer that took it
+  // would draw the last query's photographs under this query's words.
+  string query = 7;
+
+  // 4 WAS `repeated string matched_on`, AND IT WAS THE ONE PLACE IN THIS
+  // SECTION THAT CARRIED A KIND AS PROSE. Every shell composing its own
+  // "Person: Ada" / "In Lisbon" is two shells wording one fact two ways, which
+  // is precisely how v0's empty states drifted apart. The kind is an enum and
+  // the name is a string, so the sentence is the view's and the DISTINCTION is
+  // the contract's.
+  reserved 4;
+}
+
+// ONE REASON A HIT IS A HIT.
+message SearchMatch {
+  Kind kind = 1;
+  // What was matched, in the vault's own words: the concept's label, the
+  // party's display name, the place's name. Never the member's query echoed
+  // back — the point is to show what it landed on.
+  string value = 2;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_LABEL = 1;
+    KIND_PERSON = 2;
+    KIND_PLACE = 3;
+    // The member's own words on the asset: its title.
+    KIND_TITLE = 4;
+    // An album the member named.
+    KIND_ALBUM = 5;
+  }
+}
+
+// ONE PERSON, PLACE OR ALBUM THE QUERY NAMED — a door, not a photograph.
+message SearchTopHit {
+  // Person, place or album. Never a title or a label: a caption belongs to
+  // one photograph and a label has no shelf of its own, so both are reasons
+  // under the grid (`SearchMatch`) and not rows above it.
+  SearchMatch.Kind kind = 1;
+  // The vault's own words: the party's name, the place's name, the album's.
+  string label = 2;
+  // How many photographs it holds, counted off one page — so a FLOOR when
+  // `photo_count_capped` says the page filled, and "at least" is the phrase.
+  uint32 photo_count = 3;
+  bool photo_count_capped = 4;
+  // Where a tap lands, built once by the read so both shells open the same
+  // shelf with the same name in its head.
+  PhotoShelf shelf = 5;
+}
+
+message PhotosSearchEvent {
+  oneof kind {
+    Opened opened = 1;
+    QueryChanged query = 2;
+    NextPageRequested next_page = 3;
+    DataArrived data = 4;
+    RestingArrived resting = 5;
+    ReadRefused refused = 6;
+    SeatChanged seat_changed = 7;
+    RowsChanged rows_changed = 8;
+  }
+
+  message Opened {}
+
+  message QueryChanged {
+    string query = 1;
+  }
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    SearchHits hits = 1;
+  }
+
+  message RestingArrived {
+    SearchResting resting = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message RowsChanged {
+    repeated string asset_ids = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Places
+// ---------------------------------------------------------------------------
+
+message PlaceRow {
+  string place_id = 1;
+  string name = 2;
+  uint32 asset_count = 3;
+  optional string cover_thumbnail_path = 4;
+  // The pin. Both present or both absent — a place row with one coordinate is
+  // a row the map cannot draw, and `has_coordinate` is what says which,
+  // because 0,0 is a real point in the Gulf of Guinea and not a null.
+  double latitude = 5;
+  double longitude = 6;
+  bool has_coordinate = 7;
+  // The vault's own name for the place's zone, so a member reading "3pm" reads
+  // the hour the photograph was taken at.
+  string time_zone = 8;
+  // THE COUNT IS A FLOOR, NOT A TOTAL, and here it cannot be anything else:
+  // `media_asset.captured_at` is nullable, so the pass that counts a place's
+  // assets takes ONE page and never continues (`KitError::NullableSortKey`).
+  // Past that page the honest phrasing is "at least".
+  bool asset_count_capped = 9;
+}
+
+// CARDS OR A MAP IS A PARAMETER, NOT A SCREEN.
+//
+// v0's `PlacesView` and `PlacesMap` read the same rows and differed in the
+// draw. Two screens meant two reads, two empty states and two ways to be out
+// of date, and the member's own words for the choice are "show me this as a
+// map" — which is a control on one screen.
+message PlacesState {
+  SeatState seat = 1;
+  Presentation presentation = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    PlacesData data = 5;
+  }
+  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
+  //
+  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
+  // READ's — it is one of the three states a read can be in — and putting a
+  // denied write there would replace the rows on screen with an error, so a
+  // member whose rename was refused would lose the list they were renaming
+  // from. `NoteDraft.save_failure` is the same field for the same reason.
+  //
+  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
+  // event carrying a sentence and, for one draft, nowhere to put it.
+  optional ReadFailure write_failure = 6;
+
+  enum Presentation {
+    PRESENTATION_UNSPECIFIED = 0;
+    PRESENTATION_CARDS = 1;
+    PRESENTATION_MAP = 2;
+  }
+}
+
+message PlacesData {
+  repeated PlaceRow places = 1;
+  optional string next_cursor = 2;
+  // HOW MANY PHOTOGRAPHS HAVE NO PLACE AT ALL. A real answer and a door: it is
+  // the number a member needs to judge whether the map is the library or a
+  // corner of it, and v0 never showed it.
+  uint32 unplaced_count = 3;
+  // Same floor, same cause, and it matters more here: `unplaced_count` is what
+  // tells a member whether the map is their library or a corner of it, and a
+  // number that quietly stopped at one page would answer that question wrong.
+  bool unplaced_count_capped = 4;
+}
+
+message PlacesEvent {
+  oneof kind {
+    Opened opened = 1;
+    PresentationChanged presentation = 2;
+    NextPageRequested next_page = 3;
+    DataArrived data = 4;
+    ReadRefused refused = 5;
+    RowsChanged rows_changed = 6;
+    SeatChanged seat_changed = 7;
+    PlaceRenamed renamed = 8;
+    WriteSettled write_settled = 9;
+  }
+
+  message Opened {}
+
+  message PresentationChanged {
+    PlacesState.Presentation presentation = 1;
+  }
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    PlacesData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message RowsChanged {
+    repeated string place_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message PlaceRenamed {
+    string place_id = 1;
+    string name = 2;
+  }
+
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// People, and the faces that are not people yet
+// ---------------------------------------------------------------------------
+
+message PersonRow {
+  string party_id = 1;
+  string display_name = 2;
+  // Confirmed regions only. A proposal is not a photograph of someone until a
+  // member has said so.
+  uint32 photo_count = 3;
+  optional string cover_thumbnail_path = 4;
+  // THE ASSET THE COVER COMES FROM, SO A SECOND READ HAS A KEY.
+  //
+  // Without it the cover cannot be filled at all: a cover is `media_asset`'s
+  // thumbnail, the door has no join, and a row with no asset id gives a
+  // second leg nothing to ask about. Same shape as
+  // `DuplicateCluster.member_asset_ids` and for the same reason.
+  string cover_asset_id = 6;
+  // THE COUNT IS A FLOOR, NOT A TOTAL. The read door has no `COUNT(*)`, so
+  // every count in this section is counted from the rows one page returned —
+  // and a page that filled has more behind it. `HomeState.ThingCount` carries
+  // this as `capped` for the same reason and with the same consequence: the
+  // honest phrasing is "at least", and a screen that printed a bare number
+  // over a full page would be stating a total nobody counted.
+  bool photo_count_capped = 5;
+}
+
+message PhotosPeopleState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    PhotosPeopleData data = 4;
+  }
+  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
+  //
+  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
+  // READ's — it is one of the three states a read can be in — and putting a
+  // denied write there would replace the rows on screen with an error, so a
+  // member whose rename was refused would lose the list they were renaming
+  // from. `NoteDraft.save_failure` is the same field for the same reason.
+  //
+  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
+  // event carrying a sentence and, for one draft, nowhere to put it.
+  optional ReadFailure write_failure = 5;
+}
+
+message PhotosPeopleData {
+  repeated PersonRow people = 1;
+  optional string next_cursor = 2;
+  // FACES WAITING TO BE NAMED. The door to review, with its count on it — and
+  // the reason this screen and review are not the same screen: one is a list of
+  // answers, the other is a queue of questions.
+  uint32 proposed_face_count = 3;
+  // WHY THE LIST IS EMPTY, WHEN IT IS. An empty People screen has three
+  // different causes and v0 drew one sentence for all of them
+  // (`PeopleEmptyState.tsx`): recognition is off, it is on and has found
+  // nothing yet, or it has found faces and none are named.
+  EmptyReason empty_reason = 4;
+
+  enum EmptyReason {
+    EMPTY_REASON_UNSPECIFIED = 0;
+    // Not empty.
+    EMPTY_REASON_NONE = 1;
+    // The member turned recognition off, or never turned it on. A setting,
+    // and the screen says where it is.
+    EMPTY_REASON_RECOGNITION_OFF = 2;
+    // On, and nothing has been looked at yet.
+    EMPTY_REASON_NOT_RUN_YET = 3;
+    // Faces found, none confirmed. The door to review is the answer.
+    EMPTY_REASON_NONE_NAMED = 4;
+  }
+}
+
+message PhotosPeopleEvent {
+  oneof kind {
+    Opened opened = 1;
+    NextPageRequested next_page = 2;
+    DataArrived data = 3;
+    ReadRefused refused = 4;
+    RowsChanged rows_changed = 5;
+    SeatChanged seat_changed = 6;
+    PersonRenamed renamed = 7;
+    WriteSettled write_settled = 8;
+  }
+
+  message Opened {}
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    PhotosPeopleData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message RowsChanged {
+    repeated string party_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message PersonRenamed {
+    string party_id = 1;
+    string display_name = 2;
+  }
+
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+  }
+}
+
+// ONE FACE, AS A QUESTION.
+message FaceCandidate {
+  string region_id = 1;
+  string asset_id = 2;
+  // The crop the member looks at. The ASSET's thumbnail plus the box, because
+  // there is no per-face derivative in the vault and inventing one would be a
+  // second copy of every photograph.
+  optional string thumbnail_path = 3;
+  // The box within the asset, in FRACTIONS of the image's width and height, so
+  // a view can draw it over whatever size it rendered at. Pixels would be
+  // wrong the moment the thumbnail is not the original's size — which it never
+  // is.
+  double box_x = 4;
+  double box_y = 5;
+  double box_width = 6;
+  double box_height = 7;
+  // Who the derivation thinks it is, empty when it has no guess at all. A
+  // proposal, never drawn as a fact.
+  string proposed_party_id = 8;
+  string proposed_name = 9;
+  // 0…1 as the row holds it. Shown as words and not a percentage: "probably"
+  // is what a member can act on.
+  double confidence = 10;
+}
+
+// A QUEUE, WORKED ONE AT A TIME — not a page of rows with checkboxes.
+//
+// The shape follows the job: a member answers "is this Ada?" and the next
+// question arrives. `cursor` is which question, and it is on the state because
+// a member who leaves and comes back should not be asked the first one again.
+message FaceReviewState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    FaceReviewData data = 4;
+  }
+  // Which candidate is showing, an index into `data.candidates`. Past the end
+  // means the queue is worked through, which is a real screen and not an
+  // empty one.
+  //
+  // **AN INDEX INTO A PAGED LIST BINDS THE REDUCER: `DataArrived` APPENDS AND
+  // NEVER REPLACES.** `FaceReviewData` carries a `next_cursor`, so the list
+  // grows — and a second page that replaced the first would leave this cursor
+  // pointing at a different question than the one the member left on. Nothing
+  // mechanical can catch that, because both shapes typecheck and both render;
+  // it is stated here because this is the field it would corrupt.
+  uint32 cursor = 5;
+  // The name picker is open over the current candidate.
+  bool naming = 6;
+  // Whether the recognition plane is on at all. A queue cannot fill while it
+  // is off, and the screen says so rather than showing an empty queue.
+  bool recognition_enabled = 7;
+  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
+  //
+  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
+  // READ's — it is one of the three states a read can be in — and putting a
+  // denied write there would replace the rows on screen with an error, so a
+  // member whose rename was refused would lose the list they were renaming
+  // from. `NoteDraft.save_failure` is the same field for the same reason.
+  //
+  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
+  // event carrying a sentence and, for one draft, nowhere to put it.
+  optional ReadFailure write_failure = 8;
+}
+
+message FaceReviewData {
+  repeated FaceCandidate candidates = 1;
+  optional string next_cursor = 2;
+  // Every party a face could be named as, so the picker needs no second read
+  // while a member is mid-answer.
+  repeated PhotoPerson known_people = 3;
+}
+
+message FaceReviewEvent {
+  oneof kind {
+    Opened opened = 1;
+    NextPageRequested next_page = 2;
+    DataArrived data = 3;
+    ReadRefused refused = 4;
+    RowsChanged rows_changed = 5;
+    SeatChanged seat_changed = 6;
+    // The three answers, and they are three because they are three different
+    // writes: this IS someone, this is NOT the proposal, and this face is
+    // kept and deliberately left unnamed (`dismissed`).
+    Confirmed confirmed = 7;
+    Rejected rejected = 8;
+    // DECIDE LATER — and it WRITES NOTHING (v0's `triageSkip`). The question
+    // goes to the back of the queue and stays a proposal; a skip that saved a
+    // dismissal would retire a face the member only postponed.
+    Skipped skipped = 9;
+    NamingChanged naming = 10;
+    WriteSettled write_settled = 11;
+    ThumbnailsArrived thumbnails = 12;
+    RecognitionChanged recognition = 13;
+    Dismissed dismissed = 14;
+    PersonCreated person_created = 15;
+  }
+
+  // KEEP THE FACE, AND LEAVE IT UNNAMED: `media.answer_face_proposal` with
+  // `dismiss`. Reviewed, so the enricher does not propose it again.
+  message Dismissed {
+    string region_id = 1;
+  }
+
+  // THE PERSON A FACE WAS BEING NAMED AS NOW EXISTS, and this is their id.
+  //
+  // `core.add_party` mints the id and answers it in `CommandOutcome.output`;
+  // the bridge reads it there and hands it back here, so the confirm that
+  // needs it follows in the same breath and "New person" is one step.
+  message PersonCreated {
+    string region_id = 1;
+    string party_id = 2;
+  }
+
+  message Opened {}
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    FaceReviewData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message RowsChanged {
+    repeated string region_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  // `party_id` empty with a `new_name` means a person this vault has no row
+  // for yet — which is most of them on a first run, and the case v0's
+  // `FaceNamePicker` handled by creating the party first and losing the answer
+  // when the create failed.
+  message Confirmed {
+    string region_id = 1;
+    string party_id = 2;
+    string new_name = 3;
+  }
+
+  message Rejected {
+    string region_id = 1;
+  }
+
+  message Skipped {
+    string region_id = 1;
+  }
+
+  // THE THUMBNAIL LEG LANDED.
+  //
+  // **Without it face review draws a box over a sentence, not a photograph.**
+  // `with_held_thumbnail` is a correlated subquery on the FROM table's
+  // `content_id` and is REFUSED AT PREPARE when the table has none — and
+  // `media_face_region` has none, so asking for it fails the whole read rather
+  // than answering nulls. `FaceCandidate.asset_id` is already on the wire, so
+  // a second leg over `media_asset` keyed on the page's asset ids is what
+  // fills this, and it arrives here rather than as a second `DataArrived`: a
+  // reducer handed two `DataArrived`s cannot tell an amendment from a replace,
+  // which is the same arm `DuplicateReviewEvent.PlacementArrived` exists for.
+  message ThumbnailsArrived {
+    // Asset id to thumbnail path. An asset missing from the map is an
+    // unanswered question and not "no thumbnail".
+    map<string, string> path_by_asset_id = 1;
+  }
+
+  // WHETHER RECOGNITION IS ON AT ALL.
+  //
+  // The tier lives in `enrich_policy` and every read on this screen answers
+  // with a `FaceReviewData`, which carries candidates and a roster and has
+  // nowhere to put a boolean — so `FaceReviewState.recognition_enabled` had no
+  // writer and the screen could not tell an empty queue from a switch that is
+  // off. Those are different screens with different next moves, the same way
+  // `PhotosPeopleData.EmptyReason` keeps three of them apart.
+  message RecognitionChanged {
+    bool enabled = 1;
+  }
+
+  message NamingChanged {
+    bool naming = 1;
+  }
+
+  // WHICH ANSWER SETTLED.
+  //
+  // **Two commands can be in flight at once here** — creating a party, and
+  // answering the proposal against it — and a settle that does not say which
+  // one it is forces the reducer to guess. Guessing wrong on this screen
+  // advances the cursor past a question whose answer was dropped, and the
+  // member is never asked again.
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+    string region_id = 3;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Duplicates
+// ---------------------------------------------------------------------------
+
+message DuplicateCluster {
+  string cluster_id = 1;
+  uint32 member_count = 2;
+  // What resolving this cluster would give back. The number that makes the
+  // work worth doing, and the reason the shelf is ordered by it.
+  uint64 reclaimable_bytes = 3;
+  // AND THE SAME NUMBER AS A PHRASE, WHICH IS WHAT A MEMBER READS.
+  //
+  // A byte count is the VAULT's to spell, for the reason `with_document_size`
+  // gives — a launcher row and a drive row once disagreed about the same file
+  // — and there is no shared formatter on either shell, so two shells left to
+  // format this would be two spellings of one fact. Empty while
+  // `reclaimable_bytes` is unknown, which is not the same as "0 bytes".
+  string reclaimable_phrase = 6;
+  optional string cover_thumbnail_path = 4;
+  // THE MEMBERS' OWN IDS, SO A SECOND READ HAS SOMETHING TO KEY ON.
+  //
+  // **Without this the shelf cannot state bytes or draw a cover at all.**
+  // `cluster_id` lives only on `media_asset_phash`, which has no `content_id`;
+  // `byte_size` lives on `core_content_item`; the door has no join and no
+  // expression in a `select`, and `with_held_thumbnail` is a correlated
+  // subquery resolved at PREPARE — so asking for it over a table with no
+  // content column fails the WHOLE read rather than answering nulls
+  // (`crates/vault/src/page.rs`). A second leg over `media_asset` is the only
+  // way, and a leg needs a key: this is it, exactly as `PhotoDetail`'s
+  // `original_hash` is what its content leg keys on.
+  repeated string member_asset_ids = 7;
+  // AND THEIR CONTENT IDS, BECAUSE THE BYTES ARE ANOTHER HOP AGAIN.
+  //
+  // The chain is `cluster_id → asset_id → content_id → byte_size`, over three
+  // tables, with no join anywhere on this door. `member_asset_ids` bought the
+  // second link; this is the third. Without it a leg over `core_content_item`
+  // comes back `(content_id, byte_size)` and **nothing on the wire says which
+  // asset — let alone which cluster — each row belongs to**, so a correct set
+  // of sizes still cannot be attributed to a card. And `reclaimable_bytes` is
+  // a per-cluster aggregate (the sum less the largest), not a per-row value,
+  // so there is no per-row phrase that could stand in for it either.
+  //
+  // Parallel to `member_asset_ids` and in the same order, so the two index
+  // together.
+  repeated string member_content_ids = 8;
+  // THE COUNT IS A FLOOR, NOT A TOTAL. The read door has no `COUNT(*)`, so
+  // every count in this section is counted from the rows one page returned —
+  // and a page that filled has more behind it. `HomeState.ThingCount` carries
+  // this as `capped` for the same reason and with the same consequence: the
+  // honest phrasing is "at least", and a screen that printed a bare number
+  // over a full page would be stating a total nobody counted.
+  bool member_count_capped = 5;
+}
+
+message DuplicatesState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    DuplicatesData data = 4;
+  }
+}
+
+message DuplicatesData {
+  repeated DuplicateCluster clusters = 1;
+  optional string next_cursor = 2;
+  uint64 total_reclaimable_bytes = 3;
+  // The same, as the phrase a member reads. See `DuplicateCluster`.
+  string total_reclaimable_phrase = 6;
+  // THE COUNT IS A FLOOR, NOT A TOTAL. The read door has no `COUNT(*)`, so
+  // every count in this section is counted from the rows one page returned —
+  // and a page that filled has more behind it. `HomeState.ThingCount` carries
+  // this as `capped` for the same reason and with the same consequence: the
+  // honest phrasing is "at least", and a screen that printed a bare number
+  // over a full page would be stating a total nobody counted.
+  bool total_capped = 5;
+  // Perceptual hashes are computed by a pass, and a library it has not walked
+  // yet has no clusters for a reason that is not "there are no duplicates".
+  //
+  // **IT IS FALSE ON EVERY READ THIS BUILD CAN MAKE, and the field stays.**
+  // Nothing in the schema records the pass's progress: `media_asset_phash`
+  // rows appear when a device supplied a phash, `cluster_id` is rewritten
+  // wholesale by a rebuild, and there is no watermark, cursor or sweep-state
+  // row anywhere — so the only way to answer would be a second read plus a
+  // `COUNT(*)` the door does not have. The conservative branch is therefore
+  // the only one a member sees, which is the correct outcome: "Centraid has
+  // not finished looking" is true, and "your library is clean" would be a
+  // claim nobody checked. The field is what a sweep-state row would fill, and
+  // deleting it would delete the distinction along with the gap.
+  bool scan_complete = 4;
+}
+
+message DuplicatesEvent {
+  oneof kind {
+    Opened opened = 1;
+    NextPageRequested next_page = 2;
+    DataArrived data = 3;
+    ReadRefused refused = 4;
+    RowsChanged rows_changed = 5;
+    SeatChanged seat_changed = 6;
+  }
+
+  message Opened {}
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    DuplicatesData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  // THE CHANGE STREAM SAYS `(table, primary keys)`, AND THIS TABLE'S KEY IS
+  // `asset_id`.
+  //
+  // It was `cluster_ids`, which no producer could fill: the core has no idea
+  // that `media_asset_phash.cluster_id` is the thing this screen groups by,
+  // and a shell putting asset ids in a field named `cluster_ids` would be a
+  // shell lying in a field name. A cluster is not addressable by the stream at
+  // all — a rebuild rewrites every row's `cluster_id` — so the honest event
+  // names the assets that moved and the shelf re-reads.
+  message RowsChanged {
+    repeated string asset_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+}
+
+// ONE MEMBER OF A CLUSTER, WITH WHAT DISTINGUISHES IT FROM ITS SIBLINGS.
+//
+// A duplicate decision is made on the differences, so the row carries exactly
+// the four a member compares: how big, how many pixels, when, and whether this
+// one is already somewhere they put it.
+message DuplicateMember {
+  string asset_id = 1;
+  optional string thumbnail_path = 2;
+  uint64 byte_size = 3;
+  // The same, as the phrase a member reads. A size is the VAULT's to spell;
+  // see `DuplicateCluster.reclaimable_phrase`.
+  string byte_phrase = 9;
+  // THE CONTENT ROW THIS COPY POINTS AT, so a leg can fetch its size and say
+  // which member it belongs to. Without it the size leg's rows are orphans.
+  //
+  // It is also what makes the contract's OWN suggestion rule reachable: "the
+  // largest by bytes". With no sizes the screen can only rank by pixels, and
+  // `suggestion_reason` has to say so — which is honest, but it is not the
+  // rule this message specifies.
+  string content_id = 10;
+  uint32 width = 4;
+  uint32 height = 5;
+  string captured_at = 6;
+  // In an album, favorited, or otherwise placed by hand. Deleting one of these
+  // is not the same act as deleting a stray copy, and the screen says so.
+  //
+  // **FALSE IS NOT A SAFE DEFAULT ON A SCREEN THAT DELETES PHOTOGRAPHS**, so
+  // it is not allowed to stand in for "nobody checked". The answer needs a
+  // second leg over `core_collection_entry`, which is why
+  // [DuplicateReviewEvent.PlacementArrived] exists as its own event arm rather
+  // than a second `DataArrived`: a screen could not otherwise tell an
+  // amendment from a replace. Until that leg has landed, `placements_checked`
+  // on the data is false and the view says so out loud instead of drawing
+  // every copy as a stray.
+  bool member_placed = 7;
+  PhotoCell.Held held = 8;
+}
+
+message DuplicateReviewState {
+  SeatState seat = 1;
+  string cluster_id = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    DuplicateReviewData data = 5;
+  }
+  // WHICH ONE SURVIVES. Empty until a member has chosen — never
+  // pre-selected by the screen, because a default here is the product
+  // choosing which of a member's photographs to delete.
+  string keep_asset_id = 6;
+  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
+  //
+  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
+  // READ's — it is one of the three states a read can be in — and putting a
+  // denied write there would replace the rows on screen with an error, so a
+  // member whose rename was refused would lose the list they were renaming
+  // from. `NoteDraft.save_failure` is the same field for the same reason.
+  //
+  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
+  // event carrying a sentence and, for one draft, nowhere to put it.
+  optional ReadFailure write_failure = 7;
+}
+
+// THE ONE UNPAGED LIST IN THIS SECTION, and deliberately.
+//
+// Every other data message here carries a `next_cursor`. A cluster is a handful
+// of copies of ONE photograph — `crates/media`'s phash clustering produces
+// nothing else — so a cursor would be a field no cluster ever sets and every
+// reducer has to handle. If a cluster ever grows past a page, this grows a
+// cursor and not a truncation.
+message DuplicateReviewData {
+  repeated DuplicateMember members = 1;
+  // The recommendation, as a recommendation: the largest by bytes, and the
+  // reason stated. It is NOT written into `keep_asset_id` — a suggestion a
+  // member has not accepted must not be able to delete anything.
+  string suggested_keep_asset_id = 2;
+  string suggestion_reason = 3;
+  // HAS ANYTHING ACTUALLY ASKED WHERE THESE COPIES ARE PLACED?
+  //
+  // False means `member_placed` on every member is an unanswered question and
+  // not a "no". The view must say so above the delete control: a member about
+  // to sweep a cluster is entitled to know whether "this one is in an album"
+  // was checked or merely unpopulated.
+  bool placements_checked = 4;
+}
+
+message DuplicateReviewEvent {
+  oneof kind {
+    Opened opened = 1;
+    DataArrived data = 2;
+    ReadRefused refused = 3;
+    RowsChanged rows_changed = 4;
+    SeatChanged seat_changed = 5;
+    KeepPicked keep = 6;
+    ResolveRequested resolve = 7;
+    WriteSettled write_settled = 8;
+    PlacementArrived placements = 9;
+  }
+
+  message Opened {
+    string cluster_id = 1;
+  }
+
+  message DataArrived {
+    DuplicateReviewData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message RowsChanged {
+    repeated string asset_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message KeepPicked {
+    string asset_id = 1;
+  }
+
+  // THE SECOND LEG LANDED: which of these copies a member has put somewhere.
+  //
+  // Its OWN arm and not a second `DataArrived`, because a reducer handed two
+  // `DataArrived`s cannot tell an amendment from a replace — and the
+  // discriminator the lightbox uses ("a detail with no `asset_id` is an
+  // amendment") cannot work here, since the asset ids are exactly what this
+  // leg carries. An arm makes the amendment a different sentence rather than
+  // the same one twice.
+  //
+  // Absent ids are absent answers: a member id missing from this list stays
+  // unanswered rather than becoming a "no".
+  message PlacementArrived {
+    repeated string placed_asset_ids = 1;
+  }
+
+  // Trash every member but the kept one. `permanent` is false and stays false:
+  // a duplicate sweep sends copies to the trash, where the member can change
+  // their mind, and a bulk act that could not be undone is not one this screen
+  // offers.
+  message ResolveRequested {}
+
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Memories
+// ---------------------------------------------------------------------------
+
+message MemoryRow {
+  string memory_id = 1;
+  Kind kind = 2;
+  // What the pass called it, empty when it had nothing to call it. The view
+  // composes a title from the day and the place in that case, rather than
+  // storing one the vault never wrote.
+  string title_hint = 3;
+  // THE VAULT'S OWN KEY FOR THIS MEMORY'S DAY, PASSED THROUGH AND NEVER
+  // PARSED.
+  //
+  // It said `YYYY-MM-DD`, and that is not what the column holds: the shape
+  // differs by kind, and an on-this-day row keys by MONTH AND DAY — it is the
+  // same date in other years, so a year in the key would defeat it. The
+  // deterministic ids are built from it (`otd:<day_key>`,
+  // `docs/photos/derived-ledger.md`), which is why it travels at all.
+  //
+  // **A view takes its dates from `started_at` and `ended_at`, not from
+  // here.** Those are unambiguous instants; this is a key whose format is the
+  // projection's business.
+  string day_key = 4;
+  string place_name = 5;
+  uint32 member_count = 6;
+  optional string cover_thumbnail_path = 7;
+  string started_at = 8;
+  string ended_at = 9;
+  // A TRIP'S ROUTE: the places its photographs were taken at, in the order
+  // they were taken, a repeat of the stop before collapsed. Only stops with a
+  // coordinate — a place with no pin cannot be sketched. Empty on every other
+  // kind, and on a trip whose photographs carry no place.
+  //
+  // Drawn as a private sketch from the member's own coordinates and never over
+  // a basemap: a tile is a request that tells a server where the member has
+  // been (`docs/photos/places.md`).
+  repeated MemoryStop route = 10;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    // This day, in other years.
+    KIND_ON_THIS_DAY = 1;
+    // A run of days away from home.
+    KIND_TRIP = 2;
+    // Photographs that look like each other.
+    KIND_SIMILAR = 3;
+  }
+}
+
+// ONE STOP ON A TRIP'S ROUTE.
+message MemoryStop {
+  string place_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+}
+
+message PhotosMemoriesState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    PhotosMemoriesData data = 4;
+  }
+}
+
+message PhotosMemoriesData {
+  repeated MemoryRow memories = 1;
+  optional string next_cursor = 2;
+  // Memories are COMPUTED, by a pass that may not have run. An empty list with
+  // this false is "not yet"; with it true it is "there are none".
+  bool computed = 3;
+}
+
+message PhotosMemoriesEvent {
+  oneof kind {
+    Opened opened = 1;
+    NextPageRequested next_page = 2;
+    DataArrived data = 3;
+    ReadRefused refused = 4;
+    RowsChanged rows_changed = 5;
+    SeatChanged seat_changed = 6;
+  }
+
+  message Opened {}
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    PhotosMemoriesData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message RowsChanged {
+    repeated string memory_ids = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The picker
+// ---------------------------------------------------------------------------
+
+// ADDING PHOTOGRAPHS TO AN ALBUM.
+//
+// Not `PhotoShelfState` with `selecting = true`: the picked set is the
+// picker's own and the album is a route param, never shared state (§10). A
+// shelf that could be picked from would carry an album id on every surface
+// that shows one.
+message PhotoPickerState {
+  SeatState seat = 1;
+  // Where the picked assets are going. Named, so the head says "Add to
+  // Portugal" before any read has landed.
+  string collection_id = 2;
+  string collection_name = 3;
+  oneof content {
+    Loading loading = 4;
+    ReadFailure failure = 5;
+    PhotosGridData data = 6;
+  }
+  repeated string picked_asset_ids = 7;
+  // Assets the album ALREADY holds, so the grid can draw them as taken rather
+  // than letting a member add one twice and discover it afterwards.
+  repeated string already_in_album_asset_ids = 8;
+  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
+  //
+  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
+  // READ's — it is one of the three states a read can be in — and putting a
+  // denied write there would replace the rows on screen with an error, so a
+  // member whose rename was refused would lose the list they were renaming
+  // from. `NoteDraft.save_failure` is the same field for the same reason.
+  //
+  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
+  // event carrying a sentence and, for one draft, nowhere to put it.
+  optional ReadFailure write_failure = 9;
+}
+
+message PhotoPickerEvent {
+  oneof kind {
+    Opened opened = 1;
+    NextPageRequested next_page = 2;
+    DataArrived data = 3;
+    ReadRefused refused = 4;
+    SeatChanged seat_changed = 5;
+    PickToggled pick = 6;
+    ConfirmRequested confirm = 7;
+    WriteSettled write_settled = 8;
+    RowsChanged rows_changed = 9;
+    MembersArrived members = 10;
+  }
+
+  message Opened {
+    string collection_id = 1;
+    string collection_name = 2;
+    repeated string already_in_album_asset_ids = 3;
+  }
+
+  // WHAT THE ALBUM ALREADY HOLDS, READ BY THE PICKER ITSELF.
+  //
+  // The caller that pushed this screen held one page of the album at most, so
+  // `Opened.already_in_album_asset_ids` was a floor at best and empty in
+  // practice. This is the album's `core_collection_entry` rows, walked, and the
+  // reducer UNIONS it into the taken set — a commit that landed while the read
+  // was in flight is not undone by a list that predates it.
+  message MembersArrived {
+    string collection_id = 1;
+    repeated string asset_ids = 2;
+  }
+
+  message NextPageRequested {
+    string after_cursor = 1;
+  }
+
+  message DataArrived {
+    PhotosGridData data = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message PickToggled {
+    string asset_id = 1;
+  }
+
+  message ConfirmRequested {}
+
+  // WHICH PICK SETTLED. See `PhotoShelfEvent.WriteSettled`: a confirm submits
+  // one `media.add_to_album` per picked asset, and a screen that moved the
+  // WHOLE picked set to taken on the first commit would tell a member their
+  // photographs are in an album when some of the adds were refused.
+  message WriteSettled {
+    bool committed = 1;
+    string sentence = 2;
+    string asset_id = 3;
+  }
+
+  message RowsChanged {
+    repeated string asset_ids = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Photos: the editor — crop, rotate, straighten, flip (#1029, photos port)
+// ---------------------------------------------------------------------------
+
+// THE PHOTOGRAPH THE EDITOR WORKS ON, as much of it as an edit needs.
+//
+// Not a `PhotoDetail`: the editor needs the ORIGINAL's path, which the
+// lightbox's page read cannot answer for (`PhotoLightboxReads`' own doc), and
+// none of the seven satellites the lightbox reads. The path here comes from the
+// BYTE door (`ContentUrlRequest`), which is the one place it lives.
+message PhotoEditSource {
+  string asset_id = 1;
+  // What the stage draws while nothing is saved. The original when this phone
+  // holds it, the thumbnail when it does not — and absent is a real answer.
+  optional string thumbnail_path = 2;
+  // THE BYTES A SAVE RENDERS FROM, and never the thumbnail: a save rendered
+  // from the display copy would silently write a smaller photograph than the
+  // one the member edited. Absent means Save is refused, with a sentence.
+  optional string original_path = 3;
+  string title = 4;
+  string captured_at = 5;
+  PhotoCell.Kind kind = 6;
+  PhotoCell.Held held = 7;
+  // The byte door's own words when it could not answer with a path.
+  string original_absent_reason = 8;
+  // THE ORIGINAL'S CAPTURE-LOCAL OFFSET, carried onto the new photograph with
+  // `captured_at`: an edit keeps the original's date, as Apple Photos does.
+  // Absent when the row records none, and then none is written.
+  optional int32 captured_utc_offset_minutes = 9;
+  // The original's place, set on the new photograph after it lands. Empty
+  // when the original has none.
+  string place_id = 10;
+}
+
+// WHAT THE MEMBER HAS DONE, AS DATA. Nothing is written until Save.
+//
+// The crop is in FRACTIONS of the ROTATED frame, so it survives a resize and
+// means the same thing on the stage and in the saved pixels (v0's
+// `photo-edit-model.ts`). The render order is fixed and both shells keep it:
+// flip, then rotate, then crop.
+message PhotoEditPlan {
+  // Quarter turns clockwise, 0-3.
+  uint32 quarters = 1;
+  // Degrees of levelling, 0 to -15. The phone levels anticlockwise only.
+  int32 straighten = 2;
+  Flip flip = 3;
+  Ratio ratio = 4;
+  PhotoEditCrop crop = 5;
+
+  // UNSPECIFIED IS "NO FLIP" — v0's `undefined`, the third state a boolean
+  // cannot hold, and the one an untouched editor is in. A three-way cycle and
+  // not two toggles: one flip per render.
+  enum Flip {
+    FLIP_UNSPECIFIED = 0;
+    FLIP_HORIZONTAL = 1;
+    FLIP_VERTICAL = 2;
+  }
+
+  // v0's three ratios. UNSPECIFIED reads as ORIGINAL.
+  enum Ratio {
+    RATIO_UNSPECIFIED = 0;
+    RATIO_ORIGINAL = 1;
+    RATIO_SQUARE = 2;
+    RATIO_THREE_TWO = 3;
+  }
+}
+
+// Fractions of the rotated frame, each in [0, 1].
+message PhotoEditCrop {
+  double x = 1;
+  double y = 2;
+  double w = 3;
+  double h = 4;
+}
+
+message PhotoEditorState {
+  SeatState seat = 1;
+  string asset_id = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    PhotoEditSource source = 5;
+  }
+  PhotoEditPlan plan = 6;
+  Phase phase = 7;
+  // THE ONE LINE, and it says "nothing written yet" until something is.
+  // Reduced here so both shells print the same sentence.
+  string status_line = 8;
+  string straighten_label = 9;
+  string flip_label = 10;
+  // Whether anything differs from the untouched photograph: Reset's gate and
+  // the discard question's.
+  bool edited = 11;
+  // WHY SAVE CANNOT FIRE, stated on screen. Empty when it can. A refused
+  // commit is outlined and says why — never a hidden control.
+  string save_refusal = 12;
+  // A save that did not land. Its own slot, never the read's `failure`: a
+  // refused save must not take the photograph off the stage.
+  optional ReadFailure save_failure = 13;
+  // "Discard this edit?" is up.
+  bool discard_open = 14;
+  // The new photograph, once the save committed. The shell opens it.
+  string saved_asset_id = 15;
+  // WHICH SAVE IS IN FLIGHT. A settle for any other key is a stale answer.
+  string save_key = 16;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_EDITING = 1;
+    // The shell is rendering and ingesting. Every control but none is inert.
+    PHASE_SAVING = 2;
+    // The new photograph is in the vault; the shell leaves for it.
+    PHASE_SAVED = 3;
+    // The member left without saving; the shell pops.
+    PHASE_CLOSED = 4;
+  }
+}
+
+message PhotoEditorEvent {
+  oneof kind {
+    Opened opened = 1;
+    DataArrived data = 2;
+    ReadRefused refused = 3;
+    SeatChanged seat_changed = 4;
+    RotateRequested rotate = 5;
+    StraightenStepped straighten = 6;
+    FlipCycled flip = 7;
+    RatioChosen ratio = 8;
+    CropMoved crop_moved = 9;
+    CropScaled crop_scaled = 10;
+    ResetRequested reset = 11;
+    CancelRequested cancel = 12;
+    DiscardAnswered discard = 13;
+    SaveRequested save = 14;
+    SaveSettled save_settled = 15;
+  }
+
+  message Opened {
+    string asset_id = 1;
+  }
+
+  message DataArrived {
+    PhotoEditSource source = 1;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message RotateRequested {}
+
+  message StraightenStepped {}
+
+  message FlipCycled {}
+
+  message RatioChosen {
+    PhotoEditPlan.Ratio ratio = 1;
+    // The rotated frame's width over its height, as the stage measured it: a
+    // centred ratio crop is a fraction of THAT, and the reducer has no image.
+    double frame_ratio = 2;
+  }
+
+  // A DRAG, in fractions of the frame. Continuous; each one is a delta.
+  message CropMoved {
+    double dx = 1;
+    double dy = 2;
+  }
+
+  // A PINCH, once, with its total factor (v0 rescaled per gesture and not per
+  // frame, because rescaling per frame drifts).
+  message CropScaled {
+    double factor = 1;
+  }
+
+  message ResetRequested {}
+
+  message CancelRequested {}
+
+  message DiscardAnswered {
+    bool discard = 1;
+  }
+
+  message SaveRequested {}
+
+  message SaveSettled {
+    string save_key = 1;
+    bool committed = 2;
+    string asset_id = 3;
+    string sentence = 4;
   }
 }

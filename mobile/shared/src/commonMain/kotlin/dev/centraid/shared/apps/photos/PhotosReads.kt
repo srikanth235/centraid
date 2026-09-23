@@ -1,8 +1,10 @@
 package dev.centraid.shared.apps.photos
 
+import centraid.core.v1.CommandStatus
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
+import centraid.core.v1.Value
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
@@ -10,6 +12,7 @@ import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.ReadFailure
 import dev.centraid.shared.sync.LinkConditions
 import dev.centraid.shared.sync.ScreenReads
+import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.sync.TransferRule
 
 /**
@@ -21,14 +24,22 @@ import dev.centraid.shared.sync.TransferRule
  * reason `TallyReads` gives: a grid in a different order from the desktop's
  * over the same assets is two libraries.
  *
- * **A NULL `captured_at` RIDES THE FIRST WINDOW AND NO OTHER**, which the app's
- * own comment states and this inherits by using its order: the keyset
- * comparison `captured_at < ?` is false for NULL in SQL. That is not a defect
- * to patch here — an undated asset has no place in a timeline cursor — and it
- * is why this file does not invent a coalesce that would put undated photos in
- * whatever order the rowid happened to be.
+ * **THE LIBRARY IS TWO WALKS, AND THE SECOND ONE IS THE UNDATED TAIL** (#1029,
+ * photos port). An undated asset has no place in a capture-time keyset — the
+ * comparison `(captured_at, asset_id) < (?, ?)` is never true for NULL — so a
+ * single walk ordered on capture time silently lost every undated photograph
+ * behind the first window, which on a library past one page was all of them.
+ * The first walk is therefore `captured_at IS NOT NULL`, newest first, exactly
+ * the app's order; when it ends, the machine starts the second over
+ * `captured_at IS NULL`, keyed on the primary key alone, and v0's "Undated"
+ * section is its tail (`timeline-model.ts`'s `UNDATED_SECTION_DAY`). No
+ * coalesce is invented: an undated photograph is placed after every dated one,
+ * which is where v0 sank it, rather than in whatever order a fallback column
+ * happened to give it.
  */
-public object PhotosReads : ScreenReads<PhotosGridState, PhotosGridEvent> {
+public object PhotosReads :
+    ScreenReads<PhotosGridState, PhotosGridEvent>,
+    ScreenWrites<PhotosGridState, PhotosGridEvent> {
     override val screenId: String = PhotosGridMachine.SCREEN_ID
 
     /** `media_asset`, the same table the machine's `rowsChanged` declares. */
@@ -64,18 +75,85 @@ public object PhotosReads : ScreenReads<PhotosGridState, PhotosGridEvent> {
      *
      * It used to make no trip at all, so every cell of a hundred-and-twenty-row
      * page drew a placeholder over a device holding the photographs.
+     *
+     * **THE PIXEL BOX AND THE LENGTH RIDE AFTER THE CELL'S FIVE** — `width`,
+     * `height` and `duration_s` (#1029, photos port). A justified row packs from
+     * the real aspect ratio before a byte arrives (v0's `justify.ts`), and a
+     * video's tile says how long it is. They sit between the five cell columns
+     * and the door's appended three, which is why [cellOf] finds the appended
+     * columns from the END of the row: `PhotoShelfReads` and `PhotoPickerReads`
+     * hand it the plain eight-value layout and are read correctly either way.
+     *
+     * **THE WALK AND THE FILTER ARE THE STATE'S.** [PhotosGridState.reading_undated]
+     * says which of the two walks the one read in flight belongs to — the
+     * machine keeps at most one outstanding, and the state is published before
+     * its effect is served, so this reads the walk that was asked for. The
+     * Favorites filter is the favourites shelf's own predicate
+     * ([PhotoShelfReads]' `STARRED`), restated here because a star is a
+     * `core_tag` row and not a column, and the door pages one table.
      */
-    override fun query(state: PhotosGridState, afterCursor: String?): PageQuery = PageQuery(
-        name = "photos.grid.live",
-        select = listOf("asset_id", "captured_at", "tz_offset_min", "kind", "capture_group_id"),
-        from = table,
-        where_ = "deleted_at IS NULL AND archived_at IS NULL",
-        order = PageOrder(
-            sort_column = "captured_at",
-            pk_column = "asset_id",
-            descending = true,
-        ),
-        with_held_thumbnail = true,
+    override fun query(state: PhotosGridState, afterCursor: String?): PageQuery {
+        val undated = state.reading_undated
+        val favorites = state.filter == PhotosGridState.Filter.FILTER_FAVORITES
+        val where = buildList {
+            add(LIVE)
+            add(if (undated) "captured_at IS NULL" else "captured_at IS NOT NULL")
+            if (favorites) add(STARRED)
+        }.joinToString(" AND ")
+        return PageQuery(
+            name = when {
+                favorites && undated -> "photos.grid.favorites.undated"
+                favorites -> "photos.grid.favorites"
+                undated -> "photos.grid.undated"
+                else -> "photos.grid.live"
+            },
+            select = SELECT,
+            from = table,
+            where_ = where,
+            bind = if (favorites) STARRED_BINDS else emptyList(),
+            order = PageOrder(
+                // THE UNDATED TAIL IS KEYED ON THE PRIMARY KEY ALONE: it has no
+                // capture time to sort on, and a keyset must be total.
+                sort_column = if (undated) "asset_id" else "captured_at",
+                pk_column = "asset_id",
+                descending = true,
+            ),
+            with_held_thumbnail = true,
+        )
+    }
+
+    /**
+     * The cell's five, then the extras the grid alone projects. Order is
+     * positional and moves with [cellOf]'s indices and nowhere else.
+     */
+    private val SELECT: List<String> = listOf(
+        "asset_id",
+        "captured_at",
+        "tz_offset_min",
+        "kind",
+        "capture_group_id",
+        "width",
+        "height",
+        "duration_s",
+    )
+
+    /** The live library: not trashed, not put away. The app's own predicate. */
+    private const val LIVE: String = "deleted_at IS NULL AND archived_at IS NULL"
+
+    /**
+     * A STAR IS A TAG, NOT A COLUMN (#916). The favourites shelf's predicate,
+     * three nested single-table subqueries, every literal bound. See
+     * `PhotoShelfReads.STARRED` for why the flags scheme is an `https` URI.
+     */
+    private const val STARRED: String = "asset_id IN (SELECT target_id FROM core_tag " +
+        "WHERE target_type = ? AND concept_id IN (SELECT concept_id FROM core_concept " +
+        "WHERE notation = ? AND scheme_id IN (SELECT scheme_id FROM core_concept_scheme " +
+        "WHERE uri = ?)))"
+
+    private val STARRED_BINDS: List<Value> = listOf(
+        Value(text = "media.asset"),
+        Value(text = "starred"),
+        Value(text = "https://centraid.dev/schemes/flags"),
     )
 
     override fun arrived(rows: List<Row>, nextCursor: String?): PhotosGridEvent = PhotosGridEvent(
@@ -97,6 +175,26 @@ public object PhotosReads : ScreenReads<PhotosGridState, PhotosGridEvent> {
 
     override fun refused(failure: ReadFailure): PhotosGridEvent =
         PhotosGridEvent(refused = PhotosGridEvent.ReadRefused(failure = failure))
+
+    override val appId: String = "photos"
+
+    /**
+     * The selection bar's writes, settled (#1029, photos port).
+     *
+     * Only `EXECUTED` committed — `PhotoShelfReads.settled`'s rule and reason.
+     * Every key the library mints ends in the asset id
+     * (`<command>[:<value>]:<assetId>`, and `AlbumChoice`'s
+     * `<command>:<albumId>:<assetId>`), so the last segment is the photograph
+     * the answer is about.
+     */
+    override fun settled(status: CommandStatus, sentence: String, invokeKey: String): PhotosGridEvent =
+        PhotosGridEvent(
+            write_settled = PhotosGridEvent.WriteSettled(
+                committed = status == CommandStatus.COMMAND_STATUS_EXECUTED,
+                sentence = sentence,
+                asset_id = invokeKey.substringAfterLast(':', missingDelimiterValue = ""),
+            ),
+        )
 
     /**
      * One cell out of one row.
@@ -123,28 +221,55 @@ public object PhotosReads : ScreenReads<PhotosGridState, PhotosGridEvent> {
      * is a mirror kept elsewhere (#916), and a flag guessed here would be a
      * star a member never put on a photograph.
      */
-    private fun cellOf(row: Row): PhotoCell = PhotoCell(
-        asset_id = row.text(0),
-        captured_at = row.text(1),
+    private fun cellOf(row: Row): PhotoCell {
+        // THE APPENDED THREE ARE THE LAST THREE, WHEREVER THE ROW ENDS. The
+        // door puts its computed columns after `select`, so counting from the
+        // end reads this grid's eleven-value rows and the shelf's and picker's
+        // eight-value rows with one set of indices. The extras are only read
+        // when the row is long enough to hold them.
+        // A row too short to carry them has NO appended columns — reading its
+        // own cell columns as a path and a hash would be worse than reading
+        // nothing.
+        val appended = if (row.values.size >= CELL_COLUMNS + APPENDED_COLUMNS) {
+            row.values.size - APPENDED_COLUMNS
+        } else {
+            row.values.size
+        }
+        val extras = appended >= CELL_COLUMNS + EXTRA_COLUMNS
+        val thumbnail = row.text(appended + THUMBNAIL)
+        val originalHash = row.text(appended + ORIGINAL_HASH)
+        val capturedAt = row.text(1)
         // A CAPTURE-LOCAL OFFSET, NOT THE READER'S. `tz_offset_min` is
         // nullable in the DDL and a missing offset is read as zero, which the
         // proto's pairing already tolerates — a photo whose day cannot be told
         // is shown in UTC rather than in the phone's zone, which would silently
         // move it a day for a traveller.
-        captured_utc_offset_minutes = row.integer(2).toInt(),
-        kind = kindOf(row.text(3)),
-        capture_group_id = row.text(4).ifEmpty { null },
-        thumbnail_path = row.text(THUMBNAIL).ifEmpty { null },
-        original_hash = row.text(ORIGINAL_HASH),
-        held = heldOf(
-            thumbnail = row.text(THUMBNAIL).isNotEmpty(),
-            originalHeld = row.integer(ORIGINAL_HELD) > 0L,
-            originalHash = row.text(ORIGINAL_HASH),
+        val offset = row.integer(2).toInt()
+        return PhotoCell(
+            asset_id = row.text(0),
+            captured_at = capturedAt,
+            captured_utc_offset_minutes = offset,
             kind = kindOf(row.text(3)),
-            rule = rule,
-            metered = metered,
-        ),
-    )
+            capture_group_id = row.text(4).ifEmpty { null },
+            thumbnail_path = thumbnail.ifEmpty { null },
+            original_hash = originalHash,
+            held = heldOf(
+                thumbnail = thumbnail.isNotEmpty(),
+                originalHeld = row.integer(appended + ORIGINAL_HELD) > 0L,
+                originalHash = originalHash,
+                kind = kindOf(row.text(3)),
+                rule = rule,
+                metered = metered,
+            ),
+            // A MISSING BOX IS ZERO AND NOT A GUESS: `width > 0` is the DDL's
+            // own CHECK, so zero can only mean "the vault does not know", and
+            // the view packs that tile square.
+            width = if (extras) row.integer(WIDTH).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt() else 0,
+            height = if (extras) row.integer(HEIGHT).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt() else 0,
+            duration_seconds = if (extras) row.seconds(DURATION) else 0,
+            day = PhotosTimeline.captureDay(capturedAt, offset),
+        )
+    }
 
     /**
      * THE MEMBER'S RULE AND THE LINK, AS THIS READ LAST HEARD THEM (#1025 S4).
@@ -233,15 +358,22 @@ public object PhotosReads : ScreenReads<PhotosGridState, PhotosGridEvent> {
             metered && kind == PhotoCell.Kind.KIND_VIDEO
     }
 
-    private const val THUMBNAIL: Int = 5
-
     /**
-     * The other two computed columns, in the order `crates/core`'s `api::page`
-     * appends them. They move together with [THUMBNAIL] and with `query`'s
-     * `select` list, and nowhere else.
+     * The door's three computed columns, as OFFSETS from where they start —
+     * `thumbnail_path`, `original_hash`, `original_held`, in the order
+     * `crates/core`'s `api::page` appends them after whatever `select` named.
      */
-    private const val ORIGINAL_HASH: Int = 6
-    private const val ORIGINAL_HELD: Int = 7
+    private const val APPENDED_COLUMNS: Int = 3
+    private const val THUMBNAIL: Int = 0
+    private const val ORIGINAL_HASH: Int = 1
+    private const val ORIGINAL_HELD: Int = 2
+
+    /** The five every cell reads, and the three only this grid projects. */
+    private const val CELL_COLUMNS: Int = 5
+    private const val EXTRA_COLUMNS: Int = 3
+    private const val WIDTH: Int = 5
+    private const val HEIGHT: Int = 6
+    private const val DURATION: Int = 7
 
     /**
      * The DDL's four `kind` values, as the proto's four.
@@ -249,8 +381,13 @@ public object PhotosReads : ScreenReads<PhotosGridState, PhotosGridEvent> {
      * An unrecognised value is `KIND_UNSPECIFIED` and not `KIND_PHOTO`: the
      * CHECK constraint admits exactly these four today, and a fifth arriving
      * from a newer gateway must not be drawn as a photograph.
+     *
+     * `internal` rather than private because every Photos surface that reads
+     * `media_asset` owes the same answer, and a second copy of this `when` is a
+     * second place a fifth `kind` gets drawn as a still image
+     * (`PhotoLightboxReads`, #1029 photos port).
      */
-    private fun kindOf(kind: String): PhotoCell.Kind = when (kind) {
+    internal fun kindOf(kind: String): PhotoCell.Kind = when (kind) {
         "photo" -> PhotoCell.Kind.KIND_PHOTO
         "video" -> PhotoCell.Kind.KIND_VIDEO
         "audio" -> PhotoCell.Kind.KIND_AUDIO
@@ -262,4 +399,15 @@ public object PhotosReads : ScreenReads<PhotosGridState, PhotosGridEvent> {
     private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
 
     private fun Row.integer(index: Int): Long = values.getOrNull(index)?.integer ?: 0L
+
+    /**
+     * `duration_s` is `REAL` in the DDL, so a STRICT table hands back a real —
+     * but an integer is read too rather than dropped to zero, because a length
+     * that arrived as `64` is still sixty-four seconds.
+     */
+    private fun Row.seconds(index: Int): Int {
+        val value = values.getOrNull(index) ?: return 0
+        val seconds = value.real ?: value.integer?.toDouble() ?: return 0
+        return seconds.coerceIn(0.0, Int.MAX_VALUE.toDouble()).toInt()
+    }
 }

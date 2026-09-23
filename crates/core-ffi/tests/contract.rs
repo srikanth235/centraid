@@ -1068,6 +1068,51 @@ fn the_phones_four_flows_round_trip_through_call() {
     assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
 }
 
+/// CLAUSE 4d. `originals` is a request kind like the phone's four: a keep
+/// round-trips through `call` and is answered with the list as it now stands,
+/// and a census over a founded vault with no photographs is a typed answer —
+/// counted, and zero, because this core opened its content store.
+#[test]
+fn the_originals_on_this_phone_round_trip_through_call() {
+    let opened = Opened::gateway();
+    let originals = |id: u64, op: wire::originals_request::Op| {
+        let (code, bytes) = call(
+            opened.handle,
+            &envelope(
+                id,
+                wire::request::Kind::Originals(wire::OriginalsRequest { op: Some(op) }),
+            ),
+        );
+        assert_eq!(code, CENTRAID_OK, "an originals ask answers");
+        let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+            panic!("an originals ask is answered by a Response");
+        };
+        let Some(wire::response::Kind::Originals(originals)) = response.kind else {
+            panic!("an OriginalsRequest is answered by an OriginalsResponse");
+        };
+        originals
+    };
+
+    let kept = originals(
+        31,
+        wire::originals_request::Op::Keep(wire::KeepAlbumOriginals {
+            album_id: "album-1".to_owned(),
+            keep: true,
+        }),
+    );
+    assert_eq!(kept.kept_album_ids, vec!["album-1"]);
+    assert_eq!(kept.census, None, "a keep counts nothing");
+
+    let counted = originals(
+        32,
+        wire::originals_request::Op::Census(wire::OriginalsCensusRead {}),
+    );
+    assert_eq!(counted.kept_album_ids, vec!["album-1"], "the list rides every answer");
+    let census = counted.census.expect("this core opened its content store, so it counts");
+    assert_eq!(census.on_phone.unwrap_or_default().count, 0);
+    assert_eq!(census.kept.unwrap_or_default().count, 0);
+}
+
 /// CLAUSE 4b, the other half. A core opened with no seed reads and writes its
 /// vault and **refuses to drain**, with a sentence naming the seed — it never
 /// invents a key file beside the vault it protects.

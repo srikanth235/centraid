@@ -1,0 +1,19 @@
+# THE PAIR: THE SAME EMPTY LIST, AND THIS ONE MAY SAY "NONE".
+#
+# No clusters, `scan_complete: true`. The pass walked the library and found
+# nothing to merge, so "No duplicates" is now a sentence the vault has earned.
+# Byte-for-byte this fixture differs from `photos-duplicates/scan-incomplete` in
+# one boolean, and that boolean is the difference between a finished answer and
+# a progress report. A screen that only checked `clusters.isEmpty()` draws both
+# the same and is wrong about one of them.
+#
+# Asserting them together rather than separately is deliberate: two independent
+# assertions pass just as happily against a decoder that collapsed the two.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  scan_complete: true
+}

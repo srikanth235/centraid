@@ -10,7 +10,13 @@ How Photos answers "where was this", and why a location is a phrase before it is
 | **Phrases** | A place becomes something a person would say out loud | [`crates/apps/photos/src/places.rs`](../../crates/apps/photos/src/places.rs) |
 | **Disclosure** | What a place does, and does not, do when a copy leaves | the share half of the same module |
 
-No surface in this tree draws a map. There is no basemap, no map SDK, and no geometry layer; a place reaches a member as words.
+**There is no basemap, and a basemap remains a non-goal.** A tile request's URL _is_ a bounding box, so fetching one tells a tile server roughly where a member photographs — which is the disclosure this whole document exists to refuse. No map SDK is linked in either shell and none should be.
+
+What the mobile shell _does_ draw is a **zero-egress coordinate plot**: `photos.places` under `PRESENTATION_MAP` plots `core_place`'s own `geo_lat`/`geo_lng` on a `Canvas` — equirectangular, normalised to the plotted rows' own bounding box, no network of any kind — and says so on the screen ("Nothing is fetched — this is drawn here from your own coordinates"). That is a picture of the member's own rows and not a map of the world; cards and plot are one screen with a `Presentation` parameter, not two.
+
+Two more pictures are drawn the same way. **A plot pin is the place's newest photograph** with its count in the corner (v0's `places-pin.tsx`), and **a trip memory carries a sketch of its route** — its photographs' places in the order they were taken, drawn beside the trip's name from the member's own coordinates (`MemoryRow.route`, `PhotosMemoriesMachine.sketch`). Photographs with no place are a door, not only a count: the footer's sentence opens their shelf (`PhotoShelf.Place.unplaced`).
+
+A place still reaches a member primarily as **words**. The plot is a second reading of rows the cards already show, and a place with no coordinate is omitted from it and counted in the footer rather than silently dropped — `PlaceRow.has_coordinate` is the only honest signal, because proto3 implicit presence puts neither double on the wire for a row at 0.0/0.0 and 0,0 is a real point in the Gulf of Guinea.
 
 ## Layer 1 — names
 

@@ -1,7 +1,9 @@
 package dev.centraid.android.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,18 +38,12 @@ import dev.centraid.android.theme.formatMoney
 public fun TallyListScreen(
     state: TallyListState,
     onEvent: (TallyListEvent) -> Unit,
-    onBandChange: (TallyListState.Destination) -> Unit,
+    @Suppress("UNUSED_PARAMETER") onBandChange: (TallyListState.Destination) -> Unit = {},
 ) {
     Column(modifier = Modifier.padding(16.dp)) {
-        Row {
-            // A BAND IS A PARAMETER: three buttons, one screen.
-            TallyListState.Destination.entries
-                .filter { it != TallyListState.Destination.DESTINATION_UNSPECIFIED }
-                .forEach { band ->
-                    TextButton(onClick = { onBandChange(band) }) {
-                        Text(text = bandLabel(band))
-                    }
-                }
+        // THE BAND IS NOT HERE: it is `AppBand` at the foot of the Tally
+        // destination in `MainActivity`. Refresh stays, at the head, alone.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             IconButton(
                 onClick = { onEvent(TallyListEvent(refreshed = TallyListEvent.Refreshed())) },
             ) {
@@ -122,12 +118,6 @@ public fun TallyListScreen(
     }
 }
 
-private fun bandLabel(band: TallyListState.Destination): String = when (band) {
-    TallyListState.Destination.DESTINATION_ACTIVITY -> "Activity"
-    TallyListState.Destination.DESTINATION_BALANCES -> "Balances"
-    TallyListState.Destination.DESTINATION_GROUPS -> "Groups"
-    TallyListState.Destination.DESTINATION_UNSPECIFIED -> ""
-}
 
 /**
  * The refresh glyph, from the CORE icon set only.
@@ -138,3 +128,25 @@ private fun bandLabel(band: TallyListState.Destination): String = when (band) {
  * the design system's own icon set this function is the one place that changes.
  */
 private fun refreshIcon(): ImageVector = Icons.Filled.Refresh
+
+/**
+ * TALLY'S BAND: v0's order and marks (`packages/blueprints/apps/tally/shelves.ts`)
+ * — Balances, Activity, Groups. v0's fourth, Waiting, has no destination in
+ * this state, and its More has no sheet here, so neither is drawn.
+ * `unspecified` is Activity: the machine opens there.
+ */
+internal fun tallyBandTabs(current: TallyListState.Destination): List<dev.centraid.android.kit.AppBandTab> =
+    listOf(
+        Triple(TallyListState.Destination.DESTINATION_BALANCES, "Balances", "Coin"),
+        Triple(TallyListState.Destination.DESTINATION_ACTIVITY, "Activity", "Activity"),
+        Triple(TallyListState.Destination.DESTINATION_GROUPS, "Groups", "Users"),
+    ).map { (destination, label, icon) ->
+        dev.centraid.android.kit.AppBandTab(
+            key = destination.name,
+            label = label,
+            iconKey = icon,
+            selected = destination == current ||
+                (destination == TallyListState.Destination.DESTINATION_ACTIVITY &&
+                    current == TallyListState.Destination.DESTINATION_UNSPECIFIED),
+        )
+    }

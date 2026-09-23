@@ -5,7 +5,7 @@
 # member watches.
 data {
   springboard: SPRINGBOARD_LOADING
-  tiles { app_id: "photos" status: TILE_STATUS_LOADING size: TILE_SIZE_LARGE wide: true earns_grid: true empty_copy: "Back up your first photo" }
+  tiles { app_id: "photos" status: TILE_STATUS_LOADING size: TILE_SIZE_LARGE wide: true earns_grid: true empty_copy: "Import your first photo" }
   tiles { app_id: "docs" status: TILE_STATUS_LOADING size: TILE_SIZE_MEDIUM wide: true earns_grid: true empty_copy: "Add your first document" }
   tiles { app_id: "notes" status: TILE_STATUS_LOADING size: TILE_SIZE_MEDIUM wide: true earns_grid: true empty_copy: "Write your first note" }
   tiles { app_id: "agenda" status: TILE_STATUS_LOADING size: TILE_SIZE_SMALL earns_grid: true empty_copy: "Put something on the calendar" }

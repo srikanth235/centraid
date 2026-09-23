@@ -1,0 +1,45 @@
+# A SELECTION OVER A CELL THE PAGE HAS NOT LOADED.
+#
+# `selected_asset_ids` names `ast-0204`, and `data.cells` does not contain it —
+# which is the entire reason the field is on the STATE and not a `selected` bool
+# on `PhotoCell`. A member who picks a photograph, scrolls past the page
+# boundary and scrolls back must find it still picked; a selection carried on
+# the cells is a selection the next page read silently drops. `TallyListState`
+# keeps `pending_expense_ids` on the state for the same reason.
+#
+# `selecting` is its own bool beside the list: an empty selection in selection
+# mode is a real screen — the toolbar is up and every verb is disabled — and it
+# is not the same screen as not being in selection mode at all.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+shelf {
+  album {
+    collection_id: "col-0007"
+    name: "Portugal"
+  }
+}
+data {
+  cells {
+    asset_id: "ast-0201"
+    thumbnail_path: "thumbs/ast-0201.jpg"
+    captured_at: "2026-04-18T09:15:00Z"
+    captured_utc_offset_minutes: 60
+    kind: KIND_PHOTO
+    held: HELD_ORIGINAL
+    original_hash: "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+  }
+  cells {
+    asset_id: "ast-0202"
+    captured_at: "2026-04-18T09:14:00Z"
+    captured_utc_offset_minutes: 60
+    kind: KIND_PHOTO
+    held: HELD_ABSENT
+  }
+  next_cursor: "2026-04-18T09:14:00Z|ast-0202"
+}
+selected_asset_ids: "ast-0201"
+selected_asset_ids: "ast-0204"
+selecting: true

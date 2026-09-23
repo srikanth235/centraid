@@ -15,6 +15,7 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import okio.ByteString.Companion.encodeUtf8
@@ -100,8 +101,22 @@ public interface ScreenWrites<S, E> {
      * [sentence] is empty unless the core supplied one. Nothing here composes a
      * sentence out of an error: `Error.detail` is logs-only and a shell that
      * made its own from a peer's words would be the hole in that rule.
+     *
+     * **[invokeKey] IS WHICH WRITE THIS IS, AND WITHOUT IT A PARTIAL REFUSAL
+     * READS AS A WHOLE SUCCESS** (#1029, photos port). A shelf selection of
+     * twelve submits twelve commands; a screen told only `(status, sentence)`
+     * has to treat the first answer as the answer, so it clears all twelve and
+     * the two the vault refused a precondition on quietly stay where they
+     * were.
+     *
+     * It is the key the screen MINTED, handed straight back — so a screen that
+     * keyed on a row id can recover it, and one that did not is no worse off.
+     * Remembering the submissions in a queue on the reads object could not
+     * work: [submit] runs one coroutine per effect, several are in flight at
+     * once, and a queue would pair the wrong answer with the wrong row —
+     * which is the same defect wearing a different hat.
      */
-    public fun settled(status: CommandStatus, sentence: String): E?
+    public fun settled(status: CommandStatus, sentence: String, invokeKey: String): E?
 }
 
 /**
@@ -187,8 +202,21 @@ public class ScreenRuntime<S, E>(
      * The read is LAUNCHED rather than awaited inside the collector, so a slow
      * page does not hold up the next effect — a member who taps refresh while a
      * first page is in flight must not be ignored.
+     *
+     * **[CoroutineStart.UNDISPATCHED], AND IT IS THE WHOLE CORRECTNESS OF THE
+     * SCREEN.** `ScreenHost.effects` is a `SharedFlow` with `replay = 0`, and a
+     * `SharedFlow` with no subscriber DROPS what is emitted — its buffer holds
+     * values for subscribers that exist and is not a mailbox for ones that do
+     * not. A plain `scope.launch` only SCHEDULES this collector, so the caller
+     * returning from `start()` says nothing about whether anything is listening
+     * yet; the screen's first `ReadPage`, emitted a line later by the event
+     * that opens it, then raced the dispatcher and was lost on the runs it won.
+     * Undispatched, `collect` registers its slot on the calling thread before
+     * this function returns, so the effect cannot be emitted into an empty
+     * room. See `HomeRuntime.start`, which is the same rule and the tile grid
+     * that sat `LOADING` for ever when it was broken.
      */
-    public fun start(): Job = scope.launch {
+    public fun start(): Job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
         host.effects.collect { effect ->
             if (effect is ScreenEffect.ReadPage && effect.screenId == reads.screenId) {
                 scope.launch { serve(effect.afterCursor) }
@@ -323,7 +351,7 @@ public class ScreenRuntime<S, E>(
         // silently dropped: the member is told the write did not happen, with
         // the sentence that says why and what is still true.
         readOnly()?.let { sentence ->
-            writes.settled(CommandStatus.COMMAND_STATUS_DENIED, sentence)
+            writes.settled(CommandStatus.COMMAND_STATUS_DENIED, sentence, write.invokeKey)
                 ?.let { host.send(it) }
             return
         }
@@ -332,6 +360,7 @@ public class ScreenRuntime<S, E>(
             writes.settled(
                 CommandStatus.COMMAND_STATUS_DENIED,
                 "No vault is open on this device.",
+                write.invokeKey,
             )?.let { host.send(it) }
             return
         }
@@ -349,17 +378,18 @@ public class ScreenRuntime<S, E>(
             is CoreOutcome.Failed -> writes.settled(
                 CommandStatus.COMMAND_STATUS_FAILED,
                 outcome.failure.sentence,
+                write.invokeKey,
             )
             is CoreOutcome.Answered -> {
                 val answered = outcome.value.response?.command
                 if (answered == null) {
-                    writes.settled(CommandStatus.COMMAND_STATUS_FAILED, "")
+                    writes.settled(CommandStatus.COMMAND_STATUS_FAILED, "", write.invokeKey)
                 } else {
                     // THE CORE'S OWN SENTENCE, when it has one.
                     // `CommandOutcome.reason` is the author's words for a denial
                     // or a failed precondition — never the raw predicate, which
                     // reaches the audit trail only.
-                    writes.settled(answered.status, answered.reason)
+                    writes.settled(answered.status, answered.reason, write.invokeKey)
                 }
             }
         }

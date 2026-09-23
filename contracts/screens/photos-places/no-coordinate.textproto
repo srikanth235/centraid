@@ -1,0 +1,61 @@
+# 0,0 IS A REAL POINT IN THE GULF OF GUINEA AND NOT A NULL.
+#
+# This fixture carries the pair that makes `has_coordinate` unavoidable:
+#
+#   - `plc-0011` has latitude 0 and longitude 0 with `has_coordinate: true`.
+#     Null Island is a real place a photograph can be taken at, and the map must
+#     draw a pin there.
+#   - `plc-0012` has latitude 0 and longitude 0 with `has_coordinate: false`.
+#     The vault holds no coordinate for it at all; the map must draw NOTHING.
+#
+# The two rows are byte-identical in their doubles. Any implementation that
+# tests `lat != 0 || lng != 0` — which is what a nullable coordinate degrades
+# into the moment it crosses a proto3 boundary, since zero is the default and
+# the default is indistinguishable from unset — draws both the same way, and it
+# is wrong about one of them whichever way it picks.
+#
+# Both or neither: a place row with one coordinate is a row the map cannot draw,
+# so `has_coordinate` governs the pair and not each number.
+#
+# `time_zone` is the vault's own name for the place's zone, so a member reading
+# "3pm" reads the hour the photograph was taken at rather than the hour it is
+# where they are standing now.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+presentation: PRESENTATION_CARDS
+data {
+  places {
+    place_id: "plc-0004"
+    name: "Dún Laoghaire"
+    asset_count: 62
+    cover_thumbnail_path: "thumbs/ast-0301.jpg"
+    latitude: 53.2941
+    longitude: -6.1358
+    has_coordinate: true
+    time_zone: "Europe/Dublin"
+  }
+  places {
+    place_id: "plc-0011"
+    name: "Null Island"
+    asset_count: 1
+    latitude: 0.0
+    longitude: 0.0
+    has_coordinate: true
+    time_zone: "Etc/GMT"
+  }
+  places {
+    place_id: "plc-0012"
+    name: "Grandma's house"
+    asset_count: 308
+    cover_thumbnail_path: "thumbs/ast-0110.jpg"
+    latitude: 0.0
+    longitude: 0.0
+    has_coordinate: false
+    time_zone: "America/Chicago"
+  }
+  next_cursor: "plc-0012"
+  unplaced_count: 1904
+}

@@ -441,9 +441,9 @@ public class CameraRoll(
 
     private fun waitingSentence(phase: BackupState.Phase): String = when (phase) {
         BackupState.Phase.PHASE_WAITING_FOR_UNMETERED ->
-            "Centraid backs these up on Wi-Fi."
+            "Centraid imports these on Wi-Fi."
         BackupState.Phase.PHASE_WAITING_FOR_POWER ->
-            "Centraid backs these up when this phone is charging."
+            "Centraid imports these when this phone is charging."
         else -> ""
     }
 
@@ -458,11 +458,11 @@ public class CameraRoll(
     internal fun permissionSentence(permission: MediaPermission): String = when (permission) {
         MediaPermission.MEDIA_PERMISSION_GRANTED -> ""
         MediaPermission.MEDIA_PERMISSION_LIMITED ->
-            "Centraid backs up the photos you selected."
+            "Centraid imports the photos you selected."
         MediaPermission.MEDIA_PERMISSION_NOT_ASKED ->
             "Centraid needs access to your photos to back them up."
         MediaPermission.MEDIA_PERMISSION_DENIED ->
-            "Photo access is off. Turn it on in Settings to back up your camera roll."
+            "Photo access is off. Turn it on in Settings to import your camera roll."
         MediaPermission.MEDIA_PERMISSION_RESTRICTED ->
             "This device does not allow photo access."
         MediaPermission.MEDIA_PERMISSION_UNSPECIFIED -> ""

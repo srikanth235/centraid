@@ -123,7 +123,7 @@ class DrainPassSpec : StringSpec({
         )
         deadline shouldBe "Still backing up — 3 MB to go. It will finish on its own."
         DrainCopy.stoppedSentence(DrainAnswer(1, 0, DrainAnswer.Stopped.EMPTY)) shouldBe
-            "Backed up. Everything is on your laptop."
+            "Backed up. Your laptop holds this vault's records; photos and files stay only on this phone."
         DrainCopy.stoppedSentence(DrainAnswer(0, 99, DrainAnswer.Stopped.UNREACHABLE)) shouldBe
             "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
         listOf(

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 17] = [
+const PROTOS: [&str; 18] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -46,6 +46,10 @@ const PROTOS: [&str; 17] = [
     // registered command, and the reasons differ per verb, so they are stated
     // where a shell author reads them.
     "proto/centraid/core/v1/phone.proto",
+    // The originals on this phone and the albums whose originals stay (#1029,
+    // the photos port). Its own file for `phone.proto`'s reason: the keep list
+    // is a fact about the phone's disk and cannot be a registered command.
+    "proto/centraid/core/v1/originals.proto",
     "proto/centraid/screen/v1/screen.proto",
 ];
 

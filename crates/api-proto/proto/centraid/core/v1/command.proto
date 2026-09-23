@@ -127,8 +127,8 @@ message SyncWindow {
   // answering a tap with nothing.
   //
   // Not a plane of its own: a fetch is an ordinary pass with a one-item
-  // window, so it writes `seat_blob_held` like any landed blob and the screen
-  // refreshes through the same `RowsChanged` (D-1025-S7-21). A second entry
+  // window, so it lands in the content store like any other blob and the
+  // screen refreshes through the same `RowsChanged` (D-1025-S7-21). A second entry
   // point would be a second way for a byte to become a row.
   optional string fetch_hash = 8;
 }

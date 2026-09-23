@@ -258,7 +258,7 @@ public object DrainCopy {
      * a product that is working.
      */
     public fun stoppedSentence(answer: DrainAnswer): String = when (answer.stopped) {
-        DrainAnswer.Stopped.EMPTY -> "Backed up. Everything is on your laptop."
+        DrainAnswer.Stopped.EMPTY -> "Backed up. Your laptop holds this vault's records; photos and files stay only on this phone."
         DrainAnswer.Stopped.DEADLINE ->
             "Still backing up — ${bytes(answer.pendingBytes)} to go. It will finish on its own."
         DrainAnswer.Stopped.UNREACHABLE ->

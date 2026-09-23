@@ -1,0 +1,83 @@
+# ONE ROW TYPE FOR FIVE SHELVES, AND `member_owned` IS THE ONLY DIFFERENCE.
+#
+# Favorites, Archive, Trash and Videos are `PhotoStateView` modes; "Portugal" is
+# a member's album. v0 drew two component families for these and had to keep
+# their covers, counts and empty states in step by hand. Here they are one
+# `ShelfRow` list, and what a menu needs to know — can this be renamed, can it
+# be deleted — is a BOOL ON THE ROW rather than a view re-deriving it from the
+# oneof. A fifth standing shelf then needs no menu edited.
+#
+# Two more facts this fixture pins, each of which a plausible implementation
+# gets wrong:
+#
+#   - Videos has `item_count: 0` and no cover. Zero is a REAL COUNT: the shelf
+#     says "Empty" and is still a door. A row dropped for having nothing in it
+#     is a door a member cannot find.
+#   - `cover_thumbnail_path` is ABSENT on Videos rather than set to a
+#     placeholder. The view draws the empty cover; a path to an asset the
+#     product ships is a path that will one day be loaded.
+#
+# The four DOORS are the taps that do not land on `photos.shelf`, which is why
+# they are a separate list and not a fifth shelf. `needs_attention` is what
+# draws the badge and it is separate from `count`: People has 214 photographs
+# behind it AND 63 faces waiting, and a single number could only say one.
+# Memories has neither, and is still a door.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  shelves {
+    shelf { state_view { mode { kind: KIND_FAVORITES } } }
+    title: "Favorites"
+    item_count: 84
+    cover_thumbnail_path: "thumbs/ast-0110.jpg"
+    member_owned: false
+  }
+  shelves {
+    shelf { state_view { mode { kind: KIND_ARCHIVE } } }
+    title: "Archive"
+    item_count: 19
+    cover_thumbnail_path: "thumbs/ast-0320.jpg"
+    member_owned: false
+  }
+  shelves {
+    shelf { state_view { mode { kind: KIND_TRASH } } }
+    title: "Trash"
+    item_count: 2
+    cover_thumbnail_path: "thumbs/ast-0101.jpg"
+    member_owned: false
+  }
+  shelves {
+    shelf { state_view { mode { kind: KIND_VIDEOS } } }
+    title: "Videos"
+    item_count: 0
+    member_owned: false
+  }
+  shelves {
+    shelf { album { collection_id: "col-0007" name: "Portugal" } }
+    title: "Portugal"
+    item_count: 137
+    cover_thumbnail_path: "thumbs/ast-0201.jpg"
+    member_owned: true
+  }
+  doors {
+    kind: KIND_PEOPLE
+    count: 214
+    needs_attention: 63
+  }
+  doors {
+    kind: KIND_PLACES
+    count: 41
+  }
+  doors {
+    kind: KIND_MEMORIES
+  }
+  doors {
+    kind: KIND_DUPLICATES
+    count: 3
+    needs_attention: 3
+  }
+}
+sheet: SHEET_NONE

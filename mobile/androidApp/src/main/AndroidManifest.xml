@@ -40,5 +40,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- "Send a copy" (#816): the copies `PhotoHandOff` writes, and
+             nothing else. Not exported; a receiving app reads one copy
+             through the grant on the intent that carried it. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.photocopies"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_copies" />
+        </provider>
     </application>
 </manifest>

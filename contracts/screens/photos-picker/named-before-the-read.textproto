@@ -1,0 +1,25 @@
+# "ADD TO PORTUGAL" BEFORE ANY READ HAS LANDED.
+#
+# `collection_name` sits beside the `content` oneof, and the content here is
+# `loading`. The head can be right immediately — the member tapped "Add photos"
+# from inside Portugal, so the shell already knew the name — and a head that
+# waited for a page read would paint the previous screen's title over the
+# spinner for as long as the read takes.
+#
+# `already_in_album_asset_ids` is populated while the grid is still empty for
+# the same reason: it arrives on `Opened`, from the album the member came from,
+# not from the library read. A picker that learned it from the page would draw
+# every cell addable for one frame and then take some of them away.
+#
+# `picked_asset_ids` is empty, which is what it should be at the start: the
+# screen never pre-picks. Confirm with nothing picked is not a write.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_METERED
+}
+collection_id: "col-0007"
+collection_name: "Portugal"
+loading { first_load: true }
+already_in_album_asset_ids: "ast-0201"
+already_in_album_asset_ids: "ast-0202"

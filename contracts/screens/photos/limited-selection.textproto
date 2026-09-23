@@ -22,6 +22,6 @@ backup {
   assets_transferred_this_session: 38
   bytes_transferred_this_session: 194512384
   transport: TRANSPORT_IROH_BLOBS
-  paused_reason: "Centraid backs up the photos you selected."
+  paused_reason: "Centraid imports the photos you selected."
 }
 sheet: SHEET_NONE

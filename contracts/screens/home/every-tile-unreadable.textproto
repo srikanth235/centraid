@@ -7,7 +7,7 @@
 data {
   springboard: SPRINGBOARD_CONTENT
   every_tile_unreadable: true
-  tiles { app_id: "photos" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_LARGE wide: true empty_copy: "Back up your first photo" }
+  tiles { app_id: "photos" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_LARGE wide: true empty_copy: "Import your first photo" }
   tiles { app_id: "docs" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_MEDIUM wide: true empty_copy: "Add your first document" }
   tiles { app_id: "notes" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_MEDIUM wide: true empty_copy: "Write your first note" }
   tiles { app_id: "agenda" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }

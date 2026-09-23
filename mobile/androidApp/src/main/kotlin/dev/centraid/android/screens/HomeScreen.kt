@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,6 +38,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.FirstMove
@@ -158,6 +160,55 @@ public fun HomeScreen(
             onForget = onForget,
             onMakeVault = onMakeVault,
         )
+    }
+    // THE ALL-APPS LISTING. The band's `more` has set this flag since wave A
+    // and nothing drew it, so the press did nothing a member could see.
+    if (state.all_apps_sheet_open) {
+        AllAppsSheet(tiles = state.data_?.tiles.orEmpty(), onEvent = onEvent)
+    }
+}
+
+/**
+ * THE ALL-APPS LISTING is a SHEET and never a destination.
+ *
+ * A row sends the same pick its tile sends, so the listing and the springboard
+ * cannot disagree about where an app goes; the navigation, and the closing that
+ * goes with it, are the activity's, which is where the routes live. Dismissing
+ * tells the machine the sheet is shut — without that the flag stays set over a
+ * sheet that is gone, and the next `more` sets a flag already set and draws
+ * nothing.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun AllAppsSheet(tiles: List<HomeTile>, onEvent: (HomeEvent) -> Unit) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = {
+            onEvent(HomeEvent(all_apps = HomeEvent.AllAppsSheetToggled(open_ = false)))
+        },
+        containerColor = centraidColor("bg"),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp).testTag("home-all-apps-sheet")) {
+            for (tile in tiles) {
+                val name = CentraidCatalog.byId[tile.app_id]?.name
+                    ?: tile.app_id.replaceFirstChar { it.uppercase() }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onEvent(HomeEvent(move_picked = HomeEvent.MovePicked(move_id = tile.app_id)))
+                        }
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = PAGE_MARGIN)
+                        .testTag("home-all-apps-row-${tile.app_id}")
+                        .semantics { contentDescription = "Open $name" },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AppMark(appId = tile.app_id, size = 22.dp)
+                    Text(name, style = centraidType("smallStrong"), color = centraidColor("text"))
+                }
+            }
+        }
     }
 }
 
@@ -495,10 +546,39 @@ private val CONTROL_RADIUS = 7.dp
 /** One row, fixed count — only the cell CONTENTS change, never the count. */
 private const val MOSAIC_SLOTS = 4
 
-/** STATED, never derived: a percentage-width cell can resolve to zero height. */
+/**
+ * A FLOOR AND NOT A HEIGHT. `mosaicCss` is `flex:1;min-height:0` over
+ * `grid-auto-rows:1fr`, so the strip STRETCHES into whatever the card's 152
+ * floor leaves over and this is only the rung below which it will not go. It is
+ * STATED rather than derived for the reason it always was: a percentage-width
+ * cell has no intrinsic height of its own and can resolve to zero.
+ */
 private val MOSAIC_CELL_HEIGHT = 88.dp
 
 private val HAIRLINE = CentraidGeometry.HAIRLINE.dp
+
+/**
+ * THE HUE KEY'S SPELLING IN THE EMITTED TABLE, and nothing more.
+ *
+ * `PartyHueWheel` decides WHICH of the eight a face gets and `HomeReads` puts
+ * the answer on the wire; this is the eight-row spelling that turns that key
+ * into a `NativeTheme` role, and `HomeView.swift` carries the same eight. It is
+ * a map and not `"c" + key.replaceFirstChar(…)` because the string form would
+ * hand any key at all to `centraidColor`, which fails loudly and correctly for
+ * a role that does not exist — the wrong failure for a launcher tile drawing
+ * whatever a producer sent. `PartyHueWheelSpec` asserts every key here has a
+ * role in `NATIVE_COLOR_ROLES` and that both view trees name all eight.
+ */
+private val PARTY_HUE_ROLES: Map<String, String> = mapOf(
+    "rose" to "cRose",
+    "amber" to "cAmber",
+    "ochre" to "cOchre",
+    "forest" to "cForest",
+    "teal" to "cTeal",
+    "slate" to "cSlate",
+    "indigo" to "cIndigo",
+    "violet" to "cViolet",
+)
 
 /**
  * A NEGATIVE MARGIN, which Compose has no token for.
@@ -508,16 +588,35 @@ private val HAIRLINE = CentraidGeometry.HAIRLINE.dp
  * refuses negative padding, so the child is measured against widened
  * constraints and placed at the offset — the standard idiom, spelled once here
  * rather than at the call site.
+ *
+ * [toFloor] is the THIRD margin of the same rule — `mosaicCss` is
+ * `margin: R.gap.s -R.gap.m -R.gap.m`, so the strip cancels the card's bottom
+ * padding exactly as it cancels its sides. Downward there is nothing to
+ * offset: the child is measured [amount] TALLER than the slot it was given and
+ * the slot is reported back unchanged, so it draws past its own bottom and the
+ * card's `clip` is what shapes it. The reference drops this half in the
+ * waiting state (`grey ? '0' : '-' + R.gap.m`) because the sentence under the
+ * strip needs the 12 back, and a line of type bled past the card's edge is
+ * clipped rather than merely tight.
  */
-private fun Modifier.bleed(amount: Dp): Modifier = this
+private fun Modifier.bleed(amount: Dp, toFloor: Boolean): Modifier = this
     .layout { measurable, constraints ->
         val extra = amount.roundToPx() * 2
+        val down = if (toFloor) amount.roundToPx() else 0
         val widened = constraints.copy(
             maxWidth = constraints.maxWidth + extra,
             minWidth = (constraints.minWidth + extra).coerceAtMost(constraints.maxWidth + extra),
+            maxHeight = if (constraints.maxHeight == Constraints.Infinity) {
+                constraints.maxHeight
+            } else {
+                constraints.maxHeight + down
+            },
+            minHeight = if (constraints.minHeight == 0) 0 else constraints.minHeight + down,
         )
         val placeable = measurable.measure(widened)
-        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+        layout(placeable.width, (placeable.height - down).coerceAtLeast(0)) {
+            placeable.place(0, 0)
+        }
     }
     .offset(x = -amount)
 
@@ -666,11 +765,23 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp)
+                        // NO TOP OF ITS OWN. `mosaicCss`'s `R.gap.s` is not an
+                        // extra 8 — it is the half this tile does not otherwise
+                        // get. Every other body is wrapped in `bodyWrapCss`
+                        // (`padding-top: R.gap.s`); the mosaic is a DIRECT
+                        // child of the tile wrap. Both therefore read 16 under
+                        // the head, and our `spacedBy(16.dp)` already spends
+                        // both halves at once. Matches SwiftUI's `PhotoMosaic`.
+                        // THE STRIP IS THE CARD'S SLACK-TAKER (`mosaicCss` is
+                        // `flex:1;min-height:0`), and this is the weight that
+                        // says so: whatever the card's 152 floor leaves over
+                        // after the head goes to the photographs, never to a
+                        // band of card ground beneath them.
+                        .weight(1f)
                         // The CELLS are the mosaic: no ground, no min height.
-                        // The bleed cancels `TILE_PAD` so it is flush with the
-                        // card's edge.
-                        .bleed(TILE_PAD),
+                        // The bleed cancels `TILE_PAD` on the sides AND on the
+                        // floor, so the strip is flush with the card's edge.
+                        .bleed(TILE_PAD, toFloor = !waiting),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     repeat(MOSAIC_SLOTS) { index ->
@@ -678,7 +789,13 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                         Box(
                             Modifier
                                 .weight(1f)
-                                .height(MOSAIC_CELL_HEIGHT)
+                                // A FLOOR, NEVER A HEIGHT: the strip stretches
+                                // (`grid-auto-rows:1fr`) and 88 is only the
+                                // rung below which a cell will not go — which
+                                // it needs, because a percentage-width cell has
+                                // no intrinsic height and can resolve to zero.
+                                .heightIn(min = MOSAIC_CELL_HEIGHT)
+                                .fillMaxHeight()
                                 // THE GROUND UNDER THE PHOTOGRAPH, and the whole
                                 // cell when there is none. A cell with no
                                 // addressable bytes is STILL A CELL: dropping it
@@ -760,10 +877,14 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 overflow = TextOverflow.Ellipsis,
             )
             if (notes.excerpt.isNotEmpty()) {
+                // SOFT INK, NOT FULL: `readBodyCss` is `color: t.ink2`, which
+                // the handoff's role map spells `--text-soft`. At full `text`
+                // the excerpt weighed the same as its title and the tile read
+                // as two headings.
                 Text(
                     notes.excerpt,
                     style = centraidType("small"),
-                    color = centraidColor("text"),
+                    color = centraidColor("textSoft"),
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -798,18 +919,29 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 // SATURATED discs, overlapping by a LOGICAL inset so the stack
                 // mirrors under RTL rather than stacking the wrong way.
                 people.faces.forEach { face ->
+                    // THE PARTY'S OWN HUE, not a grey disc. `face.color` is the
+                    // key `HomeReads` already resolved with the one port of the
+                    // identity wheel; all this does is spell the emitted role.
+                    // An unrecognised key draws the neutral disc rather than
+                    // reaching `centraidColor`, which fails LOUDLY by design —
+                    // a tile is not the place to take a shell down over a hue.
+                    val hue = face.color?.let { PARTY_HUE_ROLES[it] }
                     Box(
                         Modifier
                             .size(30.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(centraidColor("bgSunken"))
+                            .background(centraidColor(hue ?: "bgSunken"))
                             .border(1.5.dp, centraidColor("bgElev"), RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             face.initials,
                             style = centraidType("smallStrong"),
-                            color = centraidColor("text"),
+                            // `textInv` is the SOLVED foreground for a filled
+                            // identity disc (`DESIGN.md`'s rule 7 — `onAccent`
+                            // in the hand-off's role map). Ink on a saturated
+                            // fill is the contrast failure this tile had.
+                            color = centraidColor(if (hue != null) "textInv" else "text"),
                         )
                     }
                 }

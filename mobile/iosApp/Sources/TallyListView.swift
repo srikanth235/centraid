@@ -9,6 +9,7 @@ import SwiftUI
 /// invites.
 struct TallyListView: View {
     @ObservedObject var shell: ShellModel
+    @Environment(\.colorScheme) private var scheme
 
     /// The decoded state. In the wired build this comes from
     /// `Centraid_Screen_V1_TallyListState(serializedData:)` over
@@ -19,9 +20,7 @@ struct TallyListView: View {
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
-                ForEach(state.bands, id: \.self) { band in
-                    Button(band.label) { shell.send(screen: "tally.list", event: band.event) }
-                }
+                Spacer()
                 Button {
                     shell.send(screen: "tally.list", event: state.refreshEvent)
                 } label: {
@@ -69,6 +68,18 @@ struct TallyListView: View {
             }
         }
         .padding()
+        // THE BAND IS AT THE FOOT — the home capsule and Tally's own plate,
+        // as every app band is (see `AppBand`).
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            AppBand(
+                app: "tally",
+                tabs: state.bands,
+                onSelect: { shell.send(screen: "tally.list", event: $0) },
+                onHome: { shell.path.removeAll() }
+            )
+            .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
+        }
         .navigationTitle("Tally")
     }
 }

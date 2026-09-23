@@ -245,6 +245,7 @@ fn a_gateway_without_the_key_door_cannot_produce_plaintext() {
                 after: None,
                 held_thumbnail: false,
                 note_body: false,
+                document_size: false,
             })
             .expect("the door answers");
         let rendered = format!("{:?}", page.rows);

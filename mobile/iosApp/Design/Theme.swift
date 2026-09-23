@@ -4,6 +4,18 @@
 // copy of this table is a fourth lowering with no drift gate, which is what
 // `git diff --exit-code design copy mobile` in the mobile-jvm gate step
 // exists to prevent.
+//
+// THE FACE TABLE BELOW IS EMITTED TOO, and so are the .ttf files it names:
+// `packages/design/fonts` is the one source and this emitter copies them into
+// both app trees. A face added or renamed there moves through here.
+//
+// THE TYPE SIZES HERE ARE THE TOUCH STEP AND WILL NOT MATCH THE SOURCE.
+// `packages/design/src/typography.ts` holds the web value and a
+// `nativeDelta` per role; this table is the sum. For sans that is +2 size
+// and +3 line-height, so `small` reads 13/19 there and 15/22 here — the
+// same role, not a second scale. `NATIVE_DELTA_OVERRIDES` is the whole
+// list of roles that refuse the step (`band`, `bodyStrong`, `control`,
+// `display`, `eyebrow`, `reading`, `title`). Change a value THERE.
 
 import SwiftUI
 
@@ -77,6 +89,29 @@ public let centraidColorRoles: [String] = [
     "textInv",
     "textSoft",
     "warning",
+]
+
+/// THE FACES BEHIND THE FAMILY NAMES, AS POSTSCRIPT NAMES.
+///
+/// `UIFont(name:size:)` matches a PostScript name and nothing else, and it
+/// returns nil rather than complaining. These strings are read out of the
+/// TTF's own `name` table by the emitter, so they cannot drift from the
+/// bytes in `Resources/Fonts`. `code` is absent: it is the system monospace
+/// and ships no file.
+///
+/// THE 400 KEY RESOLVES TO `InstrumentSans-Book` ON PURPOSE. It is a
+/// LOWERING and not a third weight: the key is the ramp's 400, the face is
+/// the derived 470 instance, and the touch step plus CoreText's grayscale
+/// antialiasing is why — see `docs/decisions.md` and the emitter's own note.
+/// Web and desktop draw a true 400 and are untouched.
+public let centraidTypeFaces: [String: [Int: String]] = [
+    "sans": [400: "InstrumentSans-Book", 600: "InstrumentSans-SemiBold"],
+]
+
+/// The files `UIAppFonts` in `project.yml` must name, one for one.
+public let centraidFontFiles: [String] = [
+    "InstrumentSans_470Book.ttf",
+    "InstrumentSans-SemiBold.ttf",
 ]
 
 public enum CentraidTokens {

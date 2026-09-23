@@ -7,6 +7,26 @@
 // stale or widened entries. Comments are stripped so issue references such as
 // #505 are not mistaken for colors.
 //
+// ONE TARGET, AND IT IS THE ONE CSS THIS REPO STILL WRITES BY HAND.
+// `extension/static` stood beside the element layer until the extension was
+// deleted with the rest of the v0 tree
+// ([#1029](https://github.com/srikanth235/centraid/issues/1029)), and a target
+// that does not exist made `scanDesignTokenCss` throw before it read a single
+// declaration — so the gate this entry point names was, for that whole window,
+// a gate that checked nothing while sitting inside `check:push`. Removing the
+// dead target is the whole repair; the METRICS, the analyzer and the empty
+// budget are untouched, because narrowing a gate to the surfaces that exist is
+// not the same as relaxing it.
+//
+// It is deliberately NOT re-pointed at `scripts/*-site`. Those sheets are
+// fenced by `bun run lint:site-tokens` — emitter freshness by bytes,
+// unresolvable `var()`s, literal families, font-CDN references and retired
+// theme names — and `src/content/ontology-style.css` still sizes in rem with
+// per-diagram literals, so widening this gate to reach them would mean
+// repopulating a ledger that docs/traps/design-tokens.md forbids repopulating.
+// That row is a current decision, not a to-do: see
+// docs/design-machinery.md#the-public-web-surfaces.
+//
 // Run with `--write` to rewrite the budget from the current tree (the only
 // sanctioned way to record a decrease).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -15,7 +35,7 @@ import path from "node:path";
 import { readLedgerSection, writeLedgerSection } from "./check-ledgers.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const TARGETS = ["packages/design/src/elements", "extension/static"];
+const TARGETS = ["packages/design/src/elements"];
 // The CSS debt ledger is `tests/budgets.json#designTokenCss.budgets` since
 // #915 Wave 4, and it is still deliberately EMPTY — see docs/traps/design-tokens.md.
 const BUDGET_FILE = path.join(ROOT, "tests/budgets.json");

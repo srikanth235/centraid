@@ -46,32 +46,67 @@ message PageQuery {
   // D-1025-S7-20).
   //
   // A shape, not a statement: the reader appends one computed column,
-  // `thumbnail_path`, after `select`'s columns, joining the seat's own
-  // `seat_blob_held` table for the thumbnail-tier derivative of the row's
-  // `content_id` — falling back to the original's bytes when no derivative row
-  // exists, which is every vault seeded from originals. The SQL is the vault's
-  // and the security rule that decides whether a path may be handed out at all
-  // is the seat's; a caller asks for the ANSWER and cannot spell either.
+  // `thumbnail_path`, after `select`'s columns. The statement names the
+  // thumbnail-tier derivative of the row's `content_id` — falling back to the
+  // original's bytes when no derivative row exists, which is every vault
+  // seeded from originals — and the vault asks the CONTENT STORE for the file.
+  // The security rule that decides whether a path may be handed out at all is
+  // the vault's too; a caller asks for the ANSWER and cannot spell either.
+  //
+  // It joined `seat_blob_held` until #1029 §1 deleted the seat plane and its
+  // table with it, which left this flag naming a relation no vault has: every
+  // read that set it failed at prepare, so Home graded Photos an empty app
+  // over a library of nineteen and the grid drew placeholders.
   //
   // It replaces a per-screenful `ContentUrlRequest` round trip that only Home
   // ever made, which is why a photo grid drew a hundred and twenty placeholders
   // over a device holding nineteen photographs.
   //
-  // The `from` table must carry a `content_id` column. One does not, and the
-  // page simply reports no thumbnail for every row.
+  // The `from` table must carry a `content_id` column, AND ONE THAT DOES NOT IS
+  // REFUSED AT PREPARE. This said the gentler thing — "one does not, and the
+  // page simply reports no thumbnail for every row" — and that was never true
+  // of any of these three flags. The computed column is a CORRELATED subquery,
+  // so `{from}.content_id` is an outer reference SQLite resolves while it
+  // prepares the statement, before a single row is read; there is no row loop
+  // in which to report nothing. Checked by
+  // `a_thumbnail_column_asked_of_a_table_that_has_no_content_is_refused`.
   bool with_held_thumbnail = 7;
   // RESOLVE EACH ROW'S NOTE BODY FROM `core_content_text` (#1025, R-NOTES-1).
   //
   // A shape, not a statement: the reader appends one computed column,
   // `body_text`, after `select`'s columns, via a correlated subquery on
   // `core_content_text` keyed by the row's `body_content_id`. Text is a ROW
-  // on the replica, never a blob in `seat_blob_held` — checking the byte store
-  // for a note body is the wrong door. NULL means the text is not on this
+  // on the device, never a blob — checking the byte store for a note body is
+  // the wrong door. NULL means the text is not on this
   // device; an empty string is a real body of zero characters.
   //
-  // The `from` table must carry a `body_content_id` column. One does not, and
-  // the page simply reports NULL for every row.
+  // The `from` table must carry a `body_content_id` column, AND ONE THAT DOES
+  // NOT IS REFUSED AT PREPARE — the same correlation, the same mechanism, and
+  // the same correction as `with_held_thumbnail` above. Checked by
+  // `a_note_body_column_asked_of_a_table_that_has_no_body_is_refused`.
   bool with_note_body = 8;
+  // SAY EACH ROW'S SIZE IN WORDS, from the bytes of the content item its
+  // `current_content_id` names (#1029, Home's Docs tile).
+  //
+  // A shape, not a statement: the reader appends one computed column,
+  // `document_size`, after `select`'s columns — a PHRASE and never a number.
+  // `TileBody.Docs.Row.size` has always said "already formatted by the core,
+  // which knows the vault's locale; never formatted in a view from a byte
+  // count", and the door had no size column at all, so the only honest thing a
+  // shell could put in that field was the empty string it was putting there.
+  // Home's Docs tile drew a bare list against a handoff that rules a trailing
+  // meta column, and nothing anywhere refused anything.
+  //
+  // The vault decides the units and the rounding, once, in
+  // `format_byte_size` — so a launcher row and a drive row cannot come to
+  // disagree about how big one file is.
+  //
+  // NULL when the document's content item is tombstoned, which is a real state
+  // and not an error: a row with no bytes draws no meta. The `from` table must
+  // carry `current_content_id`; one that does not is REFUSED at prepare rather
+  // than answered with nulls, because a flag set on the wrong table is a
+  // caller's bug and a read that goes quiet is the defect this column undoes.
+  bool with_document_size = 9;
 }
 
 // The keyset cursor. `sort_key` is TEXT even for a numeric sort column, and a
