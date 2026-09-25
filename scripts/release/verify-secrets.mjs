@@ -14,16 +14,16 @@ const DESKTOP_AZURE = [
   "AZURE_CODE_SIGNING_ACCOUNT",
   "AZURE_CERT_PROFILE",
 ];
+// The store lane's own secrets, as lane-release-mobile.yml declares them.
 const MOBILE = [
-  "EXPO_TOKEN",
-  "EAS_PROJECT_ID",
-  "CENTRAID_UPLOAD_STORE_FILE",
-  "CENTRAID_UPLOAD_STORE_PASSWORD",
-  "CENTRAID_UPLOAD_KEY_ALIAS",
-  "CENTRAID_UPLOAD_KEY_PASSWORD",
+  "ANDROID_KEYSTORE_BASE64",
+  "ANDROID_KEYSTORE_PASSWORD",
+  "ANDROID_KEY_ALIAS",
+  "PLAY_SERVICE_ACCOUNT_JSON",
+  "APPLE_API_KEY_ID",
+  "APPLE_API_ISSUER_ID",
+  "APPLE_API_PRIVATE_KEY",
 ];
-const WEB = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"];
-const GATEWAY_NPM = ["NPM_TOKEN"];
 /** GHCR uses GITHUB_TOKEN + packages:write in Actions; local probe is informational. */
 const GATEWAY_IMAGE = ["GITHUB_TOKEN"];
 
@@ -31,8 +31,6 @@ const groups = {
   "desktop-apple": DESKTOP_APPLE,
   "desktop-azure": DESKTOP_AZURE,
   mobile: MOBILE,
-  web: WEB,
-  "gateway-npm": GATEWAY_NPM,
   "gateway-image": GATEWAY_IMAGE,
 };
 

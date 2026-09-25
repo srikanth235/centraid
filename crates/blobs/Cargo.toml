@@ -1,0 +1,38 @@
+[package]
+name = "centraid-blobs"
+description = "The byte plane: BLAKE3-addressed blobs, verified per chunk group, moved over a gated iroh lane and resumable at any interruption (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_blobs"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-protocol = { path = "../protocol" }
+# THE VAULT'S BYTE DOOR, implemented here (`door.rs`). The direction is
+# blobs -> vault and never the reverse: `crates/vault` is host-agnostic and
+# must not gain a network dependency (#1025 S3).
+centraid-vault = { path = "../vault" }
+blake3.workspace = true
+bytes.workspace = true
+hex.workspace = true
+iroh-blobs.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = [
+  "rt",
+  "rt-multi-thread",
+  "macros",
+  "time",
+  "io-util",
+] }

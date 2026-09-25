@@ -2,141 +2,71 @@
 
 Every debugging session (human or agent) starts here. Do not invent alternate paths in issues or skills.
 
-## Gateway process logs (first stop)
+## The `centraid` binary (first stop)
 
-JSONL rotation of the gateway log ring (survives restart — issue #351).
+Every verb of the one binary — `gateway`, `seat`, `pair`, `backup`, `doctor`, `recover`, `export`, `native-host` — writes its diagnostics to **stderr** — `tracing` events one line each, plus the plain `centraid: …` refusals some verbs print — so stdout stays parseable (`crates/centraid/src/run.rs`, `install_tracing`). The filter is `--log <filter>` or `CENTRAID_LOG`, in `tracing`'s `EnvFilter` syntax; the default is `centraid=info,centraid_net=info`, and a filter that does not parse falls back to `info`.
 
-| Host | Path |
+```sh
+centraid --log centraid=debug,centraid_net=debug,iroh=debug gateway --data-dir <dir>
+CENTRAID_LOG=centraid_seat_link=debug centraid seat pair <ticket>
+```
+
+One stdout line is a contract rather than a log: `centraid-gateway serve` prints its `endpoint` line once it can accept. Scripts and service units wait on it.
+
+Where stderr lands depends on who started the process:
+
+| Host | Where |
 | --- | --- |
-| **Desktop local gateway** | `<Electron userData>/gateways/local/gateway-logs/` |
-| **Other desktop gateways** | `<Electron userData>/gateways/<id>/gateway-logs/` |
-| **Daemon (`centraid-gateway`)** | `<dataDir>/gateway-logs/` |
+| A terminal | the terminal |
+| macOS service (`centraid gateway install`, [`deploy/launchd`](../deploy/launchd)) | `~/Library/Logs/Centraid/gateway.out.log` and `gateway.err.log` |
+| Linux per-user service ([`deploy/systemd/centraid-gateway.service`](../deploy/systemd/centraid-gateway.service)) | `~/.local/state/centraid/gateway.out.log` and `gateway.err.log` |
+| Linux system service ([`deploy/systemd/system`](../deploy/systemd/system)) | the journal: `journalctl -u centraid-gateway@<instance>` — a `DynamicUser` unit cannot write to a path it does not own ([deploy/README.md](../deploy/README.md)) |
+| Docker ([`deploy/docker/Dockerfile`](../deploy/docker/Dockerfile)) | the container's output: `docker logs <container>`. The health check runs `centraid doctor --data-dir /data` |
+| A Rust integration test | nowhere, unless the test installs a subscriber. Note that `tracing` caches one `Interest` per callsite **process-wide**, so a thread-local dispatcher another test registered can leave a callsite cached at `never` — `rebuild_interest_cache` is the fix ([#1029](https://github.com/srikanth235/centraid/issues/1029) W20) |
 
-`userData` on macOS is typically `~/Library/Application Support/Centraid` (exact product name follows the Electron `name` / build). Daemon `dataDir` is whatever was passed to `serve --data-dir`.
+The unit paths are written by `crates/centraid/src/cmd/gateway_install.rs` through `crates/centraid/src/cmd/units.rs`.
 
-Also redirected by OS service units (when H5 installed): stdout/stderr paths from `centraid-gateway service install` (see unit files under `~/Library/LaunchAgents/dev.centraid.gateway.plist` or `~/.config/systemd/user/centraid-gateway.service`).
+`centraid doctor --data-dir <dir> [--json]` is read-only and lock-free, so it is safe against a serving gateway; it is the first thing to run against a vault that is misbehaving. The laptop's gateway logs through the same filter; its sweeps log **counts only**, because a blind store may say how many objects it read and never which ([gateway.md](gateway.md#the-sweeps)).
 
-Code pointers:
+## Mobile
 
-- `packages/server/src/paths.ts` — `logsDir`
-- `packages/server/src/cli/paths.ts` — daemon `gateway-logs/`
-- `apps/desktop/src/main/local-gateway.ts` — desktop `logsDir` wiring
+The phone links the core through `centraid-core-ffi`, which emits `tracing` events but **installs no subscriber**, so those events are dropped on a device. What a failing call carries back is the error the C ABI returns to the shell.
 
-## Seat (replica) doors
+What the shells write to the platform log:
 
-One line per answer from the seat doors, in the gateway log ring above ([#1011](https://github.com/srikanth235/centraid/issues/1011)):
+| Platform | Line | Where to read it |
+| --- | --- | --- |
+| Android | `Log.w("Centraid", "could not place <name>: …")` — a demo fixture could not be copied into `filesDir` (`mobile/androidApp/.../MainActivity.kt`) | `adb logcat -s Centraid` |
+| iOS | `NSLog("centraid: the secure store refused a write (OSStatus %d)")` (`mobile/shared/src/iosMain/.../PlatformServices.ios.kt`) | the Xcode console, or Console.app filtered on `centraid` |
 
-| Line | Emitted by |
-| --- | --- |
-| `seat log page for <vaultId>: since <seq>, <n> rows, next <seq>, watermark <seq>, hasMore <bool>` | `packages/server/src/routes/seat-routes.ts` |
-| `seat snapshot for <vaultId>: seq <seq>, <bytes> bytes, GET\|HEAD` | same |
+Everything else a sync pass knows is state the shell draws, not a log line: how to tell a stale seat from a healthy one is in [mobile-offline.md](mobile-offline.md#the-seat-is-stale-how-to-tell). The Kotlin JVM suites write their reports under `mobile/**/build/reports/`.
 
-Absence is the signal: a phone with an empty copy and NO `seat log page` lines never asked. The device-side counterpart lines and the two rows to compare are in [mobile-offline.md](mobile-offline.md#the-seat-is-stale-how-to-tell).
-
-## Camera-roll import device rungs
-
-The phone is the ONLY producer of display rungs for HEVC-coded HEIC (the gateway codec declines it — [photos/derived-ledger.md](photos/derived-ledger.md)), and the contribution is never fatal to the import. So its failures are swallowed by contract; they are not silent. In the Metro / device console, one line per still the phone rendered rungs for ([#1011](https://github.com/srikanth235/centraid/issues/1011)):
-
-| Line | Means |
-| --- | --- |
-| `[centraid] import: device rungs landed for <filename> — thumb, preview, phash, thumbhash` | The variant door took every rung, before the publish claimed the original. |
-| `[centraid] import: device rungs skipped for <filename> — could not render on device: <reason>` | Nothing was sent: the device imaging stack refused. |
-| `[centraid] import: device rungs skipped for <filename> — contribution failed: <reason>` | Rendered, but the variant POST was refused — the HTTP status is in the reason. |
-
-Both `skipped` lines mean the item stays exactly as backfillable as it was, and the gateway will stamp it `preview-codec@1` unsupported until a sweep or a re-import. Emitted by `contributeDeviceRungs` in `apps/mobile/src/apps/photos/camera-roll-import-run.ts`. Absence of all three for an HEIC still means the rung branch was never entered — check the candidate's filename extension, which is what routes it.
-
-## The raw text behind a member sentence
-
-A screen prints the member sentence its producer built and never the exception ([protocol.md](protocol.md#the-member-sentence-and-its-detail-1015-r-ny-10)). The raw text is not discarded — it is here, in the Metro / device console ([#1015](https://github.com/srikanth235/centraid/issues/1015)):
-
-| Line | Means |
-| --- | --- |
-| `[centraid] upload: <itemId> was not sent — <reason>` | A queue item's attempt failed. The row the member sees says which of the five outcomes it was (`memberTransferFailure`); `<reason>` is the HTTP refusal, the URL-gate refusal, or the local-file mismatch. |
-| `[centraid] insights: the CSV was not shared — <reason>` | The Activity export did not reach the share sheet. The screen says `The CSV could not be shared.`; `<reason>` is the file or sharing error. |
-
-Emitted by `UploadDrainer.drainOnce` in `apps/mobile/src/lib/upload/uploader.ts` and `useInsights` in `apps/mobile/src/apps/insights/useInsights.ts`. A failed transfer with NO `[centraid] upload:` line never reached the drainer — check the network policy (`canTransfer`), which halts the drain before any attempt.
-
-## Desktop crash log
-
-| Path | Contents |
-| --- | --- |
-| `<userData>/` crash log file (see `apps/desktop/src/main/crash-log.ts`) | Main-process exceptions |
-
-Note: renderer/GPU crash coverage is still incomplete (issue #468 K12) — do not assume this file catches UI-only failures.
-
-## Pairing / e2e workspaces
+## Gate and CI
 
 | Context | Path |
 | --- | --- |
-| Agent pairing e2e run | `tests/agent-e2e-pairing/runs/<runId>/gateway.log` |
-| On FAIL, workspace kept | `…/runs/<runId>/workspace/…` (`gateway.db`, `keys/`, `vault/`) |
+| A failing `cargo xtask gate` step | `target/xtask/<profile>/<step>/` — `command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the internal steps. The step's one line names the directory |
+| Passing-run timings | `target/xtask/<profile>/release-build/timing.json` and `target/xtask/release/restore-drill/timing.json` — evidence, not ceilings |
+| A failing simulation seed | the `sim` step's output prints `SIM_SEED=<n>` and its schedule; replay with `SIM_SEED=<n> cargo test -p centraid-sim` |
 
-## CI
+CI uploads, from the gate workflows:
 
-- Job logs on GitHub Actions (collapsible groups when E4 lands).
-- Uploaded artifacts: Playwright traces/screenshots, test-health report under `dist/test-report/` / workflow artifacts.
-- Public report (main/nightly): see [TESTING.md](../TESTING.md).
+| Workflow | Artifact | Contents | When |
+| --- | --- | --- | --- |
+| [`gate.yml`](../.github/workflows/gate.yml) | `gate-pr-artifacts` | `target/xtask/**` | on failure, kept 7 days |
+| [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) | `gate-nightly-artifacts` | `target/xtask/**` | on failure, kept 7 days |
+| `gate-nightly.yml` | `gate-mobile-jvm-artifacts` | `target/xtask/**` and `mobile/**/build/reports/**` | on failure, kept 7 days |
+| `gate-nightly.yml` | `device-lane-<lane>` | `target/xtask/**` | always, kept 14 days |
 
-## Centraid Assist Worker
-
-Cloudflare Analytics Engine dataset `centraid_oauth` is the canonical Assist edge signal. It stores only route, outcome, HTTP status, and count. The Worker emits no console events.
-
-Keep Workers Logs, invocation logs, and automatic traces disabled for `oauth.centraid.dev`: callback query strings contain authorization code/state, and automatic traces retain full URLs. Any zone Logpush dataset must omit or redact query strings, headers, and request bodies. Never paste a raw start/bind/callback/exchange/refresh request into a ticket. Failure-ratio/429/5xx alert setup and incident handling are in [recovery/oauth-assist.md](recovery/oauth-assist.md).
-
-## Commons sync observability (#731)
-
-Steward-absence detection and local Commons sync instrumentation — no network egress, no new telemetry system, three tables in the device's own `vault.db`.
-
-| Surface | Path | Contents |
-| --- | --- | --- |
-| Diagnostics bundle | `GET /centraid/_gateway/diagnostics` → `config.commons` | Every mounted vault's `CommonsVaultObservability[]` (`packages/server/src/serve/commons-observability.ts`), assembled in `build-gateway.ts`'s `buildDiagnostics` closure. |
-| Owner-tier recovery door | `GET /centraid/_gateway/commons/recovery?actorVaultId=…` | The same per-grant observability, scoped to one vault (`packages/server/src/routes/commons-recovery-routes.ts`). |
-| Peer-plane sweep log | wherever `logger.warn` lands (see "Gateway process logs" above) | One line per pull whose steward status is `degraded`, `absent`, `link-down`, or `parked` — `commons steward <presence> for grant <id> (member <vaultId>, steward <vaultId>) — silent <ms>ms, <n> consecutive failures` (or `fault <tag>` when parked). Emitted by `logStewardConcern` in `packages/server/src/serve/peer-commons-sweep.ts`; `reachable`/`unknown` pulls stay silent. |
-
-Each grant's entry carries: `steward` (the escalating presence + silence duration), `reachableRatio` (contacts / attempts), `absence` (episode count, total/longest/open duration), `pullOutcomes` (noop/tail/snapshot/tombstone/parked/unreachable counts), `opLog` (row count, last/checkpoint sequence, rows beyond checkpoint — the first go/no-go number in the [Commons decision](decisions.md#commons)), `memberLag` (member count, max/p50 ops behind, count beyond the K=256 window — the second go/no-go number), and `intentDwellMs` (parked-intent submitted→settled latency).
-
-## Traces and work counters (#927)
-
-The product measures itself: every hop of a user action — seat → tunnel → gateway → handler → SQLite → commit → SSE → apply → render — emits a span, and the journey budgets are queries over those spans, so a regression says _where_ and not only _whether_. The shared contract is `packages/core/src/protocol/trace.ts` (`TraceSpan`, `TraceRecord`, `WorkCounters`, `validateTraceRecord`, `waterfall`), imported by every emitter and every consumer so there is exactly one format.
-
-**Sovereign and local-only.** A trace never leaves the machine that produced it. There is no telemetry endpoint, no sampling service, no opt-in upload — the store is part of the owner's own diagnostics under their vault directory, so it is backed up, moved and **purged with the vault** like any other vault content. Nothing in the trace path writes to a network socket; a span that reached one would be a security bug, not a configuration mistake.
-
-| Property | How it holds |
-| --- | --- |
-| Never egressed | The record type is not part of any wire schema; no route serves it and no client posts it. |
-| Purged with the vault | The store lives under the vault's diagnostics, so deleting the vault deletes the traces. |
-| Bounded cost | Spans are **off by default** and sampled (`TraceSamplingPolicy`, `shouldSample`); only the integer work counters are always on. |
-| Deterministic unit | `WorkCounters` — statements, rows scanned, fsyncs, bytes read/written, worker spawns, HTTP round trips, invalidations, re-reads — integers, so the merge rung compares them with no flake, no retry and no history. |
-
-A trace id is not a new identifier: for a write it **is** the replica intent id (`traceIdOfIntent`), so the outbox row and the waterfall join without a lookup table; a read has no intent and mints one at the seat (`mintTraceId`).
-
-**Where the records live.** `<vaultDir>/<vaultId>/diagnostics/traces.jsonl`, one JSON record per line, rotated once at 2 MB. Inside the vault directory on purpose: `VaultRegistry.delete` removes that directory whole, so purge-with-vault is a property of the location and not of a sweeper anyone has to remember to run. Writes are best-effort and swallow their failures — a diagnostics record must never be the thing that fails a request — and a torn trailing line from a process that died mid-append is skipped by the reader, not fatal.
-
-**Turning spans on.** They are **off in every shipped build**. `CENTRAID_TRACE=1` enables them for a gateway process; `CENTRAID_TRACE_SAMPLE_EVERY=N` records one action in N (deterministic in the action counter, not random, so two runs of a rig sample the same actions). The work counters underneath are not affected by this switch — they are always on and cost single-digit percent.
-
-**Where the numbers come from.**
-
-| Counter | Seam |
-| --- | --- |
-| `statements`, `rowsScanned`, `bytesRead`, `bytesWritten`, `fsyncs` | `packages/vault/src/gateway/work-counters.ts`, attached to the vault's one SQLite handle at `createGateway`. `fsyncs` counts **durability barriers** — `COMMIT`/`END` and WAL checkpoints, the statements that make SQLite sync — so the integer is a property of the product's own behaviour rather than of `strace` and a platform. `bytesRead`/`bytesWritten` are payload bytes: what a statement materialized out of SQLite, and what it bound into it. |
-| `workerSpawns` | `packages/server/src/engine/handlers/work-counters.ts`, bumped in `WorkerPool.spawn()` — the one place a handler thread is created. A second registry on purpose: the engine must not import `@centraid/vault`, and `addCounters` is the contract's answer for summing them. |
-| `httpRoundTrips`, `invalidations`, `reReads` | `packages/client/src/replica/work-counters.ts` — the seat's registry (a third, because this code runs in a browser, a worker and on Hermes). `httpRoundTrips` is bumped inside `shell-transport.ts`'s one transport seam, so an injected fetcher counts exactly like the default. **`invalidations` and `reReads` have no writer.** They were bumped by `LiveQueryRegistry` and `LiveQuery`, whose last consumer went with the old replica plane ([#996](https://github.com/srikanth235/centraid/issues/996)); a screen is now notified by the applier's `(table, pk)` sets per batch (R9). Both counters therefore read zero, and whether two protocol counters that can only read zero are deleted is a `packages/core` protocol decision open to the owner. |
-
-**On a phone, spans are a ring buffer.** A phone has no gateway process to append to and no business doing disk I/O on a scroll, so the mobile seat buffers records in a bounded in-memory ring (`ClientTraceRing`) and writes them to `<replicaStorage>/diagnostics/traces.jsonl` at two moments only: the background sync pass (`runBackgroundReplicaSync`'s `finally`, so a pass that timed out still lands what it recorded) and the developer command. If the OS kills the app first the ring is lost — a diagnostics buffer, not evidence. `EXPO_PUBLIC_CENTRAID_TRACE=1` turns it on; Hermes has no `crypto.randomUUID`, so the mobile tracer is built with `nativeReplicaIdFactory` rather than the contract's web default. See [mobile-offline.md](mobile-offline.md).
-
-**The gateway's per-request timing seam is this one and only this one.** `serve.ts` wraps the composed handler in `traceRequests` (`packages/server/src/serve/gateway-trace.ts`); `route-latency.ts` keeps aggregate per-route histograms for health, which answers "how slow is this route across many requests" and cannot answer "where did THIS request spend its milliseconds". #922's per-request gateway phase timing is absorbed here by ruling: do not add a second instrument beside it.
-
-**Reading the last tap's waterfall.** `centraid-gateway trace last` prints the most recent trace on this machine as a nested waterfall (each row: hop, name, offset from the root, duration, depth), rendered from the pure `waterfall()` helper the rigs also use. It is a developer tool on the owner's own machine, not product surface: it opens no socket, contacts no daemon, and there is no route that would serve the file. `--vault-dir <path>` reads one vault; with none given it takes the most recently written trace file under the registry root, so "the last tap" means the last tap on this machine. `--json` hands back the record for a rig; `--clear` empties the store after printing. A machine with no records prints how to turn spans on rather than an empty table.
-
-**The merge rung reads counters, not clocks.** `bun run test:perf:counters` (ci.yml, job `verify`) runs a fixed workload against the golden year-3 vault and compares the integers to `scripts/ci/work-counters.expected.json` — tighten-only, no retry step, no history, no `strace`. A seeded extra statement or durability barrier on a hot path fails it on the first run. The wall-clock rig (`bun run test:perf:pr`) still exists and still answers its own question, latency under a constrained hardware profile; it is simply not on the merge rung any more.
+The job log itself is on GitHub Actions; every gate step prints exactly one line unless it fails.
 
 ## What is not a log
 
 | Path | Role |
 | --- | --- |
-| `vault.db` | Data plus the audit and ledger bands — query with tools, do not treat as greppable logs |
-| `gateway.db` preferences / settings | Config ([config-ownership.md](config-ownership.md)) |
-| Browser devtools console | Ephemeral client noise; useful but not canonical |
+| `<data-dir>/vault/<vaultId>/vault.db` | Data plus the audit and ledger bands — query with tools, do not treat as greppable logs |
+| `<data-dir>/wal/pending.jsonl` | The WAL capture tick's pending-tail index for the next backup generation, not a log ([traps/wal-checkpoint.md](traps/wal-checkpoint.md)) |
+| `<data-dir>/keys/` | Key custody; never copy it into a ticket |
 
 ## Related
 

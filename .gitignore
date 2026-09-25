@@ -3,10 +3,6 @@ dist
 out
 .turbo
 .astro
-.expo
-# Expo local modules are Gradle subprojects; their nested output is not covered
-# by the root Android project's ignore file.
-apps/mobile/modules/*/android/build/
 .DS_Store
 *.log
 .meridian-cache
@@ -20,17 +16,6 @@ coverage
 artifacts
 output/playwright/
 target
-packages/tunnel/native/*.node
-packages/tunnel/native/native-platforms.manifest.json
-.wrangler
-**/.dev.vars
-# Generated from the pinned Wrangler/workerd runtime during OAuth Worker
-# typecheck. Keeping it out of git avoids a ~16k-line vendored declaration.
-apps/oauth-worker/worker-configuration.d.ts
-# Derived classic-worker wrapper around the tracked browser Iroh bindings.
-# apps/web/scripts/build-iroh-worker.mjs regenerates both before web builds.
-apps/web/public/centraid-worker-iroh.js
-apps/web/public/centraid-worker-iroh.wasm
 .claude
 # Python bytecode created by .governance/ hook scripts (not source).
 __pycache__
@@ -42,34 +27,15 @@ __pycache__
 .governance/law/node_modules/
 .governance/law/out/
 
-# Per-app scratch trees the boot harness builds (app.js + symlinked kit assets);
-# they must live inside the package because vite refuses to load a dynamically
-# imported module from outside the project root. See src/app-boot-harness.ts.
-packages/blueprints/.app-boot/
 # CSS-module carve tooling bookkeeping (class -> local-name maps used only by
 # the carve/rewrite scripts, never read by the app or its build).
 *.module.css.map.json
 
-# Browser Iroh WASM: the binary is re-committed so clean CI (static typecheck
-# builds @centraid/web without a Rust/wasm toolchain) stays green. Regenerate
-# with `bun run --cwd apps/web build:iroh` after changing iroh-wasm
-# (issue #468 K15 — ensure-iroh still rebuilds if the file is deleted).
 **/.stryker-tmp/
 
 # Design-agent handoff prototypes (#707) are reference-only: read them locally,
 # never commit them. The brief itself is quoted in full in the issue.
 docs/design/handoff-binding-layer/
 
-# electron-builder's output tree (`directories.output` in
-# apps/desktop/electron-builder.yml), produced by `bun run --cwd apps/desktop
-# dist`/`dist:dir`. Packaged apps carry the whole Electron runtime; CI uploads
-# them as release artifacts and never commits them.
-apps/desktop/release/
-
-# Precompiled first-party app handlers (#922 B2): `bun run --cwd
-# packages/blueprints build:handlers` bundles every `apps/<id>/{actions,
-# queries}/<name>.ts` to a `<name>.js` beside it, which is what a bundled app
-# — enrolled in place — actually runs. Generated, so never committed; shipped
-# by `files: ["apps"]` and kept out of the catalog by build-manifest.mjs.
-packages/blueprints/apps/*/actions/*.js
-packages/blueprints/apps/*/queries/*.js
+# The v1 Rust workspace build directory (#1020).
+/target/

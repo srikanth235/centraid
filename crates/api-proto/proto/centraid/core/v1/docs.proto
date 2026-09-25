@@ -1,0 +1,339 @@
+// DOCS' QUERIES, AS THE CORE ANSWERS THEM (#1046).
+//
+// `crates/apps/docs` folds the drive over the vault — the folders scheme, the
+// filed window, the stars, the labels, the byte rows, the representations and
+// the version chain — and these are its answers, typed. A shell reaches them
+// through `app_query.proto`'s `AppQueryRequest` and draws them; it joins
+// nothing, sorts nothing, classifies no media type and does no date arithmetic.
+//
+// TYPED, NOT JSON, for `agenda.proto`'s reason: `commonMain` has no JSON
+// dependency. `crates/core`'s `app_query::docs` module is the one conversion
+// from the crate's Rust rows to these messages.
+//
+// SHAPED FOR A PHONE, NOT COPIED FROM v0'S PAYLOAD. v0's drive shipped the
+// whole window and let each screen filter, sort and slice it; here the shelf,
+// the filters and the sort are part of the REQUEST, and the answer is the rows
+// that screen draws plus the counts its rail needs. There is no Shared shelf,
+// no `shared_with`, no `shared_from` and no People filter: the sharing plane
+// left with #1029's scope amendment, and a field that can only ever be empty
+// is a claim a screen would draw.
+//
+// CIVIL TIME IS ANSWERED IN THE DEVICE'S ZONE — `agenda.proto`'s zone rule,
+// word for word: `tz` is an IANA name; EMPTY is the vault's zone; a vault that
+// names none, or a name the bundled database does not know, is
+// `ERROR_CODE_INVALID_REQUEST`. Never UTC by default. Every instant the answer
+// carries raw (`*_at`, the vault's `YYYY-MM-DDTHH:MM:SS.mmmZ`) is accompanied
+// by its reading in that zone (`*_local`, `YYYY-MM-DDTHH:MM`), and every answer
+// that dates anything carries `today`, so "edited today" and "purges in 3
+// days" are string comparisons in a view.
+//
+// SIZES ARE PHRASES. `size` is `format_byte_size`'s words ("2.4 MB") — the one
+// formatter Home's Docs tile already reads through `with_document_size` — and
+// EMPTY when the document's bytes have no row, never "0 bytes".
+//
+// WHAT "TRASH" MEANS ON THIS PHONE. Trashing stamps `purge_at` thirty days out;
+// "Empty trash" (`core.empty_document_trash`) collapses `purge_at` onto
+// `deleted_at`. NOTHING IN THIS BUILD DESTROYS A TRASHED DOCUMENT — there is no
+// purge command and no sweep since the gateway's lifecycle sweep left — so a
+// trashed document stays in Trash after its `purge_local_day` has passed (or
+// the trash was emptied), and from then on `core.restore_document` refuses it.
+// `purge_in_days` can therefore be zero or negative. A screen must not say
+// "deleted forever" or "will be deleted on"; see `crates/apps/docs`'s README,
+// "Trash has no destroy path".
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// The requests.
+// ---------------------------------------------------------------------------
+
+// `docs.drive`: one shelf of the drive — its rows, filtered and sorted — and
+// the folder rail and counts every shelf draws.
+message DocsDriveRequest {
+  DocsShelf shelf = 1;
+  // `DOCS_SHELF_FOLDER` only: the folder whose DIRECT children to answer.
+  // EMPTY is the drive's top level ("Unfiled"). A folder id this vault does
+  // not have answers no rows, not an error: a folder deleted on another
+  // screen is a state.
+  string folder_id = 2;
+  // The Type filter; UNSPECIFIED is none.
+  DocsTypeFilter type = 3;
+  // The Modified filter, over `updated_at` read in `tz`; UNSPECIFIED is none.
+  DocsModifiedFilter modified = 4;
+  // One free-form label, matched exactly; EMPTY is none. Filters COMPOSE: a
+  // row must pass every one that is set.
+  string label = 5;
+  // The order. Ignored on `DOCS_SHELF_RECENT`, which is newest-added first by
+  // definition. UNSPECIFIED is `DOCS_SORT_CHANGED`.
+  DocsSort sort = 6;
+  // FALSE (the default) is descending: newest changed, Z→A, largest first.
+  bool ascending = 7;
+  // The drive's window over filed documents, clamped 20…2,000; 0 is the
+  // default, 200 (v0's `min(max(limit || 200, 20), 2000)`). Every shelf is
+  // cut from this ONE window, so `truncated` applies to all of them.
+  uint32 limit = 8;
+  // The zone (the file header's rule).
+  string tz = 9;
+}
+
+// `docs.search`: live documents matching a term — title and the current
+// version's decoded text — in the index's rank order. A trashed document never
+// matches.
+message DocsSearchRequest {
+  // Owner-typed words; FTS operators stay literals. A term with no searchable
+  // word answers no rows and no error.
+  string term = 1;
+  // REQUIRED: zero is `ERROR_CODE_INVALID_REQUEST`, never defaulted. Clamped
+  // to 100, the query's own ceiling.
+  uint32 limit = 2;
+  string tz = 3;
+}
+
+// `docs.document`: one document, everything its reader, viewer, properties
+// and version-history screens draw.
+message DocsDocumentRequest {
+  string document_id = 1;
+  string tz = 2;
+}
+
+// `docs.activity`: one document's audit trail, newest first.
+message DocsActivityRequest {
+  string document_id = 1;
+  string tz = 2;
+}
+
+enum DocsShelf {
+  // Everything not in the trash.
+  DOCS_SHELF_UNSPECIFIED = 0;
+  DOCS_SHELF_ALL = 1;
+  // The direct children of `folder_id` (empty: the top level), not trashed.
+  DOCS_SHELF_FOLDER = 2;
+  // Starred and not trashed. A star survives trash, so a trashed starred
+  // document is in Trash, not here.
+  DOCS_SHELF_STARRED = 3;
+  // The fifty newest-added live documents (`created_at`), in that order. A
+  // WINDOW, not a filter.
+  DOCS_SHELF_RECENT = 4;
+  // Trashed documents only, most recently trashed first unless sorted.
+  DOCS_SHELF_TRASH = 5;
+}
+
+// v0's Type pills, each a predicate over the row's media type and title.
+enum DocsTypeFilter {
+  DOCS_TYPE_FILTER_UNSPECIFIED = 0;
+  DOCS_TYPE_FILTER_PDF = 1;
+  DOCS_TYPE_FILTER_IMAGE = 2;
+  // `DOCS_KIND_DOCUMENT`.
+  DOCS_TYPE_FILTER_WORD = 3;
+  DOCS_TYPE_FILTER_SPREADSHEET = 4;
+  // `text/markdown` only.
+  DOCS_TYPE_FILTER_MARKDOWN = 5;
+  // `text/plain` only.
+  DOCS_TYPE_FILTER_TEXT = 6;
+  DOCS_TYPE_FILTER_AUDIO = 7;
+  DOCS_TYPE_FILTER_VIDEO = 8;
+}
+
+// v0's Modified pills, over `updated_at` (else `created_at`).
+enum DocsModifiedFilter {
+  DOCS_MODIFIED_FILTER_UNSPECIFIED = 0;
+  // Its local day is `today`.
+  DOCS_MODIFIED_FILTER_TODAY = 1;
+  // Within 7 × 24 hours of the vault clock.
+  DOCS_MODIFIED_FILTER_LAST_7_DAYS = 2;
+  DOCS_MODIFIED_FILTER_LAST_30_DAYS = 3;
+  // Its local year is today's.
+  DOCS_MODIFIED_FILTER_THIS_YEAR = 4;
+}
+
+enum DocsSort {
+  DOCS_SORT_UNSPECIFIED = 0;
+  // `updated_at`.
+  DOCS_SORT_CHANGED = 1;
+  // The title, case-insensitive, digit runs compared as numbers ("Scan 2"
+  // before "Scan 10").
+  DOCS_SORT_NAME = 2;
+  // The kind's word ("PDF", "Image", …), then the title.
+  DOCS_SORT_KIND = 3;
+  // Bytes; a document with no byte row sorts as zero.
+  DOCS_SORT_SIZE = 4;
+}
+
+// What a document IS to a member, from its media type first and its title's
+// extension second (v0's `typeMeta`, never the reverse).
+enum DocsKind {
+  DOCS_KIND_UNSPECIFIED = 0;
+  DOCS_KIND_PDF = 1;
+  DOCS_KIND_IMAGE = 2;
+  DOCS_KIND_VIDEO = 3;
+  DOCS_KIND_AUDIO = 4;
+  DOCS_KIND_SPREADSHEET = 5;
+  DOCS_KIND_PRESENTATION = 6;
+  // Word processors, and every `text/*` but `text/csv` (a spreadsheet).
+  DOCS_KIND_DOCUMENT = 7;
+  DOCS_KIND_OTHER = 8;
+}
+
+// Which of the three document screens opens it (v0's `readSurfaceFor`).
+enum DocsSurface {
+  DOCS_SURFACE_UNSPECIFIED = 0;
+  // A `text/*` document: the reader, over `DocsDocument.body`, and editable.
+  DOCS_SURFACE_READING = 1;
+  // An image, audio, video or PDF: the media stage, over the bytes.
+  DOCS_SURFACE_STAGE = 2;
+  // Anything the phone cannot render: the facts sheet. Docs converts nothing.
+  DOCS_SURFACE_FACTS = 3;
+}
+
+// ---------------------------------------------------------------------------
+// The rows.
+// ---------------------------------------------------------------------------
+
+// One folder: a folders-scheme concept, minus the root, which is the drive.
+message DocsFolder {
+  string folder_id = 1;
+  // `pref_label`. EMPTY only on a concept no command writes.
+  string name = 2;
+  // EMPTY at the top level. The tree is `parent_id` → `folder_id`; the list is
+  // sorted by name, so a view nests it in one pass.
+  string parent_id = 3;
+  // Live documents filed DIRECTLY here, within the window. Trash counts its
+  // own.
+  uint32 document_count = 4;
+}
+
+// One free-form label, with the tag edge that removes it (`untag` is by edge).
+message DocsLabel {
+  string tag_id = 1;
+  string label = 2;
+}
+
+// One document row, as every list draws it.
+message DocsDocumentRow {
+  // THE IDENTITY. Two documents may share identical bytes (#352).
+  string document_id = 1;
+  // The head's content: what `ContentUrlRequest` asks for.
+  string content_id = 2;
+  string title = 3;
+  // This document's representation of its bytes. EMPTY is "nothing says what
+  // these bytes are", never a default type.
+  string media_type = 4;
+  DocsKind kind = 5;
+  // The kind's word, as the Kind column prints it.
+  string kind_name = 6;
+  DocsSurface surface = 7;
+  // The bytes, in words. EMPTY when there is no byte row.
+  string size = 8;
+  // EMPTY at the top level.
+  string folder_id = 9;
+  bool starred = 10;
+  bool trashed = 11;
+  repeated DocsLabel labels = 12;
+  // The instants, raw, and read in `tz`.
+  string created_at = 13;
+  string created_local = 14;
+  string updated_at = 15;
+  string updated_local = 16;
+  // Trash only (EMPTY on a live row): when it was trashed, and the day its
+  // grace window ends. See the file header: nothing destroys it on that day.
+  string trashed_at = 17;
+  string trashed_local = 18;
+  string purge_at = 19;
+  // `YYYY-MM-DD` in `tz`.
+  string purge_local_day = 20;
+  // Whole local days from `today` to `purge_local_day`. Zero or negative once
+  // the window has run out — a restore is then refused by the vault.
+  int32 purge_in_days = 21;
+  // `search` only: the index's highlight, `⟦`/`⟧` around the matched words.
+  // EMPTY on a hit with none.
+  string snippet = 22;
+}
+
+// One version, newest first. A→B→A is THREE versions: each is an occurrence,
+// dated by when it became current, not by when its bytes were minted.
+message DocsVersion {
+  string content_id = 1;
+  string media_type = 2;
+  string size = 3;
+  // Exactly one version is current: the first.
+  bool current = 4;
+  // "Version N", counted from the oldest, which is 1.
+  uint32 number = 5;
+  string asserted_at = 6;
+  string asserted_local = 7;
+}
+
+// One event on the activity rail.
+message DocsActivityEvent {
+  // The vault's activity name (`core.edit_document`, …), for a view's label
+  // table. EMPTY on a row that recorded none.
+  string activity = 1;
+  // `owner`, `agent`, … — who acted.
+  string agent_kind = 2;
+  string occurred_at = 3;
+  string occurred_local = 4;
+}
+
+// ---------------------------------------------------------------------------
+// The answers.
+// ---------------------------------------------------------------------------
+
+message DocsDrive {
+  // The shelf's rows, filtered and in the requested order.
+  repeated DocsDocumentRow documents = 1;
+  // The whole folder rail, whatever the shelf.
+  repeated DocsFolder folders = 2;
+  // Every label on a live document in the window, sorted — the Label pill's
+  // options. From the unfiltered set, so choosing one never removes its own
+  // pill.
+  repeated string labels = 3;
+  // Counts over the window, for the rail: live, live at the top level,
+  // starred-and-live, and trashed.
+  uint32 all_count = 4;
+  uint32 unfiled_count = 5;
+  uint32 starred_count = 6;
+  uint32 trash_count = 7;
+  // OLDER FILED DOCUMENTS EXIST BEYOND THE WINDOW, so every shelf and count
+  // above is of the newest `window` only. The page's own cursor, never a row
+  // count. A screen says so, or offers search, which is not windowed.
+  bool truncated = 8;
+  uint32 window = 9;
+  // The vault clock's day and wall clock in `tz`.
+  string today = 10;
+  string now_local = 11;
+}
+
+message DocsSearch {
+  repeated DocsDocumentRow documents = 1;
+  string today = 2;
+}
+
+message DocsDocument {
+  // UNSET when no such document exists — deleted elsewhere, or a stale link.
+  // A state, not an error.
+  optional DocsDocumentRow document = 1;
+  // The folder chain from the top level down to the document's folder, for a
+  // breadcrumb. Empty at the top level.
+  repeated DocsFolder path = 2;
+  // The version chain, newest first (the header of `DocsVersion`).
+  repeated DocsVersion versions = 3;
+  // THE TEXT THE READER AND EDITOR SHOW: `core_content_text.body_text` for the
+  // head's content. UNSET is "this vault holds no decoded text for these
+  // bytes" (a binary document, or text that would not decode); SET AND EMPTY
+  // is an empty text document. A reader tells the two apart.
+  optional string body = 4;
+  // WHETHER THE HEAD'S BYTES ARE ON THIS DEVICE — the media stage's question.
+  // False for a text document too: its text is the body above, not a file.
+  bool bytes_held = 5;
+  // Why they are not, in the member's words. EMPTY when they are.
+  string bytes_absent_reason = 6;
+  string today = 7;
+  string now_local = 8;
+}
+
+message DocsActivity {
+  // Newest first. EMPTY is honest: nothing has been recorded yet.
+  repeated DocsActivityEvent events = 1;
+}

@@ -28,7 +28,8 @@ const ruleKey = (lang, id) => `${lang}:${id}`;
 /**
  * Globs excluded from source analysis (Autoscan UI/API supports wildcards).
  *
- * Product signal lives under packages/* and apps/* (minus generated/harness).
+ * Product signal lives under crates/, mobile/, desktop/, extension/ and
+ * packages/* (minus generated/harness).
  * Tooling is owned elsewhere: oxlint/knip for scripts, actionlint+CodeQL for
  * .github, Vitest for tests. Sonar way fails PRs on *any* new BUG/VULNERABILITY
  * in scanned new code — keep non-product paths out so hygiene-only PRs do not
@@ -41,32 +42,15 @@ const SOURCE_EXCLUSIONS = [
   "**/artifacts/**",
   "**/.turbo/**",
   "**/.astro/**",
-  "**/.expo/**",
-  "**/.stryker-tmp/**",
+  "**/.gradle/**",
+  "**/build/**",
   "**/target/**",
   // Non-product surfaces (other tools own them).
   "scripts/**",
   ".github/**",
   "tests/**",
-  "packages/tunnel/**",
-  "packages/blueprints/.app-boot/**",
-  "packages/blueprints/kit/**",
-  // Release-generated recognition bundles are deployed artifacts; their
-  // source-of-truth lives under packages/model-runtime, where the
-  // local lint/typecheck/test gates own the implementation.
-  "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
-  "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
-  "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
-  "packages/blueprints/automations/faces/automations/faces/handler.js",
-  "packages/blueprints/automations/place-names/automations/place-names/handler.js",
-  "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   "packages/test-kit/**",
-  "apps/web/src/generated/**",
-  "apps/web/public/**",
-  "apps/web/dist/**",
   "packages/**/dist/**",
-  "**/centraid_web_iroh.js",
-  "**/centraid-worker-iroh.js",
   "**/*.wasm",
   "**/*.map",
   "receipts/**",
@@ -96,7 +80,6 @@ const CPD_EXCLUSIONS = [
   // The normative registry repeats the profile-lowering record shape so each
   // role's meaning, contrast obligation, and totality stay reviewable inline.
   "packages/design/src/roles.ts",
-  "packages/blueprints/apps/**",
   "scripts/test-report/**",
 ];
 
@@ -109,11 +92,9 @@ const COVERAGE_EXCLUSIONS = [
   "**/tests/**",
   "**/e2e/**",
   "**/vitest.config.*",
-  "**/stryker.config.*",
   "**/generated/**",
   "scripts/**",
   "packages/test-kit/**",
-  "packages/blueprints/kit/**",
 ];
 
 const TEST_INCLUSIONS = [

@@ -1,0 +1,34 @@
+# THE LOUD RIBBON. One rule and one action, never a filled warning plate.
+#
+# `URGENT` and `ATTENTION` are the only two tones that earn a member's eye; the
+# tiles beneath are untouched, because the status line is an ambient sentence
+# about the route and not a failure of any app on it.
+data {
+  springboard: SPRINGBOARD_CONTENT
+  tiles {
+    app_id: "photos" status: TILE_STATUS_CONTENT size: TILE_SIZE_LARGE wide: true earns_grid: true
+    count { value: 500 capped: true } count_label: "photos"
+    body { photos { offline_pack: false cells { asset_id: "asset-1" } } }
+  }
+  tiles { app_id: "docs" status: TILE_STATUS_EMPTY size: TILE_SIZE_MEDIUM wide: true empty_copy: "Add your first document" }
+  tiles { app_id: "notes" status: TILE_STATUS_EMPTY size: TILE_SIZE_MEDIUM wide: true empty_copy: "Write your first note" }
+  tiles { app_id: "agenda" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }
+  tiles { app_id: "tasks" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Capture the next thing to do" }
+  tiles { app_id: "people" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
+  tiles { app_id: "tally" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
+  tiles { app_id: "locker" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL earns_grid: true empty_copy: "Unlock to see your items" body { locker { locked: true } } }
+  # CAPPED: the true number is at least 500, which is why a renderer says "at
+  # least" rather than printing 500 as a fact.
+  things { total: 500 capped: true settled: true }
+  status {
+    tone: TONE_URGENT
+    copy: "Your gateway has not answered since yesterday"
+    action: "Check it"
+    destination: DESTINATION_BACKUP
+  }
+  # THE PACKED GRID, decided by the machine so the two shells cannot pack it
+  # differently. A wide tile takes a whole line; smalls pair. A lone small at
+  # the end is not a hole.
+  grid_rows { app_ids: "photos" }
+  grid_rows { app_ids: "locker" }
+}

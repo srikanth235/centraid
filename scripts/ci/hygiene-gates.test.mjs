@@ -8,20 +8,18 @@ test("shipped hygiene gates pass the structural contract", () => {
   assert.equal(ok, true, errors.join("\n"));
 });
 
-test("ci.yml rolls gitleaks and osv-scanner into the required check job", () => {
-  const ci = readRepoFile(".github/workflows/ci.yml");
-  // Slice from the check job's needs list specifically.
-  const checkBlock = ci.slice(ci.indexOf("\n  check:"));
-  assert.match(checkBlock, /\bgitleaks\b/u);
-  assert.match(checkBlock, /\bosv-scanner\b/u);
-  assert.match(checkBlock, /\bdependency-review\b/u);
+test("the pull-request gate carries gitleaks and osv-scanner as steps", () => {
+  const steps = readRepoFile("crates/xtask/src/gate.rs");
+  assert.match(steps, /step\("secrets",\s*run_secrets\)/u);
+  assert.match(steps, /step\("osv",\s*run_osv\)/u);
+  const workflow = readRepoFile(".github/workflows/gate.yml");
+  assert.match(workflow, /cargo xtask gate --profile pr/u);
 });
 
 test("gitleaks config allowlists fixtures without disabling all rules", () => {
   const cfg = readRepoFile(".gitleaks.toml");
   assert.match(cfg, /useDefault\s*=\s*true/u);
   assert.match(cfg, /allowlist/u);
-  assert.match(cfg, /packages\/data-plane\/fixtures/u);
 });
 
 test("gateway image lane fails closed on critical/high image vulns", () => {

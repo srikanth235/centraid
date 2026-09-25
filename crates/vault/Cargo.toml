@@ -1,0 +1,57 @@
+[package]
+name = "centraid-vault"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_vault"
+path = "src/lib.rs"
+
+[[bin]]
+name = "export-baseline"
+path = "src/bin/export-baseline.rs"
+
+[[bin]]
+name = "export-ladder-ddl"
+path = "src/bin/export-ladder-ddl.rs"
+
+[dependencies]
+aes-gcm.workspace = true
+anyhow.workspace = true
+base64.workspace = true
+blake3.workspace = true
+centraid-media = { path = "../media" }
+centraid-ontology = { path = "../ontology" }
+flate2.workspace = true
+hex.workspace = true
+jiff.workspace = true
+jsonschema.workspace = true
+rand.workspace = true
+rusqlite.workspace = true
+scrypt.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# The derivative tests BUILD their fixtures (#1025 S3): a 4000x3000 JPEG with
+# an EXIF orientation tag is not a file to check in, and the assertions read
+# the produced thumbnail back as pixels rather than as a byte count.
+image.workspace = true
+# THE BYTE PLANE'S STORE, in the fixtures that need a content store (#1025 S3).
+# A dev-dependency cycle — `centraid-blobs` depends on this crate for the door
+# it implements — which cargo allows and which is the honest direction: the
+# door belongs beside the store, and these tests want the real one.
+centraid-blobs = { path = "../blobs" }
+tokio = { workspace = true }
+base64.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+rusqlite.workspace = true
+hex.workspace = true
+centraid-ontology = { path = "../ontology" }

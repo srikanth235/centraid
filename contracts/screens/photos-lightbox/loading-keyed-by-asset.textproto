@@ -1,0 +1,26 @@
+# THE LIGHTBOX KNOWS WHICH PHOTOGRAPH IT IS BEFORE THE READ LANDS.
+#
+# `asset_id` sits beside the `content` oneof rather than inside `detail`, and
+# this is the case that proves it has to: the read is still in flight, there is
+# no detail, and the chrome, the filmstrip and the share sheet all still need
+# something to key by. A screen whose identity lived only in its loaded data
+# would have no identity while loading — which is when a member swipes.
+#
+# `neighbour_asset_ids` are already here for the same reason: they came from the
+# shelf that opened this lightbox, in the order that shelf had them, so a swipe
+# has somewhere to go without a read per swipe.
+#
+# `first_load: true` — a spinner over an empty frame, not over a photograph that
+# is already drawn.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+asset_id: "ast-0330"
+loading { first_load: true }
+chrome_visible: true
+sheet: SHEET_NONE
+neighbour_asset_ids: "ast-0329"
+neighbour_asset_ids: "ast-0331"
+neighbour_asset_ids: "ast-0332"

@@ -19,15 +19,11 @@ const bytes = (text) => Buffer.from(text, "utf8");
 
 test("SEEDED RED: a source file with a raw NUL fails, the same file with \\0 passes", () => {
   const withRaw = `const key = \`\${a}${NUL}\${b}\`;\n`;
-  const failures = scan(
-    ["packages/vault/src/grant/authority-registry.ts"],
-    () => bytes(withRaw)
+  const failures = scan(["desktop/electron/src/main/ipc-core.ts"], () =>
+    bytes(withRaw)
   );
   assert.equal(failures.length, 1);
-  assert.match(
-    failures[0],
-    /authority-registry\.ts: 1 raw NUL byte\(s\) at 1:18/u
-  );
+  assert.match(failures[0], /ipc-core\.ts: 1 raw NUL byte\(s\) at 1:18/u);
   assert.match(failures[0], /Write \\0 instead/u);
 
   // The fix: the two-character escape is the same byte to the program and
@@ -37,9 +33,7 @@ test("SEEDED RED: a source file with a raw NUL fails, the same file with \\0 pas
   const interp = (name) => `\${${name}}`;
   const escaped = `const key = \`${interp("a")}\\0${interp("b")}\`;\n`;
   assert.deepEqual(
-    scan(["packages/vault/src/grant/authority-registry.ts"], () =>
-      bytes(escaped)
-    ),
+    scan(["desktop/electron/src/main/ipc-core.ts"], () => bytes(escaped)),
     []
   );
 });
@@ -57,24 +51,18 @@ test("binary extensions are skipped and text ones are not", () => {
     assert.equal(isScanned(`some/file${ext}`), false, ext);
   }
   for (const file of [
-    "packages/vault/src/grant/authority-registry.ts",
-    "scripts/fuzz/mutate.mjs",
+    "desktop/electron/src/main/ipc-core.ts",
+    "scripts/lint-aria-labels.mjs",
     "docs/logs.md",
     "tests/claims.json",
     ".github/workflows/ci.yml",
   ]) {
     assert.equal(isScanned(file), true, file);
   }
-  // The golden corpus binaries and the fuzz seeds are the reason `.gz` and
-  // `.bin` are on the list at all.
-  assert.equal(
-    isScanned("packages/vault/tests/golden/issue-929/vault.db.gz"),
-    false
-  );
-  assert.equal(
-    isScanned("scripts/fuzz/corpus/cbsf-directory/zeros.bin"),
-    false
-  );
+  // The golden corpus binaries and the screen fixtures are the reason `.gz`
+  // and `.bin` are on the list at all.
+  assert.equal(isScanned("contracts/golden/issue-929/vault.db.gz"), false);
+  assert.equal(isScanned("contracts/screens/home/content.bin"), false);
 });
 
 test("the allowlist is one named path, not a folder", () => {

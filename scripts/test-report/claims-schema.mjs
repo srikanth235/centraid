@@ -5,13 +5,12 @@
  * surfaces vocabulary, the lane registry, the 45 claim rows with their
  * severity and the date each was last demonstrated red, the law registry, the
  * consent ledger, the join laws, the deliberate n/a cells with reasons, the
- * revisit triggers, and the flow ownership + `minimumTests` floors. Everything
- * observable — journeys, suite budgets, seeds, fuzz targets, Vitest projects,
- * Stryker configs — is derived at read time by `derive.mjs`.
+ * revisit triggers, and the flow ownership + `minimumTests` floors. The flow
+ * ownership view is derived from it by `derive-flows.mjs`.
  *
- * This module validates the file on every read. The report refuses to render
- * from a claims file it cannot understand, because a silently-half-read
- * registry produces a page that looks complete and is not.
+ * This module validates the file on every read. Its readers refuse a claims
+ * file they cannot understand, because a silently-half-read registry produces
+ * a view that looks complete and is not.
  */
 
 import { readFileSync } from "node:fs";

@@ -1,0 +1,29 @@
+# A SHEET LEAVES THE SCREEN UNDERNEATH INTACT.
+#
+# Naming a new album is one field and a verb, so it is a sheet and not a route:
+# a push for it would put a keyboard behind a back chevron. The fixture makes
+# that checkable rather than a comment — `sheet: SHEET_NEW_ALBUM` AND `data`
+# with its shelves still present, which is the shape a route could not produce.
+# It is the same assertion `photos/more-sheet-open` makes for the grid.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_LOCAL_ONLY
+  pending { queued_writes: 1 oldest_queued_seconds: 12 }
+  connectivity: CONNECTIVITY_OFFLINE
+}
+data {
+  shelves {
+    shelf { state_view { mode { kind: KIND_FAVORITES } } }
+    title: "Favorites"
+    item_count: 84
+    member_owned: false
+  }
+  shelves {
+    shelf { album { collection_id: "col-0007" name: "Portugal" } }
+    title: "Portugal"
+    item_count: 137
+    member_owned: true
+  }
+  next_cursor: "col-0007"
+}
+sheet: SHEET_NEW_ALBUM

@@ -2,7 +2,7 @@
 version: alpha
 name: Centraid
 description: >-
-  The Binding Layer: one ink-on-paper superapp shell wrapping many first-party apps across a desktop shell, an installable web PWA, and native mobile. Values are pinned to packages/design/src.
+  The Binding Layer: one ink-on-paper superapp shell wrapping many first-party apps across a desktop shell and native mobile. Values are pinned to packages/design/src.
 colors:
   primary: "{colors.brand}"
   brand: "#141414"
@@ -339,7 +339,7 @@ The product grammar is one semantic contract with three lowerings: shell CSS (`S
 ### The five invariants
 
 1. **Navigation is the stem.** A reserved band 240px wide on the leading edge, or the bottom band on mobile. It holds which vault you are in and on which gateway, the Search control, the launcher, and a foot of All apps and Settings — and nothing else. It is never themed by an app, never scrolls away, and never changes width. It may be reclaimed outright (⌘B, persisted), which is a different thing from shrinking: hidden or full width, never an in-between, and never a drawer — no scrim, no float over the content, and nothing dismisses it for you. The compact band ignores the preference, because a phone with no way to move is not a phone. Its promise is "always the same distance from the reading edge" — not "from the left" — so every rule that positions it uses logical properties and it mirrors under RTL. The mobile band is capped at 5 apps plus More; a tab below 44px stops being a tap target, so the cap is a constraint and not a preference.
-2. **One ramp, one face.** Seven sizes, one bundled face, two weights. Instrument Sans sets the whole product; hierarchy comes from named roles, not an app-level family. The platform code stack is allowed only for code, inline literals, and file paths. Nothing falls below 11px, navigation labels never fall below `--text-soft`, and numerics are proportional, tabular Sans in every app without exception. Native consumes each role's typed `nativeDelta`; desktop and PWA consume the same generated pointer/touch CSS contract.
+2. **One ramp, one face.** Seven sizes, one bundled face, two weights. Instrument Sans sets the whole product; hierarchy comes from named roles, not an app-level family. The platform code stack is allowed only for code, inline literals, and file paths. Nothing falls below 11px, navigation labels never fall below `--text-soft`, and numerics are proportional, tabular Sans in every app without exception. Native consumes each role's typed `nativeDelta`; desktop consumes the generated pointer/touch CSS contract.
 3. **One control vocabulary, and the shell owns no colour.** Every control is ink on paper; commit is a filled ink button, never a hue. At most one filled ink element per view. Destructive is an **outlined** button in `--net`, never a fill. Actions live in bounded controls; where a control must be text it carries the ink step plus a hover ground plus a trailing arrow, because hover alone is nothing on a phone. One hue is reserved for prose links, selection and the focus ring, and it is never permitted on a control. State is never expressed with container `opacity` — a recessive state takes its own token on the leaf element.
 4. **One spatial rhythm.** 4px base, scale 4 / 8 / 12 / 16 / 24 / 32. Control 34px, row 44px, segmented 28px, stem 240px. Density tiers scale row height and content padding only. Any text in a fixed-height container is line-clamped, never `overflow: hidden` — a clipped baseline reads as a rendering bug.
 5. **One motion and feedback grammar.** Entry and settle at 280ms, a state change at 140ms, and state reported on one persistent status line rather than a toast. Never a spinner, a bounce, a parallax, a scale-on-hover, a red dot, a badge count, or a toast. `prefers-reduced-motion` is honoured in one global rule.
@@ -430,6 +430,8 @@ The role registry marks values as `literal`, `scalar`, `solved`, or `wash`; only
 
 There is **one** bundled face, shipped from the repo with no network fetch: `Instrument Sans` at 400 and 600. Source Serif 4 is withdrawn with v8, so display, reading, UI, and numerics all draw from the same stack with mandatory CJK fallbacks. `--font-code` names the platform code stack (`ui-monospace, SFMono-Regular, Menlo, …`) and ships no bytes; it is reached only by fenced code, inline literals, file paths, keyboard chips, and secrets — never by a timestamp, count, duration, or file size.
 
+The weights are **two**, here and everywhere, and the table below is the whole ramp. One thing is true of the phone that is not true of a desktop pane, and it is a lowering rather than a rung: the 400 register is DRAWN by a derived 470 instance of the same family on native, because the native delta's +2px step scales the glyph without scaling the stroke and CoreText's grayscale antialiasing takes the rest. Nothing in this ramp names a 470 and nothing may; only the file behind the 400 register changes, and only on a touch surface. See [decisions.md](docs/decisions.md) and [packages/design/fonts](packages/design/fonts/README.md).
+
 | Role | Brief role | Face | Size / line-height | Weight | Native delta |
 | --- | --- | --- | --- | --- | --- |
 | `--t-display` | Display | Instrument Sans | 32 / 36, −0.02em | 600 | −5 / −5 |
@@ -497,7 +499,7 @@ One icon registry owns iconKey resolution for manifest, index, and app metadata.
 
 ### The seven rooms (mobile)
 
-A mobile screen is one of seven rooms, and nothing else ([apps/mobile/src/kit/rooms/README.md](apps/mobile/src/kit/rooms/README.md)). The recipes above say what a control looks like; the rooms say what a SCREEN is, which is the half the audit of #1015 found missing — nine surfaces sharing no header, back affordance, search field, confirm, empty state or date format, because the kit was optional and nothing noticed a screen ignoring it.
+A mobile screen is one of seven rooms, and nothing else. The recipes above say what a control looks like; the rooms say what a SCREEN is, which is the half the audit of #1015 found missing — nine surfaces sharing no header, back affordance, search field, confirm, empty state or date format, because the kit was optional and nothing noticed a screen ignoring it.
 
 | Room | Anatomy | Examples |
 | --- | --- | --- |
@@ -515,15 +517,13 @@ The room owns the header, the back control, search, the empty/loading/error stat
 
 Six product rulings sit behind the rooms and are not re-decided per screen — trash, casing, editors, push-versus-sheet, the band under a selection, and where Settings is reachable from: [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015), D1–D6.
 
-`node scripts/lint-mobile-rooms.mjs --enforce` is the enforcement, wired into `bun run lint:product`: a hand-rolled screen root, a back destination written as a string, a gutter typed as a number, an identity hue on a control, a Title Case label, or an exception rendered as member copy fails the push gate.
-
 ## Copy
 
 **Copy is signage, not conversation.** The voice is calm, concrete, and specific — the same voice the rest of this document is written in — and it is read at a glance, on the way to something else. One glance is the unit: a label a member has to parse twice has already failed, and a second sentence explaining the first one is the label admitting it did not work. Crisp is not curt. "Photo deleted" is the register; "Deleted" throws away the noun that made it legible, and "Your photo has been successfully deleted." pads a fact into an announcement.
 
 The house tic this rulebook exists to stop is **defensive reassurance**: a string states a fact and then adds a sentence about what was _not_ lost, not deleted, not sent, not generated. Repeated everywhere, it stops reading as care and starts reading as a product apologising for itself. Reassurance is **positional** — it belongs where the risk decision is actually made, and nowhere else.
 
-Every string has a budget. The budget is the contract; the ratchet in [tests/quality/user-facing-qualities.test.ts](tests/quality/user-facing-qualities.test.ts) enforces it, and [tests/quality/copy-allowlist.json](tests/quality/copy-allowlist.json) is the only escape hatch.
+Every string has a budget, and the budget is the contract. Copy lives in `copy/<app>.json` and its hand-maintained Kotlin twin, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/<App>Copy.kt`; `KitTimeMoneyCopySpec` fails when the two disagree.
 
 | Surface | Budget |
 | --- | --- |
@@ -535,26 +535,26 @@ Every string has a budget. The budget is the contract; the ratchet in [tests/qua
 | Error | What happened and what to do, ≤ ~12 words. No apology, no "Please try again." |
 | Settings label + description | The label carries the meaning; the description is one sentence or absent |
 | Placeholder | A short noun phrase, not an instruction manual |
-| Consent, destructive confirm, security or privacy disclosure | Full sentences. The one home for reassurance, allowlisted by name. |
+| Consent, destructive confirm, security or privacy disclosure | Full sentences. The one home for reassurance. |
 
 **Banned everywhere**: "please", "successfully", "simply", "in order to", "you can", "we're sorry". Each of them is a word the sentence works without, and every one of them is a tell that the string is talking rather than labelling.
 
-The reassurance rule cuts both ways, and the second half is as binding as the first. Photos' faces disclosure keeps its full sentence — "Faces are proposed on a photograph you open, and a name is only ever yours to confirm. Nobody is named until you name them." ([photos-collections.ts](apps/mobile/src/apps/photos/photos-collections.ts)) — because it sits exactly where a member decides whether to let recognition name people. A toast, an empty state, or a shelf header making the same promise a fourth time is not more trustworthy; it is noise the disclosure has to compete with.
+The reassurance rule cuts both ways, and the second half is as binding as the first. Photos' faces disclosure keeps its full sentence — "Faces are proposed on a photograph you open, and a name is only ever yours to confirm. Nobody is named until you name them." — because it sits exactly where a member decides whether to let recognition name people. A toast, an empty state, or a shelf header making the same promise a fourth time is not more trustworthy; it is noise the disclosure has to compete with.
 
 Voice survives compression. The evocative half of a line is usually the short half — cut the defence, keep the image.
 
-**Worked pairs**, drawn from real strings in the repo:
+**Worked pairs**, from the [#805](https://github.com/srikanth235/centraid/issues/805) copy pass:
 
 | Where | Before | After |
 | --- | --- | --- |
-| [NeedsYouScreen.tsx](packages/client/src/react/screens/NeedsYouScreen.tsx) empty state | "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state." | "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here." |
-| [docs/view-copy.ts](packages/blueprints/apps/docs/view-copy.ts) offline banner | "The gateway is unreachable. Titles, folders, filing, tags and stars are read from this device, so the drive still lists everything — but most documents cannot be opened, and search is not available on this surface. Anything you write stays here, in order, until the gateway is back." | "Gateway unreachable — filing works from this device, opening and search do not." |
-| [MemoriesView.tsx](apps/mobile/src/apps/photos/MemoriesView.tsx) empty state | "Memories appear here on their own: a day that has an earlier year behind it, a run of days away from home, or a burst of near-identical photographs. Nothing is generated — they are your own photographs, noticed." | "Your own photographs, noticed — a year behind a day, a trip, a burst." |
-| [write-outcome.ts](apps/mobile/src/kit/replica/write-outcome.ts) write failure | "&lt;title&gt;: Please try again." | "&lt;title&gt;. Retry." |
+| Needs-you screen empty state | "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state." | "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here." |
+| Docs offline banner (v0; the key and the gateway it spoke of were removed in [#1029](https://github.com/srikanth235/centraid/issues/1029) and [#1047](https://github.com/srikanth235/centraid/issues/1047)) | "The gateway is unreachable. Titles, folders, filing, tags and stars are read from this device, so the drive still lists everything — but most documents cannot be opened, and search is not available on this surface. Anything you write stays here, in order, until the gateway is back." | "Gateway unreachable — filing works from this device, opening and search do not." |
+| Photos Memories empty state | "Memories appear here on their own: a day that has an earlier year behind it, a run of days away from home, or a burst of near-identical photographs. Nothing is generated — they are your own photographs, noticed." | "Your own photographs, noticed — a year behind a day, a trip, a burst." |
+| Write failure outcome | "&lt;title&gt;: Please try again." | "&lt;title&gt;. Retry." |
 
-The first two lose a whole sentence of reassurance about what still works; the third keeps the image and drops the defence in front of it; the fourth deletes an apology that told a member nothing they could act on. Audit everything, churn nothing — a string already inside its budget is left alone, and an allowlist entry is a debt that carries its reason in the file.
+The first two lose a whole sentence of reassurance about what still works; the third keeps the image and drops the defence in front of it; the fourth deletes an apology that told a member nothing they could act on. Audit everything, churn nothing — a string already inside its budget is left alone.
 
-**One noun per thing, and the same noun on every seat.** A place and its rows share a vocabulary: a place named Rules whose rows are called automations makes a member learn two words for one thing, and hear a third from VoiceOver. A short form may DROP words from the full name, never swap one in. Identifiers are exempt and are not copy — a wire flag, a route key, a deep-link path, a module name, a file name and a concept id (`DESTINATION_MARKS`' keys) keep whatever they were called; no member reads them. When two seats share a copy module, the noun is fixed AT THE SOURCE: renaming half a shared pool is worse than the divergence it was meant to close. `apps/mobile/src/screens/shell-copy.test.ts` sweeps this — no sentence in the shell trees or the shared copy modules may say "automation" — and [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015) R-SH-8/R-SH-11/R-SH-12 carries the reasoning.
+**One noun per thing, and the same noun on every seat.** A place and its rows share a vocabulary: a place named Rules whose rows are called automations makes a member learn two words for one thing, and hear a third from VoiceOver. A short form may DROP words from the full name, never swap one in. Identifiers are exempt and are not copy — a wire flag, a route key, a deep-link path, a module name, a file name and a concept id (`DESTINATION_MARKS`' keys) keep whatever they were called; no member reads them. When two seats share a copy module, the noun is fixed AT THE SOURCE: renaming half a shared pool is worse than the divergence it was meant to close. [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015) R-SH-8/R-SH-11/R-SH-12 carries the reasoning.
 
 ## Responsive Behavior
 
@@ -562,13 +562,13 @@ The local responsive constitution is explicit: SH-c is the compact shell at 720p
 
 ## Agent Prompt Guide
 
-When authoring an app, start with a recipe and a moment, then choose only roles from [packages/design/src/roles.ts](packages/design/src/roles.ts). Declare your density tier; do not declare a type register or retune the page. Use `primary` once per viewport and `secondary` for ordinary actions. Use `--accent-text` for the action colour on type, `--text-inv` for published fills, `--link` for prose links only, `--net` for anything that leaves the device, and a status role only for status. Put every number in `--t-mono`; use `--font-code` only for code, inline literals, and paths. Write every string to its budget in [Copy](#copy) before you write the component: a verb-first label, a fragment for a toast, one sentence for an empty state or a banner, ≤ ~12 actionable words for an error. Never add a second sentence reassuring a member about what was not lost — reassurance belongs only to a consent screen, a destructive confirm, or a security disclosure, and it is allowlisted by name. Never ship "please", "successfully", "simply", "in order to", "you can", or "we're sorry". Pick an iconKey from the shared registry. Use `formatRelativeTime`, `formatBytes`, `identityInitials`, and `identityColor`; do not write local copies. For an unsupported surface capability, state why in the recipe/profile matrix. Run `bun run check:pr`, the affected contract tests, and the screenshot lane before presenting work.
+When authoring an app, start with a recipe and a moment, then choose only roles from [packages/design/src/roles.ts](packages/design/src/roles.ts). Declare your density tier; do not declare a type register or retune the page. Use `primary` once per viewport and `secondary` for ordinary actions. Use `--accent-text` for the action colour on type, `--text-inv` for published fills, `--link` for prose links only, `--net` for anything that leaves the device, and a status role only for status. Put every number in `--t-mono`; use `--font-code` only for code, inline literals, and paths. Write every string to its budget in [Copy](#copy) before you write the component: a verb-first label, a fragment for a toast, one sentence for an empty state or a banner, ≤ ~12 actionable words for an error. Never add a second sentence reassuring a member about what was not lost — reassurance belongs only to a consent screen, a destructive confirm, or a security disclosure. Never ship "please", "successfully", "simply", "in order to", "you can", or "we're sorry". Pick an iconKey from the shared registry. Use `formatRelativeTime`, `formatBytes`, `identityInitials`, and `identityColor`; do not write local copies. For an unsupported surface capability, state why in the recipe/profile matrix. Run `bun run check:pr`, the affected contract tests, and the screenshot lane before presenting work.
 
 ## Do's and Don'ts
 
 Do use shared roles, recipes, icon keys, formatters, safe-area adapters, and generated lowerings. Do keep app identity separate from the shell, which spends none. Do line-clamp text in a fixed-height container. Do give a recessive state its own token on the leaf element. Do add a receipt and update the matching refactor progress log when a system fact changes. Do let the label carry the meaning, and keep a string inside its [Copy](#copy) budget.
 
-Do not add a second sentence reassuring a member about what was not lost, deleted, sent, or generated — outside a consent screen, a destructive confirm, or a security disclosure, that sentence is deleted rather than shortened. Do not explain a feature in an empty state, apologise in an error, or write "please", "successfully", "simply", "in order to", "you can", or "we're sorry" anywhere. Do not weaken a budget to make a string fit; add an allowlist entry with its reason, or cut the words.
+Do not add a second sentence reassuring a member about what was not lost, deleted, sent, or generated — outside a consent screen, a destructive confirm, or a security disclosure, that sentence is deleted rather than shortened. Do not explain a feature in an empty state, apologise in an error, or write "please", "successfully", "simply", "in order to", "you can", or "we're sorry" anywhere. Do not weaken a budget to make a string fit; cut the words.
 
 Do not hardcode colours, font stacks, type sizes, spacing, radii, icon dictionaries, or foreground choices. Type uses a named `--t-*` role or its emitted `--t-*-size` geometry adapter; radius uses a shared `--r-*` rung, the registry-emitted tile shape, or the 26%-of-box app-mark rule. A literal fallback or arithmetic such as `calc(var(--r-md) * .7)` is a second scale and fails the zero-debt gate. Do not add a new token in app CSS or in `kit.css`. Do not put a hue on a control, ship a second filled element in one view, fill a destructive button, or use a toast as a notification. Do not express state with container `opacity`, clip text with `overflow: hidden`, use a spinner, a badge count or a red dot, or write a physical direction property where a logical one exists. Do not restore `--bg-l`, `--t-hero`, `--t-greeting`, `--sp-7`, `ACCENT_PALETTE`, `--t-tiny`, `--lib-*`, `--font-title`, `--mono`, `--bezel*`, or `--accent-midnight` as compatibility aliases.
 
@@ -580,7 +580,7 @@ Do not hardcode colours, font stacks, type sizes, spacing, radii, icon dictionar
 - [packages/design/src/fonts.ts](packages/design/src/fonts.ts) — the one bundled face and the `@font-face` emitter
 - [issue #707](https://github.com/srikanth235/centraid/issues/707) — the Binding Layer brief this constitution implements, quoted in full in the issue; the design-agent prototypes are reference-only and are not kept in the repo
 - [issue #805](https://github.com/srikanth235/centraid/issues/805) — the copy rulebook this constitution's [Copy](#copy) section states, and the U-series ratchet that enforces it
-- [tests/quality/user-facing-qualities.test.ts](tests/quality/user-facing-qualities.test.ts) — the copy ratchet; [tests/quality/copy-allowlist.json](tests/quality/copy-allowlist.json) is its only escape hatch
+- [copy/](copy) — the per-app copy tables
 - [docs/traps/design-tokens.md](docs/traps/design-tokens.md) — source-of-truth trap
 - [issue #690](https://github.com/srikanth235/centraid/issues/690) — product-grammar migration intent and review closure
 - `bun run lint:design-md` — official design.md validation

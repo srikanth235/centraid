@@ -6,9 +6,9 @@
 // idiom `${a}\x00${b}` typed literally instead of escaped — flips the whole
 // file to binary, and from that moment `git diff` prints "Binary files differ"
 // and `--numstat` prints `-\t-`. Every later hunk in that file is invisible to
-// textual review. It happened three times: #916's audit, #928 w1b, and
-// `packages/vault/src/grant/authority-registry.ts`, which had been sitting on
-// `main` making a kilobyte of grant-authority edits unreviewable.
+// textual review. It happened three times: #916's audit, #928 w1b, and a
+// grant-authority registry that had been sitting on `main` with a kilobyte of
+// edits unreviewable (#931).
 //
 // The fix is always the same and always free: write `\0`, which is the same
 // byte to the program and an ordinary two-character sequence to git.
@@ -26,10 +26,9 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 /**
  * Extensions whose files are binary by construction, so a NUL says nothing.
  *
- * Images and app icons, the vendored web fonts, the Android keystore and
- * gradle wrapper jar, the wasm-bindgen bundle, the fuzz corpus seeds (`.bin`,
- * which exist to hold arbitrary bytes) and the gzipped golden vaults under
- * `packages/vault/tests/golden/` (`.gz`). Every one of them is already opaque
+ * Images and app icons, the vendored web fonts, the gradle wrapper jar, the
+ * encoded screen fixtures under `contracts/screens/` (`.bin`) and the gzipped
+ * golden vaults under `contracts/golden/` (`.gz`). Every one of them is already opaque
  * to textual review and nothing about that is a defect.
  */
 export const BINARY_EXTS = Object.freeze([
@@ -40,11 +39,8 @@ export const BINARY_EXTS = Object.freeze([
   ".jar",
   ".jpeg",
   ".jpg",
-  ".keystore",
-  ".node",
   ".png",
   ".ttf",
-  ".wasm",
   ".webp",
   ".woff",
   ".woff2",

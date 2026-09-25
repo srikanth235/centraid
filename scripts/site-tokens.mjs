@@ -52,16 +52,6 @@ const FONTS_SRC = path.join(ROOT, "packages/design/fonts");
 /** The vendored bytes of one bundled face. */
 const faceBytes = (fileName) => readFileSync(path.join(FONTS_SRC, fileName));
 
-/**
- * The mark the PRODUCT wears — the PWA's own icon, not a second drawing of
- * it. Both sites carried a teal orbit tile on `#3EC8B4`, a brand hue the v8
- * flip retired (DESIGN.md, "Colors"); `packages/design` has asserted for
- * releases that the emitted CSS contains none of it, while the site artwork
- * kept it. Copying the shipped icon here means the two can never disagree
- * again about what Centraid looks like.
- */
-const MARK_SRC = path.join(ROOT, "apps/web/public/centraid.svg");
-
 /** Every public surface that renders in the product's design: the site tree
  *  whose authored files the gate below reads, and — derived from it, so the two
  *  can never name different sites — its `assets/` copy of the sheet and faces. */
@@ -105,14 +95,14 @@ const EMITTED_SHEET = "centraid-tokens.css";
  * The site layer that sits between the product tokens and the two
  * stylesheets. It carries only what a long-form PAGE needs and the product
  * shell does not: the reading measure, the section rhythm, and the one
- * sanctioned marketing display step (docs/design-divergences.md). Every value
+ * sanctioned marketing display step (docs/design-machinery.md). Every value
  * composes from a product token — nothing here introduces a colour, a face, a
  * radius, or a duration of its own.
  */
 const SITE_LAYER = `
 /* ---------------------------------------------------------------------------
    Site layer — page-scale values the product shell has no use for. Every one
-   composes from a token above; see docs/design-divergences.md for the one
+   composes from a token above; see docs/design-machinery.md for the one
    sanctioned step beyond the ramp.
    --------------------------------------------------------------------------- */
 
@@ -168,7 +158,7 @@ const SITE_LAYER = `
  * The Night Watch palette — the ground, ink, rule and signal values the nightly
  * report's layout is drawn in (issue #862). The status ramp below says what a
  * STATE is; this says what the PAGE is. Bounded the same way the ramp is: see
- * docs/design-divergences.md#the-nightly-test-report. A rung is spelled ONCE, a
+ * docs/design-machinery.md#the-nightly-test-report. A rung is spelled ONCE, a
  * `name light dark` triple read off by whitespace, so the theme's three blocks
  * cannot drift; the `--nw-` prefix disambiguates from the product tokens
  * (`--line`, `--danger`, `--link`) already in this sheet. Type rungs clear
@@ -179,7 +169,7 @@ const SITE_LAYER = `
  * passed; `danger` tonight went wrong; `park` the failure has a date on it;
  * `grey` evidence absent; `attn` degraded — over budget or outside its noise
  * band; `partial`, `gap` and `bug` are declared and currently unpainted (see
- * docs/design-divergences.md#the-nightly-test-report). `partial`/`park`/`gap`
+ * docs/design-machinery.md#the-nightly-test-report). `partial`/`park`/`gap`
  * follow the ramp's identity hues. `attn` moved off the `--seam` literal it
  * used to duplicate (at #B4441F it sat 8° from `danger`, and `--st-gap`
  * pointed at the same value, carrying pending, attention and hole at once).
@@ -227,13 +217,13 @@ function nightWatchDecls(indent, theme) {
  * A matrix cell paints no fill: it is the state's WORD on a quiet family tint
  * from the Night Watch palette above, so the fill rungs are declared and
  * unpainted while the `-text` half carries the Pages landing page and the
- * briefing's metric words. docs/design-divergences.md bounds both.
+ * briefing's metric words. docs/design-machinery.md bounds both.
  */
 const REPORT_LAYER = `
 /* ---------------------------------------------------------------------------
    Report layer — the matrix status ramp. One name per state, per role; every
    value resolves from a product token above. See
-   docs/design-divergences.md#the-nightly-test-report for what bounds it.
+   docs/design-machinery.md#the-nightly-test-report for what bounds it.
    --------------------------------------------------------------------------- */
 
 :root {
@@ -301,7 +291,7 @@ const REPORT_LAYER = `
 /* ---------------------------------------------------------------------------
    Night Watch layer — the report page's own ground, ink, rules and signal
    tints. One name per rung, both themes; see
-   docs/design-divergences.md#the-nightly-test-report for what bounds it.
+   docs/design-machinery.md#the-nightly-test-report for what bounds it.
    --------------------------------------------------------------------------- */
 
 :root {
@@ -394,7 +384,6 @@ function sheet() {
 function emitted() {
   return new Map([
     [EMITTED_SHEET, Buffer.from(sheet(), "utf8")],
-    ["centraid-mark.svg", readFileSync(MARK_SRC)],
     ...FONT_FILES.map((file) => [
       path.posix.join(FONT_SUBDIR, file.fileName),
       faceBytes(file.fileName),
@@ -405,7 +394,7 @@ function emitted() {
 /**
  * The three ways the sites drifted, as a gate.
  *
- * `lint:design-tokens` is the zero-debt gate for the client and blueprint
+ * `lint:design-tokens` is the zero-debt gate for the product's consumer
  * stylesheets, and it is not pointed here: the ontology spec sheet still
  * sizes in rem and this pass did not close that out, so adding the directory
  * would mean widening its budget — the one thing that gate exists to
@@ -547,9 +536,9 @@ const declaredProps = (css) => declaredCustomProps(stripCssComments(css));
  * computed-value time — the declaration is dropped, the property falls back to
  * inherited or initial, nothing throws and nothing logs. That is exactly how
  * `var(--ink-3)` and `var(--night-2)` survived in this tree long after the
- * tokens behind them were renamed, and it is the same class `packages/client`
- * and `packages/blueprints` gate on. The helpers are theirs, imported rather
- * than re-implemented so the three cannot disagree about what counts.
+ * tokens behind them were renamed. The helpers are `packages/design`'s,
+ * imported rather than re-implemented so the two cannot disagree about what
+ * counts.
  */
 function resolvableProps() {
   // `--d` is a per-instance knob the markup sets inline on the element itself.

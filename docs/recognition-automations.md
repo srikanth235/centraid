@@ -1,5 +1,7 @@
 # Recognition automations
 
+> **Superseded, 2026-09-21 ([#1029](https://github.com/srikanth235/centraid/issues/1029)); recorded 2026-09-24.** There is no recognition plane in v0. The worker this page describes (`crates/automations` over `crates/assist`) and all nine `enrich.*` commands it wrote through were deleted with the assistant and automation planes — `crates/vault/tests/commands.rs` asserts the registry holds no `enrich.*`, and `crates/vault/src/commands/enrich.rs`, which this banner used to name as the current implementation, does not exist. The derivation tables (`enrich_derivation`, `enrich_target_failure`, `media_face_region` and their siblings) remain in the schema with no production writer. Whether Photos' face surfaces are deleted or on-device detection is proposed is an open owner question ([decisions.md](decisions.md#the-app-ports-and-the-shell-kit-1047)). Every path below also names the v0 TypeScript tree removed in [#1020](https://github.com/srikanth235/centraid/issues/1020). **Nothing on this page describes current state.**
+
 OCR, transcription, image/text embeddings, and faces are bundled automations whose handlers own model execution.
 
 ## Three provenance tiers
@@ -62,6 +64,31 @@ There is no enrichment HTTP service, gateway model client, reserved `centraid://
 
 The source modules live under [`packages/model-runtime/automation-handlers`](../packages/model-runtime/automation-handlers) for build-time reuse. [`build-automation-handlers.ts`](../packages/model-runtime/build-automation-handlers.ts) bundles Centraid-authored modules into each shipped blueprint handler under [`packages/blueprints/automations`](../packages/blueprints/automations). Large third-party packages such as PDF.js remain in the single version-locked recognition runtime rather than being duplicated into handler source.
 
+## v1: the same boundary, in Rust
+
+[`crates/automations`](../crates/automations) carries the whole of the above with four things made structural rather than conventional ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-AU4).
+
+**The tiers are still two constants**, and the lane routing still reads the id and never a declaration — but a manifest can no longer _spell_ `system`: `sandbox.lane` parses to exactly `model-runtime` or `media-transcode`, so the widening the comment above warns against is not expressible.
+
+**The two caps are two counters**, on one row, and the third answer beside derived and skipped is a value: `Disposition::{Derived, Parked, Declined, Skipped}`. `advances_cursor()` is the one place the difference between parking and advancing is decided, so _pending parks and unsupported advances_ is a function rather than a rule two call sites have to remember.
+
+**The models are behind a trait.** `handler::Model` is one method — bytes in, a typed result out — and no `ort` session is in the crate. Each real implementation is an owner hand-off with its exact command and the evidence it needs, listed in [`crates/automations/README.md`](../crates/automations/README.md). The weights half is ported and complete: `centraid_media::models` verifies from disk, fetches only what is missing into a temp file renamed only over verified bytes, and **reports rather than throws** — `handler::NoNetwork` drives every line of that except the socket.
+
+**`ctx.fetch` is a typed refusal.** Connectors are on the back burner (owner, 2026-09-12), so the rail answers `CtxError::NotAvailable` naming what it belongs to, rather than being half-built or silently returning nothing.
+
+### The third execution site, adopted as vocabulary
+
+[`contracts/apps/photos/recognition-placement.md`](../contracts/apps/photos/recognition-placement.md) is open question 9's proposal. Its gateway half is integrated:
+
+| Ruling | What it decides |
+| --- | --- |
+| **D-1020-AU3-1** | `tier` gains a **fourth** value rather than re-meaning `device`: `off(0) < on-device(1) < sealed-gateway(2) < gateway(3)`. `device` is read forward as `sealed-gateway` and never written back, so a member who chose "no model turns leave my gateway" in 2026 still has that answer |
+| **D-1020-AU3-2** | a parked holder is **not a failure**: an unreachable device writes **no** `enrich_target_failure` row at all, because counting a phone in a drawer would decline a member's photographs for being on a phone they did not bring |
+| **D-1020-AU3-3** | the cursor still **advances** past a parked target, so one device never stops recognition for the whole library; the parked set is a second, cheap selection |
+| **D-1020-AU3-4** | the derivation stamp's `site`/`device_id`, the `EnrichAsk` event and `enrich.submit_derivation` are **root-integrated**, not this lane's: they move `crates/core`'s wire and the shell's own service together |
+
+The embedding lane does **not** move. Face embeddings are compared only within one `enrich_embedding.model`, so detection and OCR may run on a device while embedding stays on the gateway, with one model, until a device can be pinned to the gateway's exact build.
+
 ## Content and result flow
 
 | Template | Content read | Result command | Local implementation |
@@ -75,7 +102,7 @@ The source modules live under [`packages/model-runtime/automation-handlers`](../
 
 ### The models
 
-Weights are **release assets, not repository content**: [`packages/model-runtime/models.lock.json`](../packages/model-runtime/models.lock.json) is the manifest and every file in it is pinned by sha256, byte length and an immutable upstream URL. `ensureModelAssets` ([`src/model-assets.ts`](../packages/model-runtime/src/model-assets.ts)) is the one implementation that reads that manifest, verifies what is on disk and fetches only what is missing or altered — into a temp file, renamed only after its digest matches. The `setup` script is a thin CLI over it and the gateway calls it at first boot for the capabilities it is provisioning; a capability whose upstream is unreachable is reported, never thrown, and its automation simply stays unavailable until the next boot. Nothing outside the requested capabilities is read or written.
+Weights are **release assets, not repository content**: [`packages/model-runtime/models.lock.json`](../packages/model-runtime/models.lock.json) is the manifest and every file in it is pinned by a BLAKE3 digest ([#1025](https://github.com/srikanth235/centraid/issues/1025) S4, D-1025-S4-1), byte length and an immutable upstream URL. `ensureModelAssets` ([`src/model-assets.ts`](../packages/model-runtime/src/model-assets.ts)) is the one implementation that reads that manifest, verifies what is on disk and fetches only what is missing or altered — into a temp file, renamed only after its digest matches. The `setup` script is a thin CLI over it and the gateway calls it at first boot for the capabilities it is provisioning; a capability whose upstream is unreachable is reported, never thrown, and its automation simply stays unavailable until the next boot. Nothing outside the requested capabilities is read or written.
 
 | Capability | Model | Pinned as | Licence | Approx. size | Why this one |
 | --- | --- | --- | --- | --- | --- |
@@ -103,7 +130,7 @@ OCR accepts both image media types and `application/pdf`. For a PDF, the handler
 
 Weights are release assets, so a fresh gateway has none. That is **preparing**, not off. After the first scheduler reconcile the gateway calls `ensureModelAssets` in the background ([`enrich/system-model-assets.ts`](../packages/server/src/enrich/system-model-assets.ts)) for exactly the capabilities the three system handlers' own model constants are pinned under — `faces` from `FACES_MODEL_ID`, `ocr` from `OCR_MODEL_ID`, both read from [`model-ids.ts`](../packages/model-runtime/src/model-ids.ts) rather than restated, and the capability list itself derived from `models.lock.json`. `doc-text-extractor` ships no bundled deterministic engine, so it carries no weights and is never preparing.
 
-**Whether this host may fetch at all is the host's call, not the gateway's.** `BuildGatewayOptions.modelAssets.provision` is `"fetch"` or `"verify-only"`, and it **defaults to `"verify-only"`**: an unconfigured gateway — a test, an e2e harness, an embedded build someone forgot to configure — verifies what is on disk, reports anything missing as `preparing` with "model assets are not provisioned on this host", opens no connection and arms no retry (there is nothing on that box that would make the weights appear). The production hosts say `"fetch"` out loud: `centraid-gateway` ([`cli/cli.ts`](../packages/server/src/cli/cli.ts)) and the desktop's embedded gateway ([`embedded-gateway.ts`](../apps/desktop/src/main/embedded-gateway.ts)). The paragraph below describes a `"fetch"` host.
+**Whether this host may fetch at all is the host's call.** Model assets are verified against `models.lock.json` — a digest, a byte length and an immutable upstream URL per file — and a host that is not configured to fetch verifies what is on disk, reports anything missing as `preparing`, opens no connection and arms no retry. On v0 the host is the phone, and the fetch is the shell's ([#1029](https://github.com/srikanth235/centraid/issues/1029)).
 
 Boot never waits on a download. Until a capability's every pinned file is present and digest-verified, its automation reports `modelState: "preparing"` on the automations status surface, the component `recognition-models` reads degraded in Diagnostics with the reason, and the recipe's **scheduled** fire is skipped with that reason in the log — the registration and the cursors are untouched, so the tick after the assets land simply proceeds and the walk catches up on its own. A manual run is never skipped: the owner asking is the answer, and the handler's own "model assets unavailable" summary is the honest one. An unreachable upstream is reported and retried on a backoff (30 s, doubling to a 30-minute ceiling), never in a tight loop, and the weights land in the directory that automation's handler actually reads — the one `resolveAutomationRuntimeDir` resolves for the sandbox, `CENTRAID_AUTOMATION_RUNTIME_DIR` when set.
 

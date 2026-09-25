@@ -1,0 +1,69 @@
+[package]
+name = "centraid-gateway-server"
+description = "The standalone Centraid gateway: one binary anyone can self-host (#1029 §3)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_gateway_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "centraid-gateway"
+path = "src/bin/centraid-gateway.rs"
+
+# THIS CRATE HOLDS NO RULES, AND THE DEPENDENCY LIST IS WHERE THAT STARTS.
+#
+# Every refusal, every floor and every checksum comparison is
+# `centraid-gateway-core`'s. What is here is a socket, a SQLite file, an object
+# store and a certificate — the four things a rule cannot be, which is exactly
+# why the ports exist. If a change to this crate would make one of its answers
+# be a rule of the protocol rather than of this adapter, it belongs in
+# `gateway-core`.
+[dependencies]
+centraid-gateway-core = { path = "../gateway-core" }
+# The wire's error codes and object kinds. The MAPPING from a rule to its code
+# is `gateway-core`'s; this crate only renders it.
+centraid-api-proto = { path = "../api-proto" }
+# A device certificate's byte layout belongs to the crate that mints it. This
+# crate decodes and verifies one, then hands `auth::CertifiedDevice` to the
+# rules — which is the seam `gateway-core` documents for exactly this reason.
+centraid-identity = { path = "../identity" }
+
+anyhow.workspace = true
+axum.workspace = true
+base64.workspace = true
+blake3.workspace = true
+clap.workspace = true
+# The ACME state machine is a `Stream`; this is the crate whose trait it is.
+futures.workspace = true
+hex.workspace = true
+# THE DEFAULT CARRIER (#1029, scope amendment 2026-09-21). The gateway API is
+# carried as HTTP/1.1 over one iroh bi-stream under `centraid-gateway/1`, so a
+# laptop behind NAT needs no port forwarding and no certificate. Confined to
+# `serve.rs`, like every other listener in this workspace.
+iroh.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+rusqlite.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "fs", "signal"] }
+tokio-rustls.workspace = true
+tokio-rustls-acme.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+# `tests/wire_iroh.rs` drives the REAL phone client against this server over
+# the real carrier. A dev-dependency cycle (the client dev-depends on this
+# crate) and deliberately so: the one test that proves the two ends agree has
+# to link both of them, and neither is the other's production dependency.
+centraid-gateway-client = { path = "../gateway-client" }
+ed25519-dalek.workspace = true
+tempfile.workspace = true

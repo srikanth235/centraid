@@ -21,14 +21,13 @@ name: hygiene
 # strictly more enforcement than it had. See docs/decisions.md, "Gate and
 # ledger diet".
 #
-# `schedule:` + `workflow_dispatch:` only: ci.yml is the one workflow allowed
+# `schedule:` + `workflow_dispatch:` only: gate.yml is the one workflow allowed
 # to listen on `pull_request` (#557, enforced by lint:workflow-pins rule 5).
 
 on:
   schedule:
-    # Saturday 05:00 UTC — after the 03:40 soak has claimed its runners and
-    # before the 06:00 nightly, so a red ratchet never competes with either for
-    # attention on a Saturday morning.
+    # Saturday 05:00 UTC — before gate-nightly.yml's 05:30, so a red ratchet
+    # never competes with it for attention on a Saturday morning.
     - cron: "0 5 * * 6"
   workflow_dispatch:
 

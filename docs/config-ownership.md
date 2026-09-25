@@ -1,6 +1,6 @@
 # Config ownership (F3)
 
-When both a **declarative file** and a **runtime tool** (UI, IPC, CLI, HTTP) can write the same surface, one side **wins**. The other is overwritten or ignored. This pre-empts "my settings vanished" support.
+When both a **declarative file** and a **runtime tool** (UI, IPC, CLI) can write the same surface, one side **wins**. The other is overwritten or ignored. This pre-empts "my settings vanished" support.
 
 ## Rule of thumb
 
@@ -13,84 +13,53 @@ Never claim both are durable writers without a merge strategy — Centraid does 
 
 ## Surfaces
 
-### Desktop UI settings — runtime wins
+### Gateway data directory — the running gateway wins
+
+One layout, stated in [`crates/centraid/src/cmd/mod.rs`](../crates/centraid/src/cmd/mod.rs):
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `<userData>/centraid-settings.json` | Desktop main process / Settings UI | Active gateway pointer, remote templates URL, per-gateway vault selection. Hand-edits while the app runs can be overwritten on next save. |
+| `<data-dir>/vault/<vaultId>/vault.db` | `centraid gateway`, the vault's one writer | Enrolled devices live here (`access_device`, `access_device_secret`). Direct SQL bypasses the command plane and its receipts, and is unsupported while the gateway runs |
+| `<data-dir>/keys/*` | `KeyStore` ([`crates/vault/src/custody`](../crates/vault/src/custody/README.md)) | Atomic `0600` envelopes. Export, backup and copy gestures never move this directory |
+| `<data-dir>/blobs/` | `centraid backup now` / `centraid recover` | The backup plane's content-addressed store |
 
-Code: `apps/desktop/src/main/settings.ts`.
-
-### Per-gateway device prefs — runtime wins
-
-| Path | Owner | Notes |
-| --- | --- | --- |
-| `<dataDir>/gateway.db` preferences table | Gateway prefs API / Settings | Harness choice, bin path, theme-related device prefs, and Resource mode. Desktop, CLI, and OS service use the same platform-default data dir. |
-
-Declarative "dotfiles" for prefs are not a product feature; treat the JSON as owned by the running gateway. Daemon `config.json` may seed `resourceMode` when the pref is unset; env `CENTRAID_RESOURCE_MODE` wins over both for operators. The selected mode is applied at gateway serve boot (worker limits are process-scoped).
-
-The resolved profile is published on the health metrics surface (`GET /centraid/_gateway/health` → `metrics.resourceProfile`, issue #528 Phase A): host class, owner mode, detected host facts, and every resolved knob (worker/replication/sqlite/sweep). It is a read-only projection of the boot resolution — nothing writes back through it.
-
-Baseline inputs now describe the **granted share of the host, not the raw machine** (issue #528 Phase E). At serve boot the gateway additionally probes the cgroup CPU quota (`cpu.max` / `cpu.cfs_quota_us`) and memory limit (`memory.max` / `memory.limit_in_bytes`) plus one cumulative CPU-steal sample, and feeds them into the **same single resolver**. A container capped below the machine, or a VM losing significant CPU to steal, sizes down to the share it actually keeps; an unconstrained host resolves to the same numbers as before. Resource modes are budget presets over that share (`resourceProfile.budget.cpuShare` / `budget.memoryCapMb`, additive). These probes are failure-tolerant read-only host reads — they never write config and never trade SQLite durability, which stays FULL unless the owner explicitly opts into NORMAL (`CENTRAID_SQLITE_SYNCHRONOUS` or Conserve mode).
-
-**Experimental feature gate (v0, issue [#774](https://github.com/srikanth235/centraid/issues/774)).** Two prefs keys — `gateway.experimental.automations` and `gateway.experimental.connectors` (booleans; absent means off) — opt a gateway into the experimental surfaces. Written through the generic prefs API; the gateway reads them at serve boot through the one `resolveExperimentalFeatures` resolver. Precedence is env &gt; prefs &gt; host option: `CENTRAID_EXPERIMENTAL` (comma-separated feature names) is authoritative for **every** feature when set at all, matching the `CENTRAID_RESOURCE_MODE` contract. Daemon `config.json` may seed the same gate under an `experimental` object (`{"experimental": {"automations": true}}`), which the prefs keys and the env var both override. Changes apply on the next serve boot. Turning a feature off never deletes its durable data.
-
-**Engine profiles are gateway prefs, never vault rows (issue [#807](https://github.com/srikanth235/centraid/issues/807)).** A user-created enrichment engine profile — a capability bound to a harness, a model, config pins and a prompt revision — is written to one prefs key per profile, `enrich.profile.<id>`, whose value is a JSON object (`{capability, label?, harness, model?, configPins?, promptRev?}`). Every binding in it is gateway/device configuration, so this is the only writer; the vault stores which profile PRODUCED a value (`enrich_derivation.profile`) and whether an egress class was consented to (a `harness`-principal row of `share_authority` since [#883](https://github.com/srikanth235/centraid/issues/883)), never the binding. The **built-in profile of each capability is derived, not stored** — `packages/server/src/enrich/engine-profiles.ts` computes it from the capability registry on every read, so a profile that shadows the reserved id `built-in` is refused. Writes go through the generic prefs API and are gated by that module's `validateEngineProfilePatch` in the prefs route's `validatePatch` hook (first offending key → 409 with the member-facing reason); the read surface `GET /centraid/_enrich/profiles` never writes. The **egress class is computed from the engine and is not a settable field** — a patch that carries one is rejected.
-
-**Background pause is runtime-only, never a durable mode flip.** `POST`/`DELETE /centraid/_gateway/resource/pause` (issue #528 Phase B) hot-applies an owner "pause background work" window that gates only the safe loops (vault sweeps, backup retention) — never WAL/fsync durability, the consent outbox, or request-path work. It lives **in memory on the running gateway** (a restart resumes normally) and is deliberately **never persisted to prefs** and **never changes `gateway.resourceMode`**: the durable Resource mode and the transient pause are independent surfaces with no write-back between them.
-
-**Durable per-knob overrides sit above the mode preset (issue #528 Phase F).** Four prefs keys let the owner pin an individual throughput knob without leaving the Resource mode's budget: `gateway.resource.workerMaxConcurrent`, `gateway.resource.workerMaxOldGenerationMb`, `gateway.resource.workerPoolSize`, `gateway.resource.replicationConcurrency` (positive integers; an absent key means **Linked** to the preset). The client writes them through the generic prefs API — the gateway only **reads** them at serve boot and resolves each knob through the **ONE** `resolveGatewayHardwareProfile` resolver, never a second policy path. Precedence per knob is **env > prefs > preset** (a matching `CENTRAID_*` env var still wins and reads as env-locked). Prefs values clamp through the same bounds as the env var; garbage (strings, negatives, floats) is dropped. Knob changes are durable and **apply on the next serve boot** — identical to Resource mode; the running-vs-desired story is the client comparing `metrics.resourceProfile` against the saved prefs. The structured profile additionally publishes `resourceProfile.sources` (per-knob `env`/`prefs`/`preset` provenance, with the exact `envVar` when env-locked) and `resourceProfile.bounds` (per-knob min/max) so the client renders Linked/Custom/env-locked and validates input without duplicating magic numbers.
-
-**Model-asset provisioning is a host option, and it is off by default (issue [#1011](https://github.com/srikanth235/centraid/issues/1011)).** The pinned recognition weights are hundreds of megabytes, so "may this process download them" is a **host** decision and never the gateway core's. `BuildGatewayOptions.modelAssets.provision` takes `"fetch"` or `"verify-only"` and **defaults to `"verify-only"`**: the gateway verifies what is already under the automation's runtime dir, reports anything missing as `preparing` with "model assets are not provisioned on this host", opens **no connection** and arms **no retry**. Every production entry point passes `"fetch"` explicitly — `centraid-gateway` (`packages/server/src/cli/cli.ts`) and the desktop's embedded gateway (`apps/desktop/src/main/embedded-gateway.ts`). The default is the safe one on purpose: a host nobody configured (a test, an e2e harness, an embedded build someone forgot) must not be able to start a hundreds-of-megabytes download by accident, and forgetting the option degrades a feature rather than spending someone's bandwidth. `CENTRAID_AUTOMATION_RUNTIME_DIR` still selects **which** directory is verified or filled; it never decides whether the network is used.
-
-### Gateway profile (multi-gateway) — runtime wins
-
-| Path | Owner | Notes |
-| --- | --- | --- |
-| `<userData>/connections.json` | Desktop main process / Gateway → Components → Connections | One non-secret row per EndpointId; relay hints are refreshable cache. |
-| `<userData>/connection-secrets.bin` | Desktop main process / OS `safeStorage` | Per-connection device keys; never renderer storage. |
+Operator inputs are flags and environment, read at start: `--data-dir`, `--vault-name`, `--relay` / `--no-relay`, `--print-qr`, `--log` / `CENTRAID_LOG`, and `CENTRAID_EXPECTED_CORE_DIGEST` (a shell's claim about which core it was built against; a mismatch is refused). There is no gateway config file and no prefs store.
 
 ### Vault ontology settings — vault commands win
 
 | Surface | Owner | Notes |
 | --- | --- | --- |
-| `core_vault.settings_json` and related rows | Vault journalled commands / Settings Backup UI | Blob store mode, backup policy, etc. Direct SQL against `vault.db` bypasses consent and is unsupported. |
+| `core_vault.settings_json` and related rows | Journalled vault commands | The seal-key fingerprint is stamped here inside the sealing transaction. Direct SQL against `vault.db` bypasses consent and is unsupported |
+| `enrich_policy` | Vault founding ([`crates/vault/src/bootstrap.rs`](../crates/vault/src/bootstrap.rs)) | Seeded `gateway` for `photos` and `docs`; no command in this build changes it, and Photos reads it without being able to set it |
 
-### App manifests — files win for code; runtime for grants
+### Mobile — the platform secure store wins
+
+Two secrets per vault in the platform store, and their sync postures are deliberately opposite ([#1029](https://github.com/srikanth235/centraid/issues/1029)): the **64-byte seed** is synced by default, because iCloud Keychain is end-to-end encrypted and a seed that does not survive a lost phone is a product with no recovery; the **device key** is `ThisDeviceOnly` and **never synced**, because a device key in a synced keychain would make two phones one device. Beside them sits the paired laptop's endpoint id in `backup/laptop.json`, which is derived state and not a secret.
+
+### App manifests — files win
 
 | Surface | Owner |
 | --- | --- |
-| Bundled system app `app.json`, handlers | The release — shipped source in `packages/blueprints/apps/`, never editable at runtime |
-| Cloned automation `app.json`, handlers | The vault's `code/` store, via the clone + publish flow |
-| Consent grants, install rows | Vault runtime (install sheet, revoke) |
+| `crates/apps/<app>/manifest.json` | The release. Each app crate embeds its manifest with `include_str!`, so a shipped binary carries the manifest it was built with and nothing edits it at runtime |
+| Consent grants, install rows | Vault runtime |
 
-Editing a cloned automation's `app.json` in a draft worktree does not change production grants until the publish / install flows say so.
-
-### Model catalog — runtime wins when file present
-
-| Path                                   | Owner                            |
-| -------------------------------------- | -------------------------------- |
-| `model-catalog.json` under gateway dir | Harness status / Refresh catalog |
-
-Omit file → enumerate without persistence. File is rewritten on refresh.
-
-### OS service units (H5) — CLI install wins
+### OS service units (H5) — `centraid gateway install` wins
 
 | Path | Owner |
 | --- | --- |
-| LaunchAgent `dev.centraid.gateway.plist` / systemd user unit | `centraid-gateway service install` |
+| LaunchAgent `dev.centraid.gateway.plist` / systemd user or system unit | `centraid gateway install [--system --instance <name>]` |
 
-Hand-edited units may be replaced on reinstall. Service install is **opt-in, default off** ([decisions.md](decisions.md) H5).
+The command writes the unit and **prints** the command that enables it; it never enables it. `--dry-run` prints the unit and writes nothing. Hand-edited units may be replaced on reinstall. Service install is **opt-in, default off** ([decisions.md](decisions.md) H5). The committed templates under [`deploy/`](../deploy/README.md) (`launchd/`, `systemd/`) and `deploy/vps/install.sh` are for hosts that install from a release.
 
-**Packaging / declarative modules (issue #504):** Docker, Nix flakes, and future NixOS modules must **not** become a second independent writer of the same unit files. Canonical writer remains `centraid-gateway service install` (use `--dry-run` as the template source). A NixOS module, if added later, must call or bit-for-bit replicate that generator's output. Declarative host config (bind, dataDir, tunnel knobs) may feed **into** the generator or `serve` flags; runtime mutation of prefs stays on the gateway prefs API.
+**Packaging / declarative modules (issue #504):** Docker, Nix flakes, and future NixOS modules must **not** become a second independent writer of the same unit files. The canonical generator is `centraid gateway install` (use `--dry-run` as the template source). A NixOS module, if added later, must call or bit-for-bit replicate that generator's output. Declarative host config may feed **into** the generator or the `gateway` flags.
 
-### Pairing / enrollment files — runtime only
+### Pairing and enrollment — runtime only
 
 | Path | Owner |
 | --- | --- |
-| `gateway.db` (`devices`, `tickets`, `web_sessions`, backup/storage state) | The lock-holding gateway daemon; stopped-daemon CLI commands may open it explicitly |
-| `<dataDir>/keys/*` | `KeyStore`; desktop supplies `safeStorage`, headless uses atomic `0600` envelopes |
-| `<userData>/connections.json` + `connection-secrets.bin` | Desktop main process only; renderer localStorage owns neither connection records nor credentials |
+| Enrolled devices in `vault.db` | The running gateway, through the vault's device methods ([`crates/vault/src/devices.rs`](../crates/vault/src/devices.rs)) |
+| Pair tickets | The running gateway's memory only; a restart invalidates them |
+| `<data-dir>/keys/gateway.endpoint.key` | The gateway, created on first start with `--data-dir` |
 
 Do not hand-merge these mid-flight. Recovery: [recovery/pairing.md](recovery/pairing.md).
 

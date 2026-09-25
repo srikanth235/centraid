@@ -1,0 +1,10 @@
+# The editor's first load. No draft yet, so there is nothing to edit and
+# nothing to lose.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+note_id: "note-0001"
+loading { first_load: true }
+save: SAVE_STATE_CLEAN

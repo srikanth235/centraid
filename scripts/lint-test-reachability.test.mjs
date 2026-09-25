@@ -77,7 +77,7 @@ test("a file a project's include misses, or its exclude removes, is an orphan", 
     }),
     ["packages/core/src/a.test.ts"]
   );
-  // Excluded by one project, included by another — the mobile stub/RNTL split.
+  // Excluded by one project, included by another.
   assert.deepEqual(
     findOrphans({
       files,
@@ -89,6 +89,35 @@ test("a file a project's include misses, or its exclude removes, is an orphan", 
       playwright: [],
     }),
     []
+  );
+});
+
+test("a file outside a project's root is reached only by an include that names the way out", () => {
+  // `desktop/vitest.config.ts` reaches `extension/src/**` through `../`.
+  const desktop = (include) => ({
+    root: path.join(root, "desktop"),
+    include,
+    exclude: [],
+  });
+  const files = ["extension/src/a.test.ts"];
+  assert.deepEqual(
+    findOrphans({
+      files,
+      projects: [desktop(["../extension/src/**/*.test.ts"])],
+      named: new Set(),
+      playwright: [],
+    }),
+    []
+  );
+  // SEEDED RED: a bare `**/` must not climb out of the project root.
+  assert.deepEqual(
+    findOrphans({
+      files,
+      projects: [desktop(["**/*.test.ts"])],
+      named: new Set(),
+      playwright: [],
+    }),
+    ["extension/src/a.test.ts"]
   );
 });
 

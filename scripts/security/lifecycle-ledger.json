@@ -16,14 +16,6 @@
       "signals": ["network-fetch", "network-tool", "process-spawn"],
       "executes": false,
       "reason": "install.js downloads the platform-native esbuild binary over https (falling back to `npm install` of the platform package). This is the canonical native-binary-fetch shape and is exactly why the package is NOT in trustedDependencies: Bun resolves the optional platform package from the lockfile instead, so the script never runs. Reviewed 2026-08 for #842 W6.3."
-    },
-    "workerd": {
-      "version": "1.20260722.1",
-      "hooks": ["postinstall"],
-      "digest": "7894344d183f2d5310dc076eaa6b486f0acaf5ed606d2e815909a83db59cc786",
-      "signals": ["network-fetch", "network-tool", "process-spawn"],
-      "executes": false,
-      "reason": "Same esbuild-derived installer, fetching the workerd native binary (wrangler's runtime). Not in trustedDependencies, so the script never runs; the platform package comes from the lockfile. Reviewed 2026-08 for #842 W6.3."
     }
   }
 }

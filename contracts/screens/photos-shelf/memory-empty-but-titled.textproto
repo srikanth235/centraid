@@ -1,0 +1,24 @@
+# AN EMPTY SHELF IS DATA, AND ITS HEAD STILL HAS A TITLE.
+#
+# `data` present with no cells is an ANSWER — "this memory's members are all
+# gone" — and it is not `failure`. The three-state read law is what keeps the
+# two apart, and a shelf is where a fourth state is most tempting: v0's
+# `PlaceDetail.tsx` grew its own empty sentence rather than sharing one, so a
+# place with no photographs and a place whose read was refused looked alike.
+#
+# The title rides on the shelf, so the app bar says "Lisbon, April" over the
+# empty frame rather than over nothing. That is the same law as `person` above,
+# asserted in the case where there is no row at all to fall back to.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_OFFLINE
+}
+shelf {
+  memory {
+    memory_id: "mem-0012"
+    title: "Lisbon, April"
+  }
+}
+data {
+}

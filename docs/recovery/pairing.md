@@ -1,75 +1,62 @@
-# Recovery: auto-founding and enrollment
+# Recovery: pairing a phone to a laptop
 
-Use this runbook when a gateway's first boot did not produce the vaults you expect, a pairing capability expired, or a device lost its private iroh identity. Ground truth for relay e2e remains `tests/agent-e2e-pairing/AGENTS.md`.
+Use this runbook when pairing did not take, an invite expired, or a phone stopped being able to find its laptop. The protocol is [../gateway.md](../gateway.md); the rulings are [decisions.md](../decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21).
 
-## Auto-founding (issue #603)
+**The vault is on the phone.** The laptop is a blind store. Losing the laptop loses the backup, not the vault; losing the phone is [backup-restore.md](backup-restore.md).
 
-There is no founding ceremony, no founding ticket, and no `uninitialized` state. A gateway founds itself:
+## Founding
 
-1. Start `centraid-gateway serve` (or start the desktop-controlled local gateway) on a **fresh** data dir. At construction the gateway creates one vault:
-   - **Personal** — the founder's private vault and registry default. It remains `Personal` until an owner explicitly changes the vault name; profile identity is optional and belongs in Settings.
-2. The host's own device identity is enrolled to the founding **owner** on that vault (recorded in `vault_owners`), in the same `gateway.db` transaction — founding is simply the first mint (issue #726 D2). A shared vault is created later only through an explicit owner action.
-3. Nothing else happens. No kit is minted, no capability is issued, and no screen blocks the user.
+A vault is founded **on the phone**, at first launch. It mints 24 words, derives the vault's keys from them and creates `vault.db` in the directory the shell hands the core. Nothing on a laptop founds anything: `centraid-gateway serve` on an empty directory creates a state file, listens, and serves nothing to nobody until an invite is redeemed.
 
-A data dir that **already** holds vault directories is never modified. `VaultRegistry.isFresh()` counts a vault directory that failed to mount, so corruption or a missing custody key can never make an existing gateway look fresh and get founded over its own data.
+## Ordinary pairing
 
-If a gateway does look empty, that is a real fault, not a legal state — check `centraid-gateway status --data-dir …` and `vault list`, both of which report `failedMounts` distinctly from an empty registry.
+1. On the laptop: `centraid-gateway serve --data-dir <dir>` in one terminal, and `centraid-gateway invite --data-dir <dir> --quota-gib <n>` in another. The invite command prints the invite code, a `pair` payload, and that payload as a **half-block Unicode QR** a phone camera can read straight off the terminal. Both commands must point at the same `--data-dir`: the invite must be redeemable while `serve` is running, and two processes share it through the state file.
+2. On the phone: the `Pair` flow scans the QR. The phone admits itself, claims the lease and writes the laptop's endpoint id to `backup/laptop.json` beside its vault.
+3. **Compare the safety number.** 60 digits in 12 groups of 5, shown on both sides. It is BLAKE3 over the two identity keys sorted by their bytes, so both sides render the same digits without agreeing an order first. An empty safety number means the phone could not compute one and is drawn as that — never as "it matched". A hex endpoint id is **not** the thing to compare: it is a string people check the first four characters of and stop.
+4. `centraid-gateway invites --data-dir <dir>` lists the invites and what became of each.
 
-Restoring an existing vault onto a blank machine is the **backup plane**, not founding: see [backup-restore.md](backup-restore.md) (`centraid-gateway recover --kit …`).
-
-## Ordinary enrollment
-
-Once a gateway is running:
-
-1. On the gateway host, run `centraid-gateway pair --data-dir … [--vault …]` (`--qr` for a terminal QR). The command talks to the running loopback daemon on the configured port. With no `--owner` flag it pairs another device to the vault's own owner. Omitting `--vault` targets the registry default, the owner's **Personal** vault on an auto-founded gateway.
-   - Use `--owner <id-or-label>` to pair another device for an existing owner.
-   - Minting a vault for a genuinely **new** person is the _Add someone_ ceremony (issue #726 P1: `POST /centraid/_gateway/devices/ticket` with `body.forPerson` on the running daemon) — it always mints that person a vault of their own, never a role inside an existing one. There is no `--new-member`/`--grant`/`--role` flag on `pair`; those were deleted with the role lattice. The stopped-daemon `centraid-gateway devices add <endpoint-id> --vault <id> --new-owner <label>` is a different operation: it claims an already-existing, still-unowned vault for a brand-new owner rather than minting a fresh one — the recovery lane for a vault that predates ownership, not the everyday "add someone" flow.
-2. The device redeems the one-time capability over the iroh pairing ALPN.
-3. Redemption and the `gateway.db` enrollment commit atomically. The redeeming device supplies its own display name; this is separate from the saved gateway label and can be renamed later from Household.
-4. Subsequent requests are admitted by the enrolled EndpointId. There is no direct-HTTP pairing route or per-device bearer.
+An invite is **one-use and expires**. A second phone needs a second invite.
 
 ## Durable state
 
 | Location | Role |
 | --- | --- |
-| `gateway.db` | Exclusive process lock; enrollments, one-time tickets, web sessions, preferences, backup/storage control state |
-| `keys/endpoint-key.bin` | Wrapped gateway iroh identity; losing it changes EndpointId and requires every device to re-pair |
-| Device secure storage | Per-connection private iroh key |
-| Desktop `connections.json` | Non-secret, device-local gateway registry keyed by EndpointId |
+| The phone's `vault.db` | **the vault.** Everything. Backed up as sealed objects and by nothing else |
+| The phone's platform secure store | the 64-byte seed (synced by default — iCloud Keychain is end-to-end encrypted) and the **device key** (this-device-only, **never synced**) |
+| The phone's `backup/laptop.json` | the paired laptop's `EndpointId`. Device-local derived state, deliberately not in the vault ([W15-D1](../decisions.md#w15--the-phones-request-contract-1029)) — lose it and the phone re-pairs |
+| `<data-dir>/node.key` on the laptop | the laptop's long-term iroh identity. Losing it changes the endpoint id and **every paired phone must pair again** |
+| `<data-dir>` state file on the laptop | the object index, the manifest heads, the leases, the invites and the quotas |
 
-Headless `keys/` files are encrypted with either OS/service custody or an external `0600` host credential under the platform configuration directory. That fallback credential is deliberately outside the gateway data dir, so a data-dir copy contains no parseable raw key material.
-
-Relay hints/tickets are refreshable address cache. They are not durable gateway identity and changing one must not create a second connection record.
+An invite's secret is held **only as its hash**. Relay and DNS hints are a refreshable address cache, never identity.
 
 ## Recovery steps
 
-### Capability expired or was consumed
+### The invite expired or was already redeemed
 
-Mint a new pair ticket. Never try to revive or edit the old value. Tickets burn on first **successful** redeem only — a wrong secret is rejected before the ticket row is deleted, so the genuine ticket still redeems afterwards.
+Mint a new one: `centraid-gateway invite --data-dir <dir>`. Never try to revive or edit the old value. A wrong code and an unknown invite are the same refusal.
 
-### `pair` reports a rejected credential
+### The phone cannot find the laptop
 
-`pair` fails with a bearer-mismatch error naming `CENTRAID_GATEWAY_TOKEN` when the daemon was launched with a pinned bearer this CLI cannot derive from `keys/endpoint-key.bin`. Restart the daemon without the pin, or run the command with `CENTRAID_GATEWAY_TOKEN` set to the same value. This used to be reported as "the iroh endpoint is not ready" — a lie the owner could not act on (issue #603).
+1. Confirm `centraid-gateway serve` is running and printed its `endpoint` line. Compare that id against what the phone holds.
+2. `centraid-gateway health --url …` for the TCP carrier; under the iroh carrier the endpoint line `serve` prints on every start is the equivalent, and it is the same id on every start unless `node.key` moved.
+3. If `serve` warned that it **minted a fresh node key**, the laptop's identity changed and every phone must pair again. That happens only if `node.key` was deleted or could not be read.
+4. n0's DNS or relay being unreachable is a denial of service, not a compromise: the record is signed by the vault's identity key, so a hostile resolver can make a phone fail to find its laptop and cannot make it find the wrong one. Read [../logs.md](../logs.md).
 
-### Device enrolled but cannot connect
+### The phone says `VAULT_MOVED`
 
-1. Run `centraid-gateway lock-status --data-dir …`; distinguish a free lock from a held-but-unresponsive daemon.
-2. Confirm the target vault still exists and the EndpointId remains enrolled with `centraid-gateway devices list`.
-3. If the device secure store was cleared, revoke the old EndpointId and pair a newly minted identity.
-4. For relay-only failures, run `tests/agent-e2e-pairing/flows/cross-network-relay.mjs` and inspect the kept test workspace.
+A device at a higher epoch has claimed the lease — normally a restore onto a new phone. This phone freezes read-only with its unacked commits visible. That is the design (F1): the lease cannot _enforce_ one writer, because both phones can hold the seed, so it shows the conflict rather than hiding it. Taking the vault back is a deliberate takeover from the phone you want to keep, not a repair on the one that was superseded.
 
-### Sole owner is lost
+### The laptop's disk is gone
 
-Use the filesystem-anchored device CLI on the gateway host. Revoking the last owner requires typed confirmation because it leaves only this shell/console recovery path — Centraid itself no longer offers any SSH-routed connect (issue #603 deleted that code).
+The vault is unaffected. Set up a new laptop, mint a fresh invite, pair again, and let the phone drain from its spool. **What is lost is the history the old laptop held**, which is what [Q-1029-6](../decisions.md#open-questions-for-the-owner-1029) — the off-site copy — is about.
 
-### Gateway identity is corrupt or lost
+### An object on the laptop is corrupt
 
-Stop the daemon before custody work. A corrupt non-32-byte endpoint key refuses with recovery instructions. Restore the original `keys/endpoint-key.bin`; deleting it deliberately mints a new identity and requires every device to re-pair.
+`centraid-gateway scrub --data-dir <dir>` re-hashes every stored object and reports bit rot; `--repair` restores what a mirror still holds intact. It needs no key.
 
 ## Do not
 
-- Hand-edit `gateway.db` while the daemon holds its exclusive lock.
-- Persist pairing tickets as gateway identity.
-- Copy device credentials into the gateway data directory.
-- Commit real pair tickets, endpoint secrets, or recovery kits.
-- Delete `vault/` to "reset" a gateway — that is how you get a data dir the auto-found bootstrap will happily found over.
+- Hand-edit the phone's `vault.db`, or copy it anywhere. See [../traps/wal-checkpoint.md](../traps/wal-checkpoint.md).
+- Persist an invite payload anywhere, or commit one.
+- Delete `node.key` to "reset" a laptop — every phone re-pairs.
+- Treat the laptop's data directory as a second vault. It holds no key and nothing that opens one.

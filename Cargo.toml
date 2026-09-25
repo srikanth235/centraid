@@ -1,0 +1,465 @@
+[workspace]
+resolver = "3"
+# One crate per app, so an edit in an app rebuilds one crate (#1020, Tooling
+# coverage). `crates/apps` is a DIRECTORY of crates, so it is excluded below
+# (cargo refuses a glob match with no manifest) and each app crate is NAMED
+# here: a glob would hide the count, and an explicitly listed member overrides
+# the exclusion of its parent.
+members = [
+  "crates/*",
+  "crates/apps/agenda",
+  "crates/apps/docs",
+  "crates/apps/kit",
+  "crates/apps/locker",
+  "crates/apps/notes",
+  "crates/apps/people",
+  "crates/apps/photos",
+  "crates/apps/tasks",
+  "crates/apps/tally",
+]
+exclude = ["crates/apps"]
+
+[workspace.package]
+version = "1.0.0-alpha.0"
+edition = "2024"
+rust-version = "1.91"
+license = "MIT"
+publish = false
+repository = "https://github.com/srikanth235/centraid"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+flate2 = "1"
+# The free-space probe the bootstrap room check needs (#1025 S7, item 3).
+# A safe wrapper over `statvfs`/`GetDiskFreeSpaceEx`; the alternative was an
+# `unsafe` block in `crates/seat-link`, which is `#![forbid(unsafe_code)]` and
+# stays that way — the only crate in this workspace with an unsafe surface is
+# `crates/core-ffi`, where the C ABI is.
+fs4 = { version = "0.13", default-features = false }
+hex = "0.4"
+# THE ONE IMAGE CODEC (#1025 S3, D-1025-S7-50). Derivatives are generated at
+# the gateway, so the workspace needs a decoder and a JPEG encoder and nothing
+# else. `default-features = false` drops every format this product does not
+# commit at a door and, with it, the rayon thread pool: a command handler runs
+# inside a SQLite transaction and must not fan out. `jpeg`/`png`/`gif`/`webp`
+# are the decode set (`webp` in 0.25 is DECODE ONLY — there is no WebP encoder
+# behind this feature, which is why `thumb` is JPEG); `jpeg` also carries the
+# encoder every derivative is written with. MIT OR Apache-2.0, pure Rust, no
+# C dependency and no system library — which is the property that kept ffmpeg
+# and libheif out (D-1025-S7-52).
+image = { version = "0.25.10", default-features = false, features = [
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+] }
+blake3 = "1.8"
+jsonschema = "0.30"
+proptest = "1"
+# `session` is the log plane's capture mechanism and it requires `bundled`
+# (#1020, D-1020-D1-3): the amalgamation is compiled with SQLITE_ENABLE_SESSION
+# and the preupdate hook, which a system libsqlite3 almost never carries.
+# `hooks` gives the commit/rollback hooks the commit guard needs; `functions`
+# the applier's scalar helpers.
+rusqlite = { version = "0.40", features = [
+  "bundled",
+  "session",
+  "hooks",
+  "functions",
+  # THE ONLINE BACKUP API, and it is a durability requirement (#1029 B4).
+  # A backup base must be PAGE-IDENTICAL: `VACUUM INTO` rebuilds the file from
+  # its logical content and renumbers every page, which is why WAL frames could
+  # never be replayed onto the old base. `rusqlite::backup` copies page 1 to
+  # page 1 and page N to page N, which is what makes a page number in a segment
+  # mean anything (`crates/vault/src/backup/base.rs`).
+  "backup",
+] }
+serde = { version = "1", features = ["derive"] }
+# `float_roundtrip` is NOT optional here (#1020, D-1020-D1-18). serde_json's
+# default float parser is fast and approximate: it can land one ULP away, and
+# `crates/vault/tests/properties.rs` found it doing exactly that on a stored
+# REAL image (1.2240809751959867e163 came back as …868e163). A log row's images
+# are parsed back on every apply, so a drifting REAL is a seat whose latitude,
+# or exchange rate, is quietly not the gateway's.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+# SHA-256/SHA-512 SURVIVE IN EXACTLY TWO PLACES (#1025 S4, D-1025-S4-5; W0.5-R1,
+# #1029): `crates/xtask`, whose artifact key feeds GitHub Actions' cache and
+# whose CI lint reads Subresource Integrity attributes, and `crates/identity`,
+# whose BIP39 seed (PBKDF2-HMAC-SHA512), SLIP-0010 derivation (HMAC-SHA512) and
+# HPKE base mode (RFC 9180's HKDF-SHA256) are fixed by their own specifications
+# and cannot be respelled in BLAKE3 without leaving the standard. Both are
+# somebody else's protocol; `blake3` remains ONE HASH for everything this repo
+# defines itself. Two more crates joined them under #1029 and for the same
+# reason — an object store's API is not ours: `crates/gateway-core`
+# (`src/checksum.rs`, the SHA-256 an object store attests). It is ONE module
+# with an entry in `crates/vault/tests/one_hash.rs`'s allowlist carrying its
+# reason, and no other crate under `crates/` may depend on `sha2` or `hmac`.
+# `crates/gateway-server/src/bytes/sigv4.rs` was the second of the two; the
+# scope amendment of 2026-09-21 struck the S3 byte store and it went with it. W0.5-R1 is a
+# ruling put to the owner with a recommendation, not yet a `docs/decisions.md`
+# supersession of D-1025-S4-5 (that entry is W9's).
+hmac = "0.13"
+sha2 = "0.11"
+thiserror = "2"
+tracing = "0.1"
+
+# Wave 2 lane C — the schema workspace, the transport-generic protocol, the
+# iroh endpoint and the one binary (#1020).
+base64 = "0.22"
+bytes = "1"
+iroh = "1.2"
+# Wave 3 lane B — the byte plane over BLAKE3 + bao (#1020, D-1020-B1).
+#
+# `iroh-blobs` is NOT an optional convenience over the endpoint: it is the only
+# reason the byte plane can be interrupted. Its transfer is verified per 16 KiB
+# chunk group against a bao outboard, so a window that ends mid-file leaves
+# durable, already-verified chunks behind — which is the single property the
+# whole mobile design rests on. A hand-rolled mover would have to re-verify from
+# the start of the file, and an 800 MB video would then need one unbroken window
+# no phone ever gets.
+iroh-blobs = "0.103"
+prost = "0.14"
+prost-build = "0.14"
+protox = "0.9"
+qrcode = { version = "0.14", default-features = false }
+
+# W17 — the gateway API over one iroh bidirectional stream (#1029, scope
+# amendment 2026-09-21). `hyper` speaks HTTP/1.1 over an arbitrary
+# `AsyncRead + AsyncWrite`, which is exactly what an iroh bi-stream is, so the
+# phone speaks the same protocol over the same code the TCP carrier does.
+# `hyper-util` is only `TokioIo`, the adapter between tokio's IO traits and
+# hyper's; `http-body-util` is `Full` and `collect`. No client stack, no
+# connection pool, no TLS: iroh already authenticated and encrypted the path.
+hyper = { version = "1", default-features = false, features = [
+  "client",
+  "http1",
+] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+http-body-util = "0.1"
+rand = "0.9"
+rand_chacha = "0.9"
+turmoil = "0.7"
+tokio = { version = "1", features = [
+  "macros",
+  "rt-multi-thread",
+  "io-util",
+  "sync",
+  "time",
+] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# `proptest` is declared above, by lane D3. One entry for the workspace.
+
+# Wave 2 lane R — the byte plane, key custody, backup and recovery (#1020).
+# The formats are normative (D-1020-R1), so a major bump on the AEAD crate is a
+# re-keying event to be proven against `contracts/golden/format-golden.json`,
+# never routine housekeeping. The KDF and MAC crates that used to sit here —
+# `hkdf` and `hmac`, both over SHA-256 — are gone: ONE HASH (#1025 S4,
+# D-1025-S4-1), and `blake3` carries `derive_key` and `keyed_hash` itself.
+aes-gcm = "0.11"
+# XChaCha20-Poly1305, the AEAD `centraid-object/1` is built from (#1029 §4).
+#
+# It sits BESIDE `aes-gcm` rather than replacing it: `aes-gcm` still serves the
+# v0-derived seals `crates/vault/src/backup` has not yet been moved off, and a
+# crate that is only half-retired is a crate that is still declared. What this
+# one buys is the 24-byte nonce. `centraid-object/1` draws every nonce from the
+# operating system and never from an address (the defect B9 names), and a
+# 96-bit random nonce has a birthday bound worth arguing about while a 192-bit
+# one does not — "draw it at random" becomes a design rather than a budget.
+# Like `aes-gcm`, a major bump here is a re-keying event to be proven against
+# `contracts/crypto/object-vectors.json`, never routine housekeeping.
+chacha20poly1305 = "0.11"
+ryu-js = "1.0.3"
+scrypt = "0.12"
+subtle = "2"
+tempfile = "3"
+zstd = "0.13"
+
+# Wave 4 lane assist — the client half of the Agent Client Protocol (#1020,
+# D-1020-AS5). It replaces the JSON-RPC-over-stdio plumbing v0 hand-rolled
+# behind `@agentclientprotocol/sdk`: the `Client` role the gateway speaks, the
+# `Agent` it talks to, typed `ContentBlock`s (including
+# `ImageContent { data, mime_type }` — the shape v0's `multimodal.ts` warns is
+# NOT Anthropic's `source.media_type`), and `AcpAgent`, which spawns a harness
+# and frames its stdio.
+#
+# `unstable_mcp_over_acp` EXISTS in 2.1.0 and is deliberately NOT enabled: it is
+# recorded as the future collapse of `centraid mcp` into the ACP connection
+# itself, and it stays unadopted while it is unstable and while neither
+# first-party adapter implements the `type: "acp"` MCP transport
+# (`vault-mcp-server.ts:1`-`:16`).
+agent-client-protocol = "2.1"
+# Comes with the protocol crate's own API surface (`BoxFuture`, the
+# executor-agnostic streams its connection is built on), so it is declared here
+# rather than reached through a re-export.
+futures = "0.3"
+
+# Wave 4 lane automations — civil time with a BUNDLED tzdb (#1020, D-1020-AU2).
+jiff = { version = "0.2", default-features = false, features = [
+  "std",
+  "tzdb-bundle-always",
+] }
+
+# Wave 4 lane Locker — origin matching, and the one dependency it adds
+# (#1020, D-1020-L10). `psl` is the Public Suffix List embedded and pinned: its
+# version number IS the list's date, which is the same shape `tldts` has on the
+# TypeScript side that `contracts/origin-matching-v1.json` is the spec for. A
+# bump is a list refresh and re-runs that spec in both trees. `url` is the
+# WHATWG parser the policy needs anyway (IDNA, default-port normalisation) and
+# is already in the graph.
+psl = "2.1"
+url = "2.5"
+# THE ONE JOB A FAST HASH MUST NOT DO (#1025 S4, D-1025-S4-4). Stretching a
+# member's passphrase is memory-hardness work, and BLAKE3 is deliberately fast,
+# so the seat's at-rest wrap is Argon2id — not `blake3::derive_key`, which would
+# be the one place "one hash" bought an attacker throughput. v0's
+# PBKDF2-SHA-256 at 600,000 rounds is superseded; `pbkdf2` leaves the graph.
+argon2 = "0.6"
+
+# Wave 0.5 lane A — `crates/identity`: the 24-word phrase, SLIP-0010 hardened
+# derivation, device certificates and HPKE base mode (#1029 §0, §4).
+#
+# `bip39` mints and validates the 24-word recovery phrase and derives its
+# 64-byte seed (PBKDF2-HMAC-SHA512, BIP39's own spec — W0.5-R1). Default
+# features only: this crate reaches for the seed and the English wordlist, not
+# `bip39`'s own `rand` convenience (a version-mismatched `rand_core` next to
+# the workspace's `rand 0.9`), so entropy is drawn from `rand` and handed in as
+# bytes.
+bip39 = "3"
+# `ed25519-dalek` signs the account key, the vault identity key and device
+# certificates. Default features (`fast`, `zeroize`) are enough: every key
+# here is built from 32 bytes this crate already derived or generated, never
+# from `SigningKey::generate`, so the optional `rand_core` feature (pinned to
+# `rand_core 0.10`, a second major version next to the workspace's `rand 0.9`)
+# is never reached for.
+ed25519-dalek = "3"
+# `x25519-dalek` is the box key's own type — SLIP-0010 derives its 32 raw
+# bytes as an independent leaf (never a conversion of the Ed25519 identity
+# key, Reference B "Keys and crypto"). `static_secrets` is the feature gate
+# `StaticSecret` lives behind; `precomputed-tables` (the default's speed/size
+# trade for repeated scalar multiplication) is skipped because sealing a
+# mailbox is not a hot path.
+x25519-dalek = { version = "3", default-features = false, features = [
+  "static_secrets",
+  "zeroize",
+] }
+# `hpke` is HPKE base mode over DHKEM(X25519, HKDF-SHA256) (RFC 9180,
+# W0.5-R1's third carve-out). Feature set is pared to the one ciphersuite this
+# product uses — `x25519` (the KEM; it pulls in `hkdfsha2`, the RFC's own
+# KDF), `aes` (AES-128-GCM, RFC 9180's `aead_id = 0x0001`), `alloc` (the
+# `Vec`-returning seal/open this crate calls). The crate's defaults
+# additionally pull in `mlkem`, `chacha` and `shake` (a post-quantum KEM, a
+# second AEAD, three more hash families) that no ciphersuite here uses.
+#
+# **`getrandom` IS NOT HERE, AND THAT IS DELIBERATE.** It is what draws the
+# ephemeral encapsulation key, once per seal — the one place this repository
+# lets a dependency touch the system RNG directly rather than going through
+# `rand`, because `hpke`'s convenience entry point is what keeps its
+# `rand_core 0.10` off our own call sites. A feature named in this table is
+# unioned into every member that inherits the dependency, so it is named by the
+# one crate that seals instead (`crates/identity/Cargo.toml`). It used to be a
+# `mint` feature there so the hosted adapter could link the crate on `wasm32`
+# without an RNG backend; that adapter is struck from v0 (#1029, scope amendment
+# 2026-09-21) and the feature is gone.
+hpke = { version = "0.14", default-features = false, features = [
+  "x25519",
+  "aes",
+  "alloc",
+] }
+
+# Wave 0.5 lane B — discovery: the signed pkarr record, publish and resolve
+# (#1029 §0, "Resolution: iroh's discovery, pkarr").
+#
+# `pkarr` is the signed-DNS record format, and the relay client that puts one
+# on an `iroh-dns-server` and reads it back. **`default-features = false` here
+# is the umbrella invariant, not a size trim** (#1029 §6): `pkarr`'s defaults
+# enable `dht`, whose mainline client binds a UDP socket and joins a gossip
+# overlay. The phone opens no listening socket, so the DHT half never enters
+# the graph, and `relays` — outbound HTTP to the configured server, nothing
+# else — is the whole client. `signed_packet` is the record type itself, which
+# encodes and decodes with no client at all.
+pkarr = { version = "8", default-features = false, features = [
+  "signed_packet",
+  "relays",
+] }
+# `iroh-dns-server` is n0's own server, a DEV-DEPENDENCY ONLY: the
+# publish-and-resolve exit runs one in-process on a free port, so the round
+# trip is proven against the implementation #1029 §0 names as the default
+# rather than against a mock of ours. It pulls `iroh-base`, `iroh-dns` and
+# `iroh-metrics`; it does NOT pull `iroh` proper, so no endpoint, no ALPN and
+# no QUIC listener reaches even the test graph. `ring` is its one default
+# feature, the rustls provider its self-signed HTTPS listener wants.
+iroh-dns-server = "1.2"
+
+# Wave 4 lane B — `crates/gateway-server`: the standalone gateway anyone can
+# self-host (#1029 §3). Every entry here exists because a SERVER needs it and
+# nothing else in this workspace is one: the phone opens no listening socket,
+# and this binary's whole job is to be the thing it dials.
+#
+# `axum` is the HTTP surface over `centraid-gateway-core`'s ports. It carries no
+# policy: every refusal it renders comes from `gateway_core::Refusal::code()`, so
+# the two adapters answer the same request with the same code.
+axum = { version = "0.8", default-features = false, features = [
+  "http1",
+  "json",
+  "query",
+  "tokio",
+] }
+# `reqwest` is the client half. It existed for the S3-compatible byte store,
+# which the scope amendment of 2026-09-21 struck; its callers now are
+# `centraid-gateway status` and the tests that drive a live server over a real
+# socket. `default-features = false` drops the default TLS stack and the
+# cookie machinery; `rustls-tls` is the stack this workspace already links
+# through `tokio-rustls-acme`, so no second TLS implementation enters the graph.
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls",
+  "http2",
+] }
+# ACME (RFC 8555) over rustls, so a self-hoster gets a certificate without a
+# second daemon. `tokio-rustls-acme` renews in the background and caches the
+# account and certificate on disk; TLS-ALPN-01 is the challenge, which needs no
+# inbound port 80 and no DNS API token — the two things a home box behind a
+# tunnel usually cannot offer.
+# `rustls-tls-webpki-roots` is its one default feature and the set this needs:
+# the roots the ACME client verifies the directory's own TLS with. Nothing here
+# turns on its `axum` feature — that pulls `axum-server`, a second HTTP server
+# beside the one this crate already runs.
+tokio-rustls-acme = { version = "0.9" }
+tokio-rustls = { version = "0.26", default-features = false, features = [
+  "ring",
+] }
+# THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
+# disk (D-1020-G7).
+#
+# Measured on `ci-linux-x64-4c` with the shared target directory three lanes of
+# wave 3 build into: **16 GB** under `debug/`, of which **7.7 GB was 144 test
+# and bin executables** (the four `centraid` test binaries alone were
+# 363–387 MB each) and **4.3 GB was rlibs**. Almost all of it is debuginfo, and
+# almost none of it was ever read: the disk allowance ran out twice during this
+# wave and the thing that ran out was type and variable tables for iroh,
+# rustls and SQLite.
+#
+# So: `debug = "line-tables-only"` for OUR crates — a backtrace still names the
+# file and the line, which is what a red test is read with — and `debug = false`
+# for dependencies, which nobody steps into. `split-debuginfo` keeps the DWARF
+# out of the executable itself, so a 380 MB test binary is a small executable
+# beside object files cargo already had.
+#
+# THE ESCAPE HATCH, because "you cannot debug this workspace" would be a real
+# cost: `CARGO_PROFILE_DEV_DEBUG=2 cargo test -p <crate>` restores full
+# debuginfo for one command, for the one crate being debugged. It is written in
+# `crates/xtask/README.md` beside the gate profiles, not only here.
+[profile.dev]
+debug = "line-tables-only"
+# "unpacked" rather than "packed" for dev: packing runs `dsymutil` (macOS) or
+# `llvm-dwp` (Linux) on every link, which is exactly the wrong trade on the
+# edit-run loop. The release profile packs, because a published symbol file has
+# to be ONE file beside the artifact.
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+# Dependencies: optimised once, and carrying no debuginfo at all. Stepping into
+# iroh or rusqlite is a `CARGO_PROFILE_DEV_DEBUG=2` session, not the default
+# every build pays for.
+opt-level = 2
+debug = false
+
+# `cargo test` uses `dev` for the crates under test but has its own profile for
+# the test harnesses, and the 7.7 GB above was mostly THOSE. Stated explicitly
+# rather than relying on inheritance, because the inheritance rules for
+# `profile.test` have changed across cargo versions and this is the number that
+# mattered.
+[profile.test]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.test.package."*"]
+opt-level = 2
+debug = false
+
+# THE RELEASE PROFILE (#1020, D-1020-G8). What ships, and what a crash report
+# can be read with.
+#
+# TWO OPTIMISED PROFILES, and the split is measured rather than stylistic.
+#
+# `release` is what a PULL REQUEST builds. `cargo xtask gate --profile pr`'s
+# `release-build` step runs `cargo build --workspace --release` and scores it
+# against the `releaseBuildSeconds` ceiling in
+# `contracts/ledgers/compile-time.json` (1400 s as wave 2 lane B2 re-based it)
+# — the one compile-time number a pull request can go red on. It is also what a developer builds when checking that
+# something is fast enough to be worth shipping.
+#
+# `dist` is what a TAG publishes. It is `release` plus `lto = "thin"` and
+# `codegen-units = 1`: cross-crate inlining across `crates/*` is the
+# optimisation a prebuilt core linked by three shells cannot get any other way,
+# and it is paid for once per triple on a CI runner rather than on every pull
+# request.
+#
+# WHY THEY ARE SEPARATE, re-judged against wave 2 lane B2's re-based ledgers
+# (D-1020-B2) rather than against the number that first prompted the split.
+# `lto = "thin"` + `codegen-units = 1` was tried inside `release` first, which
+# is the conventional single-profile answer. Measured on `ci-linux-x64-4c`,
+# cold, contended with another lane's build:
+#
+#   * `cargo build --release --bin centraid`, LTO + `codegen-units = 1`: 630 s
+#   * `cargo build --workspace --release`, LTO + `codegen-units = 1`: 1039 s
+#   * `cargo build --workspace --release`, no LTO, with split debuginfo: 747 s
+#   * `cargo build --workspace --release`, this profile: **379 s**
+#
+# Against the 600 s `releaseBuildSeconds` ceiling those numbers were measured
+# under, LTO simply did not fit. B2 has since re-based that ceiling to 1400 s,
+# so 1039 s WOULD now fit — and the split stays anyway, on the argument that
+# survives the number: LTO in `release` spends 74 % of the ceiling and about
+# 70 % of the whole 1500 s `pr` budget on an optimisation only the PUBLISHED
+# artifact needs, and `pr` has to hold with the release build inside it. A
+# feedback loop is not the place to pay for inlining nobody on a pull request
+# consumes. If that argument ever stops holding, the fix is to merge `dist`
+# back into `release`, not to widen a ledger.
+#
+# WHAT THE SPLIT COSTS, stated because it is a real cost and not a free win:
+# the binary a pull request builds is no longer bit-identical to the binary a
+# tag ships. `cargo xtask gate --profile release`'s `vps-smoke` step therefore
+# smokes the `release` binary, and the `dist` artifact is proved by
+# `.github/workflows/lane-prebuilt-core.yml` — which builds it, stamps it,
+# checks the stamp it reads back out of the binary, and publishes it with its
+# symbol file. What the two profiles share is everything that affects
+# BEHAVIOUR: the same `panic` strategy, the same debuginfo shape, the same
+# dependency graph. What differs is inlining.
+#
+# `panic = "unwind"`, NOT abort, and this is not a size oversight:
+# `crates/core-ffi` exports a C ABI, and a panic crossing a C frame with
+# `panic = "abort"` takes the host process down — the phone's app, the
+# desktop's Electron main, the browser's native host. Unwinding lets the FFI
+# boundary catch it and return an error the shell can report. The saving abort
+# would buy is a fraction of the artifact; the cost is the shell losing the
+# ability to survive a bug in the core.
+#
+# DEBUGINFO IS `dist`-ONLY, for the same reason and on the same measurement. A
+# symbol file is only needed for an artifact somebody SHIPS, and generating and
+# packing one is not free: `release` carrying
+# `debug = "line-tables-only"` + `split-debuginfo = "packed"` cost 747 s against
+# this profile's 379 s — nearly double, for symbols no pull request reads. So
+# the debuginfo settings live in `dist`, where the wall clock is bounded by a CI
+# runner rather than by a feedback-time budget, and `release` is cargo's
+# ordinary optimised build.
+#
+# `debug = "line-tables-only"` + `split-debuginfo = "packed"` + NO `strip`. A
+# stripped binary with no symbol file anywhere is a crash report nobody can
+# read, and #1020 rules a symbol file published beside every artifact — so the
+# DWARF is kept, and kept OUTSIDE the executable. "packed" is what makes it one
+# file per platform: `centraid.dwp` on Linux, `centraid.dSYM` on macOS, the
+# `.pdb` cargo already emits on Windows. That file is the published symbol
+# artifact, and the shipped binary is stripped at PACKAGING rather than here —
+# `strip = "debuginfo"` in these tables would throw the symbols away before
+# anything could keep them. Line tables rather than full debuginfo for the same
+# reason as `dev` (D-1020-G7).
+[profile.release]
+panic = "unwind"
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"
+split-debuginfo = "packed"
+strip = false

@@ -4,11 +4,10 @@ Stand up Centraid development without tribal knowledge. **Do not invent a new ma
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) matching root `packageManager` (pinned in `package.json`)
+- Rust at the channel pinned in `rust-toolchain.toml` (rustup reads it; [`flake.nix`](../flake.nix)'s dev shell reads it through `rust-overlay`)
+- [Bun](https://bun.sh) matching root `packageManager` (pinned in `package.json`) — for `packages/design`, `packages/test-kit` and the repo tooling scripts
 - Node 24.4.1 — `.node-version` and `package.json#engines.node` must agree, and CI runs exactly this version. Locally a different Node only **warns** (#668); match it with `nvm use` if you hit a toolchain difference
-- For desktop: platform deps for Electron
-- For mobile: Xcode / Android SDK as needed
-- Optional: Docker for `tests/agent-e2e-pairing` cross-network relay
+- For mobile: a JDK for the committed Gradle wrapper (`mobile/gradlew`); the Android SDK for `:androidApp`; Xcode at `.xcode-version` plus `xcodegen` for the iOS shell ([mobile/README.md](../mobile/README.md#the-toolchain))
 
 ## Fresh clone
 
@@ -16,134 +15,36 @@ Stand up Centraid development without tribal knowledge. **Do not invent a new ma
 git clone <repo-url> centraid && cd centraid
 git config core.hooksPath .githooks   # once per clone
 bun install
-bun run build                         # packages emit dist/; blueprints regenerate manifest/vendors as needed
+cargo build --workspace               # the core, the gateway and the two CLI binaries
 ```
 
 `CLAUDE.md` is a symlink to `AGENTS.md` (`ln -sf AGENTS.md CLAUDE.md`), so every agent CLI reads one manual with no sync burden. Restore the symlink if a tool ever replaces it with a copy.
 
-Smoke:
+## Dev loops
 
-```sh
-bun run dev:desktop    # Electron + local gateway
-bun run dev:web        # Vite PWA
-# headless:
-bun run build && centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --port 8765
-```
+| Name | Command | Notes |
+| --- | --- | --- |
+| **gateway** | `cargo run -p centraid-gateway-server --bin centraid-gateway -- serve --data-dir <dir>` | The laptop's blind store. Headless, iroh by default, and it prints its `endpoint` line on every start. `centraid-gateway invite --data-dir <dir>` mints a one-shot invite and prints a pairing QR; `invites` lists what became of each ([gateway.md](gateway.md)) |
+| **demo data** | `cargo run -p centraid --bin seed-demo-vault -- <data-dir>/vault/<id> --file vault.db --name <name>` | Writes rows through the real command plane into a gateway's vault ([mobile/README.md](../mobile/README.md#seeing-it-with-real-data-pair-with-a-gateway)); `mobile/scripts/demo-vault.sh` wraps it for the emulator and simulator |
+| **mobile (JVM)** | `cd mobile && ./gradlew mobileJvm` | `:shared:jvmTest`, `:core:jvmTest` over the real `centraid-core-ffi` cdylib, and the kover report — the gate's `mobile-jvm` step |
+| **mobile (Android)** | `cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug` | Needs `ANDROID_HOME`; `mobile/scripts/android-core.sh` cross-compiles the core into `jniLibs` first |
+| **mobile (iOS)** | the numbered steps in [mobile/README.md](../mobile/README.md#the-ios-hand-off) | Rust slice → `:shared:assembleCentraidSharedDebugXCFramework` → `protoc` → `xcodegen generate` → `xcodebuild … test` on a simulator (**not** `swift test`, which cannot build `Sources/`'s UIKit imports for the macOS host). Skipping the first two links stale code with no error ([traps/stale-core-slice.md](traps/stale-core-slice.md)) |
+| **mobile flows** | `maestro test mobile/maestro/flows` | Needs a running simulator or emulator with the app installed |
+| **service unit** | `centraid-gateway install --data-dir <dir>` (or `centraid gateway install`) | Writes a launchd or systemd unit and prints the enable command; never enables it ([deploy/README.md](../deploy/README.md)) |
+| **docs site** | `bun run docs:build` then `bun run docs:serve` | **4173** on 127.0.0.1 |
 
-## Named services and ports
+Every verb logs through `tracing` to stderr, filtered by `--log` / `CENTRAID_LOG` — where those lines end up per host is [logs.md](logs.md).
 
-| Name | Command | Default bind | Notes |
-| --- | --- | --- | --- |
-| **desktop** | `bun run dev:desktop` | Electron window; detached local gateway on `127.0.0.1:17832` by default | Set `CENTRAID_EMBEDDED_GATEWAY=1` only for the in-process test/E2E path |
-| **web** | `bun run dev:web` | Vite default (see `apps/web`) | Needs a reachable gateway or ticket path |
-| **mobile** | `bun run dev:mobile` | Metro **8081** | Pair with a ticket minted in desktop Household → Devices |
-| **gateway-daemon** | `centraid-gateway serve --data-dir <dir> --host 127.0.0.1 --port 8765` | **8765** (example) | No `print-token` (retired #505). **Do not pin `CENTRAID_GATEWAY_TOKEN`** — see below. A fresh `<dir>` auto-founds `Personal` (#603); `centraid-gateway pair` mints a device ticket |
-| **product CLI** | `centraid status --url http://127.0.0.1:8765 --token <hex>` | (client) | Wire client (`@centraid/cli`); auth via `--token` / `CENTRAID_TOKEN` / `CENTRAID_GATEWAY_TOKEN` |
-| **docs site** | `bun run docs:serve` | **4173** on 127.0.0.1 | After `docs:build` / `docs:bundle` |
-
-Parameterize ports via CLI flags / env documented on each package; do not hardcode foreign ports into other apps without a single config owner.
-
-### `CENTRAID_GATEWAY_TOKEN`: do not pin it by hand
-
-The daemon's loopback bearer is **derived from custody, not minted per boot**: `HMAC(endpoint-key.bin, "centraid/landlord-http/v1")` ([SECURITY.md](../SECURITY.md)). Every local process that can open the gateway's `KeyStore` — the admin CLI included — derives the same value, so **the default needs no configuration**.
-
-Pinning `CENTRAID_GATEWAY_TOKEN` is only for a **parent process that spawns the daemon** and needs to know the bearer without deriving it (the desktop does this). If you pin it in your shell and then run `centraid-gateway pair` (or any admin verb) in a shell that does not carry the same value, the daemon rejects the CLI's derived bearer and `pair` now fails with an explicit bearer-mismatch error naming `CENTRAID_GATEWAY_TOKEN` (issue #603 — it used to lie and say "the iroh endpoint is not ready"). Either restart the daemon without the pin, or export the identical value in both shells.
-
-The product CLI's `--token` / `CENTRAID_TOKEN` is a separate, wire-client concern and is unaffected.
-
-## Mobile: the native projects are generated
-
-`apps/mobile/ios` and `apps/mobile/android` are **outputs of `expo prebuild`** and are **committed** ([#1011](https://github.com/srikanth235/centraid/issues/1011)): generated from the sources below, and tracked so that a native change arrives as a reviewable diff rather than as a hash nobody can read. Neither tree is gitignored, on purpose ([apps/mobile/.gitignore](../apps/mobile/.gitignore)) — a rule over a tracked tree keeps the files committed while hiding the next regeneration from `git status`. The sources are:
-
-| Source | What it decides |
-| --- | --- |
-| `apps/mobile/app.config.ts` | the Expo config, the plugin list, and everything an upstream plugin can express |
-| `apps/mobile/plugins/*.cjs` | everything it cannot — Android backup/cleartext rules, the OpenSSL resolution, the Play upload signing config, the iOS pod deployment floor, the share extension's bundle id and version pair, the replacement `ShareViewController.swift` |
-| `apps/mobile/plugins/native/` | repo-owned native files those plugins copy in verbatim |
-| `apps/mobile/modules/centraid-*` | autolinked local Expo modules, including the Android upload foreground service |
-
-**Never hand-edit a native file.** An edit inside `ios/` or `android/` survives until the next prebuild and then silently disappears; if something has to be in the generated project, a plugin writes it. Committing the trees does not make them editable — it makes the regeneration reviewable, and `ci:native-state`'s L1 fails a tree that has moved off the id blessed with its inputs. Centraid's own plugins are listed **first** in `app.config.ts` because `@expo/config-plugins` runs the last-registered mod first — first in the list is last to run, which is what lets them overwrite what upstream plugins produced.
-
-Running the app needs no explicit prebuild — `expo run:ios` / `expo run:android` generate the missing project themselves:
-
-```sh
-bun run --cwd apps/mobile ios       # builds vec.xcframework, then run:ios
-bun run --cwd apps/mobile android
-```
-
-To regenerate the projects on their own — after changing a plugin, adding a native dependency, or to inspect the output:
-
-```sh
-bun run --cwd apps/mobile native:prebuild   # expo prebuild --no-install + the sqlite-vec build
-bun run --cwd apps/mobile native:sqlite-vec # the iOS framework alone (no-op off macOS)
-```
-
-`native:sqlite-vec` is not optional on iOS and not a step CocoaPods can do for you: expo-sqlite 57 pre-bundles the sqlite-vec extension for Android only, so `scripts/build-sqlite-vec-ios.sh` builds `vec.xcframework` from the same upstream tag and it must exist **before `pod install`** or the `withSQLiteVecExtension` flag points the podspec at a framework that is not there. It is idempotent — a framework already built from the pinned tag is left alone — and EAS runs it through `eas-build-post-install`.
-
-`Podfile.lock` is generated by `pod install` inside the macOS lanes, so it has no independent source for a repo-wide checker to compare it against; the pod-family checks stay retired ([docs/traps/mobile-native-state.md](traps/mobile-native-state.md)).
-
-The gate over all of this is `bun run --cwd apps/mobile ci:native-state` (path-filtered from the root as `bun run check:mobile-native-state`, and run by `ci.yml`'s `mobile-smoke` on every mobile-touching PR). It checks the inputs and the generated trees' fidelity to them: `ios/` and `android/` are tracked and unignored and each sits at the git tree id blessed beside the input fingerprints (#1011 commits the generated projects, so drift — not absence — is the question), the config plugins and local modules are what the fingerprint actually reads, no prebuild output contributes to the hash, and `native-fingerprints.json` matches. See [docs/traps/mobile-native-state.md](traps/mobile-native-state.md) for the layers and the remediation. Every CI lane that runs `./gradlew` or reads a path inside the generated project prebuilds first, in a step of its own, before restoring any cache that lives in there.
-
-To see what the config produces without generating anything:
-
-```sh
-bunx expo config --type introspect   # the merged manifest, entitlements, Info.plist
-```
-
-One thing introspection does **not** show: the upload foreground service's `<service>` entry and its three permissions live in the local module's own library manifest (`apps/mobile/modules/centraid-upload/android/src/main/AndroidManifest.xml`) and reach the app manifest through AGP's manifest merge at build time, not through a config plugin.
-
-## Preview the web app in a browser against an existing vault
-
-The desktop app controls a local gateway, detached by default so it survives the window. A fresh browser origin served by a standalone gateway still lands on onboarding rather than your data. Web onboarding is **ticket-only** since issue #603 — there is no "This Mac" card and no founding probe in a browser tab, because a browser cannot start a gateway. The supported (and only) way to reach an existing vault from a browser is **pair a device**, exactly like a phone or a second desktop:
-
-1. **Serve the existing vault.** Point a gateway at the data dir that already has the vault. Desktop's lives at `~/Library/Application Support/@centraid/desktop/gateways/local`.
-
-   ```sh
-   centraid-gateway serve --data-dir "<data-dir>" --host 127.0.0.1 --port 17832
-   ```
-
-   The gateway serves the **API** on `--port` and the **web UI on a second port** — read the exact `web app: http://127.0.0.1:<p>` line it prints on startup. The web UI it serves is the **build-time snapshot** embedded in `packages/server/dist/web`. To preview _uncommitted client edits_, rebuild and re-embed first (no full gateway rebuild needed):
-
-   ```sh
-   bun run --cwd apps/web build && node packages/server/scripts/embed-web.mjs
-   ```
-
-2. **Mint a pairing ticket** for the vault (one line; redeems only over the iroh pairing ALPN `centraid/gw-pair/1` — the HTTP `POST /centraid/_gateway/pair` twin was removed in #555):
-
-   ```sh
-   centraid-gateway pair --data-dir "<same data-dir>" --vault "<name-or-id>"
-   ```
-
-   Omitting `--vault` targets the registry default — the owner's `Personal` vault on an auto-founded gateway, never `Shared`.
-
-3. **Open the web UI in the browser pane.** Register the web port in `.claude/launch.json` and start it with the preview tool — ad-hoc navigation to a bare `http://localhost:<port>` is policy-blocked, but a `preview_start`-managed server (a config with just a `url` **attaches** to the already-running gateway) is the sanctioned path:
-
-   ```json
-   {
-     "version": "0.0.1",
-     "configurations": [
-       {
-         "name": "centraid-web",
-         "url": "http://127.0.0.1:17833",
-         "port": 17833
-       }
-     ]
-   }
-   ```
-
-4. Web onboarding opens straight on the ticket path — paste the ticket, enter Centraid, and set a display name or avatar colour later in Settings → You. On first entry Home automatically prepares its removable sample week so the first screen is useful without another decision. The ticket step (`packages/client/src/react/shell/routes/ConnectTicketPanel.tsx`, wrapping `ConnectFlow.tsx`) is shared verbatim with desktop's **Connect with a ticket** option and the switcher's **Add vault** modal; it defaults to `methods={['gateway']}` plus `initialMethod="gateway"`, so there is no method chooser — every surface opens directly on the ticket field. The ticket redeems over iroh, records this device's EndpointId enrollment, and connects to the existing vault — its automations, runs, and data appear as in desktop.
-
-There is no remote URL+token connection path and no SSH-routed connect (the SSH code was deleted in #603). Browser clients use iroh-wasm and the same EndpointId pairing contract. Do not point a standalone gateway at a data dir the desktop app is **also** running against: `gateway.db` rejects the second writer immediately (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
+Do not point two processes at one vault directory: the core holds the one writable connection and the whole pragma set depends on being the only opener ([traps/wal-checkpoint.md](traps/wal-checkpoint.md)). Two `centraid-gateway` processes over one data directory is fine and expected — `serve` and `invite` share it through the state file.
 
 ## Worktrees
 
 Agents often work in git worktrees (including under `.claude/worktrees/`).
 
 1. **Install** — each worktree needs its own `bun install` (do not assume root `node_modules` is visible unless you deliberately symlink — prefer install).
-2. **Build** — run `bun run build` (or filtered turbo) so `dist/` exists for packages that resolve compiled output. This bites inside one worktree too: `@centraid/server/engine` (and `@centraid/vault` from the server) resolve to `dist/`, so an engine- or vault-side source edit is invisible to an in-process `serve()` test until `bun run --cwd packages/<pkg> build` re-emits it.
-3. **Do not share** writable `gw-data/`, Electron `userData`, or SQLite vault dirs across concurrent agents.
-4. **Symlinks** — if you symlink `node_modules` for speed, rebuild native addons for the active platform; pairing Docker flows may fetch platform-specific `@number0/iroh` binaries (see `tests/agent-e2e-pairing/AGENTS.md`).
-5. **Seed data** — optional; use a dedicated `--data-dir` and vault create rather than copying a live vault (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
+2. **One `CARGO_TARGET_DIR` per worktree** — sharing one is not only lock contention. A build script's `OUT_DIR` is keyed by package identity, which is the same in every worktree, so a lane that edits a `.proto` hands its generated Rust to every other lane; and a gate verdict taken from a shared directory is worth nothing. Export `CARGO_TARGET_DIR=<something unique>` and `touch crates/api-proto/build.rs` before the first build in a fresh one ([traps/shared-cargo-target.md](traps/shared-cargo-target.md)).
+3. **Do not share** writable `--data-dir` trees across concurrent agents, and give each worktree its own `CARGO_TARGET_DIR` ([traps/shared-cargo-target.md](traps/shared-cargo-target.md)).
+4. **Seed data** — use a dedicated `--data-dir` and `seed-demo-vault` rather than copying a live vault (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
 
 More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-agent.md](multi-agent.md).
 
@@ -151,74 +52,42 @@ More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-
 
 One issue carries one receipt (`receipts/issue-<N>-<slug>.md`), and a slice adds exactly one section at the **end** of it: `doc-integrity` requires the trunk's copy to stay a byte-prefix of yours. Two sibling slices appending to the same receipt therefore conflict on every rebase, always with the same correct resolution — keep both hunks, upstream first. The root `.gitattributes` marks `receipts/*.md merge=union`, and git's built-in union driver concatenates a conflicting hunk ours-then-theirs; during a `git rebase` onto `main` "ours" is `main`, so main's section lands first and the prefix survives. Check the seam afterwards: union factors out the blank line both sides share, so the second section may need one blank line reinserted before its heading — still an append, still prefix-safe.
 
-Two things the driver does not do. It cannot tell an append from an edit — it resolves _any_ conflicting hunk the same way — so the rule it does not replace still stands: never touch text above your own section, and `doc-integrity` still fails you if you do. And GitHub's own PR mergeability check does not honour `.gitattributes` merge drivers, so this helps local rebases only; that is where the conflicts were being paid, because a branch is rebased onto `main` before it is pushed. Rebase, do not merge: `git merge` resolves union with the **checked-out** branch first, so merging `main` into a slice branch would put your section above main's and break the byte-prefix.
-
-## Unattended desktop runs: `CENTRAID_INSECURE_DEVICE_SECRETS`
-
-Every read of the desktop's device credentials decrypts through Electron `safeStorage`, i.e. the OS keychain. A dev build is ad-hoc signed, so macOS does not durably trust it and **re-prompts for the login password on every restart**. That makes restart-heavy scenarios — fresh gateway, warm boot, crash recovery, credential desync — impossible to drive unattended by a test harness or agent.
-
-Set `CENTRAID_INSECURE_DEVICE_SECRETS=1` to opt into the same 0600 plaintext device-secrets file that Linux hosts without libsecret already use (`apps/desktop/src/main/gateway-secrets.ts`). One format, one code path.
-
-- **Never takes effect in a packaged build.** The guard is `env === "1" && !app.isPackaged`, so a shipped Centraid ignores the variable outright and a real user's custody can never be downgraded by their environment.
-- **Give the run its own `--user-data-dir`.** The flag refuses to touch the keychain, so it cannot read an existing _encrypted_ `connection-secrets.bin` and will throw telling you so. Reusing your real profile is the one way to make it fail confusingly.
-- Switching back is automatic: run without the variable and the next read adopts the plaintext file back into keychain custody.
+Two things the driver does not do. It cannot tell an append from an edit — it resolves _any_ conflicting hunk the same way — so the rule it does not replace still stands: never touch text above your own section, and `doc-integrity` still fails you if you do. And GitHub's own PR mergeability check does not honour `.gitattributes` merge drivers, so this helps local rebases only. Rebase, do not merge: `git merge` resolves union with the **checked-out** branch first, so merging `main` into a slice branch would put your section above main's and break the byte-prefix.
 
 ## `.claude/launch.json`
 
-If a local `.claude/launch.json` exists (may be gitignored), treat it as the **named service list** for Claude/desktop launch integrations (ports, cwd, commands). Keep it in sync when you add a long-lived dev process. If absent, the table above is the source of truth until someone adds the file.
+If a local `.claude/launch.json` exists (may be gitignored), treat it as the **named service list** for launch integrations (ports, cwd, commands). Keep it in sync when you add a long-lived dev process. If absent, the table above is the source of truth until someone adds the file.
 
 ## The local gate loop
 
-The local half of the six-rung quality ladder ([#915](https://github.com/srikanth235/centraid/issues/915)). Rungs 0 and 1 are hooks; nothing here is something you have to remember to run.
+One command gates the tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)): `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>`. The profiles, their steps and their budgets are in [toolchain.md](toolchain.md#cargo-xtask-gate-1020) and [`crates/xtask/README.md`](../crates/xtask/README.md); this section is the loop.
 
-| Rung | When | Budget | Cost | What runs |
-| --- | --- | --- | --- | --- |
-| 0 commit | pre-commit hook | ≤ 5s | 3.6s | Every governance directive — nine, including `law`, which runs the whole ESLint rule catalog at its hook door ([#1005](https://github.com/srikanth235/centraid/issues/1005)) — plus `oxfmt` and `oxlint` **on staged files only**. Nothing is deferred |
-| 1 push | pre-push hook | ≤ 90s | bounded by `test:affected` | The tier the pushed ref earns (#988): `main` gets `bun run check:push` — **17 gate names**, run concurrently — every other branch gets `check:push:static`. Nothing is deferred here any more (#1005) |
-| 1.5 | want CI's answer early | — | ~4 min | `bun run check:pr` — `check:push` plus full `typecheck`, `lint:types`, `lint:workflow-pins`, diff coverage |
-| 2 merge | PR, required `check` | ≤ 15 min | minutes | `ci.yml`. Locally: `bun run check:full`, including dependents, coverage, mutation/perf, and client e2e |
-| 3 candidate | push to `main` | ≤ 45 min | — | `candidate.yml` |
-| 4 nightly | 06:00 UTC on the latest candidate | ≤ 90 min | — | `e2e.yml` |
-| 5 weekly | weekend on the latest candidate | ≤ 5h | — | `soak-weekly.yml`, `interop-weekly.yml`, `enrichment-live-weekly.yml`, `hygiene.yml` |
-
-Costs are measured on this repo's CI container, which runs the governance directives about 2.7× slower than the 8-core M-series the rest of this section is measured on.
-
-**The 17 gates are not 17 checks.** `check:push` named 59 gates while this document claimed 25. #915 Wave 4 cut the list to 17 without dropping a check, three ways:
-
-| Move | Names | Why |
+| When | What runs | Where |
 | --- | --- | --- |
-| Bundle into `lint:product` | 38 → 1 | Every one runs in under a second. They are not 38 decisions a developer makes, they are one — "does this diff satisfy the repo's contracts?" — and they cost 38 of the concurrency pool's slots. `scripts/lint-product.mjs` runs them in one process at full machine parallelism with the same per-gate buffered failure output |
-| Move to the weekly `hygiene.yml` | 7 → 0 | Tighten-only ratchets over the **test suite's own** quality (comment density, assertion matchers, fixed sleeps, skips, environment-red sites, the type floor, the schema/export fingerprint). Each is a _standing_ check over the whole tree, so a weekly run against `main` sees exactly what a per-push run would; what changes is detection latency, not coverage. One rolling issue on red |
-| Drop to rung 2 | 1 → 0 | `check:mobile-native-state` is 30.5s and ci.yml's `mobile-smoke` job already runs it on exactly the diffs that matter |
+| after an edit | `cargo xtask gate --profile local` — `fmt`, `clippy`, `test` (workspace minus `centraid-sim`), `rules`, `ledgers`. Budget 120 s on a warm tree | by hand |
+| a narrower answer | `cargo test -p <crate>`, `cargo xtask rules`, `SIM_SEED=<n> cargo test -p centraid-sim` to replay one simulation seed | by hand |
+| commit | the pre-commit hook | `.githooks/pre-commit` |
+| push | the pre-push hook | `.githooks/pre-push` |
+| want CI's answer early | `cargo xtask gate --profile pr` — `local` plus supply chain, CI policy, secrets, release build, the TypeScript static tier, emitters, the call budget and the fault door | [`gate.yml`](../.github/workflows/gate.yml), required on every pull request and push to `main`, beside `dependency-review` |
+| Kotlin changed | `cargo xtask gate --profile mobile-jvm` — builds `centraid-core-ffi`, runs `./gradlew mobileJvm`, regenerates the native theme and screen fixtures and fails on drift. Budget 420 s | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) |
+| nightly | `cargo xtask gate --profile nightly` — `pr` plus `device-lanes` and the deeper suites. One lane alone: `--lane <name>` | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml), 05:30 UTC |
+| release | `cargo xtask gate --profile release` — `nightly` plus `restore-drill`, `artifact-identity`, `prebuilt-core-required`, `vps-smoke` | [`release.yml`](../.github/workflows/release.yml)'s lanes |
 
-The class and the one-line reason for every gate live in [`scripts/ci/gate-classes.json`](../scripts/ci/gate-classes.json) — **product** (a user-visible claim), **contract** (a repo-internal wiring or shape claim), **hygiene** (a ratchet over the suite itself). `scripts/ci/gate-classes.test.mjs` fails if a gate in `check:push` is unclassified, if a hygiene gate is still charged to every push, or if one left `check:push` without arriving in the weekly lane — the last is the failure mode that would make a gate enforced nowhere.
+A failing step writes its command, stdout and stderr under `target/xtask/<profile>/<step>/` and names that directory on its one line. **Every cargo and xtask command needs its own `CARGO_TARGET_DIR`** when more than one worktree is in flight — see the worktree rules above.
 
-**The knobs those gates read are four files.** #915 Wave 4 also merged the twenty tighten-only JSON ledgers under `tests/` into [`tests/floors.json`](../tests/floors.json) (up-only), [`tests/budgets.json`](../tests/budgets.json) (down-only), [`tests/inventory.json`](../tests/inventory.json) (down-only, issue and expiry per exception) and [`tests/quarantine.json`](../tests/quarantine.json) (flaky tests and parked lanes). One validator, `bun run lint:ledgers`, holds the direction, the per-section waiver scope and the deadlines; it is a **contract** gate inside the `lint:product` bundle, so it costs the push tier a name of nothing and a fraction of a second. What each section holds and why two of them are references rather than copies is in [TESTING.md](../TESTING.md#the-four-ledgers-915-wave-4).
+**The hooks.** `.githooks/*` are governance-kit dispatchers: each runs the directives under `.governance/packs/` whose `hook:` field names that hook.
 
-**Why rung 1 was rebuilt (#668).** `check:pr` was the pre-push gate, and it had three compounding problems. It ran **serially** — 28 `&&`-chained steps where almost none depend on each other. It **stopped at the first failure**, so three unrelated problems cost three full passes. And four gates dominated the clock while duplicating work CI recomputes authoritatively anyway:
+- **pre-commit** runs `scripts/test.sh` (path-gated to commits that stage shell or governance files), then the nine pre-commit directives — among them `format-check` and `lint-check`, which run `oxfmt` and `oxlint` on **staged files only**, and `law`, which runs the ESLint rule catalog under [`.governance/law/`](../.governance/law/README.md) at its hook door ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
+- **pre-push** runs the `pre-push-gate` directive. The tier is chosen by the destination ([#988](https://github.com/srikanth235/centraid/issues/988)): a push to `main` runs `bun run check:push`, every other ref runs `bun run check:push:static`, and `CENTRAID_PUSH_TIER=full` widens a branch push to the `main` tier. Both are gate lists in the root `package.json`, run concurrently by `scripts/ci/run-gates.mjs`, with every failure reported in one pass. `check:push:static` is also what the gate's `ts-static` step runs.
+- **commit-msg** carries the `law` directive's message checks; **post-commit** can only warn.
 
-| Gate | Cost | Why it left the push tier |
-| --- | --- | --- |
-| `check:diff-coverage` | 89.4s | Instrumented full-suite run; the repo-wide `coverage` job in CI `verify` is the authoritative copy |
-| `typecheck` (full) | 66.0s | `typecheck:affected` is 11s and catches the same thing on your diff; CI still runs the full one |
-| `lint:types` | 21.3s | Type-aware lint over every package; low hit rate, and `static` already gates it |
-| `lint:workflow-pins` | 0.1s | Only meaningful when `.github/workflows/**` changed, which the push tier cannot cheaply know |
+Staged-files-only is on purpose: a repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
 
-Measured on an 8-core M-series with warm turbo caches. The remaining gates run through `scripts/ci/run-gates.mjs` at a bounded concurrency, so every non-test gate (including `typecheck:affected` at 24s cold) finishes inside the `test:affected` window and costs nothing. **The gate costs exactly what the affected tests cost.**
+**Format before you commit.** `bun run format` writes oxfmt's output over the tree; `cargo fmt --all` does the same for Rust. Neither hook rewrites a tracked file.
 
-The failure report changed too, and that matters as much as the clock: every gate runs even when an earlier one fails, and the summary lists all of them with the slowest five. One pass tells you everything that is wrong.
+**A tier does not re-run against a tree it already passed.** `scripts/ci/gate-stamp.mjs` keys a pass on the oid of a git tree built from the working copy in a _copy_ of the index, plus `origin/main`. `check:push --stamp` skips the static members on a match, and `bun run governance` — the stamped entry point to the digest-locked `.governance/run.sh` — takes the same treatment. A tier is stamped only when every one of its gates ran and passed; `CI` in the environment disables stamps outright; `CENTRAID_GATE_STAMPS=0` turns them off. Every root script that runs turbo goes through `scripts/ci/turbo.mjs`, which points it at one cache shared by every worktree. Both live outside the repository ([toolchain.md](toolchain.md#where-the-caches-live)).
 
-**A gate that is always skipped enforces nothing.** `lint:node-version` demanded the _exact_ pinned Node at position three of the chain. CI satisfies that by construction (`setup-node` reads `.node-version`) and never ran the check; locally it hard-failed for anyone whose version manager defaulted elsewhere — so every push died five seconds in for a reason unrelated to the diff. It now warns locally, stays fatal under `CI`, and is wired into the `static` job where the claim is real.
-
-**Rung 0 is 3.6s, measured on this container with one staged registry file.** It was 88.7s before [#915](https://github.com/srikanth235/centraid/issues/915) cut it, and the arithmetic of that cut is worth keeping because it is the reason the budget holds. Two vendored `governance-kit` directives were 86.3s of it, because both were repo-wide by construction: `repo-hygiene` (51.2s, `git grep` + `git ls-files` across the tree) and `receipt-per-issue` (35.1s, re-read the receipt corpus). Neither could be scoped to the staged set, and neither could be moved by changing its `hook:` field — both folders carry digests in `.governance/packs.lock`, so `managed-tree-integrity` fails on a hand edit, and the kit exposes no supported override (`.governance/lib.sh` reads `hook:` straight out of `directive.yaml`; `conf_get`/`conf_list` only serve keys a directive declares in its own `config:` block, and `hook` is not one).
-
-**Those figures are superseded and the deferral is gone.** governance-kit audit 0.11.0 retired `repo-hygiene` outright and rewrote `receipt-per-issue` to a much cheaper check; [#1005](https://github.com/srikanth235/centraid/issues/1005) then ported all four vendored directives to rules and deleted the pack. The repo runs **nine** directives, one of which — `law` — is the whole ported catalog behind one door. `.governance/conf/srikanth235/centraid/pre-commit-deferred.conf` is deleted; nothing runs at pre-push that does not run at pre-commit. Re-measure on the reference machine before treating any number in this section as current.
-
-The deferral mechanism this section used to describe is retired, and one thing about it is worth recording because it was invisible: under governance-kit 0.15.0 **nothing in `.githooks/` read that conf file at all** — the hook dispatchers select directives by their `hook:` field alone. The deferral had already stopped operating before #1005 removed it; `receipt-per-issue` was running at pre-commit and the documentation said otherwise. A gate whose mechanism has quietly evaporated still reads as enforced, which is exactly the failure #782 named.
-
-The ninth is `law` ([#1005](https://github.com/srikanth235/centraid/issues/1005)), which is not a shell check at all: it generates the change set into `.governance/law/out/arrival.json` and lints it, and the governance documents the change touched, with the ESLint rule catalog declared under [`.governance/law/`](../.governance/law/README.md). At rung 0 it opens the **hook door** — the rules answerable from the commit being written, all fatal there whatever their pack row says — and everywhere else (`bash .governance/run.sh`, CI, `bun run governance:law`) the **window door** runs the whole catalog at each rule's declared severity. It prints one line per enabled rule either way. The two doors also see different change sets: at the hook only the staged set is judged, because a finding about a commit already made would block a commit no edit to it could fix.
-
-Two of the catalog's rules are about the change rather than about a file. `estate-separation` refuses a commit that edits the **law** estate and the **territory** estate together (`warn` in the window, fatal at the hook — waive with `governance: allow-estate-separation <reason>` in the commit body); `registry-completeness` asks for the changelog line, the `docs/decisions.md` ruling, the gate authorisation or the docket row that the change's own events call for, at `error`, because `governance` is a required check. [CONSTITUTION.md](../CONSTITUTION.md#estate-separation) carries both directives in full and [docs/decisions.md](decisions.md#governance-as-a-constitution-1005) the rulings behind them.
+**Governance.** `law` generates the change set into `.governance/law/out/arrival.json` and lints it together with the governance documents the change touched. At pre-commit it opens the **hook door** — the rules answerable from the commit being written, all fatal there; everywhere else (`bash .governance/run.sh`, `bun run governance:law`, [`governance.yml`](../.github/workflows/governance.yml)) the **window door** runs the whole catalog at each rule's declared severity. `estate-separation` refuses a commit that edits the law estate and the territory estate together (waive with `governance: allow-estate-separation <reason>` in the commit body); `registry-completeness` asks for the changelog line, the `docs/decisions.md` ruling, the gate authorisation or the docket row a change's own events call for. [CONSTITUTION.md](../CONSTITUTION.md#estate-separation) carries both directives and [docs/decisions.md](decisions.md#governance-as-a-constitution-1005) the rulings behind them.
 
 `.github/CODEOWNERS` is generated, not hand-kept:
 
@@ -227,103 +96,36 @@ node .governance/law/codeowners.mjs --check   # exit 1 on drift
 node .governance/law/codeowners.mjs --write   # regenerate from the packs' lawPaths
 ```
 
-What the **host** would enforce — GitHub branch protection requiring review from code owners on the default branch, and `governance` in the required set — is configured outside this repository and is the owner's to enable. It is **not confirmed enabled**; the rules observe and report either way.
+What the **host** would enforce — branch protection requiring code-owner review on the default branch, and `gate`, `dependency-review` and `governance` in the required set — is configured outside this repository and is the owner's to enable. It is **not confirmed enabled**; the rules observe and report either way.
 
-What is left at rung 0 is the whole catalog. Its pole is `managed-tree-integrity`, now a rule rather than a vendored directive, and still repo-wide: a hand-edited managed file is exactly the "is this diff well-formed?" question rung 0 exists to answer, and the law's own generator is under that digest too. (`internal-doc-links`, the other pole this section used to name, was retired with the `foundation` pack in audit 0.11.0.)
-
-**`governance.yml` cannot be given a `timeout-minutes` by hand (#915).** It is listed in `.governance/install.yaml`'s `managed_digests`, so `managed-tree-integrity` fails on any edit to it, and neither `install.yaml` nor `lib.sh` exposes a timeout setting for the generated workflow — there is no `governance` CLI vendored in this repo to regenerate it, either. Its bare `pull_request:` listener and its missing `timeout-minutes` are both legal today by the same mechanism: `scripts/lint-workflow-pins.mjs` skips any file whose first lines carry `# governance-kit:managed`, which is a whole-file exemption rather than a per-rule allowlist. The supported path to a timeout is a kit update; until one ships, this is a known, documented gap and not something to hand-patch.
-
-**Why these tiers and not others (#576).** A CI round trip is 12.3 minutes of wall clock. Local gates do not shrink that — a green PR takes 12.3 minutes no matter what runs here — so the only thing a local gate buys is not paying those 12.3 minutes twice. That makes the rule arithmetic: a gate earns its slot if it fails more often than `local_cost / 738s`. `oxlint` at 1.7s needs a 0.2% hit rate; `knip` at 28.8s needs 3.9%; a full instrumented `coverage` run at 418s needs 57%, which is why it is scoped rather than run whole.
-
-That arithmetic is a tiebreaker **within** a door, never a reason to move one (#1005): [`scripts/ci/gate-classes.json`](../scripts/ci/gate-classes.json) gives every gate a `door` — `hook` at rungs 0–1, `window` at rung 2, `owner` at rung 3 and above — in the same vocabulary the law's rules use, and where a gate is answerable is decided by what it can see and who can act on it. Cost decides which of two gates at the same door runs first, or whether one is scoped; it does not buy a promotion out of the door a gate belongs to.
-
-Rung 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
-
-### Tiers, stamps, and one cache (#988)
-
-Five agents work this repo in parallel, each in its own worktree, and each pushes several times an hour. Three costs were being paid per worktree and per push for answers that were already known.
-
-**The push tier is chosen by the ref being pushed.** A push to `main` runs the full `bun run check:push`; every other ref runs `bun run check:push:static` — `format:check`, `lint`, `turbo:lint`, `typecheck:affected`. Nothing left the ladder: `ci.yml` and `governance.yml` both listen on a bare `pull_request:`, so **CI runs the full tier on every commit of every branch**; what moved is the local rung, from "every push" to "the push that is the last moment before the trunk moves". `CENTRAID_PUSH_TIER=full` widens a branch push back to the full tier — there is deliberately no value that narrows the `main` tier, and `SKIP_CHECK_PR=1`, `SKIP_GOVERNANCE=1` and `--no-verify` behave exactly as they did.
-
-**A tier does not re-run against a tree it already passed.** `scripts/ci/gate-stamp.mjs` keys a pass on a pair: the oid of a real git tree built from the working copy in a _copy_ of the index (56 ms on this tree — git's stat cache still applies, and your staging area is untouched), and `origin/main`, because the `[origin/main]` filters give the same tree a different affected set once the base moves. `check:push --stamp` skips the static members on a match; `bun run governance` and `.githooks/pre-push`'s deferred-directive loop take the same treatment. Three properties make it a cache rather than a hole: a tier is stamped only when **every** one of its gates ran and passed in that invocation, `CI` in the environment disables reading and writing outright so the enforcing copy always recomputes from zero, and `CENTRAID_GATE_STAMPS=0` turns it off — a knob that can only ever make more run. `.governance/run.sh` itself is digest-locked and could not carry the stamp, which is why `bun run governance` exists; it delegates the whole run to the managed script unchanged.
-
-**One turbo cache for every worktree.** Turbo's default `cacheDir` is `.turbo/cache`, per checkout, so a build one worktree had already paid for was re-paid in the next — and a fresh worktree started from a fully cold graph (4 m 09.7 s here, 278 s of it one release cargo compile). The cache key is turbo's own content hash, so entries were always interchangeable across checkouts of the same repo; only the directory was not. Every root script that runs turbo goes through `scripts/ci/turbo.mjs`, which points it at the shared directory named in [toolchain.md](toolchain.md#where-the-caches-live). Measured on this container: a fresh worktree with no `.turbo` of its own restores 13/13 build tasks in **0.48 s**. `dev:*` keeps the plain binary — persistent tasks are never cached, and an interactive run should have nothing between it and its TTY.
-
-**Stamps and caches live outside the repository**, under the user's cache home, and are never committed. A stale one dies with the cache instead of travelling in a diff.
-
-### Reaching the vault from outside it
-
-`bun run lint:vault-sql` (tier 1, in `check:push`, and a step of the CI `static` job) fails when a file outside `packages/vault` names a physical vault table in raw SQL. The gateway is where consent is resolved, a receipt is written, and trashed rows are filtered out; a `SELECT … FROM core_event` written anywhere else walks past all three, and nothing in the type system notices. The vocabulary is **read from** `packages/vault/src/schema/entity-catalog.ts`, so a table added tomorrow is covered the day it is declared, and the plane machinery that legitimately owns tables outside the vault (replica, share/commons, broker, notices, doctor, restore, quarantine) is named in `ALLOW_LIST` in [`scripts/lint-vault-sql.mjs`](../scripts/lint-vault-sql.mjs) with one clause each. An allow-list entry whose file has stopped speaking SQL fails too — a standing allowance nothing needs is a permission slip for the next file that moves in.
-
-It went green the way it was meant to (review lens 8.1): the three life-data readers that used to fail it — `packages/server/src/brief/daily-brief.ts`, `packages/server/src/reminders/due-reminders.ts` and `packages/server/src/enrich/semantic-search.ts` — moved behind the gateway rather than onto the allow-list.
+**`governance.yml` cannot be given a `timeout-minutes` by hand.** It is listed in `.governance/install.yaml`'s `managed_digests`, so `managed-tree-integrity` fails on any edit to it, and `scripts/lint-workflow-pins.mjs` skips any file whose first lines carry `# governance-kit:managed`. The supported path to a timeout is a kit update.
 
 ### Escape hatches
 
 ```sh
-SKIP_CHECK_PR=1 git push     # skip the pre-push check:push gate only
+SKIP_CHECK_PR=1 git push     # skip the pre-push gate only
 SKIP_GOVERNANCE=1 git push   # skip every governance hook
 git push --no-verify         # skip all hooks entirely
 ```
 
 All three are legitimate for a WIP branch or a spike, and all three leave CI as the enforcing copy. A gate with no exit is a gate people disable permanently.
 
-### Diff coverage
-
-`check:diff-coverage` scores changed lines against an instrumented run, scoped to the packages the diff touches (`vitest.diff-coverage.config.ts`). A diff with no instrumentable source in it — docs, config, workflow, tests-only — skips the run entirely. The repo-wide `bun run coverage` in the CI `verify` job stays authoritative: it enforces the seeded floors and catches a file covered only by another package's tests, which a scoped run cannot see.
-
 ### What deliberately does not run locally
 
-The strace fsync perf gate, the actionlint container, cargo data-plane, the wasm toolchain, e2e browsers, `gateway-package`, and `dependency-review`. All are platform-specific, container-bound, or rarely red — running them locally costs minutes and lowers the odds of a red CI by almost nothing. `bun run lint:actions` works if you have actionlint installed.
-
-### How CI is shaped
-
-`ci.yml` is the **only** workflow listening on `pull_request`, and `release.yml` the only one on `push: tags` (#557, enforced by `lint:workflow-pins`). Every PR gate is a job there, rolling up into one required `check` aggregator. Lanes the diff does not touch report `skipped`, which `check` treats as satisfied; `cancelled` is a failure. This is why the one-workflow rule is mechanical: a lane in its own path-filtered workflow reports no status on unrelated PRs, so it can never be a required check.
-
-`static` runs the lint/typecheck gates plus the claims ledger (`test:claims`, `lint:evidence-mapping`) and the floors ratchet. `verify` runs build, native tunnel, data-plane, gateway perf, coverage, and diff-coverage. Neither runs `test:affected` — full package vitest lives under `verify`.
-
-**Six rungs, one question each ([#915](https://github.com/srikanth235/centraid/issues/915)).** Rungs 0 and 1 are the hooks above. Rungs 2–5 are workflows:
-
-| Rung | Trigger | Workflow | Question | p95 budget |
-| --: | --- | --- | --- | --- |
-| 2 | PR, required `check` | `ci.yml` | Can this land without a regression a user would see on the phone or through the gateway? | ≤ 15 min |
-| 3 | every push to `main` | `candidate.yml` | Is this SHA a build we would hand to a device — on Android **and** on iOS? | ≤ 45 min |
-| 4 | 06:00 UTC, on the promoted candidate | `e2e.yml` | Does the candidate hold under depth — iOS, cross-browser, scale, chaos, adversaries? | ≤ 90 min |
-| 5 | weekend, on the promoted candidate | `soak-weekly.yml`, `interop-weekly.yml`, `enrichment-live-weekly.yml`, `hygiene.yml` | Does it survive time, live dependencies, and our own suite being attacked? | ≤ 5 h |
-
-**Lane identity is the GitHub job id** (no `name:` overrides); a matrix leg is `<job> (<leg>)`. That is what `scripts/ci/lane-health.mjs`, the evidence files and the rolling issues all key on, so renaming a job renames a lane everywhere at once.
-
-**Rung 3 is what rungs 4 and 5 and the release chain consume.** `candidate.yml`'s `promote` job moves the git ref `refs/candidates/latest` and publishes `test-report/candidate.json` on gh-pages; every deep workflow opens with a `resolve-candidate` job (`scripts/ci/resolve-candidate.mjs`) whose fallback chain — dispatch input → the pointer → the last green `ci.yml` run on main → the run's own SHA — is printed to the step summary so the page always says which link answered. Before this, the nightly ran against whatever `main` pointed at when the cron fired, and thirty consecutive red nights could not distinguish a product regression from a dependency merge four hours earlier.
-
-**The rung-2 budget is enforced on the run that spends it.** The `check` job (which holds `actions: read`) runs `scripts/ci/pr-gate-wall-clock.mjs`: it reads this run's own jobs, computes the **union of the `started_at → completed_at` intervals** across `check`'s `needs:` — the time during which at least one gate lane was actually running — appends the number to the Job Summary, and fails over `tests/budgets.json#suiteWallClock`'s `lanes["pr-gate"].budgetMs` (900,000 ms). It was `max(completed_at) − min(started_at)` until [#931](https://github.com/srikanth235/centraid/issues/931): the raw span charged the PR for the account's runner backlog, so a `packages/core`-only diff with every lane green failed at 16.0 min because three workflows shared the runner pool and the coverage shards queued. Overlapping lanes still collapse into one interval, so parallelism is worth exactly what it was; only the gaps in which no gate job was running are dropped. The elapsed span and the queue wait inside it are printed beside the budgeted number. **The ceiling did not move** — `tests/budgets.json` is untouched and tighten-only.
-
-### The `build:ci` cache miss, diagnosed (#915)
-
-[#892](https://github.com/srikanth235/centraid/issues/892) found one provable defect (a git-tracked file declared as a turbo output) and instrumented the rest; `bun run build:ci` has printed a per-task HIT/MISS table and the global hash inputs ever since. #915 read those inputs and measured the remaining miss on this tree:
-
-- A cold `build:ci` is **349 s over 13 build tasks, and 278 s of it is `@centraid/tunnel#build`** — a release `cargo` compile behind the napi module.
-- `@centraid/tunnel#build` `dependsOn: ["^build"]` → `@centraid/core#build`. With no `inputs:` declared, turbo hashes **every non-ignored file in a package**, so editing one line of `packages/core/src/blob/cbsf-properties.test.ts` moved **11 of 16 build hashes**, `@centraid/tunnel` among them. A test-file edit — which is on nearly every PR — was re-paying a Rust compile, in each of the five lanes that build.
-- The fix is `turbo.json`'s `build.inputs`: `$TURBO_DEFAULT$` minus `*.test.*`, `*.spec.*`, `__tests__/**` and `**/*.md`. Every package's build is `tsc` or a bundler and none reads markdown or a test module, so the exclusions cannot produce a stale hit. Re-measured on the same tree: a test-file edit and a README edit now move **0** hashes; a real `packages/core/src` edit still moves the same 11.
-- Second cause, same symptom: a turbo MISS on `@centraid/tunnel#build` degrades to a **fully cold** cargo compile in any lane without a Cargo cache. `verify` had `cargo-cache: verify` and `coverage-shard` / `coverage` did not, so identical misses cost very differently. Both now carry the preset.
-- Enforcement: the three `build:ci` lanes call `bun run build:ci:floored` → [`scripts/ci/turbo-floor.mjs`](../scripts/ci/turbo-floor.mjs), which enforces `--min-hit-rate 0.15`. The number is justified by the graph — the deepest single-package change (`packages/core/src`) still leaves 3 of 13 tasks cached (≈ 23 %), so only a genuine whole-graph miss falls below it.
-- **The one legitimate way to be below the floor is a global-hash change**, and the wrapper detects it rather than offering a waiver. Before enforcing, it reads the diff (merge-base three-dot against `origin/main`, falling back to a two-dot diff and then to `HEAD~1` for a main push) and checks it against `GLOBAL_HASH_INPUTS`: `bun.lock`, the **root** `package.json`, `turbo.json`, `.npmrc`, `bunfig.toml`, `Cargo.lock`, `.node-version`, `rust-toolchain*`, and `.github/actions/setup/**`. If any moved, the failure is downgraded to `::warning title=Turbo cache floor waived::` **naming the file**, and the reason is written to the Job Summary; otherwise the floor enforces. A package-local `package.json` is deliberately not a mover — that is exactly the case the floor is meant to catch. An unreadable diff (a shallow checkout with no `origin/main`) also waives, loudly, because reding a lane for the checkout depth is a false red the author cannot fix from the PR.
-- There is **no flag and no environment variable that turns the floor off.** The waiver is computed from the diff, so it is an exception rather than a hole; a gate that is always red on the PRs that need it least is a gate that is off ([#915](https://github.com/srikanth235/centraid/issues/915) principle 2), and the scorecard's PR false-red target is ≤ 2 %. Do not lower the floor to make anything green, and add a path to `GLOBAL_HASH_INPUTS` only when a run has proved it moves the global hash — the `### Turbo cache` summary prints `globalCacheInputs` for exactly that.
-
-Two things this repo cannot answer from inside the tree, recorded rather than implied: whether the GitHub-backed remote cache is actually **serving** those hits across jobs and branches, and whether the 10 GB Actions cache pool is evicting turbo entries. Both are readable from the next real run's `### Turbo cache` table (hit **source** column: `local` vs `remote`), which is why the report prints it.
+`deny` without `cargo-deny` installed, `ci-policy` without `actionlint`, `secrets` without `gitleaks`, `osv` without `osv-scanner`, and `buf` without `buf` — each prints a loud `SKIP` naming what turns it into a real run, and each is required in CI. `device-lanes` need attached devices and run only on the self-hosted runner.
 
 ## Tools only via repo scripts
 
 Never raw `npx vitest`, `npx tsc`, etc. Use:
 
 ```sh
-bun run test
-bun run typecheck
-bun run check:push  # the pre-push gate (the hook runs it)
-bun run check:pr    # full local mirror of the CI PR gate
-bun run check:full  # required for shared infrastructure
+cargo xtask gate --profile local
+cargo test -p <crate>
 bun run format
+bun run typecheck
 ```
 
-Pinned toolchain lives in root `package.json` / workspaces. The complete ownership and command contract is [toolchain.md](toolchain.md).
+Pinned toolchains live in `rust-toolchain.toml`, `mobile/gradle/libs.versions.toml` and the root `package.json`. The complete ownership and command contract is [toolchain.md](toolchain.md).
 
 ## Related
 

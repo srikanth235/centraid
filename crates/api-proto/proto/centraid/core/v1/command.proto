@@ -1,0 +1,249 @@
+// Commands (#1020, D-1020-C4).
+//
+// A command is the one way anything changes.
+//
+// **The CLI is a client** (#1020 Decision): `centraid devices revoke` and every
+// other admin verb send THESE messages, the same ones an owner seat sends, and
+// produce the same receipts. There is no privileged path to audit separately,
+// which is why admin.proto carries payloads and not a second envelope.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+message Command {
+  // The registered command name.
+  string name = 1;
+  // The input. Canonical JSON in bytes, for the reasons in
+  // intent.proto's D-1020-C12 note — chiefly that the input is validated
+  // against `agent_command.input_schema_json` held in the vault, so a proto
+  // message per command would put `buf breaking` in the way of adding one.
+  bytes input = 2;
+  // WHICH OF A HANDLER'S CALLS THIS IS. Required, unlike v0, where the fallback
+  // was the call's ORDINAL and only stable for a handler that makes the same
+  // call sequence every time (census, apps §2.1). Without it a replayed intent
+  // can re-execute a command that already committed.
+  string invoke_key = 3;
+  // Who is asking. Never inferred from the connection inside the core: the
+  // gateway resolves the enrolled device to a principal at the ALPN boundary
+  // and stamps it here, and every authority decision downstream reads THIS
+  // field (#1020 wave 2 lane D, per-command authorization).
+  Principal principal = 4;
+  // "This decorates the answer": a seat with no gateway settles it
+  // `FAILED` rather than refusing the whole run. The gateway ignores it.
+  bool optional = 5;
+  // THE WINDOW THE SHELL WAS GIVEN, for `seat.sync` and nothing else
+  // (#1025 S2). Absent means "as long as it takes", which is what a desktop
+  // "sync now" means and what no phone ever means.
+  optional SyncWindow sync_window = 6;
+}
+
+// HOW LONG THIS PASS HAS, AND WHAT IT MAY SPEND — the OS's numbers, not the
+// core's (#1025 S2).
+//
+// The core used to hold both as constants: a 60-second per-plane ceiling and
+// `Budget::foreground()` on every pass core-ffi ever attached. Neither is a
+// fact the core can know. iOS hands a `BGAppRefreshTask` an expiry it chose,
+// Android's `ListenableWorker` is stopped when its own budget runs out, and a
+// member tapping "sync now" in the foreground has no expiry at all. A constant
+// in the middle is a guess that is wrong in both directions: it outlives an
+// iOS refresh window, and it cuts a night-shift pass that had hours.
+//
+// A window the deadline cuts is a NORMAL END. The pass reports what it kept —
+// every applied commit is committed and every verified chunk group is durable —
+// and the next pass continues from there. Nothing is rolled back and nothing is
+// redone.
+message SyncWindow {
+  // Milliseconds from the moment the call is made until the caller's window
+  // ends. A RELATIVE duration rather than an absolute instant, because the
+  // shell's clock and the core's are the same clock only by luck, and a skewed
+  // absolute deadline is either already past or never reached.
+  uint64 deadline_ms = 1;
+  // The most payload bytes the byte plane may move this window. Absent leaves
+  // the implementation's default, which is what a foreground pass wants.
+  optional uint64 budget_bytes = 2;
+  // The most blobs the byte plane may ask for, however small. A window that
+  // queued forty thousand thumbnails would spend itself on round trips.
+  optional uint32 budget_items = 3;
+  // WHICH PLAN THIS WINDOW IS (#1025 S5). `crates/blobs` has held the three
+  // shapes — short refresh, night shift, foreground — since #1020, and until
+  // this field the shell could not choose between them: core-ffi attached
+  // `foreground()` to every pass, so a thirty-second cellular refresh and a
+  // night on the charger asked for exactly the same thing.
+  //
+  // A SELECTOR AND NOT TWO MORE NUMBERS. The numbers are already here, in
+  // `budget_bytes` and `budget_items`, and they override this — but a shell
+  // that had to compute them would be a second copy of `crates/blobs`'s
+  // reasoning written in Kotlin and Swift, drifting from the Rust the moment
+  // either number changed. The selector names the decision; the crate that
+  // knows the sizes keeps them.
+  SyncBudget budget = 4;
+  // THE MEMBER IS PAYING BY THE MEGABYTE. A separate fact from the selector,
+  // because it is separately true: a night shift on a tethered phone is a
+  // night shift, metered.
+  //
+  // It changes WHAT is fetched and not only how much — the byte plane asks for
+  // no originals at all. A ceiling could not have done it: the planner admits
+  // an item larger than the whole budget on purpose, because that is the only
+  // way a 900 MB video ever crosses, so a metered window bounded only by bytes
+  // starts the video and resumes it every window until the bill arrives.
+  bool metered = 5;
+  // THIS WINDOW IS A TAIL (#1025 S2, D-1025-S7-40).
+  //
+  // The row stage does not end at the last catch-up page: it holds the log
+  // stream open and applies every further page the gateway writes, until this
+  // window's deadline fires, the shell says stop, or the connection drops.
+  // The intent and byte stages still run — once when the catch-up finishes,
+  // and the byte stage again after each live page that names new content.
+  //
+  // A shell that wants a bounded catch-up and no more simply leaves this
+  // false. There is no third mode and no interval anywhere: a foreground
+  // timer is a deleted concept.
+  bool tail = 6;
+  // THE MEMBER'S TRANSFER RULE (#1025 S4, D-1025-S7-60).
+  //
+  // WhatsApp's auto-download model: bytes are never pushed, they are PLANNED,
+  // and the plan is a member's setting. It is one per DEVICE and not per
+  // vault, because what it governs is a data plan and a phone has one data
+  // plan however many vaults it holds; the shell keeps it in its secure store
+  // and passes it as part of the window.
+  //
+  // A SELECTOR AND NEVER A BYTE COUNT, for the same reason `metered` is not
+  // one: the planner admits an item larger than the whole budget on purpose,
+  // so a ceiling cannot express "not this tier". `crates/blobs` does every bit
+  // of the arithmetic — a Kotlin or Swift copy of the table would be a second
+  // rule deciding a member's bill.
+  //
+  // It rides BESIDE `metered` rather than replacing it, because the two are
+  // separately true: `TRANSFER_RULE_MANUAL` withholds on an unmetered link
+  // too, which no spelling of a metered flag could say.
+  TransferRule originals = 7;
+  // THE ONE BLOB THE MEMBER TAPPED (#1025 S5, D-1025-S7-63).
+  //
+  // Lowercase-hex content hash. WhatsApp's download arrow: it narrows this
+  // window to that blob and suspends the tier rules FOR IT, because a member
+  // who tapped the affordance has overridden the rule for that item — which is
+  // what the affordance means, and a window that then withheld it would be
+  // answering a tap with nothing.
+  //
+  // Not a plane of its own: a fetch is an ordinary pass with a one-item
+  // window, so it lands in the content store like any other blob and the
+  // screen refreshes through the same `RowsChanged` (D-1025-S7-21). A second entry
+  // point would be a second way for a byte to become a row.
+  optional string fetch_hash = 8;
+}
+
+// WHEN THIS DEVICE MAY FETCH ORIGINALS — the member's setting, as one value.
+//
+// Thumbnails and previews are NOT in this enum, which is the shape of the
+// ruling rather than an omission: a thumbnail crosses on any link and ahead of
+// everything because it is kilobytes and it is the grid, and a preview crosses
+// on any link bounded by the short-refresh budget. Only the originals are
+// worth a member's decision.
+//
+// Unspecified is WIFI_ONLY: the default, and the one whose failure mode is a
+// photograph that arrives late rather than a bill.
+enum TransferRule {
+  TRANSFER_RULE_UNSPECIFIED = 0;
+  // Originals wait for a link the member is not paying for.
+  TRANSFER_RULE_WIFI_ONLY = 1;
+  // A photograph's original may cross a metered link; a VIDEO's may not. That
+  // last part is a fixed rule and not a fourth setting: the two differ by
+  // three orders of magnitude, and a member who said "photos on cellular" did
+  // not say "a 900 MB video on cellular".
+  TRANSFER_RULE_WIFI_AND_CELLULAR_PHOTOS = 2;
+  // No original crosses on any link unless the member taps it (`fetch_hash`).
+  //
+  // Not "Wi-Fi off": a member on unlimited fibre may still want a phone that
+  // holds thumbnails and fetches a full-size photograph only when asked,
+  // because the constraint being spent is the device's disk rather than its
+  // data plan.
+  TRANSFER_RULE_MANUAL = 3;
+}
+
+// WHICH OF `crates/blobs`'s three windows this is.
+//
+// Unspecified is the FOREGROUND window, which is what "no budget was named"
+// has always meant here and what a desktop "sync now" is. An older shell that
+// sends no budget therefore gets exactly what it got before this field.
+enum SyncBudget {
+  SYNC_BUDGET_UNSPECIFIED = 0;
+  // iOS's `BGAppRefreshTask`: about thirty seconds and possibly cellular.
+  SYNC_BUDGET_SHORT_REFRESH = 1;
+  // Charging, unmetered, and the gateway is usually one LAN hop away because
+  // that is where the charger is.
+  SYNC_BUDGET_NIGHT_SHIFT = 2;
+  // The member is looking at the screen. Nothing is held back; what bounds this
+  // window is the member closing the app.
+  SYNC_BUDGET_FOREGROUND = 3;
+}
+
+// A principal. Exactly two kinds, and enrolment is full trust (#996 R11): an
+// enrolled device has a row whose public key matches, and revoking deletes
+// it — unknown and revoked are the SAME refusal.
+message Principal {
+  PrincipalKind kind = 1;
+  // `access_device.device_id`, or `access_agent.agent_id` for an agent.
+  string caller_id = 2;
+  // The agent's enrollment key. Empty for an owner device.
+  string principal_id = 3;
+  // The named surface, when one is named; it becomes the caller id in v0
+  // (`identity.ts:104-112`).
+  string surface = 4;
+  // The agent is riding an acting owner. An agent can never exceed the owner
+  // it rides, and the assistant holds NO standing answer of its own.
+  bool on_behalf_of_owner = 5;
+}
+
+enum PrincipalKind {
+  PRINCIPAL_KIND_UNSPECIFIED = 0;
+  PRINCIPAL_KIND_OWNER_DEVICE = 1;
+  PRINCIPAL_KIND_AGENT = 2;
+}
+
+// The command's verdict. Five of v0's six `VaultOutcome.status` values plus
+// `IN_FLIGHT`; `QUEUED` is the seat's own answer for a durable outbox entry.
+enum CommandStatus {
+  COMMAND_STATUS_UNSPECIFIED = 0;
+  COMMAND_STATUS_EXECUTED = 1;
+  COMMAND_STATUS_PARKED = 2;
+  COMMAND_STATUS_QUEUED = 3;
+  COMMAND_STATUS_IN_FLIGHT = 4;
+  COMMAND_STATUS_FAILED = 5;
+  COMMAND_STATUS_DENIED = 6;
+}
+
+message CommandOutcome {
+  CommandStatus status = 1;
+  // The handler's answer, canonical JSON in bytes.
+  bytes output = 2;
+  // An OWNER-FACING SENTENCE. The author's words for a failed precondition, the
+  // access plane's sentence for a denial. The raw predicate reaches the audit
+  // trail and never a member.
+  string reason = 3;
+  // The audit-band ids, so a caller can point at its own evidence.
+  string invocation_id = 4;
+  string receipt_id = 5;
+  // Set when the refusal was a revocation: a revoked app cannot read the
+  // consent tables to find out for itself, so the host attaches this.
+  // RFC 3339.
+  optional string revoked_at = 6;
+  // THE COMMIT THE EFFECT LANDED IN. Absent when the command wrote nothing a
+  // session saw — an empty commit is not a commit.
+  //
+  // Added in wave 2 lane D2 because the deterministic simulation found its
+  // absence to be a liveness bug, not a cosmetic gap (#1020). A seat settles an
+  // `EXECUTED` answer by waiting for its own applied commit seq to reach this
+  // number. Without it, an answer carried neither a commit seq nor an
+  // `answered_versions` set, so the intent parked at `awaiting-change` with
+  // nothing that could ever settle it — the overlay stayed on every screen for
+  // the life of the seat. `crates/vault`'s own `CommandOutcome` has carried
+  // this field all along; it was only the wire that dropped it.
+  //
+  // Adding a field with a fresh number is not a `buf breaking` violation: an
+  // older peer ignores it and the seat then falls back to the version-set path
+  // exactly as before.
+   // 7 WAS `commit_seq`, DELETED (#1029 §1). It was the position a SEAT's
+  // overlay settled against, allocated by `replica_meta` in the log plane. The
+  // number is retired, not reused.
+}

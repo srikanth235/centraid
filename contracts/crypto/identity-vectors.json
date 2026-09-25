@@ -1,0 +1,27 @@
+{
+  "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+  "safetyNumber": "38394 36422 07209 27357 06879 57260 38834 97705 12477 24050 94056 44949",
+  "schema": "centraid-identity-vectors/1",
+  "seedHex": "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf705489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840",
+  "vaults": [
+    {
+      "boxPublicHex": "5db03b32ccb73475d77d660fee6bd1439f0bc2a076ef51ff5f4d337cb8d3680d",
+      "identityPublicHex": "f2ee1ee5284af1a30f9db9bf045dde9a6e85191768356b4fd9d6c28fad7c5d18",
+      "index": 0,
+      "rootKeyHex": "3e493b959a5ad11b4c9373f8e82cd4d19033a7a62d419c3b831c5d8e0d1a0587"
+    },
+    {
+      "boxPublicHex": "6cb33b3f9496b2942e5d6bb347c67b02323ec2b8184ae3da91d511beff90777a",
+      "identityPublicHex": "71a86af705176a1e249cbe59f9c20dd15aba2a62b57eaada6e8d3fbd74d69fc8",
+      "index": 1,
+      "rootKeyHex": "dba3d055ce3b4b06ab4ad5742eb7cc59eb14a1f96aaa706609ba822a46baee57"
+    },
+    {
+      "boxPublicHex": "87192cbff0d03105774ae58897c2abe0c42bf52e894f4fa38f201625b7db4156",
+      "identityPublicHex": "fad8dae060ba246068673b5fc11bb92243d69cbaaa8707e934bf71a42823d71a",
+      "index": 4,
+      "rootKeyHex": "9691d1906f4ca953270e38fd5b6692a59cede128b88983baa4342e5621081ca9"
+    }
+  ],
+  "why": "SLIP-0010 paths, domain tags and indices are format decisions (#1029 §0, W0.5-R1). A vault identity public key IS its address; a round trip cannot see it move, these bytes can."
+}

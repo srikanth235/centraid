@@ -1,0 +1,23 @@
+# A QUERY THAT MATCHED NOTHING, AND IT MUST NOT READ LIKE `resting`.
+#
+# This is the pair `photos-search/resting` exists to be compared against, and
+# the difference a bag of optionals erases: both screens show a grid with no
+# photographs in it, and only one of them may say "Nothing matched". The two
+# facts that separate them are in the bytes — `query` is non-empty here and
+# empty there, and the arm is `hits` here and `resting` there.
+#
+# `hits` present with no cells is DATA: the search ran and the answer was none.
+# It is not `failure`, and a decoder that collapsed an empty result into one
+# would tell a member their vault is unreachable when what happened is that they
+# have no photographs of a kayak.
+#
+# `matched_on` is empty for the same reason the cells are: nothing matched, so
+# there is nothing to explain.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+query: "kayak"
+hits {
+}

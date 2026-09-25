@@ -1,6 +1,5 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["RUNNER_OS"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -9,22 +8,12 @@
       // that is also a committed file is simultaneously one of the task's own
       // hashed INPUTS, so the task's cache key depends on its own product: a
       // hit restores the file, a rebuild that is not byte-exact moves the key,
-      // and turbo's own docs call the overlap undefined. This list previously
-      // carried `src/generated/centraid_web_iroh_bg.wasm`, which is a committed
-      // 1.9 MB artifact — so `@centraid/web`'s cache entry shipped it on every
-      // save and restore for no gain, and the repo simultaneously documents its
-      // rebuild as non-hermetic ("intrinsic comment renumbering", ci.yml
-      // `iroh-wasm`). `dist/**` and `native/*.node` are both gitignored.
-      "outputs": ["dist/**", "native/*.node"],
+      // and turbo's own docs call the overlap undefined. `dist/**` is
+      // gitignored.
+      "outputs": ["dist/**"],
       // #915 — WHAT A BUILD IS ALLOWED TO CARE ABOUT. With no `inputs`, turbo
-      // hashes every non-ignored file in the package, so a one-line edit to
-      // `packages/core/src/blob/cbsf-properties.test.ts` moved ELEVEN of the
-      // sixteen build hashes — `@centraid/tunnel` among them, whose build is a
-      // release cargo compile measured at 278s of a 349s cold `build:ci`. Five
-      // CI lanes run `build:ci`, so one test-file edit cost roughly 23 minutes
-      // of runner time re-proving a Rust artifact that could not have changed.
-      // That is the whole of the "~4.5-minute build:ci miss" #915 asks about,
-      // and it is caused by hashing files no build reads.
+      // hashes every non-ignored file in the package, so a one-line edit to a
+      // test file moves the build hash of the package and of every dependent.
       //
       // `$TURBO_DEFAULT$` keeps the default set and the negations remove only
       // files that cannot reach a build output: every package's build is `tsc`

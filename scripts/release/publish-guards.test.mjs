@@ -1,11 +1,5 @@
 import { spawnSync } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { beforeAll, describe, expect, test } from "vitest";
@@ -22,9 +16,9 @@ import {
  *
  * Both scripts are top-level `main`s that derive their repo root from
  * `import.meta.dirname`, so each test runs them inside a **synthetic root**:
- * a temp directory holding a copy of `scripts/release/`, a fixture
- * `package.json` / `CHANGELOG.md`, and the one native file `sync-versions.mjs`
- * requires. Nothing here can touch the real repo, its git history, or npm.
+ * a temp directory holding a copy of `scripts/release/` and a fixture
+ * `package.json` / `CHANGELOG.md`. Nothing here can touch the real repo, its
+ * git history, or npm.
  *
  * Every publish case either aborts before the first mutation or runs with
  * `--dry-run`, which returns before `git commit` / `git tag`.
@@ -111,11 +105,6 @@ function makeFixtureRoot(options = {}) {
     path.join(realRoot, "scripts/release"),
     path.join(root, "scripts/release"),
     { recursive: true }
-  );
-  mkdirSync(path.join(root, "apps/mobile/src"), { recursive: true });
-  cpSync(
-    path.join(realRoot, "apps/mobile/src/version-core.cjs"),
-    path.join(root, "apps/mobile/src/version-core.cjs")
   );
   writeFileSync(
     path.join(root, "package.json"),
@@ -353,7 +342,7 @@ describe("release publish derivation", () => {
     expect(JSON.parse(result.stdout).surfaces).toEqual([
       "desktop",
       "gateway-image",
-      "gateway-npm",
+      "prebuilt-core",
     ]);
   });
 
@@ -460,7 +449,7 @@ describe("release prepare guards", () => {
     const result = runPrepare(root, ["--allow-dirty", "--skip-check"]);
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout).publishCommand).toBe(
-      "node scripts/release/publish.mjs --version 0.4.3 --issue N --surfaces desktop,gateway-image,gateway-npm"
+      "node scripts/release/publish.mjs --version 0.4.3 --issue N --surfaces desktop,gateway-image,prebuilt-core"
     );
   });
 

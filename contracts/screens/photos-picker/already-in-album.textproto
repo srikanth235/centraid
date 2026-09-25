@@ -1,0 +1,58 @@
+# THE GRID HAS TO KNOW WHAT THE ALBUM ALREADY HOLDS.
+#
+# `already_in_album_asset_ids` names `ast-0201` and `ast-0202`, and both are in
+# `data.cells`. That OVERLAP is the fixture: the picker draws its own grid of
+# the library, and without this list every photograph looks addable, including
+# the ones a member put in this album last week. They tap, the write lands as a
+# no-op or a duplicate entry, and they find out afterwards — which is the worst
+# moment to learn it.
+#
+# `picked_asset_ids` is a separate list and the two are DISJOINT here by
+# construction, not by coincidence: already-in is a fact about the album and
+# picked is a fact about this session. Collapsing them into one "selected" set
+# would make the member's new picks indistinguishable from what was already
+# there, and Confirm would either re-add everything or nothing.
+#
+# `ast-0203` is picked and in neither — the one real addition this screen would
+# write.
+#
+# The picked set is the PICKER's own state and not a shelf's (§10). A shelf that
+# could be picked from would carry an album id on every surface that shows one.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+collection_id: "col-0007"
+collection_name: "Portugal"
+data {
+  cells {
+    asset_id: "ast-0201"
+    thumbnail_path: "thumbs/ast-0201.jpg"
+    captured_at: "2026-04-18T09:15:00Z"
+    captured_utc_offset_minutes: 60
+    kind: KIND_PHOTO
+    held: HELD_ORIGINAL
+    original_hash: "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+  }
+  cells {
+    asset_id: "ast-0202"
+    captured_at: "2026-04-18T09:14:00Z"
+    captured_utc_offset_minutes: 60
+    kind: KIND_PHOTO
+    held: HELD_ABSENT
+  }
+  cells {
+    asset_id: "ast-0203"
+    thumbnail_path: "thumbs/ast-0203.jpg"
+    captured_at: "2026-04-17T21:50:00Z"
+    captured_utc_offset_minutes: 60
+    kind: KIND_PHOTO
+    held: HELD_THUMBNAIL_ONLY
+    original_hash: "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f"
+  }
+  next_cursor: "2026-04-17T21:50:00Z|ast-0203"
+}
+picked_asset_ids: "ast-0203"
+already_in_album_asset_ids: "ast-0201"
+already_in_album_asset_ids: "ast-0202"

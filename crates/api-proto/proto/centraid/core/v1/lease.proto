@@ -1,0 +1,141 @@
+// Admission, the account, and the lease (#1029 §0, §3).
+//
+// Just keys. There are no email addresses, phone numbers, provider accounts or
+// names in this file, and there is nowhere for one to arrive: an account is an
+// Ed25519 public key, a vault is an Ed25519 public key, and a device is an
+// Ed25519 public key certified by a vault's.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// "Device D takes vault V at epoch E", signed by the VAULT IDENTITY key.
+//
+// Appends are accepted only from the device holding the current lease. The
+// epoch is a per-vault monotonic counter the gateway stores and a claim carries
+// `epoch + 1` (F3) — NOT a backup generation, which is 128 random bits and has
+// no order at all.
+//
+// `centraid_identity::DeviceCertificate` is the same statement in its own
+// encoding, and `DeviceTrust::accept` is the rule that refuses an equal or
+// lower epoch. This message is that certificate on the wire plus the claim's
+// own signature: a request is signed by the device key, and a LEASE CLAIM is
+// additionally signed by the identity key, because a device key that could take
+// a lease by itself would be a device key that could take somebody else's.
+message LeaseClaim {
+  // 136 bytes — `DeviceCertificate::to_bytes`. It names the vault identity key,
+  // the device key and the epoch, all three signed by the identity key.
+  bytes device_certificate = 1;
+  // Ed25519 by the identity key over the claim context and the certificate, so
+  // a certificate cannot be replayed as a claim on another gateway.
+  bytes signature = 2;
+}
+
+// The lease as the gateway holds it.
+message Lease {
+  bytes device = 1;
+  uint64 epoch = 2;
+  int64 taken_at_ms = 3;
+}
+
+// A SUPERSEDED DEVICE IS TOLD IT WAS SUPERSEDED, not that it is a stranger.
+//
+// It comes from a TOMBSTONE and not a deletion, which is the whole point: an
+// `UNAUTHORIZED` and a `VAULT_MOVED` are different facts and the phone's answer
+// differs. The phone FREEZES THAT VAULT READ-ONLY, shows the unacked spool as
+// "N changes since <date>", and keeps it. Taking the vault back is a deliberate
+// action on that phone, never automatic.
+//
+// The seed is on both phones, so this is cooperation and not enforcement (F1):
+// a misplaced phone still holding the synced seed can sign a claim as validly
+// as the new one. The manifest compare-and-set is what makes the race
+// first-writer-wins; this message is what makes the loser coherent.
+message VaultMoved {
+  uint64 current_epoch = 1;
+  int64 moved_at_ms = 2;
+}
+
+// Registering a vault under an account on the gateway.
+//
+// `vault_claim` carried an ACCOUNT KEY's signed "vault V belongs to account A"
+// (`centraid_identity::VaultClaim`, 132 bytes) until the scope amendment of
+// 2026-09-21 struck the account. The field is RESERVED rather than re-used:
+// field 1 of this message means that claim to anything already built.
+message VaultRegistration {
+  reserved 1;
+  // The first lease, so registration and admission are one round trip.
+  LeaseClaim lease = 2;
+}
+
+// The vaults a gateway holds for a caller. RESTORE NEEDS NO OPERATOR
+// (#1029 §3), and how a restoring phone learns WHICH vaults exist is W15's:
+// the amendment of 2026-09-21 struck the account key and its signed listing,
+// so field 1 — `centraid_identity::VaultListing::to_bytes` — is RESERVED and
+// not re-used.
+message VaultsResponse {
+  reserved 1;
+  repeated VaultSummary vaults = 2;
+}
+
+message VaultSummary {
+  bytes vault = 1;
+  optional Lease lease = 2;
+  // The head as the gateway holds it, so a restore knows what it is asking for
+  // before it asks. A fresh phone cannot tell a rolled-back head from the real
+  // one (F7); the partial mitigation is the head hash in the vault's pkarr
+  // record, which a fresh restore compares against this.
+  optional bytes head = 3;
+  uint64 stored_bytes = 4;
+  uint64 object_count = 5;
+}
+
+// ADMISSION IS THE ONE PLACE THE ADAPTERS DIFFER, and it ends in the same
+// state: an account keyed by the account key, holding its vault identity keys,
+// each with a current device certificate.
+message AdmissionRequest {
+  bytes account = 1;
+  oneof proof {
+    // Standalone: an owner-issued invite, the successor of the pairing ticket
+    // (15-minute lifetime, one use, secret stored hashed).
+    Invite invite = 2;
+    // Hosted: an App Store / Play in-app purchase. StoreKit's
+    // `appAccountToken` is a UUID, so a RANDOM token is mapped to the account
+    // key server-side and no email is ever collected.
+    Purchase purchase = 3;
+  }
+}
+
+message Invite {
+  bytes secret = 1;
+}
+
+message Purchase {
+  string app_account_token = 1;
+  bytes receipt = 2;
+}
+
+// THE PLAN, AND WHAT LAPSE MEANS (F13).
+//
+// Keys are free to mint, so an unbounded free tier is unbounded Sybil storage:
+// the free tier is zero or receipt-bound, and `quota_bytes` is the rule, not a
+// display value. A LAPSED PLAN IS READ-ONLY AND RETAINED for `retain_until_ms`,
+// never deleted inside it — restore still works while lapsed, which is the
+// whole reason somebody would come back.
+message Plan {
+  PlanState state = 1;
+  uint64 quota_bytes = 2;
+  uint64 used_bytes = 3;
+  // When the plan lapses, or lapsed.
+  optional int64 lapse_at_ms = 4;
+  // For a lapsed plan: the end of the stated retention period.
+  optional int64 retain_until_ms = 5;
+}
+
+enum PlanState {
+  PLAN_STATE_UNSPECIFIED = 0;
+  PLAN_STATE_ACTIVE = 1;
+  // Read-only. Reads, lists and restores work; nothing new is accepted.
+  PLAN_STATE_LAPSED = 2;
+  // The stated retention period ended. Nothing is served.
+  PLAN_STATE_EXPIRED = 3;
+}

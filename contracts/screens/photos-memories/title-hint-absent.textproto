@@ -1,0 +1,49 @@
+# A MEMORY THE PASS HAD NOTHING TO CALL.
+#
+# `mem-0020` has an empty `title_hint`, and the view has to compose its title
+# from `day_key` and `place_name` — "14 June 2024, Dún Laoghaire" — rather than
+# storing one the vault never wrote. That is the whole reason the field is
+# allowed to be empty instead of being filled in by whatever produced the row:
+# a title written into the vault by a view is a title no other surface agrees
+# with, and it outlives the view that invented it.
+#
+# `mem-0021` beside it carries a hint the pass did write. The two are the
+# branch, and a fixture with only one of them would pass against a view that
+# handled neither.
+#
+# `KIND_ON_THIS_DAY` and `KIND_TRIP` are the two kinds whose composed titles
+# read differently — one is a day, one is a span — which is why
+# `started_at`/`ended_at` are on the row beside `day_key` and not derived from
+# it. `mem-0020` spans four days; its `day_key` is the first.
+#
+# `member_count` is 0 on `mem-0021`: a memory whose members this device has not
+# copied is still a memory, and 0 is a real count.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_METERED
+}
+data {
+  memories {
+    memory_id: "mem-0020"
+    kind: KIND_TRIP
+    day_key: "2024-06-14"
+    place_name: "Dún Laoghaire"
+    member_count: 46
+    cover_thumbnail_path: "thumbs/ast-0301.jpg"
+    started_at: "2024-06-14T08:02:00Z"
+    ended_at: "2024-06-18T19:40:00Z"
+  }
+  memories {
+    memory_id: "mem-0021"
+    kind: KIND_ON_THIS_DAY
+    title_hint: "On this day"
+    day_key: "2023-09-22"
+    place_name: "Vembanad"
+    member_count: 0
+    started_at: "2023-09-22T00:00:00Z"
+    ended_at: "2023-09-22T23:59:59Z"
+  }
+  next_cursor: "2023-09-22|mem-0021"
+  computed: true
+}

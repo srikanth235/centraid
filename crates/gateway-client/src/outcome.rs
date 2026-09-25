@@ -1,0 +1,453 @@
+//! What came back, and which of it a phone is allowed to act on (#1029 §3, W5B-1).
+//!
+//! # A REFUSAL IS A CODE, AND THE CLIENT'S JOB IS TO BRANCH ON IT
+//!
+//! The gateway never sends a member-facing sentence — `error.proto` says so for
+//! every refusal in this product, and `gateway-core`'s `Refusal` says it again.
+//! So this module turns the wire's code back into a typed thing, and the shell
+//! turns *that* into words. Three of the codes are behaviour and the rest are
+//! shown; the table is in [`crate`]'s header.
+//!
+//! # THE COMPANION TRAVELS WITH THE REFUSAL, NOT AFTER IT
+//!
+//! `ERROR_CODE_VAULT_MOVED` without its `VaultMoved` is half an answer: a phone
+//! learns THAT its vault moved and never when, which is half of "N changes
+//! since `<date>`" — and a client that filled the date in from its own clock
+//! would be inventing the one fact the refusal exists to carry (W5 lane A, on
+//! `Error.moved`). The same holds for `ERROR_CODE_VERSION_WINDOW`, whose range
+//! `version::admit` puts in the refusal precisely "so the phone can render the
+//! typed state without a second round trip".
+//!
+//! [`ErrorBody`] therefore carries both companions, and they are `Option`s
+//! because a *body-less* code has none — not because a phone may shrug when one
+//! is missing. [`ClientError::from_body`] refuses to invent either.
+
+use centraid_api_proto::core_v1::ErrorCode;
+use centraid_gateway_core::error::Refusal;
+
+use crate::transport::TransportError;
+
+/// THE REFUSAL BODY IS `centraid_gateway_core::error::ErrorBody`.
+///
+/// It used to be declared here, `Deserialize`-only, as a hand-written twin of
+/// `gateway-server`'s `Serialize`-only one — "shared with
+/// `centraid-gateway-server` by being written the same on both sides", which
+/// is discipline and not a mechanism. **They had drifted**: the server wrote
+/// `server_protocol_min`/`server_protocol_max`/`client_protocol` and this
+/// declared `min`/`max`, non-optional, so a `VersionWindow` refusal did not
+/// deserialise at all and a phone that was merely too new got
+/// [`ClientError::Malformed`] — "the gateway's answer did not decode", which
+/// reads as a broken server and is not one.
+///
+/// One declaration, in the crate that owns the protocol (#1029 W17-5).
+/// `gateway-server/tests/wire_iroh.rs` moves the bytes between the two ends to
+/// prove it, and [`tests::every_refusal_this_product_has_survives_the_servers_own_serializer`]
+/// walks every variant through it.
+pub use centraid_gateway_core::error::{
+    ErrorBody, LeaseBody, MovedBody, ProtocolBody, QuotaBody, SizeBody,
+};
+
+/// Which side of a protocol mismatch needs an update.
+///
+/// Both arms exist because it is one comparison seen from two ends
+/// ([`centraid_gateway_core::version::Skew`]) and the sentences differ. The
+/// client latches the first arm: a server below this phone's minimum is one
+/// this phone **writes nothing to**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServerNeeds {
+    /// The server is below this phone's minimum. The typed "this server needs
+    /// an update" state, and no write.
+    Update { server: (u32, u32) },
+    /// This phone is below the server's minimum.
+    PhoneUpdate { server: (u32, u32) },
+}
+
+/// Everything a call to a gateway can come back as, other than the answer.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ClientError {
+    /// The gateway could not be reached. **Not a refusal** — see
+    /// [`TransportError`].
+    #[error(transparent)]
+    Transport(#[from] TransportError),
+
+    /// THE VAULT MOVED. The shell freezes that vault read-only, shows the
+    /// unacked spool as "N changes since `<date>`", and keeps it (F1). Nothing
+    /// is wiped and nothing is taken back automatically.
+    #[error("gateway: the vault moved to another device")]
+    Moved {
+        /// The lease epoch that holds it now.
+        current_epoch: u64,
+        /// When, on the server's clock.
+        moved_at_ms: i64,
+    },
+
+    /// **A LEASE CLAIM AT AN EPOCH THE VAULT ALREADY HOLDS** (#1029 W15-3).
+    ///
+    /// Not a failure a phone shows: it is the answer a RESTORE is asking for.
+    /// A restoring phone does not know what epoch the lost phone held, so it
+    /// claims at one and reads `held` off the refusal, re-certifies at
+    /// `held + 1` and claims again (F3). The server has always sent the two
+    /// epochs — `ErrorBody.lease` — and this client was throwing them away into
+    /// [`Self::Refused`], which made "the vault exists and somebody held it"
+    /// indistinguishable from "there is no such vault".
+    #[error("gateway: the lease is held at epoch {held}")]
+    LeaseStale {
+        /// The epoch the vault's lease stands at now. A restore claims above
+        /// it.
+        held: u64,
+        /// What was claimed, for a log line.
+        claimed: u64,
+    },
+
+    /// One side is outside the other's protocol range.
+    #[error("gateway: protocol version")]
+    Version(ServerNeeds),
+
+    /// **The skew answer was spent and the clock is still wrong.** A second
+    /// skew refusal on a re-signed request is a real failure and not a clock
+    /// ([`Refusal::is_retryable_once`]), so the client stops here rather than
+    /// hammering a server whose clock is the broken one.
+    #[error("gateway: the clock is still outside the window after one correction")]
+    ClockUnrecoverable {
+        /// What the server said its time was, the second time.
+        server_time_ms: i64,
+    },
+
+    /// Any other refusal. The code is the answer; the shell derives the words.
+    #[error("gateway refused: {code:?}")]
+    Refused {
+        /// The code.
+        code: ErrorCode,
+        /// The status it arrived under, for a log line.
+        status: u16,
+    },
+
+    /// The answer did not decode. A gateway that sends this is broken, and the
+    /// phone shows the same thing it shows for an internal error.
+    #[error("the gateway's answer did not decode: {reason}")]
+    Malformed {
+        /// For a log line.
+        reason: String,
+    },
+}
+
+impl ClientError {
+    /// Turn one refusal body into the typed error the shell branches on.
+    ///
+    /// A companion that should be there and is not becomes
+    /// [`Self::Malformed`] rather than a default: a `VAULT_MOVED` with no
+    /// moment would let a shell draw "0 changes since 1 January 1970" over a
+    /// frozen vault, which is worse than an error, because it reads like a
+    /// fact.
+    #[must_use]
+    pub fn from_body(status: u16, body: &ErrorBody) -> Self {
+        let Some(code) = code_of(&body.code) else {
+            return Self::Malformed {
+                reason: format!("unknown error code {:?}", body.code),
+            };
+        };
+        match code {
+            ErrorCode::VaultMoved => body.moved.map_or_else(
+                || Self::Malformed {
+                    reason: "a moved refusal with no VaultMoved companion".to_owned(),
+                },
+                |moved| Self::Moved {
+                    current_epoch: moved.current_epoch,
+                    moved_at_ms: moved.moved_at_ms,
+                },
+            ),
+            ErrorCode::GatewayLeaseStale => body.lease.map_or_else(
+                || Self::Malformed {
+                    reason: "a stale-lease refusal with no epochs".to_owned(),
+                },
+                |lease| Self::LeaseStale {
+                    held: lease.held_epoch,
+                    claimed: lease.claimed_epoch,
+                },
+            ),
+            ErrorCode::VersionWindow => body.protocol.map_or_else(
+                || Self::Malformed {
+                    reason: "a version refusal with no range".to_owned(),
+                },
+                |range| {
+                    Self::Version(needs(
+                        (range.server_protocol_min, range.server_protocol_max),
+                        (crate::CLIENT_PROTOCOL_MIN, crate::CLIENT_PROTOCOL_MAX),
+                    ))
+                },
+            ),
+            code => Self::Refused { code, status },
+        }
+    }
+}
+
+/// Which side needs an update, from the two ranges.
+///
+/// It is [`centraid_gateway_core::version::negotiate`]'s answer and not a
+/// second comparison — that module exists exactly so a phone and a server
+/// cannot disagree about whose fault a mismatch is.
+#[must_use]
+pub fn needs(server: (u32, u32), client: (u32, u32)) -> ServerNeeds {
+    use centraid_gateway_core::version::{Range, Skew, negotiate};
+
+    match negotiate(
+        Range::new(server.0, server.1),
+        Range::new(client.0, client.1),
+    ) {
+        Skew::ServerTooOld => ServerNeeds::Update { server },
+        // A phone that agrees with the server has no business being here: the
+        // caller only builds a `ServerNeeds` from a refusal. An `Agreed` that
+        // reached this arm means the SERVER refused a version it advertises, so
+        // the phone is the one that cannot proceed.
+        Skew::ClientTooOld | Skew::Agreed(_) => ServerNeeds::PhoneUpdate { server },
+    }
+}
+
+/// Every code a gateway's refusal can carry, so a wire spelling can be read
+/// back into one.
+///
+/// **It is derived from `Refusal` rather than from the enum**: the wire
+/// spelling is `format!("{code:?}")` on the adapters' side, and the set of
+/// codes that can appear is exactly `Refusal::code()`'s range.
+/// `every_refusal_this_product_has_survives_its_wire_spelling` walks every
+/// variant and would fail the moment a new refusal is minted without a client
+/// that can read it.
+const GATEWAY_CODES: &[ErrorCode] = &[
+    ErrorCode::Unauthorized,
+    ErrorCode::VersionWindow,
+    ErrorCode::InvalidRequest,
+    ErrorCode::VaultMoved,
+    ErrorCode::Internal,
+    ErrorCode::GatewaySignatureInvalid,
+    ErrorCode::GatewayClockSkew,
+    ErrorCode::GatewayChecksumMissing,
+    ErrorCode::GatewayChecksumMismatch,
+    ErrorCode::GatewayAlreadyCommitted,
+    ErrorCode::GatewayObjectUnknown,
+    ErrorCode::GatewayObjectTooLarge,
+    ErrorCode::GatewayHeadConflict,
+    ErrorCode::GatewayLeaseStale,
+    ErrorCode::GatewayNotLeaseHolder,
+    ErrorCode::GatewayQuotaExceeded,
+    ErrorCode::GatewayDeleteRefused,
+    ErrorCode::GatewayCapabilityScope,
+];
+
+/// Read a wire spelling back into a code.
+#[must_use]
+pub fn code_of(spelling: &str) -> Option<ErrorCode> {
+    GATEWAY_CODES
+        .iter()
+        .copied()
+        .find(|code| format!("{code:?}") == spelling)
+}
+
+/// How a refusal is spelled on the wire. One function, used by the adapters to
+/// render and by this crate to read, so the two cannot drift.
+#[must_use]
+pub fn spelling_of(refusal: &Refusal) -> String {
+    format!("{:?}", refusal.code())
+}
+
+#[cfg(test)]
+mod tests {
+    use centraid_gateway_core::error::ChecksumFault;
+    use centraid_gateway_core::ids::ObjectName;
+    use centraid_gateway_core::retention::DeleteRefusal;
+    use centraid_gateway_core::time::{Duration, ServerTime};
+
+    use super::*;
+
+    fn every_refusal() -> Vec<Refusal> {
+        vec![
+            Refusal::SignatureInvalid,
+            Refusal::ClockSkew {
+                server_time: ServerTime::from_millis(1),
+                window: Duration::from_millis(1),
+            },
+            Refusal::VersionWindow {
+                server: (1, 1),
+                client: 9,
+            },
+            Refusal::Checksum(ChecksumFault::Mismatch),
+            Refusal::AlreadyCommitted(ObjectName::of(b"a")),
+            Refusal::ObjectUnknown(ObjectName::of(b"a")),
+            Refusal::ObjectTooLarge {
+                declared: 1,
+                cap: 1,
+            },
+            Refusal::MalformedGeneration,
+            Refusal::HeadConflict { current: None },
+            Refusal::LeaseStale {
+                held: 2,
+                claimed: 1,
+            },
+            Refusal::NotLeaseHolder,
+            Refusal::VaultMoved {
+                current_epoch: 2,
+                moved_at: ServerTime::from_millis(7),
+            },
+            Refusal::UnknownVault,
+            Refusal::QuotaExceeded {
+                quota_bytes: 1,
+                used_bytes: 1,
+                wanted_bytes: 1,
+            },
+            Refusal::DeleteRefused(DeleteRefusal::AppendOnly),
+            Refusal::CapabilityScope,
+        ]
+    }
+
+    /// EVERY REFUSAL THIS PRODUCT HAS SURVIVES ITS WIRE SPELLING. A new refusal
+    /// minted without a client that can read it fails here, rather than on a
+    /// phone that shows "the gateway's answer did not decode" to somebody whose
+    /// quota ran out.
+    #[test]
+    fn every_refusal_this_product_has_survives_its_wire_spelling() {
+        for refusal in every_refusal() {
+            let spelling = spelling_of(&refusal);
+            assert_eq!(
+                code_of(&spelling),
+                Some(refusal.code()),
+                "{refusal:?} spells {spelling} and no client code reads it"
+            );
+        }
+    }
+
+    /// A MOVED REFUSAL WITH NO MOMENT IS MALFORMED, never a zero. A shell that
+    /// drew "0 changes since 1 January 1970" over a frozen vault would be
+    /// showing a fabricated fact, which is worse than an error.
+    #[test]
+    fn a_moved_refusal_with_no_companion_is_malformed_rather_than_defaulted() {
+        let body = ErrorBody {
+            code: spelling_of(&Refusal::VaultMoved {
+                current_epoch: 3,
+                moved_at: ServerTime::from_millis(9),
+            }),
+            ..ErrorBody::internal(10)
+        };
+        assert!(matches!(
+            ClientError::from_body(409, &body),
+            ClientError::Malformed { .. }
+        ));
+    }
+
+    #[test]
+    fn a_moved_refusal_carries_the_epoch_and_the_moment_through() {
+        let body = ErrorBody {
+            code: format!("{:?}", ErrorCode::VaultMoved),
+            moved: Some(MovedBody {
+                current_epoch: 3,
+                moved_at_ms: 9,
+            }),
+            ..ErrorBody::internal(10)
+        };
+        assert_eq!(
+            ClientError::from_body(409, &body),
+            ClientError::Moved {
+                current_epoch: 3,
+                moved_at_ms: 9,
+            }
+        );
+    }
+
+    /// A SERVER A YEAR BEHIND THE PHONE IN SOMEBODY'S POCKET. The self-hoster
+    /// case, and the one where the phone must write nothing.
+    #[test]
+    fn a_server_below_this_phones_minimum_needs_an_update() {
+        assert_eq!(
+            needs((0, 0), (1, 1)),
+            ServerNeeds::Update { server: (0, 0) }
+        );
+        assert_eq!(
+            needs((4, 6), (1, 1)),
+            ServerNeeds::PhoneUpdate { server: (4, 6) }
+        );
+    }
+
+    /// A refusal a phone cannot read is not a refusal it may guess at.
+    #[test]
+    fn a_code_a_newer_server_invented_is_malformed() {
+        let body = ErrorBody {
+            code: "SomethingANewerServerInvented".to_owned(),
+            ..ErrorBody::internal(1)
+        };
+        assert!(matches!(
+            ClientError::from_body(400, &body),
+            ClientError::Malformed { .. }
+        ));
+    }
+
+    #[test]
+    fn the_unauthorized_and_moved_codes_stay_different_answers() {
+        let unauthorized = ErrorBody {
+            code: format!("{:?}", ErrorCode::Unauthorized),
+            ..ErrorBody::internal(1)
+        };
+        assert!(matches!(
+            ClientError::from_body(401, &unauthorized),
+            ClientError::Refused {
+                code: ErrorCode::Unauthorized,
+                ..
+            }
+        ));
+    }
+
+    /// THE CROSS-SERIALIZER TEST (#1029 W17-5).
+    ///
+    /// Not "the client's struct round-trips through the client's struct" —
+    /// that is what the two hand-written twins passed while they disagreed
+    /// about `VersionWindow`. This builds each refusal's body the way the
+    /// **server** does (`ErrorBody::of`), serialises it to the bytes the
+    /// server writes, and parses those bytes back the way the client does, for
+    /// every refusal this product has. A companion that only one end knows the
+    /// name of fails here.
+    #[test]
+    fn every_refusal_this_product_has_survives_the_servers_own_serializer() {
+        for refusal in every_refusal() {
+            let rendered = ErrorBody::of(&refusal, 1_770_000_000_000);
+            let bytes = serde_json::to_vec(&rendered).expect("the server serialises it");
+            let parsed: ErrorBody = serde_json::from_slice(&bytes)
+                .unwrap_or_else(|error| panic!("{refusal:?} does not parse on the phone: {error}"));
+            assert_eq!(parsed, rendered, "{refusal:?} lost a field on the wire");
+            assert!(
+                !matches!(
+                    ClientError::from_body(400, &parsed),
+                    ClientError::Malformed { .. }
+                ),
+                "{refusal:?} reaches the phone as \"the gateway's answer did \
+                 not decode\", which reads as a broken server and is not one"
+            );
+        }
+    }
+
+    /// And the one that was broken, named on its own so a regression says what
+    /// it is: the range travels WITH the refusal.
+    #[test]
+    fn a_version_window_refusal_carries_its_range_through_the_servers_bytes() {
+        let bytes = serde_json::to_vec(&ErrorBody::of(
+            &Refusal::VersionWindow {
+                server: (1, 1),
+                client: 9,
+            },
+            1,
+        ))
+        .expect("serialises");
+        let parsed: ErrorBody = serde_json::from_slice(&bytes).expect("parses on the phone");
+        assert_eq!(
+            ClientError::from_body(400, &parsed),
+            ClientError::Version(ServerNeeds::PhoneUpdate { server: (1, 1) })
+        );
+    }
+
+    /// The companions are optional on the wire and absent when they do not
+    /// apply, so an older body still decodes.
+    #[test]
+    fn a_body_without_companions_decodes() {
+        let decoded: ErrorBody =
+            serde_json::from_str(r#"{"code":"GatewayQuotaExceeded","server_time_ms":5}"#)
+                .expect("decodes");
+        assert_eq!(decoded.moved, None);
+        assert_eq!(decoded.protocol, None);
+    }
+}

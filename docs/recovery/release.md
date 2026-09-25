@@ -47,8 +47,8 @@ When a release prepare/publish attempt strands halfway. Policy: [release.md](../
 
 ### F — Wrong surface shipped / mobile accidentally skipped
 
-1. Product version stamps are still correct if `sync-versions` ran — do **not** invent a surface-local version.
-2. Dispatch the missing surface (`gh workflow run release-mobile.yml …` or re-run the tag workflow).
+1. Product version stamps are still correct if `bun run release:sync-versions` ran — do **not** invent a surface-local version.
+2. Dispatch the missing surface through the one entry point: `gh workflow run release.yml -f surfaces=<desktop|gateway-image|mobile|companion>` (mobile runs only when selected by name), or re-run the tag workflow.
 3. Update `artifacts/release-ship.json` / release notes only if maintainers care about the audit trail.
 
 ### G — Tempted to bump version because CI failed

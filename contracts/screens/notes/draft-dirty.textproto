@@ -1,0 +1,28 @@
+# Edited and not yet saved. An edit schedules its save (the kit's autosave,
+# 900 ms after the last keystroke) and writes nothing itself: `autosave` is
+# DIRTY at edit 1, nothing is saved yet, and `baseline` is the note as the
+# vault has it. `save` is the same fact as the views still read it.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+note_id: "note-0001"
+draft {
+  title: "Winter plans"
+  body: "Book the cabin.\nAsk about the dog."
+  format: FORMAT_MARKDOWN
+  base_revision_id: "rev-0007"
+}
+save: SAVE_STATE_DIRTY
+autosave {
+  phase: PHASE_DIRTY
+  edit_seq: 1
+  base_revision_id: "rev-0007"
+}
+baseline {
+  title: "Winter plans"
+  body: "Book the cabin."
+  format: FORMAT_MARKDOWN
+  base_revision_id: "rev-0007"
+}

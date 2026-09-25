@@ -1,0 +1,55 @@
+[package]
+name = "centraid-gateway-client"
+description = "The phone's half of the gateway protocol: it signs, and something else carries (#1029 §3, W5)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_gateway_client"
+path = "src/lib.rs"
+
+# THIS CRATE HOLDS NO RULES EITHER, and for the mirror of `gateway-server`'s
+# reason. The preimage, the replay window, the skew answer and the protocol
+# comparison are all `centraid-gateway-core`'s, and this crate CALLS them. A
+# phone that assembled its own preimage would be a phone that fails against a
+# server for a reason nobody can read in a log — which is the sentence
+# `gateway_core::auth`'s own header opens with.
+[dependencies]
+centraid-gateway-core = { path = "../gateway-core" }
+# The wire's error codes. A refusal arrives as the code `Refusal::code()`
+# produced, and this crate maps it back — one table, against one `Debug`
+# spelling, in `outcome.rs`.
+centraid-api-proto = { path = "../api-proto" }
+# The certificate this client presents, and the keys behind it. Its byte layout
+# belongs to the crate that mints it, here as much as on the server.
+centraid-identity = { path = "../identity" }
+
+blake3.workspace = true
+bytes.workspace = true
+ed25519-dalek.workspace = true
+http-body-util.workspace = true
+# HTTP/1.1 over one iroh bi-stream: the same protocol the TCP carrier speaks,
+# over a different wire (#1029, scope amendment 2026-09-21).
+hyper.workspace = true
+hyper-util.workspace = true
+# THE PHONE'S CARRIER. Its endpoint offers no ALPN and never calls `accept`:
+# the phone dials, and accepts no inbound connection.
+iroh.workspace = true
+hex.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
+# The one transport this crate ships. It is behind `Transport` like every other
+# one, because on a phone the carrier is `URLSession` or `OkHttp` and not this.
+reqwest.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+centraid-gateway-server = { path = "../gateway-server" }
+rand.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["net", "macros", "rt-multi-thread"] }

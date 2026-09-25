@@ -1,0 +1,29 @@
+# NO REPLICA, NO GRANT, OR EVERY READ FAILED.
+#
+# The grid is shown ANYWAY — demoting one unreadable tile beside readable
+# neighbours is right, demoting them ALL leaves a launcher with no tiles. The
+# springboard reports CONTENT precisely so the screen does not claim the vault
+# is empty, and every count is absent because no read stands behind one.
+data {
+  springboard: SPRINGBOARD_CONTENT
+  every_tile_unreadable: true
+  tiles { app_id: "photos" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_LARGE wide: true empty_copy: "Import your first photo" }
+  tiles { app_id: "docs" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_MEDIUM wide: true empty_copy: "Add your first document" }
+  tiles { app_id: "notes" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_MEDIUM wide: true empty_copy: "Write your first note" }
+  tiles { app_id: "agenda" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }
+  tiles { app_id: "tasks" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Capture the next thing to do" }
+  tiles { app_id: "people" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
+  tiles { app_id: "tally" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
+  tiles { app_id: "locker" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Unlock to see your items" }
+  things { total: 0 settled: true }
+  status { tone: TONE_ATTENTION copy: "This device has not copied anything yet" action: "Check the connection" destination: DESTINATION_PHONE }
+  # THE PACKED GRID, decided by the machine so the two shells cannot pack it
+  # differently. A wide tile takes a whole line; smalls pair. A lone small at
+  # the end is not a hole.
+  grid_rows { app_ids: "photos" }
+  grid_rows { app_ids: "docs" }
+  grid_rows { app_ids: "notes" }
+  grid_rows { app_ids: "agenda" app_ids: "tasks" }
+  grid_rows { app_ids: "people" app_ids: "tally" }
+  grid_rows { app_ids: "locker" }
+}

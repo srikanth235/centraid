@@ -272,7 +272,7 @@ const COMMANDS = {
     if (key === null)
       skip(
         "CENTRAID_RELEASE_SIGNING_KEY is not set, so the manifest is UNSIGNED and the shipped updater will refuse it (no-trust-anchor)",
-        "generating an Ed25519 release key, storing its raw seed as the CENTRAID_RELEASE_SIGNING_KEY secret in the `release` environment, and enrolling the public half in TRUSTED_RELEASE_KEYS (apps/desktop/src/main/update-signature-gate.ts)"
+        "generating an Ed25519 release key, storing its raw seed as the CENTRAID_RELEASE_SIGNING_KEY secret in the `release` environment, and enrolling the public half in TRUSTED_RELEASE_KEYS (desktop/electron/src/main/update-signature-gate.ts)"
       );
     const envelope = signDocument(manifest, key.privateKey, key.publicKey);
     const check = verifyDocument(manifest, envelope, key.publicKey);

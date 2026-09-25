@@ -1,0 +1,50 @@
+[package]
+name = "centraid-identity"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_identity"
+path = "src/lib.rs"
+
+[dependencies]
+# The pair ticket IS a protobuf message (`PairTicket`), not JSON: smaller in a
+# QR and not hand-editable into a shape a lenient parser half-accepts.
+centraid-api-proto = { path = "../api-proto" }
+
+base64.workspace = true
+bip39.workspace = true
+blake3.workspace = true
+ed25519-dalek.workspace = true
+hex.workspace = true
+hmac.workspace = true
+# `getrandom` is named HERE rather than in the workspace table: it is what draws
+# the ephemeral encapsulation key inside `hpke`, once per seal, and this is the
+# one crate that seals. It was a `mint` feature while the hosted adapter had to
+# link this crate on `wasm32` without an RNG backend; that adapter is struck
+# from v0 (#1029, scope amendment 2026-09-21), so the feature is gone and the
+# dependency is plain.
+hpke = { workspace = true, features = ["getrandom"] }
+pkarr.workspace = true
+prost.workspace = true
+# The pairing QR a headless laptop renders to its terminal. #1029's Reference A
+# moves the pair ticket here as the parent of the standalone invite and the §7
+# link ticket; `crates/net` is deleted with it.
+qrcode.workspace = true
+rand.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+url.workspace = true
+x25519-dalek.workspace = true
+
+[dev-dependencies]
+iroh-dns-server.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true

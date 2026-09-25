@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  THE ONE FOLDER A PHOTOGRAPH LEAVES THIS PHONE FROM (#816, #1029 photos port).
+
+  `PhotoHandOff` writes each copy here — stripped to the place precision the
+  member chose — and hands the OS a content URI into it. The vault's own store
+  is never exposed: a URI into it would hand the receiving app the ORIGINAL,
+  place and all, whatever the member picked.
+-->
+<paths>
+    <cache-path name="shared_copies" path="shared-copies/" />
+</paths>

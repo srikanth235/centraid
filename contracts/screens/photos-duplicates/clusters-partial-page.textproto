@@ -1,0 +1,56 @@
+# THE COUNT IS A FLOOR, AND THE FIXTURE MAKES IT UNSAYABLE OTHERWISE.
+#
+# `next_cursor` is present — the page filled, and there are clusters behind it
+# that this read never saw. So:
+#
+#   - `total_capped: true`, and `total_reclaimable_bytes` is the sum of the
+#     three clusters on THIS PAGE and nothing else. The honest sentence is "at
+#     least 214 MB", never "214 MB".
+#   - `dup-0004` has `member_count_capped: true` with `member_count: 40`: the
+#     cluster's own members were read within a page limit too, and forty is
+#     where the read stopped rather than how many copies exist.
+#
+# There is no `COUNT(*)` on the read door and no join clause, so every count in
+# this section is counted from rows in the reducer's `arrived`. That makes a
+# bare number over a full page a total nobody counted — which is why
+# `HomeState.ThingCount` has carried `capped` since Home shipped, and why these
+# do now.
+#
+# The contrast is `photos-duplicates/clusters-by-reclaimable`: no `next_cursor`,
+# `total_capped` unset, and its total IS the sum. A screen that printed both
+# the same way is wrong about this one, and asserting only the whole-page case
+# would never catch it.
+#
+# The deliberately awkward arithmetic: 214958080 + 8412672 + 1048576 is
+# 224419328, which is what this page can account for. `dup-0004` alone would
+# add more, and the vault holds an unknown number past it. The total says less
+# than the truth, on purpose, because saying more would be inventing it.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  clusters {
+    cluster_id: "dup-0001"
+    member_count: 2
+    reclaimable_bytes: 214958080
+    cover_thumbnail_path: "thumbs/ast-0320.jpg"
+  }
+  clusters {
+    cluster_id: "dup-0002"
+    member_count: 4
+    reclaimable_bytes: 8412672
+    cover_thumbnail_path: "thumbs/ast-0301.jpg"
+  }
+  clusters {
+    cluster_id: "dup-0004"
+    member_count: 40
+    member_count_capped: true
+    reclaimable_bytes: 1048576
+  }
+  next_cursor: "1048576|dup-0004"
+  total_reclaimable_bytes: 224419328
+  total_capped: true
+  scan_complete: true
+}

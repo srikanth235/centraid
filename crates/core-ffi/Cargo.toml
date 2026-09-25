@@ -1,0 +1,61 @@
+[package]
+name = "centraid-core-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_core_ffi"
+path = "src/lib.rs"
+# Both: `cdylib` is what a shell links (`libcentraid_core_ffi.so`, `.dylib`,
+# `.dll`) and what the symbol-count test runs `nm` over; `rlib` is what this
+# crate's own tests link so they can call the entry points directly as well as
+# through `libloading` on the built cdylib.
+# `staticlib` is the third: `libcentraid_core_ffi.a` is what
+# `lane-prebuilt-core.yml` hands to `lipo` and `xcodebuild
+# -create-xcframework`, and what the Kotlin/Native framework link
+# resolves the five symbols against. Its absence was invisible because
+# neither the lane nor the iOS link had ever run (#1020, hand-offs 1.2
+# and 3.4).
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+[features]
+default = []
+# Forwarded to `centraid-core`, where the panic is. See its `debug-fault`.
+debug-fault = ["centraid-core/debug-fault"]
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-core = { path = "../core" }
+# THE NETWORK, ATTACHED HERE AND NOWHERE ELSE (#1020, D-1020-B7). `centraid-core`
+# declares the `SeatNetwork` seam and cannot depend on the implementation — the
+# implementation depends on it — so the process builder closes the loop. This is
+# the process builder for every phone.
+centraid-vault = { path = "../vault" }
+# The vault seed crosses this boundary as hex (`CONTRACT.md` §4b), and this is
+# what decodes it. One type's worth of dependency, not `centraid-identity`:
+# `centraid_core::Seed` is re-exported for exactly this reason.
+hex.workspace = true
+prost.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[build-dependencies]
+cbindgen = "0.29"
+
+[dev-dependencies]
+centraid-ontology = { path = "../ontology" }
+# The safety number's own renderer, for the clause-4c companion case: the test
+# asserts the SHIPPED function rather than a second rendering of its own.
+centraid-identity = { path = "../identity" }
+libloading = "0.8"
+cbindgen = "0.29"
+centraid-protocol = { path = "../protocol" }
+# Only to READ what this crate logs. `tests/contract.rs` asserts that a refusal
+# at `open` writes the line `code_for_open`'s documentation promises — which is
+# the only place the reason behind a `-1` exists, so an untested promise there
+# is how it went unwritten in the first place.
+tracing-subscriber.workspace = true

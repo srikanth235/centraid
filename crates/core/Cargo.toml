@@ -1,0 +1,118 @@
+[package]
+name = "centraid-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_core"
+path = "src/lib.rs"
+
+[features]
+default = []
+# THE FAULT-INJECTION DOOR (#1020 wave 3, lane E finding 4). Makes a `Command`
+# named `debug.panic` panic inside `Handle::call`, so a shell can prove its own
+# clause-9 poison handling against the REAL library rather than a fake ABI.
+# Never on in a release profile, and it exports nothing: `abi-five-symbols`
+# still counts five.
+debug-fault = []
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+# THE UNLOCK BOUNDARY'S ORIGIN MATCHER (#1029 §1). `locker::fill` asks
+# `centraid_apps_locker` whether a page's origin matches a stored one before it
+# will hand an autofill grant out — the one question a fill must not answer
+# itself.
+centraid-apps-locker = { path = "../apps/locker" }
+# THE APP QUERIES THE PHONE ASKS FOR BY NAME (#1046). Agenda's `upcoming` joins
+# six-plus tables and expands every series through the one recurrence engine,
+# so it runs HERE, over the page door, and a shell draws its typed answer —
+# rather than a second engine in each shell (D-1020-S1). `app_query` is the one
+# module that reaches it.
+centraid-apps-agenda = { path = "../apps/agenda" }
+# Tasks' board, one task, projects, search and catch-up (#1046): the families,
+# the recurrence collapse and every civil reading run here, over the page door.
+centraid-apps-tasks = { path = "../apps/tasks" }
+# Docs' drive, search, document and activity (#1046), the same way.
+centraid-apps-docs = { path = "../apps/docs" }
+# People's five phone queries (#1046) — the roster, Touch, the sheet, search and
+# the trash shelf — answered the way Agenda's are, through `app_query`.
+centraid-apps-people = { path = "../apps/people" }
+# Notes' folds, for the `notes_*` app-query arms (#1046).
+centraid-apps-notes = { path = "../apps/notes" }
+# Tally's ten phone queries (#1046) — the ledger folded once through its one
+# balance engine, every figure with its currency's exponent — the same way.
+centraid-apps-tally = { path = "../apps/tally" }
+# The door an app crate reads through (`PageDoor`), and the rows it answers.
+centraid-apps-kit = { path = "../apps/kit" }
+# THE FTS DOOR, for `agenda.search`. It owns every `MATCH` in the workspace and
+# takes a connection; the core hands it `Vault::read`'s, and writes no SQL.
+centraid-search = { path = "../search" }
+# THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
+# core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
+# door and this is the crate that has both halves in scope.
+centraid-blobs = { path = "../blobs" }
+# THE 24 WORDS AND THE PAIRING CODE (#1029 W15). A restore parses the phrase
+# here and refuses a bad checksum before anything is derived from it, and a
+# pairing payload is decoded by `centraid_identity::ticket` and NOT by a second
+# parser in a shell — a ticket is the one message with no handshake in front of
+# it, so two parsers is two chances to half-accept one.
+centraid-identity = { path = "../identity" }
+# THE PHONE'S HALF OF THE GATEWAY PROTOCOL (#1029 W15-2). A drain signs a
+# request, reads a refusal, and knows which refusals it may act on; that is
+# this crate and nothing above it assembles a preimage.
+centraid-gateway-client = { path = "../gateway-client" }
+# The rules' own vocabulary: `VaultId`, `ALPN`, `PROTOCOL_MIN`. Imported rather
+# than respelled so a phone and a laptop cannot disagree about whose fault a
+# mismatch is (`gateway-client`'s header).
+centraid-gateway-core = { path = "../gateway-core" }
+# `ObjectName` and `Kind`: an object's name is the BLAKE3 of its ciphertext on
+# both sides of the wire, and this is the one type that computes it.
+centraid-media = { path = "../media" }
+# THE CARRIER (#1029 W17). Only to BIND A DIAL-ONLY ENDPOINT and name an
+# address: this crate offers no ALPN and calls no `accept`, which is what
+# `no-listening-socket` checks on every gate run.
+iroh.workspace = true
+# ONE TYPE: `VerifyingKey`. An iroh `EndpointId` IS an Ed25519 public key, and
+# a safety number is computed over two of them (W15-D5).
+ed25519-dalek.workspace = true
+# The laptop's endpoint id is stored as hex beside the vault; `hex` is what
+# writes and reads it.
+hex.workspace = true
+# THE RUNTIME THE BYTE STORE NEEDS, OWNED BY THE CORE (#1029 W6, hand-off 2).
+# `ByteStore::open` is asynchronous and `ContentBytes` holds a runtime handle,
+# so SOMEBODY has to own a runtime for the life of the core. On a phone there is
+# no longer anybody else — `SeatLink` went with the seat plane — so it is this
+# crate. The workspace entry's `rt-multi-thread` is the feature that matters:
+# see `Handle::open_own_bytes`, where a current-thread runtime is a deadlock and
+# not a preference. This crate opens no socket.
+tokio.workspace = true
+centraid-ontology = { path = "../ontology" }
+centraid-protocol = { path = "../protocol" }
+centraid-vault = { path = "../vault" }
+prost.workspace = true
+# THE LOCKER'S OWN PRIMITIVES (#1029 §1), moved in with `crates/core/src/locker`:
+# Argon2id over the passphrase, AES-GCM around `K`, base64 for the wrapped blob
+# at rest, and `rand` for its salt and nonce.
+aes-gcm.workspace = true
+argon2.workspace = true
+base64.workspace = true
+rand.workspace = true
+serde.workspace = true
+# The network seam hands a connection DOWN (`link::SeatNetwork::sync`): SQLite
+# allows one writer and this crate holds it, so the type has to be nameable here.
+rusqlite.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+serde_json.workspace = true
+
+[[test]]
+name = "call_budget"
+path = "tests/call_budget.rs"

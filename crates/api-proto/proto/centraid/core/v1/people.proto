@@ -1,0 +1,268 @@
+// PEOPLE'S FIVE PHONE QUERIES, AS THE CORE ANSWERS THEM (#1046).
+//
+// `crates/apps/people` folds the roster, the Touch dashboard, one person's
+// sheet, the search and the trash shelf over the vault — a profile window
+// joined to parties, tags, the vocabulary, important dates, contact channels,
+// annotations and the activity links — and these are its answers, typed. A
+// shell reaches them through `app_query.proto`'s `AppQueryRequest` and draws
+// them; it joins nothing and does no date arithmetic.
+//
+// Every message mirrors a Rust struct in `crates/apps/people`
+// (`roster.rs`, `dashboard.rs`, `person.rs`, `phone.rs`); `crates/core`'s
+// `app_query` module is the one conversion.
+//
+// NO SHARING PLANE. v1 has no sharing (#1029 amendment): no vault links, no
+// rings, no share or revoke, so no roster row, count or sheet here carries a
+// `linked` fact.
+//
+// CIVIL DATES ARE ANSWERED IN THE DEVICE'S ZONE, under `agenda.proto`'s zone
+// rule: a request that carries `tz` states an IANA name; EMPTY is the vault's
+// own zone, and a vault that names none — or a name the bundled database does
+// not know — is `ERROR_CODE_INVALID_REQUEST`. The answer carries `today`
+// (`YYYY-MM-DD`) and every annual date's `in_days` from it, so a birthday on
+// 2 January is 2 days away on 31 December, not 363 days ago.
+//
+// Instants are the vault's text form, `YYYY-MM-DDTHH:MM:SS.mmmZ`. "Due" (the
+// v0 Overdue chip) is instant arithmetic against the vault clock: last contact
+// — or when the person was added, if never — strictly more than
+// `cadence_days` ago, and a cadence of 0 is no cadence, never due.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// The requests.
+// ---------------------------------------------------------------------------
+
+// `people.roster`: the live people, newest-added first unless sorted.
+message PeopleRosterRequest {
+  // The window. 0 is the declared maximum (10,000); anything else is clamped
+  // to 20..=10,000. `truncated` says whether older people exist beyond it.
+  uint32 limit = 1;
+  PeopleRosterFilter filter = 2;
+  PeopleRosterSort sort = 3;
+  // The zone `today` and every reminder's `in_days` are read in.
+  string tz = 4;
+}
+
+// The roster's chips. UNSPECIFIED is ALL.
+enum PeopleRosterFilter {
+  PEOPLE_ROSTER_FILTER_UNSPECIFIED = 0;
+  PEOPLE_ROSTER_FILTER_ALL = 1;
+  PEOPLE_ROSTER_FILTER_STARRED = 2;
+  PEOPLE_ROSTER_FILTER_DUE = 3;
+}
+
+// The roster's order. UNSPECIFIED is RECENT (newest-added first).
+enum PeopleRosterSort {
+  PEOPLE_ROSTER_SORT_UNSPECIFIED = 0;
+  PEOPLE_ROSTER_SORT_RECENT = 1;
+  // By name, case-insensitively, ties by party id.
+  PEOPLE_ROSTER_SORT_NAME = 2;
+}
+
+// `people.touch`: the keep-in-touch dashboard.
+message PeopleTouchRequest {
+  // The zone the Upcoming rail's days are counted in.
+  string tz = 1;
+}
+
+// `people.person`: one person's sheet.
+message PeoplePersonRequest {
+  string party_id = 1;
+  // The zone `today` and every date's `in_days` are read in.
+  string tz = 2;
+}
+
+// `people.search`: live people whose name matches, in the index's rank order.
+message PeopleSearchRequest {
+  string term = 1;
+  // REQUIRED: 0 is `ERROR_CODE_INVALID_REQUEST`. At most 50 are asked of the
+  // index.
+  uint32 limit = 2;
+}
+
+// `people.trash`: the reversible shelf.
+message PeopleTrashRequest {}
+
+// ---------------------------------------------------------------------------
+// The shared rows.
+// ---------------------------------------------------------------------------
+
+// One of the owner's lists (a lists-scheme concept).
+message PeopleList {
+  string list_id = 1;
+  string name = 2;
+}
+
+// One important date.
+message PeopleDate {
+  string date_id = 1;
+  string label = 2;
+  // `MM-DD`, annual.
+  string month_day = 3;
+  bool reminder_on = 4;
+  // Days from the answer's `today` to the next occurrence; 0 is today, and
+  // 29 February is 28 February in a common year. ABSENT when `month_day`
+  // does not parse.
+  optional int64 in_days = 5;
+}
+
+// One person as a list draws them: the roster, search, the sheet's header.
+message PeopleRosterRow {
+  string party_id = 1;
+  // The party's display name, or "—" when the party read did not reach it.
+  string name = 2;
+  string role = 3;
+  optional string avatar_color = 4;
+  // 0 is no cadence.
+  int64 cadence_days = 5;
+  optional string last_contacted_at = 6;
+  string created_at = 7;
+  optional string list_id = 8;
+  // The canonical flags-scheme star on the party.
+  bool starred = 9;
+  // The Overdue chip's fact (the file header's rule).
+  bool due = 10;
+  // Whole days since last contact, or since added when never contacted.
+  int64 days_since_contact = 11;
+  // The dates whose reminder is on. Empty on a search row: search does not
+  // read important dates.
+  repeated PeopleDate reminders = 12;
+  // The index's snippet, on a search row only.
+  optional string snippet = 13;
+}
+
+// ---------------------------------------------------------------------------
+// The answers.
+// ---------------------------------------------------------------------------
+
+message PeopleRoster {
+  // Filtered by the chip and in the requested order.
+  repeated PeopleRosterRow people = 1;
+  repeated PeopleList lists = 2;
+  // Older live people exist beyond the window.
+  bool truncated = 3;
+  uint32 window = 4;
+  // `YYYY-MM-DD` in the request's zone.
+  string today = 5;
+  // The chips' counts over the whole window, before the filter.
+  uint32 count_all = 6;
+  uint32 count_starred = 7;
+  uint32 count_due = 8;
+}
+
+// One person as a dashboard rail draws them.
+message PeopleCard {
+  string party_id = 1;
+  string name = 2;
+  string role = 3;
+  optional string avatar_color = 4;
+  // On the Reconnect rail: whole days PAST the cadence (always > 0).
+  optional int64 days_over = 5;
+}
+
+// One Upcoming-rail row: a person's active reminder.
+message PeopleUpcoming {
+  PeopleCard person = 1;
+  PeopleDate date = 2;
+}
+
+// One logged touch (a `core.activity` linked to a person).
+message PeopleTouchEntry {
+  string interaction_id = 1;
+  string party_id = 2;
+  // On the dashboard the kind concept's label ("Touch" when none); on the
+  // sheet its notation ("interaction" when none).
+  string kind = 3;
+  string text = 4;
+  string occurred_at = 5;
+  // The person's card, on the dashboard's Recent rail.
+  string name = 6;
+  optional string avatar_color = 7;
+  // `occurred_at`'s civil day (`YYYY-MM-DD`) in the request's zone.
+  string occurred_local_day = 8;
+}
+
+message PeopleTouch {
+  // Due people, most overdue first, ties by party id.
+  repeated PeopleCard reconnect = 1;
+  // Active reminders, nearest first (across the year boundary), ties by date id.
+  repeated PeopleUpcoming upcoming = 2;
+  // The latest touches, newest first, at most 30.
+  repeated PeopleTouchEntry recent = 3;
+  uint32 count_all = 4;
+  uint32 count_reconnect = 5;
+  uint32 count_upcoming = 6;
+  uint32 count_starred = 7;
+  // More live people exist than the window the counts were folded over.
+  bool truncated = 8;
+  uint32 window = 9;
+  string today = 10;
+}
+
+// One way to reach a person.
+message PeopleChannel {
+  string channel_id = 1;
+  // `phone`, `email`, `address` or `handle`.
+  string kind = 2;
+  optional string label = 3;
+  string value = 4;
+  bool preferred = 5;
+  // Who else in the vault holds the same normalized value.
+  repeated string duplicate_names = 6;
+}
+
+// One of the owner's notes on the person.
+message PeopleNote {
+  string annotation_id = 1;
+  string text = 2;
+  string created_at = 3;
+  // `created_at`'s civil day (`YYYY-MM-DD`) in the request's zone.
+  string created_local_day = 4;
+}
+
+// One person's sheet.
+message PeopleSheet {
+  PeopleRosterRow person = 1;
+  string nickname = 2;
+  // How you met; empty when unset.
+  string met = 3;
+  repeated PeopleChannel channels = 4;
+  // Every live date, reminder on or off.
+  repeated PeopleDate dates = 5;
+  // Newest first.
+  repeated PeopleNote notes = 6;
+  // FALSE when the activity plane was refused: `touches` is then unknown, not
+  // empty, and the rest of the sheet stands.
+  bool touches_known = 7;
+  // The touch log, newest first.
+  repeated PeopleTouchEntry touches = 8;
+}
+
+message PeoplePerson {
+  // ABSENT: no live person has this id (unknown, trashed, or a party with no
+  // People profile). Not a denial.
+  optional PeopleSheet sheet = 1;
+  string today = 2;
+}
+
+message PeopleSearch {
+  repeated PeopleRosterRow people = 1;
+}
+
+// One trashed person. A name, a role and when the shelf purges them.
+message PeopleTrashRow {
+  string party_id = 1;
+  string name = 2;
+  string role = 3;
+  optional string purge_at = 4;
+}
+
+message PeopleTrash {
+  // Most recently trashed first.
+  repeated PeopleTrashRow people = 1;
+  // The shelf is longer than its 500-row window.
+  bool truncated = 2;
+}

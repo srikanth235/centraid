@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Android manifest, as SOURCE (#1020, D-1020-E1).
+
+  The privacy rules are here, reviewable, and not the output of a build plugin.
+
+  `android:allowBackup="false"` and the two rule files are the same three
+  mechanisms v0's plugin wrote, and they are all three needed: `allowBackup`
+  covers the legacy path, `dataExtractionRules` covers Android 12+ cloud backup
+  and device-to-device transfer separately, and `fullBackupContent` covers the
+  11-and-below fallback.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Photos, for the camera-roll backup only. The grid reads the VAULT and
+         needs none of these. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:name=".CentraidApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/full_backup_content"
+        android:label="Centraid"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Centraid">
+        <activity
+            android:name="dev.centraid.android.MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- "Send a copy" (#816): the copies `PhotoHandOff` writes, and
+             nothing else. Not exported; a receiving app reads one copy
+             through the grant on the intent that carried it. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.photocopies"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_copies" />
+        </provider>
+    </application>
+</manifest>

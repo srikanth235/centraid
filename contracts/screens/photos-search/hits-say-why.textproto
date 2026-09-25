@@ -1,0 +1,65 @@
+# WHY THESE MATCHED — AS A KIND AND A NAME, NOT AS PROSE.
+#
+# The same word can hit a label, a person, a place or the member's own title,
+# and a member looking at a grid of photographs has no way to tell which: "Ada"
+# returned these because a face was confirmed, not because someone wrote it in
+# a caption.
+#
+# `matches` replaced a `repeated string matched_on` (field 4, now reserved) for
+# the reason this fixture is the proof of: a prose line made each shell compose
+# its own sentence — "Person: Ada" on one, "In photos of Ada" on the other —
+# which is exactly how v0's empty states drifted apart. The kind is an enum and
+# the value is the vault's own word for the thing, so the SENTENCE stays the
+# view's and the DISTINCTION is the contract's.
+#
+# The value is never the query echoed back. The query here is "Ada"; the person
+# match says "Ada Lovelace", because the point is to show what it landed on.
+# Two of the three matches below do not contain the query as typed at all.
+#
+# `matches` rides on `SearchHits` rather than on each cell: it explains the
+# RESULT SET. A per-cell reason would be a different feature and a much more
+# expensive read, and the sentence a member needs is about the query.
+#
+# `thumbnail_pack_absent` is here for the grid's reason, not search's: a hit
+# whose thumbnail this device does not hold is still a hit, and the two
+# empty-cell sentences stay distinguishable inside search exactly as they are
+# in the library.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_METERED
+}
+query: "Ada"
+hits {
+  cells {
+    asset_id: "ast-0110"
+    thumbnail_path: "thumbs/ast-0110.jpg"
+    captured_at: "2026-05-02T16:20:00Z"
+    captured_utc_offset_minutes: -300
+    kind: KIND_PHOTO
+    favorite: true
+    held: HELD_ORIGINAL
+    original_hash: "aa11bb22cc33dd44ee55ff6677889900aa11bb22cc33dd44ee55ff6677889900"
+  }
+  cells {
+    asset_id: "ast-0320"
+    captured_at: "2026-01-11T14:30:00Z"
+    captured_utc_offset_minutes: 330
+    kind: KIND_VIDEO
+    held: HELD_WITHHELD_BY_RULE
+    original_hash: "deadbeef00112233445566778899aabbccddeeff00112233445566778899aabb"
+  }
+  next_cursor: "2026-01-11T14:30:00Z|ast-0320"
+  matches {
+    kind: KIND_PERSON
+    value: "Ada Lovelace"
+  }
+  matches {
+    kind: KIND_LABEL
+    value: "Lake"
+  }
+  matches {
+    kind: KIND_TITLE
+    value: "Ada at the lake"
+  }
+}

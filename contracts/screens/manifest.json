@@ -1,0 +1,447 @@
+{
+  "$generatedBy": "contracts/tools/build-screen-fixtures.ts",
+  "$note": "Screen-state fixtures: one .textproto source, one .bin beside it. Decoded by mobile/shared's jvmTest (Wire) and by mobile/iosApp/Tests (SwiftProtobuf). Regenerate with `bun contracts/tools/build-screen-fixtures.ts && bun run format`; `git diff --exit-code contracts/screens` is the drift check (#1020).",
+  "fixtures": [
+    {
+      "case": "all-apps-open",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/all-apps-open.textproto",
+      "binary": "contracts/screens/home/all-apps-open.bin"
+    },
+    {
+      "case": "content",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/content.textproto",
+      "binary": "contracts/screens/home/content.bin"
+    },
+    {
+      "case": "every-tile-unreadable",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/every-tile-unreadable.textproto",
+      "binary": "contracts/screens/home/every-tile-unreadable.bin"
+    },
+    {
+      "case": "first-run",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/first-run.textproto",
+      "binary": "contracts/screens/home/first-run.bin"
+    },
+    {
+      "case": "loading-first",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/loading-first.textproto",
+      "binary": "contracts/screens/home/loading-first.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/read-refused.textproto",
+      "binary": "contracts/screens/home/read-refused.bin"
+    },
+    {
+      "case": "status-urgent",
+      "screen": "home",
+      "type": "centraid.screen.v1.HomeState",
+      "textproto": "contracts/screens/home/status-urgent.textproto",
+      "binary": "contracts/screens/home/status-urgent.bin"
+    },
+    {
+      "case": "draft-dirty",
+      "screen": "notes",
+      "type": "centraid.screen.v1.NotesEditorState",
+      "textproto": "contracts/screens/notes/draft-dirty.textproto",
+      "binary": "contracts/screens/notes/draft-dirty.bin"
+    },
+    {
+      "case": "loading",
+      "screen": "notes",
+      "type": "centraid.screen.v1.NotesEditorState",
+      "textproto": "contracts/screens/notes/loading.textproto",
+      "binary": "contracts/screens/notes/loading.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "notes",
+      "type": "centraid.screen.v1.NotesEditorState",
+      "textproto": "contracts/screens/notes/read-refused.textproto",
+      "binary": "contracts/screens/notes/read-refused.bin"
+    },
+    {
+      "case": "save-refused",
+      "screen": "notes",
+      "type": "centraid.screen.v1.NotesEditorState",
+      "textproto": "contracts/screens/notes/save-refused.textproto",
+      "binary": "contracts/screens/notes/save-refused.bin"
+    },
+    {
+      "case": "limited-selection",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/limited-selection.textproto",
+      "binary": "contracts/screens/photos/limited-selection.bin"
+    },
+    {
+      "case": "more-sheet-open",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/more-sheet-open.textproto",
+      "binary": "contracts/screens/photos/more-sheet-open.bin"
+    },
+    {
+      "case": "no-copy-yet",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/no-copy-yet.textproto",
+      "binary": "contracts/screens/photos/no-copy-yet.bin"
+    },
+    {
+      "case": "permission-denied",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/permission-denied.textproto",
+      "binary": "contracts/screens/photos/permission-denied.bin"
+    },
+    {
+      "case": "thumbnail-pack-absent",
+      "screen": "photos",
+      "type": "centraid.screen.v1.PhotosGridState",
+      "textproto": "contracts/screens/photos/thumbnail-pack-absent.textproto",
+      "binary": "contracts/screens/photos/thumbnail-pack-absent.bin"
+    },
+    {
+      "case": "counts-are-floors",
+      "screen": "photos-collections",
+      "type": "centraid.screen.v1.PhotosCollectionsState",
+      "textproto": "contracts/screens/photos-collections/counts-are-floors.textproto",
+      "binary": "contracts/screens/photos-collections/counts-are-floors.bin"
+    },
+    {
+      "case": "new-album-sheet",
+      "screen": "photos-collections",
+      "type": "centraid.screen.v1.PhotosCollectionsState",
+      "textproto": "contracts/screens/photos-collections/new-album-sheet.textproto",
+      "binary": "contracts/screens/photos-collections/new-album-sheet.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "photos-collections",
+      "type": "centraid.screen.v1.PhotosCollectionsState",
+      "textproto": "contracts/screens/photos-collections/read-refused.textproto",
+      "binary": "contracts/screens/photos-collections/read-refused.bin"
+    },
+    {
+      "case": "standing-and-owned",
+      "screen": "photos-collections",
+      "type": "centraid.screen.v1.PhotosCollectionsState",
+      "textproto": "contracts/screens/photos-collections/standing-and-owned.textproto",
+      "binary": "contracts/screens/photos-collections/standing-and-owned.bin"
+    },
+    {
+      "case": "member-overrode-the-suggestion",
+      "screen": "photos-duplicate-review",
+      "type": "centraid.screen.v1.DuplicateReviewState",
+      "textproto": "contracts/screens/photos-duplicate-review/member-overrode-the-suggestion.textproto",
+      "binary": "contracts/screens/photos-duplicate-review/member-overrode-the-suggestion.bin"
+    },
+    {
+      "case": "no-suggestion-at-all",
+      "screen": "photos-duplicate-review",
+      "type": "centraid.screen.v1.DuplicateReviewState",
+      "textproto": "contracts/screens/photos-duplicate-review/no-suggestion-at-all.textproto",
+      "binary": "contracts/screens/photos-duplicate-review/no-suggestion-at-all.bin"
+    },
+    {
+      "case": "suggestion-not-accepted",
+      "screen": "photos-duplicate-review",
+      "type": "centraid.screen.v1.DuplicateReviewState",
+      "textproto": "contracts/screens/photos-duplicate-review/suggestion-not-accepted.textproto",
+      "binary": "contracts/screens/photos-duplicate-review/suggestion-not-accepted.bin"
+    },
+    {
+      "case": "clusters-by-reclaimable",
+      "screen": "photos-duplicates",
+      "type": "centraid.screen.v1.DuplicatesState",
+      "textproto": "contracts/screens/photos-duplicates/clusters-by-reclaimable.textproto",
+      "binary": "contracts/screens/photos-duplicates/clusters-by-reclaimable.bin"
+    },
+    {
+      "case": "clusters-partial-page",
+      "screen": "photos-duplicates",
+      "type": "centraid.screen.v1.DuplicatesState",
+      "textproto": "contracts/screens/photos-duplicates/clusters-partial-page.textproto",
+      "binary": "contracts/screens/photos-duplicates/clusters-partial-page.bin"
+    },
+    {
+      "case": "scan-incomplete",
+      "screen": "photos-duplicates",
+      "type": "centraid.screen.v1.DuplicatesState",
+      "textproto": "contracts/screens/photos-duplicates/scan-incomplete.textproto",
+      "binary": "contracts/screens/photos-duplicates/scan-incomplete.bin"
+    },
+    {
+      "case": "scanned-and-clean",
+      "screen": "photos-duplicates",
+      "type": "centraid.screen.v1.DuplicatesState",
+      "textproto": "contracts/screens/photos-duplicates/scanned-and-clean.textproto",
+      "binary": "contracts/screens/photos-duplicates/scanned-and-clean.bin"
+    },
+    {
+      "case": "recognition-off",
+      "screen": "photos-faces",
+      "type": "centraid.screen.v1.FaceReviewState",
+      "textproto": "contracts/screens/photos-faces/recognition-off.textproto",
+      "binary": "contracts/screens/photos-faces/recognition-off.bin"
+    },
+    {
+      "case": "unnamed-guess",
+      "screen": "photos-faces",
+      "type": "centraid.screen.v1.FaceReviewState",
+      "textproto": "contracts/screens/photos-faces/unnamed-guess.textproto",
+      "binary": "contracts/screens/photos-faces/unnamed-guess.bin"
+    },
+    {
+      "case": "worked-through",
+      "screen": "photos-faces",
+      "type": "centraid.screen.v1.FaceReviewState",
+      "textproto": "contracts/screens/photos-faces/worked-through.textproto",
+      "binary": "contracts/screens/photos-faces/worked-through.bin"
+    },
+    {
+      "case": "chrome-hidden",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/chrome-hidden.textproto",
+      "binary": "contracts/screens/photos-lightbox/chrome-hidden.bin"
+    },
+    {
+      "case": "fetching-with-percent",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/fetching-with-percent.textproto",
+      "binary": "contracts/screens/photos-lightbox/fetching-with-percent.bin"
+    },
+    {
+      "case": "info-sheet-proposals",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/info-sheet-proposals.textproto",
+      "binary": "contracts/screens/photos-lightbox/info-sheet-proposals.bin"
+    },
+    {
+      "case": "loading-keyed-by-asset",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/loading-keyed-by-asset.textproto",
+      "binary": "contracts/screens/photos-lightbox/loading-keyed-by-asset.bin"
+    },
+    {
+      "case": "withheld-by-rule",
+      "screen": "photos-lightbox",
+      "type": "centraid.screen.v1.PhotoLightboxState",
+      "textproto": "contracts/screens/photos-lightbox/withheld-by-rule.textproto",
+      "binary": "contracts/screens/photos-lightbox/withheld-by-rule.bin"
+    },
+    {
+      "case": "computed-and-empty",
+      "screen": "photos-memories",
+      "type": "centraid.screen.v1.PhotosMemoriesState",
+      "textproto": "contracts/screens/photos-memories/computed-and-empty.textproto",
+      "binary": "contracts/screens/photos-memories/computed-and-empty.bin"
+    },
+    {
+      "case": "not-yet-computed",
+      "screen": "photos-memories",
+      "type": "centraid.screen.v1.PhotosMemoriesState",
+      "textproto": "contracts/screens/photos-memories/not-yet-computed.textproto",
+      "binary": "contracts/screens/photos-memories/not-yet-computed.bin"
+    },
+    {
+      "case": "title-hint-absent",
+      "screen": "photos-memories",
+      "type": "centraid.screen.v1.PhotosMemoriesState",
+      "textproto": "contracts/screens/photos-memories/title-hint-absent.textproto",
+      "binary": "contracts/screens/photos-memories/title-hint-absent.bin"
+    },
+    {
+      "case": "named-with-proposals-waiting",
+      "screen": "photos-people",
+      "type": "centraid.screen.v1.PhotosPeopleState",
+      "textproto": "contracts/screens/photos-people/named-with-proposals-waiting.textproto",
+      "binary": "contracts/screens/photos-people/named-with-proposals-waiting.bin"
+    },
+    {
+      "case": "none-named",
+      "screen": "photos-people",
+      "type": "centraid.screen.v1.PhotosPeopleState",
+      "textproto": "contracts/screens/photos-people/none-named.textproto",
+      "binary": "contracts/screens/photos-people/none-named.bin"
+    },
+    {
+      "case": "recognition-off",
+      "screen": "photos-people",
+      "type": "centraid.screen.v1.PhotosPeopleState",
+      "textproto": "contracts/screens/photos-people/recognition-off.textproto",
+      "binary": "contracts/screens/photos-people/recognition-off.bin"
+    },
+    {
+      "case": "already-in-album",
+      "screen": "photos-picker",
+      "type": "centraid.screen.v1.PhotoPickerState",
+      "textproto": "contracts/screens/photos-picker/already-in-album.textproto",
+      "binary": "contracts/screens/photos-picker/already-in-album.bin"
+    },
+    {
+      "case": "named-before-the-read",
+      "screen": "photos-picker",
+      "type": "centraid.screen.v1.PhotoPickerState",
+      "textproto": "contracts/screens/photos-picker/named-before-the-read.textproto",
+      "binary": "contracts/screens/photos-picker/named-before-the-read.bin"
+    },
+    {
+      "case": "map-presentation",
+      "screen": "photos-places",
+      "type": "centraid.screen.v1.PlacesState",
+      "textproto": "contracts/screens/photos-places/map-presentation.textproto",
+      "binary": "contracts/screens/photos-places/map-presentation.bin"
+    },
+    {
+      "case": "no-coordinate",
+      "screen": "photos-places",
+      "type": "centraid.screen.v1.PlacesState",
+      "textproto": "contracts/screens/photos-places/no-coordinate.textproto",
+      "binary": "contracts/screens/photos-places/no-coordinate.bin"
+    },
+    {
+      "case": "no-places-but-unplaced",
+      "screen": "photos-places",
+      "type": "centraid.screen.v1.PlacesState",
+      "textproto": "contracts/screens/photos-places/no-places-but-unplaced.textproto",
+      "binary": "contracts/screens/photos-places/no-places-but-unplaced.bin"
+    },
+    {
+      "case": "hits-say-why",
+      "screen": "photos-search",
+      "type": "centraid.screen.v1.PhotosSearchState",
+      "textproto": "contracts/screens/photos-search/hits-say-why.textproto",
+      "binary": "contracts/screens/photos-search/hits-say-why.bin"
+    },
+    {
+      "case": "no-hits",
+      "screen": "photos-search",
+      "type": "centraid.screen.v1.PhotosSearchState",
+      "textproto": "contracts/screens/photos-search/no-hits.textproto",
+      "binary": "contracts/screens/photos-search/no-hits.bin"
+    },
+    {
+      "case": "resting",
+      "screen": "photos-search",
+      "type": "centraid.screen.v1.PhotosSearchState",
+      "textproto": "contracts/screens/photos-search/resting.textproto",
+      "binary": "contracts/screens/photos-search/resting.bin"
+    },
+    {
+      "case": "album-selecting",
+      "screen": "photos-shelf",
+      "type": "centraid.screen.v1.PhotoShelfState",
+      "textproto": "contracts/screens/photos-shelf/album-selecting.textproto",
+      "binary": "contracts/screens/photos-shelf/album-selecting.bin"
+    },
+    {
+      "case": "memory-empty-but-titled",
+      "screen": "photos-shelf",
+      "type": "centraid.screen.v1.PhotoShelfState",
+      "textproto": "contracts/screens/photos-shelf/memory-empty-but-titled.textproto",
+      "binary": "contracts/screens/photos-shelf/memory-empty-but-titled.bin"
+    },
+    {
+      "case": "person",
+      "screen": "photos-shelf",
+      "type": "centraid.screen.v1.PhotoShelfState",
+      "textproto": "contracts/screens/photos-shelf/person.textproto",
+      "binary": "contracts/screens/photos-shelf/person.bin"
+    },
+    {
+      "case": "trash-states-its-window",
+      "screen": "photos-shelf",
+      "type": "centraid.screen.v1.PhotoShelfState",
+      "textproto": "contracts/screens/photos-shelf/trash-states-its-window.textproto",
+      "binary": "contracts/screens/photos-shelf/trash-states-its-window.bin"
+    },
+    {
+      "case": "locked",
+      "screen": "seat",
+      "type": "centraid.screen.v1.SeatState",
+      "textproto": "contracts/screens/seat/locked.textproto",
+      "binary": "contracts/screens/seat/locked.bin"
+    },
+    {
+      "case": "platform-refused-to-say",
+      "screen": "seat",
+      "type": "centraid.screen.v1.SeatState",
+      "textproto": "contracts/screens/seat/platform-refused-to-say.textproto",
+      "binary": "contracts/screens/seat/platform-refused-to-say.bin"
+    },
+    {
+      "case": "restarting",
+      "screen": "seat",
+      "type": "centraid.screen.v1.SeatState",
+      "textproto": "contracts/screens/seat/restarting.textproto",
+      "binary": "contracts/screens/seat/restarting.bin"
+    },
+    {
+      "case": "waiting-for-mount",
+      "screen": "seat",
+      "type": "centraid.screen.v1.SeatState",
+      "textproto": "contracts/screens/seat/waiting-for-mount.textproto",
+      "binary": "contracts/screens/seat/waiting-for-mount.bin"
+    },
+    {
+      "case": "data-page",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/data-page.textproto",
+      "binary": "contracts/screens/tally/data-page.bin"
+    },
+    {
+      "case": "empty-ledger",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/empty-ledger.textproto",
+      "binary": "contracts/screens/tally/empty-ledger.bin"
+    },
+    {
+      "case": "loading-first",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/loading-first.textproto",
+      "binary": "contracts/screens/tally/loading-first.bin"
+    },
+    {
+      "case": "low-disk-parked",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/low-disk-parked.textproto",
+      "binary": "contracts/screens/tally/low-disk-parked.bin"
+    },
+    {
+      "case": "offline-withheld",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/offline-withheld.textproto",
+      "binary": "contracts/screens/tally/offline-withheld.bin"
+    },
+    {
+      "case": "refused-denied",
+      "screen": "tally",
+      "type": "centraid.screen.v1.TallyListState",
+      "textproto": "contracts/screens/tally/refused-denied.textproto",
+      "binary": "contracts/screens/tally/refused-denied.bin"
+    }
+  ]
+}

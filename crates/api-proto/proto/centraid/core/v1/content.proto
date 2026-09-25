@@ -1,0 +1,161 @@
+// THE BYTE DOOR'S READ HALF (#1020, D-1020-DC1; census §A3).
+//
+// This file promotes `blobUrl` to a core request, which is the one a grid
+// needs: a surface asks "where are these bytes" and hands the answer to an
+// `<img>`, a `UIImage` or a Compose painter. The bytes themselves never cross
+// the ABI, so range requests and caching stay the platform's and the core
+// never buffers a photograph.
+//
+// `crates/apps/docs/src/bytes.rs` holds the same three shapes as an app-crate
+// trait and states the rules; this is that trait's `Url` arm on the wire. The
+// other two arms stay where they are until something needs them: a quick-look
+// of a text body is Docs', and staging is an upload.
+//
+// ## THE NEVER-INLINE RULE CROSSES WITH THE ANSWER
+//
+// Blob bytes can be attacker-authored — an imported attachment, a shared
+// document — so `text/html`, `application/xhtml+xml` and `image/svg+xml` are
+// offered and never embedded (`crates/centraid/src/cmd/seat/blob.rs:48`, from
+// v0's `blob-read-route.ts:23`-`:27`, issue #865). A shell that decided this
+// for itself would be a second place the rule lives, and on a desktop seat the
+// shell origin is the app itself, which makes a stored XSS worse rather than
+// better. So the core answers `embeddable` and a surface that renders a
+// non-embeddable answer as an image is the bug.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// WHICH BYTES, AND WHO IS READING THEM.
+//
+// The owner is not decoration: the media type of a content item belongs to the
+// REPRESENTATION and never to the byte row (#996, ruling R20(b)). The same sha
+// pinned to two rows carries two readings, and it is the reading — not the
+// bytes — that decides whether a surface may embed them.
+message ContentRef {
+  string content_id = 1;
+  // The row doing the reading: `media.asset` and an asset id, `core.document`
+  // and a document id. Empty means the caller has no reading to offer, and the
+  // answer is then never embeddable — NO TYPE IS NOT PERMISSION.
+  string owner_type = 2;
+  string owner_id = 3;
+}
+
+message ContentUrlRequest {
+  // At most `MAX_CONTENT_URLS` refs. A batch because a GRID asks for a screenful
+  // at once, and one round trip per cell through the ABI is one round trip per
+  // cell.
+  repeated ContentRef refs = 1;
+}
+
+// Where one content item's bytes are, or why they are not anywhere.
+message ContentUrl {
+  string content_id = 1;
+  // The local path, when this device holds the bytes.
+  //
+  // A PATH INSIDE THE APP'S OWN CONTAINER on mobile, which is what
+  // `centraid.screen.v1.PhotoCell.thumbnail_path` has always meant, and a
+  // `centraid://` URL on a desktop seat once that handler lands. Absent is a
+  // REAL ANSWER — a seat that has the row and not the bytes yet — and
+  // `absent_reason` says which kind of absent in a member's words.
+  optional string path = 2;
+  // What the OWNER reads these bytes as, from the representation index. Empty
+  // when there is no representation for the owner the request named.
+  string media_type = 3;
+  int64 byte_size = 4;
+  // Whether a surface may EMBED this rather than only offer it. See the file
+  // header: this is a security answer and not a hint.
+  bool embeddable = 5;
+  // A member-facing sentence, set only when `path` is absent. Never a path,
+  // never a sha, never a stack.
+  string absent_reason = 6;
+}
+
+message ContentUrls {
+  // ONE ANSWER PER REF, in the order they were asked, including the ones that
+  // resolved to nothing. A caller zipping a short list against its own rows
+  // would silently pair a photograph with another photograph's bytes.
+  repeated ContentUrl urls = 1;
+}
+
+// `BlobRequest` STOOD HERE (#1029 §3). It tagged a QUIC stream and handed the
+// rest of it to iroh-blobs' own protocol; there is no stream and no second
+// host to hand one to.
+
+
+// THE WRITE HALF'S DOOR: A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM
+// (#1025 S4, D-1025-S4-6).
+//
+// A camera roll is the shell's; the NAME of what is in it is the core's.
+// `core_content_item.content_hash` is BLAKE3 and is UNIQUE, so a shell that
+// computed its own identity would be a second implementation of the vault's
+// dedupe key — and on iOS and Android the only hash the platform offers is
+// SHA-256, so the second implementation could not even be the same function.
+// `MediaLibrary.Asset.sha256` is therefore gone from the mobile shell entirely.
+//
+// The shape is the native-messaging stage door's, for the same reason it has
+// that shape there: a ceiling on one message, no streaming, so the bytes arrive
+// in frames the receiver bounds. `begin` declares a size and a media type — the
+// ALLOCATION, so a sender does not decide how much memory this process uses —
+// `chunk` carries ordered payload, and `end` answers the handle.
+//
+// **A digest is never DECLARED, only ANSWERED.** There is nothing a sender could
+// assert that the core would not then compute for itself, and a declaration that
+// is checked is a second name for the same bytes that has to agree.
+message StageRequest {
+  oneof kind {
+    StageBegin begin = 1;
+    StageChunk chunk = 2;
+    StageEnd end = 3;
+  }
+}
+
+message StageBegin {
+  // What the shell reads these bytes as. The core has no sniffer, and a
+  // photograph promoted as `application/octet-stream` is one a grid will not
+  // embed.
+  string media_type = 1;
+  // The declared length, which is the allocation and the bound.
+  uint64 byte_size = 2;
+}
+
+message StageChunk {
+  string staging_id = 1;
+  // Zero-based and checked against the next expected one: transposed frames
+  // name the frame rather than producing bytes nobody asked for.
+  uint64 seq = 2;
+  bytes payload = 3;
+}
+
+message StageEnd {
+  string staging_id = 1;
+}
+
+message StageResponse {
+  oneof kind {
+    StageBegun begun = 1;
+    StageChunked chunked = 2;
+    StageHandle handle = 3;
+  }
+}
+
+message StageBegun {
+  string staging_id = 1;
+  // The chunk ceiling this core accepts, so the sender's split and the
+  // assembler's agree before the first frame rather than at the first refusal.
+  uint64 chunk_bytes = 2;
+}
+
+message StageChunked {
+  uint64 received = 1;
+}
+
+// THE HANDLE IS THE BYTES. `content_hash` is `content_digest` over exactly what
+// arrived — the value a `media.add_asset` or `core.add_document` then names.
+message StageHandle {
+  string content_hash = 1;
+  uint64 byte_size = 2;
+  // Whether this core ALREADY held these bytes. A camera roll re-scanned is the
+  // ordinary case, and a shell that could not tell would re-upload the roll.
+  bool already_held = 3;
+}

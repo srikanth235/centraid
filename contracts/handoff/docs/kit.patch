@@ -1,0 +1,434 @@
+diff --git a/crates/apps/kit/src/lib.rs b/crates/apps/kit/src/lib.rs
+index 04db0182..d4b62792 100644
+--- a/crates/apps/kit/src/lib.rs
++++ b/crates/apps/kit/src/lib.rs
+@@ -43,6 +43,7 @@ pub mod manifest;
+ pub mod money;
+ pub mod page;
+ pub mod reads;
++pub mod representations;
+ pub mod row;
+ pub mod statement;
+ pub mod testdoor;
+@@ -52,6 +53,7 @@ pub use page::{MAX_PAGE_ROWS, Page, PageCursor, PageRequest, page_of, probe_limi
+ pub use reads::{
+     FanOutBound, JOIN_FAN_OUT, PageDoor, Window, in_list, read_by_id, read_pages, read_window,
+ };
++pub use representations::{RepresentationIndex, read_representations};
+ pub use row::{Cell, Row};
+ pub use statement::{
+     PageBindValue, PageOrder, PageQuery, page_cursor_boundary, page_cursor_of, page_statement,
+diff --git a/crates/apps/kit/src/representations.rs b/crates/apps/kit/src/representations.rs
+new file mode 100644
+index 00000000..ede1c84d
+--- /dev/null
++++ b/crates/apps/kit/src/representations.rs
+@@ -0,0 +1,220 @@
++//! **WHAT THE BYTES ARE**, which is not a property of the bytes (#996, ruling
++//! R20(b), drift ONT-28).
++//!
++//! `core_content_item` carries no `media_type`: the same sha is `text/html`
++//! under one document and `text/plain` under another, so what it IS lives in
++//! `core_content_representation`, one row per `(owner_type, owner_id)`. Every
++//! grid row and every drive row still ships a `media_type` FIELD — a tile on a
++//! phone has to say whether it is a photograph, a video or a PDF before it can
++//! decide what to paint — and this module is the only place that field is
++//! filled in, exactly as v0's
++//! `packages/blueprints/apps/_shared/representation-reads.ts` is the only place
++//! on its side.
++//!
++//! Three things the port keeps, because each one is a bug it would otherwise
++//! reintroduce:
++//!
++//! 1. **The index is keyed on the OWNER, never on the content.** A
++//!    content-keyed lookup answers "whatever the oldest owner thought", which
++//!    for two documents sharing one sha is the wrong one — and two documents
++//!    sharing one sha is the case `core.document` exists to allow (#352).
++//!    [`RepresentationIndex::by_content`] is the deliberate fallback for a
++//!    surface addressing bytes with no owner in hand, and it takes the OLDEST
++//!    reading of them, which is the same deterministic answer the vault's own
++//!    resolver gives.
++//! 2. **The set is bounded by the caller's own content ids and then walked to
++//!    the END of that set** — not windowed again. v0 originally windowed it and
++//!    a vault with enough representations silently answered short, so rows came
++//!    back with no type rather than the wrong one.
++//! 3. **A denial is not an error.** The caller renders without a type. A door
++//!    that refuses yields [`RepresentationIndex::default`], and the field is
++//!    then `None` — which is what "we may not read that" looks like on a tile.
++//!
++//! ## Why it is here and not in an app crate
++//!
++//! Lane Photos wrote this fold in `crates/apps/photos/src/representations.rs`
++//! and filed the lift as an owner hand-off "for whichever lane ports the second
++//! caller". **Docs is that second caller** (#1020 wave 4 slot 4b), and a
++//! second copy is how the two answers drift — so the fold moved here, where v0
++//! keeps its own copy, under `contracts/handoff/docs/kit.patch`. Photos'
++//! module survives as a thin, owner-typed re-export so nothing it exports
++//! changed name.
++//!
++//! The narrowing the lift undid, and why it mattered: Photos' copy folded to
++//! `owner_id -> media_type` for the one owner type `media.asset` and dropped
++//! the content index entirely. Docs' `history` query reads
++//! `representations.byContent` for a SUPERSEDED version — a version whose
++//! bytes the document no longer reads — and a fold with no content index
++//! cannot answer it at all.
++
++use std::collections::BTreeMap;
++
++use crate::error::KitResult;
++use crate::reads::{FanOutBound, PageDoor, in_list, read_pages};
++use crate::row::{Row, text_of};
++use crate::statement::{PageOrder, PageQuery};
++
++/// The PHYSICAL table, because a page is plain SQL over the seat's own copy of
++/// `vault.db` and over the gateway's file (W4-D2) — the same statement on both.
++pub const REPRESENTATION_TABLE: &str = "core_content_representation";
++
++/// `_shared/representations` — v0's own statement name, kept so a plan
++/// snapshot taken on either side names the same read.
++pub const REPRESENTATION_STATEMENT: &str = "_shared/representations";
++
++/// One read, two indexes.
++///
++/// `Default` is the EMPTY index, which is what a denied door yields: the caller
++/// renders without a type rather than failing the screen.
++#[derive(Debug, Clone, PartialEq, Eq, Default)]
++pub struct RepresentationIndex {
++    /// `(owner_type, owner_id)` → media type. The right answer wherever the
++    /// caller knows the owner — a document, a note, an asset, an attachment.
++    pub by_owner: BTreeMap<(String, String), String>,
++    /// content id → the OLDEST owner's media type. The fallback for a surface
++    /// addressing bytes with no owner in hand.
++    pub by_content: BTreeMap<String, String>,
++}
++
++impl RepresentationIndex {
++    /// The media type this owner reads its bytes as.
++    #[must_use]
++    pub fn owner(&self, owner_type: &str, owner_id: &str) -> Option<&str> {
++        self.by_owner
++            .get(&(owner_type.to_owned(), owner_id.to_owned()))
++            .map(String::as_str)
++    }
++
++    /// The oldest reading of these bytes, for a caller with no owner in hand.
++    #[must_use]
++    pub fn content(&self, content_id: &str) -> Option<&str> {
++        self.by_content.get(content_id).map(String::as_str)
++    }
++}
++
++/// The statement: the media types of a bounded content set.
++///
++/// The keyset's second axis is `representation_id` and NOT `content_id`: one
++/// sha read as two things by two owners is the row this table exists for, and a
++/// cursor keyed on `content_id` would stall on it. `created_at` is `NOT NULL`
++/// on this table, so the walk is continuable (the kit's door refuses a
++/// continued page over a nullable sort key).
++pub fn representations_statement(content_ids: &[String]) -> KitResult<PageQuery> {
++    let fragment = in_list("content_id", content_ids)?;
++    Ok(PageQuery::new(
++        REPRESENTATION_STATEMENT,
++        "representation_id, content_id, owner_type, owner_id, media_type, created_at",
++        REPRESENTATION_TABLE,
++        PageOrder::asc("created_at", "representation_id"),
++    )
++    .filter(&fragment.sql, fragment.bind))
++}
++
++/// THE FOLD, over rows the read above returned in oldest-first order.
++///
++/// A row whose media type is empty is skipped rather than stored as `""`: the
++/// column is `NOT NULL`, so an empty string is a writer's bug and "no type" is
++/// the honest reading of it.
++#[must_use]
++pub fn fold_representations(rows: &[Row]) -> RepresentationIndex {
++    let mut index = RepresentationIndex::default();
++    for row in rows {
++        let Some(media_type) = text_of(row, "media_type").filter(|text| !text.is_empty()) else {
++            continue;
++        };
++        if let (Some(owner_type), Some(owner_id)) =
++            (text_of(row, "owner_type"), text_of(row, "owner_id"))
++        {
++            index.by_owner.insert((owner_type, owner_id), media_type.clone());
++        }
++        if let Some(content_id) = text_of(row, "content_id") {
++            // FIRST WINS, and the read is oldest-first: the same deterministic
++            // answer the vault's own resolver gives.
++            index.by_content.entry(content_id).or_insert(media_type);
++        }
++    }
++    index
++}
++
++/// Read and fold the representations of a bounded content set.
++///
++/// An empty set reads nothing — a statement with an empty `IN ()` is a refusal
++/// in the kit's grammar, and asking for the types of no bytes is not an error.
++/// A door that refuses answers with the empty index, because a denial here is
++/// a missing FIELD and not a failed screen.
++pub fn read_representations(
++    door: &dyn PageDoor,
++    content_ids: &[String],
++    bound: FanOutBound,
++) -> KitResult<RepresentationIndex> {
++    if content_ids.is_empty() {
++        return Ok(RepresentationIndex::default());
++    }
++    let mut ids: Vec<String> = content_ids.to_vec();
++    ids.sort();
++    ids.dedup();
++    let rows = read_pages(door, &representations_statement(&ids)?, bound)?;
++    Ok(fold_representations(&rows))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::row::Cell;
++
++    fn row(pairs: &[(&str, &str)]) -> Row {
++        let mut row = Row::default();
++        for (column, value) in pairs {
++            row.insert((*column).to_owned(), Cell::Text((*value).to_owned()));
++        }
++        row
++    }
++
++    /// THE BUG THE OWNER KEY EXISTS TO PREVENT (#996 R20(b), #352). Two
++    /// documents over one sha, read as two different things. A content-keyed
++    /// fold answers `text/plain` for both.
++    #[test]
++    fn two_owners_over_one_sha_keep_their_own_readings() {
++        let index = fold_representations(&[
++            row(&[
++                ("representation_id", "r1"),
++                ("content_id", "c1"),
++                ("owner_type", "core.document"),
++                ("owner_id", "d1"),
++                ("media_type", "text/plain"),
++            ]),
++            row(&[
++                ("representation_id", "r2"),
++                ("content_id", "c1"),
++                ("owner_type", "core.document"),
++                ("owner_id", "d2"),
++                ("media_type", "text/html"),
++            ]),
++        ]);
++        assert_eq!(index.owner("core.document", "d1"), Some("text/plain"));
++        assert_eq!(index.owner("core.document", "d2"), Some("text/html"));
++        // And the content fallback takes the OLDEST, deterministically.
++        assert_eq!(index.content("c1"), Some("text/plain"));
++    }
++
++    #[test]
++    fn an_empty_media_type_is_absence_and_not_an_empty_string() {
++        let index = fold_representations(&[row(&[
++            ("representation_id", "r1"),
++            ("content_id", "c1"),
++            ("owner_type", "media.asset"),
++            ("owner_id", "a1"),
++            ("media_type", ""),
++        ])]);
++        assert!(index.by_owner.is_empty());
++        assert!(index.by_content.is_empty());
++    }
++
++    #[test]
++    fn no_content_ids_is_not_a_read() {
++        assert!(matches!(
++            representations_statement(&[]),
++            Err(crate::error::KitError::EmptyInList { .. })
++        ));
++    }
++}
+diff --git a/crates/apps/photos/src/representations.rs b/crates/apps/photos/src/representations.rs
+index 4f448da9..050533ef 100644
+--- a/crates/apps/photos/src/representations.rs
++++ b/crates/apps/photos/src/representations.rs
+@@ -1,104 +1,105 @@
+-//! **WHAT THE BYTES ARE**, which is not a property of the bytes (#996, ruling
+-//! R20(b), drift ONT-28).
++//! Photos' owner-typed view of the kit's representation fold.
+ //!
+-//! `core_content_item` carries no `media_type`: the same sha is `text/html`
+-//! under one document and `text/plain` under another, so what it IS lives in
+-//! `core_content_representation`, one row per `(owner_type, owner_id)`. Every
+-//! grid row still ships a `media_type` FIELD — a tile on a phone has to say
+-//! whether it is a photograph or a video before it can decide what to paint —
+-//! and this module is the only place that field is filled in, exactly as v0's
+-//! `packages/blueprints/apps/_shared/representation-reads.ts` is the only place
+-//! on its side.
++//! **The fold moved.** It was written here by lane Photos with the lift filed
++//! as an owner hand-off "for whichever lane ports the second caller", because
++//! `crates/apps/kit` was another lane's file that slot (census §Cross-lane).
++//! Docs is that second caller (#1020 wave 4 slot 4b), so the fold now lives in
++//! [`centraid_apps_kit::representations`] — where v0 keeps its own copy
++//! (`packages/blueprints/apps/_shared/representation-reads.ts`) — and this
++//! module is what is left: the owner type Photos keys on, and a fold narrowed
++//! to it.
+ //!
+-//! Three things the port keeps, because each one is a bug it would otherwise
+-//! reintroduce:
++//! Nothing this module exported changed name or meaning. What the lift ADDED is
++//! the content index the kit now carries: Photos never needed it, and Docs'
++//! `history` query cannot be written without it, because a superseded version
++//! has no representation of its own.
+ //!
+-//! 1. **The index is keyed on the OWNER, never on the content.** `media.asset`
+-//!    plus the asset id. A content-keyed lookup answers "whatever the oldest
+-//!    owner thought", which for two assets sharing one sha is the wrong one.
+-//! 2. **The set is bounded by the caller's own content ids and then walked to
+-//!    the END of that set** — not windowed again. v0 originally windowed it and
+-//!    a vault with enough representations silently answered short, so rows came
+-//!    back with no type rather than the wrong one; the read is bounded by
+-//!    construction here through [`ASSET_JOIN_BOUND`].
+-//! 3. **A denial is not an error.** The caller renders without a type. This
+-//!    module returns an empty index for a door that refuses, and the field is
+-//!    then `None` — which is what "we may not read that" looks like on a tile.
+-//!
+-//! WHY THIS LIVES IN PHOTOS AND NOT IN THE KIT. v0's copy is in `_shared/`
+-//! because six apps call it. On the Rust side Photos is the first app to need
+-//! it; a shared home is `crates/apps/kit`, which is another lane's file this
+-//! slot (census §Cross-lane). The receipt files the lift as an owner hand-off
+-//! for whichever lane ports the second caller — the fold and its statement are
+-//! written here to be moved, not to be copied.
++//! The doctrine — owner-keyed and never content-keyed, bounded by the caller's
++//! own ids and walked to the end of them, a denial that is an absent field and
++//! not a failed screen — is stated once, in the kit.
+ 
+ use std::collections::BTreeMap;
+ 
+ use centraid_apps_kit::error::KitResult;
+-use centraid_apps_kit::reads::{PageDoor, in_list, read_pages};
+-use centraid_apps_kit::row::{Row, text_of};
+-use centraid_apps_kit::statement::{PageOrder, PageQuery};
++use centraid_apps_kit::reads::PageDoor;
++use centraid_apps_kit::representations::{
++    RepresentationIndex, fold_representations, read_representations,
++};
++use centraid_apps_kit::row::Row;
++
++pub use centraid_apps_kit::representations::representations_statement;
+ 
+ use crate::queries::ASSET_JOIN_BOUND;
+ 
+ /// The owner type every Photos asset's representation is keyed under.
+ pub const ASSET_OWNER_TYPE: &str = "media.asset";
+ 
+-/// `photos.shared.representations` — the media types of a bounded content set.
++/// THE FOLD, narrowed to `media.asset`: `asset_id` → media type.
+ ///
+-/// The keyset's second axis is `representation_id` and NOT `content_id`: one
+-/// sha read as two things by two owners is the row this table exists for, and a
+-/// cursor keyed on `content_id` would stall on it.
+-pub fn representations_statement(content_ids: &[String]) -> KitResult<PageQuery> {
+-    let fragment = in_list("content_id", content_ids)?;
+-    Ok(PageQuery::new(
+-        "photos.shared.representations",
+-        "representation_id, content_id, owner_type, owner_id, media_type, created_at",
+-        "core_content_representation",
+-        PageOrder::asc("created_at", "representation_id"),
+-    )
+-    .filter(&fragment.sql, fragment.bind))
+-}
+-
+-/// THE FOLD: `asset_id` → media type, for the rows owned by `media.asset`.
+-///
+-/// A row whose media type is empty is skipped rather than stored as `""`: the
+-/// column is `NOT NULL`, so an empty string is a writer's bug and "no type" is
+-/// the honest reading of it.
++/// A row owned by anything else is skipped — a `core.document` over the same
++/// sha is a different reading of the same bytes, and it is not this library's
++/// answer.
+ #[must_use]
+ pub fn fold_media_types(rows: &[Row]) -> BTreeMap<String, String> {
+-    let mut by_owner = BTreeMap::new();
+-    for row in rows {
+-        let Some(media_type) = text_of(row, "media_type").filter(|text| !text.is_empty()) else {
+-            continue;
+-        };
+-        if text_of(row, "owner_type").as_deref() != Some(ASSET_OWNER_TYPE) {
+-            continue;
+-        }
+-        let Some(owner_id) = text_of(row, "owner_id") else {
+-            continue;
+-        };
+-        // FIRST WINS, and the read is oldest-first: the same deterministic
+-        // answer the vault's own resolver gives.
+-        by_owner.entry(owner_id).or_insert(media_type);
+-    }
+-    by_owner
++    narrow(&fold_representations(rows))
++}
++
++/// The asset-owned half of a kit index.
++fn narrow(index: &RepresentationIndex) -> BTreeMap<String, String> {
++    index
++        .by_owner
++        .iter()
++        .filter(|((owner_type, _), _)| owner_type == ASSET_OWNER_TYPE)
++        .map(|((_, owner_id), media_type)| (owner_id.clone(), media_type.clone()))
++        .collect()
+ }
+ 
+ /// Read and fold the media types of a bounded content set.
+ ///
+-/// An empty set reads nothing — a statement with an empty `IN ()` is a refusal
+-/// in the kit's grammar, and asking for the types of no bytes is not an error.
++/// An empty set reads nothing, and a door that refuses answers with an empty
++/// index: the caller renders a tile with no type rather than no tile.
+ pub fn read_media_types(
+     door: &dyn PageDoor,
+     content_ids: &[String],
+ ) -> KitResult<BTreeMap<String, String>> {
+-    if content_ids.is_empty() {
+-        return Ok(BTreeMap::new());
++    Ok(narrow(&read_representations(
++        door,
++        content_ids,
++        ASSET_JOIN_BOUND,
++    )?))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use centraid_apps_kit::row::Cell;
++
++    /// The narrowing is the whole of what is left here, so it is what is
++    /// tested: a document's reading of the same bytes is not an asset's.
++    #[test]
++    fn only_asset_owned_readings_reach_the_library() {
++        let mut asset = Row::new();
++        for (column, value) in [
++            ("representation_id", "r1"),
++            ("content_id", "c1"),
++            ("owner_type", ASSET_OWNER_TYPE),
++            ("owner_id", "a1"),
++            ("media_type", "image/png"),
++        ] {
++            asset.insert(column.to_owned(), Cell::Text(value.to_owned()));
++        }
++        let mut document = Row::new();
++        for (column, value) in [
++            ("representation_id", "r2"),
++            ("content_id", "c1"),
++            ("owner_type", "core.document"),
++            ("owner_id", "d1"),
++            ("media_type", "application/pdf"),
++        ] {
++            document.insert(column.to_owned(), Cell::Text(value.to_owned()));
++        }
++        let folded = fold_media_types(&[asset, document]);
++        assert_eq!(folded.get("a1").map(String::as_str), Some("image/png"));
++        assert!(folded.get("d1").is_none());
+     }
+-    let mut ids: Vec<String> = content_ids.to_vec();
+-    ids.sort();
+-    ids.dedup();
+-    let rows = read_pages(door, &representations_statement(&ids)?, ASSET_JOIN_BOUND)?;
+-    Ok(fold_media_types(&rows))
+ }

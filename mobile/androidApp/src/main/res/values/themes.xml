@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  THE ACTIVITY THEME, AS SOURCE (#1020, wave A).
+
+  Declaring no theme at all was not neutral: the platform's default carries an
+  ActionBar, so the first Android run of Home drew a dark "Centraid" title bar
+  above a screen whose whole point is that it has its own frame — the vault
+  lockup, the title row and the band. Two chromes, one of them nobody wrote.
+
+  `NoActionBar` is the whole intent. The window is transparent because the
+  Compose content paints the page ground from the emitted token table, and a
+  window background under it would be a second definition of "the page" that
+  does not follow the theme.
+-->
+<resources>
+    <style name="Theme.Centraid" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <!-- Edge to edge. `enableEdgeToEdge()` in the activity owns the bar
+             icon contrast; these two only get the system's own fills out of
+             the way so the page ground reaches the edges. -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

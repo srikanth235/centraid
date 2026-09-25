@@ -6,9 +6,7 @@
 // its own — `.deviceListCurrent { font-size: 9.5px }` shipped straight past
 // that test the same day the ramp landed. This gate closes that hole by
 // scanning the CONSUMERS directly: hardcoded CSS `font-size` (px or rem) in
-// the three CSS surfaces that draw from the ramp, plus React Native
-// `fontSize:` numeric literals in the mobile app, which has no CSS layer for
-// the other gate to see at all.
+// the CSS surface that draws from the ramp.
 //
 // Zero tolerance, not a ratchet budget (contrast lint-container-opacity.mjs):
 // the 11px floor is DESIGN.md's own invariant ("Nothing falls below 11px" —
@@ -23,16 +21,10 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const FLOOR = 11;
 const REM_BASE_PX = 16;
 
-const CSS_TARGETS = [
-  "packages/client/src",
-  "packages/blueprints",
-  "packages/design/src/elements",
-];
-const MOBILE_TARGETS = ["apps/mobile/src"];
+const CSS_TARGETS = ["packages/design/src/elements"];
 
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 const CSS_EXTENSION = /\.css$/u;
-const TS_EXTENSION = /\.tsx?$/u;
 
 function walk(dir, extension, out = []) {
   for (const entry of readdirSync(dir)) {
@@ -48,17 +40,11 @@ function lineOf(src, index) {
   return src.slice(0, index).split("\n").length;
 }
 
-/** Blank `/* … *\/` (CSS) or `//` + `/* *\/` (JS/TS) comment bodies to
- *  spaces, preserving newlines/length so line numbers stay accurate and a
- *  size mentioned in prose (like this file's own header) is never mistaken
- *  for a real declaration. */
+/** Blank `/* … *\/` comment bodies to spaces, preserving newlines/length
+ *  so line numbers stay accurate and a size mentioned in prose is never
+ *  mistaken for a real declaration. */
 function blankCssComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "));
-}
-function blankJsComments(src) {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "))
-    .replace(/(?<!:)\/\/[^\n]*/gu, (m) => " ".repeat(m.length));
 }
 
 // ── CSS: hardcoded `font-size` below the floor ──────────────────────────────
@@ -106,60 +92,13 @@ export function lintTypeFloorCss(root = ROOT, targets = CSS_TARGETS) {
   return { findings, filesScanned, missingTarget: null };
 }
 
-// ── Mobile: hardcoded React Native `fontSize:` below the floor ─────────────
-//
-// A bare numeric literal only — `fontSize: variable`, `fontSize:
-// theme.type.body.fontSize`, and similar expressions aren't a literal this
-// gate can misjudge, so they're left alone (out of scope, not silently
-// passed: a non-numeric fontSize is either already routed through the native
-// adapter or isn't a plain constant this gate can reason about).
-const TS_FONT_SIZE_RE =
-  /(?<![\w-])fontSize\s*:\s*(?<value>-?[0-9.]+)\s*[,;}]/gu;
-
-function scanTsFile(src, rel) {
-  const findings = [];
-  TS_FONT_SIZE_RE.lastIndex = 0;
-  let match;
-  while ((match = TS_FONT_SIZE_RE.exec(src))) {
-    const value = Number(match.groups.value);
-    if (value <= 0) continue; // 0 or negative: not a text size.
-    if (value < FLOOR) {
-      const line = lineOf(src, match.index);
-      findings.push(`${rel}:${line} — fontSize: ${value} (floor is ${FLOOR})`);
-    }
-  }
-  return findings;
-}
-
-export function lintTypeFloorMobile(root = ROOT, targets = MOBILE_TARGETS) {
-  const findings = [];
-  let filesScanned = 0;
-  for (const target of targets) {
-    const dir = path.resolve(root, target);
-    if (!existsSync(dir))
-      return { findings, filesScanned, missingTarget: target };
-    for (const file of walk(dir, TS_EXTENSION)) {
-      const rel = path.relative(root, file);
-      filesScanned += 1;
-      const src = blankJsComments(readFileSync(file, "utf8"));
-      findings.push(...scanTsFile(src, rel));
-    }
-  }
-  return { findings, filesScanned, missingTarget: null };
-}
-
 function main() {
   const reportOnly = process.argv.includes("--report-only");
 
   const css = lintTypeFloorCss();
-  const mobile = lintTypeFloorMobile();
 
   if (css.missingTarget) {
     console.error(`FAIL — target does not exist: ${css.missingTarget}`);
-    process.exit(1);
-  }
-  if (mobile.missingTarget) {
-    console.error(`FAIL — target does not exist: ${mobile.missingTarget}`);
     process.exit(1);
   }
   if (css.filesScanned === 0) {
@@ -168,36 +107,27 @@ function main() {
     );
     process.exit(1);
   }
-  if (mobile.filesScanned === 0) {
-    console.error(
-      "FAIL — scanned 0 mobile .ts/.tsx files. MOBILE_TARGETS is stale in scripts/lint-type-floor.mjs."
-    );
-    process.exit(1);
-  }
 
-  const findings = [...css.findings, ...mobile.findings];
+  const { findings } = css;
 
   if (findings.length > 0) {
     const label = reportOnly ? "report" : "FAIL";
     console.error(
       `\n${label} — ${findings.length} sub-11px type-floor violation(s) across ` +
-        `${css.filesScanned} CSS file(s) + ${mobile.filesScanned} mobile file(s):\n`
+        `${css.filesScanned} CSS file(s):\n`
     );
     for (const f of findings.sort()) console.error(`  ${f}`);
     console.error(
       "\nNothing falls below 11px (packages/design/src/typography.ts). Tokenize a\n" +
-        "CSS hit to the nearest rung ≥11px (usually `var(--t-control-size)`); a\n" +
-        "mobile hit to the nearest native rung exposed by\n" +
-        "apps/mobile/src/kit/theme's `type` (usually `mono`'s\n" +
-        "12.5). Never invent a new size. See scripts/lint-type-floor.mjs.\n"
+        "hit to the nearest rung ≥11px (usually `var(--t-control-size)`). Never\n" +
+        "invent a new size. See scripts/lint-type-floor.mjs.\n"
     );
     if (!reportOnly) process.exit(1);
     return;
   }
 
   console.log(
-    `ok   type-floor — ${css.filesScanned} CSS file(s) + ${mobile.filesScanned} ` +
-      "mobile file(s), nothing below 11px"
+    `ok   type-floor — ${css.filesScanned} CSS file(s), nothing below 11px`
   );
 }
 
