@@ -1,0 +1,318 @@
+{
+  "slug": "2026-09-25-36125061053",
+  "date": "2026-09-25",
+  "runId": null,
+  "runUrl": null,
+  "reportPath": "test-report/nightly/runs/2026-09-25-36125061053/",
+  "summary": {
+    "schema": 1,
+    "verdict": "HOLD",
+    "why": "7 S2 blocker: desktop-e2e failed.",
+    "flip": "fix or park desktop-e2e → HOLD",
+    "blockers": [
+      {
+        "severity": "S2",
+        "lane": "desktop-e2e",
+        "case": null,
+        "platform": "desktop",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-26 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "fuzz-parsers",
+        "case": null,
+        "platform": "any",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-26 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "mobile-e2e-android",
+        "case": null,
+        "platform": "android",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-26 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "mobile-e2e-ios",
+        "case": null,
+        "platform": "ios",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-26 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "quality-performance-scale",
+        "case": null,
+        "platform": "any",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-26 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "web-e2e",
+        "case": null,
+        "platform": "web",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-26 (24 h to owned)",
+        "issue": null
+      },
+      {
+        "severity": "S2",
+        "lane": "web-e2e-cross-browser",
+        "case": null,
+        "platform": "web",
+        "firstRed": "17eda0be748a314ee2dfbb99916f1c6b14b994d6",
+        "lastGreen": null,
+        "owner": null,
+        "ageHours": 0,
+        "overSla": false,
+        "deadline": "2026-09-26 (24 h to owned)",
+        "issue": null
+      }
+    ],
+    "deltas": {
+      "passed": 8,
+      "failed": 8,
+      "degraded": 0,
+      "noEvidence": 33,
+      "newRed": 8,
+      "newGreen": 0,
+      "previousVerdict": null
+    },
+    "parks": [],
+    "candidate": null,
+    "generatedAt": "2026-09-25T11:48:23.066Z",
+    "label": "2026-09-25",
+    "validationErrorCount": 0,
+    "lanes": {
+      "companion-static": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "coverage": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "coverage-shard": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "dependency-review": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "design-gallery": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "docs": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "gates": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "gitleaks": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "iroh-wasm": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mobile-device-gate": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mobile-smoke": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mutation-pr": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "new-test-burn-in": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "oauth-worker": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "osv-scanner": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "static": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "verify": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "web-build": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "desktop-e2e-linux": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "desktop-e2e-macos": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "lane-gateway-package": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mobile-canary-android": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mobile-ios-smoke": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "mutation-full": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "rung1-on-main": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "rust-supply-chain": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "suite": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "web-e2e-linux": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "compat-upgrade-and-skew": {
+        "verdict": "passed",
+        "durationMs": 25082
+      },
+      "dast-scan": {
+        "verdict": "passed",
+        "durationMs": 33390
+      },
+      "desktop-e2e": {
+        "verdict": "failed",
+        "durationMs": 685630
+      },
+      "fuzz-parsers": {
+        "verdict": "failed",
+        "durationMs": 552409
+      },
+      "lane-health": {
+        "verdict": "failed",
+        "durationMs": 17012
+      },
+      "mobile-e2e-android": {
+        "verdict": "failed",
+        "durationMs": 3131034
+      },
+      "mobile-e2e-ios": {
+        "verdict": "failed",
+        "durationMs": 934066
+      },
+      "mutation-testing": {
+        "verdict": "passed",
+        "durationMs": 998203
+      },
+      "pairing-cross-network-relay": {
+        "verdict": "passed",
+        "durationMs": 66267
+      },
+      "pairing-lifecycle": {
+        "verdict": "passed",
+        "durationMs": 42215
+      },
+      "pairing-ticket-hygiene": {
+        "verdict": "passed",
+        "durationMs": 40656
+      },
+      "protocol-join": {
+        "verdict": "passed",
+        "durationMs": 94970
+      },
+      "quality-performance-scale": {
+        "verdict": "failed",
+        "durationMs": 328916
+      },
+      "restore-year3": {
+        "verdict": "passed",
+        "durationMs": 227447
+      },
+      "web-e2e": {
+        "verdict": "failed",
+        "durationMs": 329966
+      },
+      "web-e2e-cross-browser": {
+        "verdict": "failed",
+        "durationMs": 1213571
+      },
+      "alarm": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "backup-interop": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "hygiene": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "long-run-soak": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      },
+      "real-model-goldens": {
+        "verdict": "no-evidence",
+        "durationMs": null
+      }
+    }
+  }
+}

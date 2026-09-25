@@ -1,0 +1,26 @@
+{
+  "lane": "scale",
+  "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
+  "name": "20 on-device Home relaunches",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 104329.86552699999,
+      "unit": "ms"
+    },
+    {
+      "name": "launches",
+      "value": 20,
+      "unit": "count"
+    }
+  ],
+  "platform": "android",
+  "capturedAt": "2026-09-08T10:58:00.893Z",
+  "history": [
+    {
+      "at": "2026-09-08T10:58:00.893Z",
+      "value": 104329.86552699999
+    }
+  ]
+}
