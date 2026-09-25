@@ -15,12 +15,15 @@ import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.shell.FirstMoves
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.SpringboardPolicy
+import dev.centraid.shared.shell.StrandedWrite
+import dev.centraid.shared.shell.strandedStatus
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 
 /**
@@ -690,6 +693,18 @@ class HomeMachineSpec : StringSpec({
         again.data_!!.tiles.first { it.app_id == "docs" }.status shouldBe
             TileStatus.TILE_STATUS_CONTENT
         again.vault!!.state shouldBe VaultLockup.State.STATE_ONLINE
+    }
+
+    "a write stranded by its screen's closing is Home's status line, in the attention tone" {
+        val quiet = strandedStatus(StrandedWrite(appId = "notes", command = "knowledge.edit_note", sentence = ""))
+        quiet.tone shouldBe HomeStatus.Tone.TONE_ATTENTION
+        quiet.copy shouldBe "Your last change in Notes was not saved."
+        quiet.action shouldBe ""
+        quiet.destination shouldBe HomeStatus.Destination.DESTINATION_NONE
+        strandedStatus(StrandedWrite("tasks", "schedule.edit_task", "That task is gone.")).copy shouldBe
+            "Tasks: That task is gone."
+        val told = HomeMachine.reduce(named("v1", "Demo vault"), HomeEvent(status = HomeEvent.StatusChanged(status = quiet))).state
+        told.data_.shouldNotBeNull().status shouldBe quiet
     }
 })
 

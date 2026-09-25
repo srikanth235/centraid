@@ -1,10 +1,16 @@
 package dev.centraid.shared.nav
 
+import centraid.screen.v1.AgendaHomeState
+import centraid.screen.v1.DocsDriveState
+import centraid.screen.v1.PeopleHomeState
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PlacesState
+import centraid.screen.v1.TallyHomeState
 import centraid.screen.v1.TallyListState
+import centraid.screen.v1.TasksHomeState
+import centraid.screen.v1.TasksListState
 
 /**
  * The navigation model (#1020, D-1020-E1, D-1020-E3).
@@ -51,6 +57,40 @@ public sealed interface Destination {
     public data class TallyHome(
         val destination: TallyListState.Destination =
             TallyListState.Destination.DESTINATION_ACTIVITY,
+    ) : Destination
+
+    /**
+     * AGENDA'S HOME (#1046). Day, Schedule or Waiting, as a parameter; Search
+     * is a mode over it and More a sheet, so neither is a value here. A shell
+     * pushes this and calls `AgendaBridge.open(destination)`.
+     */
+    public data class AgendaHome(
+        val destination: AgendaHomeState.Destination =
+            AgendaHomeState.Destination.DESTINATION_DAY,
+    ) : Destination
+
+    /**
+     * ONE AGENDA OCCURRENCE (#1046 wave 4) — `AgendaHomeEvent.EventPicked`'s
+     * fields. A shell pushes this and calls `AgendaEventBridge.open`.
+     */
+    public data class AgendaEvent(
+        val eventId: String,
+        val instanceKey: String,
+        val originalStartLocal: String? = null,
+        val day: String,
+    ) : Destination
+
+    /**
+     * AGENDA'S EDITOR (#1046 wave 5): a new event on [day] when [eventId] is
+     * null (`AgendaEditorBridge.openNew`), else that occurrence
+     * (`AgendaEditorBridge.openEdit`). Popped only on
+     * `AgendaEditorState.dismissed`.
+     */
+    public data class AgendaEditor(
+        val eventId: String? = null,
+        val instanceKey: String = "",
+        val originalStartLocal: String? = null,
+        val day: String = "",
     ) : Destination
 
     public data class PhotosHome(
@@ -138,9 +178,150 @@ public sealed interface Destination {
         val noteId: String,
         /** The title rides along so the app bar has something to say at once. */
         val title: String? = null,
+        /**
+         * The id was minted on the phone for a note not yet written
+         * (`NotesRouting.target`): the editor opens empty and creates it on
+         * its first save.
+         */
+        val isNew: Boolean = false,
     ) : Destination
 
     public data class DocsFolder(val folderId: String, val folderName: String) : Destination
+
+    // --- Docs (#1046, docs port) ---------------------------------------
+
+    /**
+     * DOCS' DRIVE. All, Folders, Starred or Recently added, as a parameter;
+     * search is a field and More a sheet, so neither is a value here. A folder
+     * inside Folders is [DocsFolder], pushed over it (#1015 D4: content
+     * pushes). A shell pushes this and calls `DocsDriveBridge.open(destination)`.
+     */
+    public data class DocsHome(
+        val destination: DocsDriveState.Destination = DocsDriveState.Destination.DESTINATION_ALL,
+    ) : Destination
+
+    /** One document. The title rides along so the head has words at once. */
+    public data class DocsDocument(val documentId: String, val title: String = "") : Destination
+
+    /** A text document's editor: autosave, close = done, no band. */
+    public data class DocsEditor(val documentId: String, val title: String = "") : Destination
+
+    /** Docs' trash: restore and Empty trash; there is no destroy path. */
+    public data object DocsTrash : Destination
+
+    // --- Notes (#1029 port) ---
+
+    /**
+     * NOTES' LIBRARY: every note, one notebook's, or the unfiled ones. A shell
+     * forwards `NotesLibraryEvent.Opened` with the same three.
+     */
+    public data class NotesLibrary(
+        val notebookId: String = "",
+        val notebookName: String = "",
+        val unfiledOnly: Boolean = false,
+    ) : Destination
+
+    public data object NotesNotebooks : Destination
+
+    public data object NotesJournal : Destination
+
+    /** One note's versions; the title rides along for the head. */
+    public data class NotesHistory(val noteId: String, val title: String = "") : Destination
+
+    public data object NotesTrash : Destination
+
+    // --- People (#1029 port) ---
+
+    /**
+     * PEOPLE'S HOME: People or Touch, as a parameter; search is a field over it
+     * and More a sheet. A shell calls `PeopleHomeBridge.open(destination)`.
+     */
+    public data class PeopleHome(
+        val destination: PeopleHomeState.Destination =
+            PeopleHomeState.Destination.DESTINATION_PEOPLE,
+    ) : Destination
+
+    /** One person; the name rides along for the head. `logTouch` opens the Log a touch sheet. */
+    public data class PeoplePerson(
+        val partyId: String,
+        val name: String = "",
+        val logTouch: Boolean = false,
+    ) : Destination
+
+    /**
+     * The profile editor. `isNew`: `partyId` was minted by
+     * `PeopleEditorBridge.openNew` and the first save adds the person.
+     */
+    public data class PeopleEditor(val partyId: String, val isNew: Boolean = false) : Destination
+
+    public data object PeopleTrash : Destination
+
+    // --- Tasks (#1029 port) ---
+
+    /**
+     * TASKS' HOME: Today, Upcoming, Inbox or Projects, as a parameter; search
+     * is a field and More a sheet. A shell calls `TasksHomeBridge.open(destination)`
+     * — or, with [quickAdd] (Notes' "Send to Tasks"), `openQuickAdd(quickAdd)`,
+     * which lands on the Inbox with those words in the quick add.
+     */
+    public data class TasksHome(
+        val destination: TasksHomeState.Destination = TasksHomeState.Destination.DESTINATION_TODAY,
+        val quickAdd: String = "",
+    ) : Destination
+
+    /** Anytime, All, Logbook or Reminders — one screen, the view a parameter. */
+    public data class TasksList(val view: TasksListState.View) : Destination
+
+    /** One project; the name rides along for the head. */
+    public data class TasksProject(val projectId: String, val name: String = "") : Destination
+
+    /** The task editor: autosave, close = done, no band. */
+    public data class TasksDetail(val taskId: String) : Destination
+
+    public data object TasksCatchUp : Destination
+
+    /** Tasks' trash: restore, and delete forever behind a confirm. */
+    public data object TasksTrash : Destination
+    // --- Tally (#1046 port) ---
+
+    /**
+     * TALLY'S HOME: Balances, Activity or Groups, as a parameter; More is a
+     * sheet. A shell calls `TallyHomeBridge.open(destination)`. The legacy
+     * [TallyHome] stays until the native list moves here.
+     */
+    public data class TallyApp(
+        val destination: TallyHomeState.Destination = TallyHomeState.Destination.DESTINATION_BALANCES,
+    ) : Destination
+
+    /** One group's ledger; the name rides along for the head. */
+    public data class TallyGroup(val groupId: String, val name: String = "") : Destination
+
+    /** One friend; the name rides along for the head. */
+    public data class TallyFriend(val partyId: String, val name: String = "") : Destination
+
+    public data class TallyExpense(val expenseId: String) : Destination
+
+    /**
+     * Add (no `expenseId`, preset with a group or a friend) or edit. No band:
+     * explicit Save, and leaving with changes asks first.
+     */
+    public data class TallyEditor(
+        val expenseId: String = "",
+        val groupId: String = "",
+        val partyId: String = "",
+    ) : Destination
+
+    /** Empty `groupId` is every group plus the group-less positions. */
+    public data class TallySettleUp(val groupId: String = "") : Destination
+
+    public data object TallyRecurring : Destination
+
+    public data object TallySpending : Destination
+
+    public data object TallySearch : Destination
+
+    /** Restore only: the sweep purges, and there is no destroy path. */
+    public data object TallyTrash : Destination
 }
 
 /**
@@ -192,6 +373,26 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
         }
     }
 
+    /** The same in-place swap for Agenda's band. */
+    public fun withAgendaDestination(destination: AgendaHomeState.Destination): NavStack {
+        val top = current
+        return if (top is Destination.AgendaHome) {
+            NavStack(entries.dropLast(1) + top.copy(destination = destination))
+        } else {
+            push(Destination.AgendaHome(destination))
+        }
+    }
+
+    /** The same in-place swap for Docs' band. A folder page is left for its tab's top level. */
+    public fun withDocsDestination(destination: DocsDriveState.Destination): NavStack {
+        val top = current
+        return if (top is Destination.DocsHome) {
+            NavStack(entries.dropLast(1) + top.copy(destination = destination))
+        } else {
+            push(Destination.DocsHome(destination))
+        }
+    }
+
     public fun withTallyDestination(destination: TallyListState.Destination): NavStack {
         val top = current
         return if (top is Destination.TallyHome) {
@@ -199,5 +400,43 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
         } else {
             push(Destination.TallyHome(destination))
         }
+    }
+}
+
+/**
+ * NOTES' BAND, IN PLACE (#1029 port): Notes, Notebooks and Journal are three
+ * screens under one band, and moving between them is not a push — back does
+ * not walk the places a member happened to tap. [key] is `NotesBandTab.key`;
+ * an unknown key (or `more`, a sheet) leaves the stack alone.
+ */
+public fun NavStack.withNotesPlace(key: String): NavStack {
+    val place: Destination = when (key) {
+        "notes" -> Destination.NotesLibrary()
+        "notebooks" -> Destination.NotesNotebooks
+        "journal" -> Destination.NotesJournal
+        else -> return this
+    }
+    val top = current
+    val onBand = top is Destination.NotesLibrary || top == Destination.NotesNotebooks || top == Destination.NotesJournal
+    return if (onBand) NavStack(entries.dropLast(1) + place) else push(place)
+}
+
+/** PEOPLE'S BAND, IN PLACE (#1029 port): People and Touch are one screen's parameter. */
+public fun NavStack.withPeopleDestination(destination: PeopleHomeState.Destination): NavStack {
+    val top = current
+    return if (top is Destination.PeopleHome) {
+        NavStack(entries.dropLast(1) + top.copy(destination = destination))
+    } else {
+        push(Destination.PeopleHome(destination))
+    }
+}
+
+/** TASKS' BAND, IN PLACE (#1029 port): Today, Upcoming, Inbox and Projects are one screen's parameter. */
+public fun NavStack.withTasksDestination(destination: TasksHomeState.Destination): NavStack {
+    val top = current
+    return if (top is Destination.TasksHome) {
+        NavStack(entries.dropLast(1) + top.copy(destination = destination))
+    } else {
+        push(Destination.TasksHome(destination))
     }
 }

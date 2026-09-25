@@ -233,7 +233,7 @@ public class FaceReviewBridge {
                     //
                     // A NEW PERSON'S ID IS HANDED BACK, so the confirm that
                     // needs it follows in the same breath (`PersonCreated`).
-                    // `core.add_party` answers it in `CommandOutcome.output`;
+                    // `people.add_person` answers it in `CommandOutcome.output`;
                     // when it is not there the settle goes as before and the
                     // member finishes with a tap on the re-read roster.
                     val created = if (
@@ -261,7 +261,7 @@ public class FaceReviewBridge {
     }
 
     /**
-     * `party_id` out of `core.add_party`'s answer, or empty.
+     * `party_id` out of `people.add_person`'s answer, or empty.
      *
      * The answer is canonical JSON the vault wrote — `{"party_id": "…", …}` —
      * and a party id is a slug with nothing in it to escape, so this reads the

@@ -40,29 +40,25 @@ class WriteRunnerSpec : StringSpec({
     fun seat(connectivity: SeatState.Connectivity, durability: SeatState.Durability) =
         SeatState(connectivity = connectivity, durability = durability)
 
-    "queued is its own state, and it is not clean" {
-        // `SAVE_STATE_QUEUED` — durable here, not yet committed. Collapsing it
-        // into CLEAN would be the shell claiming a commit that has not
-        // happened, which is exactly the badge a member reads to know a write
-        // is still owed.
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_QUEUED, "", "test.command:row-0001")
-            .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_IN_FLIGHT, "", "test.command:row-0001")
-            .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_PARKED, "", "test.command:row-0001")
-            .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_QUEUED
-    }
-
-    "only an executed command is clean, and every refusal is refused" {
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "test.command:row-0001")
-            .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_CLEAN
+    "only an executed command commits; every other status is refused, keyed to its save" {
+        // THE PHONE IS THE VAULT (#1029 §1): a save commits here or it does
+        // not. QUEUED left with the outbox, so there is no third state — and
+        // the settle carries the key it answers, so the editor can tell its
+        // own save's answer from a stale one.
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "k:1")
+            .write_settled.shouldNotBeNull().let {
+                it.committed shouldBe true
+                it.invoke_key shouldBe "k:1"
+            }
         listOf(
+            CommandStatus.COMMAND_STATUS_QUEUED,
+            CommandStatus.COMMAND_STATUS_IN_FLIGHT,
+            CommandStatus.COMMAND_STATUS_PARKED,
             CommandStatus.COMMAND_STATUS_DENIED,
             CommandStatus.COMMAND_STATUS_FAILED,
             CommandStatus.COMMAND_STATUS_UNSPECIFIED,
         ).forEach { status ->
-            NotesReads.settled(status, "", "test.command:row-0001")
-                .save_settled?.outcome shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
+            NotesReads.settled(status, "", "k:1").write_settled.shouldNotBeNull().committed shouldBe false
         }
     }
 
@@ -70,21 +66,17 @@ class WriteRunnerSpec : StringSpec({
         // `CommandOutcome.reason` is the author's words for a denial or a failed
         // precondition — never the raw predicate, which reaches the audit trail
         // only. A shell that composed one would be the hole in that rule.
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "That note was removed.", "test.command:row-0001")
-            .save_settled?.failure.shouldNotBeNull()
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "That note was removed.", "k:1")
+            .write_settled?.failure.shouldNotBeNull()
             .sentence shouldBe "That note was removed."
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "", "test.command:row-0001")
-            .save_settled?.failure shouldBe null
+        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "", "k:1")
+            .write_settled?.failure shouldBe null
     }
 
-    "a save that would blank the note is refused, not sent" {
-        // THE DATA-LOSS GUARD (#1025 S5, R-NOTES-2). A draft whose body is
-        // empty AND marked unavailable has no member-typed replacement: sending
-        // it as a whole-draft write would blank the note. `knowledge.edit_note`
-        // treats an absent `body_text` as leave-alone, and title/pin-only saves
-        // queue on that path — but a pristine empty+unavailable save with no
-        // typed body still refuses, so the sentence reaches the member rather
-        // than a quiet no-op that looks like success.
+    "a body this device has not copied is never sent, so nothing can blank the note" {
+        // THE DATA-LOSS GUARD (#1025 S5, R-NOTES-2), as autosave keeps it: only
+        // CHANGED fields are sent, and a body marked unavailable is never one of
+        // them. A pristine save therefore has nothing to send and sends nothing.
         val opened = NotesEditorMachine.reduce(
             NotesEditorMachine.initial(),
             NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
@@ -109,9 +101,7 @@ class WriteRunnerSpec : StringSpec({
 
         // NO WRITE LEAVES. That is the whole assertion.
         saved.effects.shouldBeEmpty()
-        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
-        saved.state.draft?.save_failure.shouldNotBeNull()
-            .sentence shouldBe "Centraid has not copied this note's text to this device yet."
+        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_CLEAN
     }
 
     "a title-only save while the body is unavailable still queues" {
@@ -151,11 +141,11 @@ class WriteRunnerSpec : StringSpec({
         saved.state.draft?.save_failure shouldBe null
     }
 
-    "a member who typed a body while it was marked unavailable saves their words" {
-        // R-NOTES-2: refusing stands ONLY when the draft body is empty AND
-        // unavailable. A member who typed a body is saving their words, not
-        // blanking the note — and `edited()` must clear the flag so
-        // `saveInput` includes `body_text`.
+    "a body marked unavailable is read-only: typing into it changes nothing" {
+        // THE OWNER'S RULING (Notes plan Q4 (a)), superseding R-NOTES-2: a
+        // body not on this device is read-only, because typing over words the
+        // member cannot see would replace them unseen. The title and the pin
+        // still save (the case above).
         val opened = NotesEditorMachine.reduce(
             NotesEditorMachine.initial(),
             NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
@@ -173,18 +163,14 @@ class WriteRunnerSpec : StringSpec({
                 ),
             ),
         ).state
+        loaded.body_editable shouldBe false
         val typed = NotesEditorMachine.reduce(
             loaded,
             NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "milk")),
-        ).state
-        typed.draft?.body_unavailable shouldBe false
-        val saved = NotesEditorMachine.reduce(
-            typed,
-            NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
         )
-        val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.inputJson.contains("\"body_text\":\"milk\"").shouldBe(true)
-        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
+        typed.state shouldBe loaded
+        typed.effects shouldBe emptyList()
+        typed.state.draft?.body_unavailable shouldBe true
     }
 
     "a draft whose body DID arrive saves normally" {
@@ -216,7 +202,7 @@ class WriteRunnerSpec : StringSpec({
         )
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
         write.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        write.invokeKey shouldBe "notes.save:note-1:rev-7"
+        write.invokeKey shouldBe "knowledge.edit_note:note-1:seq=1"
         saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
     }
 
@@ -229,30 +215,11 @@ class WriteRunnerSpec : StringSpec({
             SeatState.Durability.DURABILITY_AUTHORITATIVE,
         )
         NotesEditorMachine.seatChanged(reachable).seat_changed?.seat shouldBe reachable
-        dev.centraid.shared.apps.tally.TallyListMachine.seatChanged(reachable)
+        dev.centraid.shared.apps.tasks.TasksTrashMachine.machine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable
         dev.centraid.shared.apps.photos.PhotosGridMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable
         dev.centraid.shared.shell.HomeMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable
-    }
-
-    "an authoritative seat stops withholding Tally's recurring verb" {
-        // The other thing a null seat got wrong. `Reads.isLocalOnly(null)` is
-        // true, so Tally's `materialize-recurring-expense` was WITHHELD on every
-        // device for ever — a verb a member could never reach, with a sentence
-        // explaining an outage that was not happening. On a phone that IS the
-        // vault the seat is ALWAYS authoritative (`HomeSession.publishSeat`), so
-        // this is the only case left and it had better be the reachable one.
-        val reduced = dev.centraid.shared.apps.tally.TallyListMachine.reduce(
-            dev.centraid.shared.apps.tally.TallyListMachine.initial(),
-            dev.centraid.shared.apps.tally.TallyListMachine.seatChanged(
-                seat(
-                    SeatState.Connectivity.CONNECTIVITY_ONLINE_UNMETERED,
-                    SeatState.Durability.DURABILITY_AUTHORITATIVE,
-                ),
-            ),
-        )
-        reduced.state.recurring_materialisation_withheld shouldBe false
     }
 })

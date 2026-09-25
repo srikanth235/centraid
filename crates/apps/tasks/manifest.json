@@ -85,6 +85,16 @@
         "verbs": "act"
       },
       {
+        "schema": "schedule",
+        "table": "purge_task",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
+        "table": "restore_task",
+        "verbs": "act"
+      },
+      {
         "schema": "core",
         "table": "attach",
         "verbs": "act"
@@ -224,7 +234,69 @@
     },
     {
       "name": "delete",
-      "description": "Remove a task and its subtasks through schedule.delete_task. The row is gone; the Logbook keeps nothing.",
+      "description": "Move a task and its subtasks to the 30-day trash through schedule.delete_task; the Logbook keeps nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["task_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["schedule.task"]
+    },
+    {
+      "name": "purge",
+      "description": "Delete a trashed task and the subtasks trashed with it forever through schedule.purge_task (#1015 D1); a subtask restored on its own is kept, promoted to the top level.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["task_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["schedule.task"]
+    },
+    {
+      "name": "restore",
+      "description": "Bring a trashed task back through schedule.restore_task, with the subtasks trashed with it; a subtask trashed on its own stays in the trash.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -255,7 +327,7 @@
     },
     {
       "name": "edit",
-      "description": "Edit a task's title, note (set or clear), due date (set or clear), priority, effort, or reminder lead time (set or clear) through schedule.edit_task.",
+      "description": "Edit a task's title, note (set or clear), due date (set or clear), priority, effort (set or clear), or reminder lead time (set or clear) through schedule.edit_task.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -290,6 +362,9 @@
           "effort_min": {
             "type": "integer",
             "minimum": 1
+          },
+          "clear_effort": {
+            "type": "boolean"
           },
           "remind_before_min": {
             "type": "integer",
@@ -387,12 +462,13 @@
           "project_id": { "type": "string" },
           "section_id": { "type": "string" },
           "clear_project": { "type": "boolean", "const": true },
+          "clear_section": { "type": "boolean", "const": true },
           "sort_order": { "type": "integer" },
           "recurrence_anchor": {
             "type": "string",
             "enum": ["scheduled", "completion"]
           },
-          "recurrence_tz": { "type": "string" }
+          "tz": { "type": "string", "minLength": 1 }
         },
         "required": ["task_id", "sort_order"],
         "additionalProperties": false

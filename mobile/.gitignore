@@ -1,6 +1,8 @@
 # Gradle's outputs. `mobile/` is source; `build/` and `.gradle/` are not.
 build/
 .gradle/
+# Kotlin 2.x's per-project daemon state (session files and error logs).
+.kotlin/
 local.properties
 # XcodeGen's output: `project.yml` is the source, `*.xcodeproj` is generated
 # and never committed.

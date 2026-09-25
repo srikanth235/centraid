@@ -156,15 +156,20 @@ impl ByteStore {
     /// **The inline threshold is zero** (D-1025-S3-2). See the module header:
     /// a blob small enough to be inlined is a blob with no file, and this
     /// store's readers are platforms that open files.
+    ///
+    /// **A store somebody else holds is refused HERE, by name** — see
+    /// [`refuse_if_held`] for why iroh-blobs cannot be left to say so.
     pub async fn open(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref().to_path_buf();
         std::fs::create_dir_all(&root).map_err(|error| StoreError::Open {
             path: root.clone(),
             detail: error.to_string(),
         })?;
+        let index = root.join("blobs.db");
+        refuse_if_held(&root, &index)?;
         let mut options = iroh_blobs::store::fs::options::Options::new(&root);
         options.inline = iroh_blobs::store::fs::options::InlineOptions::NO_INLINE;
-        let store = FsStore::load_with_opts(root.join("blobs.db"), options)
+        let store = FsStore::load_with_opts(index, options)
             .await
             .map_err(|error| StoreError::Open {
                 path: root.clone(),
@@ -485,8 +490,61 @@ impl ByteStore {
     }
 
     /// Close the store cleanly, flushing its index.
+    ///
+    /// **This is what unlocks `blobs.db`, and nothing else does.** iroh-blobs'
+    /// shutdown drops the redb database before it acknowledges, so when this
+    /// returns the index file is free for the next opener. Dropping the last
+    /// clone instead leaves the unlock to iroh-blobs' own runtime teardown,
+    /// which never finishes (see [`refuse_if_held`]) — so an owner that means
+    /// to open this directory again in the same process must come through
+    /// here first.
     pub async fn close(self) {
         self.store.shutdown().await.ok();
+    }
+}
+
+/// REFUSE A STORE WHOSE INDEX ANOTHER OPENER HOLDS, rather than hang on it.
+///
+/// redb locks `blobs.db` for as long as a store has it open, and a second
+/// opener gets `DatabaseAlreadyOpen` — in this process or another. iroh-blobs
+/// 0.103 never delivers that error: `FsStore::load_with_opts` builds a private
+/// runtime, hands it to the actor it spawns ON that runtime, and on the actor's
+/// error path drops it there (`RtWrapper::drop` → `block_in_place` →
+/// `BlockingPool::shutdown`), which waits for every pool thread including the
+/// one doing the waiting. The future `load_with_opts` returned never completes,
+/// and whoever awaited it parks forever with no line saying why. That is how
+/// `centraid_open` hung the JVM's ABI round trip: a reopen of a vault whose
+/// previous core had not released this file.
+///
+/// So the lock is asked about first, with the same advisory lock redb takes
+/// (`File::try_lock`, which is `flock` on the platforms a phone runs): a
+/// `WouldBlock` here is exactly the `DatabaseAlreadyOpen` iroh-blobs would have
+/// swallowed, and it becomes an [`StoreError::Open`] a caller can print. The
+/// probe's own lock is released before iroh-blobs opens the file. A file that
+/// does not exist yet cannot be held, and a platform without file locks is one
+/// where redb does not lock either, so both go on to the real open.
+fn refuse_if_held(root: &Path, index: &Path) -> Result<()> {
+    let Ok(file) = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(index)
+    else {
+        return Ok(());
+    };
+    match file.try_lock() {
+        Ok(()) => {
+            let _ = file.unlock();
+            Ok(())
+        }
+        Err(std::fs::TryLockError::WouldBlock) => Err(StoreError::Open {
+            path: root.to_path_buf(),
+            detail: format!(
+                "{} is held by another open store, in this process or another; \
+                 close that one first",
+                index.display()
+            ),
+        }),
+        Err(std::fs::TryLockError::Error(_)) => Ok(()),
     }
 }
 

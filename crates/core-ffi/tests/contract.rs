@@ -1107,10 +1107,131 @@ fn the_originals_on_this_phone_round_trip_through_call() {
         32,
         wire::originals_request::Op::Census(wire::OriginalsCensusRead {}),
     );
-    assert_eq!(counted.kept_album_ids, vec!["album-1"], "the list rides every answer");
-    let census = counted.census.expect("this core opened its content store, so it counts");
+    assert_eq!(
+        counted.kept_album_ids,
+        vec!["album-1"],
+        "the list rides every answer"
+    );
+    let census = counted
+        .census
+        .expect("this core opened its content store, so it counts");
     assert_eq!(census.on_phone.unwrap_or_default().count, 0);
     assert_eq!(census.kept.unwrap_or_default().count, 0);
+}
+
+/// CLAUSE 4e. An app's own query is a request kind: a weekly series written
+/// through `call` comes back from `app_query` EXPANDED by the core, one row per
+/// occurrence with its own key, and a search with no limit is refused like a
+/// page with none — `BAD_ARGUMENT` with an `INVALID_REQUEST` body.
+#[test]
+fn the_app_queries_round_trip_through_call() {
+    let opened = Opened::gateway();
+    let ask = |id: u64, query: wire::app_query_request::Query| {
+        call(
+            opened.handle,
+            &envelope(
+                id,
+                wire::request::Kind::AppQuery(wire::AppQueryRequest { query: Some(query) }),
+            ),
+        )
+    };
+    let answered = |(code, bytes): (i32, Vec<u8>)| {
+        assert_eq!(code, CENTRAID_OK, "an app query answers");
+        let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+            panic!("an app query is answered by a Response");
+        };
+        let Some(wire::response::Kind::AppQuery(answered)) = response.kind else {
+            panic!("an AppQueryRequest is answered by an AppQueryResponse");
+        };
+        answered.answer.expect("an answer")
+    };
+    let upcoming = |id: u64| {
+        let wire::app_query_response::Answer::AgendaUpcoming(upcoming) = answered(ask(
+            id,
+            wire::app_query_request::Query::AgendaUpcoming(wire::AgendaUpcomingRequest {
+                from: "2099-06-01T00:00:00.000Z".to_owned(),
+                to: "2099-06-22T00:00:00.000Z".to_owned(),
+                tz: "America/New_York".to_owned(),
+            }),
+        )) else {
+            panic!("upcoming is answered as upcoming");
+        };
+        upcoming
+    };
+
+    let calendar_id = upcoming(41).calendars[0].calendar_id.clone();
+    let (code, _) = call(
+        opened.handle,
+        &envelope(
+            42,
+            wire::request::Kind::Command(wire::Command {
+                name: "schedule.propose_event".to_owned(),
+                input: serde_json::to_vec(&serde_json::json!({
+                    "summary": "Morning run",
+                    "dtstart": "2099-06-01T07:00:00.000Z",
+                    "dtend": "2099-06-01T08:00:00.000Z",
+                    "calendar_id": calendar_id,
+                    "rrule": "FREQ=WEEKLY",
+                }))
+                .expect("json"),
+                invoke_key: "contract-4e".to_owned(),
+                ..wire::Command::default()
+            }),
+        ),
+    );
+    assert_eq!(code, CENTRAID_OK, "the series is written");
+    let runs = upcoming(43).events;
+    assert_eq!(runs.len(), 3, "three weeks of a weekly series: {runs:?}");
+    let keys: std::collections::BTreeSet<&str> =
+        runs.iter().map(|run| run.instance_key.as_str()).collect();
+    assert_eq!(keys.len(), 3, "each occurrence keyed on its own wall clock");
+    // Placed by the core in the stated zone: a floating 07:00 is 07:00 there.
+    assert!(
+        runs.iter()
+            .all(|run| run.local_start.ends_with("T07:00") && run.local_days.len() == 1),
+        "{runs:?}"
+    );
+
+    let wire::app_query_response::Answer::AgendaParties(parties) = answered(ask(
+        44,
+        wire::app_query_request::Query::AgendaParties(wire::AgendaPartiesRequest {}),
+    )) else {
+        panic!("parties is answered as parties");
+    };
+    assert!(parties.parties.iter().any(|party| party.is_you));
+
+    let (code, bytes) = ask(
+        45,
+        wire::app_query_request::Query::AgendaSearch(wire::AgendaSearchRequest {
+            term: "run".to_owned(),
+            limit: 0,
+            tz: "America/New_York".to_owned(),
+        }),
+    );
+    assert_eq!(
+        code, CENTRAID_BAD_ARGUMENT,
+        "a search with no limit is refused"
+    );
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+
+    // A ZONE THIS BUILD DOES NOT KNOW is refused the same way — never answered
+    // in UTC.
+    let (code, bytes) = ask(
+        46,
+        wire::app_query_request::Query::AgendaUpcoming(wire::AgendaUpcomingRequest {
+            from: String::new(),
+            to: String::new(),
+            tz: "Mars/Olympus_Mons".to_owned(),
+        }),
+    );
+    assert_eq!(code, CENTRAID_BAD_ARGUMENT, "an unknown zone is refused");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
 }
 
 /// CLAUSE 4b, the other half. A core opened with no seed reads and writes its

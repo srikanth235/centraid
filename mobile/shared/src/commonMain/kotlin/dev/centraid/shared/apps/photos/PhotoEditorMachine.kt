@@ -11,7 +11,7 @@ import centraid.screen.v1.PhotoEditorState
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.ReadFailureKind
 import centraid.screen.v1.SeatState
-import dev.centraid.design.CentraidCopy
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
@@ -529,9 +529,9 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
     public const val EDITOR_TITLE: String = "Crop and rotate"
     public const val EDITOR_CANCEL: String = "Cancel"
     /** v0's shared words, from the one copy table (`copy/photos.json`). */
-    public const val SAVE_AS_NEW: String = CentraidCopy.Photos.PHOTOS_SAVE_AS_NEW
+    public const val SAVE_AS_NEW: String = PhotosCopy.PHOTOS_SAVE_AS_NEW
     public const val SAVE_AS_NEW_EXPLANATION: String =
-        CentraidCopy.Photos.PHOTOS_SAVE_AS_NEW_EXPLANATION
+        PhotosCopy.PHOTOS_SAVE_AS_NEW_EXPLANATION
     public const val SAVING: String = "Rendering the new photograph · the original is not touched"
     public const val EDIT_NOT_SAVED: String = "Photograph not saved."
     public const val RETRY: String = "Try again."

@@ -37,6 +37,7 @@ pub mod commands;
 #[cfg(feature = "vault-door")]
 pub mod door;
 pub mod manifest;
+pub mod phone;
 pub mod queries;
 pub mod views;
 

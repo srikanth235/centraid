@@ -7,9 +7,13 @@ import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.ReadFailure
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
+import dev.centraid.shared.sync.AppQueryOutcome
+import dev.centraid.shared.sync.askCore
+import dev.centraid.shared.sync.deniedFailure
 import dev.centraid.shared.sync.fromCore
 import dev.centraid.shared.sync.sentenceFor
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +58,11 @@ public class HomeRuntime(
     private val core: () -> CentraidCore?,
     private val host: ScreenHost<centraid.screen.v1.HomeState, HomeEvent>,
     private val scope: CoroutineScope,
+    /**
+     * The device's zone and wall clock, read at every Agenda tile read
+     * (#1046). The one tile that answers civil time has to say which zone.
+     */
+    private val clock: DeviceClock,
 ) {
     /**
      * Collect this host's effects and serve them for as long as [scope] lives.
@@ -90,28 +99,50 @@ public class HomeRuntime(
         }
     }
 
-    /** Every tile's read, fanned out. */
-    public fun readAllTiles(): Unit = HomeReads.READS.forEach { read ->
-        scope.launch {
-            when (val answer = page(read.query, HomeReads.LIMIT)) {
-                is Read.Rows -> host.send(
-                    HomeReads.arrived(
-                        appId = read.appId,
-                        rows = answer.rows,
-                        capped = answer.rows.size >= HomeReads.LIMIT,
-                    ),
-                )
-                is Read.Refused -> host.send(
-                    HomeEvent(
-                        tile_refused = HomeEvent.TileRefused(
-                            app_id = read.appId,
-                            failure = answer.failure,
-                        ),
-                    ),
-                )
-            }
+    /** Every tile's read, fanned out: the page reads, and Agenda's app query. */
+    public fun readAllTiles() {
+        HomeReads.READS.forEach { read -> scope.launch { readTile(read) } }
+        scope.launch { readAgenda() }
+    }
+
+    private suspend fun readTile(read: HomeReads.TileRead) {
+        when (val answer = page(read.query, HomeReads.LIMIT)) {
+            is Read.Rows -> host.send(
+                HomeReads.arrived(
+                    appId = read.appId,
+                    rows = answer.rows,
+                    capped = answer.rows.size >= HomeReads.LIMIT,
+                ),
+            )
+            is Read.Refused -> host.send(refused(read.appId, answer.failure))
         }
     }
+
+    /**
+     * AGENDA'S TILE, THROUGH THE APP-QUERY ARM (#1046).
+     *
+     * Not a page read: the next occurrence of a repeating event is the core's
+     * recurrence engine's to answer ([HomeAgendaTile]). Same law as every
+     * other tile — its own event the moment it lands, and a read that did not
+     * land is `TileRefused`, never an empty tile. A DENIED read is refused
+     * too: a launcher tile has no designed ask, and grading it `EMPTY` would
+     * send the member to first moves for an app that may be full.
+     */
+    private suspend fun readAgenda() {
+        val request = HomeAgendaTile.request(clock.read())
+        val event = when (val outcome = askCore(core(), listOf(request))) {
+            is AppQueryOutcome.Answered -> outcome.answers.single().agenda_upcoming
+                ?.let(HomeAgendaTile::arrived)
+                ?: refused(HomeAgendaTile.APP_ID, Reads.refused(WRONG_ANSWER))
+            is AppQueryOutcome.Denied ->
+                refused(HomeAgendaTile.APP_ID, deniedFailure(outcome.denial))
+            is AppQueryOutcome.Refused -> refused(HomeAgendaTile.APP_ID, outcome.failure)
+        }
+        host.send(event)
+    }
+
+    private fun refused(appId: String, failure: ReadFailure): HomeEvent =
+        HomeEvent(tile_refused = HomeEvent.TileRefused(app_id = appId, failure = failure))
 
     /**
      * WHAT ONE READ CAME BACK AS, and never a nullable pair.
@@ -159,5 +190,10 @@ public class HomeRuntime(
                 }
             }
         }
+    }
+
+    private companion object {
+        /** An answer at another query's arm: a core bug, said as a refusal. */
+        const val WRONG_ANSWER: String = "The vault answered a different question."
     }
 }

@@ -90,6 +90,7 @@ fn fixture_vault() -> rusqlite::Connection {
                 "share_subscription_lineage",
             ],
             columns_gone: &[],
+            columns_added: &[],
         },
     )
     .expect("the fixture vault is built")

@@ -45,6 +45,9 @@
 #![forbid(unsafe_code)]
 
 pub mod api;
+/// AN APP'S OWN QUERY, RUN IN THE CORE (#1046): the page door an app crate
+/// reads through, and Agenda's answers as `agenda.proto` spells them.
+pub mod app_query;
 pub mod config;
 pub mod convert;
 pub mod error;

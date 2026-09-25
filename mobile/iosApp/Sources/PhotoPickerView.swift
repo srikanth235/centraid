@@ -76,6 +76,8 @@ struct PhotoPickerView: View {
                 switch state.content {
                 case .loading:
                     ProgressView()
+                case let .denied(denied):
+                    DeniedGate(denied)
                 case let .failure(sentence, remedy):
                     // A FAILED READ IS NOT AN EMPTY LIBRARY, and on this screen
                     // the difference decides what a member does next: one means

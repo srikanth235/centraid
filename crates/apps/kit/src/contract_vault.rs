@@ -40,16 +40,18 @@ pub fn open_contract_vault(ddl: &str, rows_json: &str) -> KitResult<Connection> 
     open_contract_vault_without(ddl, rows_json, &FrozenRowMapping::NONE)
 }
 
-/// WHAT A FROZEN BUNDLE CARRIES THAT THE SCHEMA NO LONGER HAS.
+/// WHERE A FROZEN BUNDLE AND THE SCHEMA NO LONGER AGREE.
 ///
 /// `rows.json` is a frozen golden (TESTING.md, "Fixtures and parity") and is
 /// never edited. Rung five drops the planes v1 does not have (#1029), so three
 /// bundles now carry rows for a table that is gone and one carries a column
-/// that is gone. A test states its own mapping here, in its own file, and the
-/// builder skips exactly what the mapping names.
+/// that is gone; rung six adds a required column two bundles cannot carry. A
+/// test states its own mapping here, in its own file, and the builder skips —
+/// or supplies — exactly what the mapping names.
 ///
 /// **It is a gate, not a silencer.** A name here that the schema still has is a
-/// refusal: a mapping cannot outlive its reason, and nothing is skipped because
+/// refusal, and so is a supplied column the schema lacks or the bundle already
+/// carries: a mapping cannot outlive its reason, and nothing is skipped because
 /// an insert happened to fail.
 #[derive(Debug, Clone, Copy)]
 pub struct FrozenRowMapping<'a> {
@@ -57,6 +59,12 @@ pub struct FrozenRowMapping<'a> {
     pub tables_gone: &'a [&'a str],
     /// `(table, column)` pairs the bundle carries and the table does not.
     pub columns_gone: &'a [(&'a str, &'a str)],
+    /// `(table, column, value)`: a REQUIRED column the table gained after the
+    /// bundle froze, and the one value every row of that table in THIS bundle
+    /// takes. Rung six's `core_collection.kind` is the case: v0's Notes bundle
+    /// holds only notebooks and its Photos bundle only albums, so the test
+    /// states which, rather than the builder guessing.
+    pub columns_added: &'a [(&'a str, &'a str, &'a str)],
 }
 
 impl FrozenRowMapping<'_> {
@@ -64,15 +72,18 @@ impl FrozenRowMapping<'_> {
     pub const NONE: FrozenRowMapping<'static> = FrozenRowMapping {
         tables_gone: &[],
         columns_gone: &[],
+        columns_added: &[],
     };
 }
 
-/// The same, with a stated mapping for what rung five dropped.
+/// The same, with a stated mapping for what rung five dropped and rung six
+/// added.
 ///
 /// # Errors
 ///
-/// [`KitError::Door`] when the mapping names something the schema still has —
-/// see [`FrozenRowMapping`] — and for anything SQLite refuses.
+/// [`KitError::Door`] when the mapping names something the schema still has,
+/// or supplies a column it does not — see [`FrozenRowMapping`] — and for
+/// anything SQLite refuses.
 pub fn open_contract_vault_without(
     ddl: &str,
     rows_json: &str,
@@ -115,6 +126,16 @@ fn check_mapping(connection: &Connection, mapping: &FrozenRowMapping<'_>) -> Kit
         {
             return Err(KitError::Door(format!(
                 "the mapping says `{table}.{column}` is gone and the table still has it"
+            )));
+        }
+    }
+    for (table, column, _) in mapping.columns_added {
+        if !columns_of(connection, table)?
+            .iter()
+            .any(|have| have == column)
+        {
+            return Err(KitError::Door(format!(
+                "the mapping supplies `{table}.{column}` and the table has no such column"
             )));
         }
     }
@@ -260,11 +281,28 @@ fn insert_rows(
             })
             .map(|(index, _)| index)
             .collect();
+        // A supplied column the bundle ALREADY carries is a refusal: the
+        // mapping would be overriding frozen cells, not filling a gap.
+        let supplied: Vec<(&str, &str)> = mapping
+            .columns_added
+            .iter()
+            .filter(|(table, _, _)| *table == name)
+            .map(|(_, column, value)| (*column, *value))
+            .collect();
+        if let Some((column, _)) = supplied
+            .iter()
+            .find(|(column, _)| declared.contains(column))
+        {
+            return Err(KitError::Door(format!(
+                "the mapping supplies `{name}.{column}` and the bundle already carries it"
+            )));
+        }
         let columns: Vec<&str> = declared
             .iter()
             .enumerate()
             .filter(|(index, _)| !dropped.contains(index))
             .map(|(_, column)| *column)
+            .chain(supplied.iter().map(|(column, _)| *column))
             .collect();
         let values = table["rows"]
             .as_array()
@@ -310,6 +348,11 @@ fn insert_rows(
                     .enumerate()
                     .filter(|(index, _)| !dropped.contains(index))
                     .map(|(_, cell)| cell_of(cell))
+                    .chain(
+                        supplied
+                            .iter()
+                            .map(|(_, value)| rusqlite::types::Value::Text((*value).to_owned())),
+                    )
                     .collect();
                 if let Err(error) = prepared.execute(rusqlite::params_from_iter(cells)) {
                     first_refusal.get_or_insert_with(|| format!("{name}: {error}"));

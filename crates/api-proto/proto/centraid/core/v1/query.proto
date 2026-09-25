@@ -107,6 +107,20 @@ message PageQuery {
   // than answered with nulls, because a flag set on the wrong table is a
   // caller's bug and a read that goes quiet is the defect this column undoes.
   bool with_document_size = 9;
+  // STATE EACH ROW'S CURRENCY EXPONENT, from the kit's one table of ISO 4217
+  // minor units (`centraid_apps_kit::money::minor_units`).
+  //
+  // A shape, not a statement: the core appends one INTEGER column after every
+  // other computed column — the minor-unit exponent of the row's `currency`
+  // (JPY 0, USD 2, KWD 3). `screen.v1.Money.exponent` has always said it comes
+  // "from the kit's table through the core, never guessed and never assumed
+  // to be 2", and no door served it, so the Tally list left it at 0 and a
+  // renderer that trusted it drew $42.50 as $4,250.
+  //
+  // `select` must name a `currency` column; one that does not is REFUSED as an
+  // invalid request rather than answered with a column of guesses, for the
+  // same reason the three flags above are refused on the wrong table.
+  bool with_minor_units = 10;
 }
 
 // The keyset cursor. `sort_key` is TEXT even for a numeric sort column, and a

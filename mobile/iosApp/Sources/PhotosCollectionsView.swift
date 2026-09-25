@@ -56,6 +56,8 @@ struct PhotosCollectionsView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding(.top, 40)
+            case let .denied(denied):
+                DeniedGate(denied)
             case let .failure(sentence, remedy):
                 ScreenFailureView(sentence: sentence, remedy: remedy)
             case let .data(shelves, doors):

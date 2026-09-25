@@ -35,6 +35,11 @@
       },
       {
         "schema": "core",
+        "table": "place",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "content_item",
         "verbs": "read"
       },
@@ -103,6 +108,11 @@
           "dtend": {
             "type": "string",
             "minLength": 1
+          },
+          "tz": {
+            "type": "string",
+            "minLength": 1,
+            "description": "An IANA zone: dtstart/dtend are then wall clocks in it (YYYY-MM-DDTHH:MM[:SS], no Z or offset) and the vault stores their instants, zoned in it. Exclusive with start_tz/end_tz."
           },
           "start_tz": {
             "type": "string"
@@ -209,6 +219,7 @@
           "clear_description": { "type": "boolean" },
           "dtstart": { "type": "string" },
           "dtend": { "type": "string" },
+          "tz": { "type": "string", "minLength": 1 },
           "start_tz": { "type": "string" },
           "end_tz": { "type": "string" },
           "recurrence_semantics": {
@@ -251,6 +262,7 @@
           "action": { "type": "string", "enum": ["skip", "override"] },
           "dtstart": { "type": "string" },
           "dtend": { "type": "string" },
+          "tz": { "type": "string", "minLength": 1 },
           "summary": { "type": "string" },
           "description": { "type": "string" }
         },

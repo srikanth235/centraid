@@ -2,25 +2,34 @@ package dev.centraid.shared.shell
 
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
+import centraid.screen.v1.HomeStatus
 import centraid.screen.v1.SeatState
 import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
+import dev.centraid.design.CentraidCatalog
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.sync.ChangeStream
 import dev.centraid.shared.sync.CoreDrainDoor
 import dev.centraid.shared.sync.ShelfDrain
+import dev.centraid.shared.sync.ScreenQueries
+import dev.centraid.shared.sync.ScreenQueryRuntime
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.sync.StrandedWrites
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -134,6 +143,25 @@ public class HomeSession private constructor(
     }
 
     /**
+     * THE SCOPE A SCREEN'S LAST WRITE RUNS ON. A bridge's `leave()` sends the
+     * screen's `Left` event here rather than on its own scope, so releasing the
+     * bridge does not cancel the flush it just asked for.
+     */
+    internal val outliving: CoroutineScope get() = scope
+
+    /**
+     * A write that failed after its screen was left (the kit's autosave flush
+     * on close). Home's status line says so ([serveStranded]).
+     */
+    public val strandedWrites: SharedFlow<StrandedWrite> get() = _stranded.asSharedFlow()
+
+    private val _stranded = MutableSharedFlow<StrandedWrite>(extraBufferCapacity = STRANDED_BUFFER)
+
+    private val strand = StrandedWrites { appId, command, sentence ->
+        _stranded.tryEmit(StrandedWrite(appId, command, sentence))
+    }
+
+    /**
      * PUT AN APP SCREEN ON THIS SESSION'S CORE (#1025 S5, lane L5).
      *
      * The three app screens have no core of their own and must not get one:
@@ -166,6 +194,8 @@ public class HomeSession private constructor(
         reads: ScreenReads<S, E>,
         /** Null for a screen with no write. See [ScreenWrites]. */
         writes: ScreenWrites<S, E>? = null,
+        /** Whether the screen was left; its bridge's. See [StrandedWrites]. */
+        left: () -> Boolean = { false },
     ): Job {
         changes.route(host)
         return ScreenRuntime(
@@ -174,6 +204,8 @@ public class HomeSession private constructor(
             reads = reads,
             scope = scope,
             writes = writes,
+            left = left,
+            stranded = strand,
             // READ OFF THE SHELF AT THE MOMENT OF THE WRITE (#1029 F1). A
             // vault frozen while the member was mid-edit must refuse the save
             // they then press, and a value read at attach would not.
@@ -248,6 +280,44 @@ public class HomeSession private constructor(
         writes = null,
         readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
     ).start()
+
+    /**
+     * PUT A SCREEN THAT READS THROUGH APP QUERIES ON THIS SESSION'S CORE
+     * (#1046).
+     *
+     * [attachScreen]'s twin for a [ScreenQueries] screen — one whose reads the
+     * core runs as an app's own query (`app_query.proto`) because no page read
+     * can say them. Both halves, as there: the runtime serves what the screen
+     * asks for, and `changes.route` delivers what arrives unasked, which the
+     * machine's `rowsChanged` turns into a re-read on exactly
+     * [ScreenQueries.tables].
+     *
+     * The device's zone is the PLATFORM's and is read at every read
+     * ([PlatformServices.clock]); a bridge passes nothing for it. Like
+     * [attachScreen], this is registration with no removal — call it once per
+     * screen host.
+     */
+    public fun <S, E> attachQueries(
+        host: ScreenHost<S, E>,
+        queries: ScreenQueries<S, E>,
+        /** Null for a screen with no write. See [ScreenWrites]. */
+        writes: ScreenWrites<S, E>? = null,
+        /** Whether the screen was left; its bridge's. See [StrandedWrites]. */
+        left: () -> Boolean = { false },
+    ): Job {
+        changes.route(host)
+        return ScreenQueryRuntime(
+            core = { core },
+            host = host,
+            queries = queries,
+            clock = services.clock,
+            scope = scope,
+            writes = writes,
+            left = left,
+            stranded = strand,
+            readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+        ).start()
+    }
 
     /**
      * MAKE A VAULT ON THIS PHONE (#1029 §1).
@@ -450,7 +520,12 @@ public class HomeSession private constructor(
                 runtime = null
             }
             runtime == null -> {
-                runtime = HomeRuntime(core = { core }, host = host, scope = scope).start()
+                runtime = HomeRuntime(
+                    core = { core },
+                    host = host,
+                    scope = scope,
+                    clock = services.clock,
+                ).start()
             }
         }
         if (open != null) {
@@ -540,6 +615,17 @@ public class HomeSession private constructor(
     }
 
     /**
+     * A WRITE STRANDED BY ITS SCREEN'S CLOSING lands on Home's status line —
+     * the one feedback channel with no screen of its own to be on — in the
+     * attention tone, with the core's sentence when it gave one.
+     */
+    private fun serveStranded(): Job = scope.launch {
+        strandedWrites.collect { write ->
+            host.send(HomeEvent(status = HomeEvent.StatusChanged(status = strandedStatus(write))))
+        }
+    }
+
+    /**
      * RE-POINT THE WHOLE APP AT ANOTHER VAULT.
      *
      * An id with no holding, or a file that will not open, leaves the session
@@ -618,9 +704,41 @@ public class HomeSession private constructor(
             // is already holding reaches Home rather than being the one value
             // that arrives only on the next change.
             session.serveRoster()
+            session.serveStranded()
             session.rebind()
             host.send(HomeEvent(opened = HomeEvent.Opened()))
             return session
         }
     }
+}
+
+/** One write that failed after its screen was left. [sentence] is the core's, or empty. */
+public data class StrandedWrite(
+    public val appId: String,
+    public val command: String,
+    public val sentence: String,
+)
+
+/** A handful: a member closes one editor at a time. */
+private const val STRANDED_BUFFER: Int = 8
+
+/**
+ * WHAT HOME'S STATUS LINE SAYS ABOUT A STRANDED WRITE: the app by name, and
+ * the core's sentence when there is one. Attention, never urgent — the words
+ * are still in the member's memory, and nothing else was lost — and nowhere
+ * to go: the screen that could retry it has closed.
+ */
+public fun strandedStatus(write: StrandedWrite): HomeStatus {
+    val app = CentraidCatalog.byId[write.appId]?.name ?: write.appId
+    val sentence = write.sentence.trim()
+    return HomeStatus(
+        tone = HomeStatus.Tone.TONE_ATTENTION,
+        copy = if (sentence.isEmpty()) {
+            SharedCopy.STRANDED_WRITE.replace("{app}", app)
+        } else {
+            SharedCopy.STRANDED_WRITE_WHY.replace("{app}", app).replace("{sentence}", sentence)
+        },
+        action = "",
+        destination = HomeStatus.Destination.DESTINATION_NONE,
+    )
 }

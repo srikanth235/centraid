@@ -27,6 +27,30 @@ centraid-api-proto = { path = "../api-proto" }
 # will hand an autofill grant out — the one question a fill must not answer
 # itself.
 centraid-apps-locker = { path = "../apps/locker" }
+# THE APP QUERIES THE PHONE ASKS FOR BY NAME (#1046). Agenda's `upcoming` joins
+# six-plus tables and expands every series through the one recurrence engine,
+# so it runs HERE, over the page door, and a shell draws its typed answer —
+# rather than a second engine in each shell (D-1020-S1). `app_query` is the one
+# module that reaches it.
+centraid-apps-agenda = { path = "../apps/agenda" }
+# Tasks' board, one task, projects, search and catch-up (#1046): the families,
+# the recurrence collapse and every civil reading run here, over the page door.
+centraid-apps-tasks = { path = "../apps/tasks" }
+# Docs' drive, search, document and activity (#1046), the same way.
+centraid-apps-docs = { path = "../apps/docs" }
+# People's five phone queries (#1046) — the roster, Touch, the sheet, search and
+# the trash shelf — answered the way Agenda's are, through `app_query`.
+centraid-apps-people = { path = "../apps/people" }
+# Notes' folds, for the `notes_*` app-query arms (#1046).
+centraid-apps-notes = { path = "../apps/notes" }
+# Tally's ten phone queries (#1046) — the ledger folded once through its one
+# balance engine, every figure with its currency's exponent — the same way.
+centraid-apps-tally = { path = "../apps/tally" }
+# The door an app crate reads through (`PageDoor`), and the rows it answers.
+centraid-apps-kit = { path = "../apps/kit" }
+# THE FTS DOOR, for `agenda.search`. It owns every `MATCH` in the workspace and
+# takes a connection; the core hands it `Vault::read`'s, and writes no SQL.
+centraid-search = { path = "../search" }
 # THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
 # core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
 # door and this is the crate that has both halves in scope.

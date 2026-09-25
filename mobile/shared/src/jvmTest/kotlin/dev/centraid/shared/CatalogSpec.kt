@@ -116,11 +116,15 @@ class CatalogSpec : StringSpec({
             .none { it.id == "gateway" }.shouldBeTrue()
     }
 
-    "a sixth pinned place overflows into More rather than shrinking the others" {
+    "every place pinned is capped at Home plus four; a sixth overflows into More" {
         // The cap is a CONSTRAINT: a sixth destination puts every target under
         // 44pt on a 390px screen.
         val everything = BandPolicy.PLACES.map { it.id }
-        BandPolicy.bandTabs(everything).size shouldBe BandPolicy.BAND_PLACE_SLOTS + 1
+        val bandable = BandPolicy.PLACES.count { it.id != "gateway" }
+        BandPolicy.bandTabs(everything).size shouldBe minOf(bandable, BandPolicy.BAND_PLACE_SLOTS + 1)
+        // Needs you and Activity went with their data planes (#1029).
+        BandPolicy.place("notifs") shouldBe null
+        BandPolicy.place("stats") shouldBe null
     }
 
     "a place's short name only ever DROPS words from its name" {

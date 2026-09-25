@@ -436,43 +436,4 @@ struct PhotoGridSkeleton: View {
     }
 }
 
-/// THE THREE-STATE READ LAW, DRAWN ONCE.
-///
-/// Every screen in this app has the same three shapes and the same two lines
-/// for a failure, and a per-screen copy is a per-screen chance to leave the
-/// remedy out — which is the half of a refusal a member can act on.
-struct ScreenFailureView: View {
-    @Environment(\.colorScheme) private var scheme
-    let sentence: String
-    let remedy: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(sentence).centraidType("body")
-            if !remedy.isEmpty {
-                Text(remedy)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// NOTHING HERE, AND WHY. An empty shelf is a screen with a sentence, never a
-/// blank frame — and the sentence differs per shelf, so it is a parameter.
-struct ScreenEmptyView: View {
-    let sentence: String
-    var remedy: String = ""
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Text(sentence).centraidType("body").multilineTextAlignment(.center)
-            if !remedy.isEmpty {
-                Text(remedy).centraidType("small").multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-    }
-}
+// `ScreenFailureView` and `ScreenEmptyView` moved to `Kit/ReadStates.swift` (K5).

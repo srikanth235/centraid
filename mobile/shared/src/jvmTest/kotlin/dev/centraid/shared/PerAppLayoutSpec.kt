@@ -82,6 +82,17 @@ class PerAppLayoutSpec : StringSpec({
         ) { offenders shouldBe emptyList() }
     }
 
+    "the kit names no app" {
+        // The kit is shared by every app, so an import of one app from it is
+        // the kit becoming that app's — and every other app then depends on
+        // it. Rule two already forbids it (kit is outside `apps`); this names
+        // the finding when it is the kit that reached.
+        val offenders = files()
+            .filter { it.packagee?.name?.startsWith("dev.centraid.shared.kit") == true }
+            .flatMap { file -> file.imports.filter { appOf(it.name) != null }.map { "${file.name}: ${it.name}" } }
+        withClue(offenders) { offenders shouldBe emptyList() }
+    }
+
     "the layout these rules are about actually exists" {
         // A rule over a tree that moved is a rule that passes forever; the
         // platform-free spec learned that the hard way and asserts its scope
@@ -95,9 +106,14 @@ class PerAppLayoutSpec : StringSpec({
                 "dev.centraid.shared.nav",
                 "dev.centraid.shared.sync",
                 "dev.centraid.shared.platform",
+                "dev.centraid.shared.kit",
+                "dev.centraid.shared.kit.time",
                 "dev.centraid.shared.apps.tally",
                 "dev.centraid.shared.apps.photos",
                 "dev.centraid.shared.apps.notes",
+                "dev.centraid.shared.apps.docs",
+                "dev.centraid.shared.apps.people",
+                "dev.centraid.shared.apps.tasks",
             ).all { packages.contains(it) }.shouldBeTrue()
         }
         // And `screen` is the CONTRACT and nothing else: two files, the machine

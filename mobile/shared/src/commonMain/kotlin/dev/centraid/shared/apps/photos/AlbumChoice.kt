@@ -109,11 +109,17 @@ public object AlbumChoice {
      *
      * `cover_content_id` rides along for [coversQuery]: it names a CONTENT
      * item, and the asset behind it is a second read.
+     *
+     * `kind = 'album'`: `core_collection` holds Notes' notebooks too, and a
+     * photograph offered a notebook here would be refused by the vault anyway
+     * (`media.add_to_album`'s `album_exists`, rung six).
      */
     public fun albumsQuery(): PageQuery = PageQuery(
         name = ALBUMS_QUERY_NAME,
         select = listOf("collection_id", "name", "cover_content_id"),
         from = COLLECTION_TABLE,
+        where_ = "kind = ?",
+        bind = listOf(Value(text = PhotosCollectionsReads.ALBUM_KIND)),
         order = PageOrder(sort_column = "name", pk_column = "collection_id"),
     )
 

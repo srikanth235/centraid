@@ -1,22 +1,35 @@
 package dev.centraid.shared.apps.notes
 
-import centraid.screen.v1.SeatState
+import centraid.screen.v1.Autosave
 import centraid.screen.v1.Loading
+import centraid.screen.v1.NoteDraft
+import centraid.screen.v1.NotesEditorChrome
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
+import centraid.screen.v1.ReadFailure
+import centraid.screen.v1.SeatState
+import dev.centraid.design.copy.NotesCopy
+import dev.centraid.shared.kit.AutosaveLaw
+import dev.centraid.shared.kit.AutosaveLens
+import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 
 /**
- * The Notes editor (#1020, D-1020-E3).
+ * The Notes editor (#1020, D-1020-E3), autosaving (#1015 D3: close = done).
  *
  * The editor is the screen where the read law and the WRITE law are different
  * laws, and keeping them apart is most of this file: a failed READ replaces the
  * editor, a failed SAVE does not. A member whose save was refused still has
  * their words on the screen, and an editor that swapped them for an error
  * message would have thrown away the only copy.
+ *
+ * The save itself is the kit's [AutosaveLaw]: an edit schedules a save 900 ms
+ * later, a pin saves at once, leaving saves whatever is unsaved, each save is
+ * one command under one key per edit, only changed fields are sent, and a
+ * change from the vault never replaces words being typed.
  */
 public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEvent> {
     public const val SCREEN_ID: String = "notes.editor"
@@ -24,138 +37,302 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
     override fun initial(): NotesEditorState = NotesEditorState(
         loading = Loading(first_load = true),
         save = NotesEditorState.SaveState.SAVE_STATE_CLEAN,
+        autosave = Autosave(phase = Autosave.Phase.PHASE_CLEAN),
     )
 
     override fun reduce(state: NotesEditorState, event: NotesEditorEvent): Step<NotesEditorState> =
+        project(step(state, event))
+
+    private fun step(state: NotesEditorState, event: NotesEditorEvent): Step<NotesEditorState> =
         when {
-            event.opened != null -> Step(
-                state.copy(
-                    note_id = event.opened.note_id,
-                    loading = Loading(first_load = true),
-                    failure = null,
-                    draft = null,
-                    save = NotesEditorState.SaveState.SAVE_STATE_CLEAN,
-                ),
-                listOf(ScreenEffect.ReadPage(SCREEN_ID, afterCursor = null)),
-            )
+            // A NEW NOTE IS NOT READ: nothing is in the vault under its id
+            // yet, and a read would answer "could not find this note". It opens
+            // on an empty draft, and its first save creates it.
+            event.opened != null && event.opened.is_new -> {
+                val opened = AutosaveLaw.opened(
+                    Lens,
+                    closeLink(state.copy(note_id = event.opened.note_id, is_new = true)),
+                ).state
+                val empty = NoteDraft(format = NoteDraft.Format.FORMAT_MARKDOWN)
+                Step(AutosaveLaw.loaded(Lens, opened, empty, "").state)
+            }
 
-            event.data_ != null -> Step(
-                state.copy(
-                    loading = null,
-                    failure = null,
-                    draft = event.data_.draft,
-                    save = NotesEditorState.SaveState.SAVE_STATE_CLEAN,
-                ),
-            )
+            event.opened != null ->
+                AutosaveLaw.opened(Lens, closeLink(state.copy(note_id = event.opened.note_id, is_new = false)))
 
-            // A CHANGE FROM THE GATEWAY NEVER TAKES A MEMBER'S TYPING.
-            //
-            // The event is delivered whatever the editor is doing, and the
-            // decision is HERE because only this machine knows whether there is
-            // an unsaved draft. A re-read while `save` is dirty would replace
-            // the paragraph being typed with the copy that arrived, which is
-            // the one outcome no member forgives; a saving draft is the same
-            // case, because its own commit is the change coming back.
-            event.rows_changed != null ->
-                if (state.note_id !in event.rows_changed.note_ids ||
-                    state.save != NotesEditorState.SaveState.SAVE_STATE_CLEAN
-                ) {
-                    Step(state)
-                } else {
-                    Step(state, listOf(ScreenEffect.ReadPage(SCREEN_ID, afterCursor = null)))
-                }
+            // Not in the vault yet: there is nothing of it to re-read.
+            event.rows_changed != null && state.is_new -> Step(state)
+
+            event.data_ != null -> {
+                val draft = event.data_.draft
+                if (draft == null) Step(state) else AutosaveLaw.loaded(Lens, state, draft, draft.base_revision_id)
+            }
+
+            // A CHANGE NEVER TAKES A MEMBER'S TYPING. Unsaved words or a save
+            // in flight: `remote_changed`, no read. An EMPTY id list is "re-read
+            // the table" — the core sends one for every local commit, this
+            // editor's own saves included — so it is this note too.
+            event.rows_changed != null -> AutosaveLaw.rowsChanged(Lens, state, event.rows_changed.note_ids)
 
             // A FAILED READ REPLACES THE EDITOR. There is nothing to edit: the
             // body never arrived.
             event.refused != null -> Step(
-                state.copy(
-                    loading = null,
-                    draft = null,
-                    failure = event.refused.failure,
-                ),
+                Lens.with(state, ReadContent.Failed(event.refused.failure ?: Reads.refused(""))),
             )
 
-            // AN EDIT NEVER WRITES. No autosave-per-keystroke: every keystroke
-            // would be a command with its own `invoke_key`, an audit receipt and
-            // a replica round trip, and a member typing a paragraph would fill
-            // their outbox with a hundred revisions of one note.
-            event.title != null -> edited(state) { it.copy(title = event.title.title) }
+            event.title != null -> AutosaveLaw.edited(Lens, state) { it.copy(title = event.title.title) }
 
-            // R-NOTES-2: a member who typed a body is saving their words. Clear
-            // the unavailable flag so `saveInput` includes `body_text`.
-            event.body != null -> edited(state) { draft ->
-                draft.copy(
-                    body = event.body.body,
-                    body_unavailable = draft.body_unavailable && event.body.body.isEmpty(),
-                )
+            // A BODY NOT ON THIS DEVICE IS READ-ONLY (the owner's ruling,
+            // superseding R-NOTES-2): typing over words the member cannot see
+            // would replace them unseen. The title and the pin still save.
+            event.body != null -> {
+                val draft = state.draft
+                if (draft == null || draft.body_unavailable) {
+                    Step(state)
+                } else {
+                    val edited = AutosaveLaw.edited(Lens, state) { it.copy(body = event.body.body) }
+                    Step(openLinkOnBrackets(edited.state, draft.body, event.body.body), edited.effects)
+                }
             }
 
-            event.pin != null -> edited(state) { it.copy(pinned = !it.pinned) }
-
-            event.save != null -> {
+            // THE POWERBOX. The link button opens it at the caret; a pick
+            // lands `[[title]]` there (replacing a typed `[[`) and saves like
+            // any edit.
+            event.link_requested != null -> {
                 val draft = state.draft
-                if (draft != null &&
-                    draft.body_unavailable &&
-                    draft.body.isEmpty() &&
-                    state.save != NotesEditorState.SaveState.SAVE_STATE_DIRTY
-                ) {
-                    // R-NOTES-2: refuse ONLY when empty AND unavailable, with
-                    // no member edit queued. A title/pin-only dirty draft still
-                    // queues (omit `body_text`); a typed body cleared the flag
-                    // above. A pristine Save on a body that is not here is the
-                    // sentence, not a quiet no-op.
-                    Step(
-                        state.copy(
-                            save = NotesEditorState.SaveState.SAVE_STATE_REFUSED,
-                            draft = draft.copy(
-                                save_failure = Reads.unavailable(
-                                    "Centraid has not copied this note's text to this device yet.",
-                                ),
-                            ),
-                        ),
-                    )
-                } else if (draft == null ||
-                    state.save == NotesEditorState.SaveState.SAVE_STATE_SAVING
-                ) {
-                    // Nothing to save, or a save already in flight. A second
-                    // command with a second `invoke_key` would be a second
-                    // revision of the same edit.
+                if (draft == null || draft.body_unavailable) {
                     Step(state)
                 } else {
                     Step(
-                        state.copy(save = NotesEditorState.SaveState.SAVE_STATE_SAVING),
-                        listOf(
-                            ScreenEffect.SubmitWrite(
-                                command = SAVE_COMMAND,
-                                inputJson = saveInput(state),
-                                // THE INVOKE KEY IS THE BASE REVISION, not an
-                                // ordinal. v0's fallback was the call's
-                                // ORDINAL and was only stable for a handler
-                                // that made the same call sequence every time
-                                // (apps census §2.1); without a stable key a
-                                // replayed intent re-executes a command that
-                                // already committed.
-                                invokeKey = "notes.save:${state.note_id}:${draft.base_revision_id}",
-                            ),
+                        state.copy(
+                            link_sheet_open = true,
+                            link_anchor = minOf(event.link_requested.caret, draft.body.length),
+                            link_replaces = false,
                         ),
                     )
                 }
             }
 
-            // A FAILED SAVE DOES NOT REPLACE THE EDITOR. The outcome lands on
-            // `save` and the sentence lands on the draft; `content` is
-            // untouched, so the words stay on the screen.
-            event.save_settled != null -> Step(
-                state.copy(
-                    save = event.save_settled.outcome,
-                    draft = state.draft?.copy(save_failure = event.save_settled.failure),
-                ),
-            )
+            event.link_picked != null -> {
+                val target = event.link_picked.target
+                val draft = state.draft
+                if (!state.link_sheet_open || target == null || draft == null || draft.body_unavailable) {
+                    Step(closeLink(state))
+                } else {
+                    val body = spliceLink(draft.body, state.link_anchor, state.link_replaces, target.title)
+                    AutosaveLaw.edited(Lens, closeLink(state)) { it.copy(body = body) }
+                }
+            }
+
+            event.link_dismissed != null -> Step(closeLink(state))
+
+            // A PIN IS A CHOICE, NOT TYPING: it saves at once.
+            event.pin != null -> {
+                val edited = AutosaveLaw.edited(Lens, state) { it.copy(pinned = !it.pinned) }
+                val flushed = AutosaveLaw.flush(Lens, edited.state)
+                // The debounce the edit scheduled is dropped: the flush is it.
+                Step(flushed.state, flushed.effects)
+            }
+
+            // SAVE NOW. What the native Save button sends until K5 removes it,
+            // and what leaving sends (close = done).
+            event.save != null || event.left != null -> AutosaveLaw.flush(Lens, state)
+
+            event.tick != null -> AutosaveLaw.tick(Lens, state, event.tick.token)
+
+            // THE CREATE COMMITTED: the note exists, and every later save is
+            // an edit of it.
+            event.write_settled != null -> {
+                val creating = state.is_new && event.write_settled.committed &&
+                    event.write_settled.invoke_key == state.autosave?.invoke_key
+                val settled = AutosaveLaw.settled(Lens, state, event.write_settled)
+                if (creating) Step(settled.state.copy(is_new = false), settled.effects) else settled
+            }
 
             event.seat_changed != null -> Step(state.copy(seat = event.seat_changed.seat))
 
             else -> Step(state)
         }
+
+    override fun ticked(token: String): NotesEditorEvent = NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = token))
+
+    override fun left(): NotesEditorEvent = NotesEditorEvent(left = NotesEditorEvent.Left())
+
+    /**
+     * `save` IS `autosave`, AS THE VIEWS STILL READ IT (until K5): written
+     * here from the one source and never read by this machine. The refusal's
+     * sentence rides the draft's `save_failure` for the same views.
+     */
+    private fun project(step: Step<NotesEditorState>): Step<NotesEditorState> {
+        val created = asCreate(step)
+        val state = decorate(created.state)
+        val autosave = state.autosave ?: return Step(state, created.effects)
+        val save = when (autosave.phase) {
+            Autosave.Phase.PHASE_DIRTY -> NotesEditorState.SaveState.SAVE_STATE_DIRTY
+            Autosave.Phase.PHASE_SAVING -> NotesEditorState.SaveState.SAVE_STATE_SAVING
+            Autosave.Phase.PHASE_REFUSED -> NotesEditorState.SaveState.SAVE_STATE_REFUSED
+            else -> NotesEditorState.SaveState.SAVE_STATE_CLEAN
+        }
+        val draft = state.draft?.let { d ->
+            val failure = if (autosave.phase == Autosave.Phase.PHASE_REFUSED) autosave.failure else null
+            if (d.save_failure == failure) d else d.copy(save_failure = failure)
+        }
+        return Step(state.copy(save = save, draft = draft), created.effects)
+    }
+
+    /**
+     * A NEW NOTE'S FIRST SAVE IS A CREATE. The kit's law submits the lens'
+     * one command; while the note is new, that submit is rewritten into
+     * `knowledge.create_note` under the phone-minted id, with the whole draft
+     * (a create has no baseline to measure changes against), and its key is
+     * the create's.
+     */
+    private fun asCreate(step: Step<NotesEditorState>): Step<NotesEditorState> {
+        val state = step.state
+        if (!state.is_new) return step
+        val draft = state.sending ?: state.draft ?: return step
+        var rewritten = state
+        val effects = step.effects.map { effect ->
+            if (effect is ScreenEffect.SubmitWrite && effect.command == SAVE_COMMAND) {
+                val key = CREATE_COMMAND + effect.invokeKey.removePrefix(SAVE_COMMAND)
+                rewritten = rewritten.copy(autosave = rewritten.autosave?.copy(invoke_key = key))
+                ScreenEffect.SubmitWrite(command = CREATE_COMMAND, inputJson = createInput(state.note_id, draft), invokeKey = key)
+            } else {
+                effect
+            }
+        }
+        return Step(rewritten, effects)
+    }
+
+    /** What a view draws that is not the draft: the chrome and the body's lock. */
+    private fun decorate(state: NotesEditorState): NotesEditorState {
+        val autosave = state.autosave
+        val draft = state.draft
+        val status = when (autosave?.phase) {
+            Autosave.Phase.PHASE_SAVING -> NotesCopy.SAVING
+            Autosave.Phase.PHASE_SAVED -> NotesCopy.SAVED
+            Autosave.Phase.PHASE_REFUSED -> autosave.failure?.sentence ?: ""
+            else -> ""
+        }
+        val untouched = autosave == null || autosave.phase == Autosave.Phase.PHASE_CLEAN
+        return state.copy(
+            body_editable = draft != null && !draft.body_unavailable,
+            body_notice = if (draft?.body_unavailable == true) NotesCopy.BODY_NOT_HERE else "",
+            chrome = NotesEditorChrome(
+                // #1015 D3: "Cancel" only before the first keystroke; after
+                // it, close = done.
+                close = if (untouched) NotesCopy.CANCEL else NotesCopy.DONE,
+                title_placeholder = NotesCopy.TITLE_PLACEHOLDER,
+                body_placeholder = NotesCopy.BODY_PLACEHOLDER,
+                pin_label = if (draft?.pinned == true) NotesCopy.UNPIN else NotesCopy.PIN,
+                history_label = NotesCopy.HISTORY_TITLE,
+                send_to_tasks_label = NotesCopy.SEND_TO_TASKS,
+                link_label = NotesCopy.LINK_LABEL,
+                status = status,
+                history_enabled = !state.is_new && draft != null,
+                title = if (state.is_new) NotesCopy.NEW_NOTE else NotesCopy.NOTE_TITLE,
+                menu_label = NotesCopy.ROW_MENU,
+            ),
+        )
+    }
+
+    private fun closeLink(state: NotesEditorState): NotesEditorState =
+        state.copy(link_sheet_open = false, link_anchor = 0, link_replaces = false)
+
+    /**
+     * `[[` JUST TYPED opens the powerbox there. Measured against the body
+     * before the edit, so a `[[` already in the note never reopens it.
+     */
+    internal fun openLinkOnBrackets(state: NotesEditorState, before: String, after: String): NotesEditorState {
+        if (after.length <= before.length || countOf(after) <= countOf(before)) return state
+        val common = before.zip(after).takeWhile { (a, b) -> a == b }.size
+        val anchor = after.indexOf(BRACKETS, maxOf(0, common - 1))
+        if (anchor < 0) return state
+        return state.copy(link_sheet_open = true, link_anchor = anchor, link_replaces = true)
+    }
+
+    private fun countOf(body: String): Int = body.windowed(2).count { it == BRACKETS }
+
+    /** `[[title]]` at [anchor], replacing a typed `[[` there when [replaces]. */
+    internal fun spliceLink(body: String, anchor: Int, replaces: Boolean, title: String): String {
+        val at = anchor.coerceIn(0, body.length)
+        val link = "[[${title.ifBlank { NotesCopy.UNTITLED }}]]"
+        val tail = if (replaces && body.startsWith(BRACKETS, at)) at + BRACKETS.length else at
+        return body.substring(0, at) + link + body.substring(tail)
+    }
+
+    private const val BRACKETS: String = "[["
+
+    /** A new note, whole: its minted id, a title (derived when blank), the body. */
+    internal fun createInput(noteId: String, draft: NoteDraft): String {
+        val title = draft.title.trim().ifEmpty { firstLine(draft.body) }
+        return "{\"note_id\":${jsonString(noteId)},\"title\":${jsonString(title)}," +
+            "\"body_text\":${jsonString(draft.body)},\"format\":\"markdown\"}"
+    }
+
+    /** The command a new note's first save is. */
+    public const val CREATE_COMMAND: String = "knowledge.create_note"
+
+    /** The editor's parts, for the kit's autosave law. */
+    internal object Lens : AutosaveLens<NotesEditorState, NoteDraft> {
+        override val screenId: String = SCREEN_ID
+        override val command: String = SAVE_COMMAND
+
+        override fun subjectId(state: NotesEditorState): String = state.note_id
+
+        override fun content(state: NotesEditorState): ReadContent<NoteDraft> = when {
+            state.draft != null -> ReadContent.Data(state.draft)
+            state.failure != null -> ReadContent.Failed(state.failure)
+            else -> ReadContent.Loading(state.loading?.first_load ?: true)
+        }
+
+        override fun with(state: NotesEditorState, content: ReadContent<NoteDraft>): NotesEditorState =
+            when (content) {
+                is ReadContent.Loading -> state.copy(
+                    loading = Loading(first_load = content.firstLoad),
+                    failure = null,
+                    draft = null,
+                )
+                is ReadContent.Failed -> state.copy(loading = null, failure = content.failure, draft = null)
+                is ReadContent.Denied -> state.copy(
+                    loading = null,
+                    failure = Reads.refused(content.denied.body.ifEmpty { content.denied.title }),
+                    draft = null,
+                )
+                is ReadContent.Data -> state.copy(loading = null, failure = null, draft = content.data)
+            }
+
+        override fun autosave(state: NotesEditorState): Autosave = state.autosave ?: Autosave()
+
+        override fun withAutosave(state: NotesEditorState, autosave: Autosave): NotesEditorState =
+            state.copy(autosave = autosave)
+
+        override fun baseline(state: NotesEditorState): NoteDraft? = state.baseline
+
+        override fun withBaseline(state: NotesEditorState, baseline: NoteDraft?): NotesEditorState =
+            state.copy(baseline = baseline)
+
+        override fun sending(state: NotesEditorState): NoteDraft? = state.sending
+
+        override fun withSending(state: NotesEditorState, sending: NoteDraft?): NotesEditorState =
+            state.copy(sending = sending)
+
+        override fun input(state: NotesEditorState, draft: NoteDraft, baseline: NoteDraft?): String? =
+            saveInput(state.note_id, draft, baseline)
+
+        /**
+         * A NEW NOTE NEEDS A NAME: `create_note` requires a `title`, and an
+         * empty one is derived from the body's first line — so a note with
+         * neither is not yet a note. A body cleared to nothing is SAVED:
+         * `body_text` takes an empty string (`minLength: 0`).
+         */
+        override fun refusal(state: NotesEditorState, draft: NoteDraft, baseline: NoteDraft?): ReadFailure? =
+            if (state.is_new && draft.title.isBlank() && firstLine(draft.body).isEmpty()) {
+                Reads.refused(NotesCopy.WRITE_A_LINE)
+            } else {
+                null
+            }
+    }
 
     /**
      * THE COMMAND THE VAULT ACTUALLY HAS (#1025 S5).
@@ -175,82 +352,48 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
      */
     public const val SAVE_COMMAND: String = "knowledge.edit_note"
 
-    private inline fun edited(
-        state: NotesEditorState,
-        change: (centraid.screen.v1.NoteDraft) -> centraid.screen.v1.NoteDraft,
-    ): Step<NotesEditorState> {
-        val draft = state.draft ?: return Step(state)
-        return Step(
-            state.copy(
-                draft = change(draft).copy(save_failure = null),
-                save = NotesEditorState.SaveState.SAVE_STATE_DIRTY,
-            ),
-        )
-    }
-
     /**
-     * The command's input, as JSON bytes (`centraid.core.v1.Intent.input`).
+     * The command's input, as JSON: `note_id` and ONLY THE FIELDS THAT CHANGED
+     * against [baseline] — or null when none did.
      *
-     * Hand-built rather than serialised by a library: `commonMain` carries no
-     * JSON dependency, the shape is four fields, and the escaping is the only
-     * hard part — which is exactly what `jsonString` below is tested for.
+     * `knowledge.edit_note`'s schema is `additionalProperties: false`, and an
+     * ABSENT field is "leave it alone", which is load-bearing here:
      *
-     * **It does NOT have to be canonical.** Both ends canonicalise the parsed
-     * value before hashing — the seat's enqueue door and the gateway's
-     * rehash — so a shell agreeing byte-for-byte with the vault's
-     * canonicaliser would be a second implementation of it, which is
-     * D-1025-S4-6's argument about digests applied to the same seam.
+     * * **`body_text`, never `body`** — an empty one included: a body cleared
+     *   to nothing is the member's words (`minLength: 0`). A body this seat has
+     *   not copied (`body_unavailable`) is never sent, which is what lets a
+     *   title or pin save without blanking the note (R-NOTES-2/3).
+     * * **An empty title is DERIVED from the body's first line**, because
+     *   `title` is `minLength: 1` too and a note with no title is still a note
+     *   a member means to keep. The draft keeps its empty title; the vault gets
+     *   the derived one. No first line, no title sent.
+     * * **`base_revision_id` is not an input.** There is no vault-side
+     *   revision check: the last save on this phone wins.
+     * * `pinned` is 0 or 1 — SQLite has no boolean.
      *
-     * ## `knowledge.edit_note`'s schema is `additionalProperties: false`
-     *
-     * So every key here is one the schema names, and three things this used to
-     * send are gone:
-     *
-     * * **`body` → `body_text`.** The column is `body_text` and the wrong
-     *   spelling would be rejected as an additional property.
-     * * **`base_revision_id` is not an input.** It is the invoke key's second
-     *   half — which is where concurrency control actually lives for a queued
-     *   write — and sending it would be refused.
-     * * **An ABSENT field is "leave it alone", and that is load-bearing here.**
-     *   `title` and `body_text` are `minLength: 1`, so an empty string is not a
-     *   legal way to say "unchanged" — it is refused. The body is omitted
-     *   whenever this seat has not copied it (`body_unavailable`), which is
-     *   what lets a title/pin-only save queue without blanking the note
-     *   (R-NOTES-2/3).
-     *
-     * `pinned` is 0 or 1: the schema says integer, because SQLite has no
-     * boolean and a `true` on the wire would invent one.
+     * Hand-built: `commonMain` carries no JSON library, and the escaping is the
+     * only hard part ([jsonString]).
      */
-    internal fun saveInput(state: NotesEditorState): String {
-        val draft = state.draft ?: return "{}"
-        val fields = mutableListOf("\"note_id\":${jsonString(state.note_id)}")
-        if (draft.title.isNotEmpty()) fields += "\"title\":${jsonString(draft.title)}"
-        if (!draft.body_unavailable && draft.body.isNotEmpty()) {
-            fields += "\"body_text\":${jsonString(draft.body)}"
-        }
-        fields += "\"pinned\":${if (draft.pinned) 1 else 0}"
-        return fields.joinToString(",", prefix = "{", postfix = "}")
+    internal fun saveInput(noteId: String, draft: NoteDraft, baseline: NoteDraft?): String? {
+        val fields = mutableListOf<String>()
+        val bodyChanged = draft.body != (baseline?.body ?: "") && !draft.body_unavailable
+        val title = draft.title.ifBlank { firstLine(draft.body) }
+        val titleChanged = draft.title != baseline?.title || (draft.title.isBlank() && bodyChanged)
+        if (titleChanged && title.isNotEmpty()) fields += "\"title\":${jsonString(title)}"
+        if (bodyChanged) fields += "\"body_text\":${jsonString(draft.body)}"
+        if (draft.pinned != baseline?.pinned) fields += "\"pinned\":${if (draft.pinned) 1 else 0}"
+        if (fields.isEmpty()) return null
+        return (listOf("\"note_id\":${jsonString(noteId)}") + fields)
+            .joinToString(",", prefix = "{", postfix = "}")
     }
 
-    internal fun jsonString(value: String): String = buildString {
-        append('"')
-        for (character in value) {
-            when (character) {
-                '"' -> append("\\\"")
-                '\\' -> append("\\\\")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else ->
-                    if (character < ' ') {
-                        append("\\u").append(character.code.toString(16).padStart(4, '0'))
-                    } else {
-                        append(character)
-                    }
-            }
-        }
-        append('"')
-    }
+    /** The first non-blank line of [body], trimmed, at most [TITLE_FROM_BODY] characters. */
+    internal fun firstLine(body: String): String =
+        body.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }?.take(TITLE_FROM_BODY) ?: ""
+
+    private const val TITLE_FROM_BODY: Int = 80
+
+    internal fun jsonString(value: String): String = dev.centraid.shared.kit.jsonString(value)
 
     /**
      * `knowledge_note`. Whether the editor acts on it is [reduce]'s decision:

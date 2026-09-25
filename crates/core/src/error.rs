@@ -97,6 +97,16 @@ pub enum CoreError {
     #[error("invalid request: {detail}")]
     InvalidRequest { detail: String },
 
+    /// AN APP QUERY REACHED ITS OWN STATED CEILING (#1046).
+    ///
+    /// A loader walks its joins to a declared fan-out and expands a series to a
+    /// declared instance cap, and stops here rather than answering what it
+    /// had: a short agenda that reads as a whole one is the truncation flag
+    /// again (D-1020-D3-12). `query` is the statement that reached it and `cap`
+    /// the rows it reached, so the log names the bound and not a guess at it.
+    #[error("`{query}` reached its stated ceiling of {cap} rows; ask for a narrower range")]
+    ReadBoundReached { query: String, cap: usize },
+
     /// A message type or body this build does not carry.
     #[error("unsupported message: {type_url}")]
     Unsupported { type_url: String },
@@ -170,6 +180,7 @@ impl CoreError {
                 ErrorCode::InvalidRequest
             }
             Self::Unsupported { .. } => ErrorCode::UnsupportedMessage,
+            Self::ReadBoundReached { .. } => ErrorCode::ReadBoundReached,
             Self::NotYetAvailable { .. } => ErrorCode::NotYetAvailable,
             Self::OnlineOnly { .. } => ErrorCode::OnlineOnly,
             Self::Cancelled { .. } => ErrorCode::Cancelled,
@@ -274,6 +285,13 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
             "That request does not make sense to this build, and nothing was changed."
         }
         C::SnapshotUnavailable => "The gateway has nowhere to build a copy of the vault right now.",
+        // NOTHING WAS LOST AND NOTHING IS BROKEN, and the sentence says the
+        // true reason no part of the answer is shown: a part would read as the
+        // whole (#1046, D-1020-D3-12).
+        C::ReadBoundReached => {
+            "There is more here than one look can gather, so none of it was shown rather than \
+             part of it. Try a shorter range."
+        }
         // THE VAULT ALREADY HERE IS THE ONE THIS PROTECTS, and the sentence
         // says so rather than naming a file: the member's vault is intact,
         // which is the fact they need. Mobile rarely renders it — `Shelf.found`

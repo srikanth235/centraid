@@ -3,6 +3,7 @@ package dev.centraid.shared.shell
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
+import centraid.core.v1.Value
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.TileBody
 import centraid.screen.v1.TileCount
@@ -78,6 +79,12 @@ public object HomeReads {
      */
     private const val DOC_SIZE: Int = 3
 
+    /** The trash predicate every soft-deleting table's tile read carries. */
+    private const val NOT_TRASHED: String = "deleted_at IS NULL"
+
+    /** `schedule_task.status`'s two open values, from the DDL's CHECK. */
+    private val OPEN_TASK_STATUSES: List<String> = listOf("needs-action", "in-process")
+
     /**
      * One app's read: the statement, and the label its count is spoken with.
      *
@@ -95,7 +102,8 @@ public object HomeReads {
         PageOrder(sort_column = sort, pk_column = pk, descending = descending)
 
     /**
-     * Every tile's read, in [SpringboardPolicy.SPRINGBOARD_ORDER].
+     * Every tile's PAGE read, in [SpringboardPolicy.SPRINGBOARD_ORDER].
+     * Agenda's is an app query and is [HomeAgendaTile]'s.
      *
      * The order is the grid's, not an execution order: they are fanned out and
      * land independently, which is why a tile is an event.
@@ -130,6 +138,11 @@ public object HomeReads {
                 name = "home.docs",
                 select = listOf("document_id", "title", "updated_at"),
                 from = "core_document",
+                // THE TRASH IS NOT THE LIBRARY (#1046's audit). A deleted
+                // document keeps its row for the restore window, and a
+                // launcher that counted it would tell a member they hold a
+                // file they threw away.
+                where_ = NOT_TRASHED,
                 order = order("updated_at", "document_id"),
                 // THE SIZE IS A COMPUTED COLUMN THE VAULT APPENDS, and asking
                 // for it is the whole of what this tile had to do. `core_document`
@@ -146,29 +159,28 @@ public object HomeReads {
                 name = "home.notes",
                 select = listOf("note_id", "title", "updated_at"),
                 from = "knowledge_note",
+                // Notes' own filter (`NotesReads`), for the Docs tile's reason.
+                where_ = NOT_TRASHED,
                 order = order("updated_at", "note_id"),
             ),
             countLabel = "notes",
         ),
-        TileRead(
-            appId = "agenda",
-            query = PageQuery(
-                name = "home.agenda",
-                select = listOf("event_id", "summary", "dtstart"),
-                from = "core_event",
-                // ASCENDING, and it is the one tile that is: an agenda shows
-                // what is coming, and "newest first" on a calendar is last
-                // week.
-                order = order("dtstart", "event_id", descending = false),
-            ),
-            countLabel = "events",
-        ),
+        // AGENDA IS NOT A PAGE READ (#1046). Its tile is the next occurrence
+        // of whatever repeats, which only the core's recurrence engine can
+        // answer, so it rides the app-query arm: `HomeAgendaTile`.
         TileRead(
             appId = "tasks",
             query = PageQuery(
                 name = "home.tasks",
                 select = listOf("task_id", "title", "status"),
                 from = "schedule_task",
+                // OPEN WORK, NOT TRASHED (#1046's audit). The tile is "the
+                // next thing to do", and a finished or cancelled task is not
+                // one — counted, a vault with one open task reads as every
+                // task it ever held. The two open statuses are the DDL
+                // CHECK's, bound rather than spliced.
+                where_ = "$NOT_TRASHED AND status IN (?, ?)",
+                bind = OPEN_TASK_STATUSES.map { Value(text = it) },
                 order = order("task_id", "task_id"),
             ),
             countLabel = "tasks",
@@ -202,9 +214,18 @@ public object HomeReads {
      * that goes quietly stale: a tile whose query moves to another table stops
      * redrawing on sync, nothing fails, and the symptom is a count that is right
      * only after a relaunch. Deriving it means there is one place a table is
-     * named and it is the query that reads it.
+     * named and it is the query that reads it — and for Agenda's app query,
+     * which names no table the runtime can see, it is [HomeAgendaTile.TABLES].
      */
-    public val TABLES: Set<String> = READS.map { it.query.from }.toSet()
+    public val TABLES: Set<String> =
+        READS.map { it.query.from }.toSet() + HomeAgendaTile.TABLES
+
+    /**
+     * Every app whose tile is READ — the page reads and the app queries —
+     * which is every tile but Locker's.
+     */
+    public val READ_APP_IDS: Set<String> =
+        READS.map { it.appId }.toSet() + HomeAgendaTile.APP_ID
 
     /**
      * The text of a row's column, or empty. Positional, as the door states.
@@ -334,16 +355,6 @@ public object HomeReads {
                 )
             }
 
-            "agenda" -> preview.firstOrNull()?.let { row ->
-                TileBody(
-                    agenda = TileBody.Agenda(
-                        title = row.text(1),
-                        at = row.text(2).take(16).replace('T', ' '),
-                        after = if (rows.size > 1) "and ${rows.size - 1} more" else "",
-                    ),
-                )
-            }
-
             "tasks" -> TileBody(
                 tasks = TileBody.Tasks(
                     rows = preview.map { row ->
@@ -351,6 +362,9 @@ public object HomeReads {
                             task_id = row.text(0),
                             title = row.text(1),
                             // v0's own vocabulary: `completed`, not `done`.
+                            // FALSE ON EVERY ROW THIS READ RETURNS, since it
+                            // reads open work only; kept so the field says what
+                            // the row is rather than what the filter implies.
                             done = row.text(2) == "completed",
                         )
                     },

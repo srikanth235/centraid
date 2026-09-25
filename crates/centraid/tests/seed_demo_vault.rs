@@ -235,6 +235,7 @@ fn every_seeded_document_carries_a_size_the_docs_tile_can_draw() {
                 with_held_thumbnail: false,
                 with_note_body: false,
                 with_document_size: true,
+                with_minor_units: false,
             }),
             limit: 200,
             after: None,
@@ -279,7 +280,10 @@ fn every_seeded_document_carries_a_size_the_docs_tile_can_draw() {
             "`{title}` said `{said}`, whose unit is not one the core composes"
         );
         assert!(
-            count.chars().next().is_some_and(|first| first.is_ascii_digit()),
+            count
+                .chars()
+                .next()
+                .is_some_and(|first| first.is_ascii_digit()),
             "`{title}` said `{said}`, which does not begin with a number"
         );
         assert_ne!(

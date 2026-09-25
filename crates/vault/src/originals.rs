@@ -90,9 +90,11 @@ pub fn census(vault: &Vault, kept_albums: &BTreeSet<String>) -> Result<Option<Or
     // ONE LISTING AND NOT ONE LOOKUP PER ROW. A camera roll is tens of
     // thousands of photographs, and `ids()` is one round trip to the store's
     // actor where `has()` per row would be one each.
-    let held = store.ids().map_err(|error| crate::error::VaultError::Invariant {
-        context: format!("the content store could not list what it holds: {error}"),
-    })?;
+    let held = store
+        .ids()
+        .map_err(|error| crate::error::VaultError::Invariant {
+            context: format!("the content store could not list what it holds: {error}"),
+        })?;
     let kept_json = serde_json::to_string(&kept_albums.iter().collect::<Vec<_>>())
         .unwrap_or_else(|_| "[]".to_owned());
     let rows: Vec<(String, i64, bool)> = vault.read(|connection| {

@@ -62,6 +62,18 @@ public interface ScreenReads<S, E> {
     /** The rows, as this screen's `DataArrived`. [nextCursor] is null at the end. */
     public fun arrived(rows: List<Row>, nextCursor: String?): E
 
+    /**
+     * The rows, with THE CURSOR THEY ANSWERED echoed back — null for a first
+     * page. What the runtime calls. A paged screen overrides it and carries
+     * [answeredCursor] on its `DataArrived`, because that, and not a state flag,
+     * is what tells a first page (replace) from a later one (append): a page
+     * two landing after a re-read has started is otherwise taken for the
+     * re-read's answer (the kit's `PagedList`). A screen that does not page
+     * keeps the default.
+     */
+    public fun arrived(rows: List<Row>, nextCursor: String?, answeredCursor: String?): E =
+        arrived(rows, nextCursor)
+
     /** The refusal, as this screen's `ReadRefused`. */
     public fun refused(failure: ReadFailure): E
 }
@@ -190,6 +202,14 @@ public class ScreenRuntime<S, E>(
      * Null on every ordinary vault, which is the ordinary case.
      */
     private val readOnly: () -> String? = { null },
+    /**
+     * Whether the screen has been LEFT — its bridge's `leave()` ran. A write
+     * that fails after that has no screen to say so on, so it goes to
+     * [stranded] instead. See [StrandedWrites].
+     */
+    private val left: () -> Boolean = { false },
+    /** Where a write that failed after its screen was left is told. */
+    private val stranded: StrandedWrites? = null,
 ) {
     /**
      * Collect this host's effects and serve the ones that are this screen's.
@@ -222,7 +242,15 @@ public class ScreenRuntime<S, E>(
                 scope.launch { serve(effect.afterCursor) }
             }
             if (effect is ScreenEffect.SubmitWrite && writes != null) {
-                scope.launch { submit(effect, writes) }
+                // THE VAULT IS PINNED WHEN THE WRITE IS EMITTED, not when the
+                // launched coroutine gets round to it. A member who typed into
+                // vault A and switched to B a moment later wrote into A; a
+                // supplier read inside the launch could hand the save to B.
+                val pinned = PinnedVault(core(), readOnly())
+                scope.launch { serveWrite(effect, writes, host, pinned, left, stranded) }
+            }
+            if (effect is ScreenEffect.Schedule && effect.screenId == reads.screenId) {
+                scope.launch { serveSchedule(effect, host) }
             }
             // `ScreenEffect.FetchOriginal` IS STILL NOT SERVED HERE (#1029 §1,
             // W6). It rode `seat.bytes.fetch` — `seat.sync` with a one-item
@@ -271,7 +299,11 @@ public class ScreenRuntime<S, E>(
                 val page = outcome.value.response?.page
                 val error = outcome.value.error
                 when {
-                    page != null -> reads.arrived(page.rows, page.next?.let(::encodeCursor))
+                    page != null -> reads.arrived(
+                        page.rows,
+                        page.next?.let(::encodeCursor),
+                        afterCursor,
+                    )
                     // `Error.detail` IS FOR LOGS AND NEVER FOR A MEMBER. It
                     // carries whatever the failing layer said, including a
                     // SQLite `RAISE(ABORT)`, and one reached a member's screen
@@ -327,72 +359,101 @@ public class ScreenRuntime<S, E>(
             return PageCursor(sort_key = encoded.substring(0, at), pk = encoded.substring(at + 1))
         }
     }
+}
 
-    /**
-     * Serve one write: gate it, then hand it to the core.
-     *
-     * ## A WRITE IS A COMMAND, AND THERE IS NO INTENT (#1029 §1, §6)
-     *
-     * This sent `Request::Intent` — a write QUEUED for a gateway to run, with a
-     * payload hash the gateway rehashed and a `needs` list it pulled bytes on.
-     * There is no gateway. The phone is the vault, so the write it makes IS the
-     * commit: `Request::Command` down the same door, answered by the
-     * `CommandOutcome` the handler produced. `intent.proto` is deleted and the
-     * envelope's arm 4 is retired, not reused.
-     *
-     * `invoke_key` IS the screen's `invokeKey`, which is content-derived rather
-     * than ordinal (`NotesEditorMachine`: `"notes.save:<noteId>:<baseRevision>"`).
-     * It kept a replayed intent from re-executing a command that had already
-     * committed, and it does exactly that here — `command.proto` calls the field
-     * required for that reason.
-     */
-    private suspend fun submit(write: ScreenEffect.SubmitWrite, writes: ScreenWrites<S, E>) {
-        // A FROZEN VAULT REFUSES, AND SAYS SO (#1029 F1). Not queued and not
-        // silently dropped: the member is told the write did not happen, with
-        // the sentence that says why and what is still true.
-        readOnly()?.let { sentence ->
-            writes.settled(CommandStatus.COMMAND_STATUS_DENIED, sentence, write.invokeKey)
-                ?.let { host.send(it) }
-            return
+/**
+ * A WRITE WHOSE SCREEN IS GONE, AND FAILED (the kit's autosave, close = done).
+ *
+ * Closing an editor flushes its unsaved words as a write on the session's
+ * scope, so the write outlives the screen — and so can its refusal. Nothing is
+ * left on screen to draw it, so it is handed here, and the session publishes
+ * it for Home's status line. [sentence] is the core's, or empty.
+ */
+public fun interface StrandedWrites {
+    public fun stranded(appId: String, command: String, sentence: String)
+}
+
+/** The vault a write was emitted against, read once, at emit time. */
+internal class PinnedVault(val core: CentraidCore?, val readOnly: String?)
+
+/** Wait out one [ScreenEffect.Schedule], then send the machine's tick. */
+internal suspend fun <S, E> serveSchedule(effect: ScreenEffect.Schedule, host: ScreenHost<S, E>) {
+    kotlinx.coroutines.delay(effect.delayMs)
+    host.machine.ticked(effect.token)?.let { host.send(it) }
+}
+
+/**
+ * Serve one write: gate it, then hand it to the core.
+ *
+ * A function and not a member of a runtime because two runtimes serve
+ * writes — [ScreenRuntime] and [ScreenQueryRuntime] (#1046) — and a write is the same
+ * command down the same door whichever way the screen reads.
+ *
+ * ## A WRITE IS A COMMAND, AND THERE IS NO INTENT (#1029 §1, §6)
+ *
+ * This sent `Request::Intent` — a write QUEUED for a gateway to run, with a
+ * payload hash the gateway rehashed and a `needs` list it pulled bytes on.
+ * There is no gateway. The phone is the vault, so the write it makes IS the
+ * commit: `Request::Command` down the same door, answered by the
+ * `CommandOutcome` the handler produced. `intent.proto` is deleted and the
+ * envelope's arm 4 is retired, not reused.
+ *
+ * `invoke_key` IS the screen's `invokeKey`, which is content-derived rather
+ * than ordinal (the kit's `InvokeKeys`: `"knowledge.edit_note:<noteId>:seq=<n>"`).
+ * It kept a replayed intent from re-executing a command that had already
+ * committed, and it does exactly that here — `command.proto` calls the field
+ * required for that reason.
+ */
+internal suspend fun <S, E> serveWrite(
+    write: ScreenEffect.SubmitWrite,
+    writes: ScreenWrites<S, E>,
+    host: ScreenHost<S, E>,
+    pinned: PinnedVault,
+    left: () -> Boolean = { false },
+    stranded: StrandedWrites? = null,
+) {
+    /** Deliver the outcome to the screen, and to [stranded] if it was left. */
+    suspend fun settle(status: CommandStatus, sentence: String) {
+        if (status != CommandStatus.COMMAND_STATUS_EXECUTED && left()) {
+            stranded?.stranded(writes.appId, write.command, sentence)
         }
-        val handle = core()
-        if (handle == null) {
-            writes.settled(
-                CommandStatus.COMMAND_STATUS_DENIED,
-                "No vault is open on this device.",
-                write.invokeKey,
-            )?.let { host.send(it) }
-            return
-        }
-        val request = Envelope(
-            request_id = 0,
-            request = Request(
-                command = Command(
-                    name = write.command,
-                    invoke_key = write.invokeKey,
-                    input = write.inputJson.encodeUtf8(),
-                ),
+        writes.settled(status, sentence, write.invokeKey)?.let { host.send(it) }
+    }
+    // A FROZEN VAULT REFUSES, AND SAYS SO (#1029 F1). Not queued and not
+    // silently dropped: the member is told the write did not happen, with
+    // the sentence that says why and what is still true.
+    pinned.readOnly?.let { sentence ->
+        settle(CommandStatus.COMMAND_STATUS_DENIED, sentence)
+        return
+    }
+    val handle = pinned.core
+    if (handle == null) {
+        settle(CommandStatus.COMMAND_STATUS_DENIED, "No vault is open on this device.")
+        return
+    }
+    val request = Envelope(
+        request_id = 0,
+        request = Request(
+            command = Command(
+                name = write.command,
+                invoke_key = write.invokeKey,
+                input = write.inputJson.encodeUtf8(),
             ),
-        )
-        val event = when (val outcome = handle.call(request)) {
-            is CoreOutcome.Failed -> writes.settled(
-                CommandStatus.COMMAND_STATUS_FAILED,
-                outcome.failure.sentence,
-                write.invokeKey,
-            )
-            is CoreOutcome.Answered -> {
-                val answered = outcome.value.response?.command
-                if (answered == null) {
-                    writes.settled(CommandStatus.COMMAND_STATUS_FAILED, "", write.invokeKey)
-                } else {
-                    // THE CORE'S OWN SENTENCE, when it has one.
-                    // `CommandOutcome.reason` is the author's words for a denial
-                    // or a failed precondition — never the raw predicate, which
-                    // reaches the audit trail only.
-                    writes.settled(answered.status, answered.reason, write.invokeKey)
-                }
+        ),
+    )
+    when (val outcome = handle.call(request)) {
+        is CoreOutcome.Failed -> settle(CommandStatus.COMMAND_STATUS_FAILED, outcome.failure.sentence)
+        is CoreOutcome.Answered -> {
+            val answered = outcome.value.response?.command
+            if (answered == null) {
+                settle(CommandStatus.COMMAND_STATUS_FAILED, "")
+            } else {
+                // THE CORE'S OWN SENTENCE, when it has one.
+                // `CommandOutcome.reason` is the author's words for a denial
+                // or a failed precondition — never the raw predicate, which
+                // reaches the audit trail only.
+                settle(answered.status, answered.reason)
             }
         }
-        event?.let { host.send(it) }
     }
 }

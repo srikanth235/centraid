@@ -417,14 +417,10 @@ private struct TileCard: View {
     /// (`TileBody.Notes.note_id`) and the editor's read is parameterised by a
     /// note id: a cover opened without one reads nothing.
     static func route(for tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
-        switch tile.appID {
-        case "tally": return .tally
-        case "photos": return .photos
-        case "notes":
-            guard case let .notes(note) = tile.body.kind, !note.noteID.isEmpty else { return nil }
-            return .note(note.noteID)
-        default: return nil
-        }
+        // Photos is the one app still routed by its own case; every other
+        // app's tile route is its `AppScreens.tileRoute` (K5).
+        if tile.appID == "photos" { return .photos }
+        return AppRegistry.tileRoute(tile)
     }
 }
 
@@ -788,24 +784,14 @@ private struct Skeleton: View {
     }
 }
 
-/// Minor units and an exponent FROM THE VAULT, never the host's locale.
+/// Minor units and an exponent FROM THE CORE, never the host's guess.
 ///
 /// v0 divided by 100 unconditionally and formatted with the device's locale, so
 /// one vault rendered differently on two phones. JPY has no minor unit and BHD
-/// has three; the exponent travels with the amount for exactly this.
-enum Money {
-    static func render(_ money: Centraid_Screen_V1_Money) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = money.currency
-        formatter.locale = Locale(identifier: money.locale)
-        formatter.minimumFractionDigits = Int(money.exponent)
-        formatter.maximumFractionDigits = Int(money.exponent)
-        let divisor = pow(10.0, Double(money.exponent))
-        let value = Double(money.minor) / divisor
-        return formatter.string(from: NSNumber(value: value)) ?? "\(money.minor)"
-    }
-}
+/// has three; the exponent travels with the amount for exactly this — stated by
+/// the core from the kit's one table (`PageQuery.with_minor_units`).
+///
+// `Money.render` lives in `Kit/Money.swift` (K5).
 
 /// Day one: the vault holds nothing anywhere.
 ///
@@ -870,6 +856,17 @@ private struct MoveRow: View {
     var body: some View {
         Button {
             shell.send(screen: "home", event: HomeEvents.movePicked(move.id))
+            // Agenda's move ("Add an event") opens the composer on the core's
+            // today (#1046 wave 5): Agenda's home under it, the editor on top.
+            if move.id == "agenda" {
+                shell.path.append(AgendaScreens.homeRoute)
+                shell.path.append(AgendaScreens.newEventRoute(day: ""))
+            }
+            if move.id == "tasks" { shell.path.append(TasksScreens.homeRoute) }
+            // "Write a note" is a NEW note (`NotesRouting.target(null)`);
+            // "Add someone" is a new person's editor.
+            if move.id == "notes" { shell.path.append(NotesScreens.newNoteRoute()) }
+            if move.id == "people" { shell.path.append(PeopleScreens.newPersonRoute) }
         } label: {
             HStack(spacing: 8) {
                 // A move carries its OWN icon key: `connectors` is a move and
@@ -953,6 +950,7 @@ private struct AllAppsSheet: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("home-all-apps-row-\(tile.appID)")
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home-all-apps-sheet")
     }
 }
@@ -1094,6 +1092,7 @@ private struct VaultSheet: View {
             .listStyle(.plain)
         }
         .background(Theme.color("bg", scheme).ignoresSafeArea())
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home-vault-sheet")
         // THE ALERT NAMES THE VAULT, and what it says changed with the
         // product (#1029 §1). Forgetting used to delete this device's COPY —

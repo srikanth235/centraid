@@ -56,6 +56,7 @@ fn fixture_vault() -> rusqlite::Connection {
         &FrozenRowMapping {
             tables_gone: &["share_party_vault_binding"],
             columns_gone: &[],
+            columns_added: &[],
         },
     )
     .expect("the fixture vault is built")

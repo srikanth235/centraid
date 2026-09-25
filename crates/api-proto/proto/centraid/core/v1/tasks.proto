@@ -1,0 +1,345 @@
+// TASKS' QUERIES, AS THE CORE ANSWERS THEM (#1046).
+//
+// `crates/apps/tasks` runs the board (a bounded window of open work plus the
+// logbook, families nested and the promotion rule applied), one task, and
+// search over the vault, and these are its answers, typed. A shell reaches them
+// through `app_query.proto`'s `AppQueryRequest` and draws them; it nests no
+// family, collapses no missed period and groups no place, because each of
+// those in Kotlin or Swift is a second copy of a rule v0 already drifted on.
+//
+// TYPED, NOT JSON, for `agenda.proto`'s reason. Every message mirrors a Rust
+// struct in `crates/apps/tasks` (`queries.rs`, `local.rs`, `views.rs`);
+// `crates/core`'s `app_query` module is the one conversion.
+//
+// Instants are the vault's own text form, `YYYY-MM-DDTHH:MM:SS.mmmZ`, and days
+// are `YYYY-MM-DD`. A `due_at` is EITHER: a civil date (the same day in every
+// zone) or an instant.
+//
+// CIVIL TIME IS ANSWERED IN THE DEVICE'S ZONE, under `agenda.proto`'s zone
+// rule: a request states `tz` (an IANA name); EMPTY is the vault's zone, and a
+// vault that names none — or a name the bundled database does not know — is
+// REFUSED, `ERROR_CODE_INVALID_REQUEST`. Never UTC by default. Every task
+// carries its due's local day and time, whether it is overdue or lands today,
+// and when its reminder fires; every answer carries `today` and `now_local`.
+// A shell prints those strings and does no zone arithmetic; the only civil
+// arithmetic left to it is a weekday from a `YYYY-MM-DD`, which is pure.
+//
+// NO SHARING. v1 has no sharing (#1029's scope amendment): no assignee from
+// another vault and no share scope is answered, because none exists.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// The requests.
+// ---------------------------------------------------------------------------
+
+// Which place a board answer's `groups` are for. The rows are the same board
+// read whichever is asked; the place decides only how they are grouped.
+enum TasksView {
+  // No groups: the answer carries the counts and the chrome only.
+  TASKS_VIEW_UNSPECIFIED = 0;
+  // Overdue (its own group, first), then due today — the device's today.
+  TASKS_VIEW_TODAY = 1;
+  // One group per civil day after today, nearest first.
+  TASKS_VIEW_UPCOMING = 2;
+  // Open work filed in no project.
+  TASKS_VIEW_INBOX = 3;
+  // Undated open work: unfiled first, then one group per project by name.
+  TASKS_VIEW_ANYTIME = 4;
+  // Dated, then undated — two groups and no third.
+  TASKS_VIEW_ALL = 5;
+  // Two outcomes: done, then won't do; newest-closed first.
+  TASKS_VIEW_LOGBOOK = 6;
+  // Open work carrying a reminder lead time and a due to count back from.
+  TASKS_VIEW_REMINDERS = 7;
+  // One project (`TasksBoardRequest.project_id`): its unfiled-in-a-section
+  // work, then EVERY section in its order, an empty one included.
+  TASKS_VIEW_PROJECT = 8;
+}
+
+// `tasks.board`: the open window, the logbook, and the project chrome.
+message TasksBoardRequest {
+  // The zone (the file header's rule).
+  string tz = 1;
+  // The open window's size. ZERO IS THE MANIFEST'S DEFAULT (500); any other
+  // value is clamped to the manifest's declared 20…500 — the app's only bound.
+  uint32 limit = 2;
+  // Which place to group for.
+  TasksView view = 3;
+  // `TASKS_VIEW_PROJECT` only: the project.
+  string project_id = 4;
+}
+
+// `tasks.task`: one task, whether or not any board window holds it.
+message TasksTaskRequest {
+  string task_id = 1;
+  string tz = 2;
+}
+
+// `tasks.projects`: the live projects and their sections, with open counts.
+message TasksProjectsRequest {
+  string tz = 1;
+}
+
+// `tasks.search`: tasks matching a term, in the index's rank order.
+message TasksSearchRequest {
+  string term = 1;
+  // REQUIRED: zero is refused, `ERROR_CODE_INVALID_REQUEST`. Clamped to 100.
+  uint32 limit = 2;
+  string tz = 3;
+}
+
+// `tasks.catch-up`: the overdue piles, and the absence to name.
+message TasksCatchUpRequest {
+  string tz = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The rows.
+// ---------------------------------------------------------------------------
+
+// One task, decorated, with its civil readings in the request zone.
+message TasksTask {
+  string task_id = 1;
+  optional string parent_task_id = 2;
+  optional string project_id = 3;
+  optional string section_id = 4;
+  // `needs-action`, `in-process`, `completed` or `cancelled`.
+  string status = 5;
+  string title = 6;
+  optional string description = 7;
+  // Todoist's scale: 0 is unset, 1..9 with HIGHER MORE URGENT — not RFC
+  // 5545's 1-is-highest. Ruled by D-1020-S5 (`docs/decisions.md`: the board
+  // sorts "priority desc"); `schedule.add_task`/`edit_task` store it as sent.
+  int64 priority = 8;
+  // As stored: a civil date or an instant.
+  optional string due_at = 9;
+  optional string completed_at = 10;
+  optional int64 effort_min = 11;
+  // The reminder's lead time, minutes before the due moment.
+  optional int64 remind_before_min = 12;
+  // `scheduled` or `completion` — what the next period counts from.
+  optional string recurrence_anchor = 13;
+  // The zone the RECURRENCE expands in, not the display zone.
+  optional string tz = 14;
+  optional string series_id = 15;
+  int64 sort_order = 16;
+  optional string created_at = 17;
+  optional string updated_at = 18;
+
+  // --- the recurrence, as facts (#834), plus the rule for the picker ------
+  // The task repeats.
+  bool repeats = 19;
+  // The one summariser's sentence ("Daily", "Every 2 weeks on Monday"), built
+  // in Rust. Absent on a one-off.
+  optional string recurrence_summary = 20;
+  // Unactioned periods, collapsed into a count: a repeating task never stacks.
+  uint32 missed = 21;
+  // The next open period, as the engine spells it; absent on a one-off.
+  optional string next_due = 22;
+
+  // --- the civil readings, in the request zone -----------------------------
+  // Of the EFFECTIVE due (`next_due`, else `due_at`). `YYYY-MM-DD`; empty when
+  // undated.
+  string due_day = 23;
+  // `YYYY-MM-DDTHH:MM`, or `YYYY-MM-DD` for a date-only due; empty when
+  // undated.
+  string due_local = 24;
+  // `HH:MM`; empty for a date-only due.
+  string due_time = 25;
+  // Civil days from today to the due day; absent when undated.
+  optional sint32 days_from_today = 26;
+  // The due day is before today.
+  bool overdue = 27;
+  // The due day is today or before — what Today draws.
+  bool lands_today = 28;
+  // When the reminder fires, `YYYY-MM-DDTHH:MM`; empty with no lead time, and
+  // for a date-only due, which has no moment to count back from.
+  string remind_at_local = 29;
+  // The local day `completed_at` falls on; empty when there is none.
+  string completed_day = 30;
+  // Civil days since `created_at` — the "sitting since" signal.
+  optional sint32 age_days = 31;
+
+  // --- the decorations -----------------------------------------------------
+  repeated TasksTag tags = 32;
+  repeated TasksAttachment attachments = 33;
+  repeated TasksReference references = 34;
+  // A root's family, in the open board's order. On the open board: every
+  // child. In the logbook: only the closed ones, so no row is drawn twice.
+  repeated TasksTask children = 35;
+  // How many of `children` are closed.
+  uint32 done_children = 36;
+  // `tasks.search` only: the index's excerpt, hits wrapped in ⟦ ⟧.
+  optional string snippet = 37;
+  // The stored RFC 5545 rule, verbatim; absent on a one-off. For the editor's
+  // repeat picker ONLY — to pre-select a preset and send the rule back
+  // through `schedule.edit_task`. A shell never expands, summarises or dates
+  // from it: `recurrence_summary`, `next_due` and `missed` are those answers
+  // (#834's rule, which this field does not relax).
+  optional string rrule = 38;
+}
+
+message TasksTag {
+  string tag_id = 1;
+  string concept_id = 2;
+  // The concept's label, or `?` when the concept row is gone.
+  string label = 3;
+}
+
+message TasksAttachment {
+  string attachment_id = 1;
+  string content_id = 2;
+  optional string role = 3;
+  bool is_primary = 4;
+  string media_type = 5;
+  string content_uri = 6;
+  int64 byte_size = 7;
+}
+
+// An `@`-mention, resolved through a live link and its anchor. The entity
+// card is not resolved here; a shell draws the target by type and id.
+message TasksReference {
+  string link_id = 1;
+  string to_type = 2;
+  string to_id = 3;
+}
+
+message TasksProject {
+  string project_id = 1;
+  string name = 2;
+  optional string area = 3;
+  optional string color = 4;
+  int64 sort_order = 5;
+  // Open ROOTS filed here, in the board window read.
+  uint32 open_count = 6;
+}
+
+message TasksSection {
+  string section_id = 1;
+  string project_id = 2;
+  string name = 3;
+  int64 sort_order = 4;
+  uint32 open_count = 5;
+}
+
+// A tag chip for the rail: every concept any fetched task is tagged with.
+message TasksTagChip {
+  string concept_id = 1;
+  string label = 2;
+}
+
+enum TasksGroupKind {
+  TASKS_GROUP_KIND_UNSPECIFIED = 0;
+  TASKS_GROUP_KIND_OVERDUE = 1;
+  TASKS_GROUP_KIND_TODAY = 2;
+  // One civil day of Upcoming; `TasksGroup.day` names it.
+  TASKS_GROUP_KIND_DAY = 3;
+  TASKS_GROUP_KIND_INBOX = 4;
+  // One project in Anytime; `TasksGroup.project_id` names it.
+  TASKS_GROUP_KIND_PROJECT = 5;
+  TASKS_GROUP_KIND_DATED = 6;
+  TASKS_GROUP_KIND_UNDATED = 7;
+  TASKS_GROUP_KIND_DONE = 8;
+  TASKS_GROUP_KIND_WONT_DO = 9;
+  TASKS_GROUP_KIND_REMINDERS = 10;
+  // One section of a project; `TasksGroup.section_id` names it.
+  TASKS_GROUP_KIND_SECTION = 11;
+  // A project's work in no section.
+  TASKS_GROUP_KIND_UNSECTIONED = 12;
+}
+
+// One group on a place. The shell owns the words: `kind` is the fact, and
+// `day`, `project_id` and `section_id` are what a header names.
+message TasksGroup {
+  TasksGroupKind kind = 1;
+  // Stable across answers, for a list's item keys.
+  string key = 2;
+  string day = 3;
+  optional string project_id = 4;
+  optional string section_id = 5;
+  // ROOTS, each with its family in `children`.
+  repeated TasksTask tasks = 6;
+}
+
+// The numbers a band, a tile or a notice says — over the open ROOTS the window
+// fetched. Overdue, today, upcoming and anytime partition them.
+message TasksCounts {
+  uint32 overdue = 1;
+  uint32 today = 2;
+  uint32 upcoming = 3;
+  uint32 anytime = 4;
+  uint32 inbox = 5;
+  uint32 reminders = 6;
+  // Every open task and every closed one FETCHED, children included — what
+  // was read, not what the table holds.
+  uint32 open = 7;
+  uint32 closed = 8;
+}
+
+// ---------------------------------------------------------------------------
+// The answers.
+// ---------------------------------------------------------------------------
+
+message TasksBoard {
+  // The device's today, `YYYY-MM-DD`, and its wall clock, `YYYY-MM-DDTHH:MM`.
+  string today = 1;
+  string now_local = 2;
+  // The place asked for, echoed.
+  TasksView view = 3;
+  repeated TasksGroup groups = 4;
+  TasksCounts counts = 5;
+  repeated TasksProject projects = 6;
+  repeated TasksSection sections = 7;
+  repeated TasksTagChip tags = 8;
+  // THE OPEN PAGE'S OWN CURSOR: the window filled and more open work exists.
+  bool truncated = 9;
+  // The window actually read, after the clamp.
+  uint32 window = 10;
+}
+
+message TasksTaskDetail {
+  string today = 1;
+  string now_local = 2;
+  // ABSENT WHEN NO LIVE TASK HAS THE ID — never created, purged, or in the
+  // trash. A state the detail screen draws, not an error.
+  optional TasksTask task = 3;
+  // The parent, when the task is a subtask and the parent is live.
+  optional TasksTask parent = 4;
+  // The task's project and section, when it is filed in a live one.
+  optional TasksProject project = 5;
+  optional TasksSection section = 6;
+}
+
+message TasksProjects {
+  repeated TasksProject projects = 1;
+  repeated TasksSection sections = 2;
+  // Open roots filed in no project.
+  uint32 inbox_count = 3;
+}
+
+message TasksSearch {
+  string today = 1;
+  string now_local = 2;
+  // In the index's rank order, best first.
+  repeated TasksTask tasks = 3;
+}
+
+message TasksCatchUp {
+  string today = 1;
+  string now_local = 2;
+  // One-off work whose due day has passed.
+  repeated TasksTask dated = 3;
+  // Repeating work that is BEHIND: a missed period, or due before today.
+  repeated TasksTask repeating = 4;
+  // Undated work that has sat 90 days or more.
+  repeated TasksTask sitting = 5;
+  // Civil days since the oldest overdue due day; zero is not away.
+  uint32 away_days = 6;
+  uint32 overdue = 7;
+  // Away a week or more with something overdue: the one moment the screen
+  // names the time away.
+  bool absent = 8;
+}

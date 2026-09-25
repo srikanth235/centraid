@@ -79,6 +79,13 @@ public object PhotosCollectionsReads :
     public const val TABLE: String = "core_collection"
 
     /**
+     * `core_collection.kind` for an album (rung six). The table holds Notes'
+     * notebooks too, and every album read in this app binds this — the vault's
+     * own word, spelled once.
+     */
+    public const val ALBUM_KIND: String = "album"
+
+    /**
      * Albums are "owner-curated and small" (`crates/apps/photos`' own
      * `albums_statement`), and this is a list of named rows rather than a
      * mosaic — a member reads them, they do not flick past them.
@@ -125,15 +132,17 @@ public object PhotosCollectionsReads :
      * this screen that is NOT nullable, which is what makes it the one read
      * here that can honestly be walked for a second page.
      *
-     * **NO PREDICATE, and that is the desktop's own choice.** A collection is
-     * an album on this surface, and a `parent_collection_id IS NULL` filter
-     * invented here would silently hide whatever another app had nested — a
-     * decision belonging to the app that nested it, not to a shell's statement.
+     * **`kind = 'album'` AND NOTHING ELSE**, as the desktop's statement does.
+     * `core_collection` holds Notes' notebooks too, and the vault says which a
+     * row is (rung six) — so no shape heuristic (a parent, an entry type) is
+     * invented here to guess at it.
      */
     public fun albumsQuery(): PageQuery = PageQuery(
         name = "photos.collections.albums",
         select = listOf("collection_id", "name", "cover_content_id"),
         from = TABLE,
+        where_ = "kind = ?",
+        bind = listOf(Value(text = ALBUM_KIND)),
         order = PageOrder(sort_column = "collection_id", pk_column = "collection_id"),
     )
 

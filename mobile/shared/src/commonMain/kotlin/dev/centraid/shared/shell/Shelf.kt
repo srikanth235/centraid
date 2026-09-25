@@ -804,10 +804,8 @@ public class Shelf(
          *
          * The make-vault sheet on both shells is a button and no text field, so
          * the found has to carry a string and this is it. It lives here rather
-         * than in `CentraidCopy` because that table is GENERATED from `copy/`
-         * and hand-editing it is what the mobile-jvm gate's clean-tree
-         * assertion refuses; a name a member can change from inside the vault
-         * is also not app copy in the sense that table holds.
+         * than in `design/copy` because a name a member can change from
+         * inside the vault is not app copy in the sense that table holds.
          *
          * **A DEFAULT AND NOT A PLACEHOLDER.** It is written to
          * `core_vault.display_name`, the one place a vault's name lives, so a

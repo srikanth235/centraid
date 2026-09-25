@@ -83,6 +83,16 @@ enum ErrorCode {
   // keeps it. A `VaultMoved` (`lease.proto`) rides with this code.
   ERROR_CODE_VAULT_MOVED = 25;
 
+  // A READ REACHED ITS OWN STATED CEILING (#1046).
+  //
+  // An app query walks its joins to a bound it declares, and expands a series
+  // to a bound it declares, and stops with THIS rather than answering what it
+  // had: a short agenda that reads as a whole one is the truncation flag again
+  // (D-1020-D3-12). Not `INVALID_REQUEST` — nothing about the request was wrong
+  // — and not `INTERNAL`, whose remedy is a restart that cannot help. The
+  // remedy is a narrower range, which is the shell's to offer.
+  ERROR_CODE_READ_BOUND_REACHED = 26;
+
   // --- intents and commands ---
   // The submitted `payload_hash` does not match the input.
   ERROR_CODE_INTENT_HASH_MISMATCH = 40;

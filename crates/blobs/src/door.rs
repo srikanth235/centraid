@@ -66,6 +66,14 @@ impl ContentBytes {
         &self.store
     }
 
+    /// Close the store from a synchronous caller: [`ByteStore::close`], driven
+    /// the way every verb here is. When this returns the store's index is
+    /// unlocked and the directory can be opened again; every clone of this
+    /// door is a closed store afterwards, so only its owner calls it, last.
+    pub fn close(&self) {
+        self.blocking(|store| Box::pin(store.clone().close()));
+    }
+
     /// Drive one future to completion from a synchronous caller. See the
     /// module header for why this is a thread and not `block_on` in place.
     fn blocking<T: Send, F>(&self, work: F) -> T

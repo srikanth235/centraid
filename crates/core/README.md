@@ -1,6 +1,6 @@
 # `centraid-core`
 
-The message loop: one handle, four entry points, three roles ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+The message loop: one handle, four entry points, one role ([#1020](https://github.com/srikanth235/centraid/issues/1020), [#1029](https://github.com/srikanth235/centraid/issues/1029)).
 
 Everything a shell can ask for goes through `call` and everything the core volunteers comes back through `next_event`. There is no third surface, and that is the point: a shell that could reach the vault directly would be a second gateway.
 
@@ -13,6 +13,8 @@ Everything a shell can ask for goes through `call` and everything the core volun
 | `handle.next_event(timeout)` | blocks on a **bounded** queue (`EVENT_QUEUE_CAP = 1024`). `Ok(None)` is a timeout, not an error. |
 | `handle.close()` | unblocks every waiter with `CoreError::Closed`, then releases. Idempotent. Calls afterwards are typed errors. |
 
+**Dropping a `Handle` closes the byte store it owns** (`impl Drop for Handle`): a store that is dropped rather than closed keeps `<vault>.bytes/blobs.db` locked for the life of the process, and the next open of that vault in the same process hangs inside `centraid_open` — [docs/traps/byte-store-lock.md](../../docs/traps/byte-store-lock.md), proven at the C boundary by `crates/core-ffi/tests/reopen.rs` ([#1047](https://github.com/srikanth235/centraid/issues/1047)).
+
 Plus `handle.cancel(request_id)`: cancels an in-flight **unbounded** operation. A bounded read is refused rather than cancelled, and the refusal is typed — bounded reads hold a SQLite read transaction, and cancelling one leaves it to be rolled back by a dropped future.
 
 ## The event queue
@@ -23,21 +25,33 @@ Change events **coalesce** per `(table, pk)` set while they wait, and the coales
 
 A stall that happens with the queue full of change events is **reported late**, on the first slot a drain frees, rather than by dropping a change event to make room. Without that the shell would learn a stall ended without ever learning it began.
 
-## The three roles
+## One role
 
-| Role | What it is |
-| --- | --- |
-| `Gateway` | the authority: the vault, the doors, the endpoint accepting seats |
-| `Seat { Replicated }` | a full mirror: `crates/seat`'s applier over a local file, its own outbox |
-| `Seat { Thin }` | no local rows. Every call is forwarded to the gateway **under the caller's principal**, and `Unavailable` when it cannot be reached. A thin seat is a pipe, not a deputy. |
-
-All three expose the same `Request` surface, which is what makes "gateway anywhere" a deployment choice rather than a fork.
+`Role` is deleted ([#1029](https://github.com/srikanth235/centraid/issues/1029) §1): the phone is the only host that opens a vault, so the `Gateway`, `Seat { Replicated }` and `Seat { Thin }` roles collapsed into one and the enum went with them — see the module docs in `lib.rs`.
 
 ## The `VaultApi` verbs
 
 `api.rs` holds eight verbs and the honest state of each. A stub is a **typed refusal**, never an empty answer: an empty page reads as "no data" and the truth is "this build cannot answer yet".
 
 `page` `invoke` `describe` `parked` are live. `search`, `resolve` and `content` are typed `NotYetAvailable` refusals in this module (content addresses are minted by `content_urls` instead). `reveal` is **online-only, always** — a mass reveal must never be queued, replayed or answered from a durable store.
+
+## App queries
+
+`Request::AppQuery` runs a registered app query in the core and answers a typed message ([#1046](https://github.com/srikanth235/centraid/issues/1046), [#1047](https://github.com/srikanth235/centraid/issues/1047)). The request and the answer are oneofs in `app_query.proto`, one arm per query at the **same number in both**, each app in its own range; each answer message is in the app's own `<app>.proto`:
+
+| Range | App | Arms | Where |
+| --- | --- | --- | --- |
+| 1–9 | Agenda | `upcoming`, `day_context`, `parties`, `search`, `event` | `app_query.rs` |
+| 10–19 | Tasks | `board`, `task`, `projects`, `search`, `catch_up` | `app_query/tasks.rs` |
+| 15 | — | `denied`, in the answer only; no query takes it | |
+| 20–29 | People | `roster`, `touch`, `person`, `search`, `trash` | `app_query/people.rs` |
+| 30–39 | Docs | `drive`, `search`, `document`, `activity` | `app_query/docs.rs` |
+| 40–49 | Notes | `library`, `notebooks`, `journal`, `search`, `trash`, `history`, `link_targets`, `note` | `app_query/notes.rs` |
+| 50–59 | Tally | `dashboard`, `group`, `friend`, `expense`, `settle_up`, `recurring`, `spending`, `search`, `trash`, `export` | `app_query/tally.rs` |
+
+A new query is a new arm inside its app's range, appended ([R-1047-Q1](../../docs/decisions.md#the-app-ports-and-the-shell-kit-1047)).
+
+`app_query.rs` holds the door (`VaultDoor`, the app kit's `PageDoor` over `Vault::keyset_page` — the page door's own call — plus the kit's grammar), the dispatch, and Agenda's conversion; each other app's module converts its crate's rows to its answer. `app_query/docs.rs` also adds the size phrase and whether the head's bytes are on this device (`Vault::content_location`). A denial is an arm of the answer; a vault failure the door saw is answered as itself and never as a denial; a read that reaches its own stated ceiling is `CoreError::ReadBoundReached` (`ERROR_CODE_READ_BOUND_REACHED`). Search arms reach `crates/search`'s FTS door over `Vault::read`'s connection, so the core writes no SQL for them. Each query answers its civil readings — an occurrence's local wall clock and days, today, now, a row's local day — in the request's `tz`, else the vault's own zone (`Vault::time_zone`), else refuses with `InvalidRequest`; never the host's clock and never UTC by default.
 
 ## One mutex over the vault (D-1020-D2-9)
 

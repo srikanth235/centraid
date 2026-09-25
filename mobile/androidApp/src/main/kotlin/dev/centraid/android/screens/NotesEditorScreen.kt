@@ -1,95 +1,176 @@
 package dev.centraid.android.screens
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.Autosave
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
+import dev.centraid.android.kit.EditableFieldRow
+import dev.centraid.android.kit.EditorRoom
+import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KitWords
+import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.ReadStateView
+import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.RowSkeleton
+import dev.centraid.android.kit.SheetOption
+import dev.centraid.android.kit.StatusLine
+import dev.centraid.android.kit.screenContentOf
+import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidType
 
 /**
- * The Notes editor (#1020, D-1020-E3).
+ * The Notes editor (#1020, D-1020-E3; #1029 port), in the kit's `EditorRoom`.
  *
- * The read law and the write law render in different places, which is the
- * whole shape of this screen: `content` decides whether there is an editor at
- * all, and `save` decides what the save line says over it. A refused save
- * leaves the member's words exactly where they were.
+ * AUTOSAVE, CLOSE = DONE (#1015 D3). There is no Save button: the machine
+ * saves after the last keystroke, a pin saves at once, and leaving by any
+ * road runs [onDeparted] — the bridge's `departed()` — which saves what is
+ * unsaved. The close key's word ("Cancel" before a keystroke, "Done" after)
+ * and the status line are the machine's `chrome`.
+ *
+ * A NEW NOTE (`is_new`) opens empty and is created on its first save. A body
+ * that is not on this device is read-only under `body_notice`. Pin, Link,
+ * History and Send to Tasks sit behind the one menu key (`menu_label`), as on
+ * iOS; History and Send to Tasks are intents for the route. `[[` typed in the
+ * body opens the link sheet on the machine's own say (`link_sheet_open`).
+ *
+ * THE WORDS ARE LOCAL WHILE THEY ARE TYPED (`rememberEditorText`): each field
+ * takes the machine's value back only on the vault's baseline while CLEAN —
+ * or, for the body, when the link sheet closes, because a pick splices
+ * `[[title]]` into the draft the machine holds.
  */
 @Composable
 public fun NotesEditorScreen(
     state: NotesEditorState,
     onEvent: (NotesEditorEvent) -> Unit,
+    onClose: () -> Unit,
+    onDeparted: () -> Unit,
 ) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        // A WIRE PROPERTY IS CROSS-MODULE PUBLIC API, so Kotlin will not smart-cast
-        // it after a null check. Binding each arm's value to a local first is
-        // what makes the branches type-check, and it is the shape every screen
-        // in this module uses.
-        val loading = state.loading
-        val failure = state.failure
-        val draft = state.draft
-        when {
-            loading != null -> CircularProgressIndicator()
-
-            failure != null -> Column {
-                Text(text = failure.sentence)
-                if (failure.remedy.isNotEmpty()) Text(text = failure.remedy)
+    val draft = state.draft
+    val chrome = state.chrome
+    val clean = state.autosave?.phase == Autosave.Phase.PHASE_CLEAN
+    val reload = if (clean) Pair(state.note_id, state.baseline) else null
+    // THE SPLICE SIGNAL: each time the link sheet closes, the body takes the
+    // machine's value once (a pick wrote `[[title]]` into it there).
+    val linkCloses = remember(state.note_id) { mutableIntStateOf(0) }
+    val wasOpen = remember(state.note_id) { booleanArrayOf(false) }
+    LaunchedEffect(state.link_sheet_open) {
+        if (wasOpen[0] && !state.link_sheet_open) linkCloses.intValue += 1
+        wasOpen[0] = state.link_sheet_open
+    }
+    val bodyReload: Any? = reload ?: linkCloses.intValue.takeIf { it > 0 }?.let { Pair(state.note_id, it) }
+    // THE MENU IS A PLAIN LIST OF THE MACHINE'S VERBS: nothing in it is a
+    // choice the machine holds, so its open/closed is this screen's alone.
+    var menuOpen by remember(state.note_id) { mutableStateOf(false) }
+    EditorRoom(
+        title = chrome?.title?.ifEmpty { null } ?: draft?.title.orEmpty(),
+        // THE MACHINE'S STATUS is drawn under the header instead of the kit's
+        // autosave words, so the sentence is the one the machine chose.
+        status = null,
+        closeLabel = chrome?.close?.takeIf { it.isNotEmpty() } ?: KitWords.DONE,
+        onClose = onClose,
+        onDeparted = onDeparted,
+        trailing = if (draft != null && chrome != null) {
+            RoomAction(iconKey = "MoreHoriz", label = chrome.menu_label.ifEmpty { chrome.pin_label }, testTag = "notes-menu") {
+                menuOpen = true
             }
-
-            draft != null -> {
-                Row {
-                    Text(text = saveLabel(state))
-                    IconButton(
-                        onClick = { onEvent(NotesEditorEvent(pin = NotesEditorEvent.PinToggled())) },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Star,
-                            contentDescription = if (draft.pinned) "Unpin note" else "Pin note",
-                        )
-                    }
-                    TextButton(
-                        onClick = { onEvent(NotesEditorEvent(save = NotesEditorEvent.SaveRequested())) },
-                    ) { Text(text = "Save") }
+        } else {
+            null
+        },
+    ) {
+        StatusLine(chrome?.status.orEmpty())
+        ReadStateView(
+            content = screenContentOf(state.loading, state.failure, draft),
+            // No member-sent re-read exists on this machine: re-opening the
+            // note is the retry.
+            onRetry = null,
+            skeleton = { RowSkeleton(rows = 4, meta = false) },
+        ) { note ->
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                EditableFieldRow(
+                    key = "",
+                    value = note.title,
+                    reload = reload,
+                    placeholder = chrome?.title_placeholder.orEmpty(),
+                    style = "title",
+                    testTag = "notes-title",
+                    onEdit = { value -> onEvent(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(value))) },
+                )
+                if (state.body_notice.isNotEmpty()) {
+                    Text(
+                        state.body_notice,
+                        style = centraidType("annotLabel"),
+                        color = centraidColor("textSoft"),
+                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag("notes-body-notice"),
+                    )
                 }
-                TextField(
-                    value = draft.title,
-                    onValueChange = { value ->
-                        onEvent(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(value)))
-                    },
-                    label = { Text(text = "Title") },
-                )
-                TextField(
-                    value = draft.body,
-                    onValueChange = { value ->
-                        onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value)))
-                    },
-                    label = { Text(text = "Note") },
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                // THE SAVE'S OWN SENTENCE, over the words and not instead of
-                // them.
-                draft.save_failure?.let { failure -> Text(text = failure.sentence) }
+                if (state.body_editable) {
+                    EditableFieldRow(
+                        key = "",
+                        value = note.body,
+                        reload = bodyReload,
+                        placeholder = chrome?.body_placeholder.orEmpty(),
+                        style = "reading",
+                        singleLine = false,
+                        testTag = "notes-body",
+                        modifier = Modifier.padding(top = 4.dp),
+                        onEdit = { value -> onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value))) },
+                    )
+                } else if (note.body.isNotEmpty()) {
+                    Text(
+                        note.body,
+                        style = centraidType("reading"),
+                        color = centraidColor("textSoft"),
+                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp).testTag("notes-body"),
+                    )
+                }
             }
         }
     }
+    if (menuOpen && chrome != null && draft != null) {
+        val options = buildList {
+            add(SheetOption(key = MENU_PIN, label = chrome.pin_label))
+            if (state.body_editable) add(SheetOption(key = MENU_LINK, label = chrome.link_label))
+            if (chrome.history_enabled) add(SheetOption(key = MENU_HISTORY, label = chrome.history_label))
+            if (chrome.send_to_tasks_label.isNotEmpty()) {
+                add(SheetOption(key = MENU_SEND, label = chrome.send_to_tasks_label))
+            }
+        }.filter { it.label.isNotEmpty() }
+        OptionSheet(
+            title = chrome.menu_label,
+            options = options,
+            onPick = { key ->
+                menuOpen = false
+                when (key) {
+                    MENU_PIN -> onEvent(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
+                    MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested(caret = draft.body.length)))
+                    MENU_HISTORY -> onEvent(NotesEditorEvent(history = NotesEditorEvent.HistoryRequested()))
+                    // The note's title, else its body — iOS sends the same.
+                    MENU_SEND -> onEvent(
+                        NotesEditorEvent(send_to_tasks = NotesEditorEvent.SendToTasks(text = draft.title.ifEmpty { draft.body })),
+                    )
+                }
+            },
+            onDismiss = { menuOpen = false },
+        )
+    }
 }
 
-private fun saveLabel(state: NotesEditorState): String = when (state.save) {
-    NotesEditorState.SaveState.SAVE_STATE_CLEAN -> "Saved"
-    NotesEditorState.SaveState.SAVE_STATE_DIRTY -> "Not saved yet"
-    NotesEditorState.SaveState.SAVE_STATE_SAVING -> "Saving"
-    // QUEUED IS NOT SAVED, and it is not failed either.
-    NotesEditorState.SaveState.SAVE_STATE_QUEUED -> "Saved on this device"
-    NotesEditorState.SaveState.SAVE_STATE_REFUSED -> "Could not save"
-    NotesEditorState.SaveState.SAVE_STATE_UNSPECIFIED -> ""
-}
+private const val MENU_PIN = "pin"
+private const val MENU_LINK = "link"
+private const val MENU_HISTORY = "history"
+private const val MENU_SEND = "send-to-tasks"

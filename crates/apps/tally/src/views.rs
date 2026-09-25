@@ -138,7 +138,7 @@ fn person_json(person: &Person, amount_key: &str, amount: i64) -> Value {
 /// when they only owe a share, and `none` when the expense is not theirs at all
 /// — and in that last case the figure is the WHOLE amount, because there is no
 /// share of it to name (`queries/dashboard.ts:778-790`).
-fn owner_stance(data: &TallyData, expense: &ExpenseRow) -> (&'static str, i64) {
+pub(crate) fn owner_stance(data: &TallyData, expense: &ExpenseRow) -> (&'static str, i64) {
     let my_share = data
         .me
         .as_deref()
@@ -169,7 +169,10 @@ fn owner_stance(data: &TallyData, expense: &ExpenseRow) -> (&'static str, i64) {
     }
 }
 
-fn balance_expense(data: &TallyData, expense: &ExpenseRow) -> crate::balance::BalanceExpense {
+pub(crate) fn balance_expense(
+    data: &TallyData,
+    expense: &ExpenseRow,
+) -> crate::balance::BalanceExpense {
     crate::balance::BalanceExpense {
         group_id: expense.group_id.clone(),
         paid_by: expense.paid_by.clone(),

@@ -1507,3 +1507,179 @@ fn only_a_draft_sends_and_sending_is_the_one_command_that_parks_a_non_owner() {
         Some("2099-06-01T10:00:00.000Z".to_owned())
     );
 }
+
+/// TWO PROFILES FOLD INTO ONE, AND NEITHER SIDE'S FACTS ARE LOST.
+/// `people_profile.party_id` is UNIQUE, so re-pointing the loser's row would
+/// collide; the fold merges the two rows instead. The nickname only the loser
+/// carried survives, and a live person folded into a trashed one leaves the
+/// survivor LIVE — a merge never sends somebody the owner can see to the trash.
+#[test]
+fn merging_two_people_with_profiles_folds_the_nickname_and_keeps_the_live_one_live() {
+    let circle = Circle::open("merge-profiles");
+    let survivor = circle.person("Ray", 0);
+    let merged = circle.person("Grandpa Ray", 14);
+    circle.run(
+        "people.edit_person",
+        json!({ "party_id": merged, "nickname": "Pops" }),
+    );
+    circle.run("people.trash_person", json!({ "party_id": survivor }));
+    circle.run(
+        "core.merge_party",
+        json!({ "survivor_party_id": survivor, "merged_party_id": merged }),
+    );
+    assert_eq!(circle.count("SELECT COUNT(*) FROM people_profile"), 1);
+    assert_eq!(
+        circle
+            .text(&format!(
+                "SELECT nickname FROM people_profile WHERE party_id = '{survivor}'"
+            ))
+            .as_deref(),
+        Some("Pops")
+    );
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM people_profile
+              WHERE party_id = '{survivor}' AND deleted_at IS NULL AND purge_at IS NULL
+                AND cadence_days = 14"
+        )),
+        1,
+        "the folded person is live, with the real cadence"
+    );
+}
+
+/// EMPTYING PEOPLE'S TRASH DESTROYS THE PERSON (#1015 D1). A trashed person
+/// with notes, an interaction, a gift, a birthday, a star, a list and a
+/// channel is purged whole: the party, the profile, every owned child, every
+/// polymorphic row about them, and the revisions that snapshot them. A task
+/// about them survives as the member's own work, unlinked.
+#[test]
+fn purging_a_trashed_person_destroys_the_party_and_everything_people_owns_of_them() {
+    let circle = Circle::open("people-purge");
+    let maya = circle.person("Maya", 14);
+    circle.run(
+        "people.log_interaction",
+        json!({ "party_id": maya, "kind": "Call", "text": "Chat" }),
+    );
+    circle.run(
+        "people.add_note",
+        json!({ "party_id": maya, "text": "Likes figs" }),
+    );
+    let task = circle.run(
+        "people.add_task",
+        json!({ "party_id": maya, "text": "Call back" }),
+    )["task_id"]
+        .as_str()
+        .expect("a task id")
+        .to_owned();
+    circle.run(
+        "people.add_gift",
+        json!({ "party_id": maya, "text": "Figs" }),
+    );
+    circle.run(
+        "people.add_important_date",
+        json!({ "party_id": maya, "label": "Birthday", "month_day": "08-14" }),
+    );
+    circle.run("people.star_person", json!({ "party_id": maya }));
+    circle.run(
+        "people.save_contact_channel",
+        json!({ "party_id": maya, "kind": "email", "value": "maya@example.com" }),
+    );
+
+    // A LIVE PERSON IS NOT PURGED: trash first.
+    let live = circle.try_run("people.purge_person", json!({ "party_id": maya }));
+    assert_eq!(live.predicate.as_deref(), Some("person_trashed"));
+
+    circle.run("people.trash_person", json!({ "party_id": maya }));
+    circle.run("people.purge_person", json!({ "party_id": maya }));
+
+    for (sql, what) in [
+        (
+            "SELECT COUNT(*) FROM core_party WHERE party_id = '{p}'",
+            "the party",
+        ),
+        (
+            "SELECT COUNT(*) FROM core_entity WHERE entity_id = '{p}'",
+            "the entity",
+        ),
+        (
+            "SELECT COUNT(*) FROM people_profile WHERE party_id = '{p}'",
+            "the profile",
+        ),
+        (
+            "SELECT COUNT(*) FROM people_important_date WHERE party_id = '{p}'",
+            "the dates",
+        ),
+        (
+            "SELECT COUNT(*) FROM social_contact_channel WHERE party_id = '{p}'",
+            "the channels",
+        ),
+        (
+            "SELECT COUNT(*) FROM core_tag WHERE target_id = '{p}'",
+            "the star",
+        ),
+        (
+            "SELECT COUNT(*) FROM knowledge_annotation WHERE target_id = '{p}'",
+            "the notes",
+        ),
+        (
+            "SELECT COUNT(*) FROM core_link WHERE to_id = '{p}' OR from_id = '{p}'",
+            "the links",
+        ),
+        (
+            "SELECT COUNT(*) FROM core_entity_revision WHERE entity_id = '{p}'",
+            "the snapshots",
+        ),
+        ("SELECT COUNT(*) FROM core_activity", "the interaction"),
+        (
+            "SELECT COUNT(*) FROM schedule_task WHERE title = 'Figs'",
+            "the gift",
+        ),
+    ] {
+        assert_eq!(
+            circle.count(&sql.replace("{p}", &maya)),
+            0,
+            "{what} survived"
+        );
+    }
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM schedule_task WHERE task_id = '{task}'"
+        )),
+        1,
+        "a task is the member's own work"
+    );
+}
+
+/// MONEY REFUSES THE PURGE (vault-ontology "a person can be purged … and money
+/// and authority refuse it while they still name them"): a debt is a durable
+/// record, so the person stays in the trash with a sentence saying why.
+#[test]
+fn a_person_money_still_names_is_refused_the_purge() {
+    let circle = Circle::open("people-purge-money");
+    let ray = circle.person("Ray", 0);
+    circle.run(
+        "people.add_debt",
+        json!({ "party_id": ray, "direction": "owe", "amount_minor": 900 }),
+    );
+    circle.run("people.trash_person", json!({ "party_id": ray }));
+    let refused = circle.try_run("people.purge_person", json!({ "party_id": ray }));
+    assert_eq!(
+        refused.predicate.as_deref(),
+        Some("no_durable_record_names_them")
+    );
+    assert!(
+        refused
+            .reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("tally_obligation"),
+        "{:?}",
+        refused.reason
+    );
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM core_party WHERE party_id = '{ray}'"
+        )),
+        1
+    );
+}

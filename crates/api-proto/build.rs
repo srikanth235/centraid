@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 18] = [
+const PROTOS: [&str; 25] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -50,6 +50,22 @@ const PROTOS: [&str; 18] = [
     // the photos port). Its own file for `phone.proto`'s reason: the keep list
     // is a fact about the phone's disk and cannot be a registered command.
     "proto/centraid/core/v1/originals.proto",
+    // An app's own query, run in the core, and Agenda's four answers (#1046).
+    // Two files because the arm is the plane's and the answers are the app's:
+    // the next app's queries arrive as its own file and one more arm, and
+    // `app_query.proto` is the one both envelopes import.
+    "proto/centraid/core/v1/agenda.proto",
+    // People's five answers (#1046), the same shape as Agenda's.
+    "proto/centraid/core/v1/people.proto",
+    // Notes' eight answers (#1046), the same shape as Agenda's.
+    "proto/centraid/core/v1/notes.proto",
+    // Docs' four answers (#1046), the same shape as Agenda's.
+    "proto/centraid/core/v1/docs.proto",
+    // Tally's ten answers (#1046), the same shape as Agenda's.
+    "proto/centraid/core/v1/tally.proto",
+    // Tasks' five answers (#1046), the same shape as Agenda's.
+    "proto/centraid/core/v1/tasks.proto",
+    "proto/centraid/core/v1/app_query.proto",
     "proto/centraid/screen/v1/screen.proto",
 ];
 
@@ -66,6 +82,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out: PathBuf = std::env::var("OUT_DIR")?.into();
     prost_build::Config::new()
         .out_dir(&out)
+        // Boxed where one oneof arm dwarfs its siblings, so a small message
+        // does not carry the largest arm's size inline (`large_enum_variant`).
+        .boxed(".centraid.screen.v1.PhotoLightboxState.content.detail")
+        .boxed(".centraid.screen.v1.PhotoLightboxEvent.kind.data")
+        // Every app screen's `data` arm: the answer is the whole screen, and
+        // its siblings (loading, empty, refused) are a line or two each.
+        .boxed(".centraid.screen.v1.AgendaEventState.content.data")
+        .boxed(".centraid.screen.v1.AgendaEditorState.content.data")
+        .boxed(".centraid.screen.v1.PeopleHomeData.surface.touch")
+        .boxed(".centraid.screen.v1.PeopleHomeState.content.data")
+        .boxed(".centraid.screen.v1.PeopleHomeEvent.kind.data")
+        .boxed(".centraid.screen.v1.PeoplePersonState.content.data")
+        .boxed(".centraid.screen.v1.PeoplePersonEvent.kind.data")
+        .boxed(".centraid.screen.v1.TasksDetailState.content.data")
+        .boxed(".centraid.screen.v1.DocsDriveEvent.kind.data")
+        .boxed(".centraid.screen.v1.DocsDocumentState.content.data")
+        .boxed(".centraid.screen.v1.DocsDocumentEvent.kind.data")
+        .boxed(".centraid.screen.v1.TallyHomeState.content.data")
+        .boxed(".centraid.screen.v1.TallyGroupState.content.data")
+        .boxed(".centraid.screen.v1.TallyFriendState.content.data")
+        .boxed(".centraid.screen.v1.TallyExpenseState.content.data")
+        .boxed(".centraid.screen.v1.TallyEditorState.content.data")
+        .boxed(".centraid.core.v1.Response.kind.app_query")
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.tasks_task")
         .compile_fds(descriptors)?;
     Ok(())
 }

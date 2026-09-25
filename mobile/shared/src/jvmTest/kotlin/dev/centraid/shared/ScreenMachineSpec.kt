@@ -8,20 +8,20 @@ import centraid.screen.v1.MediaPermission
 import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
+import centraid.screen.v1.TrashListData
+import centraid.screen.v1.TrashListEvent
+import centraid.screen.v1.TrashRow
+import centraid.screen.v1.WriteSettled
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
-import centraid.screen.v1.SeatState
-import centraid.screen.v1.TallyListData
-import centraid.screen.v1.TallyListEvent
-import centraid.screen.v1.TallyListState
-import centraid.screen.v1.TallyRow
 import centraid.screen.v1.TileCount
 import centraid.screen.v1.TileStatus
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.tally.TallyListMachine
+import dev.centraid.shared.apps.tasks.TasksTrashMachine
+import dev.centraid.shared.kit.TrashMachine
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
@@ -42,7 +42,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 
 /**
- * The three screens, as state machines (#1020, D-1020-E3).
+ * The first screens, as state machines (#1020, D-1020-E3) — a paged list
+ * (the kit's), the Photos grid, the Notes editor and the host.
  *
  * Every test here is `(state, event) -> (state, effects)` and nothing else: no
  * dispatcher, no clock, no core. That is the whole reason the screens are pure
@@ -50,151 +51,81 @@ import kotlinx.coroutines.withContext
  */
 class ScreenMachineSpec : StringSpec({
 
-    // --- Tally ------------------------------------------------------------
+    // --- A paged list (the kit's, as every app's trash draws it) ----------
 
-    "tally: a refused read clears the rows and is NOT an empty ledger" {
-        val loaded = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(data_ = TallyListEvent.DataArrived(TallyListData(rows = twoRows()))),
+    "a list: a refused read clears the rows and is NOT an empty list" {
+        val loaded = list.reduce(
+            list.initial(),
+            TrashListEvent(data_ = TrashListEvent.DataArrived(TrashListData(rows = twoRows()))),
         ).state
         loaded.data_.shouldNotBeNull().rows.size shouldBe 2
 
-        val refused = TallyListMachine.reduce(
+        val refused = list.reduce(
             loaded,
-            TallyListEvent(
-                refused = TallyListEvent.ReadRefused(Reads.refused("This is not shared with you.")),
-            ),
+            TrashListEvent(refused = TrashListEvent.ReadRefused(Reads.refused("This is not yours to read."))),
         )
         refused.state.data_.shouldBeNull()
-        refused.state.failure.shouldNotBeNull().sentence shouldBe "This is not shared with you."
+        refused.state.failure.shouldNotBeNull().sentence shouldBe "This is not yours to read."
         // AND NO RE-READ. A retry is a wake, not a reducer's reflex; a reducer
         // that re-read on its own refusal is the 1 s loop the low-disk park
         // exists to stop.
         refused.effects.shouldBeEmpty()
     }
 
-    "tally: an empty ledger is data with no rows, and the two are different states" {
-        val empty = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(data_ = TallyListEvent.DataArrived(TallyListData())),
+    "a list: an empty list is data with no rows, and the two are different states" {
+        val empty = list.reduce(
+            list.initial(),
+            TrashListEvent(data_ = TrashListEvent.DataArrived(TrashListData())),
         ).state
         empty.data_.shouldNotBeNull().rows.shouldBeEmpty()
         empty.failure.shouldBeNull()
 
-        val refused = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(refused = TallyListEvent.ReadRefused(Reads.refused("no"))),
+        val refused = list.reduce(
+            list.initial(),
+            TrashListEvent(refused = TrashListEvent.ReadRefused(Reads.refused("no"))),
         ).state
         (empty == refused).shouldBeFalse()
     }
 
-    "tally: a refresh over rows does not replace them with a spinner" {
-        val loaded = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(data_ = TallyListEvent.DataArrived(TallyListData(rows = twoRows()))),
+    "a list: a refresh over rows does not replace them with a spinner" {
+        val loaded = list.reduce(
+            list.initial(),
+            TrashListEvent(data_ = TrashListEvent.DataArrived(TrashListData(rows = twoRows()))),
         ).state
-        val refreshed = TallyListMachine.reduce(
-            loaded,
-            TallyListEvent(refreshed = TallyListEvent.Refreshed()),
-        )
+        val refreshed = list.reduce(loaded, TrashListEvent(refreshed = TrashListEvent.Refreshed()))
         refreshed.state.data_.shouldNotBeNull().rows.size shouldBe 2
         refreshed.state.loading.shouldBeNull()
-        refreshed.effects shouldBe listOf(
-            ScreenEffect.ReadPage(TallyListMachine.SCREEN_ID, afterCursor = null),
-        )
+        refreshed.effects shouldBe listOf(ScreenEffect.ReadPage(list.screenId, afterCursor = null))
     }
 
-    "tally: a refresh with nothing to refresh over IS a first load" {
-        val refreshed = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(refreshed = TallyListEvent.Refreshed()),
-        )
+    "a list: a refresh with nothing to refresh over IS a first load" {
+        val refreshed = list.reduce(list.initial(), TrashListEvent(refreshed = TrashListEvent.Refreshed()))
         refreshed.state.loading shouldBe Loading(first_load = true)
     }
 
-    "tally: a band destination changes a parameter, not the machine" {
-        val moved = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(
-                destination = TallyListEvent.DestinationChanged(
-                    TallyListState.Destination.DESTINATION_BALANCES,
-                ),
-            ),
-        )
-        moved.state.destination shouldBe TallyListState.Destination.DESTINATION_BALANCES
-        moved.effects.size shouldBe 1
-    }
-
-    "tally: a later page appends and never duplicates; a first page replaces" {
-        var state = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(
-                data_ = TallyListEvent.DataArrived(
-                    TallyListData(rows = twoRows(), next_cursor = "c1"),
-                ),
-            ),
+    "a list: a later page appends and never duplicates; a first load clears" {
+        var state = list.reduce(
+            list.initial(),
+            TrashListEvent(data_ = TrashListEvent.DataArrived(TrashListData(rows = twoRows(), next_cursor = "c1"))),
         ).state
         // The second page repeats one row, as a page boundary can.
-        state = TallyListMachine.reduce(
+        state = list.reduce(
             state,
-            TallyListEvent(
-                data_ = TallyListEvent.DataArrived(
-                    TallyListData(rows = listOf(twoRows()[1], row("exp-0003"))),
-                ),
-            ),
+            TrashListEvent(data_ = TrashListEvent.DataArrived(TrashListData(rows = listOf(twoRows()[1], row("t-0003"))))),
         ).state
-        state.data_.shouldNotBeNull().rows.map { it.expense_id } shouldBe
-            listOf("exp-0001", "exp-0002", "exp-0003")
+        state.data_.shouldNotBeNull().rows.map { it.id } shouldBe listOf("t-0001", "t-0002", "t-0003")
 
         // A first load clears, so the next page REPLACES rather than appending.
-        val reloaded = TallyListMachine.reduce(
-            state,
-            TallyListEvent(opened = TallyListEvent.Opened()),
-        ).state
-        reloaded.data_.shouldBeNull()
+        list.reduce(state, TrashListEvent(opened = TrashListEvent.Opened())).state.data_.shouldBeNull()
     }
 
-    "tally: a change event for rows this screen is not showing costs nothing" {
-        val loaded = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(data_ = TallyListEvent.DataArrived(TallyListData(rows = twoRows()))),
+    "a list: a change event for rows this screen is not showing costs nothing" {
+        val loaded = list.reduce(
+            list.initial(),
+            TrashListEvent(data_ = TrashListEvent.DataArrived(TrashListData(rows = twoRows()))),
         ).state
-        TallyListMachine.reduce(
-            loaded,
-            TallyListEvent(rows_changed = TallyListEvent.RowsChanged(listOf("exp-9999"))),
-        ).effects.shouldBeEmpty()
-        TallyListMachine.reduce(
-            loaded,
-            TallyListEvent(rows_changed = TallyListEvent.RowsChanged(listOf("exp-0002"))),
-        ).effects.size shouldBe 1
-    }
-
-    "tally: offline WITHHOLDS the recurring verb rather than queueing it" {
-        val offline = TallyListMachine.reduce(
-            TallyListMachine.initial(),
-            TallyListEvent(
-                seat_changed = TallyListEvent.SeatChanged(
-                    SeatState(durability = SeatState.Durability.DURABILITY_LOCAL_ONLY),
-                ),
-            ),
-        ).state
-        offline.recurring_materialisation_withheld.shouldBeTrue()
-
-        val online = TallyListMachine.reduce(
-            offline,
-            TallyListEvent(
-                seat_changed = TallyListEvent.SeatChanged(
-                    SeatState(durability = SeatState.Durability.DURABILITY_AUTHORITATIVE),
-                ),
-            ),
-        ).state
-        online.recurring_materialisation_withheld.shouldBeFalse()
-
-        // And the ask, when it comes, is an answer and not an enqueue.
-        val withheld = TallyListMachine.withhold()
-        (withheld is ScreenEffect.WithheldOffline).shouldBeTrue()
-        (withheld as ScreenEffect.WithheldOffline).verb shouldBe
-            TallyListMachine.WITHHELD_VERB
+        list.reduce(loaded, TrashListEvent(rows_changed = TrashListEvent.RowsChanged(listOf("t-9999")))).effects.shouldBeEmpty()
+        list.reduce(loaded, TrashListEvent(rows_changed = TrashListEvent.RowsChanged(listOf("t-0002")))).effects.size shouldBe 1
     }
 
     // --- Photos -----------------------------------------------------------
@@ -293,15 +224,17 @@ class ScreenMachineSpec : StringSpec({
 
     // --- Notes ------------------------------------------------------------
 
-    "notes: an edit marks the draft dirty and writes nothing" {
+    "notes: an edit marks the draft dirty and writes nothing — it schedules the save" {
         val step = NotesEditorMachine.reduce(loadedNote(), NotesEditorEvent(
             body = NotesEditorEvent.BodyEdited("Book the cabin."),
         ))
         step.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_DIRTY
-        step.effects.shouldBeEmpty()
+        step.effects shouldBe listOf(
+            ScreenEffect.Schedule(NotesEditorMachine.SCREEN_ID, "save:1", 900),
+        )
     }
 
-    "notes: a save submits once, with the base revision as its invoke key" {
+    "notes: a save submits once, under one key per edit" {
         val dirty = NotesEditorMachine.reduce(
             loadedNote(),
             NotesEditorEvent(body = NotesEditorEvent.BodyEdited("Book the cabin.")),
@@ -313,22 +246,17 @@ class ScreenMachineSpec : StringSpec({
         saving.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
         val write = saving.effects.single() as ScreenEffect.SubmitWrite
         write.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        write.invokeKey shouldBe "notes.save:note-0001:rev-0007"
-        // THE BASE REVISION IS THE INVOKE KEY'S SECOND HALF AND NOT AN INPUT
-        // (#1025 S5). `knowledge.edit_note`'s schema is
-        // `additionalProperties: false`, so sending it would be refused — and
-        // the invoke key is where concurrency control actually lives for a
-        // queued write: a save over a new base revision is a different id.
+        write.invokeKey shouldBe "knowledge.edit_note:note-0001:seq=1"
+        // THE BASE REVISION IS NOT AN INPUT: `knowledge.edit_note`'s schema is
+        // `additionalProperties: false`, and there is no vault-side revision
+        // check — the last save on this phone wins.
         write.inputJson.contains("base_revision_id").shouldBeFalse()
-        // The column is `body_text`, not `body`. The wrong spelling is an
-        // additional property and the whole write is refused.
+        // The column is `body_text`, not `body`.
         write.inputJson.contains("\"body_text\":\"Book the cabin.\"").shouldBeTrue()
-        // And `pinned` is an INTEGER: SQLite has no boolean, so a `true` on the
-        // wire would invent one.
-        write.inputJson.contains("\"pinned\":0").shouldBeTrue()
+        // ONLY WHAT CHANGED: the pin did not, so it is not sent.
+        write.inputJson.contains("pinned").shouldBeFalse()
 
-        // A SECOND SAVE WHILE ONE IS IN FLIGHT IS NOT A SECOND COMMAND. Two
-        // `invoke_key`s for one edit is two revisions of one note.
+        // A SECOND SAVE WHILE ONE IS IN FLIGHT IS NOT A SECOND COMMAND.
         NotesEditorMachine.reduce(
             saving.state,
             NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
@@ -340,17 +268,21 @@ class ScreenMachineSpec : StringSpec({
             loadedNote(),
             NotesEditorEvent(body = NotesEditorEvent.BodyEdited("Book the cabin.")),
         ).state
+        val saving = NotesEditorMachine.reduce(dirty, NotesEditorEvent(save = NotesEditorEvent.SaveRequested()))
+        val key = (saving.effects.single() as ScreenEffect.SubmitWrite).invokeKey
         val refusedSave = NotesEditorMachine.reduce(
-            dirty,
+            saving.state,
             NotesEditorEvent(
-                save_settled = NotesEditorEvent.SaveSettled(
-                    outcome = NotesEditorState.SaveState.SAVE_STATE_REFUSED,
+                write_settled = WriteSettled(
+                    invoke_key = key,
+                    committed = false,
                     failure = Reads.unavailable("Centraid could not reach your gateway."),
                 ),
             ),
         ).state
         refusedSave.draft.shouldNotBeNull().body shouldBe "Book the cabin."
         refusedSave.failure.shouldBeNull()
+        refusedSave.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
         refusedSave.draft!!.save_failure.shouldNotBeNull()
 
         val refusedRead = NotesEditorMachine.reduce(
@@ -369,13 +301,13 @@ class ScreenMachineSpec : StringSpec({
     // --- The host ---------------------------------------------------------
 
     "the host publishes a finished state before it emits the effect that asked for it" {
-        val host = ScreenHost(TallyListMachine)
+        val host = ScreenHost(list)
         host.effects.test {
-            host.send(TallyListEvent(opened = TallyListEvent.Opened()))
+            host.send(TrashListEvent(opened = TrashListEvent.Opened()))
             // The state is already the loading state by the time the effect
             // arrives, so an answer delivered synchronously cannot beat it.
             host.state.value.loading.shouldNotBeNull().first_load.shouldBeTrue()
-            awaitItem() shouldBe ScreenEffect.ReadPage(TallyListMachine.SCREEN_ID, null)
+            awaitItem() shouldBe ScreenEffect.ReadPage(list.screenId, null)
         }
         host.revision shouldBe 1uL
     }
@@ -424,9 +356,12 @@ class ScreenMachineSpec : StringSpec({
     }
 }) {
     companion object {
-        fun row(id: String): TallyRow = TallyRow(expense_id = id, description = id)
+        /** A paged list: Tasks' trash, the kit's machine. */
+        val list: TrashMachine get() = TasksTrashMachine.machine
 
-        fun twoRows(): List<TallyRow> = listOf(row("exp-0001"), row("exp-0002"))
+        fun row(id: String): TrashRow = TrashRow(id = id, title = id)
+
+        fun twoRows(): List<TrashRow> = listOf(row("t-0001"), row("t-0002"))
 
         fun loadedNote(): NotesEditorState = NotesEditorMachine.reduce(
             NotesEditorMachine.reduce(

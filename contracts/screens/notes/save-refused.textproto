@@ -21,3 +21,13 @@ draft {
   }
 }
 save: SAVE_STATE_REFUSED
+autosave {
+  phase: PHASE_REFUSED
+  edit_seq: 1
+  base_revision_id: "rev-0007"
+  failure {
+    kind: READ_FAILURE_KIND_UNAVAILABLE
+    sentence: "Centraid could not reach your gateway."
+    remedy: "Centraid tries again when it can reach your gateway."
+  }
+}

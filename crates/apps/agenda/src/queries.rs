@@ -9,8 +9,8 @@
 //!
 //! | Read | What it is |
 //! |---|---|
-//! | `agenda.upcoming.window` | **the visible range, as a page**: `status <> 'cancelled'` and `dtstart` inside `[from - 31 days, to)`, capped at [`EVENT_WINDOW_CAP`] |
-//! | `agenda.upcoming.recurringAnchors` | **the second window**: a series anchors years in the past, so the range predicate would drop it. `rrule IS NOT NULL`, newest first, capped at [`RECURRING_ANCHOR_CAP`] (D-1020-S4) |
+//! | `agenda.upcoming.window` | **the visible range, as a page**: `status <> 'cancelled'`, not in the trash, and `dtstart` inside `[from - 31 days, to)`, capped at [`EVENT_WINDOW_CAP`] |
+//! | `agenda.upcoming.recurringAnchors` | **the second window**: a series anchors years in the past, so the range predicate would drop it. `rrule IS NOT NULL` and not in the trash, newest first, capped at [`RECURRING_ANCHOR_CAP`] (D-1020-S4) |
 //! | `ctx.vault.search` | `search`'s own FTS read, which is `crates/search`'s and not a [`PageQuery`] — the hits arrive here in RANK ORDER and the fold keeps that order |
 //! | `agenda.dayContext.birthdays` / `.dueTasks` | the grid's two decorations, each its own stated window |
 //! | `agenda.parties.people` | the invite directory: owner-curated, walked with a stated ceiling |
@@ -19,13 +19,36 @@
 //! bytes, the parties and the exceptions — is `IN`-bounded by ids one of those
 //! already returned.
 //!
+//! ## A trashed event is not on the agenda
+//!
+//! `schedule.delete_event` moves an event to the trash — `deleted_at` and
+//! `purge_at` set, the row kept for its restore window — and both discovering
+//! reads say `deleted_at IS NULL` ([#1046](https://github.com/srikanth235/centraid/issues/1046)).
+//! v0's statements named only `status`, so a deleted event stayed on the
+//! agenda until its purge: `contracts/apps/agenda/queries.json` carries the
+//! trashed "Book the Tahoe cabin" in three `upcoming` answers, and
+//! `tests/parity.rs` names it as the one row the port refuses to reproduce.
+//! `search` needs no clause of its own — the FTS door drops a trashed row
+//! before a hit reaches the fold (`crates/search`'s `deleted_column`).
+//!
 //! ## Two windows, then the TRUE lower bound
 //!
 //! The two windows are merged by `event_id` (the recurring read wins, because
-//! it carries the anchor row), expanded, and then filtered: an ordinary event
-//! is kept only if it is still running at `from`. A recurrence instance is
-//! in-range by construction and is never re-filtered — which is why the
-//! `SPAN_BUFFER_MS` reach-back cannot leak a month of past occurrences.
+//! it carries the anchor row), expanded, and then filtered: **every** row — an
+//! ordinary event and an expanded occurrence alike — is kept only if it is
+//! still running at `from` or starts at or after it ([`still_running_at`]).
+//! The expansion runs from the `SPAN_BUFFER_MS` reach-back, which is what
+//! finds a multi-day occurrence that began before the range; without the
+//! filter every series leaked a month of PAST occurrences into the answer,
+//! which v0 did and its goldens carry (`tests/parity.rs`, `ENDED_BEFORE_FROM`,
+//! [#1046](https://github.com/srikanth235/centraid/issues/1046)).
+//!
+//! ## The zone a range is read in
+//!
+//! `upcoming` and `day-context` take the REQUEST's zone — the device's, stated
+//! by the shell ([`crate::local`]). An empty `from` is the first instant of
+//! today THERE, not 00:00Z; a floating wall clock and an all-day date are read
+//! there when the lower bound asks whether they have ended.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -36,6 +59,8 @@ use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_vault::time::occurrence::StoredExceptionRow;
 use centraid_vault::time::recurrence::{Semantics, parse_instant_ms};
+
+use centraid_vault::time::zone::FireZone;
 
 use crate::expansion::{
     DEFAULT_EXPAND_MS, SPAN_BUFFER_MS, expand_recurring_events, recurrence_summary,
@@ -142,6 +167,9 @@ pub struct EventRow {
     pub rrule_support: Option<String>,
     pub status: Option<String>,
     pub location_place_id: Option<String>,
+    /// `core_place.name` of `location_place_id`, so a detail can say where
+    /// without a second read. Absent when there is no place or it is gone.
+    pub location_name: Option<String>,
     pub organizer_party_id: Option<String>,
     pub sequence: Option<i64>,
     pub created_at: Option<String>,
@@ -248,6 +276,9 @@ pub struct PartiesData {
 /// `agenda.upcoming.window` — the visible range, as a page.
 ///
 /// `dtstart` is `NOT NULL` on `core_event`, so the page is continuable.
+/// **`deleted_at IS NULL` is the trash** (see the module header): a cancelled
+/// event and a deleted one are two different facts, and the agenda shows
+/// neither.
 #[must_use]
 pub fn event_window_statement(from_lower: &str, to: Option<&str>) -> PageQuery {
     let mut bind = vec![
@@ -257,9 +288,9 @@ pub fn event_window_statement(from_lower: &str, to: Option<&str>) -> PageQuery {
     let predicate = match to {
         Some(upper) => {
             bind.push(PageBindValue::Text(upper.to_owned()));
-            "status <> ? AND dtstart >= ? AND dtstart < ?"
+            "status <> ? AND deleted_at IS NULL AND dtstart >= ? AND dtstart < ?"
         }
-        None => "status <> ? AND dtstart >= ?",
+        None => "status <> ? AND deleted_at IS NULL AND dtstart >= ?",
     };
     PageQuery::new(
         "agenda.upcoming.window",
@@ -274,7 +305,9 @@ pub fn event_window_statement(from_lower: &str, to: Option<&str>) -> PageQuery {
 ///
 /// A recurring series anchors years in the past, so the range predicate would
 /// drop it; the anchors are fetched separately and merged before the range
-/// check (`upcoming.ts:352`-`:354`).
+/// check (`upcoming.ts:352`-`:354`). A trashed series is left out here as well
+/// as in the window: the anchor read is the one that would otherwise bring a
+/// deleted series back, one occurrence a week, for as long as it recurs.
 #[must_use]
 pub fn recurring_anchors_statement() -> PageQuery {
     PageQuery::new(
@@ -284,7 +317,7 @@ pub fn recurring_anchors_statement() -> PageQuery {
         PageOrder::desc("dtstart", "event_id"),
     )
     .filter(
-        "status <> ? AND rrule IS NOT NULL",
+        "status <> ? AND deleted_at IS NULL AND rrule IS NOT NULL",
         vec![PageBindValue::Text("cancelled".to_owned())],
     )
 }
@@ -409,6 +442,18 @@ pub fn parties_statement(name: &'static str, party_ids: &[String]) -> KitResult<
     .filter(&fragment.sql, fragment.bind))
 }
 
+/// `agenda.<query>.places` — the names the events' places carry.
+pub fn places_statement(name: &'static str, place_ids: &[String]) -> KitResult<PageQuery> {
+    let fragment = in_list("place_id", place_ids)?;
+    Ok(PageQuery::new(
+        name,
+        "place_id, name",
+        "core_place",
+        PageOrder::asc("place_id", "place_id"),
+    )
+    .filter(&fragment.sql, fragment.bind))
+}
+
 /// `agenda.<query>.contents` — the bytes an attachment points at.
 pub fn contents_statement(name: &'static str, content_ids: &[String]) -> KitResult<PageQuery> {
     let fragment = in_list("content_id", content_ids)?;
@@ -529,7 +574,7 @@ pub fn people_statement() -> PageQuery {
 // The folds.
 // ---------------------------------------------------------------------------
 
-fn cell_text(row: &Row, column: &str) -> Option<String> {
+pub(crate) fn cell_text(row: &Row, column: &str) -> Option<String> {
     text_of(row, column)
 }
 
@@ -647,7 +692,7 @@ fn attendees_by_event(
 }
 
 /// One `core_event` row, read off the page.
-fn event_of(row: &Row) -> Option<EventRow> {
+pub(crate) fn event_of(row: &Row) -> Option<EventRow> {
     Some(EventRow {
         event_id: cell_text(row, "event_id")?,
         ical_uid: cell_text(row, "ical_uid"),
@@ -681,7 +726,7 @@ fn calendar_of(row: &Row) -> Option<CalendarRow> {
     })
 }
 
-fn exception_of(row: &Row) -> StoredExceptionRow {
+pub(crate) fn exception_of(row: &Row) -> StoredExceptionRow {
     StoredExceptionRow {
         target_type: cell_text(row, "target_type"),
         target_id: cell_text(row, "target_id"),
@@ -701,17 +746,29 @@ fn me_of(rows: &[Row]) -> Option<String> {
     rows.first().and_then(|row| cell_text(row, "self_party_id"))
 }
 
-/// Every decoration the two event queries share, read over one windowed set.
-struct Decorations {
+/// Every decoration the event queries share, read over one windowed set.
+pub(crate) struct Decorations {
     ext: BTreeMap<String, Row>,
     attachments: BTreeMap<String, Vec<Attachment>>,
     attendees: BTreeMap<String, Vec<Attendee>>,
+    /// `place_id` → `name`.
+    places: BTreeMap<String, String>,
 }
 
-fn read_decorations(
+/// The distinct places a set of event rows names, for [`read_decorations`].
+pub(crate) fn place_ids_of<'a>(rows: impl Iterator<Item = &'a Row>) -> Vec<String> {
+    rows.filter_map(|row| cell_text(row, "location_place_id"))
+        .filter(|id| !id.is_empty())
+        .collect::<BTreeSet<String>>()
+        .into_iter()
+        .collect()
+}
+
+pub(crate) fn read_decorations(
     door: &dyn PageDoor,
     prefix: &'static str,
     event_ids: &[String],
+    place_ids: &[String],
     carry_attendee_id: bool,
 ) -> KitResult<Decorations> {
     let ext_rows = read_pages(
@@ -772,7 +829,20 @@ fn read_decorations(
         )?
     };
     let representations = read_representations(door, &content_ids, EVENT_JOIN_BOUND)?;
+    let places = if place_ids.is_empty() {
+        BTreeMap::new()
+    } else {
+        read_pages(
+            door,
+            &places_statement(name_of(prefix, "places"), place_ids)?,
+            EVENT_JOIN_BOUND,
+        )?
+        .iter()
+        .filter_map(|row| Some((cell_text(row, "place_id")?, cell_text(row, "name")?)))
+        .collect()
+    };
     Ok(Decorations {
+        places,
         ext: ext_rows
             .into_iter()
             .filter_map(|row| cell_text(&row, "event_id").map(|id| (id, row)))
@@ -791,18 +861,31 @@ fn name_of(prefix: &'static str, leaf: &'static str) -> &'static str {
         ("upcoming", "vault") => "agenda.upcoming.vault",
         ("upcoming", "parties") => "agenda.upcoming.parties",
         ("upcoming", "contents") => "agenda.upcoming.contents",
+        ("upcoming", "places") => "agenda.upcoming.places",
         ("search", "eventExt") => "agenda.search.eventExt",
         ("search", "attachments") => "agenda.search.attachments",
         ("search", "attendees") => "agenda.search.attendees",
         ("search", "vault") => "agenda.search.vault",
         ("search", "parties") => "agenda.search.parties",
         ("search", "contents") => "agenda.search.contents",
+        ("search", "places") => "agenda.search.places",
+        ("event", "eventExt") => "agenda.event.eventExt",
+        ("event", "attachments") => "agenda.event.attachments",
+        ("event", "attendees") => "agenda.event.attendees",
+        ("event", "vault") => "agenda.event.vault",
+        ("event", "parties") => "agenda.event.parties",
+        ("event", "contents") => "agenda.event.contents",
+        ("event", "places") => "agenda.event.places",
         _ => "agenda.unknown",
     }
 }
 
-fn decorate(event: &mut EventRow, decorations: &Decorations) {
+pub(crate) fn decorate(event: &mut EventRow, decorations: &Decorations) {
     let ext = decorations.ext.get(&event.event_id);
+    event.location_name = event
+        .location_place_id
+        .as_ref()
+        .and_then(|place_id| decorations.places.get(place_id).cloned());
     event.calendar_id = ext.and_then(|row| cell_text(row, "calendar_id"));
     event.conferencing_uri = ext.and_then(|row| cell_text(row, "conferencing_uri"));
     event.reminders_json = ext.and_then(|row| cell_text(row, "reminders_json"));
@@ -825,7 +908,21 @@ fn iso_of(millis: i64) -> String {
     centraid_vault::clock::format_iso_ms(millis)
 }
 
+/// THE TRUE LOWER BOUND, for every row: an occurrence is in the range if it is
+/// still running at `from` — it ends AFTER `from` — or starts at or after it.
+/// So a run that ended exactly at `from` is out, and a zero-length event AT
+/// `from` is in. A row whose start does not parse is kept, as v0 keeps it:
+/// dropping it would hide a row, and the placement already draws it nowhere.
+#[must_use]
+pub fn still_running_at(event: &EventRow, from_ms: i64, zone: &FireZone) -> bool {
+    crate::local::interval_ms(event, zone)
+        .is_none_or(|(start, end)| end > from_ms || start >= from_ms)
+}
+
 /// `upcoming` — TWO WINDOWS, the expansion, and the true lower bound.
+///
+/// `zone` is the request's: an empty `from` is the first instant of today in
+/// it, and the lower bound reads floating and all-day rows in it.
 ///
 /// # Errors
 ///
@@ -838,9 +935,16 @@ pub fn load_upcoming(
     from: Option<&str>,
     to: Option<&str>,
     now: &str,
+    zone: &FireZone,
 ) -> KitResult<(UpcomingData, Option<Denial>)> {
+    // TODAY IS THE ZONE'S: 00:00Z is somebody else's midnight.
     let from = from.filter(|value| !value.is_empty()).map_or_else(
-        || format!("{}T00:00:00Z", &now[..10.min(now.len())]),
+        || {
+            parse_instant_ms(now).map_or_else(
+                || format!("{}T00:00:00Z", &now[..10.min(now.len())]),
+                |millis| crate::local::start_of_day(zone, zone.zoned_parts(millis)),
+            )
+        },
         str::to_owned,
     );
     let from_ms = parse_instant_ms(&from);
@@ -883,7 +987,8 @@ pub fn load_upcoming(
         ));
     }
     let event_ids: Vec<String> = order.clone();
-    let decorations = read_decorations(door, "upcoming", &event_ids, true)?;
+    let place_ids = place_ids_of(window.rows.iter().chain(anchors.rows.iter()));
+    let decorations = read_decorations(door, "upcoming", &event_ids, &place_ids, true)?;
     let exception_rows: Vec<StoredExceptionRow> =
         read_pages(door, &exceptions_statement(&event_ids)?, EVENT_JOIN_BOUND)?
             .iter()
@@ -903,20 +1008,12 @@ pub fn load_upcoming(
         None => from_ms.map_or_else(|| from.clone(), |millis| iso_of(millis + DEFAULT_EXPAND_MS)),
     };
     let expanded = expand_recurring_events(enriched, &from_lower, &expand_to, &exception_rows)?;
-    // THE TRUE LOWER BOUND: keep anything still running at `from`. A recurrence
-    // instance is in-range by construction and is never re-filtered.
+    // THE TRUE LOWER BOUND, on EVERY row: the expansion ran from the
+    // reach-back, so an occurrence of a series is no more in range by
+    // construction than a one-off is.
     let mut events: Vec<EventRow> = expanded
         .into_iter()
-        .filter(|event| {
-            if event.is_recurrence_instance || event.rrule.is_some() {
-                return true;
-            }
-            let end = event.dtend.clone().unwrap_or_else(|| event.dtstart.clone());
-            match (parse_instant_ms(&end), from_ms) {
-                (Some(end), Some(from)) => end >= from,
-                _ => true,
-            }
-        })
+        .filter(|event| from_ms.is_none_or(|from| still_running_at(event, from, zone)))
         .collect();
     events.sort_by(|left, right| left.dtstart.cmp(&right.dtstart));
     Ok((UpcomingData { events, calendars }, None))
@@ -949,7 +1046,8 @@ pub fn load_search(door: &dyn PageDoor, hits: &[Row]) -> KitResult<(SearchData, 
     if event_ids.is_empty() {
         return Ok((SearchData::default(), None));
     }
-    let decorations = match read_decorations(door, "search", &event_ids, false) {
+    let place_ids = place_ids_of(live.iter().copied());
+    let decorations = match read_decorations(door, "search", &event_ids, &place_ids, false) {
         Ok(decorations) => decorations,
         Err(KitError::Door(message)) => {
             return Ok((SearchData::default(), Some(denial_of(message))));
@@ -972,6 +1070,113 @@ pub fn load_search(door: &dyn PageDoor, hits: &[Row]) -> KitResult<(SearchData, 
         })
         .collect();
     Ok((SearchData { events }, None))
+}
+
+/// The FTS domain an event is indexed under (`crates/search`'s `DOMAINS`).
+pub const EVENT_TARGET_TYPE: &str = "core.event";
+
+/// `agenda.search.events` — the rows the index ranked, by id.
+///
+/// The index answers a [`centraid_search::Target`] — five strings — and the
+/// fold needs the event row, so the hits are read back through the page door
+/// the same way Notes reads its own. **`deleted_at IS NULL` is stated even
+/// though the index already dropped the trash**: the index is kept in step by a
+/// trigger, and this read is the one a member's screen is drawn from.
+pub fn search_events_statement(event_ids: &[String]) -> KitResult<PageQuery> {
+    let fragment = in_list("event_id", event_ids)?;
+    Ok(PageQuery::new(
+        "agenda.search.events",
+        EVENT_COLUMNS,
+        "core_event",
+        PageOrder::asc("event_id", "event_id"),
+    )
+    .filter(
+        &format!("{} AND deleted_at IS NULL", fragment.sql),
+        fragment.bind,
+    ))
+}
+
+/// `search` from a TERM: the FTS door's ranked hits, read back as event rows
+/// and folded by [`load_search`].
+///
+/// v0's `ctx.vault.search` answered whole rows with an `_snippet` beside them;
+/// `crates/search` answers secret-free targets, so this is the step between —
+/// the ids in RANK ORDER, the rows they name, and the index's own snippet laid
+/// back on each. `limit` is the caller's and is clamped to [`SEARCH_LIMIT`];
+/// a zero is the caller's refusal to state one and is answered as nothing,
+/// never as a default.
+///
+/// **A term with no searchable word answers the empty shape and no denial**,
+/// which is v0's short-circuit reached one step earlier: a member who typed
+/// `---` was not refused anything. A door that answers [`Answer::Denied`] is
+/// the payload's denial.
+///
+/// [`Answer::Denied`]: centraid_search::Answer::Denied
+///
+/// # Errors
+///
+/// A reached bound, as [`load_search`]; an index the door cannot use at all is
+/// the payload's denial, because a surface renders it rather than a failure.
+pub fn load_search_term(
+    door: &dyn PageDoor,
+    search: &dyn centraid_search::Search,
+    principal: &centraid_search::Principal,
+    term: &str,
+    limit: usize,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() || limit == 0 {
+        return Ok((SearchData::default(), None));
+    }
+    let request =
+        centraid_search::SearchRequest::new(EVENT_TARGET_TYPE, term, limit.min(SEARCH_LIMIT));
+    let page = match search.query(principal, &request) {
+        Ok(centraid_search::Answer::Data { page, .. }) => page,
+        Ok(centraid_search::Answer::Denied(denial)) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: denial.code,
+                    message: denial.message,
+                    revoked_at: denial.revoked_at,
+                }),
+            ));
+        }
+        Err(centraid_search::SearchError::NoSearchableWords { .. }) => {
+            return Ok((SearchData::default(), None));
+        }
+        Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
+    };
+    if page.rows.is_empty() {
+        return Ok((SearchData::default(), None));
+    }
+    // VAULT ORDER IS RANK ORDER, best match first. The rows come back in id
+    // order and are laid back onto this one.
+    let ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
+    let mut rows: BTreeMap<String, Row> =
+        match read_pages(door, &search_events_statement(&ids)?, EVENT_JOIN_BOUND) {
+            Ok(rows) => rows
+                .into_iter()
+                .filter_map(|row| cell_text(&row, "event_id").map(|id| (id, row)))
+                .collect(),
+            Err(KitError::Door(message)) => {
+                return Ok((SearchData::default(), Some(denial_of(message))));
+            }
+            Err(other) => return Err(other),
+        };
+    let hits: Vec<Row> = page
+        .rows
+        .iter()
+        .filter_map(|target| {
+            let mut row = rows.remove(&target.id)?;
+            row.insert(
+                "_snippet".to_owned(),
+                centraid_apps_kit::row::Cell::Text(target.snippet.clone()),
+            );
+            Some(row)
+        })
+        .collect();
+    load_search(door, &hits)
 }
 
 // ---------------------------------------------------------------------------
@@ -1002,10 +1207,18 @@ fn add_days(day: &str, days: i64) -> String {
 }
 
 /// The range the grid asked for, clamped. **An unusable range is not an error;
-/// the default window stands** (`day-context.ts:100`).
+/// the default window stands** (`day-context.ts:100`). The default's first day
+/// is TODAY IN `zone` — the vault clock's instant read there, never its UTC
+/// date.
 #[must_use]
-pub fn range_of(from: Option<&str>, to: Option<&str>, now: &str) -> (String, String) {
-    let today: String = now.chars().take(10).collect();
+pub fn range_of(
+    from: Option<&str>,
+    to: Option<&str>,
+    now: &str,
+    zone: &FireZone,
+) -> (String, String) {
+    let today: String =
+        crate::local::today(zone, now).unwrap_or_else(|| now.chars().take(10).collect());
     let from = day_of(from).unwrap_or(today);
     let asked = day_of(to);
     let fallback = add_days(&from, DEFAULT_RANGE_DAYS);
@@ -1059,6 +1272,9 @@ fn recurs_in_range(month: i64, day: i64, from: &str, to: &str) -> bool {
 
 /// `day-context` — birthdays and due work for the calendar grid.
 ///
+/// `zone` is the request's, and it decides only which day an empty `from` is:
+/// a birthday and a due date are civil days already.
+///
 /// # Errors
 ///
 /// A door refusal becomes the payload's denial; a reached bound is an `Err`.
@@ -1067,8 +1283,9 @@ pub fn load_day_context(
     from: Option<&str>,
     to: Option<&str>,
     now: &str,
+    zone: &FireZone,
 ) -> KitResult<(DayContextData, Option<Denial>)> {
-    let (from, to) = range_of(from, to, now);
+    let (from, to) = range_of(from, to, now, zone);
     // Half-open, so a date-only and a timed `due_at` both land.
     let due_upper = add_days(&to, 1);
     let parties = match read_window(door, &birthdays_statement(), PARTY_CAP) {

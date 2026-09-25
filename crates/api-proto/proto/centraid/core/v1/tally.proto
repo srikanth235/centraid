@@ -1,0 +1,537 @@
+// TALLY'S PHONE QUERIES, AS THE CORE ANSWERS THEM (#1046).
+//
+// `crates/apps/tally` reads the whole ledger once (`load_tally`: expenses,
+// splits, payers, settlements, obligations, lines, groups, circles, members and
+// the parties they name) and folds it through ONE balance engine
+// (`balance.rs`). These are its answers, typed. A shell reaches them through
+// `app_query.proto`'s `AppQueryRequest` and draws them; it derives no balance,
+// attributes no share and adds no two amounts, because a second balance engine
+// in Kotlin or Swift is exactly the drift "balances are never stored" exists to
+// prevent.
+//
+// Every message mirrors a Rust struct in `crates/apps/tally/src/phone.rs`;
+// `crates/core`'s `app_query` module is the one conversion.
+//
+// EVERY FIGURE IS A `TallyMoney`: minor units, the currency code, and that
+// currency's minor-unit exponent from `centraid_apps_kit::money::minor_units`
+// — never a bare integer a shell would divide by 100 (JPY is 0, BHD is 3).
+// BALANCES ARE KEYED BY CURRENCY (#996, R22): a friend owed EUR 10 and USD 10
+// is two `TallyMoney`, and nothing here adds across currencies.
+//
+// SIGN CONVENTION, for the whole app: POSITIVE IS OWED TO YOU (or, for a
+// group member's net, to that member); negative is owed BY you.
+//
+// NO SHARING PLANE. v1 has no sharing (#1029 amendment, 2026-09-21): no
+// Waiting shelf, no queued or parked notices, no Share group — none of it has
+// a field here.
+//
+// CIVIL TIME IS THE DEVICE'S, under `agenda.proto`'s zone rule: a request that
+// carries `tz` states an IANA name; EMPTY is the vault's own zone, and a vault
+// that names none — or a name the bundled database does not know — is
+// `ERROR_CODE_INVALID_REQUEST`. An answer that reads the clock carries `today`
+// (`YYYY-MM-DD` in that zone), and every stored instant a member reads (a
+// trash date, a revision's time) comes with its local reading beside it.
+// Expense and settlement dates are civil days already (`spent_on`, `paid_on`).
+//
+// Instants are the vault's text form, `YYYY-MM-DDTHH:MM:SS.mmmZ`; local
+// readings are `YYYY-MM-DDTHH:MM`; days are `YYYY-MM-DD`.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// The requests.
+// ---------------------------------------------------------------------------
+
+// `tally.dashboard`: Balances, Groups and Activity — the three band screens —
+// from one read of the ledger.
+message TallyDashboardRequest {
+  // The zone `today` and `yesterday` are read in (the header's rule).
+  string tz = 1;
+}
+
+// `tally.group`: one group's ledger.
+message TallyGroupRequest {
+  string group_id = 1;
+}
+
+// `tally.friend`: one friend's position and the expenses you both took part in.
+message TallyFriendRequest {
+  string party_id = 1;
+}
+
+// `tally.expense`: one expense, live or in the trash, with its revisions.
+message TallyExpenseRequest {
+  string expense_id = 1;
+  // The zone revision times and the purge date are read in.
+  string tz = 2;
+}
+
+// `tally.settle-up`: the payments that would level the ledger.
+message TallySettleUpRequest {
+  // One group's suggestions only. EMPTY is every group plus the group-less
+  // 1:1 positions.
+  string group_id = 1;
+}
+
+// `tally.recurring`: the standing orders.
+message TallyRecurringRequest {}
+
+// `tally.spending`: what one month went on.
+message TallySpendingRequest {
+  // The zone TODAY is read in, when `month` is empty.
+  string tz = 1;
+  // `YYYY-MM`. EMPTY is the month today falls in; a value not of that shape
+  // is `ERROR_CODE_INVALID_REQUEST`.
+  string month = 2;
+}
+
+// `tally.search`: live expenses whose description contains the term.
+message TallySearchRequest {
+  // Case-insensitive substring of the description. Amounts and people are not
+  // searched. An empty term answers no results without reading.
+  string term = 1;
+  // REQUIRED: 0 is `ERROR_CODE_INVALID_REQUEST`, never a default.
+  uint32 limit = 2;
+}
+
+// `tally.trash`: the trashed expenses, newest first (at most 100).
+message TallyTrashRequest {
+  // The zone the trash and purge dates are read in.
+  string tz = 1;
+}
+
+// `tally.export`: one group's ledger as rows for a file. BALANCES EXCLUDED.
+message TallyExportRequest {
+  string group_id = 1;
+  // `YYYY-MM-DD`: expenses spent, and settlements paid, on or after it. A value
+  // not of that shape is no floor at all — a malformed bound never narrows.
+  string since = 2;
+  // 0 is the default window (500); anything else is clamped to 1..=2,000.
+  uint32 limit = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Shared shapes.
+// ---------------------------------------------------------------------------
+
+// A money amount in ONE currency.
+message TallyMoney {
+  // Minor units: 4250 is USD 42.50, JPY 4,250, BHD 4.250.
+  int64 minor = 1;
+  // ISO 4217 code, as the vault holds it.
+  string currency = 2;
+  // The currency's minor-unit exponent, from the kit's table. Never guessed.
+  uint32 exponent = 3;
+}
+
+// A party, resolved: the owner is "You" in the brand, a friend with no name is
+// "Friend", anyone else the ledger names but the vault cannot is "Someone".
+message TallyPerson {
+  string party_id = 1;
+  string name = 2;
+  // The party hue (`crates/design`), `#rrggbb`.
+  string color = 3;
+  string initials = 4;
+  bool is_me = 5;
+}
+
+// The owner's stance on one expense.
+enum TallyRole {
+  TALLY_ROLE_UNSPECIFIED = 0;
+  // You put money down: `your_amount` is what the others owe you.
+  TALLY_ROLE_LENT = 1;
+  // You only owe a share: `your_amount` is that share.
+  TALLY_ROLE_BORROWED = 2;
+  // Not your expense: `your_amount` is the whole amount.
+  TALLY_ROLE_NONE = 3;
+}
+
+// A person's part of an expense: a payer's `paid`, a sharer's `share`.
+message TallyShare {
+  TallyPerson person = 1;
+  TallyMoney amount = 2;
+}
+
+// One typed line of an itemised ("By line") expense.
+message TallyLine {
+  string line_item_id = 1;
+  // `item`, `tax`, `tip`, `discount`, … as stored.
+  string kind = 2;
+  string description = 3;
+  TallyMoney amount = 4;
+  repeated TallyShare allocations = 5;
+}
+
+// What the member typed beside each person, so an edit re-opens the way the
+// expense was entered. PROVENANCE, never a second arithmetic path — the
+// resolved `splits` are the figures.
+message TallySplitParams {
+  // `money`, `percent`, `shares`, `adjust`, … as the entry form stored it.
+  string unit = 1;
+  repeated TallySplitParam entries = 2;
+}
+
+message TallySplitParam {
+  string party_id = 1;
+  // The number typed: a percentage, a weight, or an adjustment in minor units.
+  double value = 2;
+}
+
+// A currency conversion recorded at entry. Absent when nothing was converted.
+message TallyRate {
+  // What was paid, in the money it was paid in.
+  TallyMoney original = 1;
+  // `rate_scaled / 10^rate_scale` units of the expense's currency per unit of
+  // the original's.
+  int64 rate_scaled = 2;
+  int64 rate_scale = 3;
+  string rate_source = 4;
+  // `YYYY-MM-DD`.
+  string rate_date = 5;
+}
+
+// An expense, as every ledger list draws it.
+message TallyExpenseRow {
+  string expense_id = 1;
+  optional string group_id = 2;
+  // The group's name; EMPTY for a group-less 1:1 expense.
+  string group_name = 3;
+  string description = 4;
+  // In the expense's own (settlement) currency.
+  TallyMoney amount = 5;
+  // One of the nine closed categories.
+  string category = 6;
+  // `YYYY-MM-DD`.
+  string spent_on = 7;
+  TallyPerson paid_by = 8;
+  // `equally`, `exact`, `percentages`, `shares`, `adjusted`, `by_line`.
+  string split_method = 9;
+  optional TallySplitParams split_params = 10;
+  // Everyone who put money down, with what they put down.
+  repeated TallyShare payers = 11;
+  // Everyone's resolved share. Sums to `amount`.
+  repeated TallyShare splits = 12;
+  repeated TallyLine lines = 13;
+  TallyRole your_role = 14;
+  TallyMoney your_amount = 15;
+  optional TallyRate rate = 16;
+  optional string recurring_template_id = 17;
+}
+
+// A settlement: real cash, anyone to anyone.
+message TallySettlementRow {
+  string settlement_id = 1;
+  optional string group_id = 2;
+  TallyPerson from = 3;
+  TallyPerson to = 4;
+  TallyMoney amount = 5;
+  // `YYYY-MM-DD`, when stated.
+  optional string paid_on = 6;
+}
+
+// One or more currencies stated as one figure — or why they cannot be.
+message TallyValuation {
+  // `true` when every component is in one currency and `total` is their sum.
+  // `false` when they are several and no rate exists: `total` is absent and a
+  // screen states the components, never a sum nobody computed.
+  bool valued = 1;
+  optional TallyMoney total = 2;
+  repeated TallyMoney components = 3;
+}
+
+// A proposed payment.
+message TallyTransfer {
+  TallyPerson from = 1;
+  TallyPerson to = 2;
+  TallyMoney amount = 3;
+  // The group it settles; absent for a group-less position.
+  optional string group_id = 4;
+}
+
+// ---------------------------------------------------------------------------
+// The answers.
+// ---------------------------------------------------------------------------
+
+message TallyDashboard {
+  optional string me = 1;
+  // The vault's base currency — what a single hero figure would be in.
+  string base_currency = 2;
+  // `YYYY-MM-DD` in the request's zone, and the day before it: Activity's day
+  // buckets compare `date` against these two and do no date arithmetic.
+  string today = 3;
+  string yesterday = 4;
+  // BALANCES: every friend with their position per currency, friends-list
+  // order. A friend with no position has no balances and is level.
+  repeated TallyFriendBalance friends = 5;
+  // The hero: what you are owed, and what you owe, over every friend.
+  TallyValuation owed = 6;
+  TallyValuation owe = 7;
+  // The window the hero states its arithmetic from.
+  uint32 expense_count = 8;
+  uint32 settlement_count = 9;
+  // `true` when the ledger is longer than the 2,000-expense window every
+  // figure here was folded over — a screen says "over the latest 2,000".
+  bool ledger_window_filled = 10;
+  // GROUPS: live groups, then the archived ones on their own list.
+  repeated TallyGroupCard groups = 11;
+  repeated TallyGroupCard archived_groups = 12;
+  // ACTIVITY: expenses and settlements interleaved, newest date first.
+  repeated TallyActivityRow activity = 13;
+  // The remembered rates, one per currency pair — Add expense's suggestion.
+  repeated TallyRateSuggestion rate_suggestions = 14;
+  // `base_currency`'s minor-unit exponent (`minor_units`), so an entry form
+  // scales a typed amount without a table of its own.
+  uint32 base_exponent = 15;
+}
+
+message TallyFriendBalance {
+  TallyPerson person = 1;
+  // Positive: they owe you. One entry per currency with a non-zero position.
+  repeated TallyMoney balances = 2;
+}
+
+message TallyGroupCard {
+  string group_id = 1;
+  string name = 2;
+  string icon = 3;
+  string color = 4;
+  uint32 member_count = 5;
+  // Your net in the group, in the GROUP's money — a group is one ledger.
+  TallyMoney your_net = 6;
+  bool simplify_opt_in = 7;
+  optional string archived_at = 8;
+}
+
+message TallyActivityRow {
+  oneof row {
+    TallyActivityExpense expense = 1;
+    TallySettlementRow settlement = 2;
+  }
+}
+
+// The feed's reading of an expense: who PAID, rather than who put money down.
+message TallyActivityExpense {
+  string expense_id = 1;
+  optional string group_id = 2;
+  string group_name = 3;
+  // `YYYY-MM-DD`.
+  string date = 4;
+  string description = 5;
+  string category = 6;
+  TallyPerson paid_by = 7;
+  TallyMoney amount = 8;
+  TallyRole your_role = 9;
+  TallyMoney your_amount = 10;
+}
+
+message TallyRateSuggestion {
+  string from_currency = 1;
+  string to_currency = 2;
+  int64 rate_scaled = 3;
+  int64 rate_scale = 4;
+  string rate_source = 5;
+  // `YYYY-MM-DD`.
+  string observed_on = 6;
+  string expense_id = 7;
+  // `from_currency`'s minor-unit exponent (`minor_units`): the original
+  // amount a suggestion converts is typed in that currency.
+  uint32 from_exponent = 8;
+}
+
+message TallyGroupLedger {
+  optional string me = 1;
+  // ABSENT for a group that does not exist — a stale link is not an error.
+  optional TallyGroup group = 2;
+  // Current members first, then anyone who left and is still on the ledger.
+  repeated TallyMember members = 3;
+  // The group's live expenses, newest first.
+  repeated TallyExpenseRow ledger = 4;
+  repeated TallySettlementRow settlements = 5;
+  TallySimplification simplification = 6;
+}
+
+message TallyGroup {
+  string group_id = 1;
+  string name = 2;
+  string icon = 3;
+  string color = 4;
+  // The group's one money.
+  string currency = 5;
+  bool simplify_opt_in = 6;
+  optional string archived_at = 7;
+}
+
+message TallyMember {
+  TallyPerson person = 1;
+  // Positive: the group owes them.
+  TallyMoney net = 2;
+  // Left the group and still on its ledger.
+  bool departed = 3;
+}
+
+// Derived, never stored: the minimal payment set, only when the group opts in.
+message TallySimplification {
+  bool opted_in = 1;
+  repeated TallyTransfer transfers = 2;
+  // The directed debts standing now, and the payments after — "five debts
+  // become three payments". Equal when not opted in.
+  uint32 debts_before = 3;
+  uint32 payments_after = 4;
+}
+
+message TallyFriendLedger {
+  optional string me = 1;
+  // ABSENT for the owner, or an id the ledger never named.
+  optional TallyPerson friend = 2;
+  // Positive: they owe you. One per currency.
+  repeated TallyMoney balances = 3;
+  // Where the net came from: one part per group, plus "outside any group".
+  repeated TallyNetPart parts = 4;
+  // Live expenses you both share and one of you paid, newest first.
+  repeated TallyExpenseRow ledger = 5;
+}
+
+message TallyNetPart {
+  // ABSENT for the group-less part (1:1 expenses, settlements and IOUs).
+  optional string group_id = 1;
+  // The group's name; EMPTY for the group-less part — its words are the shell's.
+  string group_name = 2;
+  TallyMoney net = 3;
+}
+
+message TallyExpense {
+  // ABSENT when no expense by this id is live or in the trash.
+  optional TallyExpenseRow expense = 1;
+  // Set when the expense is in the trash: the instant, and its local reading.
+  optional string deleted_at = 2;
+  optional string purge_at = 3;
+  // `YYYY-MM-DD` in the request's zone.
+  optional string purge_on_local = 4;
+  // The owner's running memo, when there is one.
+  optional string memo = 5;
+  // Newest first.
+  repeated TallyRevision revisions = 6;
+}
+
+message TallyRevision {
+  string revision_id = 1;
+  // `edit`, `trash`, `restore`, … as recorded.
+  string operation = 2;
+  string recorded_at = 3;
+  // `YYYY-MM-DDTHH:MM` in the request's zone.
+  string recorded_local = 4;
+  string undo_until = 5;
+  optional string undone_at = 6;
+  // Not undone, and the vault clock is still inside `undo_until`.
+  bool undoable = 7;
+  // What the expense was BEFORE this revision, read off the snapshot — absent
+  // where the snapshot does not carry it.
+  optional string before_description = 8;
+  optional TallyMoney before_amount = 9;
+}
+
+message TallySettleUp {
+  optional string me = 1;
+  // Per group: the simplification when opted in, else each open pairwise
+  // debt. Then the group-less positions between you and each friend. Every
+  // suggestion names both parties; "record" is the shell's `tally.settle_up`.
+  repeated TallyTransfer suggestions = 2;
+}
+
+message TallyRecurring {
+  repeated TallyRecurringTemplate templates = 1;
+}
+
+message TallyRecurringTemplate {
+  string template_id = 1;
+  optional string group_id = 2;
+  string group_name = 3;
+  string description = 4;
+  // In the currency the member entered it in.
+  TallyMoney amount = 5;
+  optional string settlement_currency = 6;
+  TallyPerson paid_by = 7;
+  string category = 8;
+  string rrule = 9;
+  // The schedule as a sentence (`centraid_vault::time::rrule::describe`).
+  // ABSENT when the rule cannot be put in one — there is then no preview.
+  optional string schedule = 10;
+  string anchor_start = 11;
+  string tz = 12;
+  // `active`, `paused`, `ended`, as stored.
+  string status = 13;
+  optional string last_materialized_start = 14;
+}
+
+message TallySpending {
+  // `YYYY-MM`.
+  string month = 1;
+  string today = 2;
+  // What the month went on, largest first within each currency: the WHOLE
+  // expense, not your share. Settlements are not spending.
+  repeated TallyCategoryTotal categories = 3;
+  // Everything the month's expenses add up to, one per currency.
+  repeated TallyMoney month_total = 4;
+  // What you fronted, in full, on expenses you paid.
+  repeated TallyMoney paid = 5;
+  // What the splits make yours.
+  repeated TallyMoney share = 6;
+  // `paid - share`, carried in balances — never a saving.
+  repeated TallyMoney difference = 7;
+}
+
+message TallyCategoryTotal {
+  string category = 1;
+  TallyMoney total = 2;
+}
+
+message TallySearch {
+  repeated TallyExpenseRow results = 1;
+  // How many matched before `limit` cut the list.
+  uint32 total_matches = 2;
+}
+
+message TallyTrash {
+  repeated TallyTrashRow rows = 1;
+}
+
+message TallyTrashRow {
+  string expense_id = 1;
+  string description = 2;
+  TallyMoney amount = 3;
+  optional string group_id = 4;
+  // EMPTY for a group-less expense, or a group that is gone.
+  string group_name = 5;
+  string spent_on = 6;
+  string deleted_at = 7;
+  // `YYYY-MM-DD` in the request's zone.
+  string deleted_on_local = 8;
+  optional string purge_at = 9;
+  optional string purge_on_local = 10;
+}
+
+message TallyExport {
+  // ABSENT for a group that does not exist; every list is then empty.
+  optional TallyGroup group = 1;
+  repeated TallyPerson members = 2;
+  repeated TallyExpenseRow expenses = 3;
+  repeated TallySettlementRow settlements = 4;
+  repeated TallyExportRevision revisions = 5;
+  // More matched than `limit` let through.
+  bool truncated = 6;
+  // The window, stated so a partial file is never read as a whole one.
+  uint32 limit = 7;
+  optional string since = 8;
+  uint32 expenses_in_window = 9;
+  uint32 settlements_in_window = 10;
+}
+
+message TallyExportRevision {
+  string revision_id = 1;
+  string expense_id = 2;
+  string operation = 3;
+  string recorded_at = 4;
+  optional string undone_at = 5;
+}

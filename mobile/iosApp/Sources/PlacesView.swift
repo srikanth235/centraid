@@ -141,6 +141,8 @@ struct PlacesView: View {
                 switch state.content {
                 case .loading:
                     ProgressView()
+                case let .denied(denied):
+                    DeniedGate(denied)
                 case let .failure(sentence, remedy):
                     ScreenFailureView(sentence: sentence, remedy: remedy)
                 case let .data(places, unplaced, capped):

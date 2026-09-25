@@ -106,6 +106,7 @@ fn v0_vault() -> Connection {
         &FrozenRowMapping {
             tables_gone: &[],
             columns_gone: &[("locker_item", "connection_id")],
+            columns_added: &[],
         },
     )
     .expect("the fixture vault is built")

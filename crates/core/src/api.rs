@@ -86,6 +86,21 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                 .to_owned(),
         });
     };
+    // A FLAG SET ON A SELECT WITH NO CURRENCY IS A CALLER'S BUG, and it is
+    // refused here rather than answered with a column of 2s: the exponent is
+    // OF a row's currency, and a row with none has no exponent to state.
+    if query.with_minor_units
+        && !query
+            .select
+            .iter()
+            .any(|column| output_name(column) == MINOR_UNITS_CURRENCY_COLUMN)
+    {
+        return Err(CoreError::InvalidRequest {
+            detail: "with_minor_units asks for the exponent of a `currency` column the select \
+                     does not name"
+                .to_owned(),
+        });
+    }
     // THE SHAPE CROSSES THE BOUNDARY; THE SQL DOES NOT. Rendering the statement
     // here would be `crates/core` knowing the query language, which the
     // `sql-confinement` rule catches — and it is right to: the statement's
@@ -119,8 +134,8 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
         rows: answer
             .rows
             .into_iter()
-            .map(|image| wire::Row {
-                values: query
+            .map(|image| {
+                let mut values: Vec<wire::Value> = query
                     .select
                     .iter()
                     .map(|column| output_name(column).to_owned())
@@ -176,7 +191,28 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                             crate::convert::value_to_wire,
                         )
                     })
-                    .collect(),
+                    .collect();
+                // AND THE CURRENCY'S EXPONENT AFTER EVERYTHING ELSE, when it is
+                // asked for. Same positional contract as the three above. It is
+                // computed HERE and not by the vault because the one table of
+                // minor units is the kit's (`centraid_apps_kit::money`), and
+                // `Money.exponent` says where it comes from: "From the kit's
+                // table through the core, never guessed and never assumed to be
+                // 2" — a shell that kept its own copy would be the second table
+                // D-1020-CL3 closed.
+                if query.with_minor_units {
+                    let exponent = image
+                        .get(MINOR_UNITS_CURRENCY_COLUMN)
+                        .and_then(|value| match value {
+                            centraid_vault::value::Value::Text(code) => Some(code.as_str()),
+                            _ => None,
+                        })
+                        .map_or(0, centraid_apps_kit::money::minor_units);
+                    values.push(wire::Value {
+                        kind: Some(wire::value::Kind::Integer(i64::from(exponent))),
+                    });
+                }
+                wire::Row { values }
             })
             .collect(),
         next: answer
@@ -184,6 +220,9 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             .map(|(sort_key, pk)| wire::PageCursor { sort_key, pk }),
     })
 }
+
+/// The column whose code `PageQuery.with_minor_units` states the exponent of.
+const MINOR_UNITS_CURRENCY_COLUMN: &str = "currency";
 
 /// The name a projected entry answers to in the row image.
 ///
@@ -372,6 +411,7 @@ mod tests {
             with_held_thumbnail: false,
             with_note_body: false,
             with_document_size: false,
+            with_minor_units: false,
         }
     }
 
@@ -411,6 +451,82 @@ mod tests {
         .expect_err("an unprojected order column is refused");
         assert_eq!(unprojected.code(), wire::ErrorCode::InvalidRequest);
         assert!(unprojected.to_string().contains("created_at"));
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// The exponent is the KIT's, per row, appended last — and a select with no
+    /// `currency` to state it of is refused rather than answered with 2s.
+    #[test]
+    fn the_minor_units_column_is_the_kits_exponent_of_each_rows_currency() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry");
+        let owner = centraid_vault::Principal::owner("test-device");
+        for (name, currency) in [("Tokyo", "JPY"), ("Kuwait", "KWD")] {
+            let outcome = vault
+                .execute(
+                    &registry,
+                    &owner,
+                    &Command::new(
+                        "tally.create_group",
+                        serde_json::json!({
+                            "name": name, "icon": "travel", "currency": currency, "member_ids": [],
+                        }),
+                    ),
+                )
+                .expect("a group");
+            assert_eq!(
+                outcome.status,
+                CommandStatus::Executed,
+                "{:?}",
+                outcome.reason
+            );
+        }
+
+        let mut asked = query(&["group_id", "currency"], "group_id", "group_id");
+        asked.from = "tally_group".to_owned();
+        asked.with_minor_units = true;
+        let answer = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("a page");
+        // Ordered by the pk, so the pair is sorted before it is compared: the
+        // claim is one exponent per row and each the kit's, not an order.
+        let mut exponents: Vec<_> = answer
+            .rows
+            .iter()
+            .map(|row| {
+                assert_eq!(row.values.len(), 3, "one computed column, appended last");
+                row.values[2].kind.clone()
+            })
+            .collect();
+        exponents.sort_by_key(|kind| format!("{kind:?}"));
+        assert_eq!(
+            exponents,
+            vec![
+                Some(wire::value::Kind::Integer(0)),
+                Some(wire::value::Kind::Integer(3)),
+            ]
+        );
+
+        asked.select = vec!["group_id".to_owned()];
+        let refused = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect_err("no currency, no exponent");
+        assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

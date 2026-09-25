@@ -43,7 +43,7 @@ impl World {
                 .put(bytes)
                 .expect("the bytes are kept")
         } else {
-            hex::encode(blake3::hash(bytes).as_bytes())
+            centraid_vault::content::content_digest(bytes)
         };
         let content_id = format!("content-{asset_id}");
         let deleted_at: Option<&str> = trashed.then_some("2026-02-01T00:00:00.000Z");
@@ -156,8 +156,20 @@ fn a_photograph_in_a_kept_album_is_kept_once_however_many_albums_hold_it() {
     let _unkept = world.album("Receipts", &["c"]);
 
     let census = world.census(&[first.as_str(), second.as_str(), "an-album-since-deleted"]);
-    assert_eq!(census.on_device, Totals { count: 3, bytes: 14 });
+    assert_eq!(
+        census.on_device,
+        Totals {
+            count: 3,
+            bytes: 14
+        }
+    );
     // `far` is in a kept album and its bytes are not here, so it is kept by
     // nobody's disk; `a` is in two kept albums and counts once.
-    assert_eq!(census.kept, Totals { count: 2, bytes: 12 });
+    assert_eq!(
+        census.kept,
+        Totals {
+            count: 2,
+            bytes: 12
+        }
+    );
 }

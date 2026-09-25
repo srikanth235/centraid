@@ -17,6 +17,10 @@ centraid-apps-kit = { path = "../kit" }
 # The FTS door. An app holds no `MATCH` (the kit's grammar has no production for
 # one); the powerbox and `search` ask this crate (D-1020-N1).
 centraid-search = { path = "../../search" }
+# THE ONE ZONE ENGINE, for the Journal's local days (#1046). `time` is
+# SQL-free and pure; this crate reaches `FireZone` and the instant parser and
+# nothing else, as `crates/apps/agenda` does.
+centraid-vault = { path = "../../vault" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

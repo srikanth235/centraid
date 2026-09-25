@@ -292,7 +292,7 @@ class FaceReviewSpec : StringSpec({
     // --- a person this vault has no row for yet ----------------------------
 
     "a new name creates the party, keeps the question, and keeps the picker open" {
-        // THE CASE THAT MATTERS. `core.add_party` mints the id in its handler
+        // THE CASE THAT MATTERS. `people.add_person` mints the id in its handler
         // and returns it in `CommandOutcome.output`, which `ScreenWrites.settled`
         // does not carry — so the confirm that needs it cannot follow. The
         // cursor does NOT move and the picker does NOT close: the question is
@@ -315,13 +315,14 @@ class FaceReviewSpec : StringSpec({
         // there whether the create lands or not.
         step.state.data_.shouldNotBeNull().candidates.first().proposed_name shouldBe "Ada"
         val write = step.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "core.add_party"
-        write.inputJson shouldBe "{\"display_name\":\"Ada\",\"kind\":\"person\"}"
-        write.invokeKey shouldBe "core.add_party:r-1:Ada"
+        // A PERSON, so the name is in People's roster too — not a bare party.
+        write.command shouldBe "people.add_person"
+        write.inputJson shouldBe "{\"display_name\":\"Ada\",\"cadence_days\":0}"
+        write.invokeKey shouldBe "people.add_person:r-1:Ada"
     }
 
     "the new person's id comes back as PersonCreated, and the confirm follows it" {
-        // `core.add_party` MINTS THE ID and this machine never does; the bridge
+        // `people.add_person` MINTS THE ID and this machine never does; the bridge
         // reads it off the outcome and hands it back, and the confirm that
         // follows is the same write a pick from the roster makes.
         val state = FaceReviewMachine.reduce(
@@ -452,7 +453,7 @@ class FaceReviewSpec : StringSpec({
         FaceReviewMachine.regionOfInvokeKey(
             "media.answer_face_proposal:r-4:confirm:p-ada",
         ) shouldBe "r-4"
-        FaceReviewMachine.regionOfInvokeKey("core.add_party:r-4:Ada") shouldBe "r-4"
+        FaceReviewMachine.regionOfInvokeKey("people.add_person:r-4:Ada") shouldBe "r-4"
         // ANYTHING ELSE ANSWERS EMPTY, which the reducer reads as "this settle
         // names no question" — a fallback, never a guess at one.
         FaceReviewMachine.regionOfInvokeKey("knowledge.edit_note:note-1:rev-7") shouldBe ""

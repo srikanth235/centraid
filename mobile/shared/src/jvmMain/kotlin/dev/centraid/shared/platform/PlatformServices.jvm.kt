@@ -30,6 +30,7 @@ public class FakePlatformServices(
     // the JVM actual is the real `java.security.SecureRandom` the tests draw
     // from (#1025 S5).
     override val secureRandom: SecureRandom = JvmSecureRandom(),
+    override val clock: FakeDeviceClock = FakeDeviceClock(),
 ) : PlatformServices
 
 public class FakeSecureStore : SecureStore {
@@ -219,4 +220,20 @@ public class JvmSecureRandom : SecureRandom {
     private val random = java.security.SecureRandom()
 
     override fun bytes(count: Int): ByteArray = ByteArray(count).also(random::nextBytes)
+}
+
+/**
+ * A device standing still in one zone (#1046).
+ *
+ * FIXED, not `TimeZone.getDefault()`: a spec that read the JVM's zone would
+ * answer differently on a laptop in London and a runner in UTC, and a spec
+ * whose answer depends on where it ran proves nothing. A test that needs a
+ * traveller assigns [zone].
+ */
+public class FakeDeviceClock(
+    public var zone: String = "Europe/London",
+    /** 2026-06-15T09:00:00Z, a Monday. */
+    public var epochMillis: Long = 1_781_514_000_000L,
+) : DeviceClock {
+    override fun read(): DeviceClock.Reading = DeviceClock.Reading(zone, epochMillis)
 }

@@ -8,18 +8,20 @@ import centraid.core.v1.Value
 import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
+import centraid.screen.v1.TrashListData
+import centraid.screen.v1.TrashListEvent
+import centraid.screen.v1.TrashRow
+import centraid.screen.v1.WriteSettled
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
-import centraid.screen.v1.TallyListData
-import centraid.screen.v1.TallyListEvent
-import centraid.screen.v1.TallyRow
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.tally.TallyListMachine
+import dev.centraid.shared.apps.tasks.TasksTrashMachine
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeMachine
+import dev.centraid.shared.shell.HomeAgendaTile
 import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.sync.ChangeStream
 import io.kotest.core.spec.style.StringSpec
@@ -43,8 +45,8 @@ import kotlinx.coroutines.launch
  *
  * What makes these worth having is that every PIECE of this path already
  * existed and passed its own tests while the path as a whole did nothing at
- * all: `TallyListEvent.RowsChanged` has been reduced correctly since #1020 with
- * no producer anywhere, and `crates/core`'s event queue has nine tests and,
+ * all: a list's `RowsChanged` was reduced correctly since #1020 with no
+ * producer anywhere, and `crates/core`'s event queue has nine tests and,
  * until this umbrella, nothing that ever pushed into it. A test of a reducer or
  * of a queue cannot see that; only a test that joins them can.
  */
@@ -69,12 +71,13 @@ class ChangeStreamSpec : StringSpec({
             host.effects.collect { into += it }
         }
 
-    suspend fun tallyShowing(vararg ids: String): ScreenHost<*, TallyListEvent> {
-        val host = ScreenHost(TallyListMachine)
+    /** A paged list showing [ids]: Tasks' trash, the kit's machine. */
+    suspend fun listShowing(vararg ids: String): ScreenHost<*, TrashListEvent> {
+        val host = ScreenHost(TasksTrashMachine.machine)
         host.send(
-            TallyListEvent(
-                data_ = TallyListEvent.DataArrived(
-                    data_ = TallyListData(rows = ids.map { TallyRow(expense_id = it) }),
+            TrashListEvent(
+                data_ = TrashListEvent.DataArrived(
+                    data_ = TrashListData(rows = ids.map { TrashRow(id = it) }),
                 ),
             ),
         )
@@ -94,30 +97,30 @@ class ChangeStreamSpec : StringSpec({
     }
 
     "a row a list is showing moves it, with no relaunch and no gesture" {
-        val host = tallyShowing("exp-1")
+        val host = listShowing("t-1")
         val effects = mutableListOf<ScreenEffect>()
         val watcher = watch(host, effects)
 
         val stream = ChangeStream()
         stream.route(host)
-        stream.deliver(change("tally_expense", "exp-1"))
+        stream.deliver(change("schedule_task", "t-1"))
 
         // THE SCREEN ASKED FOR ITS PAGE AGAIN. Not "the state changed" — the
         // state cannot change until rows are read, and the re-read IS the
         // deliverable: without it a member sees a gateway's write on the next
         // relaunch.
-        effects shouldBe listOf(ScreenEffect.ReadPage(TallyListMachine.SCREEN_ID, null))
+        effects shouldBe listOf(ScreenEffect.ReadPage(TasksTrashMachine.machine.screenId, null))
         watcher.cancel()
     }
 
     "a row the list is not showing moves nothing" {
-        val host = tallyShowing("exp-1")
+        val host = listShowing("t-1")
         val effects = mutableListOf<ScreenEffect>()
         val watcher = watch(host, effects)
 
         val stream = ChangeStream()
         stream.route(host)
-        stream.deliver(change("tally_expense", "exp-99"))
+        stream.deliver(change("schedule_task", "t-99"))
 
         // A TAILING PASS APPLIES THOUSANDS OF ROWS. If every one of them made
         // every open screen re-read its page, catching up would cost a page
@@ -130,8 +133,8 @@ class ChangeStreamSpec : StringSpec({
         // The routing decision is the MACHINE's, so it is asserted on the
         // machine: a stream holding its own table map would be a second place
         // every screen's reads are written down.
-        TallyListMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
-        PhotosGridMachine.rowsChanged("tally_expense", listOf("exp-1")).shouldBeNull()
+        TasksTrashMachine.machine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
+        PhotosGridMachine.rowsChanged("schedule_task", listOf("t-1")).shouldBeNull()
         NotesEditorMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         HomeMachine.rowsChanged("locker_item", listOf("lck-1")).shouldBeNull()
     }
@@ -143,7 +146,14 @@ class ChangeStreamSpec : StringSpec({
         HomeReads.READS.forEach { read ->
             HomeMachine.rowsChanged(read.query.from, listOf("x")).shouldNotBeNull()
         }
-        HomeReads.TABLES shouldBe HomeReads.READS.map { it.query.from }.toSet()
+        // AGENDA'S APP QUERY NAMES ITS TABLES ITSELF (#1046): the runtime
+        // cannot see what the core joins, so the tile declares them and Home
+        // redraws on every one.
+        HomeAgendaTile.TABLES.forEach { table ->
+            HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
+        }
+        HomeReads.TABLES shouldBe
+            HomeReads.READS.map { it.query.from }.toSet() + HomeAgendaTile.TABLES
     }
 
     "a change from the gateway never takes a member's typing" {
@@ -170,9 +180,20 @@ class ChangeStreamSpec : StringSpec({
         effects shouldBe emptyList()
         host.state.value.draft?.body shouldBe "half a paragraph"
 
-        // And the same event on a CLEAN editor DOES re-read: the rule is about
-        // an unsaved draft, not about ignoring the gateway.
+        // A read's answer landing over the typing replaces nothing either.
         host.send(arrived)
+        host.state.value.draft?.body shouldBe "half a paragraph"
+
+        // ONCE THE WORDS ARE SAVED the editor reads what the vault moved to —
+        // the rule is about unsaved words, not about ignoring the vault.
+        host.send(NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = "save:1")))
+        val key = (effects.last() as ScreenEffect.SubmitWrite).invokeKey
+        effects.clear()
+        host.send(NotesEditorEvent(write_settled = WriteSettled(invoke_key = key, committed = true)))
+        effects shouldBe listOf(ScreenEffect.ReadPage(NotesEditorMachine.SCREEN_ID, null))
+
+        // And a change on a CLEAN editor re-reads.
+        effects.clear()
         stream.deliver(change("knowledge_note", "note-1"))
         effects shouldBe listOf(ScreenEffect.ReadPage(NotesEditorMachine.SCREEN_ID, null))
         watcher.cancel()
@@ -192,15 +213,15 @@ class ChangeStreamSpec : StringSpec({
     }
 
     "one change reaches every screen that cares and no others" {
-        val tally = tallyShowing("exp-1")
+        val list = listShowing("t-1")
         val photos = photosShowing("ast-1")
         val seen = mutableListOf<String>()
         val scope = CoroutineScope(Dispatchers.Unconfined)
-        val a = scope.launch { tally.effects.collect { seen += "tally" } }
+        val a = scope.launch { list.effects.collect { seen += "list" } }
         val b = scope.launch { photos.effects.collect { seen += "photos" } }
 
         val stream = ChangeStream()
-        stream.route(tally)
+        stream.route(list)
         stream.route(photos)
         stream.deliver(change("media_asset", "ast-1"))
 

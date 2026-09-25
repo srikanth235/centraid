@@ -1,0 +1,351 @@
+// AGENDA'S FIVE QUERIES, AS THE CORE ANSWERS THEM (#1046, #1029).
+//
+// `crates/apps/agenda` runs `upcoming`, `day-context`, `parties` and `search`
+// over the vault — six-plus tables joined and every repeating series expanded by
+// the one recurrence engine (D-1020-S1) — and these are its answers, typed. A
+// shell reaches them through `app_query.proto`'s `AppQueryRequest`, and draws
+// them; it expands nothing and joins nothing, because a second recurrence engine
+// in Kotlin or Swift is the drift D-1020-S1/S3 rule out.
+//
+// TYPED, NOT JSON. `commonMain` has no JSON dependency and Wire and
+// SwiftProtobuf already decode everything else the core says, so the answers
+// are messages. Every message here mirrors one Rust struct in
+// `crates/apps/agenda/src/queries.rs`, field for field; `crates/core`'s
+// `app_query` module is the one conversion, and a field that moved moves there.
+//
+// Instants are the vault's own text form, `YYYY-MM-DDTHH:MM:SS.mmmZ`, and days
+// are `YYYY-MM-DD`. A shell formats them for a member; it never does arithmetic
+// on them that the core could have done.
+//
+// CIVIL TIME IS ANSWERED IN THE DEVICE'S ZONE. `commonMain` has no calendar,
+// zone or date-time library by design (`sync/Instants.kt`), and a screen still
+// groups by the member's local day, draws a now line and prints "08:15". So a
+// request states `tz`, and the answer carries the local readings — every
+// occurrence's `local_start`, `local_end` and `local_days`, and the answer's
+// `today` and `now_local` — computed by `crates/apps/agenda`'s `local` module
+// against the bundled zone database. A shell reads those strings and does no
+// zone arithmetic; the only civil arithmetic left to it is a weekday from a
+// `YYYY-MM-DD`, which is pure.
+//
+// THE ZONE RULE, for every request that carries `tz`: an IANA name (the
+// device's own, e.g. `America/New_York`). EMPTY is the vault's zone —
+// `core_vault.settings_json`'s `timeZone` — and a vault that names none either
+// is REFUSED, `ERROR_CODE_INVALID_REQUEST`, as is a name the bundled database
+// does not know. Never UTC by default: 00:00Z is somebody else's midnight.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// The requests.
+// ---------------------------------------------------------------------------
+
+// `agenda.upcoming`: the events in a range, every repeating series expanded
+// into one row per occurrence.
+message AgendaUpcomingRequest {
+  // The range's start, an instant. EMPTY IS "TODAY": the first instant of the
+  // vault clock's day in `tz` — the loader's own default, not a shell's guess.
+  string from = 1;
+  // The range's end, an instant, exclusive. EMPTY IS OPEN-ENDED, and an
+  // open-ended range still expands a series only 120 days past `from`, so a
+  // daily series cannot answer a year (#404).
+  string to = 2;
+  // The zone every local reading is in (the file header's rule). An empty
+  // `from` is the first instant of TODAY IN THIS ZONE, and a floating or
+  // all-day row is read in it when the lower bound asks whether it has ended.
+  string tz = 3;
+}
+
+// `agenda.day-context`: the birthdays and due work a calendar grid decorates
+// its days with.
+message AgendaDayContextRequest {
+  // The first day, `YYYY-MM-DD` (an instant is read for its day). Empty, or a
+  // day that does not parse, is TODAY — an unusable range is not an error and
+  // the default window stands.
+  string from = 1;
+  // The last day, inclusive. Empty, or earlier than `from`, is 45 days after
+  // `from`; later than 400 days after it is clamped to 400.
+  string to = 2;
+  // The zone (the file header's rule). It decides which day TODAY is — for an
+  // empty `from`, and for the answer's `today` — and nothing else: a birthday
+  // and a due date are civil days already.
+  string tz = 3;
+}
+
+// `agenda.parties`: the people an event can invite.
+message AgendaPartiesRequest {}
+
+// `agenda.search`: events matching a term, in the index's rank order.
+message AgendaSearchRequest {
+  // Owner-typed words. FTS operators in it stay literals; a term with no
+  // searchable word answers no events and no denial.
+  string term = 1;
+  // How many hits. REQUIRED: a zero is refused as `ERROR_CODE_INVALID_REQUEST`
+  // rather than defaulted, because a default is how an unbounded read gets
+  // written by accident. Clamped to 100, the query's own ceiling.
+  uint32 limit = 2;
+  // The zone each hit's local readings are in (the file header's rule).
+  string tz = 3;
+}
+
+// `agenda.event`: ONE event, or one occurrence of one, by id — what a detail
+// screen reads instead of a padded `upcoming` window (#1029).
+message AgendaEventRequest {
+  // The SERIES' id, as every row carries it.
+  string event_id = 1;
+  // The list's key, `<event_id>:<wall clock>` for an occurrence. Read only
+  // when `original_start_local` is empty; the event id alone is the series.
+  string instance_key = 2;
+  // The occurrence's series-local wall clock, as `AgendaEvent` carries it.
+  // EMPTY (and no occurrence in `instance_key`) is the series row itself.
+  string original_start_local = 3;
+  // The zone the local readings are in (the file header's rule).
+  string tz = 4;
+}
+
+// ---------------------------------------------------------------------------
+// The rows.
+// ---------------------------------------------------------------------------
+
+// One event — or ONE OCCURRENCE of a repeating one, which is the same row with
+// its own `dtstart` and `instance_key`. `event_id` is always the SERIES' id, so
+// reschedule, cancel, RSVP and attach all still target the series.
+message AgendaEvent {
+  string event_id = 1;
+  optional string ical_uid = 2;
+  optional string summary = 3;
+  optional string description = 4;
+  // This occurrence's start: the series' anchor moved to the occurrence.
+  string dtstart = 5;
+  optional string dtend = 6;
+  optional string start_tz = 7;
+  optional string end_tz = 8;
+  // `zoned`, `floating` or `all-day`. `all-day` is a day and not a time, so a
+  // surface draws no clock time for it (#1046, a v0 defect not carried).
+  optional string recurrence_semantics = 9;
+  // THE RULE, FOR AN EDITOR AND NEVER FOR A MEMBER. An editor reads it to show
+  // which repeat preset is set; what a member reads is `recurrence_summary`,
+  // and a raw RRULE on a screen is the defect that field exists to prevent
+  // (#834).
+  optional string rrule = 10;
+  // `supported` or `unsupported`. An unsupported rule — only an import can
+  // store one; a command refuses it — expands to nothing and the anchor stays
+  // visible (D-1020-S1).
+  optional string rrule_support = 11;
+  // `tentative`, `confirmed` or `cancelled`. `upcoming` never answers a
+  // cancelled event; `search` drops one after the hit.
+  optional string status = 12;
+  optional string location_place_id = 13;
+  optional string organizer_party_id = 14;
+  optional int64 sequence = 15;
+  optional string created_at = 16;
+  optional string updated_at = 17;
+  // The calendar edge: which calendar, the joining link, the reminders.
+  optional string calendar_id = 18;
+  optional string conferencing_uri = 19;
+  // The reminders, in the order they were set. Stored as JSON in the vault;
+  // decoded HERE, once, because a shell has no JSON to decode it with.
+  repeated AgendaReminder reminders = 20;
+  repeated AgendaAttachment attachments = 21;
+  // THE OWNER FIRST, so RSVP controls lead (#337); then by name.
+  repeated AgendaAttendee attendees = 22;
+  // The ONE member-facing recurrence sentence, resolved by the core. Absent
+  // on an event that does not repeat.
+  optional string recurrence_summary = 23;
+  // True on an occurrence the expansion moved off the series' own start, and
+  // FALSE on the occurrence AT it — the anchor. So this is not "does this
+  // repeat": `recurrence_summary` present is.
+  bool is_recurrence_instance = 24;
+  // THE LIST'S KEY, NEVER THE ROW'S IDENTITY: the event id for a one-off, and
+  // `<event_id>:<wall clock>` for every occurrence of a series, the anchor
+  // included.
+  string instance_key = 25;
+  // The occurrence's own identity — the series-local wall clock, never the
+  // resolved instant (#996 R21). What an occurrence edit is keyed on.
+  optional string original_start_local = 26;
+  // This occurrence's wall clock happens twice that day (a DST fall-back).
+  optional bool recurrence_overlap = 27;
+  // `search` only: the index's highlight of the match, `⟦`/`⟧` around the
+  // matched words.
+  optional string snippet = 28;
+
+  // --- Where it falls, in the request's `tz` (#1046). ---
+  // Computed by the core, so a view draws strings. EMPTY, all three, only on a
+  // row whose stored start does not parse — which no command writes.
+  //
+  // The start: `YYYY-MM-DDTHH:MM` on the request zone's wall clock — for a
+  // `zoned` row its instant read there, for a `floating` row its own wall
+  // clock (the same in every zone). For an ALL-DAY row, the civil date
+  // `YYYY-MM-DD` and never a time.
+  string local_start = 29;
+  // The end, in the same spelling. EMPTY when the row states no `dtend`: an
+  // instant with no length, drawn as its start alone. For an ALL-DAY row it
+  // is the LAST DAY, INCLUSIVE — the vault stores a one-day event with
+  // `dtend = dtstart`, as v0 did — never the day after.
+  string local_end = 30;
+  // Every civil day, `YYYY-MM-DD`, in order, the occurrence occupies in the
+  // request zone: what a Day list groups it under. A timed run's end is
+  // EXCLUSIVE — one ending exactly at local midnight does not occupy the next
+  // day, and one with no length occupies its own; an all-day run's end is
+  // inclusive. A day in the middle of a multi-day run is listed, so a
+  // Friday-to-Sunday event is on Saturday too.
+  repeated string local_days = 31;
+  // `recurrence_semantics` is `all-day`: a day and not a time, so a surface
+  // draws no clock time for it. The one test a view makes, answered here.
+  bool all_day = 32;
+  // `core_place.name` of `location_place_id`, so a detail can say where.
+  // Absent when the event names no place, or the place is gone.
+  optional string location_name = 33;
+}
+
+// One reminder: how long before the start it fires.
+message AgendaReminder {
+  int64 minutes_before = 1;
+}
+
+// One attachment on an event, joined to its bytes.
+message AgendaAttachment {
+  string attachment_id = 1;
+  string content_id = 2;
+  optional string role = 3;
+  optional int64 is_primary = 4;
+  // The ATTACHMENT's own reading of the bytes (#996 R20(b)); bytes carry no
+  // media type of their own.
+  string media_type = 5;
+  // Where v0's handler route served the bytes. A phone resolves bytes through
+  // `ContentUrlRequest` by `content_id`, never through this.
+  string content_uri = 6;
+  int64 byte_size = 7;
+}
+
+// One guest, and their reply.
+message AgendaAttendee {
+  // Absent on `search`'s projection, and on a guest an occurrence override
+  // introduced.
+  optional string attendee_id = 1;
+  string party_id = 2;
+  // `Guest` when the party has no display name.
+  string name = 3;
+  // `needs-action`, `accepted`, `declined` or `tentative`.
+  string partstat = 4;
+  optional string role = 5;
+  // This guest IS the vault's owner — `core_vault.self_party_id`, never a
+  // guess — so the RSVP controls are theirs.
+  bool is_you = 6;
+}
+
+// A calendar, as the picker draws it.
+message AgendaCalendar {
+  string calendar_id = 1;
+  optional string owner_party_id = 2;
+  optional string name = 3;
+  optional string color = 4;
+  optional string default_tz = 5;
+  optional string visibility = 6;
+}
+
+// One birthday inside the range.
+message AgendaBirthday {
+  string party_id = 1;
+  string name = 2;
+  int32 month = 3;
+  int32 day = 4;
+  AgendaBirthdayTier tier = 5;
+}
+
+// How close a birthday's person is. There is NO relationship-tier column: the
+// tier is derived, and the derivation is named here rather than implied.
+enum AgendaBirthdayTier {
+  AGENDA_BIRTHDAY_TIER_UNSPECIFIED = 0;
+  // The person is STARRED (the flags scheme's `starred` concept).
+  AGENDA_BIRTHDAY_TIER_INNER = 1;
+  // Everyone else — including every person in a vault with no flags scheme,
+  // which is an honest "nobody is starred" and never a refusal.
+  AGENDA_BIRTHDAY_TIER_OUTER = 2;
+}
+
+// One day with open work due on it. DAYS WITH NONE ARE ABSENT, not zero-filled.
+message AgendaDueDay {
+  // `YYYY-MM-DD`.
+  string day = 1;
+  // Every open task due that day — which can be more than `tasks` holds.
+  uint32 count = 2;
+  // In due order, at most eight: a shelf lists, it never pages. `count` says
+  // how many there are.
+  repeated AgendaDueTask tasks = 3;
+}
+
+message AgendaDueTask {
+  string task_id = 1;
+  string title = 2;
+}
+
+// One person the create-event picker can invite.
+message AgendaParty {
+  string party_id = 1;
+  string name = 2;
+  bool is_you = 3;
+}
+
+// ---------------------------------------------------------------------------
+// The answers.
+// ---------------------------------------------------------------------------
+
+message AgendaUpcoming {
+  // In start order, and EVERY ONE IN RANGE: a row is answered only if it is
+  // still running at `from` — it ends after it — or starts at or after it. So
+  // a multi-day event, or occurrence, that began before the range and is
+  // still going is in it; one that was over before the range opened is not.
+  // (A series is expanded from 31 days before `from` to find the running
+  // ones; v0 answered the rest of that month too, and the port does not —
+  // #1046, `tests/parity.rs`'s `ENDED_BEFORE_FROM_PER_CASE`.)
+  repeated AgendaEvent events = 1;
+  // Every calendar the member has, whether or not an event in range is on it.
+  repeated AgendaCalendar calendars = 2;
+  // TODAY, `YYYY-MM-DD`: the vault clock's instant read in the request's `tz`.
+  // A screen marks today and places the now line from this and `now_local`,
+  // never from a device clock read in `commonMain`.
+  string today = 3;
+  // NOW, `YYYY-MM-DDTHH:MM`, on the request zone's wall clock — where the now
+  // line is drawn against the rows' `local_start`/`local_end`.
+  string now_local = 4;
+}
+
+message AgendaDayContext {
+  // By month, then day, then name.
+  repeated AgendaBirthday birthdays = 1;
+  // By day.
+  repeated AgendaDueDay due = 2;
+  // No holiday source exists in the vault: EMPTY BY CONSTRUCTION, and the field
+  // holds the shape open rather than a shell inventing one.
+  repeated string holidays = 3;
+  // TODAY and NOW in the request's `tz`, as `AgendaUpcoming` carries them, so a
+  // grid decorated from this answer alone still knows which day is today.
+  string today = 4;
+  string now_local = 5;
+}
+
+message AgendaParties {
+  // The owner first and flagged, then by name. People only: an invitation is a
+  // commitment asked of a person, so agents, orgs and groups are left out.
+  repeated AgendaParty parties = 1;
+  // The owner's own party id. Absent on a vault that names no owner.
+  optional string me = 2;
+}
+
+message AgendaEventDetail {
+  // TODAY and NOW in the request's `tz`, as `AgendaUpcoming` carries them.
+  string today = 1;
+  string now_local = 2;
+  // ABSENT WHEN NOTHING LIVE ANSWERS: no such id, a trashed event, a key that
+  // is not an occurrence of the series, or a SKIPPED occurrence. A state the
+  // detail draws, not an error. A cancelled event is answered.
+  optional AgendaEvent event = 3;
+}
+
+message AgendaSearch {
+  // In the index's RANK ORDER, best match first. A hit is the series and never
+  // an occurrence: its `instance_key` is its `event_id`.
+  repeated AgendaEvent events = 1;
+}

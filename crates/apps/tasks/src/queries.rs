@@ -58,8 +58,15 @@ pub const CLOSED_STATUSES: [&str; 2] = ["completed", "cancelled"];
 
 /// One task row, as both task reads project it (`board.ts:37`-`:40`).
 pub const TASK_COLUMNS: &str = "task_id, parent_task_id, project_id, section_id, status, title, \
-     description, priority, due_at, completed_at, effort_min, rrule, tz, recurrence_anchor, \
-     series_id, sort_order, created_at, updated_at";
+     description, priority, due_at, completed_at, effort_min, remind_before_min, rrule, tz, \
+     recurrence_anchor, series_id, sort_order, created_at, updated_at";
+
+/// **THE TRASH IS NOT THE BOARD** (#1046). `schedule.delete_task` moves a task
+/// and every subtask under it to the trash — `deleted_at` and `purge_at` — and
+/// until this clause every task read here brought them back: a deleted task
+/// reappeared on the board, in the logbook and as a promoted orphan. Every
+/// statement over `schedule_task` states it, as Agenda's do for `core_event`.
+pub const LIVE: &str = "deleted_at IS NULL";
 
 // ---------------------------------------------------------------------------
 // The rows.
@@ -133,6 +140,10 @@ pub struct TaskRow {
     pub due_at: Option<String>,
     pub completed_at: Option<String>,
     pub effort_min: Option<i64>,
+    /// The reminder's lead time, in minutes before the due moment. v0 wrote it
+    /// through `add`/`edit` and never read it back, so the Reminder lens and
+    /// the detail's Reminder field always read "none".
+    pub remind_before_min: Option<i64>,
     pub rrule: Option<String>,
     pub tz: Option<String>,
     pub recurrence_anchor: Option<String>,
@@ -245,7 +256,7 @@ pub fn open_statement() -> KitResult<PageQuery> {
         "schedule_task",
         PageOrder::desc("created_at", "task_id"),
     )
-    .filter(&fragment.sql, fragment.bind))
+    .filter(&format!("{} AND {LIVE}", fragment.sql), fragment.bind))
 }
 
 /// `tasks.board.logbook` — the 50 most recently closed.
@@ -263,7 +274,7 @@ pub fn logbook_statement() -> KitResult<PageQuery> {
         "schedule_task",
         PageOrder::desc("completed_at", "task_id"),
     )
-    .filter(&fragment.sql, fragment.bind))
+    .filter(&format!("{} AND {LIVE}", fragment.sql), fragment.bind))
 }
 
 /// `tasks.board.projects` — the live projects, in their own order.
@@ -298,7 +309,7 @@ pub fn parents_statement(task_ids: &[String]) -> KitResult<PageQuery> {
         "schedule_task",
         PageOrder::asc("task_id", "task_id"),
     )
-    .filter(&fragment.sql, fragment.bind))
+    .filter(&format!("{} AND {LIVE}", fragment.sql), fragment.bind))
 }
 
 /// `tasks.board.children` — every subtask of a fetched top-level task.
@@ -310,7 +321,7 @@ pub fn children_statement(parent_ids: &[String]) -> KitResult<PageQuery> {
         "schedule_task",
         PageOrder::asc("task_id", "task_id"),
     )
-    .filter(&fragment.sql, fragment.bind))
+    .filter(&format!("{} AND {LIVE}", fragment.sql), fragment.bind))
 }
 
 fn by_target(
@@ -488,6 +499,7 @@ fn task_of(row: &Row) -> Option<TaskRow> {
         due_at: cell_text(row, "due_at"),
         completed_at: cell_text(row, "completed_at"),
         effort_min: cell_int(row, "effort_min"),
+        remind_before_min: cell_int(row, "remind_before_min"),
         rrule: cell_text(row, "rrule"),
         tz: cell_text(row, "tz"),
         recurrence_anchor: cell_text(row, "recurrence_anchor"),
@@ -706,6 +718,39 @@ fn read_decorations(
     })
 }
 
+/// The board's chrome: the live projects and every section, in their own
+/// order. The detail screen and the projects list read it without a board.
+///
+/// # Errors
+///
+/// A door refusal or a reached bound, as the caller's read would.
+pub fn load_chrome(door: &dyn PageDoor) -> KitResult<(Vec<ProjectRow>, Vec<SectionRow>)> {
+    let projects = read_pages(door, &projects_statement(), TASK_JOIN_BOUND)?
+        .iter()
+        .filter_map(|row| {
+            Some(ProjectRow {
+                project_id: cell_text(row, "project_id")?,
+                name: cell_text(row, "name"),
+                area: cell_text(row, "area"),
+                color: cell_text(row, "color"),
+                sort_order: cell_int(row, "sort_order"),
+            })
+        })
+        .collect();
+    let sections = read_pages(door, &sections_statement(), TASK_JOIN_BOUND)?
+        .iter()
+        .filter_map(|row| {
+            Some(SectionRow {
+                section_id: cell_text(row, "section_id")?,
+                project_id: cell_text(row, "project_id"),
+                name: cell_text(row, "name"),
+                sort_order: cell_int(row, "sort_order"),
+            })
+        })
+        .collect();
+    Ok((projects, sections))
+}
+
 /// `board` — the whole app.
 ///
 /// # Errors
@@ -733,29 +778,7 @@ pub fn load_board(
         Err(other) => return Err(other),
     };
     let closed_page = read_window(door, &logbook_statement()?, LOGBOOK_ROWS)?;
-    let projects: Vec<ProjectRow> = read_pages(door, &projects_statement(), TASK_JOIN_BOUND)?
-        .iter()
-        .filter_map(|row| {
-            Some(ProjectRow {
-                project_id: cell_text(row, "project_id")?,
-                name: cell_text(row, "name"),
-                area: cell_text(row, "area"),
-                color: cell_text(row, "color"),
-                sort_order: cell_int(row, "sort_order"),
-            })
-        })
-        .collect();
-    let sections: Vec<SectionRow> = read_pages(door, &sections_statement(), TASK_JOIN_BOUND)?
-        .iter()
-        .filter_map(|row| {
-            Some(SectionRow {
-                section_id: cell_text(row, "section_id")?,
-                project_id: cell_text(row, "project_id"),
-                name: cell_text(row, "name"),
-                sort_order: cell_int(row, "sort_order"),
-            })
-        })
-        .collect();
+    let (projects, sections) = load_chrome(door)?;
 
     let mut by_id: BTreeMap<String, TaskRow> = BTreeMap::new();
     for row in open_page.rows.iter().chain(closed_page.rows.iter()) {
@@ -895,4 +918,182 @@ pub fn load_search(
         })
         .collect();
     Ok((SearchData { tasks }, None))
+}
+
+// ---------------------------------------------------------------------------
+// One task, and search from a term (#1046, the phone's Tasks arm).
+// ---------------------------------------------------------------------------
+
+/// `tasks.task.by-id` — tasks by id, live only.
+///
+/// The detail screen opens a task the board may not have fetched (a board is
+/// a window; a notification or a search hit names any task), so it reads the
+/// row itself rather than finding it in a board answer.
+pub fn tasks_by_id_statement(name: &'static str, task_ids: &[String]) -> KitResult<PageQuery> {
+    let fragment = in_list("task_id", task_ids)?;
+    Ok(PageQuery::new(
+        name,
+        TASK_COLUMNS,
+        "schedule_task",
+        PageOrder::asc("task_id", "task_id"),
+    )
+    .filter(&format!("{} AND {LIVE}", fragment.sql), fragment.bind))
+}
+
+/// What `task` answers: the task with its whole family below it, and its
+/// parent when it has one. `task` is `None` when no LIVE task has the id —
+/// never found, purged, or in the trash.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TaskDetailData {
+    pub task: Option<TaskRow>,
+    pub parent: Option<TaskRow>,
+}
+
+/// `task` — one task, decorated as the board decorates it, with EVERY child
+/// (open and closed) nested in the open board's order and `done_children`
+/// counted over them.
+///
+/// # Errors
+///
+/// A door refusal becomes the payload's denial; a reached bound is an `Err`.
+pub fn load_task(
+    door: &dyn PageDoor,
+    task_id: &str,
+    now: &str,
+) -> KitResult<(TaskDetailData, Option<Denial>)> {
+    let task_id = task_id.trim();
+    if task_id.is_empty() {
+        return Ok((TaskDetailData::default(), None));
+    }
+    let ids = [task_id.to_owned()];
+    let found = match read_pages(
+        door,
+        &tasks_by_id_statement("tasks.task.by-id", &ids)?,
+        TASK_JOIN_BOUND,
+    ) {
+        Ok(rows) => rows.iter().find_map(task_of),
+        Err(KitError::Door(message)) => {
+            return Ok((TaskDetailData::default(), Some(denial_of(message))));
+        }
+        Err(other) => return Err(other),
+    };
+    let Some(task) = found else {
+        return Ok((TaskDetailData::default(), None));
+    };
+    let children: Vec<TaskRow> = read_pages(door, &children_statement(&ids)?, TASK_JOIN_BOUND)?
+        .iter()
+        .filter_map(task_of)
+        .collect();
+    let parent = match task.parent_task_id.clone() {
+        Some(parent_id) => read_pages(
+            door,
+            &tasks_by_id_statement("tasks.task.parent", &[parent_id])?,
+            TASK_JOIN_BOUND,
+        )?
+        .iter()
+        .find_map(task_of),
+        None => None,
+    };
+    let mut family_ids: Vec<String> = vec![task.task_id.clone()];
+    family_ids.extend(children.iter().map(|child| child.task_id.clone()));
+    let decorations = read_decorations(door, "board", &family_ids)?;
+    let mut nested: Vec<TaskRow> = children
+        .iter()
+        .map(|child| decorate(child, &decorations, now))
+        .collect();
+    nested.sort_by(|left, right| by_urgency(sort_key(left), sort_key(right)));
+    let done = nested
+        .iter()
+        .filter(|child| !is_open_status(&child.status))
+        .count();
+    let task = TaskRow {
+        children: nested,
+        done_children: Some(done),
+        ..decorate(&task, &decorations, now)
+    };
+    Ok((
+        TaskDetailData {
+            task: Some(task),
+            parent: parent.map(|parent| decorate(&parent, &decorations, now)),
+        },
+        None,
+    ))
+}
+
+/// The FTS domain a task is indexed under (`crates/search`'s `DOMAINS`).
+pub const TASK_TARGET_TYPE: &str = "schedule.task";
+
+/// `search` from a TERM: the FTS door's ranked hits, read back as task rows
+/// through the page door and folded by [`load_search`] — Agenda's
+/// `load_search_term`, for tasks.
+///
+/// **`deleted_at IS NULL` is stated even though the index already drops the
+/// trash**: this read is the one a member's screen is drawn from. A term with
+/// no searchable word, or a zero `limit`, answers the empty shape and no
+/// denial. `limit` is clamped to [`SEARCH_LIMIT`].
+///
+/// # Errors
+///
+/// A reached bound, as [`load_search`].
+pub fn load_search_term(
+    door: &dyn PageDoor,
+    search: &dyn centraid_search::Search,
+    principal: &centraid_search::Principal,
+    term: &str,
+    limit: usize,
+    now: &str,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() || limit == 0 {
+        return Ok((SearchData::default(), None));
+    }
+    let request =
+        centraid_search::SearchRequest::new(TASK_TARGET_TYPE, term, limit.min(SEARCH_LIMIT));
+    let page = match search.query(principal, &request) {
+        Ok(centraid_search::Answer::Data { page, .. }) => page,
+        Ok(centraid_search::Answer::Denied(denial)) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: denial.code,
+                    message: denial.message,
+                    revoked_at: denial.revoked_at,
+                }),
+            ));
+        }
+        Err(centraid_search::SearchError::NoSearchableWords { .. }) => {
+            return Ok((SearchData::default(), None));
+        }
+        Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
+    };
+    if page.rows.is_empty() {
+        return Ok((SearchData::default(), None));
+    }
+    // VAULT ORDER IS RANK ORDER, best match first; the rows come back in id
+    // order and are laid back onto this one.
+    let ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
+    let mut rows: BTreeMap<String, Row> = match read_pages(
+        door,
+        &tasks_by_id_statement("tasks.search.tasks", &ids)?,
+        TASK_JOIN_BOUND,
+    ) {
+        Ok(rows) => rows
+            .into_iter()
+            .filter_map(|row| cell_text(&row, "task_id").map(|id| (id, row)))
+            .collect(),
+        Err(KitError::Door(message)) => {
+            return Ok((SearchData::default(), Some(denial_of(message))));
+        }
+        Err(other) => return Err(other),
+    };
+    let hits: Vec<Row> = page
+        .rows
+        .iter()
+        .filter_map(|target| {
+            let mut row = rows.remove(&target.id)?;
+            row.insert("_snippet".to_owned(), Cell::Text(target.snippet.clone()));
+            Some(row)
+        })
+        .collect();
+    load_search(door, &hits, now)
 }

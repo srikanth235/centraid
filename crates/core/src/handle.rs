@@ -117,6 +117,13 @@ pub struct Handle {
     /// byte door drives on it: a runtime dropped while `ContentBytes` still
     /// holds its handle is a store whose next call panics.
     runtime: Mutex<Option<Arc<tokio::runtime::Runtime>>>,
+    /// THE STORE THIS CORE OPENED ITSELF, which is the store it must close.
+    ///
+    /// `Some` only after [`Handle::open_own_bytes`]: a store handed in through
+    /// [`Handle::attach_bytes`] belongs to whoever opened it, and closing it
+    /// here would close it under them. See this type's `Drop` for why an
+    /// owned store is closed rather than dropped.
+    owned_bytes: Mutex<Option<centraid_blobs::ContentBytes>>,
     /// Open staging sessions: bytes a shell is streaming in so this core can
     /// name them (#1025 S4). See [`crate::stage`].
     staging: crate::stage::Staging,
@@ -246,6 +253,7 @@ impl Core {
             diagnostics: AtomicU64::new(0),
             bytes: Mutex::new(None),
             runtime: Mutex::new(None),
+            owned_bytes: Mutex::new(None),
         })
     }
 
@@ -399,6 +407,9 @@ impl Handle {
         // be dropped.
         if let Ok(mut held) = self.runtime.lock() {
             *held = Some(Arc::new(runtime));
+        }
+        if let Ok(mut owned) = self.owned_bytes.lock() {
+            *owned = Some(door.clone());
         }
         self.attach_bytes(door);
         Ok(())
@@ -878,6 +889,12 @@ impl Handle {
             K::Originals(request) => Ok(response(wire::response::Kind::Originals(
                 self.with_vault(|vault| crate::originals::answer(vault, &self.path, request))?,
             ))),
+            // AN APP'S OWN QUERY, RUN WHERE IT IS WRITTEN (#1046). Through
+            // `with_vault` like a page read, because it IS page reads — the
+            // app crate's, through `app_query::VaultDoor`.
+            K::AppQuery(request) => Ok(response(wire::response::Kind::AppQuery(Box::new(
+                self.with_vault(|vault| crate::app_query::answer(vault, request))?,
+            )))),
         }
         .map_err(|error| {
             tracing::debug!(request_id, %error, "the core refused a request");
@@ -989,6 +1006,34 @@ impl Handle {
     }
 }
 
+/// A CORE THAT OPENED ITS OWN BYTE STORE CLOSES IT, so the next core on the
+/// same vault can open it again.
+///
+/// Dropping the store is not closing it. iroh-blobs 0.103 unlocks
+/// `<vault>.bytes/blobs.db` only when its actor's runtime is torn down, and
+/// that teardown runs on the runtime it is tearing down and never finishes —
+/// so the file stayed locked for the life of the process, and the next
+/// `open_own_bytes` on the same path parked in `block_on` forever
+/// (`ByteStore::open` now refuses that case by name instead). A shell that
+/// closes and reopens a vault — the JVM's ABI round trip, a phone switching
+/// back to a vault it left — is exactly that sequence.
+///
+/// Closed here, before the fields drop, because the close is driven on
+/// the `runtime` field's workers, and that runtime is one of the fields.
+/// `crates/core-ffi/tests/reopen.rs` is the regression.
+impl Drop for Handle {
+    fn drop(&mut self) {
+        let owned = self
+            .owned_bytes
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(door) = owned {
+            door.close();
+        }
+    }
+}
+
 fn response(kind: wire::response::Kind) -> wire::Response {
     wire::Response { kind: Some(kind) }
 }
@@ -1033,7 +1078,11 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // THE ORIGINALS ASK IS BOUNDED: one small file, and for a census
             // one listing of the store and one read of the library's rows. It
             // moves no byte and dials nothing.
-            | K::Originals(_),
+            | K::Originals(_)
+            // AN APP QUERY IS BOUNDED BY ITS OWN STATED CEILINGS: every join
+            // walks a declared fan-out and every expansion a declared instance
+            // cap, and reaching one is `ReadBoundReached`, not a longer read.
+            | K::AppQuery(_),
         )
         | None => RequestKind::Bounded,
         // A DRAIN IS AS LONG AS THE SPOOL IS and a RESTORE as long as the
@@ -1438,6 +1487,7 @@ mod tests {
                     with_held_thumbnail: false,
                     with_note_body: false,
                     with_document_size: false,
+                    with_minor_units: false,
                 }),
                 limit: 10,
                 after: None,

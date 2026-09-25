@@ -8,9 +8,11 @@ import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosCollectionsData
 import centraid.screen.v1.PhotosCollectionsEvent
 import centraid.screen.v1.PhotosCollectionsState
+import dev.centraid.shared.apps.photos.AlbumChoice
 import dev.centraid.shared.apps.photos.PhotosCollectionsMachine
 import dev.centraid.shared.apps.photos.PhotosCollectionsReads
 import dev.centraid.shared.apps.photos.PhotosCollectionsReads.Scan
+import dev.centraid.shared.apps.photos.PhotosSearchReads
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import io.kotest.assertions.withClue
@@ -207,6 +209,28 @@ class PhotosCollectionsSpec : StringSpec({
         // without one is REFUSED at prepare, which would take the whole page
         // down rather than return a blank column.
         query.with_held_thumbnail shouldBe false
+    }
+
+    "every album read in the app is kind = 'album', and binds it first" {
+        // `core_collection` HOLDS NOTES' NOTEBOOKS TOO (rung six). A read that
+        // lost its kind would list every notebook as an album, and the add
+        // sheet would offer a notebook the vault then refuses.
+        listOf(
+            PhotosCollectionsReads.albumsQuery(),
+            AlbumChoice.albumsQuery(),
+            PhotosSearchReads.albumsQuery(listOf("port")),
+        ).forEach { query ->
+            withClue(query.name) {
+                query.from shouldBe PhotosCollectionsReads.TABLE
+                query.where_.shouldNotBeNull().startsWith("kind = ?") shouldBe true
+                query.bind.first() shouldBe Value(text = PhotosCollectionsReads.ALBUM_KIND)
+            }
+        }
+        PhotosCollectionsReads.ALBUM_KIND shouldBe "album"
+        // Search keeps its words AFTER the kind: one bind per placeholder, in order.
+        val search = PhotosSearchReads.albumsQuery(listOf("port", "lis"))
+        search.where_ shouldBe "kind = ? AND (name LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')"
+        search.bind.map { it.text } shouldBe listOf("album", "%port%", "%lis%")
     }
 
     "only the three shelf statements ask the byte store anything" {

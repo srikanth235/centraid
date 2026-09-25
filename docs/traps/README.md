@@ -15,3 +15,4 @@ Read the matching trap before working near its area; each one was paid for once.
 | [shared-cargo-target.md](shared-cargo-target.md) | Two worktrees on one `CARGO_TARGET_DIR`: a build script's `OUT_DIR` is keyed by package identity, and a gate verdict is then worthless |
 | [serde-json-preserve-order.md](serde-json-preserve-order.md) | A `serde_json::Value`'s printed text is not canonical — `preserve_order` unifies across a build, so one crate's feature decides another crate's sort |
 | [first-dial-readiness.md](first-dial-readiness.md) | A seat's first dial races the gateway's `READY` line, a relay probe and the endpoint's own address discovery — all three read as "the gateway did not answer" |
+| [byte-store-lock.md](byte-store-lock.md) | A byte store dropped without `close` keeps `blobs.db` locked for the process, and iroh-blobs 0.103 turns the next open's error into a hang inside `centraid_open` |

@@ -1076,14 +1076,15 @@ fn deleting_a_task_takes_its_subtasks_and_restore_brings_them_back() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_schema_declares_sixteen_commands_and_four_confirm_gates() {
+fn the_schema_declares_seventeen_commands_and_four_confirm_gates() {
     let registry = registry();
     let names: Vec<&str> = registry
         .names()
         .into_iter()
         .filter(|name| name.starts_with("schedule."))
         .collect();
-    assert_eq!(names.len(), 16);
+    // v0's sixteen plus `schedule.purge_task` (#1015 D1).
+    assert_eq!(names.len(), 17);
     let confirming: Vec<&str> = names
         .iter()
         .copied()
@@ -1110,4 +1111,129 @@ fn the_schema_declares_sixteen_commands_and_four_confirm_gates() {
             .definition
             .online_only
     }));
+}
+
+// ---------------------------------------------------------------------------
+// The phone-shell port's core gaps (Tasks).
+// ---------------------------------------------------------------------------
+
+/// A TASK IS STAMPED BY THE VAULT CLOCK, not SQLite's `'now'`: `add_task`
+/// writes both timestamps and `edit_task` moves `updated_at` to the
+/// invocation's instant (the clock is frozen at 2026-01-01, which no host is).
+#[test]
+fn a_task_is_stamped_by_the_vault_clock_on_add_and_edit() {
+    let bench = Bench::new("task-clock");
+    let now = bench.vault().clock().now_text();
+    let task_id = bench.run("schedule.add_task", json!({ "title": "Clocked" }))["task_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    for column in ["created_at", "updated_at"] {
+        assert_eq!(
+            bench
+                .text(
+                    &format!("SELECT {column} FROM schedule_task WHERE task_id = ?1"),
+                    &[&task_id]
+                )
+                .as_deref(),
+            Some(now.as_str()),
+            "{column}"
+        );
+    }
+    bench.scratch.clock.advance_days(1);
+    let later = bench.vault().clock().now_text();
+    bench.run(
+        "schedule.edit_task",
+        json!({ "task_id": task_id, "title": "Clocked again" }),
+    );
+    assert_eq!(
+        bench
+            .text(
+                "SELECT updated_at FROM schedule_task WHERE task_id = ?1",
+                &[&task_id]
+            )
+            .as_deref(),
+        Some(later.as_str())
+    );
+}
+
+/// `clear_effort` UNSETS THE ESTIMATE, and asking to set and clear it at once
+/// is refused like every other `clear_*` pair.
+#[test]
+fn clear_effort_unsets_the_estimate_and_is_exclusive_with_setting_it() {
+    let bench = Bench::new("task-effort");
+    let task_id = bench.run(
+        "schedule.add_task",
+        json!({ "title": "Estimate", "effort_min": 30 }),
+    )["task_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let refused = bench.denied(
+        "schedule.edit_task",
+        json!({ "task_id": task_id, "effort_min": 10, "clear_effort": true }),
+    );
+    assert!(refused.contains("not both"), "{refused}");
+    bench.run(
+        "schedule.edit_task",
+        json!({ "task_id": task_id, "clear_effort": true }),
+    );
+    assert_eq!(
+        bench.number(
+            "SELECT COUNT(*) FROM schedule_task WHERE task_id = ?1 AND effort_min IS NULL",
+            &[&task_id]
+        ),
+        1
+    );
+}
+
+/// EMPTYING THE TASKS TRASH DESTROYS (#1015 D1). A trashed task and the
+/// subtasks trashed with it are gone, with every polymorphic row about them
+/// (here People's `about` link); a live task is refused; the person stays.
+#[test]
+fn purging_a_trashed_task_destroys_it_and_its_trashed_subtasks() {
+    let bench = Bench::new("task-purge");
+    let party = bench.run(
+        "people.add_person",
+        json!({ "display_name": "Maya", "cadence_days": 0 }),
+    )["party_id"]
+        .as_str()
+        .expect("a party")
+        .to_owned();
+    let parent = bench.run(
+        "people.add_task",
+        json!({ "party_id": party, "text": "Call" }),
+    )["task_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let child = bench.run(
+        "schedule.add_task",
+        json!({ "title": "Find number", "parent_task_id": parent }),
+    )["task_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let refused = bench.denied("schedule.purge_task", json!({ "task_id": parent }));
+    assert!(refused.contains("trash"), "{refused}");
+    bench.run("schedule.delete_task", json!({ "task_id": parent }));
+    bench.run("schedule.purge_task", json!({ "task_id": parent }));
+    for id in [&parent, &child] {
+        assert_eq!(
+            bench.number(
+                "SELECT (SELECT COUNT(*) FROM schedule_task WHERE task_id = ?1)
+                      + (SELECT COUNT(*) FROM core_entity WHERE entity_id = ?1)
+                      + (SELECT COUNT(*) FROM core_link WHERE from_id = ?1 OR to_id = ?1)",
+                &[id]
+            ),
+            0
+        );
+    }
+    assert_eq!(
+        bench.number(
+            "SELECT COUNT(*) FROM core_party WHERE party_id = ?1",
+            &[&party]
+        ),
+        1
+    );
 }

@@ -200,15 +200,19 @@ public object PhotosSearchReads {
         order = PageOrder(sort_column = "place_id", pk_column = "place_id"),
     )
 
-    /** `photos.search.albums` — albums whose name holds a word of the query. */
+    /**
+     * `photos.search.albums` — albums whose name holds a word of the query.
+     * `kind = 'album'` first: a notebook called "Portugal" is Notes', and is
+     * never an album hit here (rung six).
+     */
     public fun albumsQuery(words: List<String>): PageQuery {
         val (names, binds) = anyWord("name", words)
         return PageQuery(
             name = "photos.search.albums",
             select = listOf("collection_id", "name"),
             from = "core_collection",
-            where_ = names,
-            bind = binds,
+            where_ = "kind = ? AND $names",
+            bind = listOf(Value(text = PhotosCollectionsReads.ALBUM_KIND)) + binds,
             order = PageOrder(sort_column = "name", pk_column = "collection_id"),
         )
     }

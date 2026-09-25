@@ -126,6 +126,7 @@ fn fixture_vault() -> rusqlite::Connection {
         &FrozenRowMapping {
             tables_gone: &["share_party_vault_binding"],
             columns_gone: &[],
+            columns_added: &[],
         },
     )
     .expect("the fixture vault is built")
@@ -764,9 +765,15 @@ fn the_script_names_every_command_of_both_schemas_and_the_merge() {
     assert!(names.contains(&"core.merge_party"));
     assert_eq!(names.len(), 33);
 
-    // EVERY ACTION THE MANIFEST DECLARES HAS ITS COMMAND IN THE SCRIPT.
+    // EVERY ACTION THE MANIFEST DECLARES HAS ITS COMMAND IN THE SCRIPT —
+    // except the one command v0 never had. The script is v0's replay, so
+    // `people.purge_person` (#1015 D1) cannot be in it; its proof is
+    // `crates/vault/tests/people_commands.rs`'s two purge tests.
     let invoked: BTreeMap<&str, usize> = names.iter().map(|name| (*name, 0usize)).collect();
-    for row in centraid_apps_people::ACTIONS {
+    for row in centraid_apps_people::ACTIONS
+        .iter()
+        .filter(|row| row.command != "people.purge_person")
+    {
         assert!(
             invoked.contains_key(row.command),
             "{} invokes {}, which the parity script never runs",

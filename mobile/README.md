@@ -122,6 +122,17 @@ cd mobile/iosApp && xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
+**Which steps a change needs.** Every step is silent when skipped, so the rule is by what changed, not by what failed:
+
+| You changed | Re-run | Why it is silent otherwise |
+| --- | --- | --- |
+| anything under `crates/` the core links — an `app_query` arm, a command, a proto | 0, then 1 | the framework links the Rust archive by path; a stale slice answers the old arm and nothing says so ([stale-core-slice](../docs/traps/stale-core-slice.md)) |
+| `mobile/shared/src/commonMain` (a machine, a bridge, copy) | 1 | Xcode links `XCFrameworks/debug/CentraidShared.xcframework`; check with `find shared/src/commonMain -newer shared/build/XCFrameworks/debug/CentraidShared.xcframework` |
+| `crates/api-proto/proto/**` (`screen.proto`, `app_query.proto`) | 2, and 1 for the Wire side | `Sources/Generated` is gitignored and only protoc writes it |
+| a new `Sources/**.swift` file | 3 | the target globs a directory, and the project is generated |
+
+Building beside other work on one Mac: give each `xcodebuild` its own `-derivedDataPath`, and run one Gradle build at a time — two Kotlin/Native links contending for one daemon run out of memory rather than failing cleanly.
+
 **`swift test` IS NOT THE COMMAND, AND HAS NOT BEEN SINCE #1020.** This file said it was for a long time, with a green count beside it. `Package.swift` still argues for it at length — a macOS floor, a commented-out `binaryTarget`, Kotlin-touching declarations behind `#if canImport(CentraidShared)` — and every one of those pieces is real. What defeats it is simpler and newer: `Sources/` imports **UIKit**, which is not a macOS framework and cannot be guarded into existence. `ShellModel.swift` took the first one in `a4dd49d0d` and `ContentImage.swift` the second in `b3832bb6e`, both #1020 waves, and the host build has failed at dependency scanning ever since — so the three files under `Tests/` were not merely unrun, they were **uncompiled**, and the counts this file carried were from before those commits.
 
 The simulator bundle is the route now, and it is the better one regardless: `FontRegistrationTests` asserts `UIFont(name:)` resolves, that `UIAppFonts` names every emitted file, and that the 400 register resolves to the derived 470 face rather than a plain 400 static — none of which means anything without a real app bundle, since the last one reads `familyName` and the CoreText weight trait back out of the registered bytes. It needed two fixes to exist at all — `GENERATE_INFOPLIST_FILE` on the test target, which had no `Info.plist` and so was refused before compiling, and `PRODUCT_MODULE_NAME: CentraidApp` on the app target, because `Tests/` says `@testable import CentraidApp` and XcodeGen names a module after its target. **26 tests, 0 failures.**
@@ -135,7 +146,7 @@ The simulator bundle is the route now, and it is the better one regardless: `Fon
 | `IosSecureStore` | **Implemented** over `kSecClassGenericPassword` with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, so a background task can read while locked and a credential cannot ride an iCloud or encrypted-backup restore onto another device. This row used to say the Keychain "needs a `Security.framework` cinterop that no machine in this repository's CI can build" — **that claim was never checked and is false**: `platform.Security` ships as a DEFAULT Kotlin/Native platform library, and the same compiler that was already compiling the file compiled `SecItemAdd` on the first try. It held the per-vault ENDPOINT KEY until #1029 §1 deleted the enrolment plane; what is in it now is `Shelf.FOREGROUND_KEY` and the member's transfer rule, and it is where W5's restore credentials land. |
 | `IosNetworkStatus` | **Implemented** over `NWPathMonitor` (`platform.Network`, also a default platform library). `platformRefused` is now reserved for the monitor failing to answer within 2 s; a satisfied path is online and an unsatisfied one is offline, which are facts rather than refusals. While this row stood, it hard-coded `platformRefused = true` and `WriteGate` treats unknown as not-reachable — so **every write on iOS was refused, always**. `UIDevice.isBatteryMonitoringEnabled` is set at construction, without which `charging` read false for ever. |
 | `IosMediaLibrary.page` | **Implemented** (#1025 S6, D-1025-S7-70/71/72). `PHAsset` enumeration keyset on `creationDate` with the `localIdentifier` as the tiebreak — `NSPredicate` over `PHAsset` cannot express `localIdentifier`, so the predicate is `>=` and the overlap is dropped in Kotlin — plus a **streamed `PHAssetResource` byte door** (`MediaLibrary.open`) that feeds `Staging`, so THE CORE hashes and the phone never names its own bytes. `requestPermission` now actually asks, at `PHAccessLevelReadWrite`; it used to return the current status, so the "Allow photo access" button could be pressed for ever without the system prompt appearing. A Live Photo is two assets sharing one `capture_group_id`; burst members and RAW get **no inferred grouping**; `phash` is derived at commit from bytes the vault holds rather than by the phone, which would be a second opinion about a value that merges nothing. The whole pass — enumerate, stage, commit `media.add_asset` — is `dev.centraid.shared.shell.CameraRoll`. The `needs` declaration a GATEWAY pulled bytes on went with the gateway (#1029 §1), and so did `Request::Intent`: the bytes are staged into this vault's own store and the command commits the row beside them. |
-| `ShellModel.send` | **Wired for all four screens** (#1025 S5, lane L5). Home goes through `HomeBridge`; Tally, Photos and Notes go through `TallyBridge`, `PhotosBridge` and `NotesBridge`, which live in the app's own package because a bridge names its screen's types and `PerAppLayoutSpec` keeps that inside `apps`. Each attaches to the ONE `HomeSession` — one session, whatever the number of open cores — through `HomeSession.attachScreen`, which both serves the screen's `ReadPage` (`sync/ScreenRuntime.kt`) and routes it onto the change stream. The row used to say their machines had no read runtime at all, and that was the larger half of the defect: `ScreenEffect.ReadPage` reached nothing, so all three drew their seeded `LOADING` state for ever. The `fatalError` is gone — an unknown screen name is dropped, because in a build where every screen is wired it would only turn a typo into a crash on a member's phone. |
+| `ShellModel.send` | **Wired for every screen, through the registry** ([#1047](https://github.com/srikanth235/centraid/issues/1047) K5). Home goes through `HomeBridge` and the Photos screens through their own bridges; every other app registers its bridges and routes through `AppRegistry` (see [Adding an app screen](#adding-an-app-screen)). A bridge lives in the app's own package because it names its screen's types and `PerAppLayoutSpec` keeps that inside `apps`. Each attaches to the ONE `HomeSession` — one session, whatever the number of open cores — through `HomeSession.attachScreen` (page reads, `sync/ScreenRuntime.kt`) or `HomeSession.attachQueries` (app queries, `sync/ScreenQueries.kt`), which serve the screen's `ReadPage` and route it onto the change stream. An unknown screen name is dropped, because in a build where every screen is wired it would only turn a typo into a crash on a member's phone. |
 
 **`.xcode-version` is `26.6`, confirmed by the first real iOS compile.** The pin was `16.4` and had never been tested against anything; D-1020-E5a's rule was that the first compile confirms or replaces it. Kotlin/Native 2.4.20 **accepted** Xcode 26.6 — it refused nothing and named no other version — so 26.6 is what the file now holds, and it is a measurement rather than the guess the `16.4` was. `:shared:linkDebugFrameworkIosSimulatorArm64` links in **26 s** on an M-series Mac. **Thirteen** defects stood between the committed tree and a green test run, and a fourteenth (a `nm` invocation with GNU-only flags) kept the Rust symbol gate red on any Mac. None was visible to a machine that could not run these four steps.
 
@@ -178,19 +189,83 @@ dev/centraid/shared/
 ├── shell/      Home, the springboard, first moves, the band, the vault roster,
 │               the shelf and where this device's vaults live
 ├── screen/     THE CONTRACT, and nothing else: ScreenMachine + ScreenHost
-├── apps/       tally/ photos/ notes/ — each app's machine and its reads
+├── kit/        the laws every app screen is built from — no app type in it
+│   └── time/   civil-day arithmetic and words over the core's answers
+├── apps/       agenda/ docs/ notes/ people/ photos/ tally/ tasks/ — each
+│               app's machines, reads, writes and bridges
+├── custody/    the 24 words, pairing and restore
 ├── nav/        the navigation model
-├── sync/       the change stream, the per-screen read runtime and the shared
-│               failure mapping
-└── platform/   the expect/actual seam
+├── sync/       the change stream, the page-read and app-query runtimes, the
+│               drain and the shared failure mapping
+└── platform/   the expect/actual seam, the device clock included
 ```
+
+The copy is `dev/centraid/design/copy/<App>Copy.kt`, one file per app, each the hand-maintained twin of `copy/<app>.json`; `KitTimeMoneyCopySpec` fails when a twin drifts. `design/Copy.kt`'s `CentraidCopy` is a forwarding shim for the old spelling and goes once nothing reads it.
 
 Two Konsist rules make the shape load-bearing rather than decorative (`PerAppLayoutSpec`):
 
 1. **An `apps.<x>` package imports no other `apps.<y>`.** Two apps meet in the VAULT, as rows, and never in a reducer.
-2. **Nothing outside `apps` imports from inside it.** The shell drives a screen through `ScreenMachine`/`ScreenHost`, which is what lets it host a screen it knows nothing else about; a `shell/` file naming `apps.tally.TallyListState` would be a shell that has to be edited to add an app.
+2. **Nothing outside `apps` imports from inside it.** The shell drives a screen through `ScreenMachine`/`ScreenHost`, which is what lets it host a screen it knows nothing else about; a `shell/` file naming `apps.tally.TallyListState` would be a shell that has to be edited to add an app. `kit` is outside `apps` too, so the kit names no app type.
 
 A third assertion says `screen` holds exactly two files, because a screen that moved back into it is a screen rule 2 can no longer say anything about.
+
+## The kit, the app queries, and adding an app screen
+
+Every first-party app but Locker is on the phone: Agenda ([#1046](https://github.com/srikanth235/centraid/issues/1046)), Tasks, People, Docs, Notes and Tally ([#1047](https://github.com/srikanth235/centraid/issues/1047)), beside Photos. They are built from one kit on three layers, so a port supplies an app's content and copy and none of the plumbing. The rulings behind it are [R-1047-K1…K6](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047).
+
+### Reads: a page, or an app query
+
+A screen reads one of two ways, and never joins tables itself:
+
+- **A page read** (`ScreenReads`, `sync/ScreenRuntime.kt`) — one `PageRequest` over one table, for a screen that is one table (Photos' shelves, the kit's trash where an app has no trash query).
+- **An app query** (`ScreenQueries`, `sync/ScreenQueries.kt`) — `Request::AppQuery` runs a registered query from the app's crate in the core and answers a typed message (`crates/api-proto/proto/centraid/core/v1/app_query.proto`, one `<app>.proto` per app). Everything that joins, expands a repeating series or folds a ledger goes here: Agenda's `upcoming`, the Tasks board, the People roster, the Docs drive, the Notes library, the Tally dashboard. `requests(state, now)` answers the queries for the state's destination, run in order; `arrived(answers, requests)` folds them into one event; one refused or denied query fails the whole read. `tables` is every table the queries read, and `AppReadsSpec` checks it against the machine's `rowsChanged` over the vault DDL. `HomeSession.attachQueries(host, queries, writes, left)` attaches one.
+
+There is one query engine: no Kotlin or Swift code joins tables or expands an rrule. A read the phone needs and no arm answers is a new arm in the core, in its app's field range ([R-1047-Q1](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047)).
+
+### The device clock
+
+`commonMain` has no calendar and no zone database. `platform/DeviceClock` answers `{zone, epochMillis}` — the IANA zone name and the wall clock — and `ScreenQueryRuntime` reads it at **every** read and hands it to `requests`, so a phone that crosses a border reads in the new zone on its next read. The core does all civil arithmetic in the request's `tz` and answers `today`, `now_local` and every `*_local` reading; a machine never derives "today" from `epochMillis`, which is for bounds only ([R-1046-2](../docs/decisions.md#agenda-on-the-phone-1046)). A blank zone is refused before the core is asked. `FakeDeviceClock` (jvmMain) is the specs' clock.
+
+### The KMP kit (`kit/`)
+
+| Piece | What it holds |
+| --- | --- |
+| `ReadContent` / `ContentLens` | the four read arms — loading, failed, denied, data — and a lens onto a screen's own `content` oneof |
+| `PagedList` | page one replaces; a later page is appended only when its answered cursor matches the list's next cursor; no next page while a page-one re-read is out; `rowsChanged` re-reads |
+| `BandLaw` | tapping the tab you are on does nothing |
+| `SearchLaw` | closing search clears the term and its answer |
+| `AutosaveLaw` | 900 ms after typing stops, flush on leave, one invoke key per edit, only changed fields, a vault change never overwrites typing ([R-1047-K3](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047)) |
+| `WriteLaw`, `InvokeKeys` | one write in flight per key; only `EXECUTED` counts as committed |
+| `TrashSpec` → `TrashMachine` / `TrashReads` | one trash screen per app (`"<app>.trash"`); `purgeCommand = null` means the app has no destroy path and the screen offers restore only |
+| `ScreenBridge` | the one bridge shape: `attach`, `observe`, `send` (Swift), `forward` (Compose), `current`, `departed`, `leave`, `close` |
+| `MoneyFold`, `time/CivilDays`, `time/CivilWords` | money sums per currency, and day words over civil dates the core answered |
+
+`departed()` is "the member left": the machine's `Left` runs (the autosave flush) and the bridge lives on. `leave()` also closes it. A write that fails after its screen was left is published on `HomeSession.strandedWrites`.
+
+The proto half is the `// --- Kit ---` section of `screen.proto`: `Denied`, `EmptyState`, `SearchField`, `WriteState`, `WriteSettled`, `Autosave`, `Confirm`, `StatusChip`, `ListRow`, `SectionHead`, `TrashRow`, `TrashList*`.
+
+### The native kit
+
+| iOS (`iosApp/Sources/Kit/`) | Android (`androidApp/…/kit/`) | Room or part |
+| --- | --- | --- |
+| `ScreenContent`, `ReadStates` | `ReadState` | the four read arms, skeleton rows (never a spinner), failure with retry, empty state, the denied gate |
+| `Rooms` | `Rooms` | `AppPlace`, `PushedPage`, `EditorRoom`, `SheetRoom` — the rooms of [DESIGN.md](../DESIGN.md) |
+| `Rows` | `Rows` | `CentraidRow`, status chip, section header, show more |
+| `Sheets` | `Sheets` | `ConfirmSheet`, `OptionSheet` / sheet rows |
+| `CentraidSearchField` | `SearchField` | the one search field |
+| `AutosaveStatus`, `TrashListView`, `Money` | `TrashListScreen`, `theme/Theme.kt` | the autosave line, the trash list, money rendering |
+| — | `KitWords` | the kit's few fixed words no machine carries yet (retry, show more); they belong in `SharedCopy` |
+
+Money renders natively from `{minor, currency, exponent}`; `contracts/screens/money-render.json` is the one fixture both shells are held to (`Tests/MoneyRenderTests.swift`, `androidApp/src/test/…/MoneyRenderTest.kt`).
+
+### Adding an app screen
+
+1. **Shared.** Append a `// --- <App> ---` section to `screen.proto` (messages prefixed with the app's name; state, data, event; every content oneof has loading, failure, the kit `Denied` and data). Write the machine, the reads (`ScreenQueries` or `ScreenReads`), the writes and a bridge in `apps/<app>/`; screen ids are `"<app>.<screen>"`. Append the app's block to `nav/Navigation.kt`, add the screen to `AppReadsSpec`, and put every word in `copy/<app>.json` and its `<App>Copy.kt` twin.
+2. **iOS.** One file, `Sources/<App>/<App>Screens.swift`, conforming to `AppScreens`: `register(into:)` hands the shell a `ScreenPort.of(id, bridge)` per bridge and a `shell.route(id, open:, view:)` per screen, and `tileRoute` says where the Home tile leads. Then **one line** in `AppRegistry.apps` (`Kit/ScreenRegistry.swift`). A view pushes with `shell.path.append(.screen(id, parameterBytes))`; an editor passes `onDeparted: { shell.departed(id) }`. The destination switch in `CentraidApp.swift` sends `Opened` with `.task(id: route)`, so a swap in place re-opens (`NavigationAndMountSpec`).
+3. **Android.** One file, `screens/<app>/<App>Routes.kt`, implementing `AppRoutes` (`handles`, `opens(moveId)`, `attach`, `back`, `Routes`), holding the app's bridges for the activity's life; `Routes` sends `Opened` from a `LaunchedEffect` keyed on the destination's parameters, collects `bridge.host.state` and passes `bridge::forward` as `onEvent`. Then **one line** in `MainActivity.routes`.
+4. **Intents are the shell's.** A machine emits `EventPicked`, `NotePicked`, `SendToTasks` and the like and changes nothing; the view forwards the event, then pushes the destination (and opens the target bridge) or hands the OS its `tel:`, `mailto:`, map or share intent.
+
+Views decide nothing: a label, sentence, chip, hue key, accessibility label, empty-state choice or enabled flag a view needs and the state does not carry is a gap in the machine, never a computation in Swift or Compose ([R-1047-K1](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047)).
 
 ## Home, and the pattern the fan-out follows
 
@@ -248,8 +323,10 @@ A cell stays a placeholder when the door says the bytes are not here, when it re
 ```sh
 mobile/scripts/android-core.sh                                   # the Rust core, first
 cd mobile && ./gradlew -Pcentraid.android=true :androidApp:installDebug
-# then pair it with a seeded gateway — "Seeing it with real data" above
+mobile/scripts/demo-vault.sh android                             # two seeded vaults — "Seeing it with real data" above
 ```
+
+The app screens are covered on Android by `:androidApp:assembleDebug` and the JVM specs; the emulator is the hand-off for walking them, and `adb` hangs on some hosts — when it does, say so rather than claim a walk.
 
 **JNA is one library in two packages and the package is the extension.** Same group, name and version — `net.java.dev.jna:jna` — published both as a jar and as an `.aar`. The jar bundles `libjnidispatch` for DESKTOP ABIs as ordinary resources; the aar carries the Android ones as real `lib/<abi>/libjnidispatch.so` entries, which is the only shape a packager installs and `System.loadLibrary` finds. Getting it wrong fails two ways and both were seen:
 

@@ -127,18 +127,21 @@ mod tests {
         }
     }
 
-    /// THIRTY-FOUR SCOPES: eighteen reads over five schemas, and **sixteen
-    /// `act` scopes, one per action** (census §A0's table).
+    /// TWENTY-SEVEN SCOPES: eleven reads over three schemas, and **sixteen
+    /// `act` scopes, one per action** (census §A0's table). The eight reads
+    /// over `share`, `social` and `core.party` left with the sharing plane
+    /// (#1029's scope amendment); `core.content_text` is the reader's body
+    /// (`docs.document.body`, #1046).
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed, because the whole point of the narrow form is that it
     /// tracks the actions: a seventeenth action with no scope is an action the
     /// grant does not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_thirty_four_scopes_with_one_act_scope_per_action() {
+    fn it_declares_twenty_seven_scopes_with_one_act_scope_per_action() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Docs declares its reach");
-        assert_eq!(vault.scopes.len(), 34);
+        assert_eq!(vault.scopes.len(), 27);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -147,7 +150,7 @@ mod tests {
             .collect();
         schemas.sort_unstable();
         schemas.dedup();
-        assert_eq!(schemas, ["access", "blob", "core", "share", "social"]);
+        assert_eq!(schemas, ["access", "blob", "core"]);
 
         let mut declared_acts: Vec<&str> = vault
             .scopes
@@ -169,7 +172,7 @@ mod tests {
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Read)
             .count();
-        assert_eq!(reads, 18);
+        assert_eq!(reads, 11);
         // NOTHING WIDER, and nothing revealed: `read+act` over a whole schema
         // is the widest form and only agenda and people use it; `reveal` is
         // Locker's alone.

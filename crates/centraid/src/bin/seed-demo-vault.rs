@@ -379,7 +379,7 @@ fn main() {
     let calendar_id = first_row(&handle, "schedule_calendar", "calendar_id");
 
     let now = now_ms();
-    let report = handle
+    let mut report = handle
         .with_vault(|vault| {
             let founded = vault.found(&vault_name, "Owner")?;
             let registry = Registry::with_system_commands()?;
@@ -391,28 +391,28 @@ fn main() {
                 refused: Vec::new(),
                 gaps: std::collections::BTreeSet::new(),
             };
-            let mut report = Report::default();
             if wanted.has("people") {
-                report.people = seed_people(&mut seeder);
+                seed_people(&mut seeder);
             }
             if wanted.has("notes") {
-                report.notes = seed_notes(&mut seeder);
+                seed_notes(&mut seeder);
             }
             if wanted.has("docs") {
-                report.docs = seed_docs(&mut seeder, now);
+                seed_docs(&mut seeder, now);
             }
             if wanted.has("photos") {
-                report.photos = seed_photos(&mut seeder, now);
+                seed_photos(&mut seeder, now);
             }
             if wanted.has("tasks") {
-                report.tasks = seed_tasks(&mut seeder, now);
+                seed_tasks(&mut seeder, now);
             }
             if wanted.has("tally") {
-                report.tally = seed_tally(&mut seeder, now, &founded.owner_party_id);
+                seed_tally(&mut seeder, now, &founded.owner_party_id);
             }
-            report.refused = seeder.refused;
-            report.gaps = seeder.gaps;
-            Ok(report)
+            Ok(Report {
+                refused: seeder.refused,
+                gaps: seeder.gaps,
+            })
         })
         .expect("the scenario seeds");
 
@@ -424,21 +424,32 @@ fn main() {
     // NOT WANTED IS NOT MISSING. Folding the two together would make a vault
     // seeded without an agenda print the "this vault has no calendar" warning
     // below, which names a real defect and would then cry wolf on every run.
-    let agenda = match calendar_id.filter(|_| wanted.has("agenda")) {
-        Some(calendar_id) => handle
-            .with_vault(|vault| {
-                let registry = Registry::with_system_commands()?;
-                let principal = Principal::owner("demo-device");
-                let mut seeder = Seeder {
-                    vault,
-                    registry: &registry,
-                    principal: &principal,
-                    refused: Vec::new(),
-                    gaps: std::collections::BTreeSet::new(),
-                };
-                Ok(seed_agenda(&mut seeder, now, &calendar_id))
-            })
-            .expect("the agenda seeds"),
+    match calendar_id.filter(|_| wanted.has("agenda")) {
+        Some(calendar_id) => {
+            // ITS REFUSALS JOIN THE REPORT. This seeder is a second one, and
+            // they used to be dropped with it: an agenda that seeded nothing
+            // printed `CENTRAID_REFUSED=0` and exited 0.
+            let agenda = handle
+                .with_vault(|vault| {
+                    let registry = Registry::with_system_commands()?;
+                    let principal = Principal::owner("demo-device");
+                    let mut seeder = Seeder {
+                        vault,
+                        registry: &registry,
+                        principal: &principal,
+                        refused: Vec::new(),
+                        gaps: std::collections::BTreeSet::new(),
+                    };
+                    seed_agenda(&mut seeder, now, &calendar_id);
+                    Ok(Report {
+                        refused: seeder.refused,
+                        gaps: seeder.gaps,
+                    })
+                })
+                .expect("the agenda seeds");
+            report.refused.extend(agenda.refused);
+            report.gaps.extend(agenda.gaps);
+        }
         None => {
             if wanted.has("agenda") {
                 eprintln!(
@@ -446,9 +457,16 @@ fn main() {
                      `Vault::found` mints one; a vault founded by an older build does not have it."
                 );
             }
-            0
         }
-    };
+    }
+    // WHAT HOME WILL DRAW, READ BACK BEFORE THE HANDLE CLOSES. Each number is
+    // the row count of the table that app's Home tile pages (`HomeReads.READS`
+    // in `mobile/shared`), read through the same door. It used to be a count of
+    // the commands each seed function saw succeed, which is a different number
+    // for every app that writes more than one kind of row: Notes said 7 over
+    // 5 notes and 2 notebooks, Docs 5 over 3 documents and 2 folders, and Tasks
+    // said 9 while the tile drew 11, because two People gifts are tasks.
+    let seeded = SEEDED_TABLES.map(|(app, table, pk)| (app, count_rows(&handle, table, pk)));
     handle.close();
     // AND THE FILE IS FINISHED BEFORE THIS PROCESS GOES, for the same reason
     // the store is flushed below (#1020 wave A, and the run that found it).
@@ -470,10 +488,11 @@ fn main() {
 
     println!("CENTRAID_VAULT={}", vault_path.display());
     println!("CENTRAID_VAULT_NAME={vault_name}");
-    println!(
-        "CENTRAID_SEEDED people={} notes={} docs={} photos={} agenda={} tasks={} tally={} locker=0",
-        report.people, report.notes, report.docs, report.photos, agenda, report.tasks, report.tally
-    );
+    let counts: Vec<String> = seeded
+        .iter()
+        .map(|(app, rows)| format!("{app}={rows}"))
+        .collect();
+    println!("CENTRAID_SEEDED {} locker=0", counts.join(" "));
     for gap in &report.gaps {
         println!(
             "CENTRAID_GAP={gap} — registered with no body yet, so the app it belongs to seeds nothing"
@@ -489,6 +508,63 @@ fn main() {
             println!("  {line}");
         }
         std::process::exit(1);
+    }
+}
+
+/// Each app, the table its Home tile pages, and that table's primary key —
+/// the `from` and the `pk_column` of `HomeReads.READS`, in its order.
+const SEEDED_TABLES: [(&str, &str, &str); 7] = [
+    ("photos", "media_asset", "asset_id"),
+    ("docs", "core_document", "document_id"),
+    ("notes", "knowledge_note", "note_id"),
+    ("agenda", "core_event", "event_id"),
+    ("tasks", "schedule_task", "task_id"),
+    ("people", "core_party", "party_id"),
+    ("tally", "tally_group", "group_id"),
+];
+
+/// Every row of a table, counted by paging it through the read door to the end.
+///
+/// There is no `COUNT(*)` on the door and `sql-confinement` refuses SQL here
+/// (see [`first_row`]), so the count is the rows the pages hand back — which is
+/// also exactly how a Home tile arrives at its number.
+fn count_rows(handle: &centraid_core::Handle, table: &str, pk: &str) -> usize {
+    let mut rows = 0;
+    let mut after = None;
+    loop {
+        let request = wire::Request {
+            kind: Some(wire::request::Kind::Page(wire::PageRequest {
+                query: Some(wire::PageQuery {
+                    name: "seed.count".to_owned(),
+                    select: vec![pk.to_owned()],
+                    from: table.to_owned(),
+                    r#where: None,
+                    bind: Vec::new(),
+                    order: Some(wire::PageOrder {
+                        sort_column: pk.to_owned(),
+                        pk_column: pk.to_owned(),
+                        descending: false,
+                    }),
+                    with_held_thumbnail: false,
+                    with_note_body: false,
+                    with_document_size: false,
+                    with_minor_units: false,
+                }),
+                limit: 500,
+                after,
+            })),
+        };
+        let response = handle
+            .call(&request)
+            .unwrap_or_else(|refusal| panic!("counting {table} was refused: {refusal:?}"));
+        let Some(wire::response::Kind::Page(page)) = response.kind else {
+            panic!("counting {table} did not answer with a page");
+        };
+        rows += page.rows.len();
+        match page.next {
+            Some(next) => after = Some(next),
+            None => return rows,
+        }
     }
 }
 
@@ -514,6 +590,7 @@ fn first_row(handle: &centraid_core::Handle, table: &str, column: &str) -> Optio
                 with_held_thumbnail: false,
                 with_note_body: false,
                 with_document_size: false,
+                with_minor_units: false,
             }),
             limit: 1,
             after: None,
@@ -530,14 +607,7 @@ fn first_row(handle: &centraid_core::Handle, table: &str, column: &str) -> Optio
     }
 }
 
-#[derive(Default)]
 struct Report {
-    people: u32,
-    notes: u32,
-    docs: u32,
-    photos: u32,
-    tasks: u32,
-    tally: u32,
     refused: Vec<String>,
     gaps: std::collections::BTreeSet<String>,
 }
@@ -549,8 +619,7 @@ struct Report {
 // birthdays, canonical gift tasks and one outstanding debt."
 // ---------------------------------------------------------------------------
 
-fn seed_people(seeder: &mut Seeder) -> u32 {
-    let mut seeded = 0;
+fn seed_people(seeder: &mut Seeder) {
     let mut ids = Vec::new();
     for (name, role, cadence) in [
         ("Maya Alvarez", "College friend", 30),
@@ -563,7 +632,6 @@ fn seed_people(seeder: &mut Seeder) -> u32 {
             json!({ "display_name": name, "role": role, "cadence_days": cadence }),
         );
         if let Some(party) = Seeder::id(output.as_ref(), "party_id") {
-            seeded += 1;
             ids.push(party);
         }
     }
@@ -571,7 +639,7 @@ fn seed_people(seeder: &mut Seeder) -> u32 {
         [maya, jake, grandpa, chris] => {
             (maya.clone(), jake.clone(), grandpa.clone(), chris.clone())
         }
-        _ => return seeded,
+        _ => return,
     };
 
     for (party, kind, text) in [
@@ -591,67 +659,46 @@ fn seed_people(seeder: &mut Seeder) -> u32 {
             "Sent the portfolio feedback he asked for.",
         ),
     ] {
-        if seeder
-            .run(
-                "people.log_interaction",
-                json!({ "party_id": party, "kind": kind, "text": text }),
-            )
-            .is_some()
-        {
-            seeded += 1;
-        }
+        seeder.run(
+            "people.log_interaction",
+            json!({ "party_id": party, "kind": kind, "text": text }),
+        );
     }
 
     for (party, label, month_day, reminder) in [
         (&grandpa, "Birthday", "08-14", true),
         (&maya, "Birthday", "11-02", false),
     ] {
-        if seeder
-            .run(
-                "people.add_important_date",
-                json!({
-                    "party_id": party,
-                    "label": label,
-                    "month_day": month_day,
-                    "reminder_on": reminder,
-                }),
-            )
-            .is_some()
-        {
-            seeded += 1;
-        }
+        seeder.run(
+            "people.add_important_date",
+            json!({
+                "party_id": party,
+                "label": label,
+                "month_day": month_day,
+                "reminder_on": reminder,
+            }),
+        );
     }
 
     for (party, text) in [
         (&grandpa, "Large-print edition of Lonesome Dove"),
         (&chris, "Fountain pen ink sampler"),
     ] {
-        if seeder
-            .run(
-                "people.add_gift",
-                json!({ "party_id": party, "text": text }),
-            )
-            .is_some()
-        {
-            seeded += 1;
-        }
+        seeder.run(
+            "people.add_gift",
+            json!({ "party_id": party, "text": text }),
+        );
     }
 
-    if seeder
-        .run(
-            "people.add_debt",
-            json!({
-                "party_id": jake,
-                "direction": "owe",
-                "amount_minor": 15_000,
-                "reason": "His half of the cabin deposit",
-            }),
-        )
-        .is_some()
-    {
-        seeded += 1;
-    }
-    seeded
+    seeder.run(
+        "people.add_debt",
+        json!({
+            "party_id": jake,
+            "direction": "owe",
+            "amount_minor": 15_000,
+            "reason": "His half of the cabin deposit",
+        }),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -661,8 +708,7 @@ fn seed_people(seeder: &mut Seeder) -> u32 {
 // scratch note."
 // ---------------------------------------------------------------------------
 
-fn seed_notes(seeder: &mut Seeder) -> u32 {
-    let mut seeded = 0;
+fn seed_notes(seeder: &mut Seeder) {
     let travel = Seeder::id(
         seeder
             .run("knowledge.create_notebook", json!({ "name": "Travel" }))
@@ -675,7 +721,6 @@ fn seed_notes(seeder: &mut Seeder) -> u32 {
             .as_ref(),
         "notebook_id",
     );
-    seeded += u32::from(travel.is_some()) + u32::from(recipes.is_some());
 
     let notes: [(&str, &str, &str, Option<&String>); 5] = [
         (
@@ -714,11 +759,8 @@ fn seed_notes(seeder: &mut Seeder) -> u32 {
         if let Some(notebook) = notebook {
             input["notebook_id"] = json!(notebook);
         }
-        if seeder.run("knowledge.create_note", input).is_some() {
-            seeded += 1;
-        }
+        seeder.run("knowledge.create_note", input);
     }
-    seeded
 }
 
 // ---------------------------------------------------------------------------
@@ -745,8 +787,7 @@ fn markdown(text: &str) -> String {
     format!("data:text/markdown;charset=utf-8,{encoded}")
 }
 
-fn seed_docs(seeder: &mut Seeder, now: i64) -> u32 {
-    let mut seeded = 0;
+fn seed_docs(seeder: &mut Seeder, now: i64) {
     let travel = Seeder::id(
         seeder
             .run("core.create_folder", json!({ "name": "Travel" }))
@@ -759,7 +800,6 @@ fn seed_docs(seeder: &mut Seeder, now: i64) -> u32 {
             .as_ref(),
         "folder_id",
     );
-    seeded += u32::from(travel.is_some()) + u32::from(home.is_some());
 
     let leaving = day(now, 3);
     let back = day(now, 6);
@@ -779,7 +819,6 @@ fn seed_docs(seeder: &mut Seeder, now: i64) -> u32 {
         "document_id",
     );
     if let Some(packing) = packing.as_ref() {
-        seeded += 1;
         // ONE EDIT, so version history has two versions to show: the walk is
         // `revises` links between CONTENT items, minted by this call.
         let revised = format!(
@@ -816,9 +855,7 @@ fn seed_docs(seeder: &mut Seeder, now: i64) -> u32 {
     if let Some(travel) = travel.as_ref() {
         cabin_input["folder_id"] = json!(travel);
     }
-    if seeder.run("core.add_document", cabin_input).is_some() {
-        seeded += 1;
-    }
+    seeder.run("core.add_document", cabin_input);
 
     let insurance = "# Renters insurance policy (sample)\n\nThis is sample demo data, not a real policy.\n\n\
          - Policy number: SAMPLE-0000-0000\n- Personal property: $30,000\n- Liability: $100,000\n\
@@ -830,10 +867,7 @@ fn seed_docs(seeder: &mut Seeder, now: i64) -> u32 {
     if let Some(home) = home.as_ref() {
         insurance_input["folder_id"] = json!(home);
     }
-    if seeder.run("core.add_document", insurance_input).is_some() {
-        seeded += 1;
-    }
-    seeded
+    seeder.run("core.add_document", insurance_input);
 }
 
 // ---------------------------------------------------------------------------
@@ -1250,8 +1284,7 @@ fn base64_of(bytes: &[u8]) -> String {
 /// door exists now (`Vault::with_blobs`), so this is v0's scenario entire:
 /// the same frames, the same places, the same two favourites, the same
 /// shortlist album.
-fn seed_photos(seeder: &mut Seeder, now: i64) -> u32 {
-    let mut seeded = 0;
+fn seed_photos(seeder: &mut Seeder, now: i64) {
     let mut asset_by_file: std::collections::BTreeMap<&str, String> =
         std::collections::BTreeMap::new();
     // STRICTLY IN ORDER, as v0 runs them: ids are minted per invocation, so a
@@ -1265,7 +1298,6 @@ fn seed_photos(seeder: &mut Seeder, now: i64) -> u32 {
         let Some(output) = seeder.run("media.add_asset", input) else {
             continue;
         };
-        seeded += 1;
         let Some(asset_id) = Seeder::id(Some(&output), "asset_id") else {
             continue;
         };
@@ -1284,29 +1316,23 @@ fn seed_photos(seeder: &mut Seeder, now: i64) -> u32 {
     // can show — and the one cell in the demo library that draws no image.
     // Nothing in this workspace writes a `poster` derivative, so the mosaic has
     // no still to fall back to and says so by drawing an empty cell.
-    if seeder
-        .run(
-            "media.add_asset",
-            json!({
-                "data_uri": format!("data:video/mp4;base64,{VIDEO_BASE64}"),
-                "kind": "video",
-                "title": "Tahoe shoreline pan",
-                "captured_at": at(now, -2, 17, 0),
-                "tz_offset_min": TZ_OFFSET_MIN,
-                "width": 360,
-                "height": 240,
-                "duration_s": 12,
-                "latitude": WEST_SHORE_RIDGE.0,
-                "longitude": WEST_SHORE_RIDGE.1,
-            }),
-        )
-        .is_some()
-    {
-        seeded += 1;
-    }
+    seeder.run(
+        "media.add_asset",
+        json!({
+            "data_uri": format!("data:video/mp4;base64,{VIDEO_BASE64}"),
+            "kind": "video",
+            "title": "Tahoe shoreline pan",
+            "captured_at": at(now, -2, 17, 0),
+            "tz_offset_min": TZ_OFFSET_MIN,
+            "width": 360,
+            "height": 240,
+            "duration_s": 12,
+            "latitude": WEST_SHORE_RIDGE.0,
+            "longitude": WEST_SHORE_RIDGE.1,
+        }),
+    );
 
     seed_album(seeder, &asset_by_file);
-    seeded
 }
 
 /// The shortlist, as an album with a cover.
@@ -1345,8 +1371,7 @@ fn seed_album(seeder: &mut Seeder, asset_by_file: &std::collections::BTreeMap<&s
 // done items, a someday idea."
 // ---------------------------------------------------------------------------
 
-fn seed_tasks(seeder: &mut Seeder, now: i64) -> u32 {
-    let mut seeded = 0;
+fn seed_tasks(seeder: &mut Seeder, now: i64) {
     let add = |seeder: &mut Seeder, input: Value| -> Option<String> {
         let output = seeder.run("schedule.add_task", input);
         Seeder::id(output.as_ref(), "task_id")
@@ -1362,9 +1387,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) -> u32 {
             "priority": 3,
         }),
     ] {
-        if add(seeder, input).is_some() {
-            seeded += 1;
-        }
+        add(seeder, input);
     }
 
     let trip = add(
@@ -1376,24 +1399,18 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) -> u32 {
             "priority": 6,
         }),
     );
-    if trip.is_some() {
-        seeded += 1;
-    }
     if let Some(trip) = trip.as_ref() {
         for input in [
             json!({ "title": "Compare cabins — South Lake vs Truckee", "parent_task_id": trip, "effort_min": 45 }),
             json!({ "title": "Book the Tahoe cabin", "parent_task_id": trip, "due_at": at(now, 3, 9, 0) }),
         ] {
-            if add(seeder, input).is_some() {
-                seeded += 1;
-            }
+            add(seeder, input);
         }
         let packed = add(
             seeder,
             json!({ "title": "Draft packing list", "parent_task_id": trip }),
         );
         if let Some(packed) = packed {
-            seeded += 1;
             seeder.run(
                 "schedule.set_task_status",
                 json!({ "task_id": packed, "status": "completed" }),
@@ -1406,21 +1423,15 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) -> u32 {
         json!({ "title": "Weekly grocery run", "due_at": at(now, -1, 9, 0), "priority": 4 }),
     );
     if let Some(groceries) = groceries {
-        seeded += 1;
         seeder.run(
             "schedule.set_task_status",
             json!({ "task_id": groceries, "status": "completed" }),
         );
     }
-    if add(
+    add(
         seeder,
         json!({ "title": "Learn to make sourdough", "priority": 1 }),
-    )
-    .is_some()
-    {
-        seeded += 1;
-    }
-    seeded
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1436,13 +1447,12 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) -> u32 {
 // names her in the summary instead.
 // ---------------------------------------------------------------------------
 
-fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) -> u32 {
+fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) {
     let slot = |days: i64, hour: i64, minute: i64, minutes: i64| {
         let start = at(now, days, hour, minute);
         let end = at(now, days, hour, minute + minutes);
         (start, end)
     };
-    let mut seeded = 0;
     /// One seeded event: title, description, `(starts_at, ends_at)`, rrule.
     type SeededEvent = (
         &'static str,
@@ -1485,11 +1495,8 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) -> u32 {
         if let Some(rrule) = rrule {
             input["rrule"] = json!(rrule);
         }
-        if seeder.run("schedule.propose_event", input).is_some() {
-            seeded += 1;
-        }
+        seeder.run("schedule.propose_event", input);
     }
-    seeded
 }
 
 // ---------------------------------------------------------------------------
@@ -1517,18 +1524,16 @@ fn even(amount: i64, parties: &[String], payer: &str) -> Vec<Value> {
         .collect()
 }
 
-fn seed_tally(seeder: &mut Seeder, now: i64, me: &str) -> u32 {
-    let mut seeded = 0;
+fn seed_tally(seeder: &mut Seeder, now: i64, me: &str) {
     let mut friends = Vec::new();
     for name in ["Maya", "Jake", "Chris"] {
         let output = seeder.run("tally.add_friend", json!({ "name": name }));
         if let Some(party) = Seeder::id(output.as_ref(), "party_id") {
-            seeded += 1;
             friends.push(party);
         }
     }
     if friends.len() != 3 {
-        return seeded;
+        return;
     }
     let (maya, jake, chris) = (friends[0].clone(), friends[1].clone(), friends[2].clone());
 
@@ -1548,8 +1553,7 @@ fn seed_tally(seeder: &mut Seeder, now: i64, me: &str) -> u32 {
             .as_ref(),
         "group_id",
     );
-    let Some(group) = group else { return seeded };
-    seeded += 1;
+    let Some(group) = group else { return };
 
     let everyone: Vec<String> = std::iter::once(me.to_owned())
         .chain(friends.iter().cloned())
@@ -1580,39 +1584,28 @@ fn seed_tally(seeder: &mut Seeder, now: i64, me: &str) -> u32 {
     ];
     for (description, amount, payer, category, days_ago, parties) in expenses {
         let parties = parties.unwrap_or_else(|| everyone.clone());
-        if seeder
-            .run(
-                "tally.add_expense",
-                json!({
-                    "group_id": group,
-                    "description": description,
-                    "amount_minor": amount,
-                    "paid_by": payer,
-                    "category": category,
-                    "spent_on": day(now, -days_ago),
-                    "splits": even(amount, &parties, payer),
-                }),
-            )
-            .is_some()
-        {
-            seeded += 1;
-        }
+        seeder.run(
+            "tally.add_expense",
+            json!({
+                "group_id": group,
+                "description": description,
+                "amount_minor": amount,
+                "paid_by": payer,
+                "category": category,
+                "spent_on": day(now, -days_ago),
+                "splits": even(amount, &parties, payer),
+            }),
+        );
     }
 
-    if seeder
-        .run(
-            "tally.settle_up",
-            json!({
-                "from_party": chris,
-                "to_party": me,
-                "amount_minor": 5_000,
-                "group_id": group,
-                "paid_on": day(now, -2),
-            }),
-        )
-        .is_some()
-    {
-        seeded += 1;
-    }
-    seeded
+    seeder.run(
+        "tally.settle_up",
+        json!({
+            "from_party": chris,
+            "to_party": me,
+            "amount_minor": 5_000,
+            "group_id": group,
+            "paid_on": day(now, -2),
+        }),
+    );
 }
