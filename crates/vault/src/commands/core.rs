@@ -1990,12 +1990,31 @@ fn add_document() -> CommandDefinition {
             let folder_id = ctx.optional_str("folder_id").map(str::to_owned);
             let extracted_text = ctx.optional_str("extracted_text").map(str::to_owned);
             let minted = minted_bytes(ctx)?;
+            // The FIRST occurrence (#996 R20(a)): a document's original body is
+            // a version like any other, so the chain starts here rather than
+            // being inferred later from the absence of a parent edge.
+            //
+            // RECORDED BEFORE THE ROW, so the row is inserted with its head in
+            // ONE statement — `knowledge.create_note`'s fix for R-1020-35. The
+            // second statement this replaces was an `UPDATE` whose `updated_at`
+            // did not move, which is exactly when
+            // `core_document_touch_updated_at` stamps SQLite's host `'now'`
+            // over the vault clock (QUALITY.md, #1046). The revision has no
+            // foreign key onto the wrapper, and `record_body_revision` finds no
+            // row yet — the right answer: the first occurrence has no parent.
+            let revision_id = record_body_revision(
+                ctx,
+                DOCUMENT_TARGET_TYPE,
+                &document_id,
+                &minted.content_id,
+                None,
+            )?;
             ctx.connection().execute(
                 "INSERT INTO core_document
-                   (document_id, title, current_content_id, created_at, updated_at,
-                    deleted_at, purge_at)
-                 VALUES (?1, ?2, ?3, ?4, ?4, NULL, NULL)",
-                rusqlite::params![document_id, title, minted.content_id, ctx.now],
+                   (document_id, title, current_content_id, current_revision_id,
+                    created_at, updated_at, deleted_at, purge_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5, NULL, NULL)",
+                rusqlite::params![document_id, title, minted.content_id, revision_id, ctx.now],
             )?;
             // THIS DOCUMENT'S READING OF THE BYTES (#996 R20(b)). The same sha
             // filed twice as two documents carries two readings, so a second
@@ -2007,20 +2026,6 @@ fn add_document() -> CommandDefinition {
                 &document_id,
                 &minted.media_type,
                 Some("body"),
-            )?;
-            // The FIRST occurrence (#996 R20(a)): a document's original body is
-            // a version like any other, so the chain starts here rather than
-            // being inferred later from the absence of a parent edge.
-            let revision_id = record_body_revision(
-                ctx,
-                DOCUMENT_TARGET_TYPE,
-                &document_id,
-                &minted.content_id,
-                None,
-            )?;
-            ctx.connection().execute(
-                "UPDATE core_document SET current_revision_id = ?1 WHERE document_id = ?2",
-                rusqlite::params![revision_id, document_id],
             )?;
             if let Some(text) = extracted_text.filter(|text| !text.is_empty()) {
                 upsert_text_derivative(ctx, &minted.content_id, "text", "text/plain", &text)?;
@@ -2333,7 +2338,17 @@ fn empty_document_trash() -> CommandDefinition {
     CommandDefinition {
         name: "core.empty_document_trash",
         owner_schema: "core",
-        input_schema: r#"{ "type": "object", "additionalProperties": false, "properties": {} }"#,
+        // "NOT YET", WHERE EVERY CALLER READS IT (QUALITY.md, #1046): the
+        // command collapses the window and nothing in this build destroys the
+        // rows afterwards, so an emptied document can neither be restored nor
+        // is it gone. The purge is a follow-up (docs.proto's "WHAT TRASH
+        // MEANS"); until it lands a surface must not say "deleted forever".
+        input_schema: r#"{
+          "type": "object",
+          "description": "Empty the Docs trash: every trashed document's grace window ends now, so restore refuses it from here on. Destroying the rows and releasing their bytes is not yet built — nothing in this build purges a document after its window — so an emptied document stays in the vault, unrestorable, until that purge lands.",
+          "additionalProperties": false,
+          "properties": {}
+        }"#,
         idempotency: Idempotency::Idempotent,
         risk: Risk::High,
         confirm: false,
@@ -3807,35 +3822,44 @@ const PARTY_ENTITY_TYPE: &str = "core.party";
 ///
 /// The fold's rules, each one chosen so the merge cannot lose a fact:
 /// a real cadence beats "no cadence"; the LATER last-contacted wins, because
-/// "when did I last speak to them" is one question with one answer; and any
-/// other field the survivor lacks is taken from the loser.
+/// "when did I last speak to them" is one question with one answer; a live
+/// side beats a trashed one; and any other field the survivor lacks —
+/// nickname included — is taken from the loser.
 fn fold_people_profile(
     connection: &rusqlite::Connection,
     survivor: &str,
     merged: &str,
     now: &str,
 ) -> Result<()> {
-    type Profile = (
-        i64,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    );
+    /// One profile's foldable facts.
+    struct Profile {
+        cadence_days: i64,
+        last_contacted_at: Option<String>,
+        avatar_color: Option<String>,
+        role: Option<String>,
+        met: Option<String>,
+        nickname: Option<String>,
+        deleted_at: Option<String>,
+        purge_at: Option<String>,
+    }
     let load = |party_id: &str| -> Option<Profile> {
         connection
             .query_row(
-                "SELECT cadence_days, last_contacted_at, avatar_color, role, met
+                "SELECT cadence_days, last_contacted_at, avatar_color, role, met, nickname,
+                        deleted_at, purge_at
                    FROM people_profile WHERE party_id = ?1",
                 [party_id],
                 |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                    ))
+                    Ok(Profile {
+                        cadence_days: row.get(0)?,
+                        last_contacted_at: row.get(1)?,
+                        avatar_color: row.get(2)?,
+                        role: row.get(3)?,
+                        met: row.get(4)?,
+                        nickname: row.get(5)?,
+                        deleted_at: row.get(6)?,
+                        purge_at: row.get(7)?,
+                    })
                 },
             )
             .ok()
@@ -3857,22 +3881,40 @@ fn fold_people_profile(
             (Some(left), Some(right)) => Some(if left >= right { left } else { right }),
         }
     };
+    // LIVE BEATS TRASHED: the folded person is live when either side was, so
+    // a merge never sends somebody the owner can see to the trash. Both
+    // trashed keeps the survivor's own window.
+    let (deleted_at, purge_at) = if kept.deleted_at.is_none() || extra.deleted_at.is_none() {
+        (None, None)
+    } else {
+        (kept.deleted_at, kept.purge_at)
+    };
+    // The loser's row goes FIRST: its entity delete cascades, and nothing may
+    // still hold the UNIQUE party id when the survivor's row is rewritten.
+    connection.execute("DELETE FROM people_profile WHERE party_id = ?1", [merged])?;
     connection.execute(
         "UPDATE people_profile
             SET cadence_days = ?1, last_contacted_at = ?2, avatar_color = ?3,
-                role = ?4, met = ?5, updated_at = ?6
-          WHERE party_id = ?7",
+                role = ?4, met = ?5, nickname = ?6, deleted_at = ?7, purge_at = ?8,
+                updated_at = ?9
+          WHERE party_id = ?10",
         rusqlite::params![
-            if kept.0 > 0 { kept.0 } else { extra.0 },
-            later(kept.1, extra.1),
-            kept.2.or(extra.2),
-            kept.3.or(extra.3),
-            kept.4.or(extra.4),
+            if kept.cadence_days > 0 {
+                kept.cadence_days
+            } else {
+                extra.cadence_days
+            },
+            later(kept.last_contacted_at, extra.last_contacted_at),
+            kept.avatar_color.or(extra.avatar_color),
+            kept.role.or(extra.role),
+            kept.met.or(extra.met),
+            kept.nickname.or(extra.nickname),
+            deleted_at,
+            purge_at,
             now,
             survivor
         ],
     )?;
-    connection.execute("DELETE FROM people_profile WHERE party_id = ?1", [merged])?;
     Ok(())
 }
 

@@ -313,7 +313,7 @@ public object FaceReviewReads : ScreenWrites<FaceReviewState, FaceReviewEvent> {
      * is the vault's own truth about what is still unanswered.
      *
      * `appId` is `photos` for both commands this screen submits, including
-     * `core.add_party` — the field is what a log line says WROTE, and it was
+     * `people.add_person` — the field is what a log line says WROTE, and it was
      * Photos that wrote, whichever schema owns the command.
      */
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): FaceReviewEvent =

@@ -2,6 +2,11 @@
 
 ## Open
 
+- **Vault-writer bugs the #1046 app_query arms surfaced.** One line each:
+  - `tally.set_expense_memo` inserts `kind`/`body` into `knowledge_annotation`, which has neither column (`body_text`, no `kind`) — `crates/vault/src/commands/tally.rs:2709`; any non-empty memo fails the write.
+  - `core.empty_document_trash` still destroys nothing: it collapses the window, so an emptied document is unrestorable and never purged. Its schema `description` and Docs' manifest now say "not yet"; the purge (rows through the entity supertype, content released as `media.purge_asset` releases it, the content sweep for the bytes) is the follow-up — `crates/vault/src/commands/core.rs`, `empty_document_trash`.
+  - `knowledge.edit_note` still refuses an empty title (`minLength: 1`); the body may be cleared.
+
 - **`.mjs` scripts should be TypeScript.** Hundreds of `.mjs` files under
   `scripts/` and `.governance/law/` exist because their call sites say
   `node …`, not because the runtime needs JS: Bun runs `.ts` natively and
@@ -40,6 +45,27 @@
   deliberately don't assert those bytes.
 
 ## Resolved
+
+- #1029 — **`core_collection` says whether it is a notebook or an album.** Rung
+  six (`contracts/migrations/006_collection_kind.sql`) adds a required,
+  immutable `kind`; every writer states it, every reader in Notes and Photos
+  (Rust and the shell) filters on it, `knowledge.*` and `media.*` refuse the
+  other kind's id with a sentence, and deleting a notebook can no longer touch
+  an album's placements. An existing vault is classified by the rule the rung
+  states. Locks: `crates/vault/tests/collection_kind.rs`; ruling
+  [R-COLL-1…4](docs/decisions.md#notes-and-photos-a-collection-says-which-it-is-1029).
+
+- #1046 — **Three vault-writer bugs the app_query arms surfaced, and the empty
+  note.** `core.add_document` and `schedule.add_task` stamped SQLite's host
+  `'now'`: the document now records its first revision before the row and
+  inserts it with the head in one statement (`knowledge.create_note`'s fix), and
+  the task binds `ctx.now` to both timestamps — `schedule.edit_task` sets
+  `updated_at` too, which the touch trigger otherwise stamps from the host.
+  `knowledge.create_note`/`edit_note` take `body_text` with `minLength: 0`
+  (owner ruling: a note may be cleared), and Notes' manifest agrees. Locks:
+  `a_filed_documents_updated_at_is_the_vault_clock`,
+  `a_task_is_stamped_by_the_vault_clock_on_add_and_edit`,
+  `a_note_body_may_be_created_empty_and_cleared_by_an_edit`.
 
 - #1005 — **The arrival fixture pinned the whole working tree, so it was red on
   every checkout but the one that recorded it.** `collectReceipts` read every

@@ -35,9 +35,13 @@ import CentraidShared
 @MainActor
 final class ShellModel: ObservableObject {
     enum Route: Hashable {
-        case tally
+        /// A REGISTERED SCREEN, by its machine's `SCREEN_ID`, with its
+        /// parameter as bytes (K5). Every app registered through
+        /// `AppRegistry` routes here — Tally, Notes and Agenda today, and each
+        /// port after them — so a new app adds no case to this enum, no branch
+        /// to `CentraidApp`'s destination switch and none to `opened`.
+        case screen(String, Data)
         case photos
-        case note(String)
 
         // THE PHOTOS MINIAPP'S OTHER NINE SCREENS (#1029, photos port).
         //
@@ -134,9 +138,12 @@ final class ShellModel: ObservableObject {
     /// Home's own bytes. It is the ROOT screen, so it is the one that is
     /// always live: every other state here belongs to a pushed route.
     @Published var homeState = Data()
-    @Published var tallyState = Data()
+    /// EVERY REGISTERED SCREEN'S BYTES, by `SCREEN_ID` (K5). A port's view
+    /// reads `shell.state(id)`; the registry's observer writes here.
+    @Published var states: [String: Data] = [:]
+    /// Each registered screen's opener and view, by `SCREEN_ID`.
+    var routes: [String: ScreenRoute] = [:]
     @Published var photosState = Data()
-    @Published var notesState = Data()
     @Published var photoShelfState = Data()
     @Published var photoLightboxState = Data()
     @Published var photoPickerState = Data()
@@ -178,9 +185,15 @@ final class ShellModel: ObservableObject {
     /// They live in `CentraidShared`'s app packages, not in `shell/`, because a
     /// bridge names its screen's types and `PerAppLayoutSpec` keeps that inside
     /// the app.
-    private let tally = TallyBridge()
     private let photos = PhotosBridge()
-    private let notes = NotesBridge()
+
+    /// THE REGISTERED SCREENS' PORTS AND ROUTES (K5) — `ScreenRegistry.swift`.
+    /// Filled once, in `init`, by `AppRegistry.apps`; held for the life of the
+    /// shell for the same reason the Photos bridges below are.
+    var ports: [String: ScreenPort] = [:]
+    /// The one session, once it exists, so a port registered after it opens
+    /// is still attached.
+    var session: HomeSession?
 
     /// THE PHOTOS MINIAPP'S OTHER NINE, held for the same reason as the three
     /// above: a `ScreenHost` routed onto the change stream cannot be
@@ -203,9 +216,9 @@ final class ShellModel: ObservableObject {
         home.observe { [weak self] bytes in
             self?.homeState = bytes.data
         }
-        tally.observe { [weak self] bytes in self?.tallyState = bytes.data }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
-        notes.observe { [weak self] bytes in self?.notesState = bytes.data }
+        // ONE LINE PER APP lives in `AppRegistry.apps`, not here.
+        for app in AppRegistry.apps { app.register(into: self) }
         photoShelf.observe { [weak self] bytes in
             guard let self else { return }
             self.photoShelfState = bytes.data
@@ -243,9 +256,9 @@ final class ShellModel: ObservableObject {
         // spin.
         home.onSession { [weak self] session in
             guard let self else { return }
-            self.tally.attach(session: session)
+            self.session = session
+            for port in self.ports.values { port.attach(session) }
             self.photos.attach(session: session)
-            self.notes.attach(session: session)
             self.photoShelf.attach(session: session)
             self.photoLightbox.attach(session: session)
             self.photoPicker.attach(session: session)
@@ -579,9 +592,7 @@ final class ShellModel: ObservableObject {
         #if canImport(CentraidShared)
         switch screen {
         case "home": home.send(event: event.kotlin)
-        case "tally.list": tally.send(event: event.kotlin)
         case "photos.grid": photos.send(event: event.kotlin)
-        case "notes.editor": notes.send(event: event.kotlin)
         case "photos.shelf": photoShelf.send(event: event.kotlin)
         case "photos.lightbox": photoLightbox.send(event: event.kotlin)
         case "photos.picker": photoPicker.send(event: event.kotlin)
@@ -594,7 +605,8 @@ final class ShellModel: ObservableObject {
         case "photos.duplicate": duplicateReview.send(event: event.kotlin)
         case "photos.memories": photosMemories.send(event: event.kotlin)
         case "photos.editor": photoEditor.send(event: event.kotlin)
-        default: break
+        // EVERY REGISTERED SCREEN: a lookup, not a case (K5).
+        default: ports[screen]?.send(event)
         }
         #endif
     }
@@ -679,18 +691,12 @@ final class ShellModel: ObservableObject {
     func opened(_ route: Route) {
         #if canImport(CentraidShared)
         switch route {
-        case .tally:
-            var event = Centraid_Screen_V1_TallyListEvent()
-            event.opened = .init()
-            send(screen: "tally.list", event: (try? event.serializedData()) ?? Data())
+        case let .screen(identifier, parameter):
+            routes[identifier]?.open(parameter)
         case .photos:
             // Re-read the OS grant, then open (R-PHOTOS-1). Sending `Opened`
             // alone left a post-attach grant as NOT_ASKED on first paint.
             photos.opened()
-        case let .note(identifier):
-            var event = Centraid_Screen_V1_NotesEditorEvent()
-            event.opened = .with { $0.noteID = identifier }
-            send(screen: "notes.editor", event: (try? event.serializedData()) ?? Data())
 
         // THE SHELF OPENS ON ITS PARAMETER, AND READS THE MACHINE'S WORDS.
         //

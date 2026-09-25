@@ -910,3 +910,34 @@ fn a_created_notebook_is_written_in_one_statement() {
     );
     assert_eq!(version, 1, "one gesture, one version");
 }
+
+/// A NOTE MAY BE CLEARED (owner ruling, 2026-09-24): an empty body is a body.
+/// Both the create and the edit accept `body_text: ""`, and the edit reads
+/// back as empty rather than keeping the old text.
+#[test]
+fn a_note_body_may_be_created_empty_and_cleared_by_an_edit() {
+    let book = Notebook::open("note-clear");
+    let empty = book.note("Blank", "", "plain");
+    assert_eq!(
+        book.count(
+            "SELECT COUNT(*) FROM knowledge_note WHERE note_id = ?1",
+            &[&empty]
+        ),
+        1
+    );
+    let note_id = book.note("Full", "some words", "plain");
+    book.run(
+        "knowledge.edit_note",
+        json!({ "note_id": note_id, "body_text": "" }),
+    );
+    assert_eq!(
+        book.text(
+            "SELECT t.body_text FROM knowledge_note n
+               JOIN core_content_text t ON t.content_id = n.body_content_id
+              WHERE n.note_id = ?1",
+            &[&note_id]
+        )
+        .unwrap_or_default(),
+        ""
+    );
+}

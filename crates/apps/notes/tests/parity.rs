@@ -39,7 +39,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use centraid_apps_kit::contract_vault::open_contract_vault;
+use centraid_apps_kit::contract_vault::{FrozenRowMapping, open_contract_vault_without};
 use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_notes::cards::{OwnerCards, RefCard};
@@ -78,7 +78,17 @@ fn fixture_vault() -> rusqlite::Connection {
         .expect("the committed DDL is readable");
     let rows = fs::read_to_string(root().join("contracts/apps/notes/rows.json"))
         .expect("the committed rows are readable");
-    open_contract_vault(&ddl, &rows).expect("the fixture vault is built")
+    // RUNG SIX'S REQUIRED `core_collection.kind`, which the frozen bundle
+    // predates: v0's Notes bundle holds only notebooks, so every collection row in it is one.
+    open_contract_vault_without(
+        &ddl,
+        &rows,
+        &FrozenRowMapping {
+            columns_added: &[("core_collection", "kind", "notebook")],
+            ..FrozenRowMapping::NONE
+        },
+    )
+    .expect("the fixture vault is built")
 }
 
 // ---------------------------------------------------------------------------

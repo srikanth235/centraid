@@ -65,12 +65,14 @@ fn the_registry_carries_every_command_this_build_has() {
         // two the member-key custody change needs (wave 4 lane Locker).
         ("locker.", 22),
         // The whole 28-command `people.*` schema and the whole 4-command
-        // `social.*` one (wave 4 lane People).
-        ("people.", 28),
+        // `social.*` one (wave 4 lane People), plus `people.purge_person` —
+        // the destroy People's trash needed to meet #1015 D1.
+        ("people.", 29),
         ("social.", 4),
         // The whole 16-command `schedule.*` schema — events, occurrences,
-        // projects, sections and tasks (wave 4 lane Schedule).
-        ("schedule.", 16),
+        // projects, sections and tasks (wave 4 lane Schedule) — plus
+        // `schedule.purge_task`, the Tasks trash's destroy (#1015 D1).
+        ("schedule.", 17),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(

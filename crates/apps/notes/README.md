@@ -1,6 +1,6 @@
 # `centraid-apps-notes` — notebooks as a projection of the vault
 
-Notes is 6 queries, 15 actions and 33 scopes over five schemas, plus a demo seed. This crate is the read plane and the action table; the writes are `crates/vault`'s `knowledge` schema (nine commands) plus the five `core.*` link and attachment commands, and the text search is `crates/search`.
+Notes is 6 queries, 15 actions and 33 scopes over five schemas, plus a demo seed. This crate is the read plane and the action table, and `crates/core` answers its phone queries as the `notes_*` arms of `app_query` (`notes.proto`, [#1046](https://github.com/srikanth235/centraid/issues/1046)); the writes are `crates/vault`'s `knowledge` schema (nine commands) plus the five `core.*` link and attachment commands, and the text search is `crates/search`.
 
 | Module | What it is |
 | --- | --- |
@@ -11,6 +11,9 @@ Notes is 6 queries, 15 actions and 33 scopes over five schemas, plus a demo seed
 | `journal` | The People-journal marker set, read once and excluded four ways. |
 | `cards` | The far end of a link, as the shelf draws it — a fold over bounded reads, with the consent half behind a `CardDoor`. |
 | `commands` | The fifteen actions as invocations, `invoke_key` mandatory. |
+| `shelves` | The phone's shelves over the library fold: sort and filters (pinned, notebook, unfiled, tags), the trash shelf on its own, and the notebook spine with live-note counts. |
+| `editor` | The editor's note: the whole body plus `current_revision_id` (moves only with the body) and `row_version` (every write) — the bases an autosave compares against. |
+| `local` | The Journal grouped by the local day of `created_at`, in the zone the request states, through `centraid_vault::time`'s one zone engine. |
 
 ## The rulings this crate is shaped by
 
@@ -35,6 +38,19 @@ Every one is an answer to a way this crate could be wrong, and every one has a t
 - **A created note's `updated_at` was the host's wall clock** (R-1020-35, fixed at source). `create_note` inserted the row and then repointed `current_revision_id`, and `knowledge_note_touch_updated_at` stamps `strftime('now')` over any update that does not carry a new `updated_at`. Invisible in production, where the two instants are the same; not invisible with an injected clock, and the library sorts on that column — four of the six notes in the parity corpus carried a host instant, and the page order was a fact about the machine. The fix records the occurrence FIRST and insert the note with its pointer already set: one gesture, one statement, one `row_version`.
 - **`link-targets`' declared subtitle was never served** in the captured fixture: `subtitles: ["preview"]` for notes, over a search row with no `preview` column, so every note target's subtitle fell back to the app's name. This crate serves the decoded body out of `core_content_text` — the same text the index was built from. Stated as a divergence in `tests/parity.rs`, with the fixture's answer asserted beside this crate's so neither can drift silently.
 - **A trashed note's reference card reads `live`.** Seven of the eleven card projections hardcode `0 AS trashed`, `knowledge.note` among them, so a link to a note a member deleted draws as if it were still there. **Reproduced** because the frozen parity fixture records it, and an open finding: fixing it is a deliberate change to that fixture.
+
+## The phone's arms
+
+`crates/core/src/app_query/notes.rs` answers eight typed queries — `library`, `notebooks`, `journal`, `search`, `trash`, `history`, `link_targets` and `note` — at numbers 40–47 of `app_query.proto`, over the same page door a shell's page read reaches. Three facts a shell author needs:
+
+- **A filter narrows the window, not the vault.** `shape_library` filters the rows the recent window returned; a notebook or tag filter over a `truncated` window can miss older notes, and `truncated` says so. The pinned filter is complete.
+- **A notebook is a collection of kind `notebook`.** `core_collection` holds Photos' albums too and says which a row is (`kind`, rung six), so `notebooks` and the library's own `notebooks` list read `kind = 'notebook'` only; the spine carries each notebook's live `note_count`, the library list no counts.
+- **`edit_note` takes no base.** The conflict check is the editor's, against `note`'s `current_revision_id` and `row_version`. Its schema requires `title` to be non-empty when present (`minLength: 1`); `body_text` takes `minLength: 0` on create and edit (owner ruling, 2026-09-24): a note may be cleared.
+
+```sh
+cargo test -p centraid-apps-notes --test phone
+cargo test -p centraid-core --lib app_query::notes
+```
 
 ## Parity
 

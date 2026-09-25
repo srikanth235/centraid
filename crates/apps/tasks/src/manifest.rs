@@ -42,10 +42,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_two_queries_and_eleven_actions() {
+    fn it_declares_two_queries_and_thirteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 2);
-        assert_eq!(manifest.actions.len(), 11);
+        assert_eq!(manifest.actions.len(), 13);
         for name in ["board", "search"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -74,26 +74,32 @@ mod tests {
     /// seam 7). Ported faithfully; the question goes to the owner as a finding
     /// rather than being answered in code (D-1020-S6). `delete` trashes a task
     /// AND every subtask under it, which is as destructive as `delete-note`.
+    /// The one exception is `purge` (#1015 D1), which is not v0's and is the
+    /// one irreversible act: it confirms, as every other app's destroy does.
     #[test]
-    fn tasks_confirms_nothing_and_the_gate_is_a_finding() {
+    fn tasks_confirms_only_the_purge_and_the_delete_gate_is_a_finding() {
         for row in ACTIONS {
             let declared = manifest()
                 .action(row.action)
                 .expect("checked above")
                 .confirmation;
-            assert_eq!(declared, Confirmation::None, "{}", row.action);
-            assert_eq!(row.confirm, Confirm::None, "{}", row.action);
+            let expected = if row.action == "purge" {
+                (Confirmation::Required, Confirm::Required)
+            } else {
+                (Confirmation::None, Confirm::None)
+            };
+            assert_eq!((declared, row.confirm), expected, "{}", row.action);
         }
     }
 
-    /// TWENTY-TWO SCOPES: eleven reads and **eleven `act` scopes, one per
+    /// TWENTY-FOUR SCOPES: eleven reads and **thirteen `act` scopes, one per
     /// action**, all narrow — Tasks does not use the whole-schema `read+act`
     /// form that agenda and people do.
     #[test]
-    fn it_declares_twenty_two_scopes_with_one_act_scope_per_action() {
+    fn it_declares_twenty_four_scopes_with_one_act_scope_per_action() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Tasks declares its reach");
-        assert_eq!(vault.scopes.len(), 22);
+        assert_eq!(vault.scopes.len(), 24);
         let mut schemas: Vec<&str> = vault
             .scopes
             .iter()
@@ -115,7 +121,7 @@ mod tests {
             .collect();
         declared_acts.sort_unstable();
         assert_eq!(declared_acts, act_scope_tables());
-        assert_eq!(declared_acts.len(), 11);
+        assert_eq!(declared_acts.len(), 13);
         let reads = vault
             .scopes
             .iter()

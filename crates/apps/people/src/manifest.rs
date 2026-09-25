@@ -46,10 +46,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_seven_queries_and_twenty_nine_actions() {
+    fn it_declares_seven_queries_and_thirty_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 7);
-        assert_eq!(manifest.actions.len(), 29);
+        assert_eq!(manifest.actions.len(), 30);
         // The seven are the handler FILES the dispatcher resolves —
         // `queries/<name>.ts` — and `_shared.ts` and `person-contacts.ts` are
         // helpers beside them rather than queries (`person-contacts.ts:17`).
@@ -149,19 +149,20 @@ mod tests {
         );
     }
 
-    /// TWENTY-FOUR SCOPES: nineteen reads, four `act` and **one `read+act`
-    /// over the whole `people` schema** (census §A0's table).
+    /// TWENTY SCOPES: fifteen reads, four `act` and **one `read+act` over the
+    /// whole `people` schema**. The four `share.*` reads went with the tables
+    /// they named (#1029: v1 has no sharing plane).
     ///
     /// The whole-schema form is the widest there is and only agenda and People
     /// use it. It is asserted here rather than narrowed, because expanding it
-    /// into twenty-four explicit scopes CHANGES THE GRANT'S MEANING — the
-    /// member consented to "People, over the People schema", and twenty-four
+    /// into twenty explicit scopes CHANGES THE GRANT'S MEANING — the
+    /// member consented to "People, over the People schema", and twenty
     /// rows is a different sentence even where the reach is the same.
     #[test]
-    fn it_declares_twenty_four_scopes_with_one_whole_schema_grant() {
+    fn it_declares_twenty_scopes_with_one_whole_schema_grant() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 24);
+        assert_eq!(vault.scopes.len(), 20);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -172,15 +173,7 @@ mod tests {
         schemas.dedup();
         assert_eq!(
             schemas,
-            [
-                "core",
-                "knowledge",
-                "people",
-                "schedule",
-                "share",
-                "social",
-                "tally"
-            ]
+            ["core", "knowledge", "people", "schedule", "social", "tally"]
         );
 
         let whole_schema: Vec<&str> = vault
@@ -205,7 +198,7 @@ mod tests {
                 .iter()
                 .filter(|scope| scope.verbs == ScopeVerbs::Read)
                 .count(),
-            19
+            15
         );
         assert_eq!(
             vault
@@ -354,27 +347,35 @@ mod tests {
         );
     }
 
-    /// THE MANIFEST PROMISES A FIELD THE HANDLER NEVER EMITS (finding PE-F2).
-    ///
-    /// `person`'s description names `shared_with_them` beside `vaults` and says
-    /// both are null when the sharing reads are denied. `queries/person.ts`
-    /// returns `vaults` and nothing else, and `queries/_shared.ts:1`-`:3` says
-    /// why: what is shared WITH a person goes through the live grant plane
-    /// (`GET /centraid/_vault/grants?partyId=`), and there is no second
-    /// vault-side invitation plane to read. So the sentence describes a field
-    /// that has never existed — the `auth_session` class of dead manifest
-    /// declaration (census §A seam 2), one app over.
+    /// THE PERSON DESCRIPTION NAMES NO SHARING FIELD. It once promised
+    /// `vaults` and `shared_with_them` (finding PE-F2: the second never
+    /// existed); v1 has no sharing plane (#1029), so the sentence went with
+    /// the tables it read.
     #[test]
-    fn the_person_description_names_a_field_no_handler_returns() {
+    fn the_person_description_names_no_sharing_field() {
         let person = manifest().query("person").expect("the person query");
         let description = person.description.as_deref().unwrap_or_default();
-        assert!(
-            description.contains("shared_with_them"),
-            "finding PE-F2 moved: re-judge it rather than deleting this test"
-        );
-        assert!(
-            !crate::person::PERSON_FIELDS.contains(&"shared_with_them"),
-            "if the port grew the field, the finding is closed and the sentence is true"
-        );
+        assert!(!description.contains("shared_with_them"), "{description}");
+        assert!(!description.contains("`vaults`"), "{description}");
+    }
+
+    /// `edit-person` CARRIES EVERY FIELD `people.edit_person` TAKES. The
+    /// nickname was writable in the vault and unreachable from the app.
+    #[test]
+    fn edit_person_declares_every_field_the_command_takes() {
+        let input = &manifest().action("edit-person").expect("declared").input;
+        for field in [
+            "party_id",
+            "display_name",
+            "role",
+            "nickname",
+            "avatar_color",
+            "met",
+        ] {
+            assert!(
+                input["properties"].get(field).is_some(),
+                "edit-person does not declare {field}"
+            );
+        }
     }
 }

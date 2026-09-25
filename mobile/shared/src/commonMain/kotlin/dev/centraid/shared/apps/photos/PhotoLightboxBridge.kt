@@ -8,7 +8,7 @@ import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoLightboxState
 import dev.centraid.core.CoreOutcome
-import dev.centraid.design.CentraidCopy
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
@@ -349,7 +349,7 @@ public const val SHARE_ORIGINAL_NOT_HERE: String =
     "The original is not on this device, so nothing was sent."
 
 /** `PHOTOS_ERROR_EXPORT_FAILED` out of `copy/photos.json`, and its retry word. */
-public const val EXPORT_FAILED: String = CentraidCopy.Photos.PHOTOS_ERROR_EXPORT_FAILED + " Retry."
+public const val EXPORT_FAILED: String = PhotosCopy.PHOTOS_ERROR_EXPORT_FAILED + " Retry."
 
 /** What "Download" says when the original went into the device's photos. */
 public const val EXPORT_SAVED: String = "Saved to this device's photos."

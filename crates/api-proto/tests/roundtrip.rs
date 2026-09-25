@@ -153,6 +153,92 @@ fn every_envelope_body_round_trips() {
     }
 }
 
+/// AN APP QUERY AND ITS TYPED ANSWER (#1046), and the one distinction its
+/// answer depends on: an event with NO END and an event whose end is the empty
+/// string are different facts, and so are a vault that names no owner and an
+/// owner whose id is empty. `optional` is what keeps them apart on the wire; a
+/// plain `string` would decode both as `""`, and a Day row would draw a
+/// zero-length event where the vault said "no end".
+#[test]
+fn an_app_query_and_its_typed_answer_round_trip_with_absence_intact() {
+    let asked = core::Request {
+        kind: Some(core::request::Kind::AppQuery(core::AppQueryRequest {
+            query: Some(core::app_query_request::Query::AgendaUpcoming(
+                core::AgendaUpcomingRequest {
+                    from: "2099-06-01T00:00:00.000Z".to_owned(),
+                    to: String::new(),
+                    tz: "America/New_York".to_owned(),
+                },
+            )),
+        })),
+    };
+    roundtrip(&asked);
+
+    let open_ended = core::AgendaEvent {
+        event_id: "ev_1".to_owned(),
+        dtstart: "2099-06-01T09:00:00.000Z".to_owned(),
+        dtend: None,
+        summary: Some(String::new()),
+        instance_key: "ev_1".to_owned(),
+        reminders: vec![core::AgendaReminder { minutes_before: 10 }],
+        local_start: "2099-06-01T05:00".to_owned(),
+        local_days: vec!["2099-06-01".to_owned()],
+        ..core::AgendaEvent::default()
+    };
+    let answered = core::Response {
+        kind: Some(core::response::Kind::AppQuery(Box::new(
+            core::AppQueryResponse {
+                answer: Some(core::app_query_response::Answer::AgendaUpcoming(
+                    core::AgendaUpcoming {
+                        events: vec![open_ended],
+                        calendars: Vec::new(),
+                        today: "2099-06-01".to_owned(),
+                        now_local: "2099-06-01T05:00".to_owned(),
+                    },
+                )),
+            },
+        ))),
+    };
+    roundtrip(&answered);
+    let decoded = core::Response::decode(answered.encode_to_vec().as_slice()).expect("decodes");
+    let Some(core::response::Kind::AppQuery(answered)) = decoded.kind else {
+        panic!("an upcoming answer decodes as one");
+    };
+    let core::AppQueryResponse {
+        answer: Some(core::app_query_response::Answer::AgendaUpcoming(upcoming)),
+    } = *answered
+    else {
+        panic!("an upcoming answer decodes as one");
+    };
+    assert_eq!(upcoming.events[0].dtend, None, "no end is not an empty end");
+    assert_eq!(upcoming.events[0].summary.as_deref(), Some(""));
+    // The local readings ride the row: no end stated is no local end.
+    assert_eq!(upcoming.events[0].local_end, "");
+    assert_eq!(upcoming.events[0].local_days, ["2099-06-01"]);
+    assert_eq!(upcoming.today, "2099-06-01");
+
+    let unowned = core::AgendaParties {
+        parties: Vec::new(),
+        me: None,
+    };
+    let decoded = core::AgendaParties::decode(unowned.encode_to_vec().as_slice()).expect("decodes");
+    assert_eq!(
+        decoded.me, None,
+        "a vault that names no owner is not an empty id"
+    );
+
+    // A DENIAL IS AN ANSWER, not an `Error` body.
+    roundtrip(&core::AppQueryResponse {
+        answer: Some(core::app_query_response::Answer::Denied(
+            core::AppQueryDenial {
+                code: None,
+                message: Some("Agenda's access was withdrawn.".to_owned()),
+                revoked_at: Some("2099-06-01T09:00:00.000Z".to_owned()),
+            },
+        )),
+    });
+}
+
 /// A command's input and the screen's state are OPAQUE BYTES, and that is
 /// load-bearing: it is mechanism 2 of D-1020-C13, the reason a newer peer's
 /// payload arrives whole even though prost drops unknown FIELDS.

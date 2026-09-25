@@ -52,6 +52,10 @@ const ASSET_TARGET_TYPE: &str = "media.asset";
 /// The album's own entity type in the revision plane.
 const ALBUM_ENTITY_TYPE: &str = "media.album";
 
+/// `core_collection.kind` for a Photos album (rung six). Notes' notebooks are
+/// the other kind, and nothing here reads or writes one.
+const ALBUM_KIND: &str = "album";
+
 /// The trash grace window (#274). Thirty days, in v0's arithmetic.
 const PURGE_AFTER_DAYS: i64 = 30;
 
@@ -1636,6 +1640,30 @@ fn purge_asset() -> CommandDefinition {
     }
 }
 
+/// A COLLECTION IS AN ALBUM ONLY IF IT SAYS SO (rung six).
+///
+/// `core_collection` holds Notes' notebooks too, told apart by `kind`. A
+/// notebook id gets its own sentence rather than "no album": the member picked
+/// a real thing, it is just the other app's, and filing a photograph into it —
+/// or renaming or deleting it from Photos — is the cross-app write this refusal
+/// exists to stop.
+fn pre_album_exists(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let album_id = ctx.required_str("album_id")?;
+    let kind: Option<String> = rusqlite::OptionalExtension::optional(ctx.connection().query_row(
+        "SELECT kind FROM core_collection WHERE collection_id = ?1",
+        [album_id],
+        |row| row.get(0),
+    ))?;
+    Ok(match kind.as_deref() {
+        Some(ALBUM_KIND) => None,
+        Some(_) => Some(
+            "that is a notebook in Notes, not an album; photographs can only go into albums"
+                .to_owned(),
+        ),
+        None => Some("there is no album with that id".to_owned()),
+    })
+}
+
 fn create_album() -> CommandDefinition {
     CommandDefinition {
         name: "media.create_album",
@@ -1679,7 +1707,8 @@ fn create_album() -> CommandDefinition {
                     .or_else(|| ctx.produced_ids.borrow().first().cloned())
                     .unwrap_or_default();
                 let count: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
+                    "SELECT COUNT(*) FROM core_collection
+                      WHERE collection_id = ?1 AND kind = 'album'",
                     [&album_id],
                     |row| row.get(0),
                 )?;
@@ -1694,14 +1723,15 @@ fn create_album() -> CommandDefinition {
             let owner = owner_party_id(ctx)?;
             // An album is a TOP-LEVEL collection, and `sort_order` is
             // sibling-scoped — `IS NULL`, not `= NULL`, so null parents group
-            // together rather than each being its own sibling set.
+            // together rather than each being its own sibling set. Siblings
+            // are ALBUMS: Notes' top-level notebooks are no part of this order.
             ctx.connection().execute(
                 "INSERT INTO core_collection
-                   (collection_id, owner_party_id, name, cover_content_id,
+                   (collection_id, owner_party_id, kind, name, cover_content_id,
                     parent_collection_id, sort_order, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, NULL, NULL,
+                 VALUES (?1, ?2, 'album', ?3, NULL, NULL,
                          (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM core_collection
-                           WHERE parent_collection_id IS NULL), ?4, ?4)",
+                           WHERE parent_collection_id IS NULL AND kind = 'album'), ?4, ?4)",
                 rusqlite::params![album_id, owner, title, ctx.now],
             )?;
             Ok(serde_json::json!({ "album_id": album_id }))
@@ -1727,13 +1757,10 @@ fn rename_album() -> CommandDefinition {
         idempotency: Idempotency::Idempotent,
         risk: Risk::Low,
         confirm: false,
-        preconditions: &[counts!(
-            "album_exists",
-            "there is no album with that id",
-            "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
-            "album_id",
-            1
-        )],
+        preconditions: &[CommandCondition {
+            predicate: "album_exists",
+            check: pre_album_exists,
+        }],
         postconditions: &[CommandCondition {
             predicate: "title_applied",
             check: |ctx| {
@@ -1884,13 +1911,10 @@ fn delete_album() -> CommandDefinition {
         risk: Risk::Medium,
         confirm: false,
         preconditions: &[
-            counts!(
-                "album_exists",
-                "there is no album with that id",
-                "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
-                "album_id",
-                1
-            ),
+            CommandCondition {
+                predicate: "album_exists",
+                check: pre_album_exists,
+            },
             counts!(
                 // The album surface manages FLAT collections only; a nested one
                 // came from the notebook surface and keeps its children until
@@ -1934,12 +1958,16 @@ fn delete_album() -> CommandDefinition {
                     ctx.now
                 ],
             )?;
+            // ALBUM ROWS ONLY, in the statement and not only in the
+            // precondition: a notebook's entries are its notes' filing.
             ctx.connection().execute(
-                "DELETE FROM core_collection_entry WHERE collection_id = ?1",
+                "DELETE FROM core_collection_entry
+                  WHERE collection_id = (SELECT collection_id FROM core_collection
+                                          WHERE collection_id = ?1 AND kind = 'album')",
                 [&album_id],
             )?;
             ctx.connection().execute(
-                "DELETE FROM core_collection WHERE collection_id = ?1",
+                "DELETE FROM core_collection WHERE collection_id = ?1 AND kind = 'album'",
                 [&album_id],
             )?;
             Ok(serde_json::json!({
@@ -2019,9 +2047,9 @@ fn restore_album() -> CommandDefinition {
             let album = &snapshot["album"];
             ctx.connection().execute(
                 "INSERT INTO core_collection
-                   (collection_id, owner_party_id, name, cover_content_id,
+                   (collection_id, owner_party_id, kind, name, cover_content_id,
                     parent_collection_id, sort_order, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                 VALUES (?1, ?2, 'album', ?3, ?4, ?5, ?6, ?7, ?8)",
                 rusqlite::params![
                     album_id,
                     album["owner_party_id"].as_str().unwrap_or_default(),
@@ -2081,13 +2109,10 @@ fn add_to_album() -> CommandDefinition {
         risk: Risk::Low,
         confirm: false,
         preconditions: &[
-            counts!(
-                "album_exists",
-                "there is no album with that id",
-                "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
-                "album_id",
-                1
-            ),
+            CommandCondition {
+                predicate: "album_exists",
+                check: pre_album_exists,
+            },
             counts!(
                 "asset_exists",
                 "there is no photograph with that id",

@@ -39,6 +39,7 @@ import platform.CoreFoundation.kCFTypeDictionaryKeyCallBacks
 import platform.CoreFoundation.kCFStringEncodingUTF8
 import platform.CoreFoundation.kCFTypeDictionaryValueCallBacks
 import platform.Foundation.NSDate
+import platform.Foundation.localTimeZone
 import platform.Foundation.NSLog
 import platform.Foundation.dateWithTimeIntervalSinceNow
 import platform.Network.nw_path_get_status
@@ -144,6 +145,7 @@ public class IosPlatformServices : PlatformServices {
     override val mediaLibrary: MediaLibrary = IosMediaLibrary()
     override val ocr: Ocr = IosOcr()
     override val secureRandom: SecureRandom = IosSecureRandom()
+    override val clock: DeviceClock = IosDeviceClock()
 }
 
 /**
@@ -1124,4 +1126,18 @@ public class IosSecureRandom : SecureRandom {
         }
         return out
     }
+}
+
+/**
+ * The device's zone and wall clock (#1046).
+ *
+ * `localTimeZone` and not `systemTimeZone`: the local zone TRACKS the system's
+ * — a border crossed with the app open moves it — where `systemTimeZone` is
+ * cached until somebody calls `resetSystemTimeZone`. Read at every call.
+ */
+public class IosDeviceClock : DeviceClock {
+    override fun read(): DeviceClock.Reading = DeviceClock.Reading(
+        zone = NSTimeZone.localTimeZone.name,
+        epochMillis = (NSDate().timeIntervalSince1970 * 1_000.0).toLong(),
+    )
 }

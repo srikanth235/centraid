@@ -35,9 +35,10 @@
 //!
 //! ### Two gates, never one (census §A0)
 //!
-//! People declares `confirmation: "required"` on exactly **three** actions —
-//! `trash-person`, `delete-contact-channel`, `merge-people` (D-1020-PE6) —
-//! and that is the DISPATCHING SURFACE's gate. Of the twenty-nine commands
+//! People declares `confirmation: "required"` on exactly **four** actions —
+//! `trash-person`, `delete-contact-channel`, `merge-people` (D-1020-PE6) and
+//! `purge-person` (#1015 D1) — and that is the DISPATCHING SURFACE's gate. Of
+//! the thirty commands
 //! behind them exactly **one** carries the command-level `confirm`, and it is
 //! not one of the two `people.*` ones: `core.merge_party` parks a **non-owner**
 //! invocation regardless of risk, because an irreversible fold of one person
@@ -179,15 +180,16 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
     }
 }
 
-/// THE TABLE. Twenty-nine actions, twenty-nine commands, in the manifest's own
-/// order.
-pub const ACTIONS: [ActionRow; 29] = [
+/// THE TABLE. Thirty actions, thirty commands, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 30] = [
     act("add-person", "people.add_person"),
     act("edit-person", "people.edit_person"),
     act("set-cadence", "people.set_cadence"),
     // The canonical party SURVIVES a trash; only the profile is dated shut.
     confirmed("trash-person", "people.trash_person"),
     act("restore-person", "people.restore_person"),
+    // EMPTYING THE TRASH (#1015 D1): the one destroy, one person at a time.
+    confirmed("purge-person", "people.purge_person"),
     act("undo-person", "people.undo_person"),
     act("log-interaction", "people.log_interaction"),
     act("star-person", "people.star_person"),
@@ -298,8 +300,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn twenty_nine_actions_invoke_twenty_nine_distinct_commands() {
-        assert_eq!(ACTIONS.len(), 29);
+    fn thirty_actions_invoke_thirty_distinct_commands() {
+        assert_eq!(ACTIONS.len(), 30);
         let mut commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
         commands.sort_unstable();
         let before = commands.len();
@@ -310,14 +312,15 @@ mod tests {
                 .iter()
                 .filter(|row| row.command.starts_with("people."))
                 .count(),
-            28,
-            "twenty-eight of the twenty-nine are the people schema's"
+            29,
+            "twenty-nine of the thirty are the people schema's"
         );
     }
 
-    /// THE THREE MANIFEST CONFIRMATIONS (D-1020-PE6), and nothing else.
+    /// THE FOUR MANIFEST CONFIRMATIONS: D-1020-PE6's three plus the purge
+    /// (#1015 D1), and nothing else.
     #[test]
-    fn three_actions_are_confirmed_by_the_dispatching_surface() {
+    fn four_actions_are_confirmed_by_the_dispatching_surface() {
         let required: Vec<&str> = ACTIONS
             .iter()
             .filter(|row| row.confirm == Confirm::Required)
@@ -325,7 +328,12 @@ mod tests {
             .collect();
         assert_eq!(
             required,
-            ["trash-person", "delete-contact-channel", "merge-people"]
+            [
+                "trash-person",
+                "purge-person",
+                "delete-contact-channel",
+                "merge-people"
+            ]
         );
     }
 

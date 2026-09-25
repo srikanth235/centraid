@@ -40,13 +40,23 @@
 //! | A denial turned into an error | [`commands::Outcome::Denied`] and [`Denial`] are states a surface renders |
 //! | A failed read folded into a `0` or a `[]` | every three-state answer here is a [`Reading`] (census §A seam 5) |
 //! | A body over the ceiling | `core.add_content_item`'s 1 MiB SB-text ceiling is the vault's; this crate never mints one |
+//!
+//! ## The phone's shelves
+//!
+//! [`shelves`], [`editor`] and [`local`] are what `crates/core` answers the
+//! phone's `notes_*` app queries with (#1046): the library's sort and filters,
+//! the trash shelf and notebook spine, the editor's note with its base
+//! revision, and the Journal by the member's local day.
 
 pub mod cards;
 pub mod commands;
 pub mod derive;
+pub mod editor;
 pub mod journal;
+pub mod local;
 pub mod manifest;
 pub mod queries;
+pub mod shelves;
 pub mod version_chain;
 
 pub use cards::{CardDoor, CardStatus, NoCards, OwnerCards, Ref, RefCard};
@@ -54,27 +64,22 @@ pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use derive::{
     CheckTally, PREVIEW_CHARS, PREVIEW_LINES, check_of, decode_note_body, preview_of,
 };
+pub use editor::{EditorNote, load_editor_note};
+pub use local::{JournalDay, PlacedEntry, journal_days};
 pub use manifest::{APP_ID, manifest};
 pub use queries::{
     HistoryData, JournalData, LibraryData, LinkTargetsData, NoteData, SHELF_ROWS, SearchData,
     WINDOW_DEFAULT, WINDOW_MAX, WINDOW_MIN, load_history, load_journal, load_library,
     load_link_targets, load_note, load_search,
 };
+pub use shelves::{
+    LibraryFilter, NotebookEntry, NotebooksData, Sort, load_notebooks, load_trash, shape_library,
+};
 pub use version_chain::{ChainWalk, MAX_CHAIN_STEPS, VersionChainError, note_version_chain};
 
-/// A CONSENT DENIAL, as the payload carries it.
-///
-/// Every v0 Notes query wraps its body and answers `{…empty, vaultDenied:
-/// {code, message}}` rather than throwing (`queries/library.ts:471`-`:479`, and
-/// the same in all six). `revoked_at` comes from the HOST, because a revoked
-/// app cannot read the consent tables to date its own revocation — so it is
-/// an `Option` this crate never fills in.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Denial {
-    pub code: Option<String>,
-    pub message: Option<String>,
-    pub revoked_at: Option<String>,
-}
+/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// every app so the core settles all of them through one door.
+pub use centraid_apps_kit::Denial;
 
 /// THE THREE STATES OF A READ, once, for every surface in this app.
 ///

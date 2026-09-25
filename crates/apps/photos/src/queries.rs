@@ -340,6 +340,9 @@ pub fn trash_statement() -> PageQuery {
 }
 
 /// `photos.library.albums` — albums are collections: owner-curated and small.
+///
+/// `kind = 'album'` (rung six): `core_collection` holds Notes' notebooks too,
+/// and one of those is never an album here.
 #[must_use]
 pub fn albums_statement(name: &str) -> PageQuery {
     PageQuery::new(
@@ -348,7 +351,11 @@ pub fn albums_statement(name: &str) -> PageQuery {
         "core_collection",
         PageOrder::asc("collection_id", "collection_id"),
     )
+    .filter("kind = ?", vec![PageBindValue::Text(ALBUM_KIND.to_owned())])
 }
+
+/// `core_collection.kind` for an album — the vault's own word (rung six).
+pub const ALBUM_KIND: &str = "album";
 
 /// `photos.library.memories`.
 #[must_use]

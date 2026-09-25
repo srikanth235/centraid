@@ -173,6 +173,11 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
          corpus, hashed through the one door so the scan is not lied to",
     ),
     (
+        "vault/tests/collection_kind.rs",
+        "`content_digest` over the asset id — stand-in bytes for a photograph \
+         whose only job is to be filed into an album, and that nothing opens",
+    ),
+    (
         "vault/tests/common/mod.rs",
         "`content_digest` over the body the fixture wrote",
     ),
@@ -183,6 +188,11 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
     (
         "vault/tests/media_commands.rs",
         "`content_digest` over the bytes the test minted",
+    ),
+    (
+        "vault/tests/originals.rs",
+        "`BlobStore::put`'s return for an original held on this device, and \
+         `content_digest` over the same bytes for one that is not",
     ),
 ];
 

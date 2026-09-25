@@ -311,6 +311,9 @@ pub fn trash_statement() -> PageQuery {
 
 /// Notebooks. Owner-curated and small, so a WALK with a stated ceiling rather
 /// than a window (`library.ts:236`).
+///
+/// `kind = 'notebook'` (rung six): `core_collection` holds Photos' albums too,
+/// and one of those is never a notebook here.
 #[must_use]
 pub fn notebooks_statement() -> PageQuery {
     PageQuery::new(
@@ -319,6 +322,16 @@ pub fn notebooks_statement() -> PageQuery {
         "core_collection",
         PageOrder::asc("collection_id", "collection_id"),
     )
+    .filter("kind = ?", notebook_kind_bind())
+}
+
+/// `core_collection.kind` for a notebook — the vault's own word (rung six).
+pub const NOTEBOOK_KIND: &str = "notebook";
+
+/// The bind every notebook read carries.
+#[must_use]
+pub fn notebook_kind_bind() -> Vec<PageBindValue> {
+    vec![PageBindValue::Text(NOTEBOOK_KIND.to_owned())]
 }
 
 /// One note's row, by id. The editor's on-open pull reads three columns.
@@ -1119,7 +1132,8 @@ fn search_body(
             "collection_id, name",
             "core_collection",
             PageOrder::asc("collection_id", "collection_id"),
-        ),
+        )
+        .filter("kind = ?", notebook_kind_bind()),
         JOIN_FAN_OUT,
     )?;
     let attachment_rows = note_scoped(door, &SEARCH_ATTACHMENTS, &hit_ids)?;

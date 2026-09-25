@@ -83,7 +83,10 @@ impl KeptAlbums {
             }
         };
         serde_json::from_str(&text).map_err(|error| CoreError::Invariant {
-            context: format!("the keep list at {} will not parse: {error}", path.display()),
+            context: format!(
+                "the keep list at {} will not parse: {error}",
+                path.display()
+            ),
         })
     }
 
@@ -188,10 +191,12 @@ mod tests {
 
     fn keep(album: &str, keep: bool) -> wire::OriginalsRequest {
         wire::OriginalsRequest {
-            op: Some(wire::originals_request::Op::Keep(wire::KeepAlbumOriginals {
-                album_id: album.to_owned(),
-                keep,
-            })),
+            op: Some(wire::originals_request::Op::Keep(
+                wire::KeepAlbumOriginals {
+                    album_id: album.to_owned(),
+                    keep,
+                },
+            )),
         }
     }
 
@@ -206,14 +211,28 @@ mod tests {
     #[test]
     fn a_kept_album_is_written_beside_the_vault_and_taken_off_again() {
         let (file, vault) = scratch();
-        assert!(answer(&vault, &file, &kept()).expect("reads").kept_album_ids.is_empty());
+        assert!(
+            answer(&vault, &file, &kept())
+                .expect("reads")
+                .kept_album_ids
+                .is_empty()
+        );
 
         answer(&vault, &file, &keep("album-b", true)).expect("keeps");
         let on = answer(&vault, &file, &keep("album-a", true)).expect("keeps");
-        assert_eq!(on.kept_album_ids, vec!["album-a", "album-b"], "sorted, both");
-        assert!(KeptAlbums::path_for(&file).exists(), "the list is beside the vault");
         assert_eq!(
-            KeptAlbums::path_for(&file).file_name().and_then(|name| name.to_str()),
+            on.kept_album_ids,
+            vec!["album-a", "album-b"],
+            "sorted, both"
+        );
+        assert!(
+            KeptAlbums::path_for(&file).exists(),
+            "the list is beside the vault"
+        );
+        assert_eq!(
+            KeptAlbums::path_for(&file)
+                .file_name()
+                .and_then(|name| name.to_str()),
             Some("vault.keep-originals.json")
         );
 
@@ -223,7 +242,9 @@ mod tests {
         let off = answer(&vault, &file, &keep("album-b", false)).expect("unkeeps");
         assert_eq!(off.kept_album_ids, vec!["album-a"]);
         assert_eq!(
-            answer(&vault, &file, &kept()).expect("reads").kept_album_ids,
+            answer(&vault, &file, &kept())
+                .expect("reads")
+                .kept_album_ids,
             vec!["album-a"]
         );
     }
@@ -269,7 +290,9 @@ mod tests {
             &vault,
             &file,
             &wire::OriginalsRequest {
-                op: Some(wire::originals_request::Op::Census(wire::OriginalsCensusRead {})),
+                op: Some(wire::originals_request::Op::Census(
+                    wire::OriginalsCensusRead {},
+                )),
             },
         )
         .expect("a census answers");

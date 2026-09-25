@@ -1353,8 +1353,8 @@ fn seed_photos_demo(
     connection
         .execute(
             "INSERT INTO core_collection
-               (collection_id, owner_party_id, name, sort_order, created_at, updated_at)
-             VALUES (?1, ?2, ?3, 1, ?4, ?4)",
+               (collection_id, owner_party_id, kind, name, sort_order, created_at, updated_at)
+             VALUES (?1, ?2, 'album', ?3, 1, ?4, ?4)",
             rusqlite::params![album_id, owner_party_id, DEMO_ALBUM_TITLE, created],
         )
         .map_err(door)?;
@@ -1566,8 +1566,8 @@ fn seed_year3_photos(
         connection
             .execute(
                 "INSERT INTO core_collection
-                   (collection_id, owner_party_id, name, sort_order, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                   (collection_id, owner_party_id, kind, name, sort_order, created_at, updated_at)
+                 VALUES (?1, ?2, 'album', ?3, ?4, ?5, ?5)",
                 rusqlite::params![
                     id("album", index),
                     YEAR3_OWNER_PARTY,
@@ -3002,9 +3002,9 @@ fn seed_notes_demo(
         connection
             .execute(
                 "INSERT INTO core_collection
-                   (collection_id, owner_party_id, name, cover_content_id,
+                   (collection_id, owner_party_id, kind, name, cover_content_id,
                     parent_collection_id, sort_order, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, NULL, NULL, ?4, ?5, ?5)",
+                 VALUES (?1, ?2, 'notebook', ?3, NULL, NULL, ?4, ?5, ?5)",
                 rusqlite::params![
                     collection_id,
                     owner_party_id,
@@ -3470,9 +3470,9 @@ fn seed_year3_notes(
         connection
             .execute(
                 "INSERT INTO core_collection
-                   (collection_id, owner_party_id, name, cover_content_id,
+                   (collection_id, owner_party_id, kind, name, cover_content_id,
                     parent_collection_id, sort_order, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, NULL, NULL, ?4, ?5, ?5)",
+                 VALUES (?1, ?2, 'notebook', ?3, NULL, NULL, ?4, ?5, ?5)",
                 rusqlite::params![
                     id("notebook", index),
                     YEAR3_OWNER_PARTY,
@@ -4993,6 +4993,31 @@ pub fn seed_undated_asset(
             "INSERT INTO media_asset (asset_id, content_id, kind, created_at, updated_at)
              VALUES (?1, ?2, 'photo', ?3, ?3)",
             rusqlite::params![asset_id, content_id, now],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
+/// One top-level collection of the stated `kind` (`notebook` | `album`,
+/// rung six), with nothing in it — the row that proves an app's read never
+/// lists the other app's collections.
+pub fn seed_collection(
+    connection: &Connection,
+    collection_id: &str,
+    owner_party_id: &str,
+    kind: &str,
+    name: &str,
+    now: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO core_collection
+               (collection_id, owner_party_id, kind, name, cover_content_id,
+                parent_collection_id, sort_order, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, NULL, NULL,
+                     (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM core_collection
+                       WHERE parent_collection_id IS NULL AND kind = ?3), ?5, ?5)",
+            rusqlite::params![collection_id, owner_party_id, kind, name, now],
         )
         .map_err(door)?;
     Ok(())

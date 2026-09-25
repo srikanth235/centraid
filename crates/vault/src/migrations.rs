@@ -91,6 +91,16 @@ pub const BLOB_CUSTODY_SQL: &str =
 /// a squash is a decision about the migration contract.
 pub const THE_CUT_SQL: &str = include_str!("../../../contracts/migrations/005_the_cut.sql");
 
+/// Rung six: a collection is a notebook or an album, and says which.
+///
+/// `core_collection` gains a REQUIRED `kind` (`notebook` | `album`), so Notes
+/// and Photos stop reading — and writing into, and deleting — each other's
+/// rows. A rebuild rather than `ADD COLUMN`, because SQLite cannot add a
+/// `NOT NULL` column without a default and a default would make the kind
+/// optional. The file states how existing rows are classified.
+pub const COLLECTION_KIND_SQL: &str =
+    include_str!("../../../contracts/migrations/006_collection_kind.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -121,6 +131,11 @@ pub const LADDER: &[Migration] = &[
         version: 5,
         name: "the-cut",
         sql: THE_CUT_SQL,
+    },
+    Migration {
+        version: 6,
+        name: "collection-kind",
+        sql: COLLECTION_KIND_SQL,
     },
 ];
 

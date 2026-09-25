@@ -26,6 +26,19 @@
 //! expanded in UTC, or keyed an exception on the resolved instant, fails on
 //! that one case alone.
 //!
+//! ## Two rows v0 answers and the port refuses to, both NAMED
+//!
+//! v0's golden is its own export and is never edited here. Where it encodes a
+//! defect the port fixed, the divergence is a named, mechanical predicate over
+//! the golden row, removed from the expected answer and nowhere else, with a
+//! test that holds the predicate to exactly the rows it names:
+//! [`TRASHED_IN_V0`] (an event in the trash) and [`ended_before_from`] (an
+//! occurrence the expansion's reach-back found that was over before the range
+//! began), [#1046](https://github.com/srikanth235/centraid/issues/1046).
+//!
+//! The corpus's rows are all `zoned`, so the zone the port reads them in does
+//! not move an answer; the suite states UTC — v0's `today` was 00:00Z.
+//!
 //! ## The one query compared as a SUBSET, and why
 //!
 //! `search`'s hits come from `crates/search`'s FTS door, which this build does
@@ -45,6 +58,8 @@ use centraid_apps_agenda::queries::{
 use centraid_apps_kit::contract_vault::open_contract_vault;
 use centraid_apps_kit::row::{Cell, Row};
 use centraid_apps_kit::testdoor::TestDoor;
+use centraid_vault::time::recurrence::parse_instant_ms;
+use centraid_vault::time::zone::FireZone;
 use serde_json::{Map, Value, json};
 
 /// The instant the generator stamped the whole run at.
@@ -57,6 +72,58 @@ const NOW: &str = "2099-06-01T09:00:00.000Z";
 /// projection (`EVENT_COLUMNS`) does not — so a hit row is WIDER than a window
 /// row in v0, which is a fact about the two reads and not about the app.
 const SEARCH_ONLY_KEYS: [&str; 4] = ["_rank", "deleted_at", "purge_at", "row_version"];
+
+/// THE ONE ROW v0 ANSWERS AND THE PORT REFUSES TO: an event in the trash
+/// ([#1046](https://github.com/srikanth235/centraid/issues/1046)).
+///
+/// The corpus's script runs `schedule.delete_event` on "Book the Tahoe cabin"
+/// (`id-0036`), and v0's `upcoming` statements name only `status`, so the
+/// deleted event is in three of its five answers. **The golden encodes the
+/// defect**, and it is v0's own export, so it is not edited here: the
+/// divergence is named by id, removed from the expected answer and nowhere
+/// else, and `the_trashed_row_is_the_only_divergence` holds the list to rows the
+/// corpus actually trashed. `tests/trash.rs` is the positive test, against a
+/// vault written through the real commands.
+const TRASHED_IN_V0: [&str; 1] = ["id-0036"];
+
+/// v0's `today` for a case that states no `from`: the generator's clock at
+/// 00:00Z.
+const V0_TODAY: &str = "2099-06-01T00:00:00.000Z";
+
+/// HOW MANY ROWS EACH `upcoming` CASE ANSWERS THAT HAD ENDED BEFORE ITS `from`,
+/// in the fixture's case order: v0's month-long leak, counted rather than
+/// described, so a regenerated corpus that moved it is a failure here.
+const ENDED_BEFORE_FROM_PER_CASE: [usize; 5] = [31, 31, 0, 0, 41];
+
+/// THE SECOND ROW SHAPE v0 ANSWERS AND THE PORT REFUSES TO: an occurrence that
+/// was OVER before the range began ([#1046](https://github.com/srikanth235/centraid/issues/1046)).
+///
+/// `upcoming` expands every series from 31 days before `from` — the reach-back
+/// that finds a multi-day occurrence still running at `from` — and v0 filtered
+/// only one-offs afterwards, so each series answered a month of its past. The
+/// port applies the true lower bound to every row
+/// ([`centraid_apps_agenda::queries::still_running_at`]). This is that bound,
+/// restated over the GOLDEN's own JSON rather than called, so the divergence is
+/// defined independently of the code it excuses: a row whose end (its start,
+/// when it states none) is at or before `from`, and whose start is before it.
+fn ended_before_from(event: &Value, from: &str) -> bool {
+    let instant = |key: &str| event[key].as_str().and_then(parse_instant_ms);
+    let (Some(from), Some(start)) = (parse_instant_ms(from), instant("dtstart")) else {
+        return false;
+    };
+    let end = instant("dtend").unwrap_or(start);
+    end <= from && start < from
+}
+
+/// The `from` a case is read at.
+fn from_of(case: &Value) -> &str {
+    input_str(case, "from").unwrap_or(V0_TODAY)
+}
+
+/// The corpus's zone: UTC, which is v0's `today` and moves no `zoned` row.
+fn utc() -> FireZone {
+    FireZone::named("Etc/UTC").expect("UTC is in the bundled database")
+}
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -260,12 +327,23 @@ fn every_upcoming_case_agrees_with_v0() {
     let mut compared = 0_usize;
     for case in &cases {
         let label = format!("upcoming {}", case["input"]);
-        let (data, denial) =
-            load_upcoming(&door, input_str(case, "from"), input_str(case, "to"), NOW)
-                .unwrap_or_else(|error| panic!("{label}: {error}"));
+        let (data, denial) = load_upcoming(
+            &door,
+            input_str(case, "from"),
+            input_str(case, "to"),
+            NOW,
+            &utc(),
+        )
+        .unwrap_or_else(|error| panic!("{label}: {error}"));
         assert!(denial.is_none(), "{label}: an unexpected denial");
         let want = &case["output"];
-        let want_events = want["events"].as_array().expect("events");
+        let want_events: Vec<&Value> = want["events"]
+            .as_array()
+            .expect("events")
+            .iter()
+            .filter(|event| !TRASHED_IN_V0.contains(&event["event_id"].as_str().unwrap_or("")))
+            .filter(|event| !ended_before_from(event, from_of(case)))
+            .collect();
         assert_eq!(
             data.events.len(),
             want_events.len(),
@@ -297,6 +375,150 @@ fn every_upcoming_case_agrees_with_v0() {
     assert!(compared > 200, "{compared} event rows compared");
 }
 
+/// The divergence [`TRASHED_IN_V0`] names is exactly the corpus's trash, and
+/// the port answers none of it: every id on the list is a row `rows.json`
+/// carries with `deleted_at` set, v0 answers it at least once, and no ported
+/// `upcoming` answer carries it.
+#[test]
+fn the_trashed_row_is_the_only_divergence() {
+    // Read off `rows.json` rather than the database: this crate holds no SQL,
+    // its tests included (`sql-confinement`).
+    let events = fixture("rows.json")
+        .as_array()
+        .expect("the rows are a list of tables")
+        .iter()
+        .find(|table| table["table"] == json!("core_event"))
+        .cloned()
+        .expect("the corpus has events");
+    let columns: Vec<&str> = events["columns"]
+        .as_array()
+        .expect("columns")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let at = |name: &str| {
+        columns
+            .iter()
+            .position(|column| *column == name)
+            .unwrap_or_else(|| panic!("core_event has no {name}"))
+    };
+    let (id_at, deleted_at) = (at("event_id"), at("deleted_at"));
+    for id in TRASHED_IN_V0 {
+        let row = events["rows"]
+            .as_array()
+            .expect("rows")
+            .iter()
+            .find(|row| row[id_at] == json!(id))
+            .unwrap_or_else(|| panic!("{id} is not a fixture event"));
+        assert!(
+            !row[deleted_at].is_null(),
+            "{id} is not in the corpus's trash"
+        );
+        let answered_by_v0 = cases("upcoming")
+            .iter()
+            .any(|case| case["output"]["events"].to_string().contains(id));
+        assert!(
+            answered_by_v0,
+            "{id}: v0 never answered it, so nothing diverges"
+        );
+    }
+    let connection = fixture_vault();
+    let door = TestDoor::new(&connection);
+    for case in cases("upcoming") {
+        let (data, _) = load_upcoming(
+            &door,
+            input_str(&case, "from"),
+            input_str(&case, "to"),
+            NOW,
+            &utc(),
+        )
+        .expect("upcoming reads");
+        assert!(
+            data.events
+                .iter()
+                .all(|event| !TRASHED_IN_V0.contains(&event.event_id.as_str())),
+            "upcoming {}: a trashed event is on the agenda",
+            case["input"]
+        );
+    }
+}
+
+/// The divergence [`ended_before_from`] names is EXACTLY what v0 answers and
+/// the port does not, case by case: v0's answer minus the trash minus the
+/// ended rows is the port's answer, key for key and in order; the ended rows
+/// are the counts [`ENDED_BEFORE_FROM_PER_CASE`] states, every one of them an
+/// expanded occurrence (v0 did bound one-offs); and the port answers no row
+/// the predicate names.
+#[test]
+fn the_rows_that_ended_before_from_are_v0s_leak_and_nothing_else() {
+    let connection = fixture_vault();
+    let door = TestDoor::new(&connection);
+    let cases = cases("upcoming");
+    let mut counted = Vec::new();
+    for case in &cases {
+        let label = format!("upcoming {}", case["input"]);
+        let from = from_of(case);
+        let v0_events = case["output"]["events"].as_array().expect("events");
+        let ended: Vec<&Value> = v0_events
+            .iter()
+            .filter(|event| ended_before_from(event, from))
+            .collect();
+        counted.push(ended.len());
+        assert!(
+            ended.iter().all(
+                |event| event["rrule"].is_string() && event["original_start_local"].is_string()
+            ),
+            "{label}: the leak is the reach-back's occurrences, not a one-off"
+        );
+        assert!(
+            ended
+                .iter()
+                .all(|event| !TRASHED_IN_V0.contains(&event["event_id"].as_str().unwrap_or(""))),
+            "{label}: the two divergences do not overlap, so neither hides the other"
+        );
+        let (data, _) = load_upcoming(
+            &door,
+            input_str(case, "from"),
+            input_str(case, "to"),
+            NOW,
+            &utc(),
+        )
+        .unwrap_or_else(|error| panic!("{label}: {error}"));
+        let port: Vec<&str> = data
+            .events
+            .iter()
+            .map(|event| event.instance_key.as_str())
+            .collect();
+        let v0_kept: Vec<&str> = v0_events
+            .iter()
+            .filter(|event| !TRASHED_IN_V0.contains(&event["event_id"].as_str().unwrap_or("")))
+            .filter(|event| !ended_before_from(event, from))
+            .filter_map(|event| event["instance_key"].as_str())
+            .collect();
+        assert_eq!(
+            port, v0_kept,
+            "{label}: v0 minus the named divergences is the port"
+        );
+        let from_ms = parse_instant_ms(from).expect("a from");
+        assert!(
+            data.events.iter().all(|event| {
+                let start = parse_instant_ms(&event.dtstart).expect("a start");
+                let end = event
+                    .dtend
+                    .as_deref()
+                    .and_then(parse_instant_ms)
+                    .unwrap_or(start);
+                end > from_ms || start >= from_ms
+            }),
+            "{label}: the port answers a row that had already ended"
+        );
+    }
+    assert_eq!(
+        counted, ENDED_BEFORE_FROM_PER_CASE,
+        "v0's leak, counted per case"
+    );
+}
+
 /// THE DST CASE, named. It is already inside the sweep above; this asserts the
 /// PROPERTY so a fixture regenerated wrong is caught here rather than agreeing
 /// with itself.
@@ -309,6 +531,7 @@ fn the_dst_window_keeps_its_wall_clock_and_honours_its_exceptions() {
         Some("2026-03-01T00:00:00.000Z"),
         Some("2026-03-20T00:00:00.000Z"),
         NOW,
+        &utc(),
     )
     .expect("the DST window reads");
     // The 09:00 New York series only: the corpus also carries a weekly
@@ -465,9 +688,14 @@ fn every_day_context_case_agrees_with_v0() {
     assert_eq!(cases.len(), 5);
     for case in &cases {
         let label = format!("day-context {}", case["input"]);
-        let (data, denial) =
-            load_day_context(&door, input_str(case, "from"), input_str(case, "to"), NOW)
-                .unwrap_or_else(|error| panic!("{label}: {error}"));
+        let (data, denial) = load_day_context(
+            &door,
+            input_str(case, "from"),
+            input_str(case, "to"),
+            NOW,
+            &utc(),
+        )
+        .unwrap_or_else(|error| panic!("{label}: {error}"));
         assert!(denial.is_none(), "{label}: an unexpected denial");
         let found = json!({
             "birthdays": data.birthdays.iter().map(|birthday| json!({

@@ -18,6 +18,10 @@ centraid-apps-kit = { path = "../kit" }
 # and the occurrence key, and for nothing else. A second expander in an app
 # crate is the drift ONT-25 already is.
 centraid-vault = { path = "../../vault" }
+# The FTS door. An app holds no `MATCH` (the kit's grammar has no production for
+# one), so `search`'s hits are asked of this crate and folded here (D-1020-N1),
+# exactly as Notes asks for its own.
+centraid-search = { path = "../../search" }
 serde_json.workspace = true
 thiserror.workspace = true
 

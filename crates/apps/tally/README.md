@@ -8,7 +8,7 @@ Tally's doctrine, from the manifest's own description (`manifest.json`):
 - a settlement is real cash;
 - **balances are never stored.** They are derived at read time by one fold, and the simplification proposal and the rate suggestion are derived the same way and written nowhere.
 
-## The five modules
+## The six modules
 
 | Module | What it owns |
 | --- | --- |
@@ -16,6 +16,7 @@ Tally's doctrine, from the manifest's own description (`manifest.json`):
 | `queries` | `loadTally` — seventeen statements as `PageQuery` values, then the party resolution that depends on what the first sixteen named — and the fold into `TallyData`. Every Tally surface is a fold over this one read, not a second read |
 | `balance` | The pure engine: the single attribution rule, the per-member net, the pairwise matrix, the min-cash-flow simplification. No vault reaches it, which is why the phone can import it directly |
 | `views` | What each of the eight manifest queries ANSWERS — the dashboard, a group, a friend, activity, search, export, history, matches — as pure functions of `TallyData` (plus a door for the three that read planes `loadTally` does not). Presentation comes from `crates/design`, the Rust lowering of `packages/design`; nothing here formats a number |
+| `phone` | What the phone's ten screens answer (#1046), typed for `tally.proto` rather than as v0's JSON: the dashboard (Balances, Groups, Activity), a group, a friend, one expense (live or trashed, with its memo and revisions), settle-up, recurring, spending, search, trash and export. Every one is a fold of the same `load_tally` read through the same engine and the views' own stance and pairwise helpers; every figure is a `Money`, so `crates/core`'s `app_query` gives each its currency's exponent, and nothing sums across currencies (a friend's group-less part and a month's spending are keyed by currency). No clock and no zone: `today`, the month and every local reading are the core's |
 | `commands` | The 23 actions, as a table of `action → command`. The projection lives in the command, not here. `door` (behind the `vault-door` feature) is the real `Commands` implementation over the vault's `execute`; the feature is off by default so an edit here rebuilds one crate |
 
 ## What this crate may not contain, and what stops it
@@ -60,7 +61,12 @@ The two fan-outs are stated at a page size of **500**, not 1,000, because `MAX_P
 | --- | --- |
 | `tally.add_receipt_expense` | it claims a staged blob, mints a `core_content_item` and its representation, attaches it and writes OCR text through the enrichment plane. Four planes, none of them Tally's, and Tally is record-only — so the command refuses with a sentence naming the way through (`tally.add_expense` with `line_items`) rather than writing the expense and dropping the photo |
 | The occurrence half of the recurrence commands | it needs `expandRecurrence` over a series' own zone, and those commands refuse with a sentence rather than carrying a minimal expander — a second recurrence engine is the drift #996 R21 (ONT-25) was filed for. The one engine is `centraid_vault::time` |
+| A memo | `tally.set_expense_memo` deletes and inserts on a `kind` column `knowledge_annotation` does not have (the table carries `body_text` and no kind), so it refuses every call; `phone` reads the annotation the schema does have, and answers no memo until the command is fixed in `crates/vault` |
 | Client-side form models | form arithmetic and surface state (splits, lines, drafts, contributions, receipts, spending, schedules, activity) belong to the shells, not the ledger. Ids are minted from `Ids`, never from a module-level counter |
+
+## The phone's arm
+
+`crates/core` links this crate and answers `app_query`'s arms 50–59 (`tally.proto`) from `phone`; `crates/core/src/app_query/tally.rs` is the one conversion and `crates/core-ffi/CONTRACT.md` §4e states the contract. The views stay the parity-pinned answers of the eight manifest queries; `phone` is the typed reading a shell draws, with the sharing-era pieces (Waiting, queued notices, Share group) absent because v1 has no share plane (#1029). Two statements exist for it alone: `expense_by_id_statement` (an expense, live or trashed, for the detail screen) and `memo_statement` (the `knowledge_annotation` on an expense).
 
 ## Where Tally sits in the plane
 

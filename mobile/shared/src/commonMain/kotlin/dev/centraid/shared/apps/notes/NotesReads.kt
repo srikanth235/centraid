@@ -9,6 +9,7 @@ import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.ReadFailure
+import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenWrites
@@ -165,35 +166,14 @@ public object NotesReads :
     override val appId: String = "notes"
 
     /**
-     * The save's outcome, as the editor's own settle event.
+     * The save's outcome, as the editor's own settle event, keyed by the
+     * invoke key it was submitted under — so a settle for a save the editor
+     * has since moved past is recognisably not the one in flight.
      *
-     * **QUEUED IS STILL ITS OWN STATE, and it is still reachable** (#1029 §1).
-     * It used to mean "in this device's outbox; the gateway has not confirmed",
-     * and there is no gateway — but `CommandStatus` keeps `QUEUED`, `IN_FLIGHT`
-     * and `PARKED`, and all three say the same thing they said: somewhere
-     * durable, not yet committed. Collapsing them into CLEAN would be the shell
-     * claiming a commit that has not happened, which is the badge a member reads
-     * to know a write is still owed.
-     *
-     * Only `EXECUTED` is clean. `DENIED` and `FAILED` are `SAVE_STATE_REFUSED`,
-     * which keeps the member's words on the screen with a sentence OVER them
-     * rather than instead of them.
+     * Only `EXECUTED` commits: the phone is the vault, and a save commits here
+     * or it does not (QUEUED left with the outbox). The sentence is the core's;
+     * silence carries none.
      */
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): NotesEditorEvent =
-        NotesEditorEvent(
-            save_settled = NotesEditorEvent.SaveSettled(
-                outcome = when (status) {
-                    CommandStatus.COMMAND_STATUS_EXECUTED ->
-                        NotesEditorState.SaveState.SAVE_STATE_CLEAN
-
-                    CommandStatus.COMMAND_STATUS_QUEUED,
-                    CommandStatus.COMMAND_STATUS_IN_FLIGHT,
-                    CommandStatus.COMMAND_STATUS_PARKED,
-                    -> NotesEditorState.SaveState.SAVE_STATE_QUEUED
-
-                    else -> NotesEditorState.SaveState.SAVE_STATE_REFUSED
-                },
-                failure = sentence.takeIf { it.isNotEmpty() }?.let { Reads.refused(it) },
-            ),
-        )
+        NotesEditorEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey))
 }

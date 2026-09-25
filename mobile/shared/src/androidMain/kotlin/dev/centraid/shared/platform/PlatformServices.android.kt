@@ -72,6 +72,7 @@ public class AndroidPlatformServices(context: Context) : PlatformServices {
     override val mediaLibrary: MediaLibrary = AndroidMediaLibrary(context)
     override val ocr: Ocr = AndroidOcr()
     override val secureRandom: SecureRandom = AndroidSecureRandom()
+    override val clock: DeviceClock = AndroidDeviceClock()
 }
 
 /**
@@ -559,4 +560,16 @@ public class AndroidSecureRandom : SecureRandom {
     private val random = java.security.SecureRandom()
 
     override fun bytes(count: Int): ByteArray = ByteArray(count).also(random::nextBytes)
+}
+
+/**
+ * The device's zone and wall clock (#1046). `TimeZone.getDefault()` is read at
+ * every call, not cached: Android updates it when the member crosses a border
+ * or changes it in Settings, and a captured value would answer the old one.
+ */
+public class AndroidDeviceClock : DeviceClock {
+    override fun read(): DeviceClock.Reading = DeviceClock.Reading(
+        zone = java.util.TimeZone.getDefault().id,
+        epochMillis = System.currentTimeMillis(),
+    )
 }

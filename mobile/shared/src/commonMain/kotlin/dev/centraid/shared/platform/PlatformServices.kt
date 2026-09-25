@@ -37,6 +37,38 @@ public interface PlatformServices {
     public val mediaLibrary: MediaLibrary
     public val ocr: Ocr
     public val secureRandom: SecureRandom
+    public val clock: DeviceClock
+}
+
+/**
+ * THE DEVICE'S ZONE AND ITS WALL CLOCK, AS PLATFORM FACTS (#1046).
+ *
+ * `commonMain` has no calendar and no zone database, and keeps none
+ * (`sync/Instants.kt`). A read that answers civil time — Agenda's app queries
+ * answer every occurrence's `local_start` and the answer's `today` — needs to
+ * say WHICH zone, and a founded vault names none, so an empty `tz` is refused
+ * rather than read as UTC (`agenda.proto`'s zone rule). The zone is therefore
+ * the platform's, stated on every request, and the core does all the
+ * arithmetic against its bundled database.
+ *
+ * **Read at every request, never captured.** A phone crossing a border changes
+ * zone while the app is open, and a zone read at launch would place the
+ * member's morning in the city they flew out of.
+ *
+ * [Reading.epochMillis] is here for a BOUND, not a calendar: a read that says
+ * "the next fourteen days" needs an instant fourteen days on, which is
+ * arithmetic on milliseconds and needs no zone. Which day is TODAY is never
+ * derived from it in `commonMain` — the core answers that.
+ */
+public interface DeviceClock {
+    public fun read(): Reading
+
+    public data class Reading(
+        /** The IANA name, e.g. `America/New_York`. Never an offset, never empty. */
+        public val zone: String,
+        /** The wall clock, milliseconds since 1970-01-01T00:00:00Z. */
+        public val epochMillis: Long,
+    )
 }
 
 /** The platform's services. Fakes on the JVM; the real things elsewhere. */

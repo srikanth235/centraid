@@ -1,0 +1,337 @@
+// NOTES' QUERIES, AS THE CORE ANSWERS THEM (#1046).
+//
+// `crates/apps/notes` folds the library (a bounded recent window plus EVERY
+// pinned note, decorated by ten `IN`-bounded joins), the People-journal
+// marker set that four surfaces exclude, the revision chain a cycle refuses
+// (D-1020-N2) and the seven-domain powerbox (D-1020-N1). These are its
+// answers, typed. A shell reaches them through `app_query.proto`'s
+// `AppQueryRequest` at numbers 40-49, and draws them; it joins nothing and
+// decodes no body.
+//
+// Every message mirrors one Rust struct in `crates/apps/notes/src/queries.rs`
+// or `editor.rs`; `crates/core`'s `app_query_notes` module is the one
+// conversion. Instants are the vault's text form,
+// `YYYY-MM-DDTHH:MM:SS.mmmZ`; days are `YYYY-MM-DD`.
+//
+// THE JOURNAL ASYMMETRY IS THE CONTRACT (D-1020-N3): a People-journal entry
+// is absent from `library`, `trash`, the tag chips, `search` and
+// `link_targets`, is the whole of `journal`, and is still answered by `note`,
+// because the People screen opens one by id.
+//
+// CIVIL DAYS. `library`, `trash` and `history` take a `tz` and answer each
+// instant's `*_local_day` beside it, so "edited today" and "purges on" are
+// string comparisons in a view. `agenda.proto`'s zone rule, unsoftened: an
+// empty `tz` is the vault's zone, and a request that states none in a vault
+// whose settings name none — or names one the bundled database does not
+// know — is `ERROR_CODE_INVALID_REQUEST`. Never UTC.
+//
+// A LIST ROW CARRIES A PREVIEW, NEVER A BODY (#404). `note` is the editor's
+// lazy pull of the full text.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// The requests.
+// ---------------------------------------------------------------------------
+
+// How the library's shelf is ordered. PINNED NOTES LEAD under every order.
+enum NotesSort {
+  // The default: newest `updated_at` first.
+  NOTES_SORT_UNSPECIFIED = 0;
+  NOTES_SORT_UPDATED = 1;
+  NOTES_SORT_CREATED = 2;
+  // Title, case-insensitively, A first.
+  NOTES_SORT_TITLE = 3;
+}
+
+// `notes.library`: the live shelf.
+//
+// The filters narrow the WINDOW the vault returned, never the vault: a
+// notebook or tag filter over a truncated window answers `truncated = true`,
+// and a wider `window` is the member's way to see further. `pinned_only` is
+// complete whatever the window, because every pinned note is read beside it.
+message NotesLibraryRequest {
+  // Rows in the recent window. 0 is the manifest's default (200); anything
+  // else is clamped to 20..2000.
+  uint32 window = 1;
+  NotesSort sort = 2;
+  bool pinned_only = 3;
+  // Only notes filed in this notebook. Empty is every notebook and none.
+  string notebook_id = 4;
+  // Only notes filed in NO notebook. Ignored when `notebook_id` is set.
+  bool unfiled_only = 5;
+  // Only notes carrying EVERY one of these concepts.
+  repeated string tag_concept_ids = 6;
+  // The zone each row's `*_local_day` is read in; see "CIVIL DAYS" below.
+  string tz = 7;
+}
+
+// `notes.notebooks`: the spine.
+message NotesNotebooksRequest {}
+
+// `notes.journal`: the People-journal entries, grouped by the local day each
+// was written on.
+message NotesJournalRequest {
+  // As `NotesLibraryRequest.window`.
+  uint32 window = 1;
+  // The zone the days are in: `agenda.proto`'s rule — an IANA name, EMPTY is
+  // the vault's zone, and neither is REFUSED (`ERROR_CODE_INVALID_REQUEST`).
+  string tz = 2;
+}
+
+// `notes.search`: full-text search over live, non-journal notes, in the
+// index's rank order, at most 100 hits.
+message NotesSearchRequest {
+  // A blank term answers no hits, as does a term with no searchable word.
+  string term = 1;
+}
+
+// `notes.trash`: the trash shelf, newest `deleted_at` first, at most 200.
+message NotesTrashRequest {
+  // As `NotesLibraryRequest.tz`.
+  string tz = 1;
+}
+
+// `notes.history`: one note's body versions, newest first.
+message NotesHistoryRequest {
+  string note_id = 1;
+  // As `NotesLibraryRequest.tz`.
+  string tz = 2;
+}
+
+// `notes.link_targets`: the powerbox — what a note can link to.
+message NotesLinkTargetsRequest {
+  string term = 1;
+}
+
+// `notes.note`: one note, whole, for the editor.
+message NotesNoteRequest {
+  string note_id = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The answers.
+// ---------------------------------------------------------------------------
+
+message NotesLibrary {
+  // Pinned first, then by the request's sort.
+  repeated NotesRow notes = 1;
+  repeated NotesNotebook notebooks = 2;
+  // The chips the WINDOW saw, by label.
+  repeated NotesTagFacet tags = 3;
+  // The recent window filled: there may be more notes than it holds.
+  bool truncated = 4;
+  uint32 window = 5;
+}
+
+message NotesNotebooks {
+  // By `sort_order`, then id.
+  repeated NotesNotebook notebooks = 1;
+}
+
+message NotesJournal {
+  // Newest day first; within a day, newest `created_at` first. Only days
+  // with an entry.
+  repeated NotesJournalDay days = 1;
+  // The vault clock's day in the request's zone.
+  string today = 2;
+  bool truncated = 3;
+  uint32 window = 4;
+}
+
+message NotesSearch {
+  repeated NotesSearchHit hits = 1;
+}
+
+message NotesTrash {
+  repeated NotesRow notes = 1;
+}
+
+message NotesHistory {
+  // Newest first; `current` is the first. A cycle or an over-long chain is
+  // REFUSED as the answer's `denied` arm, never a truncated list (D-1020-N2).
+  repeated NotesVersion versions = 1;
+}
+
+message NotesLinkTargets {
+  // Grouped by domain in the search crate's domain order, at most eight each.
+  // Locker is never a domain.
+  repeated NotesLinkTarget targets = 1;
+}
+
+// The editor's note. `found = false` is a note id nothing answers to — never
+// an empty note a save would write over.
+message NotesNote {
+  bool found = 1;
+  string note_id = 2;
+  string title = 3;
+  // `markdown`, `html` or `plain`.
+  string format = 4;
+  bool pinned = 5;
+  // The whole decoded body.
+  string body = 6;
+  string body_content_id = 7;
+  // THE BASE REVISION: the newest body occurrence. It moves only when the
+  // BODY changes (a title, pin or format edit records no occurrence), so an
+  // editor that saw this id and reads a different one has lost a body race.
+  optional string current_revision_id = 8;
+  // Bumped by EVERY write to the row — title, pin, format, body, trash.
+  int64 row_version = 9;
+  string created_at = 10;
+  string updated_at = 11;
+  // Set when the note is in the trash; `knowledge.edit_note` refuses it.
+  optional string deleted_at = 12;
+  optional string purge_at = 13;
+  // The one notebook it is filed in (v1 keeps one placement).
+  optional string notebook_id = 14;
+}
+
+// ---------------------------------------------------------------------------
+// The parts.
+// ---------------------------------------------------------------------------
+
+message NotesRow {
+  string note_id = 1;
+  optional string title = 2;
+  optional string format = 3;
+  bool pinned = 4;
+  optional string created_at = 5;
+  optional string updated_at = 6;
+  optional string deleted_at = 7;
+  optional string purge_at = 8;
+  // Six lines, 200 characters, marks stripped.
+  string preview = 9;
+  uint32 check_total = 10;
+  uint32 check_done = 11;
+  repeated string notebook_ids = 12;
+  repeated string notebook_names = 13;
+  repeated NotesAttachment attachments = 14;
+  repeated NotesReference references = 15;
+  repeated NotesBacklink backlinks = 16;
+  repeated NotesTag tags = 17;
+  // The civil days (`YYYY-MM-DD`) of the four instants above in the
+  // request's zone; EMPTY when the instant is absent.
+  string created_local_day = 18;
+  string updated_local_day = 19;
+  string deleted_local_day = 20;
+  string purge_local_day = 21;
+}
+
+message NotesSearchHit {
+  string note_id = 1;
+  optional string title = 2;
+  optional string format = 3;
+  bool pinned = 4;
+  optional string created_at = 5;
+  optional string updated_at = 6;
+  string preview = 7;
+  uint32 check_total = 8;
+  uint32 check_done = 9;
+  repeated string notebook_ids = 10;
+  repeated string notebook_names = 11;
+  repeated NotesAttachment attachments = 12;
+  // The index's highlight, matches between `⟦` and `⟧`.
+  string snippet = 13;
+}
+
+// A notebook is a `core_collection` whose `kind` is `notebook` (#274, rung
+// six). The same table holds Photos' albums, and the read filters them out by
+// kind, so every row here is a notebook.
+message NotesNotebook {
+  // Was `other_entry_count`, the album heuristic `kind` replaced.
+  reserved 6;
+  reserved "other_entry_count";
+  string notebook_id = 1;
+  optional string name = 2;
+  int64 sort_order = 3;
+  optional string parent_notebook_id = 4;
+  // Live, non-journal notes filed here. Zero in `NotesLibrary.notebooks`,
+  // which does not count.
+  uint32 note_count = 5;
+}
+
+message NotesTagFacet {
+  string concept_id = 1;
+  string label = 2;
+}
+
+message NotesTag {
+  string tag_id = 1;
+  string concept_id = 2;
+  string label = 3;
+}
+
+message NotesAttachment {
+  string attachment_id = 1;
+  string content_id = 2;
+  optional string role = 3;
+  bool is_primary = 4;
+  string media_type = 5;
+  string content_uri = 6;
+  int64 byte_size = 7;
+}
+
+// The far end of a link, as a shelf draws it.
+message NotesCard {
+  string entity = 1;
+  string id = 2;
+  // `live`, `trashed`, `missing`, `denied` or `unknown`.
+  string status = 3;
+  optional string title = 4;
+  optional string subtitle = 5;
+  optional string thumbnail_content_id = 6;
+}
+
+message NotesReference {
+  string link_id = 1;
+  // The standoff selector, as JSON. Resolving it is presentation (#282).
+  optional string selector_json = 2;
+  NotesCard card = 3;
+}
+
+message NotesBacklink {
+  string link_id = 1;
+  NotesCard card = 2;
+}
+
+message NotesJournalDay {
+  // `YYYY-MM-DD` in the request's zone.
+  string day = 1;
+  repeated NotesJournalEntry entries = 2;
+}
+
+message NotesJournalEntry {
+  string note_id = 1;
+  optional string title = 2;
+  optional string format = 3;
+  string created_at = 4;
+  optional string updated_at = 5;
+  // `HH:MM`, the wall clock `created_at` reads in the request's zone.
+  string local_time = 6;
+  string preview = 7;
+  uint32 check_total = 8;
+  uint32 check_done = 9;
+}
+
+message NotesVersion {
+  string content_id = 1;
+  string body = 2;
+  optional string media_type = 3;
+  bool current = 4;
+  string asserted_at = 5;
+  // `asserted_at`'s civil day in the request's zone; EMPTY as `NotesRow`'s.
+  string asserted_local_day = 6;
+}
+
+message NotesLinkTarget {
+  // The logical entity, e.g. `knowledge.note`, `core.party`, `schedule.task`.
+  string entity = 1;
+  string id = 2;
+  string title = 3;
+  string subtitle = 4;
+  // The app a member would open it in.
+  string app_id = 5;
+  string snippet = 6;
+}

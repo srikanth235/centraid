@@ -257,6 +257,27 @@ pub fn provenance_statement(document_id: &str) -> PageQuery {
     )
 }
 
+/// `docs.document.body` — THE DECODED TEXT OF ONE CONTENT ITEM (#1046).
+///
+/// `core_content_text` is what the vault's one decoder wrote at write time
+/// (`index_content_text`): a row per `text/*` content item whose bytes decoded,
+/// `body_text NOT NULL`. So an ABSENT row is "no text for these bytes" and a
+/// row holding `""` is an empty text document — two facts a reader draws
+/// differently, and the reason this is its own read rather than a decode of
+/// `content_uri` here.
+pub fn body_statement(content_id: &str) -> PageQuery {
+    PageQuery::new(
+        "docs.document.body",
+        "content_id, body_text",
+        "core_content_text",
+        PageOrder::asc("content_id", "content_id"),
+    )
+    .filter(
+        "content_id = ?",
+        vec![PageBindValue::Text(content_id.to_owned())],
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Rows and payloads.
 // ---------------------------------------------------------------------------
@@ -296,6 +317,8 @@ pub struct DocumentRow {
     pub folder_id: Option<String>,
     pub starred: bool,
     pub trashed: bool,
+    /// When it went to the trash; `None` on a live row. Trash's own order.
+    pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
     pub tags: Vec<LabelEntry>,
     pub custody_state: Option<String>,
@@ -611,6 +634,7 @@ fn fold_row(wrapper: &Row, decorations: &Decorations) -> Option<DocumentRow> {
         },
         starred: decorations.starred.contains(&document_id),
         trashed: text_of(wrapper, "deleted_at").is_some(),
+        deleted_at: text_of(wrapper, "deleted_at"),
         purge_at: text_of(wrapper, "purge_at"),
         tags: decorations
             .labels
@@ -1189,6 +1213,184 @@ pub fn load_activity(
     Ok((ActivityData { events }, None))
 }
 
+/// What `document` answers: one row, where it is filed, and its text.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DocumentData {
+    /// `None` when no such document exists — a state, not an error.
+    pub row: Option<DocumentRow>,
+    /// The folder chain from the top level down to the document's folder.
+    pub path: Vec<FolderRow>,
+    /// The decoded text of the head's content: `None` is "no text row", and
+    /// `Some("")` is an empty text document ([`body_statement`]).
+    pub body: Option<String>,
+}
+
+/// The folder chain above `folder_id`, top level first. Capped at the number of
+/// folders, so a cycle no command can write still terminates.
+#[must_use]
+pub fn folder_path(folders: &[FolderRow], folder_id: Option<&str>) -> Vec<FolderRow> {
+    let mut path = Vec::new();
+    let mut at = folder_id.map(str::to_owned);
+    while let Some(id) = at {
+        if path.len() > folders.len() {
+            break;
+        }
+        let Some(folder) = folders.iter().find(|folder| folder.folder_id == id) else {
+            break;
+        };
+        path.push(folder.clone());
+        at = folder.parent_id.clone();
+    }
+    path.reverse();
+    path
+}
+
+/// `document` — ONE document, as the reader, the viewer and the properties
+/// sheet draw it (#1046). The same row the drive folds, found by id rather
+/// than through the filed window — so a document beyond the window, or one
+/// search found, opens exactly as a browsed one does.
+pub fn load_document(
+    door: &dyn PageDoor,
+    document_id: &str,
+) -> KitResult<(DocumentData, Option<Denial>)> {
+    if document_id.is_empty() {
+        return Ok((DocumentData::default(), None));
+    }
+    let wrappers = match walk(
+        door,
+        &documents_statement(&[document_id.to_owned()])?,
+        DOC_JOIN_BOUND,
+    )? {
+        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
+        Walked::Rows(rows) => rows,
+    };
+    if wrappers.is_empty() {
+        return Ok((DocumentData::default(), None));
+    }
+    let taxonomy = match read_taxonomy(door) {
+        Ok(taxonomy) => taxonomy,
+        Err(KitError::Door(message)) => {
+            return Ok((DocumentData::default(), Some(denial_of(message))));
+        }
+        Err(other) => return Err(other),
+    };
+    let (folders, root_folder_id) = fold_folders(&taxonomy);
+    let folder_concepts: BTreeSet<String> = taxonomy
+        .concepts_in(FOLDER_SCHEME_URI)
+        .into_iter()
+        .filter_map(|row| text_of(row, "concept_id"))
+        .collect();
+    let tags = match walk(
+        door,
+        &labels_statement(&[document_id.to_owned()])?,
+        DOC_PAIR_BOUND,
+    )? {
+        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
+        Walked::Rows(rows) => rows,
+    };
+    let folder_by_document: BTreeMap<String, String> = tags
+        .iter()
+        .filter_map(|row| Some((text_of(row, "target_id")?, text_of(row, "concept_id")?)))
+        .filter(|(_, concept_id)| folder_concepts.contains(concept_id))
+        .collect();
+    let decorations = match read_decorations(
+        door,
+        &taxonomy,
+        &wrappers,
+        folder_by_document,
+        root_folder_id,
+    )? {
+        Err(denial) => return Ok((DocumentData::default(), Some(denial))),
+        Ok(decorations) => decorations,
+    };
+    let Some(row) = wrappers
+        .iter()
+        .find_map(|wrapper| fold_row(wrapper, &decorations))
+    else {
+        return Ok((DocumentData::default(), None));
+    };
+    let body = match walk(door, &body_statement(&row.content_id), DOC_JOIN_BOUND)? {
+        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
+        Walked::Rows(rows) => rows.iter().find_map(|row| text_of(row, "body_text")),
+    };
+    Ok((
+        DocumentData {
+            path: folder_path(&folders, row.folder_id.as_deref()),
+            row: Some(row),
+            body,
+        },
+        None,
+    ))
+}
+
+/// `search` from a TERM: the FTS door's hits for `core.document`, laid onto
+/// their wrappers in rank order and folded by [`load_search`].
+///
+/// The index holds live documents only, which is why a trashed document never
+/// matches ([`load_search`]'s note). A term with no searchable word is an
+/// answer — no rows — and never an error.
+pub fn load_search_term(
+    door: &dyn PageDoor,
+    search: &dyn centraid_search::Search,
+    principal: &centraid_search::Principal,
+    term: &str,
+    limit: usize,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() || limit == 0 {
+        return Ok((SearchData::default(), None));
+    }
+    let request =
+        centraid_search::SearchRequest::new(DOCUMENT_TARGET_TYPE, term, limit.min(SEARCH_LIMIT));
+    let page = match search.query(principal, &request) {
+        Ok(centraid_search::Answer::Data { page, .. }) => page,
+        Ok(centraid_search::Answer::Denied(denial)) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: denial.code,
+                    message: denial.message,
+                    revoked_at: denial.revoked_at,
+                }),
+            ));
+        }
+        Err(centraid_search::SearchError::NoSearchableWords { .. }) => {
+            return Ok((SearchData::default(), None));
+        }
+        Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
+    };
+    if page.rows.is_empty() {
+        return Ok((SearchData::default(), None));
+    }
+    let ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
+    let mut wrappers: BTreeMap<String, Row> =
+        match walk(door, &documents_statement(&ids)?, DOC_JOIN_BOUND)? {
+            Walked::Denied(denial) => return Ok((SearchData::default(), Some(denial))),
+            Walked::Rows(rows) => rows
+                .into_iter()
+                .filter_map(|row| text_of(&row, "document_id").map(|id| (id, row)))
+                .collect(),
+        };
+    let hits: Vec<Row> = page
+        .rows
+        .iter()
+        .filter_map(|target| {
+            let mut row = wrappers.remove(&target.id)?;
+            row.insert("_snippet".to_owned(), Cell::Text(target.snippet.clone()));
+            Some(row)
+        })
+        .collect();
+    load_search(door, &hits)
+}
+
+fn denial_of(message: String) -> Denial {
+    Denial {
+        code: None,
+        message: Some(message),
+        revoked_at: None,
+    }
+}
+
 /// The nine windows the whole app walks under [`SHARE_FAN_OUT`], plus the
 /// statements this module owns — named so a plan snapshot and a parity fixture
 /// can be compared against one list.
@@ -1207,6 +1409,7 @@ pub fn statement_names() -> Vec<&'static str> {
         "docs.history.revisions",
         "docs.history.contents",
         "docs.activity.provenance",
+        "docs.document.body",
     ];
     names.sort_unstable();
     names.dedup();
@@ -1446,7 +1649,7 @@ mod tests {
     #[test]
     fn every_statement_is_named_once() {
         let names = statement_names();
-        assert_eq!(names.len(), 12);
+        assert_eq!(names.len(), 13);
         for name in &names {
             assert!(
                 name.starts_with("docs.") || name.starts_with("_shared/"),

@@ -1,6 +1,6 @@
 package dev.centraid.shared
 
-import dev.centraid.design.CentraidCopy
+import dev.centraid.design.copy.NotesCopy
 import dev.centraid.design.CentraidTokens
 import dev.centraid.design.NATIVE_COLOR_ROLES
 import dev.centraid.design.NATIVE_EFFECT_ROLES
@@ -133,7 +133,7 @@ class NativeThemeSpec : StringSpec({
         // a sentence is built, and a generated Kotlin port of one would be a
         // second implementation that drifts — so those are named in
         // `copy/<app>.json` and left for the kit.
-        CentraidCopy.Notes.ANCHOR_DEGRADED.isNotBlank().shouldBeTrue()
+        NotesCopy.ANCHOR_DEGRADED.isNotBlank().shouldBeTrue()
         val repositoryRoot = File(
             System.getProperty("centraid.repositoryRoot") ?: error("unset"),
         )

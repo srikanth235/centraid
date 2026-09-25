@@ -1113,6 +1113,7 @@ CREATE TABLE core_attachment (
 CREATE TABLE core_collection (
   collection_id        TEXT PRIMARY KEY,
   owner_party_id       TEXT NOT NULL REFERENCES core_party(party_id),
+  kind                 TEXT NOT NULL CHECK (kind IN ('notebook','album')),
   name                 TEXT NOT NULL,
   cover_content_id     TEXT REFERENCES core_content_item(content_id),
   parent_collection_id TEXT REFERENCES core_collection(collection_id),
@@ -3239,6 +3240,14 @@ BEGIN
       WHERE entity_id = NEW.entry_id AND entity_type <> 'core.collection_entry');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.entry_id, 'core.collection_entry', COALESCE(NEW.added_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger core_collection_kind_is_immutable on core_collection
+CREATE TRIGGER core_collection_kind_is_immutable
+BEFORE UPDATE OF kind ON core_collection
+WHEN NEW.kind IS NOT OLD.kind
+BEGIN
+  SELECT RAISE(ABORT, 'a collection''s kind never changes: a notebook stays a notebook and an album stays an album');
 END;
 
 -- trigger core_collection_touch_updated_at on core_collection

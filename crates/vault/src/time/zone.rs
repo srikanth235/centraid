@@ -275,6 +275,28 @@ pub enum ZoneUnset {
     Unknown { name: String },
 }
 
+/// THE SECOND TIER'S NAME, read off `core_vault.settings_json` — the one
+/// place its spellings are listed, so the command plane and the app-query arm
+/// cannot disagree about which key names a vault's zone.
+///
+/// `timeZone` is v0's spelling; `timezone` and `time_zone` are read because a
+/// settings blob is owner-edited JSON and all three have been written. An
+/// empty name, a settings value that does not parse and a blob that names no
+/// zone are all `None`: "this vault names no zone", which [`FireZone::resolve`]
+/// turns into [`ZoneUnset::Missing`] rather than into anybody's clock.
+#[must_use]
+pub fn zone_of_settings(settings_json: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(settings_json).ok()?;
+    parsed
+        .get("timeZone")
+        .or_else(|| parsed.get("timezone"))
+        .or_else(|| parsed.get("time_zone"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+}
+
 /// Cron's weekday numbering, from `jiff`'s. Exported because
 /// `crates/automations::cron` walks civil dates with it.
 #[must_use]
@@ -473,6 +495,21 @@ const fn days_in_month(year: i64, month: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_vaults_zone_is_read_under_each_spelling_and_nothing_is_none() {
+        for blob in [
+            r#"{"timeZone":"Asia/Kolkata"}"#,
+            r#"{"timezone":"Asia/Kolkata"}"#,
+            r#"{"time_zone":" Asia/Kolkata "}"#,
+        ] {
+            assert_eq!(zone_of_settings(blob).as_deref(), Some("Asia/Kolkata"));
+        }
+        // Founding writes `{}`: no zone, and no guess at one.
+        for blob in ["{}", r#"{"timeZone":""}"#, r#"{"timeZone":5}"#, "not json"] {
+            assert_eq!(zone_of_settings(blob), None, "{blob}");
+        }
+    }
 
     #[test]
     fn a_gap_wall_time_resolves_to_nothing() {

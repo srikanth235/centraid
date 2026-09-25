@@ -18,15 +18,18 @@ package dev.centraid.shared.shell
  */
 public object BandPolicy {
     /**
-     * The ten frame destinations, in FIXED order.
+     * The frame destinations, in FIXED order.
      *
      * Never sorted by recency: a band that reordered itself would move the
      * target under a member's thumb, which is the same law the springboard
      * follows. Readers FILTER this list and never reorder it.
      *
-     * Starred was an eleventh until v0's `#1015` B15 — a row that navigated
-     * nowhere and could still be pinned into a band slot. It is dropped rather
-     * than shipped dead.
+     * Starred was one until v0's `#1015` B15 — a row that navigated nowhere
+     * and could still be pinned into a band slot. It is dropped rather than
+     * shipped dead, and so are Needs you and Activity: their data planes
+     * (staged writes and access requests; runs, harnesses and spend) were
+     * deleted with the gateway-as-server (#1029), and a place with nothing
+     * behind it is Starred's defect again.
      */
     public val PLACES: List<Place> = listOf(
         Place(
@@ -37,29 +40,6 @@ public object BandPolicy {
             what = "The springboard — every app with something in it",
             // Pinned BY LAW: its row shows "by law", not a switch.
             law = true,
-            pinnedByDefault = true,
-        ),
-        Place(
-            id = "notifs",
-            // ONE NOUN PER DESTINATION. v0 shipped four names for this one
-            // place at once (`#1015` R-NY-4) because the band spoke one noun to
-            // VoiceOver and painted another; [short] may only DROP words from
-            // [name], never substitute a different noun.
-            name = "Needs you",
-            short = "Needs you",
-            iconKey = "Bell",
-            what = "Decisions waiting on you",
-            law = false,
-            pinnedByDefault = true,
-        ),
-        Place(
-            id = "stats",
-            name = "Activity",
-            short = "Activity",
-            // Bars, not a pulse: Activity is liveness, a chart is a settled reading.
-            iconKey = "BarChart2",
-            what = "Runs, failures, harnesses, models and spend",
-            law = false,
             pinnedByDefault = true,
         ),
         Place(
@@ -149,7 +129,10 @@ public object BandPolicy {
         val name: String,
         /**
          * The band tab is 61px wide: a declared short name, never an ellipsised
-         * long one. See the `notifs` comment for the rule it must obey.
+         * long one. ONE NOUN PER DESTINATION: v0 shipped four names for one
+         * place at once (`#1015` R-NY-4) because the band spoke one noun to
+         * VoiceOver and painted another, so this may only DROP words from
+         * [name], never substitute a different noun.
          */
         val short: String,
         val iconKey: String,

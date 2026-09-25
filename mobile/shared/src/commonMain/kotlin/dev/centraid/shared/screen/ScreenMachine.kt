@@ -69,6 +69,26 @@ public interface ScreenMachine<S, E> {
      * a real answer — Home draws its own status line and needs no seat.
      */
     public fun seatChanged(seat: SeatState): E?
+
+    /**
+     * A [ScreenEffect.Schedule] CAME DUE: this screen's own event for [token],
+     * or null for a screen that schedules nothing (the kit's autosave debounce).
+     *
+     * A reducer has no clock, so a delay is an effect the runtime serves and
+     * its expiry is an event the machine names here. A default, because most
+     * screens never schedule and a stub on each would say nothing.
+     */
+    public fun ticked(token: String): E? = null
+
+    /**
+     * THE SCREEN IS CLOSING: this screen's own event, or null.
+     *
+     * The bridge's `leave()` sends it BEFORE it releases its scope, so an
+     * editor's unsaved words are submitted on close (#1015 D3: close = done).
+     * The write runs on the session's scope, so releasing the bridge does not
+     * cancel it.
+     */
+    public fun left(): E? = null
 }
 
 public data class Step<S>(val state: S, val effects: List<ScreenEffect> = emptyList())
@@ -88,6 +108,19 @@ public sealed interface ScreenEffect {
     public data class ReadPage(
         public val screenId: String,
         public val afterCursor: String?,
+    ) : ScreenEffect
+
+    /**
+     * WAKE THIS SCREEN LATER. A reducer is pure and has no clock, so a delay is
+     * data: the runtime serving [screenId] waits [delayMs] and sends the
+     * machine's [ScreenMachine.ticked] event for [token]. A later schedule does
+     * not cancel an earlier one; the machine drops a token it has moved past,
+     * which is what makes the debounce a pure function.
+     */
+    public data class Schedule(
+        public val screenId: String,
+        public val token: String,
+        public val delayMs: Long,
     ) : ScreenEffect
 
     /** Ask the OS. The answer arrives as an event, because it is a state. */

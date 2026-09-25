@@ -42,11 +42,13 @@ import dev.centraid.shared.screen.Step
  * ## A PERSON THIS VAULT HAS NO ROW FOR — THE CASE THAT MATTERS
  *
  * On a first run MOST answers are a name the vault has never heard. That needs
- * two writes: `core.add_party` mints the party, then `media.answer_face_proposal`
- * confirms the region against it — and it is ONE step for the member.
+ * two writes: `people.add_person` makes the person — a party AND a People
+ * profile, so the name is in People's roster the moment it is in Photos — then
+ * `media.answer_face_proposal` confirms the region against it, and it is ONE
+ * step for the member. (A bare `core.add_party` party has no profile, and is
+ * in no People list.)
  *
- * `core.add_party` takes no `party_id` (`additionalProperties: false`) and this
- * machine never mints one, so the id comes back the only way it can: in
+ * This machine never mints the id, so it comes back the only way it can: in
  * `CommandOutcome.output`. `FaceReviewBridge` reads it there and hands it back
  * as [FaceReviewEvent.PersonCreated], and the confirm follows from that event.
  * Until then the cursor DOES NOT MOVE and the picker DOES NOT CLOSE, so a failed
@@ -89,12 +91,12 @@ public object FaceReviewMachine : ScreenMachine<FaceReviewState, FaceReviewEvent
     /**
      * THE PERSON A FACE IS NAMED AS, when the vault has no row for them yet.
      *
-     * A CORE command and not a media one: a party belongs to the ontology and
-     * Photos only points at it. There is no `media.create_person`, and a screen
+     * People's command and not a media one: a person is People's, and Photos
+     * only points at them. There is no `media.create_person`, and a screen
      * that invented one would get `UnknownCommand` on every window for ever
      * (`NotesEditorMachine.SAVE_COMMAND`, #1025).
      */
-    public const val CREATE_PERSON_COMMAND: String = "core.add_party"
+    public const val CREATE_PERSON_COMMAND: String = "people.add_person"
 
     override fun initial(): FaceReviewState = FaceReviewState(
         loading = Loading(first_load = true),
@@ -329,8 +331,8 @@ public object FaceReviewMachine : ScreenMachine<FaceReviewState, FaceReviewEvent
      * `WriteSettled` says whether it committed and **not WHICH write it was**,
      * which is a gap in this screen's contract — so the rule here is one a
      * mis-attribution cannot corrupt. `naming` is what tells the two apart in
-     * practice, because the picker is open exactly while a `core.add_party` is
-     * in flight.
+     * practice, because the picker is open exactly while a `people.add_person`
+     * is in flight.
      *
      * * **an answer committed** — and only now does the queue move on. The
      *   member stayed on the question they answered until the vault agreed,
@@ -525,16 +527,14 @@ public object FaceReviewMachine : ScreenMachine<FaceReviewState, FaceReviewEvent
     }
 
     /**
-     * `core.add_party`'s input.
-     *
-     * `kind` is spelled rather than left to the handler's default, which is
-     * also `person`: a face is a person by construction, and a default that
-     * moved would silently start minting organisations from a name picker.
-     * `display_name` is `minLength: 1`, so an empty name is refused by the
-     * vault — and never sent, because [confirmed] does not submit one.
+     * `people.add_person`'s input: the name, and no cadence (`0` — the
+     * command requires one, and a face named in Photos asks nobody to keep in
+     * touch). The vault mints the `party_id`. `display_name` is `minLength:
+     * 1`, so an empty name is refused by the vault — and never sent, because
+     * [confirmed] does not submit one.
      */
     internal fun createPersonInput(displayName: String): String =
-        "{\"display_name\":${PhotosPeopleMachine.jsonString(displayName)},\"kind\":\"person\"}"
+        "{\"display_name\":${PhotosPeopleMachine.jsonString(displayName)},\"cadence_days\":0}"
 
     /**
      * THE QUESTION AN INVOKE KEY WAS ABOUT.

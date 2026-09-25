@@ -1,6 +1,6 @@
 //! # Agenda — four queries, seven actions, and the one recurrence engine
 //!
-//! 7,818 lines of v0 TypeScript, 4 queries, 7 actions, **13 scopes — the
+//! 7,818 lines of v0 TypeScript, 4 queries, 7 actions, **14 scopes — the
 //! smallest scope set of any app** (#1020, wave 4 census §A6). Its doctrine,
 //! from the manifest's own description (`manifest.json`, copied verbatim from
 //! v0's `app.json`):
@@ -22,9 +22,13 @@
 //!   UTC; a series expands in its own `start_tz`, resolved through the one
 //!   [`centraid_vault::time::zone::FireZone`] cron already used.
 //! - **TWO WINDOWS, ONE RANGE.** Events are fetched from BEFORE `from` so
-//!   multi-day spans arrive, and the filter re-applies the true lower bound;
-//!   recurring anchors live in the past and are fetched separately
-//!   ([`queries::load_upcoming`], D-1020-S4).
+//!   multi-day spans arrive, and the filter re-applies the true lower bound to
+//!   every row, an expanded occurrence included; recurring anchors live in the
+//!   past and are fetched separately ([`queries::load_upcoming`], D-1020-S4).
+//! - **A SCREEN'S CIVIL TIME IS THE DEVICE'S ZONE, AND THE CORE COMPUTES IT.**
+//!   Which local days an occurrence occupies, its wall clock, today and now
+//!   are answered in the zone the request states ([`local`], #1046), because a
+//!   shell's shared layer has no calendar to compute them with.
 //! - **NO DATA OF ITS OWN** — revoke the grant and the app goes dark.
 //!
 //! ## What this crate is allowed to contain, and what stops the rest
@@ -39,34 +43,28 @@
 //! | A raw RRULE shown to a member | `recurrence_summary` is [`centraid_vault::time::rrule::describe`]'s sentence, resolved here; a second summariser is the defect that function exists to prevent (#834) |
 
 pub mod commands;
+pub mod detail;
 pub mod expansion;
+pub mod local;
 pub mod manifest;
 pub mod queries;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
+pub use detail::{EventDetailData, load_event};
 pub use expansion::{
     DEFAULT_EXPAND_MS, MAX_TOTAL_INSTANCES, SPAN_BUFFER_MS, expand_recurring_events,
 };
+pub use local::{Placement, place};
 pub use manifest::{APP_ID, manifest};
 pub use queries::{
     DayContextData, EVENT_WINDOW_CAP, MAX_RANGE_DAYS, PARTY_CAP, PartiesData, RECURRING_ANCHOR_CAP,
-    SHELF_CAP, SearchData, TAG_CAP, TASK_CAP, UpcomingData, load_day_context, load_parties,
-    load_search, load_upcoming,
+    SEARCH_LIMIT, SHELF_CAP, SearchData, TAG_CAP, TASK_CAP, UpcomingData, load_day_context,
+    load_parties, load_search, load_search_term, load_upcoming,
 };
 
-/// A CONSENT DENIAL, as the payload carries it.
-///
-/// Every v0 Agenda query wraps its body and answers `{…empty, vaultDenied:
-/// {code, message}}` rather than throwing (`queries/upcoming.ts:620`-`:628`,
-/// and the same in all four). `revoked_at` comes from the HOST, because a
-/// revoked app cannot read the consent tables to date its own revocation —
-/// so it is an `Option` this crate never fills in.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Denial {
-    pub code: Option<String>,
-    pub message: Option<String>,
-    pub revoked_at: Option<String>,
-}
+/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// every app so the core settles all of them through one door.
+pub use centraid_apps_kit::Denial;
 
 /// THE THREE STATES OF A READ, once, for every surface in this app.
 ///

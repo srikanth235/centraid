@@ -1,0 +1,144 @@
+// A REGISTERED APP QUERY, RUN IN THE CORE (#1046).
+//
+// ## Why a request kind and not a page read
+//
+// Every screen the phone had drew ONE table through `PageRequest`, and a shell
+// can say one table. An app's own query cannot be said that way: Agenda's
+// `upcoming` joins six-plus tables and expands every repeating series through
+// the one recurrence engine (D-1020-S1), and rebuilding it in Kotlin and Swift
+// would be a second engine in each. So the query runs where it is written —
+// `crates/apps/<app>`, over the same paged door `PageRequest` reaches — and the
+// shell sends the query's NAME and its arguments and gets the query's answer.
+//
+// ## Why a oneof of typed queries and not a name and a JSON body
+//
+// A name and a body is a second, untyped API beside this one: `commonMain` has
+// no JSON dependency, and a shell that built a body by hand would be the only
+// thing checking it. Each query is a message here and each answer is a message
+// in the app's own file (`agenda.proto`), so Wire and SwiftProtobuf check both
+// ends and `buf breaking` governs the churn. A new app query is a new arm, at
+// the same number in both oneofs.
+//
+// ## What the answer carries, and what is an error
+//
+// **A DENIED READ IS A STATE, NOT AN ERROR** — `denied` is an arm of the
+// answer, beside the data, because a screen draws the ask and not a failure.
+// The phone's page door evaluates no grant (the phone IS the owner, #1029 §1),
+// so today nothing produces one; it is carried so a door that grows a consent
+// check changes no shell. Everything a read cannot answer at all is the
+// envelope's `Error`: a zero search `limit` and a `tz` that names no zone this
+// build knows — or is empty on a vault whose settings name none — are
+// `ERROR_CODE_INVALID_REQUEST`, and a read whose joins or expansion reach their
+// stated ceiling is `ERROR_CODE_READ_BOUND_REACHED` — never a short answer that
+// reads as a whole one (D-1020-D3-12).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/agenda.proto";
+import "centraid/core/v1/docs.proto";
+import "centraid/core/v1/notes.proto";
+import "centraid/core/v1/people.proto";
+import "centraid/core/v1/tally.proto";
+import "centraid/core/v1/tasks.proto";
+
+message AppQueryRequest {
+  oneof query {
+    AgendaUpcomingRequest agenda_upcoming = 1;
+    AgendaDayContextRequest agenda_day_context = 2;
+    AgendaPartiesRequest agenda_parties = 3;
+    AgendaSearchRequest agenda_search = 4;
+    AgendaEventRequest agenda_event = 5;
+    // Tasks (#1046): 10-14. 15 is `denied`'s in the answer, so no query takes it.
+    TasksBoardRequest tasks_board = 10;
+    TasksTaskRequest tasks_task = 11;
+    TasksProjectsRequest tasks_projects = 12;
+    TasksSearchRequest tasks_search = 13;
+    TasksCatchUpRequest tasks_catch_up = 14;
+    DocsDriveRequest docs_drive = 30;
+    DocsSearchRequest docs_search = 31;
+    DocsDocumentRequest docs_document = 32;
+    DocsActivityRequest docs_activity = 33;
+    NotesLibraryRequest notes_library = 40;
+    NotesNotebooksRequest notes_notebooks = 41;
+    NotesJournalRequest notes_journal = 42;
+    NotesSearchRequest notes_search = 43;
+    NotesTrashRequest notes_trash = 44;
+    NotesHistoryRequest notes_history = 45;
+    NotesLinkTargetsRequest notes_link_targets = 46;
+    NotesNoteRequest notes_note = 47;
+    PeopleRosterRequest people_roster = 20;
+    PeopleTouchRequest people_touch = 21;
+    PeoplePersonRequest people_person = 22;
+    PeopleSearchRequest people_search = 23;
+    PeopleTrashRequest people_trash = 24;
+    TallyDashboardRequest tally_dashboard = 50;
+    TallyGroupRequest tally_group = 51;
+    TallyFriendRequest tally_friend = 52;
+    TallyExpenseRequest tally_expense = 53;
+    TallySettleUpRequest tally_settle_up = 54;
+    TallyRecurringRequest tally_recurring = 55;
+    TallySpendingRequest tally_spending = 56;
+    TallySearchRequest tally_search = 57;
+    TallyTrashRequest tally_trash = 58;
+    TallyExportRequest tally_export = 59;
+  }
+}
+
+// The answer to the query that was asked — its arm at the query's own number —
+// or the refusal.
+message AppQueryResponse {
+  oneof answer {
+    AgendaUpcoming agenda_upcoming = 1;
+    AgendaDayContext agenda_day_context = 2;
+    AgendaParties agenda_parties = 3;
+    AgendaSearch agenda_search = 4;
+    AgendaEventDetail agenda_event = 5;
+    TasksBoard tasks_board = 10;
+    TasksTaskDetail tasks_task = 11;
+    TasksProjects tasks_projects = 12;
+    TasksSearch tasks_search = 13;
+    TasksCatchUp tasks_catch_up = 14;
+    DocsDrive docs_drive = 30;
+    DocsSearch docs_search = 31;
+    DocsDocument docs_document = 32;
+    DocsActivity docs_activity = 33;
+    NotesLibrary notes_library = 40;
+    NotesNotebooks notes_notebooks = 41;
+    NotesJournal notes_journal = 42;
+    NotesSearch notes_search = 43;
+    NotesTrash notes_trash = 44;
+    NotesHistory notes_history = 45;
+    NotesLinkTargets notes_link_targets = 46;
+    NotesNote notes_note = 47;
+    PeopleRoster people_roster = 20;
+    PeopleTouch people_touch = 21;
+    PeoplePerson people_person = 22;
+    PeopleSearch people_search = 23;
+    PeopleTrash people_trash = 24;
+    TallyDashboard tally_dashboard = 50;
+    TallyGroupLedger tally_group = 51;
+    TallyFriendLedger tally_friend = 52;
+    TallyExpense tally_expense = 53;
+    TallySettleUp tally_settle_up = 54;
+    TallyRecurring tally_recurring = 55;
+    TallySpending tally_spending = 56;
+    TallySearch tally_search = 57;
+    TallyTrash tally_trash = 58;
+    TallyExport tally_export = 59;
+    // The vault would not let this app read. At a number no query will take.
+    AppQueryDenial denied = 15;
+  }
+}
+
+// A CONSENT DENIAL, the shape every app's payload carries.
+message AppQueryDenial {
+  // The vault's code for the refusal, when it has one.
+  optional string code = 1;
+  // The refusal's sentence, for a member.
+  optional string message = 2;
+  // When the grant was revoked. From the HOST: a revoked app cannot read the
+  // consent tables to date its own revocation.
+  optional string revoked_at = 3;
+}

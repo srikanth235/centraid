@@ -20,12 +20,14 @@
 //!
 //! - what a rung ADDS — rung two's four revision guards (#1020, D-1020-N2),
 //!   rung three's four backup-index objects and rung four's four blob-custody
-//!   objects (#1029 §2, §4) — named in `LADDER_OBJECTS`;
+//!   objects (#1029 §2, §4), and rung six's kind guard on `core_collection` —
+//!   named in `LADDER_OBJECTS`;
 //! - what rung five DROPS — the planes v1 does not have (#1029) — named in
 //!   `DROPPED_OBJECTS`;
-//! - the one table rung five ALTERS — `locker_item`, which loses the
-//!   `connection_id` column that pointed into `sync_connection` — named in
-//!   `ALTERED_OBJECTS`.
+//! - the tables a rung ALTERS — `locker_item`, which loses the
+//!   `connection_id` column that pointed into `sync_connection` (rung five),
+//!   and `core_collection`, which gains its required `kind` (rung six) — named
+//!   in `ALTERED_OBJECTS`.
 //!
 //! All three are named rather than matched by prefix, so a table that comes
 //! back, a drop that stops running and an object arriving from nowhere are each
@@ -39,15 +41,16 @@ use std::collections::BTreeMap;
 use centraid_vault::{APPLICATION_ID, Vault, head_version};
 
 /// What the ladder adds above the baseline: rung two's four revision guards
-/// (#1020, D-1020-N2), rung three's in-vault backup index and rung four's blob
-/// custody — a file key per blob, and where its bytes are (#1029 §2, §4).
+/// (#1020, D-1020-N2), rung three's in-vault backup index, rung four's blob
+/// custody — a file key per blob, and where its bytes are (#1029 §2, §4) — and
+/// rung six's guard that a collection's kind never changes.
 ///
 /// The corpus is a v0 file and knows nothing of the v1 ladder above rung one,
 /// so a founded v1 file legitimately carries exactly these and nothing else.
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 12] = [
+const LADDER_OBJECTS: [&str; 13] = [
     "backup_base_range",
     "backup_base_range_by_hash",
     "backup_blob_custody",
@@ -56,6 +59,7 @@ const LADDER_OBJECTS: [&str; 12] = [
     "backup_blob_placement_by_object",
     "backup_object_range",
     "backup_object_range_by_object",
+    "core_collection_kind_is_immutable",
     "core_entity_revision_no_self_parent",
     "core_entity_revision_parent_is_immutable",
     "core_entity_revision_parent_is_same_object",
@@ -195,13 +199,18 @@ const DROPPED_OBJECTS: [&str; 119] = [
     "turns",
 ];
 
-/// The one object rung five ALTERS rather than creates or drops.
+/// The objects the ladder ALTERS rather than creates or drops.
 ///
-/// `locker_item.connection_id` was a foreign key into `sync_connection`, "the
-/// connector this password belongs to". There is no connector runtime, so the
-/// column and its index go — which makes this table's DDL differ from the
-/// corpus's by exactly one line.
-const ALTERED_OBJECTS: [&str; 1] = ["locker_item"];
+/// - `core_collection` (rung six): the table gains its REQUIRED `kind`
+///   (`notebook` | `album`), so Notes and Photos stop reading each other's
+///   rows. The rung rebuilds the table and re-creates its indexes and triggers
+///   in the baseline's own text, so the table is the only one of them whose DDL
+///   differs from the corpus's.
+/// - `locker_item` (rung five): `locker_item.connection_id` was a foreign key
+///   into `sync_connection`, "the connector this password belongs to". There is
+///   no connector runtime, so the column and its index go — which makes this
+///   table's DDL differ from the corpus's by exactly one line.
+const ALTERED_OBJECTS: [&str; 2] = ["core_collection", "locker_item"];
 
 /// Every schema object of a file, keyed by `(type, name)`.
 fn schema_of(connection: &rusqlite::Connection) -> BTreeMap<(String, String), String> {
@@ -425,10 +434,10 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     assert_eq!(user_version, head_version());
     // Rung two is the revision guards (#1020, D-1020-N2); rung three is the
     // in-vault backup index and rung four is blob custody (#1029 §2, §4); rung
-    // five is the cut (#1029). Spelled out rather than left as
-    // `head_version()` alone: a rung silently vanishing would still satisfy the
-    // line above.
-    assert_eq!(user_version, 5);
+    // five is the cut (#1029); rung six is the collection kind. Spelled out
+    // rather than left as `head_version()` alone: a rung silently vanishing
+    // would still satisfy the line above.
+    assert_eq!(user_version, 6);
     assert_eq!(journal, "wal");
 }
 

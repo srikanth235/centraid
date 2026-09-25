@@ -111,6 +111,10 @@ pub struct DashboardData {
     /// The window the counts were folded over, so `all` is readable as
     /// "`all` of this many".
     pub window: usize,
+    /// Whole days past the cadence, for every party on [`Self::reconnect`] —
+    /// the number the rail is sorted by, kept so a surface prints it rather
+    /// than recomputing it against a second clock.
+    pub days_over: BTreeMap<String, i64>,
 }
 
 /// `dashboard` — the summary.
@@ -375,6 +379,10 @@ pub fn load_dashboard(
             counts,
             truncated: window.filled,
             window: DASHBOARD_WINDOW,
+            days_over: overdue
+                .into_iter()
+                .map(|(over, party_id)| (party_id, over))
+                .collect(),
         },
         None,
     ))

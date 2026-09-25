@@ -523,7 +523,7 @@ Six product rulings sit behind the rooms and are not re-decided per screen — t
 
 The house tic this rulebook exists to stop is **defensive reassurance**: a string states a fact and then adds a sentence about what was _not_ lost, not deleted, not sent, not generated. Repeated everywhere, it stops reading as care and starts reading as a product apologising for itself. Reassurance is **positional** — it belongs where the risk decision is actually made, and nowhere else.
 
-Every string has a budget, and the budget is the contract. Copy lives in `copy/<app>.json`, which generates the Kotlin table in `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`, so a string is edited in one place.
+Every string has a budget, and the budget is the contract. Copy lives in `copy/<app>.json` and its hand-maintained Kotlin twin, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/<App>Copy.kt`; `KitTimeMoneyCopySpec` fails when the two disagree.
 
 | Surface | Budget |
 | --- | --- |
@@ -548,7 +548,7 @@ Voice survives compression. The evocative half of a line is usually the short ha
 | Where | Before | After |
 | --- | --- | --- |
 | Needs-you screen empty state | "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state." | "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here." |
-| Docs offline banner (`copy/docs.json` `OFFLINE_BANNER`) | "The gateway is unreachable. Titles, folders, filing, tags and stars are read from this device, so the drive still lists everything — but most documents cannot be opened, and search is not available on this surface. Anything you write stays here, in order, until the gateway is back." | "Gateway unreachable — filing works from this device, opening and search do not." |
+| Docs offline banner (v0; the key and the gateway it spoke of were removed in [#1029](https://github.com/srikanth235/centraid/issues/1029) and [#1047](https://github.com/srikanth235/centraid/issues/1047)) | "The gateway is unreachable. Titles, folders, filing, tags and stars are read from this device, so the drive still lists everything — but most documents cannot be opened, and search is not available on this surface. Anything you write stays here, in order, until the gateway is back." | "Gateway unreachable — filing works from this device, opening and search do not." |
 | Photos Memories empty state | "Memories appear here on their own: a day that has an earlier year behind it, a run of days away from home, or a burst of near-identical photographs. Nothing is generated — they are your own photographs, noticed." | "Your own photographs, noticed — a year behind a day, a trip, a burst." |
 | Write failure outcome | "&lt;title&gt;: Please try again." | "&lt;title&gt;. Retry." |
 

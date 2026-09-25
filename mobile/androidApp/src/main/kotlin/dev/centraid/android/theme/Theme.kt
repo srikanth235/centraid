@@ -208,18 +208,33 @@ internal fun NativeTheme.color(role: String): Color = Color(
  *
  * Both come from the message rather than from this function: `Money.exponent`
  * is the currency's own minor-unit exponent, from the kit's table through the
- * core, and `Money.locale` is the vault's. This function reads them and
- * guesses nothing.
+ * core, and `Money.locale` is the vault's — or empty, which is the device's.
+ * This function reads them and guesses nothing else.
  */
 public fun formatMoney(money: Money): String {
     if (money.currency.isEmpty()) return ""
-    val locale = Locale.forLanguageTag(money.locale.ifEmpty { "und" })
-    val format = NumberFormat.getCurrencyInstance(locale).apply {
-        currency = java.util.Currency.getInstance(money.currency)
-        minimumFractionDigits = money.exponent.toInt()
-        maximumFractionDigits = money.exponent.toInt()
-    }
+    val exponent = money.exponent.toInt()
+    // AN EMPTY LOCALE IS THE DEVICE'S, as on iOS (`Money.render`) and as
+    // `TallyReads` says: "und" was the ROOT locale — no grouping a member
+    // recognises and a bare currency sign — so the two shells drew one amount
+    // two ways (`contracts/screens/money-render.json`).
+    val locale = if (money.locale.isEmpty()) Locale.getDefault() else Locale.forLanguageTag(money.locale)
     // `BigDecimal` and not a `Double`: a currency amount that went through a
     // binary float would be the rounding bug this whole comment is about.
-    return format.format(BigDecimal(money.minor).movePointLeft(money.exponent.toInt()))
+    val amount = BigDecimal(money.minor).movePointLeft(exponent)
+    // A CODE ISO 4217 DOES NOT KNOW IS SPELLED, NOT A CRASH. The schema takes
+    // any three letters and `Currency.getInstance` throws on one it has never
+    // heard of, which took a whole ledger row down with it. The amount beside
+    // its own code is what the row actually says — and what iOS draws.
+    val currency = runCatching { java.util.Currency.getInstance(money.currency) }.getOrNull()
+        ?: return NumberFormat.getNumberInstance(locale).apply {
+            minimumFractionDigits = exponent
+            maximumFractionDigits = exponent
+        }.format(amount) + " " + money.currency
+    val format = NumberFormat.getCurrencyInstance(locale).apply {
+        this.currency = currency
+        minimumFractionDigits = exponent
+        maximumFractionDigits = exponent
+    }
+    return format.format(amount)
 }

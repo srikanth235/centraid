@@ -1,4 +1,4 @@
-//! # Tasks — two queries, eleven actions, and one promotion rule
+//! # Tasks — two queries, thirteen actions, and one promotion rule
 //!
 //! 8,005 lines of v0 TypeScript, **2 queries**, 11 actions, 22 scopes — the
 //! smallest surface of any app (#1020, wave 4 census §A7). Its doctrine, from
@@ -27,6 +27,11 @@
 //!   ([`centraid_vault::time::recurrence::collapse_missed`]), so no surface
 //!   ever sees an RRULE string or re-counts a missed period for itself (#834).
 //! - **NO DATA OF ITS OWN** — revoke the grant and the app goes dark.
+//! - **THE PHONE READS IT IN THE CORE** (#1046): `crates/core`'s `app_query`
+//!   runs [`load_board`], [`load_task`] and [`load_search_term`] and answers
+//!   `tasks.proto`. Every civil reading a screen draws — a due's local day and
+//!   time, overdue, today, the reminder's wall clock, each place's groups — is
+//!   [`local`] and [`views`], in the zone the device states.
 //!
 //! ## What this crate is allowed to contain, and what stops the rest
 //!
@@ -41,8 +46,10 @@
 
 pub mod board;
 pub mod commands;
+pub mod local;
 pub mod manifest;
 pub mod queries;
+pub mod views;
 
 pub use board::{
     BOARD_DEFAULT, BOARD_MAX, BOARD_MIN, Families, FamilyRow, LOGBOOK_ROWS, by_urgency,
@@ -50,21 +57,14 @@ pub use board::{
 };
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};
-pub use queries::{BoardData, SearchData, TaskRow, load_board, load_search};
+pub use queries::{
+    BoardData, SearchData, TaskDetailData, TaskRow, load_board, load_search, load_search_term,
+    load_task,
+};
 
-/// A CONSENT DENIAL, as the payload carries it.
-///
-/// Both v0 Tasks queries wrap their body and answer the full empty payload plus
-/// `vaultDenied: {code, message}` rather than throwing (`board.ts:546`-`:556`).
-/// `revoked_at` comes from the HOST, because a revoked app cannot read the
-/// consent tables to date its own revocation — so it is an `Option` this crate
-/// never fills in.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Denial {
-    pub code: Option<String>,
-    pub message: Option<String>,
-    pub revoked_at: Option<String>,
-}
+/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// every app so the core settles all of them through one door.
+pub use centraid_apps_kit::Denial;
 
 /// A door error, as the payload's denial.
 #[must_use]

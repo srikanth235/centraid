@@ -71,6 +71,8 @@ struct PhotoLightboxView: View {
                 // ring only over a stage with nothing at all.
                 stage(state).ignoresSafeArea()
                 if state.framePath(state.assetID) == nil { ProgressView() }
+            case let .denied(denied):
+                DeniedGate(denied)
             case let .failure(sentence, remedy):
                 ScreenFailureView(sentence: sentence, remedy: remedy)
                     .padding(CentraidGeometry.pageMargin)

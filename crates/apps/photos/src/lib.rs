@@ -67,19 +67,9 @@ pub use places::{PlacePhrase, PlacePhraseSource, PlaceRow, place_phrase};
 pub use queries::{LibraryData, LibraryInput, load_library};
 pub use storage::{StorageSummary, storage_summary};
 
-/// A CONSENT DENIAL, as the payload carries it.
-///
-/// Every v0 Photos query wraps its body and answers `{…empty, vaultDenied:
-/// {code, message}}` rather than throwing (`queries/library.ts:284-292` and the
-/// same in all eight). `revoked_at` comes from the HOST, because a revoked app
-/// cannot read the consent tables to date its own revocation — so it is an
-/// `Option` that is never filled in by this crate.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Denial {
-    pub code: Option<String>,
-    pub message: Option<String>,
-    pub revoked_at: Option<String>,
-}
+/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// every app so the core settles all of them through one door.
+pub use centraid_apps_kit::Denial;
 
 /// THE THREE STATES OF A READ, once, for every surface in this app.
 ///

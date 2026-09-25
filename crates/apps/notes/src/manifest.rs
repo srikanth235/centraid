@@ -142,6 +142,20 @@ mod tests {
         assert_eq!(gated("move-note"), Confirmation::None);
     }
 
+    /// A NOTE MAY BE CLEARED (owner ruling 2026-09-24): the manifest's
+    /// `body_text` accepts the empty string on both actions, in step with
+    /// `knowledge.create_note` / `knowledge.edit_note`'s own schemas.
+    #[test]
+    fn a_note_body_may_be_empty_on_create_and_edit() {
+        for action in ["create-note", "edit-note"] {
+            let input = &manifest().action(action).expect("declared").input;
+            assert_eq!(
+                input["properties"]["body_text"]["minLength"], 0,
+                "{action} still refuses an empty body"
+            );
+        }
+    }
+
     #[test]
     fn every_action_declares_the_tables_it_writes() {
         for action in &manifest().actions {

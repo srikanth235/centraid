@@ -191,6 +191,29 @@ impl Vault {
         })
     }
 
+    /// THE VAULT'S OWN ZONE, when its settings name one — the second tier of
+    /// [`crate::time::zone::FireZone::resolve`], and there is no third.
+    ///
+    /// Founding writes `{}`, so a fresh vault names none; a caller that needs a
+    /// zone and gets `None` refuses rather than reading a host clock (#1046:
+    /// the app-query arm answers in the zone the device states, and this only
+    /// when it states none).
+    pub fn time_zone(&self) -> Result<Option<String>> {
+        self.read(|connection| {
+            let settings: Option<String> = connection
+                .query_row(
+                    "SELECT settings_json FROM core_vault ORDER BY vault_id LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
+            Ok(settings
+                .as_deref()
+                .and_then(crate::time::zone::zone_of_settings))
+        })
+    }
+
     pub fn vault_id(&self) -> Result<Option<String>> {
         self.read(|connection| {
             Ok(connection

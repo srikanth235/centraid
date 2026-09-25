@@ -24,10 +24,6 @@
       { "schema": "schedule", "table": "task", "verbs": "read" },
       { "schema": "tally", "table": "obligation", "verbs": "read" },
       { "schema": "social", "table": "contact_channel", "verbs": "read" },
-      { "schema": "share", "table": "party_vault_binding", "verbs": "read" },
-      { "schema": "share", "table": "authority", "verbs": "read" },
-      { "schema": "share", "table": "authority_use", "verbs": "read" },
-      { "schema": "share", "table": "authority_request", "verbs": "read" },
       { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
       {
         "schema": "social",
@@ -103,7 +99,7 @@
     },
     {
       "name": "edit-person",
-      "description": "Revise a person's name, role line, avatar hue or how-you-met note through people.edit_person.",
+      "description": "Revise a person's name, role line, nickname, avatar hue or how-you-met note through people.edit_person.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -111,6 +107,7 @@
           "party_id": { "type": "string", "minLength": 1 },
           "display_name": { "type": "string", "minLength": 1 },
           "role": { "type": "string" },
+          "nickname": { "type": "string" },
           "avatar_color": { "type": "string" },
           "met": { "type": "string" }
         },
@@ -193,6 +190,40 @@
         }
       },
       "writes": ["people.profile"]
+    },
+    {
+      "name": "purge-person",
+      "description": "Delete a trashed person forever through people.purge_person: the party, the profile, their dates, handles, channels, notes, interactions and gift ideas. Refused while money, messages or other lasting records still name them; a task about them stays as the member's own.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": [
+        "core.activity",
+        "core.entity_revision",
+        "core.link",
+        "core.party",
+        "core.party_identifier",
+        "core.tag",
+        "knowledge.annotation",
+        "people.important_date",
+        "people.profile",
+        "schedule.task",
+        "social.contact_channel"
+      ]
     },
     {
       "name": "undo-person",
@@ -810,7 +841,7 @@
     },
     {
       "name": "person",
-      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history — plus their sharing standing: the vault(s) they are linked to (`vaults`) and what you have shared with them (`shared_with_them`). Both are null when the sharing reads are denied, which means unknown, not none. A share that has not reached them yet is said by the live grant plane, not by a second invitation list.",
+      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history.",
       "input": {
         "type": "object",
         "properties": { "party_id": { "type": "string", "minLength": 1 } },

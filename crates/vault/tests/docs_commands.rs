@@ -976,3 +976,52 @@ fn base64_of(bytes: &[u8]) -> String {
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
+
+/// A FILED DOCUMENT IS STAMPED BY THE VAULT CLOCK. The first-occurrence
+/// pointer used to land in a second `UPDATE` whose `updated_at` did not move,
+/// which is exactly when `core_document_touch_updated_at` writes SQLite's host
+/// `'now'` over the injected instant (QUALITY.md, #1046). The clock here is
+/// frozen at 2026-01-01, which no host is.
+#[test]
+fn a_filed_documents_updated_at_is_the_vault_clock() {
+    let drive = Drive::open("docs-clock");
+    let added = drive.run(
+        "core.add_document",
+        json!({ "title": "Lease", "data_uri": text_uri("rent") }),
+    );
+    let document_id = added["document_id"].as_str().expect("an id").to_owned();
+    let now = drive.vault().clock().now_text();
+    assert_eq!(
+        drive
+            .text(
+                "SELECT updated_at FROM core_document WHERE document_id = ?1",
+                &[&document_id]
+            )
+            .as_deref(),
+        Some(now.as_str())
+    );
+    assert_eq!(
+        drive.count(
+            "SELECT COUNT(*) FROM core_document
+              WHERE document_id = ?1 AND current_revision_id IS NOT NULL AND row_version = 1",
+            &[&document_id]
+        ),
+        1,
+        "the head is written with the row, in one statement"
+    );
+}
+
+/// EMPTYING THE DOCS TRASH SAYS WHAT IT DOES NOT DO YET. It collapses the
+/// grace window and destroys nothing — no purge sweep runs in this build — so
+/// the command's own schema says so, where every caller reads it.
+#[test]
+fn empty_document_trash_states_that_nothing_is_destroyed_yet() {
+    let registry = Registry::with_system_commands().expect("the registry builds");
+    let schema = registry
+        .get("core.empty_document_trash")
+        .expect("registered")
+        .schema();
+    let description = schema["description"].as_str().unwrap_or_default();
+    assert!(description.contains("not yet"), "{description}");
+    assert!(description.contains("restore"), "{description}");
+}

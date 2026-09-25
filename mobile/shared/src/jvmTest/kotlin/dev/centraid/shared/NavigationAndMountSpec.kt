@@ -51,6 +51,29 @@ class NavigationAndMountSpec : StringSpec({
             TallyListState.Destination.DESTINATION_BALANCES
     }
 
+    "iOS tells a route swapped in place that it opened, not only a pushed one" {
+        // A screen reads because it was OPENED (`ShellModel.opened`), and
+        // `CentraidApp` says so from the destination's `.task`. Notes' band
+        // places and its editor's Done SWAP the top of the path in place
+        // (`NotesScreens.swapPlace`, `closeEditor`), and SwiftUI keeps the
+        // destination's view — and its `.task` — across a swap at the same
+        // depth. An unkeyed `.task` therefore never ran for the new route, and
+        // the Library, Notebooks and Journal sat on their seeded skeleton for
+        // ever while the pushed editor read fine. Keyed on the route, a swap is
+        // a new task, and a pop back onto a route still re-runs it.
+        val root = java.io.File(
+            System.getProperty("centraid.mobileRoot")
+                ?: error("centraid.mobileRoot is unset; see mobile/shared/build.gradle.kts"),
+        )
+        val app = root.resolve("iosApp/Sources/CentraidApp.swift").readText()
+        val openers = Regex("""\.task(\([^)]*\))?\s*\{\s*shell\.opened\(route\)\s*\}""")
+            .findAll(app).map { it.value }.toList()
+        withClue("CentraidApp.swift no longer tells a destination it opened from a `.task`") {
+            openers.isNotEmpty().shouldBeTrue()
+        }
+        openers.forEach { opener -> opener shouldContain ".task(id: route)" }
+    }
+
     "names ride along the route, so an app bar has something to say at once" {
         // A route carries its display name, so the app bar never waits on a read.
         val folder = Destination.DocsFolder(folderId = "fld-1", folderName = "Taxes")

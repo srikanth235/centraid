@@ -65,6 +65,7 @@ use crate::time::recurrence::{ExpandInput, Semantics};
 use crate::time::zone::FireZone;
 use crate::time::{recurrence, rrule};
 
+use super::event_time::{self, Bounds};
 use super::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 
 /// The grace window Docs, Photos, Locker, People and Tally carry (#883).
@@ -90,6 +91,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
         edit_task(),
         delete_task(),
         restore_task(),
+        // Not v0's: the destroy the Tasks trash needed to meet #1015 D1.
+        purge_task(),
     ]
 }
 
@@ -162,6 +165,16 @@ fn invalid(name: &str, detail: impl Into<String>) -> VaultError {
     }
 }
 
+/// The `dtstart` a proposal STORED — its resolved instant when it came as a
+/// wall clock in `tz` ([`event_time`]), which a postcondition keyed on the raw
+/// input would never find.
+fn stored_start(ctx: &CommandCtx<'_, '_>) -> Result<String> {
+    event_time::bounds(ctx)
+        .ok()
+        .and_then(|times| times.start)
+        .ok_or_else(|| invalid("dtstart", "required"))
+}
+
 /// The id a caller supplied, else a fresh one (#922 G2).
 fn minted_id(ctx: &CommandCtx<'_, '_>, key: &str) -> String {
     ctx.optional_str(key)
@@ -200,14 +213,7 @@ fn vault_zone(connection: &Connection) -> Option<String> {
         })
         .ok()
         .flatten();
-    let parsed: serde_json::Value = serde_json::from_str(settings.as_deref()?).ok()?;
-    parsed
-        .get("timeZone")
-        .or_else(|| parsed.get("timezone"))
-        .or_else(|| parsed.get("time_zone"))
-        .and_then(serde_json::Value::as_str)
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
+    crate::time::zone::zone_of_settings(settings.as_deref()?)
 }
 
 /// The value `core_event.rrule_support` carries for a rule (#996 R21 / ONT-31;
@@ -471,8 +477,15 @@ fn propose_event() -> CommandDefinition {
         CommandCondition {
             predicate: "no_busy_conflict",
             check: |ctx| {
-                let dtstart = ctx.required_str("dtstart")?;
-                let dtend = ctx.required_str("dtend")?;
+                // A time that does not resolve is `times_resolve`'s refusal.
+                let Ok(Bounds {
+                    start: Some(dtstart),
+                    end: Some(dtend),
+                    ..
+                }) = event_time::bounds(ctx)
+                else {
+                    return Ok(None);
+                };
                 let found = count(
                     ctx,
                     "SELECT COUNT(*)
@@ -486,12 +499,22 @@ fn propose_event() -> CommandDefinition {
             },
         },
         CommandCondition {
+            predicate: "times_resolve",
+            check: |ctx| Ok(event_time::bounds_refusal(ctx)),
+        },
+        CommandCondition {
             predicate: "dtend_after_dtstart",
             check: |ctx| {
-                let dtstart = ctx.required_str("dtstart")?.to_owned();
-                let dtend = ctx.required_str("dtend")?;
-                Ok((dtend <= dtstart.as_str())
-                    .then(|| "An event must end after it starts.".to_owned()))
+                let Ok(Bounds {
+                    start: Some(dtstart),
+                    end: Some(dtend),
+                    ..
+                }) = event_time::bounds(ctx)
+                else {
+                    return Ok(None);
+                };
+                let all_day = ctx.optional_str("recurrence_semantics") == Some("all-day");
+                Ok(event_time::order_refusal(&dtstart, &dtend, all_day))
             },
         },
         CommandCondition {
@@ -523,7 +546,7 @@ fn propose_event() -> CommandDefinition {
             predicate: "event_created_tentative",
             check: |ctx| {
                 let summary = ctx.required_str("summary")?;
-                let dtstart = ctx.required_str("dtstart")?;
+                let dtstart = stored_start(ctx)?;
                 let found = count(
                     ctx,
                     "SELECT COUNT(*) FROM core_event
@@ -537,7 +560,7 @@ fn propose_event() -> CommandDefinition {
             predicate: "event_ext_attached",
             check: |ctx| {
                 let summary = ctx.required_str("summary")?;
-                let dtstart = ctx.required_str("dtstart")?;
+                let dtstart = stored_start(ctx)?;
                 let found = count(
                     ctx,
                     "SELECT COUNT(*) FROM schedule_event_ext x
@@ -567,6 +590,7 @@ fn propose_event() -> CommandDefinition {
             "description": { "type": "string" },
             "dtstart": { "type": "string", "minLength": 1 },
             "dtend": { "type": "string", "minLength": 1 },
+            "tz": { "type": "string", "minLength": 1, "description": "IANA zone: dtstart/dtend are then wall clocks in it (YYYY-MM-DDTHH:MM[:SS], no Z or offset), stored as instants zoned in it; exclusive with start_tz/end_tz (commands/event_time.rs)" },
             "start_tz": { "type": "string" },
             "end_tz": { "type": "string" },
             "recurrence_semantics": { "type": "string", "enum": ["zoned", "floating", "all-day"] },
@@ -594,10 +618,13 @@ fn propose_event() -> CommandDefinition {
             let organizer = owner_party_id(ctx)?;
             let event_id = minted_id(ctx, "event_id");
             let summary = ctx.required_str("summary")?.to_owned();
-            let dtstart = ctx.required_str("dtstart")?.to_owned();
-            let dtend = ctx.required_str("dtend")?.to_owned();
+            let times = event_time::bounds(ctx).map_err(|refusal| invalid("dtstart", refusal))?;
+            let dtstart = times.start.ok_or_else(|| invalid("dtstart", "required"))?;
+            let dtend = times.end.ok_or_else(|| invalid("dtend", "required"))?;
             let calendar_id = ctx.required_str("calendar_id")?.to_owned();
-            let start_tz = ctx.optional_str("start_tz").map(str::to_owned);
+            let start_tz = times
+                .tz
+                .or_else(|| ctx.optional_str("start_tz").map(str::to_owned));
             let end_tz = ctx
                 .optional_str("end_tz")
                 .map(str::to_owned)
@@ -1034,20 +1061,45 @@ fn edit_event() -> CommandDefinition {
             },
         },
         CommandCondition {
+            predicate: "times_resolve",
+            check: |ctx| Ok(event_time::bounds_refusal(ctx)),
+        },
+        CommandCondition {
             predicate: "event_end_after_start",
             check: |ctx| {
-                let Some(dtend) = ctx.optional_str("dtend").map(str::to_owned) else {
+                let Ok(times) = event_time::bounds(ctx) else {
                     return Ok(None);
                 };
-                let start = match ctx.optional_str("dtstart") {
-                    Some(dtstart) => dtstart.to_owned(),
-                    None => ctx.connection().query_row(
-                        "SELECT dtstart FROM core_event WHERE event_id = ?1",
+                let stored: Option<(String, Option<String>, Option<String>)> = ctx
+                    .connection()
+                    .query_row(
+                        "SELECT dtstart, dtend, recurrence_semantics
+                           FROM core_event WHERE event_id = ?1",
                         [ctx.required_str("event_id")?],
-                        |row| row.get(0),
-                    )?,
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )
+                    .ok();
+                let Some((stored_start, stored_end, stored_semantics)) = stored else {
+                    return Ok(None);
                 };
-                Ok((dtend <= start).then(|| "An event must end after it starts.".to_owned()))
+                if times.start.is_none() && times.end.is_none() {
+                    return Ok(None);
+                }
+                let Some(end) = times.end.or(stored_end) else {
+                    return Ok(None);
+                };
+                let start = times.start.unwrap_or(stored_start);
+                let semantics = if times.tz.is_some() {
+                    Some("zoned")
+                } else {
+                    ctx.optional_str("recurrence_semantics")
+                        .or(stored_semantics.as_deref())
+                };
+                Ok(event_time::order_refusal(
+                    &start,
+                    &end,
+                    semantics == Some("all-day"),
+                ))
             },
         },
         CommandCondition {
@@ -1087,6 +1139,7 @@ fn edit_event() -> CommandDefinition {
             "clear_description": { "type": "boolean", "const": true },
             "dtstart": { "type": "string", "minLength": 1 },
             "dtend": { "type": "string", "minLength": 1 },
+            "tz": { "type": "string", "minLength": 1, "description": "IANA zone: dtstart/dtend are then wall clocks in it (YYYY-MM-DDTHH:MM[:SS], no Z or offset), stored as instants zoned in it; exclusive with start_tz/end_tz (commands/event_time.rs)" },
             "start_tz": { "type": "string", "minLength": 1 },
             "end_tz": { "type": "string", "minLength": 1 },
             "recurrence_semantics": { "type": "string", "enum": ["zoned", "floating", "all-day"] },
@@ -1119,17 +1172,28 @@ fn edit_event() -> CommandDefinition {
             let sequence = bump_sequence(ctx, &event_id)?;
             let canonical_rule = ctx.optional_str("rrule").map(rrule::canonicalize);
             let clear_rrule = optional_bool(ctx, "clear_rrule");
+            let times = event_time::bounds(ctx).map_err(|refusal| invalid("dtstart", refusal))?;
+            // A wall clock in `tz` restates the zone and the reading with it.
+            let stated = |key: &str| {
+                times
+                    .tz
+                    .clone()
+                    .or_else(|| ctx.optional_str(key).map(str::to_owned))
+            };
             let mut sets: Vec<String> = Vec::new();
             let mut values: Vec<rusqlite::types::Value> = Vec::new();
             for (column, value) in [
                 ("summary", ctx.optional_str("summary").map(str::to_owned)),
-                ("dtstart", ctx.optional_str("dtstart").map(str::to_owned)),
-                ("dtend", ctx.optional_str("dtend").map(str::to_owned)),
-                ("start_tz", ctx.optional_str("start_tz").map(str::to_owned)),
-                ("end_tz", ctx.optional_str("end_tz").map(str::to_owned)),
+                ("dtstart", times.start.clone()),
+                ("dtend", times.end.clone()),
+                ("start_tz", stated("start_tz")),
+                ("end_tz", stated("end_tz")),
                 (
                     "recurrence_semantics",
-                    ctx.optional_str("recurrence_semantics").map(str::to_owned),
+                    times.tz.as_ref().map_or_else(
+                        || ctx.optional_str("recurrence_semantics").map(str::to_owned),
+                        |_| Some("zoned".to_owned()),
+                    ),
                 ),
             ] {
                 if let Some(value) = value {
@@ -1264,18 +1328,28 @@ fn replace_attendees(ctx: &CommandCtx<'_, '_>, event_id: &str) -> Result<()> {
 }
 
 fn edit_event_occurrence() -> CommandDefinition {
-    static PRE: &[CommandCondition] = &[CommandCondition {
-        predicate: "recurring_event_exists",
-        check: |ctx| {
-            let event_id = ctx.required_str("event_id")?;
-            let found = count(
-                ctx,
-                "SELECT COUNT(*) FROM core_event WHERE event_id = ?1 AND rrule IS NOT NULL",
-                &[&event_id],
-            )?;
-            Ok((found != 1).then(|| "That event does not repeat.".to_owned()))
+    static PRE: &[CommandCondition] = &[
+        CommandCondition {
+            predicate: "recurring_event_exists",
+            check: |ctx| {
+                let event_id = ctx.required_str("event_id")?;
+                let found = count(
+                    ctx,
+                    "SELECT COUNT(*) FROM core_event WHERE event_id = ?1 AND rrule IS NOT NULL",
+                    &[&event_id],
+                )?;
+                Ok((found != 1).then(|| "That event does not repeat.".to_owned()))
+            },
         },
-    }];
+        CommandCondition {
+            predicate: "times_resolve",
+            check: |ctx| Ok(event_time::bounds_refusal(ctx)),
+        },
+        CommandCondition {
+            predicate: "occurrence_end_after_start",
+            check: occurrence_order_refusal,
+        },
+    ];
     static POST: &[CommandCondition] = &[];
     definition(
         "schedule.edit_event_occurrence",
@@ -1290,6 +1364,7 @@ fn edit_event_occurrence() -> CommandDefinition {
             "action": { "type": "string", "enum": ["skip", "override"] },
             "dtstart": { "type": "string", "minLength": 1 },
             "dtend": { "type": "string", "minLength": 1 },
+            "tz": { "type": "string", "minLength": 1, "description": "IANA zone: dtstart/dtend are then wall clocks in it (YYYY-MM-DDTHH:MM[:SS], no Z or offset), stored as instants zoned in it; exclusive with start_tz/end_tz (commands/event_time.rs)" },
             "summary": { "type": "string", "minLength": 1 },
             "description": { "type": "string" },
             "recurrence_semantics": { "type": "string", "enum": ["zoned", "floating", "all-day"] },
@@ -1329,7 +1404,7 @@ fn edit_event_occurrence() -> CommandDefinition {
                     "original_start_local is not an occurrence of this series",
                 ));
             };
-            let override_json = occurrence_override_json(ctx, &scope, &action);
+            let override_json = occurrence_override_json(ctx, &scope, &action)?;
             let semantics = event_series(ctx.connection(), &event_id)?.semantics;
             let exception_id = ctx.next_id();
             ctx.connection().execute(
@@ -1362,15 +1437,30 @@ fn edit_event_occurrence() -> CommandDefinition {
 
 /// The override payload, which is where the shadow occurrence's own values
 /// live. A skip carries none, which the schema's CHECK enforces.
-fn occurrence_override_json(ctx: &CommandCtx<'_, '_>, scope: &str, action: &str) -> Option<String> {
+///
+/// `start`/`end` are the RESOLVED times ([`event_time`]): a wall clock in
+/// `tz` is stored as its instant, so the payload never carries a zone of its
+/// own.
+fn occurrence_override_json(
+    ctx: &CommandCtx<'_, '_>,
+    scope: &str,
+    action: &str,
+) -> Result<Option<String>> {
     if action == "skip" {
-        return None;
+        return Ok(None);
     }
+    let times = event_time::bounds(ctx).map_err(|refusal| invalid("dtstart", refusal))?;
     let mut override_value = serde_json::Map::new();
     override_value.insert("scope".to_owned(), scope.into());
+    for (field, value) in [("start", times.start), ("end", times.end)] {
+        if let Some(value) = value {
+            override_value.insert(field.to_owned(), value.into());
+        }
+    }
+    if times.tz.is_some() {
+        override_value.insert("recurrence_semantics".to_owned(), "zoned".into());
+    }
     for (key, field) in [
-        ("dtstart", "start"),
-        ("dtend", "end"),
         ("summary", "summary"),
         ("description", "description"),
         ("recurrence_semantics", "recurrence_semantics"),
@@ -1386,7 +1476,57 @@ fn occurrence_override_json(ctx: &CommandCtx<'_, '_>, scope: &str, action: &str)
             override_value.insert(key.to_owned(), value.clone());
         }
     }
-    Some(serde_json::Value::Object(override_value).to_string())
+    Ok(Some(serde_json::Value::Object(override_value).to_string()))
+}
+
+/// The ordering rule on the occurrence and series paths ([`event_time`]).
+///
+/// A SERIES edit completes a half-stated range from the row; an occurrence
+/// override's missing half comes from the series' own duration at read time,
+/// so only a range it states in full is judged here.
+fn occurrence_order_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if ctx.optional_str("action") != Some("override") {
+        return Ok(None);
+    }
+    let Ok(times) = event_time::bounds(ctx) else {
+        return Ok(None);
+    };
+    let stored: Option<(String, Option<String>, Option<String>)> = ctx
+        .connection()
+        .query_row(
+            "SELECT dtstart, dtend, recurrence_semantics FROM core_event WHERE event_id = ?1",
+            [ctx.required_str("event_id")?],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .ok();
+    let Some((stored_start, stored_end, stored_semantics)) = stored else {
+        return Ok(None);
+    };
+    let (start, end) = if ctx.optional_str("scope") == Some("series") {
+        if times.start.is_none() && times.end.is_none() {
+            return Ok(None);
+        }
+        (
+            Some(times.start.unwrap_or(stored_start)),
+            times.end.or(stored_end),
+        )
+    } else {
+        (times.start, times.end)
+    };
+    let (Some(start), Some(end)) = (start, end) else {
+        return Ok(None);
+    };
+    let semantics = if times.tz.is_some() {
+        Some("zoned")
+    } else {
+        ctx.optional_str("recurrence_semantics")
+            .or(stored_semantics.as_deref())
+    };
+    Ok(event_time::order_refusal(
+        &start,
+        &end,
+        semantics == Some("all-day"),
+    ))
 }
 
 /// A SERIES-wide skip is cancellation of the series identity — the same
@@ -1417,17 +1557,25 @@ fn edit_series(
             "sequence": sequence,
         }));
     }
+    let times = event_time::bounds(ctx).map_err(|refusal| invalid("dtstart", refusal))?;
+    let zoned = times.tz.as_ref().map(|_| "zoned".to_owned());
     let mut sets: Vec<String> = Vec::new();
     let mut values: Vec<rusqlite::types::Value> = Vec::new();
-    for (column, key) in [
-        ("dtstart", "dtstart"),
-        ("dtend", "dtend"),
-        ("summary", "summary"),
-        ("description", "description"),
+    for (column, value) in [
+        ("dtstart", times.start.clone()),
+        ("dtend", times.end.clone()),
+        ("start_tz", times.tz.clone()),
+        ("end_tz", times.tz.clone()),
+        ("recurrence_semantics", zoned),
+        ("summary", ctx.optional_str("summary").map(str::to_owned)),
+        (
+            "description",
+            ctx.optional_str("description").map(str::to_owned),
+        ),
     ] {
-        if let Some(value) = ctx.optional_str(key) {
+        if let Some(value) = value {
             sets.push(format!("{column} = ?"));
-            values.push(value.to_owned().into());
+            values.push(value.into());
         }
     }
     if sets.is_empty() {
@@ -1626,8 +1774,11 @@ fn organize_task() -> CommandDefinition {
 
 // ---------------------------------------------------------------------------
 // Tasks. iCalendar VTODO vocabulary: status is the CHECK-constrained lifecycle
-// (needs-action → in-process → completed | cancelled), priority 0 means unset
-// and 1 is highest (RFC 5545 §3.8.1.9).
+// (needs-action → in-process → completed | cancelled). PRIORITY IS NOT RFC
+// 5545's: 0 is unset and HIGHER IS MORE URGENT (Todoist's scale, v0's board
+// order, ruled by D-1020-S5 — `docs/decisions.md`, "priority desc"). The
+// column's `CHECK (priority BETWEEN 0 AND 9)` is the only range; an iCalendar
+// import maps RFC 5545's 1-highest onto it rather than storing it raw.
 // ---------------------------------------------------------------------------
 
 fn add_task_draft(ctx: &CommandCtx<'_, '_>) -> TaskWriteDraft {
@@ -1757,10 +1908,14 @@ fn add_task() -> CommandDefinition {
             let task_id = minted_id(ctx, "task_id"); // The seat's, or ours (#922 G2).
             let title = ctx.required_str("title")?.to_owned();
             ctx.connection().execute(
+                // THE VAULT CLOCK STAMPS BOTH (QUALITY.md, #1046): the
+                // column defaults are SQLite's host `'now'`.
                 "INSERT INTO schedule_task
                    (task_id, owner_party_id, title, description, status, priority, due_at,
-                    completed_at, effort_min, parent_task_id, rrule, remind_before_min)
-                 VALUES (?1, ?2, ?3, ?4, 'needs-action', ?5, ?6, NULL, ?7, ?8, ?9, ?10)",
+                    completed_at, effort_min, parent_task_id, rrule, remind_before_min,
+                    created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, 'needs-action', ?5, ?6, NULL, ?7, ?8, ?9, ?10,
+                         ?11, ?11)",
                 rusqlite::params![
                     task_id,
                     owner,
@@ -1772,6 +1927,7 @@ fn add_task() -> CommandDefinition {
                     ctx.optional_str("parent_task_id"),
                     ctx.optional_str("rrule"),
                     optional_i64(ctx, "remind_before_min"),
+                    ctx.now,
                 ],
             )?;
             Ok(serde_json::json!({ "task_id": task_id }))
@@ -1892,6 +2048,14 @@ fn edit_task() -> CommandDefinition {
             },
         },
         CommandCondition {
+            predicate: "effort_set_and_clear_are_exclusive",
+            check: |ctx| {
+                Ok((optional_i64(ctx, "effort_min").is_some()
+                    && optional_bool(ctx, "clear_effort"))
+                .then(|| "Set an effort estimate or clear it, not both.".to_owned()))
+            },
+        },
+        CommandCondition {
             predicate: "remind_set_and_clear_are_exclusive",
             check: |ctx| {
                 Ok((optional_i64(ctx, "remind_before_min").is_some()
@@ -1983,6 +2147,7 @@ fn edit_task() -> CommandDefinition {
             "clear_due": { "type": "boolean", "const": true },
             "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
             "effort_min": { "type": "integer", "minimum": 1 },
+            "clear_effort": { "type": "boolean", "const": true },
             "remind_before_min": { "type": "integer", "minimum": 0 },
             "clear_remind": { "type": "boolean", "const": true },
             "rrule": { "type": "string", "minLength": 1 },
@@ -2010,6 +2175,7 @@ fn edit_task() -> CommandDefinition {
             for (flag, column) in [
                 ("clear_description", "description"),
                 ("clear_due", "due_at"),
+                ("clear_effort", "effort_min"),
                 ("clear_remind", "remind_before_min"),
                 ("clear_rrule", "rrule"),
             ] {
@@ -2025,6 +2191,10 @@ fn edit_task() -> CommandDefinition {
                 }
             }
             if !sets.is_empty() {
+                // THE VAULT CLOCK, not `schedule_task_touch_updated_at`'s
+                // host `'now'`, which fires only when `updated_at` is unchanged.
+                sets.push("updated_at = ?".to_owned());
+                values.push(ctx.now.clone().into());
                 values.push(task_id.clone().into());
                 ctx.connection().execute(
                     &format!(
@@ -2079,6 +2249,80 @@ fn delete_task() -> CommandDefinition {
                 rusqlite::params![ctx.now, purge, task_id],
             )?;
             Ok(serde_json::json!({ "task_id": task_id, "removed": removed }))
+        },
+    )
+}
+
+/// EMPTYING THE TASKS TRASH (#1015 D1): destroy one trashed task.
+///
+/// The task and every subtask still in the trash go through the entity
+/// supertype — `DELETE FROM core_entity` cascades the `schedule_task` row and
+/// every composite `(type, id)` pointer at it: links (People's `about` /
+/// `gift-for`), tags, annotations, collection entries, attachments,
+/// recurrence exceptions, enrichment rows. `series_id` onto it is `SET NULL`
+/// by the engine. A subtask restored on its own is LIVE and is not the
+/// member's to lose: it is promoted to a top-level task first, because
+/// `parent_task_id` has no delete action and would otherwise refuse.
+fn purge_task() -> CommandDefinition {
+    static PRE: &[CommandCondition] = &[CommandCondition {
+        predicate: "task_trashed",
+        check: |ctx| {
+            let task_id = ctx.required_str("task_id")?;
+            let found = count(
+                ctx,
+                "SELECT COUNT(*) FROM schedule_task WHERE task_id = ?1 AND deleted_at IS NOT NULL",
+                &[&task_id],
+            )?;
+            Ok((found != 1).then(|| {
+                "Only a task that is already in the trash can be deleted forever.".to_owned()
+            }))
+        },
+    }];
+    static POST: &[CommandCondition] = &[CommandCondition {
+        predicate: "task_destroyed",
+        check: |ctx| {
+            let task_id = ctx.required_str("task_id")?;
+            let found = count(
+                ctx,
+                "SELECT (SELECT COUNT(*) FROM schedule_task
+                          WHERE task_id = ?1 OR parent_task_id = ?1)
+                      + (SELECT COUNT(*) FROM core_entity WHERE entity_id = ?1)",
+                &[&task_id],
+            )?;
+            Ok((found != 0).then(|| "the task is still in the vault".to_owned()))
+        },
+    }];
+    definition(
+        "schedule.purge_task",
+        r#"{
+          "type": "object",
+          "required": ["task_id"],
+          "additionalProperties": false,
+          "properties": { "task_id": { "type": "string", "minLength": 1 } }
+        }"#,
+        Gates::new(Idempotency::Once, Risk::High),
+        PRE,
+        POST,
+        |ctx| {
+            let task_id = ctx.required_str("task_id")?.to_owned();
+            let promoted = ctx.connection().execute(
+                "UPDATE schedule_task SET parent_task_id = NULL, updated_at = ?1
+                  WHERE parent_task_id = ?2 AND deleted_at IS NULL",
+                rusqlite::params![ctx.now, task_id],
+            )?;
+            let removed = ctx.connection().execute(
+                "DELETE FROM core_entity
+                  WHERE entity_id IN (SELECT task_id FROM schedule_task
+                                       WHERE parent_task_id = ?1 AND deleted_at IS NOT NULL)",
+                [&task_id],
+            )?;
+            ctx.connection()
+                .execute("DELETE FROM core_entity WHERE entity_id = ?1", [&task_id])?;
+            Ok(serde_json::json!({
+                "task_id": task_id,
+                "subtasks_removed": removed,
+                "subtasks_promoted": promoted,
+            }))
         },
     )
 }

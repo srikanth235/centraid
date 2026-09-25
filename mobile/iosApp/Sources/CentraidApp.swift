@@ -50,12 +50,12 @@ struct CentraidApp: App {
                     .navigationDestination(for: ShellModel.Route.self) { route in
                         Group {
                             switch route {
-                            case .tally:
-                                TallyListView(shell: shell)
+                            // EVERY REGISTERED APP'S SCREENS (K5): the view
+                            // is the one its `AppScreens.register` handed over.
+                            case let .screen(identifier, parameter):
+                                RegisteredScreen(shell: shell, identifier: identifier, parameter: parameter)
                             case .photos:
                                 PhotosGridView(shell: shell)
-                            case let .note(identifier):
-                                NotesEditorView(shell: shell, noteIdentifier: identifier)
 
                             // THE PHOTOS MINIAPP'S OTHER NINE SCREENS.
                             //
@@ -204,7 +204,14 @@ struct CentraidApp: App {
                         // cover re-runs it, and a screen a member returned to
                         // should re-read rather than show the page it had when
                         // they left.
-                        .task { shell.opened(route) }
+                        //
+                        // KEYED ON THE ROUTE. A route SWAPPED IN PLACE — Notes'
+                        // band places, the editor's Done — keeps this
+                        // destination's view and its task, so an unkeyed
+                        // `.task` never told the new screen it opened and it
+                        // sat on its skeleton for ever. `id: route` makes the
+                        // swap a new task (`NavigationAndMountSpec`).
+                        .task(id: route) { shell.opened(route) }
                     }
             }
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask

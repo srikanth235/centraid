@@ -13,9 +13,18 @@
 //! not**: its status line is a family of `STATUS` FUNCTIONS of counts — "3
 //! people · 1 to reconnect · 2 starred" — so `routes` is empty by design and a
 //! route-gap check over it would report all eight shelves as uncovered. What is
-//! asserted instead is the shape: the four strings that crossed, the
-//! twenty-five records and functions that did not and are listed, and the eight
-//! shelves the screen declares.
+//! asserted instead is the shape: the phone's sentences, the records and
+//! functions that are listed as not crossing, and the eight shelves the screen
+//! declares.
+//!
+//! ## The sentences are the phone's
+//!
+//! `copy/people.json` is the source, not an emitter's output (see
+//! `centraid_design::copy`), and the native People port wrote the whole set the
+//! shell draws — `{slot}` templates included, filled by the shell's `fill`
+//! rather than composed in code. So the count is not pinned: what holds is that
+//! each sentence is non-empty, that no name is both a sentence and a listed
+//! composition, and that the sentences the People machines read are present.
 //!
 //! ## Finding PE-F7, as a test
 //!
@@ -45,14 +54,31 @@ fn leaf(app: &str) -> CopyLeaf {
 fn the_leaf_carries_its_sentences_and_names_what_did_not_cross() {
     let people = leaf("people");
     assert_eq!(people.app, "people");
-    // THE FOUR THAT CROSSED. A plain `export const NAME = "…"` and nothing else:
-    // a template literal, a concatenation or a computed value is a DECISION
-    // about how a sentence is composed, and the emitter leaves those to the kit.
+    // THE TITLES, and a sentence from each family the People machines read:
+    // the status line, an outcome, a refusal, an empty state.
     assert_eq!(people.text("APP_TITLE"), Some("People"));
     assert_eq!(people.text("SEARCH_TITLE"), Some("Search"));
     assert_eq!(people.text("TOUCH_TITLE"), Some("Touch"));
     assert_eq!(people.text("CADENCE_NEVER"), Some("Never"));
-    assert_eq!(people.strings.len(), 4);
+    assert_eq!(
+        people.text("STATUS_ROSTER"),
+        Some("{people} people · {due} to reconnect · {starred} starred")
+    );
+    assert_eq!(
+        people.text("OUTCOME_TRASHED"),
+        Some("{name} moved to trash")
+    );
+    assert_eq!(
+        people.text("WRITE_FAILED"),
+        Some("That write did not land.")
+    );
+    assert_eq!(people.text("EMPTY_NO_MATCH"), Some("Nothing matches."));
+
+    // EVERY SENTENCE IS TEXT. An empty value would read as a deliberate blank
+    // where the file meant a missing sentence.
+    for (name, text) in &people.strings {
+        assert!(!text.is_empty(), "{name} is an empty sentence");
+    }
 
     // AND THE REST ARE LISTED, so a reader can see what did not cross rather
     // than wondering whether it was missed.
@@ -82,6 +108,14 @@ fn the_leaf_carries_its_sentences_and_names_what_did_not_cross() {
         assert!(
             people.text(composed).is_none(),
             "{composed} must not be emitted as a string"
+        );
+    }
+    // AND NO NAME IS BOTH: a sentence and a listed composition under one name
+    // would leave a reader unsure which one the shell draws.
+    for listed in &people.functions {
+        assert!(
+            people.text(listed).is_none(),
+            "{listed} is listed as not crossing and also carried as a sentence"
         );
     }
     // An absent name is `None`, never `""` — a missing sentence has to be
