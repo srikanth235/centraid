@@ -1,0 +1,132 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/replica-retention.scale.test.ts",
+  "name": "Resumable replica history under year-3 churn",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "worst-day resumable window (compaction)",
+      "value": 28,
+      "unit": "days",
+      "budget": 30
+    },
+    {
+      "name": "worst-day resumable window (entry cap alone)",
+      "value": 5,
+      "unit": "days"
+    },
+    {
+      "name": "retained entries",
+      "value": 100000,
+      "unit": "entries",
+      "budget": 100000
+    },
+    {
+      "name": "wall clock",
+      "value": 12951,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:19:07.310Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-05T09:47:12.646Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-06T09:57:02.185Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-07T11:13:54.348Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-08T10:28:54.731Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-09T10:37:22.777Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-10T10:19:47.961Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-11T10:20:00.346Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-12T09:51:51.789Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-13T10:53:58.864Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-14T11:19:46.380Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-15T10:44:30.748Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-16T10:34:42.293Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-17T10:43:08.947Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-18T10:18:59.108Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-19T10:00:31.024Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-20T10:22:16.978Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-21T11:25:08.969Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-22T10:37:23.597Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-23T10:31:55.704Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-24T10:47:44.546Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-25T10:53:17.356Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-26T10:34:30.390Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-27T11:06:26.879Z",
+      "value": 28
+    },
+    {
+      "at": "2026-09-28T12:18:50.644Z",
+      "value": 28
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/composite-load.scale.test.ts",
+  "name": "Composite load: 20 ops x 5 HTTP lanes + 128 turns + 200 automations, solo vs together",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "composite phase wall clock",
+      "value": 4309.048079000001,
+      "unit": "ms"
+    },
+    {
+      "name": "solo phase wall clock",
+      "value": 3791.3594980000007,
+      "unit": "ms"
+    },
+    {
+      "name": "composition throughput factor (composite/solo)",
+      "value": 1.1365443137937958,
+      "unit": "x",
+      "budget": 2
+    },
+    {
+      "name": "worst lane p95 under composition (write)",
+      "value": 662.7659109999995,
+      "unit": "ms",
+      "budget": 3500
+    },
+    {
+      "name": "ref-search p95 under composition",
+      "value": 81.50963899999988,
+      "unit": "ms",
+      "budget": 1000
+    },
+    {
+      "name": "worst per-lane latency factor (browse, reported not gated)",
+      "value": 27.89912561130625,
+      "unit": "x"
+    },
+    {
+      "name": "sync p95 composite",
+      "value": 554.7904139999991,
+      "unit": "ms"
+    },
+    {
+      "name": "search p95 composite",
+      "value": 592.3898420000005,
+      "unit": "ms"
+    },
+    {
+      "name": "write p95 composite",
+      "value": 662.7659109999995,
+      "unit": "ms"
+    },
+    {
+      "name": "blob p95 composite",
+      "value": 305.9187550000006,
+      "unit": "ms"
+    },
+    {
+      "name": "browse p95 composite",
+      "value": 81.50963899999988,
+      "unit": "ms"
+    },
+    {
+      "name": "sync p95 solo",
+      "value": 80.10158700000011,
+      "unit": "ms"
+    },
+    {
+      "name": "search p95 solo",
+      "value": 224.37708500000008,
+      "unit": "ms"
+    },
+    {
+      "name": "write p95 solo",
+      "value": 147.6455159999996,
+      "unit": "ms"
+    },
+    {
+      "name": "blob p95 solo",
+      "value": 87.71577400000024,
+      "unit": "ms"
+    },
+    {
+      "name": "browse p95 solo",
+      "value": 2.921584000000621,
+      "unit": "ms"
+    },
+    {
+      "name": "turn dispatch",
+      "value": 0.44685300000037387,
+      "unit": "ms"
+    },
+    {
+      "name": "missed-window scan",
+      "value": 3.4343640000006417,
+      "unit": "ms"
+    },
+    {
+      "name": "composite ops",
+      "value": 100,
+      "unit": "count"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-04T10:17:18.473Z",
+      "value": 4054.847787999999
+    },
+    {
+      "at": "2026-09-05T09:45:16.726Z",
+      "value": 3941.2150770000007
+    },
+    {
+      "at": "2026-09-06T09:55:13.997Z",
+      "value": 3928.9488380000003
+    },
+    {
+      "at": "2026-09-07T11:11:55.567Z",
+      "value": 4118.048780000001
+    },
+    {
+      "at": "2026-09-08T10:26:53.231Z",
+      "value": 4512.784184
+    },
+    {
+      "at": "2026-09-09T10:35:24.575Z",
+      "value": 4837.364113000001
+    },
+    {
+      "at": "2026-09-10T10:17:59.099Z",
+      "value": 3973.595644000001
+    },
+    {
+      "at": "2026-09-11T10:18:12.453Z",
+      "value": 4054.4161779999995
+    },
+    {
+      "at": "2026-09-12T09:50:04.635Z",
+      "value": 3918.590570999999
+    },
+    {
+      "at": "2026-09-13T10:52:09.471Z",
+      "value": 4185.9933550000005
+    },
+    {
+      "at": "2026-09-14T11:18:04.370Z",
+      "value": 4428.961157
+    },
+    {
+      "at": "2026-09-15T10:42:34.315Z",
+      "value": 3996.1821390000005
+    },
+    {
+      "at": "2026-09-16T10:32:54.094Z",
+      "value": 3898.3972329999997
+    },
+    {
+      "at": "2026-09-17T10:41:20.790Z",
+      "value": 4050.3673420000014
+    },
+    {
+      "at": "2026-09-18T10:17:21.565Z",
+      "value": 3167.5368450000005
+    },
+    {
+      "at": "2026-09-19T09:58:32.486Z",
+      "value": 4164.378536
+    },
+    {
+      "at": "2026-09-20T10:20:19.036Z",
+      "value": 4229.733662999999
+    },
+    {
+      "at": "2026-09-21T11:23:10.944Z",
+      "value": 4134.3577000000005
+    },
+    {
+      "at": "2026-09-22T10:35:34.023Z",
+      "value": 3796.1633779999993
+    },
+    {
+      "at": "2026-09-23T10:30:14.406Z",
+      "value": 3686.021161999999
+    },
+    {
+      "at": "2026-09-24T10:45:56.387Z",
+      "value": 3956.8726800000004
+    },
+    {
+      "at": "2026-09-25T10:51:28.703Z",
+      "value": 4123.856323
+    },
+    {
+      "at": "2026-09-26T10:33:03.639Z",
+      "value": 4608.146025999999
+    },
+    {
+      "at": "2026-09-27T11:04:57.741Z",
+      "value": 3282.877176000001
+    },
+    {
+      "at": "2026-09-28T12:17:07.442Z",
+      "value": 4309.048079000001
+    }
+  ]
+}

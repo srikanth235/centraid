@@ -1,34 +1,19 @@
-## Night Watch — HOLD
+## Test health
 
-7 S2 blocker: desktop-e2e failed.
+**Status:** needs attention
 
 | Signal | Value |
 | --- | ---: |
-| Lanes passed | 8 |
-| Lanes failed | 8 |
-| Lanes degraded | 0 |
-| Lanes parked | 0 |
-| Lanes with no evidence | 33 |
-| New red since the last candidate | 8 |
-| New green since the last candidate | 0 |
-| Validation errors | 0 |
-
-### Blockers
-
-- **S2** `desktop-e2e` — 0h of the 24h SLA, unowned
-- **S2** `fuzz-parsers` — 0h of the 24h SLA, unowned
-- **S2** `mobile-e2e-android` — 0h of the 24h SLA, unowned
-- **S2** `mobile-e2e-ios` — 0h of the 24h SLA, unowned
-- **S2** `quality-performance-scale` — 0h of the 24h SLA, unowned
-- **S2** `web-e2e` — 0h of the 24h SLA, unowned
-- **S2** `web-e2e-cross-browser` — 0h of the 24h SLA, unowned
-
-**To flip the verdict:** fix or park desktop-e2e → HOLD
+| Evidence passed | 1138 |
+| Evidence failed | 3 |
+| Cells failed (ran) | 1 |
+| Cells not run | 21 |
+| Unhandled errors | 0 |
+| Coverage floors below | 0 |
+| Matrix validation errors | 0 |
 
 _Public HTML report publishes on main (and nightly); this run keeps the artifact + Job Summary only._
 
-Actions run: https://github.com/srikanth235/centraid/actions/runs/36419683442
-
-Generated: `2026-09-28T13:20:23.386Z`
+Generated: `2026-09-29T12:06:50.450Z`
 
 <!-- centraid-test-health-report -->

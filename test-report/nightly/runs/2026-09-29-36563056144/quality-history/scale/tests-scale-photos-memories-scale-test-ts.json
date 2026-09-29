@@ -1,0 +1,55 @@
+{
+  "lane": "scale",
+  "owner": "tests/scale/photos-memories.scale.test.ts",
+  "name": "Memories v0 rebuild at 50k assets over a 3-year span",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "rebuild",
+      "value": 1406.5631209999997,
+      "unit": "ms",
+      "budget": 20000
+    },
+    {
+      "name": "fixture seeding",
+      "value": 3122.2763689999997,
+      "unit": "ms"
+    },
+    {
+      "name": "assets",
+      "value": 50000,
+      "unit": "assets"
+    },
+    {
+      "name": "on-this-day memories",
+      "value": 365,
+      "unit": "memories"
+    },
+    {
+      "name": "trip memories",
+      "value": 28,
+      "unit": "memories"
+    },
+    {
+      "name": "similar memories",
+      "value": 1000,
+      "unit": "memories"
+    },
+    {
+      "name": "total memories",
+      "value": 1393,
+      "unit": "memories"
+    },
+    {
+      "name": "member rows written",
+      "value": 58394,
+      "unit": "rows"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-29T11:48:22.623Z",
+      "value": 1406.5631209999997
+    }
+  ]
+}
